@@ -42,6 +42,9 @@ a proposed data model, and conventions.
 
 ### Phase 1 — Auth & app shell (started)
 
+- [x] Design system: ported color/type/spacing/elevation tokens into Tailwind v4
+      `@theme` and wired the Geist font (`next/font`) — see the FundExecs OS
+      design system; primary CTA stays white per the shipped app
 - [x] Supabase browser/server/middleware clients
 - [x] Session-refreshing middleware + protected-route gating
 - [x] Login / sign-up page + auth callback + sign-out
