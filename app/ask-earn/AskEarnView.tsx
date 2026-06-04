@@ -44,11 +44,11 @@ const ROW_ACTIONS: Array<{ act: Action; icon: LucideIcon; label: string }> = [
 ];
 
 const NEXT_STEPS: Array<{ label: string; icon: LucideIcon }> = [
-  { label: 'Build a targeted LP list', icon: Users },
-  { label: 'Review my deck like an LP', icon: FileText },
-  { label: 'Draft a monthly LP update', icon: FileText },
-  { label: 'Find capital for Cedar roll-up', icon: Search },
-  { label: 'Summarize new diligence docs', icon: Layers }
+  { label: 'Build LP list', icon: Users },
+  { label: 'Review deck like an institutional LP', icon: FileText },
+  { label: 'Generate investor outreach', icon: FileText },
+  { label: 'Summarize last meeting', icon: Search },
+  { label: 'Create diligence checklist', icon: ListChecks }
 ];
 
 function TaskRow({ t, onAct }: { t: EarnTask; onAct: (id: string, a: Action) => void }) {
@@ -56,65 +56,75 @@ function TaskRow({ t, onAct }: { t: EarnTask; onAct: (id: string, a: Action) => 
   return (
     <Card
       className={cn(
-        'group flex items-start gap-3 p-3.5',
+        'group p-3.5',
         !t.read && 'border-[var(--azure-line)] bg-[rgba(91,141,239,0.05)]',
         done && 'opacity-60'
       )}
     >
-      <button
-        type="button"
-        onClick={() => onAct(t.id, 'done')}
-        title="Mark complete"
-        aria-label="Mark complete"
-        className={cn(
-          'mt-px flex-none transition',
-          done ? 'text-success' : 'text-fg-5 hover:text-fg-2'
-        )}
-      >
-        {done ? (
-          <CheckCircle2 size={18} strokeWidth={1.9} aria-hidden />
-        ) : (
-          <Circle size={18} strokeWidth={1.9} aria-hidden />
-        )}
-      </button>
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          onClick={() => onAct(t.id, 'done')}
+          title="Mark complete"
+          aria-label="Mark complete"
+          className={cn(
+            'mt-px flex-none transition',
+            done ? 'text-success' : 'text-fg-5 hover:text-fg-2'
+          )}
+        >
+          {done ? (
+            <CheckCircle2 size={18} strokeWidth={1.9} aria-hidden />
+          ) : (
+            <Circle size={18} strokeWidth={1.9} aria-hidden />
+          )}
+        </button>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          {!t.read && <span className="h-1.5 w-1.5 rounded-full bg-azure-1" aria-hidden />}
-          <span className={cn('text-[13.5px] font-semibold text-fg-1', done && 'line-through')}>
-            {t.title}
-          </span>
-          <Badge tone={PRIORITY_TONE[t.priority]} className="text-[9.5px]">
-            {t.priority}
-          </Badge>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            {!t.read && <span className="h-1.5 w-1.5 rounded-full bg-azure-1" aria-hidden />}
+            <span className={cn('text-[13.5px] font-semibold text-fg-1', done && 'line-through')}>
+              {t.title}
+            </span>
+            <Badge tone={PRIORITY_TONE[t.priority]} className="text-[9.5px]">
+              {t.priority}
+            </Badge>
+          </div>
+          {t.desc && <div className="mt-1 text-[12.5px] text-fg-3">{t.desc}</div>}
         </div>
-        {t.desc && <div className="mt-1 text-[12.5px] text-fg-3">{t.desc}</div>}
 
-        <div className="mt-2.5 flex items-center gap-4 text-[11px] text-fg-5">
-          <span className="flex items-center gap-1.5">
-            <Sparkles size={12} strokeWidth={1.9} aria-hidden />
-            {t.source}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Calendar size={12} strokeWidth={1.9} aria-hidden />
-            {t.due}
-          </span>
+        <div className="flex gap-1 opacity-30 transition group-hover:opacity-100">
+          {ROW_ACTIONS.map(({ act, icon: Icon, label }) => (
+            <button
+              key={act}
+              type="button"
+              title={label}
+              aria-label={label}
+              onClick={() => onAct(t.id, act)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline bg-surface-1 text-fg-4 transition hover:bg-surface-2 hover:text-fg-1"
+            >
+              <Icon size={13} strokeWidth={1.9} aria-hidden />
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="flex gap-1 opacity-30 transition group-hover:opacity-100">
-        {ROW_ACTIONS.map(({ act, icon: Icon, label }) => (
-          <button
-            key={act}
-            type="button"
-            title={label}
-            aria-label={label}
-            onClick={() => onAct(t.id, act)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline bg-surface-1 text-fg-4 transition hover:bg-surface-2 hover:text-fg-1"
-          >
-            <Icon size={13} strokeWidth={1.9} aria-hidden />
-          </button>
-        ))}
+      {/* Earn note — Earn's suggested next move for this task (gold). */}
+      <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-2">
+        <Sparkles size={13} strokeWidth={1.9} className="mt-px flex-none text-gold-1" aria-hidden />
+        <span className="text-[12px] text-fg-2">
+          <span className="font-semibold text-gold-1">Earn:</span> {t.earnNote}
+        </span>
+      </div>
+
+      <div className="mt-2.5 flex items-center gap-4 text-[11px] text-fg-5">
+        <span className="flex items-center gap-1.5">
+          <Sparkles size={12} strokeWidth={1.9} aria-hidden />
+          {t.source}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Calendar size={12} strokeWidth={1.9} aria-hidden />
+          {t.due}
+        </span>
       </div>
     </Card>
   );
@@ -144,11 +154,16 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
     archived: tasks.filter((t) => t.state === 'archived').length
   };
   const shown = tasks.filter((t) => t.state === filter);
+  const workflowCount = tasks.length;
 
   return (
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-end justify-between gap-3">
-        <SectionTitle eyebrow="Copilot task manager" title="Ask Earn" className="mb-0" />
+        <SectionTitle
+          eyebrow="Earnest Fundmaker · your private-market assistant"
+          title="Ask Earn"
+          className="mb-0"
+        />
         <div className="flex items-center gap-2.5">
           <Button variant="secondary" icon={Filter} size="sm">
             Filter
@@ -159,21 +174,23 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
         </div>
       </div>
 
-      {/* Earn presence band + command bar (presentational chat surface) */}
-      <Card className="flex items-center gap-4 bg-[linear-gradient(100deg,rgba(247,201,72,0.09),transparent_60%)] px-[18px] py-3.5">
-        <EarnCoin size={40} glow online />
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] text-fg-2">
-            <span className="font-semibold text-fg-1">Earnest Fundmaker</span>, your private-market
-            assistant, is tracking{' '}
-            <span className="font-semibold text-gold-1">{counts.open} open tasks</span> across your
-            workflows.
+      {/* Earn presence band + live command bar (the live EarnChat copilot). */}
+      <Card className="bg-[linear-gradient(100deg,rgba(247,201,72,0.09),transparent_60%)] px-[18px] py-3.5">
+        <div className="flex items-center gap-4">
+          <EarnCoin size={40} glow online />
+          <div className="min-w-0 flex-1 text-[13px] text-fg-2">
+            <span className="font-semibold text-fg-1">Earnest Fundmaker</span>, your Private Market
+            Assistant, is running{' '}
+            <span className="font-semibold text-gold-1">{workflowCount} workflows</span> across{' '}
+            {BRAINS.length} brains —{' '}
+            <span className="font-semibold text-gold-1">{counts.open}</span> awaiting you.
           </div>
         </div>
+        {/* Live Earn copilot chat (posts to /api/ask-earn). */}
+        <div className="mt-3">
+          <EarnChat />
+        </div>
       </Card>
-
-      {/* Live Earn copilot chat (RAG over the 15 brains + Claude) */}
-      <EarnChat />
 
       <div className="grid items-start gap-[18px] lg:grid-cols-[1fr_320px]">
         <div>
@@ -220,7 +237,7 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
           <Card>
             <SectionTitle
               eyebrow={`${BRAINS.length} brains`}
-              title="Intelligence layers"
+              title="Active brains"
               className="mb-3"
               action={<ListChecks size={15} strokeWidth={1.9} className="text-fg-4" aria-hidden />}
             />
