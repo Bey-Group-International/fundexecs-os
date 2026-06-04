@@ -6,13 +6,11 @@ import {
   MessageSquare,
   Rocket,
   Inbox,
-  Check,
-  RefreshCw,
-  Plus,
   type LucideIcon
 } from 'lucide-react';
 import { AppShell } from '@/components/shell/AppShell';
-import { Badge, Button, Card, SectionTitle } from '@/components/ui';
+import { Badge, Card, SectionTitle } from '@/components/ui';
+import { ConnectButton } from '@/components/integrations/ConnectButton';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getIntegrationConnections, type ProviderConnection } from '@/lib/queries/integrations';
 
@@ -141,19 +139,7 @@ function IntegrationCard({ conn }: { conn: IntegrationView }) {
             {syncedLabel(conn.last_synced_at)}
           </div>
         </div>
-        {connected ? (
-          <Button variant="secondary" size="sm" icon={Check}>
-            Manage
-          </Button>
-        ) : error ? (
-          <Button variant="secondary" size="sm" icon={RefreshCw}>
-            Reconnect
-          </Button>
-        ) : (
-          <Button variant="primary" size="sm" icon={Plus}>
-            Connect
-          </Button>
-        )}
+        <ConnectButton provider={conn.provider} connected={connected} />
       </div>
     </Card>
   );
