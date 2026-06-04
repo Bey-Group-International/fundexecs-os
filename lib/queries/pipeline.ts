@@ -9,6 +9,8 @@ export interface PipelineDeal {
   stage: string;
   status: string;
   amount: number | null;
+  /** A short, human note derived from the deal's stage/status for card context. */
+  note: string;
 }
 
 export interface PipelineStage {
@@ -57,6 +59,30 @@ function normalizeStageKey(stage: string): string {
     .replace(/[\s_]+/g, '-');
 }
 
+/** A short contextual note for a deal card, derived from its formation stage. */
+function dealNote(stageKey: string, status: string): string {
+  switch (stageKey) {
+    case 'visitor':
+      return 'New inbound lead';
+    case 'prospect':
+      return 'Qualifying fit';
+    case 'qualified':
+      return 'Mandate confirmed';
+    case 'meeting':
+      return 'Intro call booked';
+    case 'diligence':
+      return 'DDQ in review';
+    case 'soft-circle':
+      return 'Soft-circled';
+    case 'committed':
+      return 'Commitment signed';
+    case 'closed':
+      return 'Capital closed';
+    default:
+      return status;
+  }
+}
+
 /**
  * Fetch the org's deals grouped by formation stage plus summary stats.
  * RLS-scoped via the server client; any query error degrades to an empty
@@ -78,16 +104,16 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
   const buckets = new Map<string, PipelineDeal[]>(STAGE_ORDER.map((s) => [s.key, []]));
   for (const d of deals) {
     const key = normalizeStageKey(d.stage);
-    const list = buckets.get(key);
+    const resolvedKey = buckets.has(key) ? key : 'prospect';
     const entry: PipelineDeal = {
       id: d.id,
       name: d.name,
       stage: d.stage,
       status: d.status,
-      amount: d.amount
+      amount: d.amount,
+      note: dealNote(resolvedKey, d.status)
     };
-    if (list) list.push(entry);
-    else buckets.get('prospect')!.push(entry);
+    buckets.get(resolvedKey)!.push(entry);
   }
 
   const stages: PipelineStage[] = STAGE_ORDER.map((s) => ({

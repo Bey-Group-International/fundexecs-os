@@ -3,6 +3,7 @@ import type { Database } from '@/lib/supabase/database.types';
 
 type PlanRow = Database['public']['Tables']['governance_plans']['Row'];
 type ObjectiveRow = Database['public']['Tables']['governance_objectives']['Row'];
+type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
 export interface StrategyObjective {
   id: string;
@@ -10,6 +11,8 @@ export interface StrategyObjective {
   tier: '100' | '30' | '10';
   title: string;
   timeline: string | null;
+  /** Display name of the objective owner, when resolvable. */
+  owner: string | null;
   priority: 'High' | 'Medium' | 'Low';
   pct: number;
   read: boolean;
@@ -56,6 +59,14 @@ function statusPct(state: StrategyObjective['state'], status: string): number {
   return 0;
 }
 
+/** Abbreviate a full name to a "F. Last" form for compact card display. */
+function shortName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return full;
+  if (parts.length === 1) return parts[0];
+  return `${parts[0][0]}. ${parts[parts.length - 1]}`;
+}
+
 /**
  * Fetch the org's governance plans and their objectives. RLS-scoped via the
  * server client; any query error degrades to an empty result so the page
@@ -73,7 +84,7 @@ export async function getStrategyData(orgId: string): Promise<StrategyData> {
     supabase
       .from('governance_objectives')
       .select(
-        'id, plan_id, objective, timeline, priority, status, read_at, archived_at, ai_recommendation'
+        'id, plan_id, objective, timeline, priority, status, read_at, archived_at, ai_recommendation, owner_id'
       )
       .eq('org_id', orgId)
       .is('deleted_at', null)
@@ -96,8 +107,26 @@ export async function getStrategyData(orgId: string): Promise<StrategyData> {
     | 'read_at'
     | 'archived_at'
     | 'ai_recommendation'
+    | 'owner_id'
   >;
-  const objectives = ((objsRes.data ?? []) as ObjSel[]).map((o) => {
+  const rawObjectives = (objsRes.data ?? []) as ObjSel[];
+
+  // Resolve owner display names from the profiles table in one round-trip.
+  const ownerIds = Array.from(
+    new Set(rawObjectives.map((o) => o.owner_id).filter((id): id is string => id != null))
+  );
+  const nameById = new Map<string, string>();
+  if (ownerIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', ownerIds);
+    for (const p of (profiles ?? []) as Pick<ProfileRow, 'id' | 'full_name'>[]) {
+      if (p.full_name) nameById.set(p.id, shortName(p.full_name));
+    }
+  }
+
+  const objectives = rawObjectives.map((o) => {
     const state = normalizeState(o.status, o.archived_at);
     return {
       id: o.id,
@@ -105,6 +134,7 @@ export async function getStrategyData(orgId: string): Promise<StrategyData> {
       tier: deriveTier(horizonByPlan.get(o.plan_id) ?? null, o.timeline),
       title: o.objective,
       timeline: o.timeline,
+      owner: o.owner_id ? (nameById.get(o.owner_id) ?? null) : null,
       priority: normalizePriority(o.priority),
       pct: statusPct(state, o.status),
       read: o.read_at != null,

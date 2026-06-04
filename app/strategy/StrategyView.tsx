@@ -47,6 +47,8 @@ const TIER_LABEL: Record<Tier, string> = {
   '10': '10-day'
 };
 
+const TIER_ORDER: Tier[] = ['100', '30', '10'];
+
 type Action = 'done' | 'read' | 'archive' | 'delete';
 
 const ROW_ACTIONS: Array<{ act: Action; icon: LucideIcon; label: string }> = [
@@ -106,11 +108,17 @@ function ObjectiveCard({
         {o.title}
       </div>
 
-      <div className="mt-2.5 flex items-center gap-4 text-[11.5px] text-fg-4">
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-fg-4">
         <span className="flex items-center gap-1.5">
           <Calendar size={13} strokeWidth={1.9} aria-hidden />
           {o.timeline ?? '—'}
         </span>
+        {o.owner && (
+          <span className="flex items-center gap-1.5">
+            <User size={13} strokeWidth={1.9} aria-hidden />
+            {o.owner}
+          </span>
+        )}
         <span className="flex items-center gap-1.5 tabular-nums">
           <CircleDashed size={13} strokeWidth={1.9} aria-hidden />
           {o.pct}%
@@ -155,14 +163,17 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
     );
   }
 
-  const visible = objectives.filter(
-    (o) => o.state !== 'archived' && (tier === 'all' || o.tier === tier)
-  );
+  const active = objectives.filter((o) => o.state !== 'archived');
+  const visible = active.filter((o) => tier === 'all' || o.tier === tier);
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <div className="flex items-end justify-between gap-3">
-        <SectionTitle eyebrow="Operating cadence" title="100 / 30 / 10 plan" className="mb-0" />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <SectionTitle
+          eyebrow="Operating cadence"
+          title="100 / 30 / 10 Strategy Plan"
+          className="mb-0"
+        />
         <div className="flex items-center gap-2.5">
           <SegTabs
             active={tier}
@@ -183,33 +194,38 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
       <Card className="flex items-center gap-4 bg-[linear-gradient(100deg,rgba(247,201,72,0.08),transparent_58%)] px-[18px] py-3.5">
         <EarnCoin size={36} glow />
         <div className="min-w-0 flex-1 text-[13px] text-fg-2">
-          <span className="font-semibold text-fg-1">Earnest Fundmaker</span>, your private-market
-          assistant, is tracking{' '}
+          <span className="font-semibold text-fg-1">Earnest Fundmaker</span>, your private market
+          assistant, is tracking your plan —{' '}
           <span className="font-semibold text-gold-1">
-            {objectives.filter((o) => o.state !== 'archived').length} objectives
+            {active.length} {active.length === 1 ? 'objective' : 'objectives'}
           </span>{' '}
-          across your operating plan.
+          across the 100 / 30 / 10 horizons.
         </div>
         <Badge tone="gold" dot className="flex-none">
           Execution ready
         </Badge>
       </Card>
 
-      <Card className="flex gap-6 p-4">
-        {(Object.keys(TIER_LABEL) as Tier[]).map((t) => {
-          const list = objectives.filter((o) => o.tier === t && o.state !== 'archived');
+      <Card className="grid gap-6 p-4 sm:grid-cols-3">
+        {TIER_ORDER.map((t) => {
+          const list = active.filter((o) => o.tier === t);
           const avg = list.length
             ? Math.round(list.reduce((s, o) => s + o.pct, 0) / list.length)
             : 0;
           return (
-            <div key={t} className="flex-1">
+            <div key={t}>
               <div className="flex items-baseline gap-2">
                 <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
                   {TIER_LABEL[t]} horizon
                 </span>
-                <span className="text-[11px] tabular-nums text-fg-5">{list.length} objectives</span>
+                <span className="text-[11px] tabular-nums text-fg-5">
+                  {list.length} {list.length === 1 ? 'objective' : 'objectives'}
+                </span>
               </div>
-              <div className="my-2 text-2xl font-semibold tabular-nums tracking-[-0.02em] text-fg-1">
+              <div
+                className="my-2 text-[28px] font-semibold tabular-nums tracking-[-0.02em]"
+                style={{ color: TIER_COLOR[t] }}
+              >
                 {avg}%
               </div>
               <ProgressBar value={avg} color={TIER_COLOR[t]} height={5} />
