@@ -79,8 +79,11 @@ a proposed data model, and conventions.
       `integration_connections` (provider-agnostic), `contacts` /
       `contact_identities`, normalized `interactions`, auto-scored
       `relationships` (recency + frequency trigger), and `warm_introductions`
-- [ ] Wire provider sync (Gmail, Google/Outlook Calendar, Calendly, Slack,
-      Apollo, …) into `interactions`; embed knowledge into `knowledge_chunks`
+- [x] Provider sync ingestion core (`lib/integrations/`,
+      `lib/supabase/admin.ts`) and the sync API route, with live Gmail +
+      Google Calendar adapters (Google session `provider_token`)
+- [ ] Remaining adapters (Calendly, Slack, Apollo, Outlook) + durable token
+      refresh, and embedding knowledge into `knowledge_chunks`
 - [ ] AI Copilot Task Manager
 - [ ] Private Market Lifecycle Intelligence
 - [ ] Bey Group Admin Portal
