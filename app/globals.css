@@ -43,6 +43,13 @@
   --azure-soft: rgba(91, 141, 239, 0.12);
   --azure-line: rgba(91, 141, 239, 0.3);
 
+  /* accent — institutional blue (primary CTAs) + electric cyan */
+  --accent: #2563eb;
+  --accent-2: #1d4ed8;
+  --accent-soft: rgba(37, 99, 235, 0.14);
+  --accent-line: rgba(37, 99, 235, 0.4);
+  --cyan: #22d3ee;
+
   /* semantic */
   --success: #34d399;
   --warning: #fbbf24;
@@ -84,6 +91,8 @@
   --fg-4: #94a3b8;
   --fg-5: #b6c0cd;
 
+  --accent-soft: rgba(37, 99, 235, 0.1);
+
   --ring-top: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), var(--ring-top);
   --shadow-md: 0 4px 16px -6px rgba(15, 23, 42, 0.12), var(--ring-top);
@@ -124,6 +133,9 @@
   --color-gold-2: var(--gold-2);
   --color-azure-1: var(--azure-1);
   --color-azure-2: var(--azure-2);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-cyan: var(--cyan);
 
   --color-success: var(--success);
   --color-warning: var(--warning);
