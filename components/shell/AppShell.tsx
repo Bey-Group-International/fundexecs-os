@@ -23,6 +23,9 @@ import { Avatar, Badge } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
+import { EarnOrb } from './earn/EarnOrb';
+import { CopilotDock } from './earn/CopilotDock';
+import { TrustToaster } from './trust/TrustToaster';
 
 interface NavItem {
   href: string;
@@ -206,11 +209,13 @@ function Sidebar({
 function Topbar({
   title,
   subtitle,
-  onMenu
+  onMenu,
+  onAskEarn
 }: {
   title: string;
   subtitle?: string;
   onMenu: () => void;
+  onAskEarn: () => void;
 }) {
   return (
     <header className="sticky top-0 z-20 flex h-[60px] flex-none items-center gap-3 border-b border-hairline bg-[var(--topbar-bg)] px-4 backdrop-blur-md sm:px-6">
@@ -246,8 +251,13 @@ function Topbar({
 
       <ThemeToggle />
 
-      {/* Gold Earn coin wallet (gamification) */}
-      <div className="hidden items-center gap-2 rounded-[10px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-1 sm:flex">
+      {/* Gold Earn coin wallet (gamification) — opens the Earn Copilot dock */}
+      <button
+        type="button"
+        onClick={onAskEarn}
+        aria-label="Ask Earn"
+        className="hidden items-center gap-2 rounded-[10px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-1 transition-[background,box-shadow] hover:bg-[var(--gold-soft)] hover:brightness-110 sm:flex"
+      >
         <EarnCoin size={22} />
         <div className="leading-none">
           <div className="text-[12.5px] font-semibold text-gold-1 [font-feature-settings:'tnum']">
@@ -257,7 +267,7 @@ function Topbar({
             Earn coins
           </div>
         </div>
-      </div>
+      </button>
 
       <button
         type="button"
@@ -290,6 +300,7 @@ export interface AppShellProps {
 export function AppShell({ title, subtitle, children }: AppShellProps) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   return (
     <div className="relative flex h-screen overflow-hidden">
@@ -302,11 +313,22 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
       )}
       <Sidebar pathname={pathname} open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="relative z-0 flex min-w-0 flex-1 flex-col">
-        <Topbar title={title} subtitle={subtitle} onMenu={() => setNavOpen(true)} />
+        <Topbar
+          title={title}
+          subtitle={subtitle}
+          onMenu={() => setNavOpen(true)}
+          onAskEarn={() => setCopilotOpen((v) => !v)}
+        />
         <main className="flex-1 overflow-y-auto px-5 pb-20 pt-6 sm:px-7">
           <div className="mx-auto max-w-[1180px]">{children}</div>
         </main>
       </div>
+
+      {/* Shell-level systems: Earn orb + Copilot dock, and the Chain-of-Trust
+          toast layer + drawer. Present on every authenticated screen. */}
+      <EarnOrb open={copilotOpen} onToggle={() => setCopilotOpen((v) => !v)} />
+      <CopilotDock open={copilotOpen} onClose={() => setCopilotOpen(false)} />
+      <TrustToaster />
     </div>
   );
 }
