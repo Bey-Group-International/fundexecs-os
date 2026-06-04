@@ -13,6 +13,7 @@ export default function LoginPage() {
     requestedRedirect && requestedRedirect.startsWith('/') && !requestedRedirect.startsWith('//')
       ? requestedRedirect
       : '/dashboard';
+  const oauthError = searchParams.get('error_description') || searchParams.get('error');
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -81,6 +82,12 @@ export default function LoginPage() {
           {mode === 'signin' ? 'Sign in to FundExecs OS' : 'Create your account'}
         </h1>
         <p className="mt-1 text-sm text-slate-400">Your private-market command center.</p>
+
+        {oauthError && (
+          <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {oauthError}. Please try signing in again.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>

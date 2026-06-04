@@ -35,6 +35,27 @@ export async function updateSession(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser();
 
+  // OAuth safety net: if a provider redirect lands on a non-callback path
+  // (e.g. Supabase fell back to the Site URL because the callback URL was not
+  // in the redirect allowlist), forward the auth `code` to /auth/callback so
+  // it gets exchanged — and surface any OAuth `error` on the login page.
+  const url = request.nextUrl;
+  if (url.pathname !== '/auth/callback') {
+    if (url.searchParams.has('code')) {
+      const callback = url.clone();
+      callback.pathname = '/auth/callback';
+      if (!callback.searchParams.get('next')) {
+        callback.searchParams.set('next', '/command-center');
+      }
+      return NextResponse.redirect(callback);
+    }
+    if (url.searchParams.has('error') && url.pathname !== '/login') {
+      const login = url.clone();
+      login.pathname = '/login';
+      return NextResponse.redirect(login);
+    }
+  }
+
   // Gate authenticated areas. Unauthenticated users hitting a protected
   // route are redirected to /login. Adjust the matcher list as modules land.
   const protectedPrefixes = [
