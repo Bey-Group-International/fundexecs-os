@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -49,33 +49,23 @@ const USER = {
 };
 
 /** Topbar theme toggle — flips `data-theme`, persists to localStorage('fx-theme').
- *  Disables transitions during the flip so no element animates `color`. */
+ *  The icon is driven by `data-theme` via CSS (no React state) so there's no
+ *  hydration mismatch; the flip is wrapped in `.fx-no-transition` so nothing
+ *  animates `color`. */
 function ThemeToggle() {
-  const [light, setLight] = useState(false);
-
-  useEffect(() => {
-    setLight(document.documentElement.getAttribute('data-theme') === 'light');
-  }, []);
-
   function toggle() {
     const root = document.documentElement;
     root.classList.add('fx-no-transition');
-    const next = !light;
-    setLight(next);
-    if (next) {
-      root.setAttribute('data-theme', 'light');
-      try {
-        localStorage.setItem('fx-theme', 'light');
-      } catch {
-        /* ignore */
-      }
-    } else {
+    const isLight = root.getAttribute('data-theme') === 'light';
+    if (isLight) {
       root.removeAttribute('data-theme');
-      try {
-        localStorage.setItem('fx-theme', 'dark');
-      } catch {
-        /* ignore */
-      }
+    } else {
+      root.setAttribute('data-theme', 'light');
+    }
+    try {
+      localStorage.setItem('fx-theme', isLight ? 'dark' : 'light');
+    } catch {
+      /* ignore */
     }
     requestAnimationFrame(() => root.classList.remove('fx-no-transition'));
   }
@@ -87,11 +77,8 @@ function ThemeToggle() {
       aria-label="Toggle theme"
       className="flex h-[38px] w-[38px] flex-none items-center justify-center rounded-[10px] border border-hairline bg-surface-1 text-fg-3 transition-[background,box-shadow] hover:bg-surface-2 hover:text-fg-1"
     >
-      {light ? (
-        <Moon size={17} strokeWidth={1.9} aria-hidden />
-      ) : (
-        <Sun size={17} strokeWidth={1.9} aria-hidden />
-      )}
+      <Sun size={17} strokeWidth={1.9} className="fx-icon-sun" aria-hidden />
+      <Moon size={17} strokeWidth={1.9} className="fx-icon-moon" aria-hidden />
     </button>
   );
 }

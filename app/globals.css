@@ -177,3 +177,15 @@ body {
 .fx-no-transition * {
   transition: none !important;
 }
+
+/* Theme-toggle icon: show the sun in dark mode, the moon in light mode.
+   Driven by data-theme so the toggle needs no React state (no hydration flash). */
+.fx-icon-moon {
+  display: none;
+}
+:root[data-theme='light'] .fx-icon-sun {
+  display: none;
+}
+:root[data-theme='light'] .fx-icon-moon {
+  display: inline-block;
+}
