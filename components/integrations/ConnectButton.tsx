@@ -27,7 +27,9 @@ async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${window.location.origin}/auth/callback?next=/command-center`,
+      // Clean redirect_to (no query string) so it matches any allow-list
+      // entry shape; the callback defaults to /command-center.
+      redirectTo: `${window.location.origin}/auth/callback`,
       scopes: GOOGLE_SCOPES,
       queryParams: { access_type: 'offline', prompt: 'consent' }
     }
