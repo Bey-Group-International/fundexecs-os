@@ -40,6 +40,10 @@ export async function updateSession(request: NextRequest) {
   const protectedPrefixes = [
     '/dashboard',
     '/pipeline',
+    '/strategy',
+    '/ask-earn',
+    '/admin',
+    '/notifications',
     '/settings',
     '/command-center',
     '/connections',
