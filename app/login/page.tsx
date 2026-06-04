@@ -62,7 +62,10 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/command-center`,
+        // Keep redirect_to a clean path with no query string — a trailing
+        // `?next=…` makes Supabase's redirect-URL allow-list reject any entry
+        // that isn't a `/**` wildcard. The callback defaults to /command-center.
+        redirectTo: `${window.location.origin}/auth/callback`,
         scopes:
           'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.metadata',
         queryParams: { access_type: 'offline', prompt: 'consent' }

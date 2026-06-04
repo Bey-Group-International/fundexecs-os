@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const next =
     requestedNext && requestedNext.startsWith('/') && !requestedNext.startsWith('//')
       ? requestedNext
-      : '/dashboard';
+      : '/command-center';
 
   if (code) {
     const supabase = await createClient();
