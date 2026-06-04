@@ -1,7 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowRight, Mail, Clock, GitMerge, type LucideIcon } from 'lucide-react';
+import {
+  ArrowRight,
+  Mail,
+  Clock,
+  GitMerge,
+  Flame,
+  Users,
+  Activity,
+  GitBranch,
+  type LucideIcon
+} from 'lucide-react';
 import {
   Avatar,
   Badge,
@@ -25,16 +35,19 @@ function normalizeStatus(status: string): RelationshipStatus {
   return 'cold';
 }
 
+// Warmth scale runs neutral -> azure -> gold (the design system reserves gold
+// for Earn/gamification, but the relationship-warmth scale is the documented
+// exception where gold reads as "hot").
 const STATUS_META: Record<RelationshipStatus, { tone: BadgeTone; label: string }> = {
-  cold: { tone: 'azure', label: 'Cold' },
-  warm: { tone: 'gold', label: 'Warm' },
-  hot: { tone: 'danger', label: 'Hot' }
+  cold: { tone: 'neutral', label: 'Cold' },
+  warm: { tone: 'azure', label: 'Warm' },
+  hot: { tone: 'gold', label: 'Hot' }
 };
 
 const STATUS_COLOR: Record<RelationshipStatus, string> = {
-  cold: 'var(--azure-1)',
-  warm: 'var(--gold-1)',
-  hot: 'var(--danger)'
+  cold: 'var(--fg-4)',
+  warm: 'var(--azure-1)',
+  hot: 'var(--gold-1)'
 };
 
 const INTRO_STATUS_META: Record<string, { tone: BadgeTone; label: string }> = {
@@ -47,10 +60,10 @@ function introMeta(status: string): { tone: BadgeTone; label: string } {
   return INTRO_STATUS_META[status] ?? { tone: 'neutral', label: status || 'Suggested' };
 }
 
-const AVATAR_TONE: Record<RelationshipStatus, 'azure' | 'gold' | 'danger'> = {
-  cold: 'azure',
-  warm: 'gold',
-  hot: 'danger'
+const AVATAR_TONE: Record<RelationshipStatus, 'neutral' | 'azure' | 'gold'> = {
+  cold: 'neutral',
+  warm: 'azure',
+  hot: 'gold'
 };
 
 function recencyLabel(iso: string | null): string {
@@ -78,6 +91,48 @@ const STATUS_TABS: TabItem[] = [
   { id: 'warm', label: 'Warm' },
   { id: 'cold', label: 'Cold' }
 ];
+
+const TONE_HEX: Record<BadgeTone, string> = {
+  neutral: 'var(--fg-4)',
+  gold: 'var(--gold-1)',
+  azure: 'var(--azure-1)',
+  success: 'var(--success)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)',
+  info: 'var(--info)'
+};
+
+interface Kpi {
+  label: string;
+  value: string;
+  delta: string;
+  sub: string;
+  icon: LucideIcon;
+  tone: BadgeTone;
+}
+
+function KpiCard({ kpi }: { kpi: Kpi }) {
+  const Icon = kpi.icon;
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-[12.5px] font-medium text-fg-3">{kpi.label}</span>
+        <span style={{ color: TONE_HEX[kpi.tone] }}>
+          <Icon size={16} strokeWidth={1.9} aria-hidden />
+        </span>
+      </div>
+      <div className="mt-3 text-[27px] font-semibold tabular-nums tracking-[-0.02em] text-fg-1">
+        {kpi.value}
+      </div>
+      <div className="mt-2.5 flex items-center gap-2">
+        <Badge tone={kpi.tone} className="px-2 py-0.5 text-[10.5px]">
+          {kpi.delta}
+        </Badge>
+        <span className="truncate text-[11.5px] text-fg-5">{kpi.sub}</span>
+      </div>
+    </Card>
+  );
+}
 
 function ContactCard({ row }: { row: ConnectionRow }) {
   const status = normalizeStatus(row.status);
@@ -164,6 +219,46 @@ export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
   const [sort, setSort] = useState<SortKey>('strength');
   const [filter, setFilter] = useState<string>('all');
 
+  const kpis = useMemo<Kpi[]>(() => {
+    const hot = rows.filter((r) => normalizeStatus(r.status) === 'hot').length;
+    const warm = rows.filter((r) => normalizeStatus(r.status) === 'warm').length;
+    const touchpoints = rows.reduce((sum, r) => sum + (r.interaction_count ?? 0), 0);
+    return [
+      {
+        label: 'Connections',
+        value: String(rows.length),
+        delta: 'total',
+        sub: 'tracked relationships',
+        icon: Users,
+        tone: 'info'
+      },
+      {
+        label: 'Hot relationships',
+        value: String(hot),
+        delta: 'hot',
+        sub: `${warm} warm`,
+        icon: Flame,
+        tone: 'gold'
+      },
+      {
+        label: 'Touchpoints',
+        value: touchpoints.toLocaleString(),
+        delta: 'logged',
+        sub: 'across your network',
+        icon: Activity,
+        tone: 'azure'
+      },
+      {
+        label: 'Intros available',
+        value: String(intros.length),
+        delta: 'suggested',
+        sub: 'warm introductions',
+        icon: GitBranch,
+        tone: 'success'
+      }
+    ];
+  }, [rows, intros]);
+
   const visibleRows = useMemo<ConnectionRow[]>(() => {
     const base = rows.filter((r) => filter === 'all' || normalizeStatus(r.status) === filter);
     const sorted = [...base];
@@ -180,54 +275,62 @@ export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
   }, [rows, sort, filter]);
 
   return (
-    <div className="grid gap-[18px] lg:grid-cols-[1.6fr_1fr]">
-      <div>
-        <SectionTitle
-          eyebrow="Relationship intelligence"
-          title="Warm connections"
-          action={
-            <SegTabs tabs={SORT_TABS} active={sort} onChange={(id) => setSort(id as SortKey)} />
-          }
-        />
-        <div className="mb-4">
-          <SegTabs tabs={STATUS_TABS} active={filter} onChange={setFilter} />
-        </div>
-        {visibleRows.length === 0 ? (
-          <Card className="p-8 text-center">
-            <p className="text-[12.5px] text-fg-4">
-              {rows.length === 0 ? 'No connections yet.' : 'No connections match this filter.'}
-            </p>
-          </Card>
-        ) : (
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            {visibleRows.map((r) => (
-              <ContactCard key={r.id} row={r} />
-            ))}
-          </div>
-        )}
+    <div className="flex flex-col gap-[18px]">
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+        {kpis.map((k) => (
+          <KpiCard key={k.label} kpi={k} />
+        ))}
       </div>
 
-      <div>
-        <SectionTitle
-          eyebrow="Suggested by Earn"
-          title="Warm introductions"
-          action={
-            <Badge tone="gold" dot pulse>
-              Live
-            </Badge>
-          }
-        />
-        {intros.length === 0 ? (
-          <Card className="p-8 text-center">
-            <p className="text-[12.5px] text-fg-4">No introductions suggested yet.</p>
-          </Card>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {intros.map((intro) => (
-              <WarmIntroRowCard key={intro.id} intro={intro} />
-            ))}
+      <div className="grid gap-[18px] lg:grid-cols-[1.6fr_1fr]">
+        <div>
+          <SectionTitle
+            eyebrow="Relationship intelligence"
+            title="Warm connections"
+            action={
+              <SegTabs tabs={SORT_TABS} active={sort} onChange={(id) => setSort(id as SortKey)} />
+            }
+          />
+          <div className="mb-4">
+            <SegTabs tabs={STATUS_TABS} active={filter} onChange={setFilter} />
           </div>
-        )}
+          {visibleRows.length === 0 ? (
+            <Card className="p-8 text-center">
+              <p className="text-[12.5px] text-fg-4">
+                {rows.length === 0 ? 'No connections yet.' : 'No connections match this filter.'}
+              </p>
+            </Card>
+          ) : (
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              {visibleRows.map((r) => (
+                <ContactCard key={r.id} row={r} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <SectionTitle
+            eyebrow="Suggested by Earn"
+            title="Warm introductions"
+            action={
+              <Badge tone="gold" dot pulse>
+                Live
+              </Badge>
+            }
+          />
+          {intros.length === 0 ? (
+            <Card className="p-8 text-center">
+              <p className="text-[12.5px] text-fg-4">No introductions suggested yet.</p>
+            </Card>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {intros.map((intro) => (
+                <WarmIntroRowCard key={intro.id} intro={intro} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
