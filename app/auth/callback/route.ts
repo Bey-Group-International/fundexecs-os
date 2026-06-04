@@ -21,7 +21,11 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  return NextResponse.redirect(`${origin}/login`);
+  // Pass through any provider error (e.g. flow_state_already_used) to /login.
+  const oauthError = searchParams.get('error_description') || searchParams.get('error');
+  const suffix = oauthError ? `?error=${encodeURIComponent(oauthError)}` : '';
+  return NextResponse.redirect(`${origin}/login${suffix}`);
 }
