@@ -551,7 +551,7 @@ export function AdminView({ data }: { data: AdminData }) {
       cards.complete(id);
       // Approving a member advances the Work layer of Chain of Trust.
       window.emitTrust?.({
-        layer: 'Work',
+        layer: 'work',
         title: 'Member approved',
         msg: 'An applicant was approved into the organization.',
         entity: id

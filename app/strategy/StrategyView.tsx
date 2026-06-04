@@ -162,7 +162,7 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
       cards.complete(id);
       // Completing an objective advances the Execution layer of Chain of Trust.
       window.emitTrust?.({
-        layer: 'Execution',
+        layer: 'execution',
         title: 'Objective complete',
         msg: 'An objective in the 100 / 30 / 10 plan was marked complete.',
         pct: 100,
