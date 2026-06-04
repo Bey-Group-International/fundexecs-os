@@ -2,7 +2,14 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'gold' | 'danger' | 'outline';
+export type ButtonVariant =
+  | 'primary'
+  | 'light'
+  | 'secondary'
+  | 'ghost'
+  | 'gold'
+  | 'danger'
+  | 'outline';
 
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
@@ -19,12 +26,14 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 /**
  * Button — the primary action primitive.
  *
- * Per the FundExecs OS design decision, `primary` is WHITE (not the
- * prototype's blue gradient). `gold` is reserved for the Earn Copilot and
- * gamification surfaces only.
+ * Per the design handoff, `primary` is the institutional **blue gradient**
+ * (option B) used for primary CTAs. `light` is the white button. `gold` is
+ * reserved for the Earn Copilot and gamification surfaces only.
  */
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: 'bg-white text-[#070b14] hover:bg-slate-200 border border-transparent',
+  primary:
+    'bg-[linear-gradient(135deg,#3B74F0,#2152D8)] text-white border border-transparent shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] hover:brightness-110',
+  light: 'bg-white text-[#070b14] hover:bg-slate-200 border border-transparent',
   secondary: 'bg-surface-2 text-fg-1 border border-hairline hover:bg-surface-3',
   ghost: 'bg-transparent text-fg-3 border border-transparent hover:bg-surface-1 hover:text-fg-1',
   gold: 'bg-gradient-to-br from-gold-1 to-gold-2 text-[#070b14] font-semibold border border-transparent hover:brightness-105',
