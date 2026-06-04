@@ -1,18 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   // Only allow same-origin relative paths to avoid open-redirects.
   const requestedRedirect = searchParams.get('redirectedFrom');
   const redirectedFrom =
     requestedRedirect && requestedRedirect.startsWith('/') && !requestedRedirect.startsWith('//')
       ? requestedRedirect
-      : '/dashboard';
+      : '/command-center';
   const oauthError = searchParams.get('error_description') || searchParams.get('error');
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -35,8 +34,11 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      router.push(redirectedFrom);
-      router.refresh();
+      // Hard navigation so the freshly-set auth cookies are sent on the next
+      // request — a client-side router.push races the cookie write and the
+      // middleware bounces back to /login. Keep `loading` true through unload.
+      window.location.assign(redirectedFrom);
+      return;
     } else {
       const { error } = await supabase.auth.signUp({
         email,
