@@ -69,6 +69,18 @@ a proposed data model, and conventions.
 
 ### Phase 4 — Intelligence
 
+- [x] Schema reconciled toward the product blueprint: ecosystem directory
+      (service/capital providers), 100/30/10 governance, synergy opportunities,
+      Chain-of-Trust state (records/proof layers/evidence), admin audit
+- [x] AI knowledge base for the "Earn" brains — pgvector RAG
+      (`ai_brains`, `knowledge_documents`, `knowledge_chunks`,
+      `brain_routing_rules`, `match_knowledge_chunks()`), org-scoped + global
+- [x] Integrations + relationship intelligence (warm connections):
+      `integration_connections` (provider-agnostic), `contacts` /
+      `contact_identities`, normalized `interactions`, auto-scored
+      `relationships` (recency + frequency trigger), and `warm_introductions`
+- [ ] Wire provider sync (Gmail, Google/Outlook Calendar, Calendly, Slack,
+      Apollo, …) into `interactions`; embed knowledge into `knowledge_chunks`
 - [ ] AI Copilot Task Manager
 - [ ] Private Market Lifecycle Intelligence
 - [ ] Bey Group Admin Portal
