@@ -25,18 +25,6 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ provider:
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  // Google providers use the OAuth access token from the user's session.
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
-  const token = googleProviders.has(providerId) ? session?.provider_token : null;
-  if (!token) {
-    return NextResponse.json(
-      { error: `No provider token for ${providerId}. Reconnect the integration.` },
-      { status: 400 }
-    );
-  }
-
   const admin = createAdminClient();
 
   // Resolve the user's organization (first membership for now).
@@ -50,6 +38,44 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ provider:
     return NextResponse.json({ error: 'No organization for user' }, { status: 400 });
   }
   const orgId = membership.org_id;
+
+  // Token resolution is pluggable per provider:
+  //  - Google providers (gmail, google_calendar) reuse the OAuth
+  //    `provider_token` minted into the user's Supabase session.
+  //  - Every other provider (Calendly, Slack, Apollo, Outlook) has its own
+  //    OAuth app / API key, so its access token is read (via the admin client)
+  //    from the stored connection's `metadata.access_token`. No new table or
+  //    migration is introduced — we reuse the existing `metadata` jsonb column.
+  let token: string | null = null;
+  if (googleProviders.has(providerId)) {
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+    token = session?.provider_token ?? null;
+    if (!token) {
+      return NextResponse.json(
+        { error: `No provider token for ${providerId}. Reconnect the integration.` },
+        { status: 400 }
+      );
+    }
+  } else {
+    const { data: stored } = await admin
+      .from('integration_connections')
+      .select('metadata')
+      .eq('org_id', orgId)
+      .eq('user_id', user.id)
+      .eq('provider', providerId)
+      .limit(1)
+      .maybeSingle();
+    const metadata = (stored?.metadata ?? null) as { access_token?: unknown } | null;
+    token = metadata && typeof metadata.access_token === 'string' ? metadata.access_token : null;
+    if (!token) {
+      return NextResponse.json(
+        { error: `Connect ${providerId} first (no stored token)` },
+        { status: 400 }
+      );
+    }
+  }
 
   // Ensure a connection row exists and read its last sync watermark.
   const { data: connection, error: connError } = await admin
