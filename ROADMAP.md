@@ -87,7 +87,11 @@ a proposed data model, and conventions.
       Google Calendar adapters (Google session `provider_token`)
 - [ ] Remaining adapters (Calendly, Slack, Apollo, Outlook) + durable token
       refresh, and embedding knowledge into `knowledge_chunks`
-- [ ] AI Copilot Task Manager
+- [x] AI Copilot ("Earn") backend: Voyage embeddings + pgvector RAG over the
+      15 brains, Claude Sonnet 4.6 with prompt caching (`lib/ai/`,
+      `POST /api/ask-earn`), live chat wired into the Ask Earn screen, and an
+      admin `POST /api/knowledge/embed` to seed brain knowledge
+- [ ] AI Copilot Task Manager (task creation/automation from Earn)
 - [ ] Private Market Lifecycle Intelligence
 - [ ] Bey Group Admin Portal
 

@@ -24,6 +24,7 @@ import { EarnCoin } from '@/components/screens/EarnCoin';
 import { BRAINS } from '@/components/screens/brains';
 import { cn } from '@/lib/utils';
 import type { EarnTask } from '@/lib/queries/ask-earn';
+import { EarnChat } from './EarnChat';
 
 type Priority = EarnTask['priority'];
 type FilterTab = 'open' | 'done' | 'archived';
@@ -168,18 +169,11 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
             <span className="font-semibold text-gold-1">{counts.open} open tasks</span> across your
             workflows.
           </div>
-          <div className="mt-2.5 flex items-center gap-2.5 rounded-[11px] border border-hairline bg-surface-2 px-3 py-2">
-            <Sparkles size={15} strokeWidth={1.9} className="flex-none text-gold-1" aria-hidden />
-            <span className="flex-1 text-[12.5px] text-fg-5">
-              Ask Earn or run a command — &ldquo;Build LP list&rdquo;, &ldquo;Review deck like an
-              LP&rdquo;&hellip;
-            </span>
-            <kbd className="rounded border border-hairline px-1.5 py-px font-mono text-[10px] text-fg-5">
-              &crarr;
-            </kbd>
-          </div>
         </div>
       </Card>
+
+      {/* Live Earn copilot chat (RAG over the 15 brains + Claude) */}
+      <EarnChat />
 
       <div className="grid items-start gap-[18px] lg:grid-cols-[1fr_320px]">
         <div>
