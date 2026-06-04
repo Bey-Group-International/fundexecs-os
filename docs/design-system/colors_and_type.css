@@ -1,0 +1,218 @@
+/* ============================================================
+   FundExecs OS — Colors & Type
+   AI-native private-market command center.
+   Dark institutional fintech aesthetic (Linear / Vercel / Ramp / Carta).
+   Derived from the codebase: base #070b14, white-alpha surfaces,
+   white/10 borders, slate text ramp, white primary buttons.
+   ============================================================ */
+
+/* Geist is the on-brand face for a Vercel-stack product. The repo itself
+   only declares an Arial fallback — Geist is a documented substitution.
+   Loaded from Google Fonts; swap for self-hosted woff2 in production. */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ---- Brand fonts ---- */
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+  /* ============================================================
+     COLOR — Base canvas (deep navy / charcoal)
+     ============================================================ */
+  --bg-0: #070b14;          /* app base — the true background */
+  --bg-1: #0a0f1c;          /* raised panel / sidebar — cooler, cleaner */
+  --bg-2: #0d1424;          /* card base on top of bg-1 */
+  --bg-3: #121a2c;          /* hover / nested surface */
+
+  /* ---- White-alpha surfaces (the codebase's core idiom) ----
+     Slightly crisper (less milky) for a fresher institutional read. */
+  --surface-1: rgba(255, 255, 255, 0.035); /* default card fill */
+  --surface-2: rgba(255, 255, 255, 0.055); /* chip / input fill */
+  --surface-3: rgba(255, 255, 255, 0.085); /* hover fill */
+
+  /* ---- Borders / hairlines — finer, sleeker ---- */
+  --border: rgba(255, 255, 255, 0.085);      /* default hairline */
+  --border-strong: rgba(255, 255, 255, 0.20);/* focus / emphasis */
+  --border-faint: rgba(255, 255, 255, 0.05); /* internal dividers */
+
+  /* ============================================================
+     COLOR — Text ramp (slate)
+     ============================================================ */
+  --fg-1: #ffffff;          /* primary headings / key values */
+  --fg-2: #cbd5e1;          /* body text (slate-300) */
+  --fg-3: #94a3b8;          /* secondary / labels (slate-400) */
+  --fg-4: #64748b;          /* tertiary / captions (slate-500) */
+  --fg-5: #475569;          /* disabled / faint (slate-600) */
+
+  /* ============================================================
+     COLOR — Accent: Gold ("Earn" / gamification / progress reward)
+     Pulled from the Earn-coin mascot. Used sparingly for status,
+     levels, XP, and the Copilot identity.
+     ============================================================ */
+  --gold-1: #F7C948;        /* primary gold */
+  --gold-2: #E5A823;        /* deeper gold (gradients, borders) */
+  --gold-soft: rgba(247, 201, 72, 0.12);  /* tinted fill */
+  --gold-line: rgba(247, 201, 72, 0.28);  /* tinted border */
+
+  /* ---- Azure: information / AI brain routing / links ---- */
+  --azure-1: #5B8DEF;
+  --azure-2: #3B6FD4;
+  --azure-soft: rgba(91, 141, 239, 0.12);
+  --azure-line: rgba(91, 141, 239, 0.30);
+
+  /* ---- Accent: institutional blue (primary CTAs) + electric cyan ----
+     Per blueprint: primary calls-to-action are cyan/blue. Gold is
+     reserved for the Earn identity and gamification only. */
+  --accent: #2563EB;
+  --accent-2: #1D4ED8;
+  --accent-soft: rgba(37, 99, 235, 0.14);
+  --accent-line: rgba(37, 99, 235, 0.40);
+  --cyan: #22D3EE;
+
+  /* ============================================================
+     COLOR — Semantic
+     ============================================================ */
+  --success: #34D399;       --success-soft: rgba(52, 211, 153, 0.12);  --success-line: rgba(52,211,153,0.30);
+  --warning: #FBBF24;       --warning-soft: rgba(251, 191, 36, 0.12);  --warning-line: rgba(251,191,36,0.30);
+  --danger:  #FB7185;       --danger-soft:  rgba(251, 113, 133, 0.12); --danger-line:  rgba(251,113,133,0.30);
+  --info:    #38BDF8;       --info-soft:    rgba(56, 189, 248, 0.12);  --info-line:    rgba(56,189,248,0.30);
+
+  /* ============================================================
+     COLOR — Chain of Trust proof layers (4-stage pipeline)
+     ============================================================ */
+  --proof-truth:     #38BDF8;   /* Proof of Truth — sky */
+  --proof-concept:   #A78BFA;   /* Proof of Concept — violet */
+  --proof-execution: #FBBF24;   /* Proof of Execution — amber */
+  --proof-work:      #34D399;   /* Proof of Work — emerald */
+
+  /* ============================================================
+     SHADOW / ELEVATION  — crisp & light, not heavy. Each card
+     pairs a soft drop with a 1px top highlight for a fresh,
+     premium-glass institutional feel.
+     ============================================================ */
+  --ring-top: inset 0 1px 0 rgba(255, 255, 255, 0.05);   /* subtle top edge highlight */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24), var(--ring-top);
+  --shadow-md: 0 4px 16px -6px rgba(0, 0, 0, 0.36), var(--ring-top);
+  --shadow-lg: 0 12px 34px -14px rgba(0, 0, 0, 0.42), var(--ring-top);
+  --shadow-glow-gold: 0 0 0 1px var(--gold-line), 0 10px 30px -10px rgba(229, 168, 35, 0.30);
+  --topbar-bg: rgba(7, 11, 20, 0.72);
+
+  /* ============================================================
+     RADIUS  (codebase uses xl / 2xl liberally)
+     ============================================================ */
+  --r-sm: 8px;
+  --r-md: 12px;     /* rounded-xl — inputs, buttons, chips */
+  --r-lg: 16px;     /* rounded-2xl — cards, panels */
+  --r-xl: 24px;
+  --r-pill: 999px;
+
+  /* ============================================================
+     SPACING  (4px base grid)
+     ============================================================ */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+  --s-12: 48px; --s-16: 64px;
+}
+
+/* ============================================================
+   TYPE SCALE — semantic roles
+   Headings: semibold, tight tracking (the codebase signature).
+   ============================================================ */
+.t-display {
+  font-family: var(--font-sans);
+  font-size: 56px; line-height: 1.04; font-weight: 600;
+  letter-spacing: -0.025em; color: var(--fg-1);
+}
+.t-h1 {
+  font-family: var(--font-sans);
+  font-size: 30px; line-height: 1.15; font-weight: 600;
+  letter-spacing: -0.02em; color: var(--fg-1);
+}
+.t-h2 {
+  font-family: var(--font-sans);
+  font-size: 20px; line-height: 1.25; font-weight: 600;
+  letter-spacing: -0.015em; color: var(--fg-1);
+}
+.t-h3 {
+  font-family: var(--font-sans);
+  font-size: 16px; line-height: 1.4; font-weight: 600;
+  letter-spacing: -0.01em; color: var(--fg-1);
+}
+.t-body {
+  font-family: var(--font-sans);
+  font-size: 14px; line-height: 1.62; font-weight: 400; color: var(--fg-2);
+}
+.t-body-sm {
+  font-family: var(--font-sans);
+  font-size: 13px; line-height: 1.5; font-weight: 400; color: var(--fg-3);
+}
+.t-label {
+  font-family: var(--font-sans);
+  font-size: 13px; line-height: 1.3; font-weight: 500; color: var(--fg-3);
+}
+.t-caption {
+  font-family: var(--font-sans);
+  font-size: 12px; line-height: 1.35; font-weight: 400; color: var(--fg-4);
+}
+/* All-caps micro-label — section eyebrows, table headers */
+.t-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 10.5px; line-height: 1.2; font-weight: 600;
+  letter-spacing: 0.11em; text-transform: uppercase; color: var(--fg-4);
+}
+.t-mono {
+  font-family: var(--font-mono);
+  font-size: 12px; line-height: 1.4; font-weight: 500;
+  letter-spacing: -0.01em; color: var(--fg-3);
+  font-feature-settings: 'tnum' 1;
+}
+/* Tabular metric — KPI numbers */
+.t-metric {
+  font-family: var(--font-sans);
+  font-size: 32px; line-height: 1; font-weight: 600;
+  letter-spacing: -0.02em; color: var(--fg-1);
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ============================================================
+   LIGHT / DAY THEME — set data-theme="light" on <html>.
+   White/slate surfaces, dark text; accent blue + gold preserved.
+   Depth flips from white-alpha to slate-alpha surfaces.
+   ============================================================ */
+:root[data-theme="light"] {
+  --bg-0: #EEF2F7;          /* app base — cool slate */
+  --bg-1: #FFFFFF;          /* sidebar / panels */
+  --bg-2: #FFFFFF;
+  --bg-3: #F1F5F9;
+
+  --surface-1: rgba(15, 23, 42, 0.022);
+  --surface-2: rgba(15, 23, 42, 0.045);
+  --surface-3: rgba(15, 23, 42, 0.085);
+
+  --border: rgba(15, 23, 42, 0.10);
+  --border-strong: rgba(15, 23, 42, 0.24);
+  --border-faint: rgba(15, 23, 42, 0.06);
+
+  --fg-1: #0F172A;
+  --fg-2: #334155;
+  --fg-3: #64748B;
+  --fg-4: #94A3B8;
+  --fg-5: #B6C0CD;
+
+  --ring-top: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), var(--ring-top);
+  --shadow-md: 0 4px 16px -6px rgba(15, 23, 42, 0.12), var(--ring-top);
+  --shadow-lg: 0 14px 34px -16px rgba(15, 23, 42, 0.16), var(--ring-top);
+  --shadow-glow-gold: 0 0 0 1px var(--gold-line), 0 10px 30px -12px rgba(229, 168, 35, 0.28);
+
+  --topbar-bg: rgba(255, 255, 255, 0.82);
+
+  /* slightly richer tinted fills so they read on white */
+  --gold-soft: rgba(229, 168, 35, 0.14);
+  --azure-soft: rgba(37, 99, 235, 0.10);
+  --accent-soft: rgba(37, 99, 235, 0.10);
+  --success-soft: rgba(16, 158, 110, 0.12);
+  --warning-soft: rgba(202, 138, 4, 0.13);
+  --danger-soft: rgba(225, 75, 100, 0.12);
+  --info-soft: rgba(8, 145, 200, 0.12);
+}
