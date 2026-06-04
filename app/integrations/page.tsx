@@ -6,10 +6,13 @@ import {
   MessageSquare,
   Rocket,
   Inbox,
+  PlugZap,
+  CheckCircle2,
+  AlertTriangle,
   type LucideIcon
 } from 'lucide-react';
 import { AppShell } from '@/components/shell/AppShell';
-import { Badge, Card, SectionTitle } from '@/components/ui';
+import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { ConnectButton } from '@/components/integrations/ConnectButton';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getIntegrationConnections, type ProviderConnection } from '@/lib/queries/integrations';
@@ -89,6 +92,47 @@ function syncedLabel(iso: string | null): string {
   const hrs = Math.round(mins / 60);
   if (hrs < 24) return `Synced ${hrs}h ago`;
   return `Synced ${Math.round(hrs / 24)}d ago`;
+}
+
+const TONE_HEX: Record<BadgeTone, string> = {
+  neutral: 'var(--fg-4)',
+  gold: 'var(--gold-1)',
+  azure: 'var(--azure-1)',
+  success: 'var(--success)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)',
+  info: 'var(--info)'
+};
+
+interface SummaryStat {
+  label: string;
+  value: number;
+  icon: LucideIcon;
+  tone: BadgeTone;
+}
+
+function SummaryCard({ stat }: { stat: SummaryStat }) {
+  const Icon = stat.icon;
+  return (
+    <Card className="flex items-center gap-3.5 p-4">
+      <span
+        className="flex h-10 w-10 flex-none items-center justify-center rounded-xl border"
+        style={{
+          color: TONE_HEX[stat.tone],
+          background: `var(--${stat.tone}-soft, var(--surface-2))`,
+          borderColor: `var(--${stat.tone}-line, var(--border))`
+        }}
+      >
+        <Icon size={18} strokeWidth={1.9} aria-hidden />
+      </span>
+      <div>
+        <div className="text-[22px] font-semibold tabular-nums leading-none tracking-[-0.02em] text-fg-1">
+          {stat.value}
+        </div>
+        <div className="mt-1.5 text-[11.5px] text-fg-4">{stat.label}</div>
+      </div>
+    </Card>
+  );
 }
 
 function IntegrationCard({ conn }: { conn: IntegrationView }) {
@@ -181,9 +225,23 @@ export default async function IntegrationsPage() {
   const rows = await getIntegrationConnections(org.orgId, org.userId);
   const connections = mergeConnections(rows);
   const connectedCount = connections.filter((c) => c.status === 'connected').length;
+  const attentionCount = connections.filter((c) => c.status === 'error').length;
+  const notConnectedCount = connections.filter((c) => c.status === 'disconnected').length;
+
+  const summary: SummaryStat[] = [
+    { label: 'Connected', value: connectedCount, icon: CheckCircle2, tone: 'success' },
+    { label: 'Needs attention', value: attentionCount, icon: AlertTriangle, tone: 'danger' },
+    { label: 'Not connected', value: notConnectedCount, icon: PlugZap, tone: 'neutral' }
+  ];
 
   return (
     <AppShell title="Integrations" subtitle="Connect your tools to power relationship intelligence">
+      <div className="mb-[18px] grid grid-cols-3 gap-3.5">
+        {summary.map((s) => (
+          <SummaryCard key={s.label} stat={s} />
+        ))}
+      </div>
+
       <SectionTitle
         eyebrow={`${connectedCount} of ${connections.length} connected`}
         title="Integrations"
