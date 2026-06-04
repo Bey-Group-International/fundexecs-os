@@ -51,7 +51,10 @@ a proposed data model, and conventions.
 
 ### Phase 2 — Core data & Command Center
 
-- [ ] Define schema + RLS migrations (see data model below)
+- [x] Define schema + RLS migrations (see `supabase/migrations/`) — all 9 core
+      tables, org-scoped Row Level Security, signup trigger, `create_organization`
+      RPC, and generated typed bindings (`lib/supabase/database.types.ts`)
+- [ ] Onboarding: call `create_organization` + set `profiles.role` after signup
 - [ ] Command Center Dashboard (KPIs, activity, next actions)
 - [ ] Notification Center
 
