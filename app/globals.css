@@ -170,3 +170,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
+
+/* During a theme flip the toggle adds this class to <html>; suppress every
+   transition so nothing animates `color` and gets stuck mid-flip. */
+.fx-no-transition,
+.fx-no-transition * {
+  transition: none !important;
+}
