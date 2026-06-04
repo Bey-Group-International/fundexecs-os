@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { AppShell } from '@/components/shell/AppShell';
 import { Badge, Button, Card, ProgressBar, SectionTitle, type BadgeTone } from '@/components/ui';
+import { getActiveOrg } from '@/lib/queries/org';
+import { getCommandCenterData, type CommandCenterData } from '@/lib/queries/command-center';
 
 export const metadata: Metadata = { title: 'Command Center' };
 
@@ -25,90 +27,6 @@ interface Kpi {
   tone: BadgeTone;
 }
 
-const KPIS: Kpi[] = [
-  {
-    label: 'Active deals',
-    value: '18',
-    delta: '+3',
-    sub: 'vs last month',
-    icon: TrendingUp,
-    tone: 'success'
-  },
-  {
-    label: 'Capital in motion',
-    value: '$284M',
-    delta: '+12%',
-    sub: 'across 5 deals',
-    icon: Banknote,
-    tone: 'gold'
-  },
-  {
-    label: 'LP conversations',
-    value: '32',
-    delta: '+7',
-    sub: '9 warm this week',
-    icon: Handshake,
-    tone: 'azure'
-  },
-  {
-    label: 'Fund readiness',
-    value: '74%',
-    delta: '+5%',
-    sub: '11 of 15 steps',
-    icon: Target,
-    tone: 'info'
-  }
-];
-
-interface Deal {
-  id: string;
-  name: string;
-  type: string;
-  stage: string;
-  amount: string;
-  trust: number;
-  tone: BadgeTone;
-}
-
-const DEALS: Deal[] = [
-  {
-    id: 'dl-187',
-    name: 'Atlas Manufacturing',
-    type: 'Growth equity',
-    stage: 'Diligence',
-    amount: '$48M',
-    trust: 68,
-    tone: 'gold'
-  },
-  {
-    id: 'dl-204',
-    name: 'Cedar Logistics',
-    type: 'Buyout',
-    stage: 'Term sheet',
-    amount: '$112M',
-    trust: 82,
-    tone: 'success'
-  },
-  {
-    id: 'dl-219',
-    name: 'Meridian Health',
-    type: 'Series B',
-    stage: 'Sourcing',
-    amount: '$26M',
-    trust: 34,
-    tone: 'azure'
-  },
-  {
-    id: 'dl-231',
-    name: 'Granite Software',
-    type: 'Secondary',
-    stage: 'Closing',
-    amount: '$58M',
-    trust: 91,
-    tone: 'success'
-  }
-];
-
 const TONE_HEX: Record<BadgeTone, string> = {
   neutral: 'var(--fg-4)',
   gold: 'var(--gold-1)',
@@ -118,6 +36,56 @@ const TONE_HEX: Record<BadgeTone, string> = {
   danger: 'var(--danger)',
   info: 'var(--info)'
 };
+
+function formatCurrency(amount: number): string {
+  if (amount >= 1_000_000_000) return `$${(amount / 1_000_000_000).toFixed(1)}B`;
+  if (amount >= 1_000_000) return `$${Math.round(amount / 1_000_000)}M`;
+  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
+  return `$${amount}`;
+}
+
+function buildKpis(data: CommandCenterData): Kpi[] {
+  return [
+    {
+      label: 'Active deals',
+      value: String(data.activeDealsCount),
+      delta: 'live',
+      sub: 'in pipeline',
+      icon: TrendingUp,
+      tone: 'success'
+    },
+    {
+      label: 'Capital in motion',
+      value: formatCurrency(data.capitalInMotion),
+      delta: 'total',
+      sub: `across ${data.capitalDealCount} deals`,
+      icon: Banknote,
+      tone: 'gold'
+    },
+    {
+      label: 'Hot relationships',
+      value: String(data.hotRelationshipsCount),
+      delta: 'hot',
+      sub: `${data.warmRelationshipsThisWeek} warm this week`,
+      icon: Handshake,
+      tone: 'azure'
+    },
+    {
+      label: 'Warm connections',
+      value: String(data.topWarmConnections.length),
+      delta: 'top',
+      sub: 'highest warmth',
+      icon: Target,
+      tone: 'info'
+    }
+  ];
+}
+
+function dealTone(strength: number): BadgeTone {
+  if (strength >= 80) return 'success';
+  if (strength >= 50) return 'gold';
+  return 'azure';
+}
 
 interface Synergy {
   icon: LucideIcon;
@@ -151,38 +119,6 @@ const SYNERGIES: Synergy[] = [
   }
 ];
 
-interface WarmConnection {
-  name: string;
-  company: string;
-  via: string;
-  strength: number;
-  tone: BadgeTone;
-}
-
-const WARM_CONNECTIONS: WarmConnection[] = [
-  {
-    name: 'Dana Whitfield',
-    company: 'Sequoia Heritage',
-    via: 'Marcus Lee can intro you',
-    strength: 88,
-    tone: 'success'
-  },
-  {
-    name: 'Priya Nair',
-    company: 'Lakeview Endowment',
-    via: 'Jordan Park can intro you',
-    strength: 71,
-    tone: 'gold'
-  },
-  {
-    name: 'Tomás Rivera',
-    company: 'Beacon Family Office',
-    via: 'Avery Chen can intro you',
-    strength: 64,
-    tone: 'gold'
-  }
-];
-
 function KpiCard({ kpi }: { kpi: Kpi }) {
   const Icon = kpi.icon;
   return (
@@ -206,7 +142,7 @@ function KpiCard({ kpi }: { kpi: Kpi }) {
   );
 }
 
-function EarnBriefing() {
+function EarnBriefing({ data }: { data: CommandCenterData }) {
   return (
     <Card className="overflow-hidden p-0">
       <div className="flex items-center gap-4 border-b border-hairline bg-[linear-gradient(105deg,rgba(247,201,72,0.11),rgba(247,201,72,0.02)_46%,transparent_72%)] px-5 py-[18px]">
@@ -216,7 +152,7 @@ function EarnBriefing() {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-[15.5px] font-semibold tracking-[-0.015em] text-fg-1">
-              Good morning, Avery.
+              Good morning.
             </span>
             <Badge tone="gold" className="px-1.5 py-px text-[9.5px]">
               Earn
@@ -224,8 +160,12 @@ function EarnBriefing() {
           </div>
           <p className="mt-1 text-[12.5px] leading-relaxed text-fg-3">
             <span className="font-semibold text-fg-2">Earnest Fundmaker</span>, your private-market
-            assistant, is monitoring 18 deals, 5 LP conversations, and 2 flagged items —{' '}
-            <span className="font-semibold text-gold-1">3 actions</span> need you today.
+            assistant, is monitoring{' '}
+            <span className="font-semibold text-gold-1">{data.activeDealsCount} deals</span> and{' '}
+            <span className="font-semibold text-gold-1">
+              {data.hotRelationshipsCount} hot relationships
+            </span>{' '}
+            across your network.
           </p>
         </div>
         <Button variant="gold" icon={Sparkles} className="flex-none">
@@ -236,11 +176,11 @@ function EarnBriefing() {
   );
 }
 
-function DealFlow() {
+function DealFlow({ data }: { data: CommandCenterData }) {
   return (
     <Card>
       <SectionTitle
-        eyebrow="18 active"
+        eyebrow={`${data.activeDealsCount} active`}
         title="Deal flow"
         action={
           <Button variant="ghost" size="sm" iconRight={ArrowRight}>
@@ -248,32 +188,51 @@ function DealFlow() {
           </Button>
         }
       />
-      <div className="grid grid-cols-[1.6fr_1fr_0.8fr_1.2fr] gap-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-        <span>Deal</span>
-        <span>Stage</span>
-        <span>Size</span>
-        <span>Trust</span>
-      </div>
-      <div className="my-2 h-px bg-hairline" />
-      <div className="flex flex-col gap-0.5">
-        {DEALS.map((d) => (
-          <div
-            key={d.id}
-            className="grid grid-cols-[1.6fr_1fr_0.8fr_1.2fr] items-center gap-2 rounded-lg px-1.5 py-2.5 transition hover:bg-surface-1"
-          >
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
-              <div className="text-[11px] text-fg-5">{d.type}</div>
-            </div>
-            <span className="text-xs text-fg-3">{d.stage}</span>
-            <span className="text-[12.5px] font-medium tabular-nums text-fg-2">{d.amount}</span>
-            <div className="flex items-center gap-2">
-              <ProgressBar value={d.trust} color={TONE_HEX[d.tone]} height={5} className="flex-1" />
-              <span className="w-7 text-right text-[11px] tabular-nums text-fg-4">{d.trust}%</span>
-            </div>
+      {data.recentDeals.length === 0 ? (
+        <p className="py-6 text-center text-[12.5px] text-fg-5">No deals yet.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-[1.6fr_1fr_0.8fr_1.2fr] gap-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+            <span>Deal</span>
+            <span>Stage</span>
+            <span>Size</span>
+            <span>Status</span>
           </div>
-        ))}
-      </div>
+          <div className="my-2 h-px bg-hairline" />
+          <div className="flex flex-col gap-0.5">
+            {data.recentDeals.map((d) => {
+              const trust = Math.min(100, Math.max(0, (d.amount ?? 0) / 1_000_000));
+              const tone = dealTone(trust);
+              return (
+                <div
+                  key={d.id}
+                  className="grid grid-cols-[1.6fr_1fr_0.8fr_1.2fr] items-center gap-2 rounded-lg px-1.5 py-2.5 transition hover:bg-surface-1"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
+                    <div className="text-[11px] text-fg-5">{d.status}</div>
+                  </div>
+                  <span className="text-xs text-fg-3">{d.stage}</span>
+                  <span className="text-[12.5px] font-medium tabular-nums text-fg-2">
+                    {d.amount != null ? formatCurrency(d.amount) : '—'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <ProgressBar
+                      value={trust}
+                      color={TONE_HEX[tone]}
+                      height={5}
+                      className="flex-1"
+                    />
+                    <span className="w-7 text-right text-[11px] tabular-nums text-fg-4">
+                      {Math.round(trust)}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </Card>
   );
 }
@@ -320,7 +279,7 @@ function SynergyFeed() {
   );
 }
 
-function WarmConnectionsPanel() {
+function WarmConnectionsPanel({ data }: { data: CommandCenterData }) {
   return (
     <Card>
       <SectionTitle
@@ -332,45 +291,72 @@ function WarmConnectionsPanel() {
           </Button>
         }
       />
-      <div className="flex flex-col gap-2">
-        {WARM_CONNECTIONS.map((c) => (
-          <div
-            key={c.name}
-            className="flex items-center justify-between gap-3 rounded-xl px-1.5 py-2 hover:bg-surface-1"
-          >
-            <div className="min-w-0">
-              <div className="truncate text-[12.5px] font-semibold text-fg-1">{c.name}</div>
-              <div className="truncate text-[11px] text-fg-5">
-                {c.company} · {c.via}
+      {data.topWarmConnections.length === 0 ? (
+        <p className="py-6 text-center text-[12.5px] text-fg-5">No connections yet.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {data.topWarmConnections.map((c) => (
+            <div
+              key={c.id}
+              className="flex items-center justify-between gap-3 rounded-xl px-1.5 py-2 hover:bg-surface-1"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-[12.5px] font-semibold text-fg-1">{c.name}</div>
+                <div className="truncate text-[11px] text-fg-5">
+                  {c.company ?? 'Unknown company'}
+                </div>
               </div>
+              <Badge tone={dealTone(c.strength)} className="px-2 py-0.5 text-[10.5px] tabular-nums">
+                {c.strength}
+              </Badge>
             </div>
-            <Badge tone={c.tone} className="px-2 py-0.5 text-[10.5px] tabular-nums">
-              {c.strength}
-            </Badge>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
 
-export default function CommandCenterPage() {
+function NoOrgState() {
+  return (
+    <AppShell title="Command Center" subtitle="Your private-market briefing">
+      <Card className="p-10 text-center">
+        <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
+        <p className="mx-auto mt-2 max-w-md text-[12.5px] text-fg-4">
+          You are not a member of an organization yet. Once you join or create one, your deal flow
+          and relationship intelligence will appear here.
+        </p>
+      </Card>
+    </AppShell>
+  );
+}
+
+export default async function CommandCenterPage() {
+  const org = await getActiveOrg();
+
+  if (!org) {
+    return <NoOrgState />;
+  }
+
+  const data = await getCommandCenterData(org.orgId);
+  const kpis = buildKpis(data);
+
   return (
     <AppShell title="Command Center" subtitle="Your private-market briefing">
       <div className="flex flex-col gap-[18px]">
-        <EarnBriefing />
+        <EarnBriefing data={data} />
 
         <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-          {KPIS.map((k) => (
+          {kpis.map((k) => (
             <KpiCard key={k.label} kpi={k} />
           ))}
         </div>
 
         <div className="grid gap-[18px] lg:grid-cols-[1.5fr_1fr]">
-          <DealFlow />
+          <DealFlow data={data} />
           <div className="flex flex-col gap-[18px]">
             <SynergyFeed />
-            <WarmConnectionsPanel />
+            <WarmConnectionsPanel data={data} />
           </div>
         </div>
       </div>

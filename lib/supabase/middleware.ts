@@ -37,7 +37,14 @@ export async function updateSession(request: NextRequest) {
 
   // Gate authenticated areas. Unauthenticated users hitting a protected
   // route are redirected to /login. Adjust the matcher list as modules land.
-  const protectedPrefixes = ['/dashboard', '/pipeline', '/settings'];
+  const protectedPrefixes = [
+    '/dashboard',
+    '/pipeline',
+    '/settings',
+    '/command-center',
+    '/connections',
+    '/integrations'
+  ];
   const isProtected = protectedPrefixes.some((p) => request.nextUrl.pathname.startsWith(p));
 
   if (!user && isProtected) {

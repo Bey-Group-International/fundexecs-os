@@ -13,19 +13,13 @@ import {
 } from 'lucide-react';
 import { AppShell } from '@/components/shell/AppShell';
 import { Badge, Button, Card, SectionTitle } from '@/components/ui';
+import { getActiveOrg } from '@/lib/queries/org';
+import { getIntegrationConnections, type ProviderConnection } from '@/lib/queries/integrations';
 
 export const metadata: Metadata = { title: 'Integrations' };
 
-/* Mock data shaped to mirror integration_connections. */
 type Provider = 'gmail' | 'google_calendar' | 'calendly' | 'slack' | 'apollo' | 'outlook';
-type ConnectionStatus = 'connected' | 'disconnected' | 'error';
-
-interface IntegrationConnection {
-  provider: Provider;
-  status: ConnectionStatus;
-  external_account: string | null;
-  last_synced_at: string | null; // ISO timestamp
-}
+type ConnectionStatus = ProviderConnection['status'];
 
 interface ProviderMeta {
   name: string;
@@ -34,6 +28,7 @@ interface ProviderMeta {
   category: string;
 }
 
+/* Static provider catalog — the known integrations we surface. */
 const PROVIDER_META: Record<Provider, ProviderMeta> = {
   gmail: {
     name: 'Gmail',
@@ -73,47 +68,32 @@ const PROVIDER_META: Record<Provider, ProviderMeta> = {
   }
 };
 
-const CONNECTIONS: IntegrationConnection[] = [
-  {
-    provider: 'gmail',
-    status: 'connected',
-    external_account: 'avery@northwind.vc',
-    last_synced_at: '2026-06-04T08:12:00Z'
-  },
-  {
-    provider: 'google_calendar',
-    status: 'connected',
-    external_account: 'avery@northwind.vc',
-    last_synced_at: '2026-06-04T08:12:00Z'
-  },
-  {
-    provider: 'calendly',
-    status: 'connected',
-    external_account: 'calendly.com/avery-sloane',
-    last_synced_at: '2026-06-03T17:40:00Z'
-  },
-  {
-    provider: 'slack',
-    status: 'error',
-    external_account: 'Northwind Capital',
-    last_synced_at: '2026-05-30T11:05:00Z'
-  },
-  { provider: 'apollo', status: 'disconnected', external_account: null, last_synced_at: null },
-  { provider: 'outlook', status: 'disconnected', external_account: null, last_synced_at: null }
+const PROVIDER_ORDER: Provider[] = [
+  'gmail',
+  'google_calendar',
+  'calendly',
+  'slack',
+  'apollo',
+  'outlook'
 ];
+
+interface IntegrationView {
+  provider: Provider;
+  status: ConnectionStatus;
+  external_account: string | null;
+  last_synced_at: string | null;
+}
 
 function syncedLabel(iso: string | null): string {
   if (!iso) return 'Never synced';
-  const then = new Date(iso).getTime();
-  const now = new Date('2026-06-04T09:00:00Z').getTime();
-  const mins = Math.max(0, Math.round((now - then) / 60_000));
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
   if (mins < 60) return `Synced ${mins}m ago`;
   const hrs = Math.round(mins / 60);
   if (hrs < 24) return `Synced ${hrs}h ago`;
   return `Synced ${Math.round(hrs / 24)}d ago`;
 }
 
-function IntegrationCard({ conn }: { conn: IntegrationConnection }) {
+function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const meta = PROVIDER_META[conn.provider];
   const Icon = meta.icon;
   const connected = conn.status === 'connected';
@@ -179,16 +159,51 @@ function IntegrationCard({ conn }: { conn: IntegrationConnection }) {
   );
 }
 
-export default function IntegrationsPage() {
-  const connectedCount = CONNECTIONS.filter((c) => c.status === 'connected').length;
+/** Merge DB rows with the static catalog so every known provider renders. */
+function mergeConnections(rows: ProviderConnection[]): IntegrationView[] {
+  const byProvider = new Map(rows.map((r) => [r.provider, r]));
+  return PROVIDER_ORDER.map((provider) => {
+    const row = byProvider.get(provider);
+    return {
+      provider,
+      status: row?.status ?? 'disconnected',
+      external_account: row?.external_account ?? null,
+      last_synced_at: row?.last_synced_at ?? null
+    };
+  });
+}
+
+export default async function IntegrationsPage() {
+  const org = await getActiveOrg();
+
+  if (!org) {
+    return (
+      <AppShell
+        title="Integrations"
+        subtitle="Connect your tools to power relationship intelligence"
+      >
+        <Card className="p-10 text-center">
+          <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
+          <p className="mx-auto mt-2 max-w-md text-[12.5px] text-fg-4">
+            Join or create an organization to connect Gmail, Calendar, Slack and more.
+          </p>
+        </Card>
+      </AppShell>
+    );
+  }
+
+  const rows = await getIntegrationConnections(org.orgId, org.userId);
+  const connections = mergeConnections(rows);
+  const connectedCount = connections.filter((c) => c.status === 'connected').length;
+
   return (
     <AppShell title="Integrations" subtitle="Connect your tools to power relationship intelligence">
       <SectionTitle
-        eyebrow={`${connectedCount} of ${CONNECTIONS.length} connected`}
+        eyebrow={`${connectedCount} of ${connections.length} connected`}
         title="Integrations"
       />
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-        {CONNECTIONS.map((c) => (
+        {connections.map((c) => (
           <IntegrationCard key={c.provider} conn={c} />
         ))}
       </div>
