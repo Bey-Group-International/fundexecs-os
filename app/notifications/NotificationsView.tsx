@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useCardState } from '@/lib/ui/useCardState';
 import {
   Zap,
   Eye,
@@ -194,7 +195,7 @@ function NotifDetail({
 }
 
 export function NotificationsView({ initial }: { initial: NotificationItem[] }) {
-  const [notifs, setNotifs] = useState<NotificationItem[]>(initial);
+  const cards = useCardState(initial, (n) => ({ read: n.read }));
   const [category, setCategory] = useState('All');
   const [open, setOpen] = useState<NotificationItem | null>(null);
 
@@ -205,28 +206,21 @@ export function NotificationsView({ initial }: { initial: NotificationItem[] }) 
   }, [initial]);
 
   function act(id: string, a: Action) {
-    setNotifs((prev) =>
-      prev.flatMap((n) => {
-        if (n.id !== id) return [n];
-        if (a === 'delete' || a === 'archive') return [];
-        if (a === 'read') return [{ ...n, read: true }];
-        return [n];
-      })
-    );
+    if (a === 'delete') cards.delete(id);
+    else if (a === 'archive') cards.archive(id);
+    else if (a === 'read') cards.markRead(id);
   }
 
-  function markAllRead() {
-    setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
-  }
-
-  const visible = notifs.filter((n) => category === 'All' || n.category === category);
-  const unread = notifs.filter((n) => !n.read).length;
+  // Archived / deleted notifications drop out of the inbox.
+  const present = cards.items.filter((n) => !n.archived && !n.deleted);
+  const visible = present.filter((n) => category === 'All' || n.category === category);
+  const unread = present.filter((n) => !n.read).length;
 
   return (
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-end justify-between">
         <SectionTitle eyebrow={`${unread} unread`} title="Notification center" className="mb-0" />
-        <Button variant="secondary" icon={CheckCheck} size="sm" onClick={markAllRead}>
+        <Button variant="secondary" icon={CheckCheck} size="sm" onClick={cards.markAllRead}>
           Mark all read
         </Button>
       </div>

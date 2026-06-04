@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useCardState } from '@/lib/ui/useCardState';
 import {
   Plus,
   Filter,
@@ -131,22 +132,49 @@ function TaskRow({ t, onAct }: { t: EarnTask; onAct: (id: string, a: Action) => 
 }
 
 export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
-  const [tasks, setTasks] = useState<EarnTask[]>(initialTasks);
+  const cards = useCardState(initialTasks, (t) => ({
+    read: t.read,
+    archived: t.state === 'archived',
+    closed: t.state === 'done'
+  }));
   const [filter, setFilter] = useState<FilterTab>('open');
 
   function act(id: string, a: Action) {
-    setTasks((prev) =>
-      prev.flatMap((t) => {
-        if (t.id !== id) return [t];
-        if (a === 'delete') return [];
-        if (a === 'done')
-          return [{ ...t, state: t.state === 'done' ? 'open' : 'done', read: true }];
-        if (a === 'read') return [{ ...t, read: true }];
-        if (a === 'archive') return [{ ...t, state: 'archived', read: true }];
-        return [t];
-      })
-    );
+    if (a === 'delete') {
+      cards.delete(id);
+      return;
+    }
+    if (a === 'archive') {
+      cards.archive(id);
+      return;
+    }
+    if (a === 'read') {
+      cards.markRead(id);
+      return;
+    }
+    // 'done' toggles completion: completing fires a Chain-of-Trust toast.
+    const current = cards.items.find((t) => t.id === id);
+    if (current?.closed) {
+      cards.restore(id);
+      cards.markRead(id);
+    } else {
+      cards.complete(id);
+      window.emitTrust?.({
+        layer: 'Execution',
+        title: 'Task complete',
+        msg: 'A task was completed in Ask Earn.',
+        entity: id
+      });
+    }
   }
+
+  // Project the shared card flags back onto each task's board state.
+  const tasks = cards.items
+    .filter((t) => !t.deleted)
+    .map((t) => ({
+      ...t,
+      state: t.archived ? ('archived' as const) : t.closed ? ('done' as const) : ('open' as const)
+    }));
 
   const counts = {
     open: tasks.filter((t) => t.state === 'open').length,
