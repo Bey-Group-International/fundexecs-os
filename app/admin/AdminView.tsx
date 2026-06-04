@@ -10,11 +10,15 @@ import {
   Archive,
   Shield,
   BrainCircuit,
-  Globe,
-  Building2,
+  Database,
+  Layers,
   GitBranch,
   Upload,
-  ChevronRight,
+  Sparkles,
+  ShieldCheck,
+  Bell,
+  CircleCheck,
+  CircleDot,
   type LucideIcon
 } from 'lucide-react';
 import {
@@ -22,12 +26,14 @@ import {
   Badge,
   Button,
   Card,
+  ProgressBar,
   SectionTitle,
   SegTabs,
   type AvatarTone,
   type BadgeTone
 } from '@/components/ui';
 import { TONE_HEX } from '@/components/screens/tone';
+import { BRAINS } from '@/components/screens/brains';
 import type { AdminData, AdminMember } from '@/lib/queries/admin';
 
 type MemberStatus = AdminMember['status'] | 'Archived';
@@ -66,7 +72,64 @@ const PIPELINE_STEPS = [
   'Optimize'
 ];
 
-type Tab = 'users' | 'activity' | 'knowledge';
+/** Chain-of-Trust verification layers shown on the oversight panel. */
+const TRUST_LAYERS: Array<{
+  no: string;
+  name: string;
+  desc: string;
+  value: number;
+  tone: BadgeTone;
+}> = [
+  {
+    no: '01',
+    name: 'Proof of truth',
+    desc: 'Source data, citations, verified facts',
+    value: 100,
+    tone: 'success'
+  },
+  {
+    no: '02',
+    name: 'Proof of concept',
+    desc: 'Strategy, thesis, fit logic',
+    value: 70,
+    tone: 'gold'
+  },
+  {
+    no: '03',
+    name: 'Proof of execution',
+    desc: 'Tasks, workflows, approvals',
+    value: 35,
+    tone: 'warning'
+  },
+  {
+    no: '04',
+    name: 'Proof of work',
+    desc: 'Evidence, uploads, outcomes, logs',
+    value: 0,
+    tone: 'neutral'
+  }
+];
+
+/** Platform notifications surfaced to admins. */
+const NOTIFICATIONS: Array<{ title: string; detail: string; tone: BadgeTone }> = [
+  {
+    title: 'Vector index optimized',
+    detail: 'pgvector reindex completed across 14 brains',
+    tone: 'success'
+  },
+  {
+    title: 'New knowledge intake',
+    detail: '3 documents queued for embedding',
+    tone: 'azure'
+  },
+  {
+    title: 'Approval pending',
+    detail: 'Chain-of-Trust review needs a human sign-off',
+    tone: 'warning'
+  }
+];
+
+type Tab = 'users' | 'activity' | 'trust' | 'knowledge';
 
 function StatTile({ stat }: { stat: Stat }) {
   const Icon = stat.icon;
@@ -172,66 +235,225 @@ function UsersPanel({
 
 function ActivityPanel({ actions }: { actions: AdminData['actions'] }) {
   return (
-    <Card className="p-2">
-      <div className="grid grid-cols-[1.6fr_1fr_1fr_0.6fr] gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-        <span>Action</span>
-        <span>Target</span>
-        <span>Actor</span>
-        <span className="text-right">When</span>
-      </div>
-      <div className="h-px bg-hairline" />
-      {actions.length === 0 ? (
-        <div className="p-10 text-center text-[13px] text-fg-5">No recent admin activity.</div>
-      ) : (
-        actions.map((a) => (
-          <div
-            key={a.id}
-            className="grid grid-cols-[1.6fr_1fr_1fr_0.6fr] items-center gap-2 border-b border-hairline-faint px-3 py-2.5 last:border-b-0"
-          >
-            <span className="truncate text-[12.5px] font-medium text-fg-1">{a.actionType}</span>
-            <span className="truncate text-xs text-fg-3">{a.targetType ?? '—'}</span>
-            <span className="truncate text-xs text-fg-2">{a.actor}</span>
-            <span className="text-right font-mono text-[11px] tabular-nums text-fg-5">
-              {a.time}
-            </span>
-          </div>
-        ))
-      )}
-    </Card>
+    <div className="grid items-start gap-[18px] lg:grid-cols-[1fr_320px]">
+      <Card className="p-2">
+        <div className="grid grid-cols-[1.6fr_1fr_1fr_0.6fr] gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+          <span>Action</span>
+          <span>Target</span>
+          <span>Actor</span>
+          <span className="text-right">When</span>
+        </div>
+        <div className="h-px bg-hairline" />
+        {actions.length === 0 ? (
+          <div className="p-10 text-center text-[13px] text-fg-5">No recent admin activity.</div>
+        ) : (
+          actions.map((a) => (
+            <div
+              key={a.id}
+              className="grid grid-cols-[1.6fr_1fr_1fr_0.6fr] items-center gap-2 border-b border-hairline-faint px-3 py-2.5 last:border-b-0"
+            >
+              <span className="truncate text-[12.5px] font-medium text-fg-1">{a.actionType}</span>
+              <span className="truncate text-xs text-fg-3">{a.targetType ?? '—'}</span>
+              <span className="truncate text-xs text-fg-2">{a.actor}</span>
+              <span className="text-right font-mono text-[11px] tabular-nums text-fg-5">
+                {a.time}
+              </span>
+            </div>
+          ))
+        )}
+      </Card>
+
+      <Card>
+        <SectionTitle
+          eyebrow="Platform"
+          title="Notifications"
+          className="mb-3"
+          action={<Bell size={15} strokeWidth={1.9} className="text-fg-4" aria-hidden />}
+        />
+        <div className="flex flex-col gap-2.5">
+          {NOTIFICATIONS.map((n) => (
+            <div
+              key={n.title}
+              className="flex items-start gap-2.5 rounded-xl border border-hairline bg-surface-1 p-3"
+            >
+              <span className="mt-0.5 flex-none" style={{ color: TONE_HEX[n.tone] }}>
+                <CircleDot size={13} strokeWidth={1.9} aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-semibold text-fg-1">{n.title}</div>
+                <div className="text-[11px] text-fg-4">{n.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
 }
 
-function KnowledgePanel({ brains }: { brains: AdminData['brains'] }) {
-  const globalCount = brains.filter((b) => b.scope === 'Global').length;
-  const orgCount = brains.filter((b) => b.scope === 'Org').length;
+function TrustPanel() {
+  const verified = 51;
+  return (
+    <div className="flex flex-col gap-[18px]">
+      <Card className="bg-[linear-gradient(100deg,rgba(52,211,153,0.07),transparent_60%)]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-hairline bg-surface-2 text-success">
+              <ShieldCheck size={18} strokeWidth={1.9} aria-hidden />
+            </span>
+            <div>
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                Chain of trust
+              </div>
+              <div className="flex items-center gap-2 text-[15px] font-semibold text-fg-1">
+                Atlas Manufacturing
+                <Badge tone="success" className="text-[9.5px]">
+                  M&amp;A · Closing
+                </Badge>
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[22px] font-semibold tabular-nums text-success">{verified}%</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+              Verified
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 text-[12px] text-fg-4">
+          $32M · 4-layer verification pipeline · from Cedar · DL-220 · last activity 2h ago
+        </div>
+      </Card>
+
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        {TRUST_LAYERS.map((l) => (
+          <Card key={l.no} className="p-4">
+            <div className="flex items-center justify-between">
+              <span style={{ color: TONE_HEX[l.tone] }}>
+                <ShieldCheck size={15} strokeWidth={1.9} aria-hidden />
+              </span>
+              <span className="font-mono text-[11px] tabular-nums text-fg-5">{l.no}</span>
+            </div>
+            <div className="mt-3 text-[13.5px] font-semibold text-fg-1">{l.name}</div>
+            <div className="mt-1 text-[11px] leading-snug text-fg-5">{l.desc}</div>
+            <div
+              className="mt-3 text-[20px] font-semibold tabular-nums"
+              style={{ color: TONE_HEX[l.tone] }}
+            >
+              {l.value}%
+            </div>
+            <ProgressBar className="mt-2" value={l.value} color={TONE_HEX[l.tone]} height={5} />
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid items-start gap-[18px] lg:grid-cols-2">
+        <Card>
+          <SectionTitle title="Required documents" className="mb-3" />
+          <div className="flex flex-col gap-2">
+            {[
+              { label: 'Investment thesis memo', done: true },
+              { label: 'Market sizing (TAM)', done: true },
+              { label: 'Competitive map', done: false }
+            ].map((d) => (
+              <div key={d.label} className="flex items-center gap-2.5 text-[12.5px]">
+                {d.done ? (
+                  <CircleCheck size={15} strokeWidth={1.9} className="text-success" aria-hidden />
+                ) : (
+                  <CircleDot size={15} strokeWidth={1.9} className="text-fg-5" aria-hidden />
+                )}
+                <span className={d.done ? 'text-fg-1' : 'text-fg-4'}>{d.label}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <SectionTitle title="Required tasks" className="mb-3" />
+          <div className="flex flex-col gap-2">
+            {[
+              { label: 'Validate thesis vs LP appetite', done: true },
+              { label: 'Complete competitive mapping', done: false }
+            ].map((d) => (
+              <div key={d.label} className="flex items-center gap-2.5 text-[12.5px]">
+                {d.done ? (
+                  <CircleCheck size={15} strokeWidth={1.9} className="text-success" aria-hidden />
+                ) : (
+                  <CircleDot size={15} strokeWidth={1.9} className="text-fg-5" aria-hidden />
+                )}
+                <span className={d.done ? 'text-fg-1' : 'text-fg-4'}>{d.label}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <SectionTitle
+            title="Human approval"
+            className="mb-3"
+            action={<UserCog size={15} strokeWidth={1.9} className="text-fg-4" aria-hidden />}
+          />
+          <Badge tone="warning">Pending review</Badge>
+          <p className="mt-3 text-[12px] text-fg-4">
+            A managing partner must sign off before the chain advances to Proof of execution.
+          </p>
+          <Button variant="primary" size="sm" className="mt-3" icon={Check}>
+            Approve chain
+          </Button>
+        </Card>
+
+        <Card className="bg-[linear-gradient(100deg,rgba(247,201,72,0.08),transparent_60%)]">
+          <SectionTitle
+            title="AI validation"
+            className="mb-3"
+            action={<Sparkles size={15} strokeWidth={1.9} className="text-gold-1" aria-hidden />}
+          />
+          <p className="text-[12.5px] text-fg-2">
+            Thesis aligns with 3 of 4 LP mandates. Competitive map incomplete — add 2 incumbents.
+          </p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function KnowledgePanel() {
+  const totalDocs = BRAINS.reduce((s, b) => s + b.docs, 0);
+  const totalChunks = BRAINS.reduce((s, b) => s + b.chunks, 0);
 
   const stats: Stat[] = [
     {
       label: 'AI brains',
-      value: String(brains.length),
+      value: String(BRAINS.length),
       sub: 'Specialized modules',
       icon: BrainCircuit,
       tone: 'gold'
     },
     {
-      label: 'Global brains',
-      value: String(globalCount),
-      sub: 'Platform-wide',
-      icon: Globe,
+      label: 'Source documents',
+      value: String(totalDocs),
+      sub: 'Across all brains',
+      icon: Database,
       tone: 'azure'
     },
     {
-      label: 'Org brains',
-      value: String(orgCount),
-      sub: 'This organization',
-      icon: Building2,
+      label: 'Embedded chunks',
+      value: totalChunks.toLocaleString('en-US'),
+      sub: 'pgvector store',
+      icon: Layers,
       tone: 'success'
     }
   ];
 
+  const STATUS_TONE_BRAIN: Record<string, BadgeTone> = {
+    Active: 'success',
+    Review: 'warning',
+    Draft: 'neutral'
+  };
+
   return (
     <div className="flex flex-col gap-[18px]">
-      <div className="flex gap-3.5">
+      <div className="grid gap-3.5 sm:grid-cols-3">
         {stats.map((s) => (
           <StatTile key={s.label} stat={s} />
         ))}
@@ -240,46 +462,58 @@ function KnowledgePanel({ brains }: { brains: AdminData['brains'] }) {
       <Card>
         <SectionTitle
           eyebrow="pgvector knowledge store"
-          title="AI brains & knowledge sources"
+          title="Knowledge base · 15 AI brains"
           action={
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" icon={GitBranch}>
                 Routing rules
               </Button>
               <Button variant="primary" size="sm" icon={Upload}>
-                Upload knowledge
+                Intake knowledge
               </Button>
             </div>
           }
         />
-        {brains.length === 0 ? (
-          <p className="py-6 text-center text-[12.5px] text-fg-5">No AI brains configured yet.</p>
-        ) : (
-          <div className="grid gap-2.5 lg:grid-cols-2">
-            {brains.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                className="flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3 text-left transition hover:bg-surface-2"
+        <div className="grid gap-2.5 lg:grid-cols-2">
+          {BRAINS.map((b) => {
+            const Icon = b.icon;
+            return (
+              <div
+                key={b.slug}
+                className="flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3"
               >
                 <span className="flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-gold-1">
-                  <BrainCircuit size={16} strokeWidth={1.9} aria-hidden />
+                  <Icon size={16} strokeWidth={1.9} aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold text-fg-1">{b.name}</div>
-                  <div className="truncate text-[10.5px] text-fg-5">{b.description ?? b.slug}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[13px] font-semibold text-fg-1">{b.name}</span>
+                    <Badge tone={STATUS_TONE_BRAIN[b.status]} className="text-[9px]">
+                      {b.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-3 text-[10.5px] tabular-nums text-fg-5">
+                    <span className="flex items-center gap-1">
+                      <Database size={11} strokeWidth={1.9} aria-hidden />
+                      {b.docs} docs
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Layers size={11} strokeWidth={1.9} aria-hidden />
+                      {b.chunks.toLocaleString('en-US')} chunks
+                    </span>
+                  </div>
                 </div>
-                <Badge tone={b.scope === 'Global' ? 'azure' : 'success'} className="text-[9.5px]">
-                  {b.scope}
-                </Badge>
-              </button>
-            ))}
-          </div>
-        )}
+                <Button variant="secondary" size="sm" icon={Sparkles}>
+                  Optimize
+                </Button>
+              </div>
+            );
+          })}
+        </div>
       </Card>
 
       <Card>
-        <SectionTitle title="Intake → route → execute" className="mb-3" />
+        <SectionTitle title="Intake → route → optimize" className="mb-3" />
         <div className="flex flex-wrap items-center gap-1.5">
           {PIPELINE_STEPS.map((s, i) => (
             <span key={s} className="flex items-center gap-1.5">
@@ -287,7 +521,9 @@ function KnowledgePanel({ brains }: { brains: AdminData['brains'] }) {
                 {s}
               </span>
               {i < PIPELINE_STEPS.length - 1 && (
-                <ChevronRight size={13} strokeWidth={1.9} className="text-fg-5" aria-hidden />
+                <span className="text-fg-5" aria-hidden>
+                  ›
+                </span>
               )}
             </span>
           ))}
@@ -327,7 +563,7 @@ export function AdminView({ data }: { data: AdminData }) {
     },
     {
       label: 'AI brains',
-      value: String(data.brains.length),
+      value: String(BRAINS.length),
       sub: 'Knowledge modules',
       icon: BrainCircuit,
       tone: 'gold'
@@ -344,7 +580,7 @@ export function AdminView({ data }: { data: AdminData }) {
   return (
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-end justify-between">
-        <SectionTitle eyebrow="Platform administration" title="Admin Portal" className="mb-0" />
+        <SectionTitle eyebrow="Platform administration" title="Admin portal" className="mb-0" />
         <Badge tone="gold" dot>
           <span className="inline-flex items-center gap-1.5">
             <Shield size={11} strokeWidth={1.9} aria-hidden />
@@ -353,8 +589,8 @@ export function AdminView({ data }: { data: AdminData }) {
         </Badge>
       </div>
 
-      {tab !== 'knowledge' && (
-        <div className="flex gap-3.5">
+      {(tab === 'users' || tab === 'activity') && (
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
           {adminStats.map((s) => (
             <StatTile key={s.label} stat={s} />
           ))}
@@ -367,7 +603,8 @@ export function AdminView({ data }: { data: AdminData }) {
         tabs={[
           { id: 'users', label: 'Users & roles', icon: Users },
           { id: 'activity', label: 'Activity', icon: Activity },
-          { id: 'knowledge', label: 'Knowledge Base', icon: BrainCircuit }
+          { id: 'trust', label: 'Chain of trust', icon: ShieldCheck },
+          { id: 'knowledge', label: 'Knowledge base', icon: BrainCircuit }
         ]}
       />
 
@@ -375,7 +612,8 @@ export function AdminView({ data }: { data: AdminData }) {
         <UsersPanel members={data.members} statuses={statuses} onSetStatus={setStatus} />
       )}
       {tab === 'activity' && <ActivityPanel actions={data.actions} />}
-      {tab === 'knowledge' && <KnowledgePanel brains={data.brains} />}
+      {tab === 'trust' && <TrustPanel />}
+      {tab === 'knowledge' && <KnowledgePanel />}
     </div>
   );
 }
