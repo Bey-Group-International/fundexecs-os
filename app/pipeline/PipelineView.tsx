@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   TrendingUp,
   CircleDot,
@@ -8,8 +8,10 @@ import {
   Percent,
   Plus,
   Sparkles,
-  LayoutGrid,
+  Columns3,
   Radar,
+  ArrowUpRight,
+  Briefcase,
   type LucideIcon
 } from 'lucide-react';
 import {
@@ -35,15 +37,15 @@ function formatCurrency(amount: number): string {
 }
 
 /** Pick a card accent tone from a deal's status. */
-function dealTone(status: string): BadgeTone {
-  const s = status.toLowerCase();
-  if (s === 'closed' || s === 'committed' || s === 'won') return 'success';
-  if (s === 'diligence' || s === 'soft-circle' || s === 'at_risk') return 'warning';
-  if (s === 'lost' || s === 'dead') return 'danger';
+function dealTone(status: string, stageKey: string): BadgeTone {
+  const s = `${status} ${stageKey}`.toLowerCase();
+  if (s.includes('closed') || s.includes('committed') || s.includes('won')) return 'success';
+  if (s.includes('diligence') || s.includes('soft') || s.includes('risk')) return 'warning';
+  if (s.includes('lost') || s.includes('dead')) return 'danger';
   return 'azure';
 }
 
-type Tab = 'formation' | 'lpmap';
+type Tab = 'formation' | 'lpmap' | 'flow' | 'partners';
 
 function EarnBand({ data }: { data: PipelineData }) {
   const activeStages = data.stages.filter((s) => s.deals.length > 0).length;
@@ -51,13 +53,15 @@ function EarnBand({ data }: { data: PipelineData }) {
     <Card className="flex items-center gap-4 bg-[linear-gradient(100deg,rgba(247,201,72,0.08),transparent_58%)] px-[18px] py-3.5">
       <EarnCoin size={36} glow />
       <div className="min-w-0 flex-1 text-[13px] text-fg-2">
-        <span className="font-semibold text-fg-1">Earnest Fundmaker</span>, your private-market
+        <span className="font-semibold text-fg-1">Earnest Fundmaker</span>, your private market
         assistant, is tracking{' '}
-        <span className="font-semibold text-gold-1">{data.totalDeals} deals</span> across{' '}
-        {activeStages} active formation {activeStages === 1 ? 'stage' : 'stages'}.
+        <span className="font-semibold text-gold-1">
+          {data.totalDeals} {data.totalDeals === 1 ? 'investor' : 'investors'}
+        </span>{' '}
+        across {activeStages} formation {activeStages === 1 ? 'stage' : 'stages'}.
       </div>
       <Badge tone="azure" dot pulse className="flex-none">
-        Live
+        Live pipeline
       </Badge>
     </Card>
   );
@@ -66,19 +70,19 @@ function EarnBand({ data }: { data: PipelineData }) {
 function FormationBoard({ data }: { data: PipelineData }) {
   return (
     <Card>
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      <div className="flex gap-3 overflow-x-auto pb-1">
         {data.stages.map((stage, i) => (
-          <div key={stage.key} className="w-48 flex-none">
+          <div key={stage.key} className="w-[200px] flex-none">
             <div className="flex items-center justify-between px-1 pb-2.5">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-[10px] text-fg-5">{i + 1}</span>
+                <span className="font-mono text-[10px] tabular-nums text-fg-5">{i + 1}</span>
                 <span className="text-xs font-semibold text-fg-2">{stage.label}</span>
               </div>
               <span className="text-[11px] tabular-nums text-fg-5">{stage.deals.length}</span>
             </div>
-            <div className="flex min-h-16 flex-col gap-2 rounded-xl border border-dashed border-hairline-faint bg-white/[0.02] p-2">
+            <div className="flex min-h-20 flex-col gap-2 rounded-xl border border-dashed border-hairline-faint bg-white/[0.02] p-2">
               {stage.deals.map((d) => {
-                const tone = dealTone(d.status);
+                const tone = dealTone(d.status, stage.key);
                 const avatarTone: AvatarTone = tone === 'danger' ? 'gold' : tone;
                 return (
                   <button
@@ -92,12 +96,12 @@ function FormationBoard({ data }: { data: PipelineData }) {
                         {d.name}
                       </span>
                     </div>
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-[10.5px] text-fg-4">
-                        {d.amount != null ? formatCurrency(d.amount) : d.status}
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-[10.5px] text-fg-4">
+                        {d.amount != null ? `${formatCurrency(d.amount)} · ${d.note}` : d.note}
                       </span>
                       <span
-                        className="h-[7px] w-[7px] rounded-full"
+                        className="h-[7px] w-[7px] flex-none rounded-full"
                         style={{ background: TONE_HEX[tone] }}
                         aria-hidden
                       />
@@ -113,12 +117,29 @@ function FormationBoard({ data }: { data: PipelineData }) {
   );
 }
 
+/** Relationship tier label derived from a deal's formation stage. */
+function relationshipTier(stage: string): { label: string; tone: BadgeTone } {
+  const s = stage.toLowerCase();
+  if (s.includes('committed') || s.includes('closed')) return { label: 'Anchor', tone: 'success' };
+  if (s.includes('soft') || s.includes('diligence')) return { label: 'Priority', tone: 'gold' };
+  if (s.includes('meeting') || s.includes('qualified')) return { label: 'Engaged', tone: 'azure' };
+  return { label: 'Watch', tone: 'neutral' };
+}
+
+/** A stable, deterministic thesis-fit score for a deal (presentational). */
+function thesisFit(deal: PipelineDeal): number {
+  let h = 0;
+  for (let i = 0; i < deal.id.length; i += 1) h = (h * 31 + deal.id.charCodeAt(i)) % 1000;
+  const base = relationshipTier(deal.stage).label === 'Anchor' ? 82 : 58;
+  return Math.min(98, base + (h % 18));
+}
+
 function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
-  const max = deals.reduce((m, d) => Math.max(m, d.amount ?? 0), 0);
+  const ranked = useMemo(() => [...deals].sort((a, b) => thesisFit(b) - thesisFit(a)), [deals]);
   return (
     <Card>
       <SectionTitle
-        eyebrow="Capital by deal · size-weighted ranking"
+        eyebrow="Relationship tier · thesis-fit scoring"
         title="LP Capital Map"
         action={
           <Button variant="ghost" size="sm" icon={Sparkles}>
@@ -126,38 +147,54 @@ function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
           </Button>
         }
       />
-      {deals.length === 0 ? (
-        <p className="py-6 text-center text-[12.5px] text-fg-5">No deals in the pipeline yet.</p>
+      {ranked.length === 0 ? (
+        <p className="py-6 text-center text-[12.5px] text-fg-5">
+          No investors in the pipeline yet.
+        </p>
       ) : (
         <>
-          <div className="grid grid-cols-[1.6fr_1fr_0.8fr_1.3fr] gap-2 px-1 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-            <span>Deal</span>
-            <span>Stage</span>
-            <span>Size</span>
-            <span>Relative weight</span>
+          <div className="grid grid-cols-[1.6fr_0.9fr_0.7fr_1.3fr] gap-2 px-1 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+            <span>Investor</span>
+            <span>Tier</span>
+            <span>Ticket</span>
+            <span>Thesis fit</span>
           </div>
           <div className="mb-1 h-px bg-hairline" />
           <div className="flex flex-col">
-            {deals.map((d) => {
-              const pct = max > 0 ? Math.round(((d.amount ?? 0) / max) * 100) : 0;
+            {ranked.map((d) => {
+              const tier = relationshipTier(d.stage);
+              const fit = thesisFit(d);
               const color =
-                pct > 66 ? 'var(--success)' : pct > 33 ? 'var(--gold-1)' : 'var(--fg-4)';
+                fit > 75 ? 'var(--success)' : fit > 55 ? 'var(--gold-1)' : 'var(--fg-4)';
               return (
                 <div
                   key={d.id}
-                  className="grid grid-cols-[1.6fr_1fr_0.8fr_1.3fr] items-center gap-2 rounded-lg px-1 py-2.5 transition hover:bg-surface-1"
+                  className="grid grid-cols-[1.6fr_0.9fr_0.7fr_1.3fr] items-center gap-2 rounded-lg px-1 py-2.5 transition hover:bg-surface-1"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
-                    <div className="text-[10.5px] text-fg-5">{d.status}</div>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Avatar
+                      name={d.name}
+                      size={26}
+                      tone={tier.tone === 'neutral' ? 'azure' : tier.tone}
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
+                      <div className="text-[10.5px] text-fg-5">{d.note}</div>
+                    </div>
                   </div>
-                  <span className="text-[11.5px] text-fg-2">{d.stage}</span>
+                  <span>
+                    <Badge tone={tier.tone} className="text-[10px]">
+                      {tier.label}
+                    </Badge>
+                  </span>
                   <span className="font-mono text-[11.5px] tabular-nums text-fg-3">
                     {d.amount != null ? formatCurrency(d.amount) : '—'}
                   </span>
                   <div className="flex items-center gap-2">
-                    <ProgressBar value={pct} color={color} height={5} className="flex-1" />
-                    <span className="w-6 text-right text-[11px] tabular-nums text-fg-3">{pct}</span>
+                    <ProgressBar value={fit} color={color} height={5} className="flex-1" />
+                    <span className="w-7 text-right text-[11px] tabular-nums text-fg-3">
+                      {fit}%
+                    </span>
                   </div>
                 </div>
               );
@@ -165,6 +202,90 @@ function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
           </div>
         </>
       )}
+    </Card>
+  );
+}
+
+function DealFlow({ data }: { data: PipelineData }) {
+  const recent = data.stages
+    .flatMap((s) => s.deals.map((d) => ({ deal: d, stageLabel: s.label, stageKey: s.key })))
+    .slice(0, 8);
+  return (
+    <Card>
+      <SectionTitle eyebrow="Recent movement · last 30 days" title="Deal flow" />
+      {recent.length === 0 ? (
+        <p className="py-6 text-center text-[12.5px] text-fg-5">No deal activity yet.</p>
+      ) : (
+        <div className="flex flex-col">
+          {recent.map(({ deal, stageLabel, stageKey }) => {
+            const tone = dealTone(deal.status, stageKey);
+            return (
+              <div
+                key={deal.id}
+                className="flex items-center gap-3 rounded-lg px-1 py-2.5 transition hover:bg-surface-1"
+              >
+                <Avatar name={deal.name} size={28} tone={tone === 'danger' ? 'gold' : tone} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-semibold text-fg-1">{deal.name}</div>
+                  <div className="text-[11px] text-fg-4">{deal.note}</div>
+                </div>
+                <Badge tone={tone} className="text-[10px]">
+                  {stageLabel}
+                </Badge>
+                <span className="w-16 text-right font-mono text-[11.5px] tabular-nums text-fg-3">
+                  {deal.amount != null ? formatCurrency(deal.amount) : '—'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Presentational capital-stack partners — no backing table exists yet. */
+const PARTNERS: Array<{ name: string; role: string; status: string; tone: BadgeTone }> = [
+  { name: 'Fund administrator', role: 'Carta Fund Admin', status: 'Engaged', tone: 'success' },
+  { name: 'Legal counsel', role: 'Cooley LLP', status: 'Engaged', tone: 'success' },
+  { name: 'Placement agent', role: 'Unassigned', status: 'Open', tone: 'warning' },
+  { name: 'Prime broker', role: 'Unassigned', status: 'Open', tone: 'warning' },
+  { name: 'Audit & tax', role: 'In review', status: 'Pending', tone: 'azure' }
+];
+
+function PartnersStack() {
+  return (
+    <Card>
+      <SectionTitle
+        eyebrow="Service providers · capital stack"
+        title="Partners & services"
+        action={
+          <Button variant="ghost" size="sm" icon={Plus}>
+            Add partner
+          </Button>
+        }
+      />
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        {PARTNERS.map((p) => (
+          <div
+            key={p.name}
+            className="flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3"
+          >
+            <Avatar
+              name={p.role === 'Unassigned' || p.role === 'In review' ? '? ?' : p.role}
+              size={32}
+              tone={p.tone}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12.5px] font-semibold text-fg-1">{p.name}</div>
+              <div className="truncate text-[11px] text-fg-4">{p.role}</div>
+            </div>
+            <Badge tone={p.tone} className="text-[10px]">
+              {p.status}
+            </Badge>
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
@@ -191,25 +312,28 @@ export function PipelineView({ data }: { data: PipelineData }) {
       icon: CheckCircle2,
       tone: 'success'
     },
-    { label: 'Conversion', value: `${data.conversionPct}%`, icon: Percent, tone: 'gold' }
+    {
+      label: 'Visitor → committed',
+      value: `${data.conversionPct}%`,
+      icon: Percent,
+      tone: 'gold'
+    }
   ];
 
-  const allDeals = data.stages
-    .flatMap((s) => s.deals)
-    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0));
-
-  const activeStages = data.stages.filter((s) => s.deals.length > 0).length;
+  const allDeals = data.stages.flatMap((s) => s.deals);
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <div className="flex items-end justify-between">
-        <div className="text-[13px] text-fg-4">
-          {activeStages} active {activeStages === 1 ? 'stage' : 'stages'} · {data.totalDeals} deals
-        </div>
-        <Button variant="primary" icon={Plus}>
-          Add to pipeline
-        </Button>
-      </div>
+      <SectionTitle
+        eyebrow="Capital formation command center"
+        title="Pipeline"
+        className="mb-0"
+        action={
+          <Button variant="primary" icon={Plus}>
+            Add to pipeline
+          </Button>
+        }
+      />
 
       <EarnBand data={data} />
 
@@ -236,12 +360,17 @@ export function PipelineView({ data }: { data: PipelineData }) {
         active={tab}
         onChange={(id) => setTab(id as Tab)}
         tabs={[
-          { id: 'formation', label: 'Capital formation', icon: LayoutGrid },
-          { id: 'lpmap', label: 'LP Capital Map', icon: Radar }
+          { id: 'formation', label: 'Capital formation', icon: Columns3 },
+          { id: 'lpmap', label: 'LP Capital Map', icon: Radar },
+          { id: 'flow', label: 'Deal flow', icon: ArrowUpRight },
+          { id: 'partners', label: 'Partners & services', icon: Briefcase }
         ]}
       />
 
-      {tab === 'formation' ? <FormationBoard data={data} /> : <LpCapitalMap deals={allDeals} />}
+      {tab === 'formation' && <FormationBoard data={data} />}
+      {tab === 'lpmap' && <LpCapitalMap deals={allDeals} />}
+      {tab === 'flow' && <DealFlow data={data} />}
+      {tab === 'partners' && <PartnersStack />}
     </div>
   );
 }

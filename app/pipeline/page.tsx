@@ -12,7 +12,7 @@ export default async function PipelinePage() {
 
   if (!org) {
     return (
-      <AppShell title="Pipeline" subtitle="Capital formation command center">
+      <AppShell title="Pipeline" subtitle="Capital formation, deals, LPs & partners">
         <Card className="p-10 text-center">
           <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
           <p className="mx-auto mt-2 max-w-md text-[12.5px] text-fg-4">
@@ -27,7 +27,7 @@ export default async function PipelinePage() {
   const data = await getPipelineData(org.orgId);
 
   return (
-    <AppShell title="Pipeline" subtitle="Capital formation command center">
+    <AppShell title="Pipeline" subtitle="Capital formation, deals, LPs & partners">
       <PipelineView data={data} />
     </AppShell>
   );
