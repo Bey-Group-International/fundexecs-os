@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useCardState } from '@/lib/ui/useCardState';
 import {
   Plus,
   Calendar,
@@ -147,21 +148,42 @@ function ObjectiveCard({
 }
 
 export function StrategyView({ initialObjectives }: { initialObjectives: StrategyObjective[] }) {
-  const [objectives, setObjectives] = useState<StrategyObjective[]>(initialObjectives);
+  const cards = useCardState(initialObjectives, (o) => ({
+    read: o.read,
+    archived: o.state === 'archived',
+    closed: o.state === 'done'
+  }));
   const [tier, setTier] = useState<'all' | Tier>('all');
 
   function act(id: string, a: Action) {
-    setObjectives((prev) =>
-      prev.flatMap((o) => {
-        if (o.id !== id) return [o];
-        if (a === 'delete') return [];
-        if (a === 'done') return [{ ...o, state: 'done', pct: 100, read: true }];
-        if (a === 'read') return [{ ...o, read: true }];
-        if (a === 'archive') return [{ ...o, state: 'archived', read: true }];
-        return [o];
-      })
-    );
+    if (a === 'delete') {
+      cards.delete(id);
+    } else if (a === 'done') {
+      cards.complete(id);
+      // Completing an objective advances the Execution layer of Chain of Trust.
+      window.emitTrust?.({
+        layer: 'Execution',
+        title: 'Objective complete',
+        msg: 'An objective in the 100 / 30 / 10 plan was marked complete.',
+        pct: 100,
+        entity: id
+      });
+    } else if (a === 'read') {
+      cards.markRead(id);
+    } else if (a === 'archive') {
+      cards.archive(id);
+    }
   }
+
+  // Project the shared card flags back onto each objective's display shape:
+  // a closed card reads as "done" (100%), an archived card drops out.
+  const objectives = cards.items
+    .filter((o) => !o.deleted)
+    .map((o) => ({
+      ...o,
+      state: o.archived ? ('archived' as const) : o.closed ? ('done' as const) : ('open' as const),
+      pct: o.closed ? 100 : o.pct
+    }));
 
   const active = objectives.filter((o) => o.state !== 'archived');
   const visible = active.filter((o) => tier === 'all' || o.tier === tier);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useCardState } from '@/lib/ui/useCardState';
 import {
   Users,
   UserPlus,
@@ -535,16 +536,33 @@ function KnowledgePanel() {
 
 export function AdminView({ data }: { data: AdminData }) {
   const [tab, setTab] = useState<Tab>('users');
-  const [statuses, setStatuses] = useState<Record<string, MemberStatus>>({});
+  // Member rows share the card lifecycle: approving an applicant "completes"
+  // the row (closed); archiving sets the archived flag.
+  const cards = useCardState(data.members);
 
-  function setStatus(id: string, status: MemberStatus) {
-    setStatuses((prev) => ({ ...prev, [id]: status }));
+  // Resolve each member's effective status from its shared card flags.
+  const statuses: Record<string, MemberStatus> = {};
+  for (const m of cards.items) {
+    statuses[m.id] = m.archived ? 'Archived' : m.closed ? 'Active' : m.status;
   }
 
-  const activeCount = data.members.filter((m) => (statuses[m.id] ?? m.status) === 'Active').length;
-  const pendingCount = data.members.filter(
-    (m) => (statuses[m.id] ?? m.status) === 'Pending'
-  ).length;
+  function setStatus(id: string, status: MemberStatus) {
+    if (status === 'Active') {
+      cards.complete(id);
+      // Approving a member advances the Work layer of Chain of Trust.
+      window.emitTrust?.({
+        layer: 'Work',
+        title: 'Member approved',
+        msg: 'An applicant was approved into the organization.',
+        entity: id
+      });
+    } else if (status === 'Archived') {
+      cards.archive(id);
+    }
+  }
+
+  const activeCount = data.members.filter((m) => statuses[m.id] === 'Active').length;
+  const pendingCount = data.members.filter((m) => statuses[m.id] === 'Pending').length;
 
   const adminStats: Stat[] = [
     {
