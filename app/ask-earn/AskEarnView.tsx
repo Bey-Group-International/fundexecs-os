@@ -160,7 +160,7 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
     } else {
       cards.complete(id);
       window.emitTrust?.({
-        layer: 'Execution',
+        layer: 'execution',
         title: 'Task complete',
         msg: 'A task was completed in Ask Earn.',
         entity: id
