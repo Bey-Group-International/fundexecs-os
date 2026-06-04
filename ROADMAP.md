@@ -50,6 +50,9 @@ a proposed data model, and conventions.
 - [x] Login / sign-up page + auth callback + sign-out
 - [ ] User onboarding flow (profile, role selection)
 - [ ] Authenticated app shell (nav, layout) for the Command Center
+- [x] Admin bootstrap for testing: fixed Bey Group org, `@beygroupintl.com`
+      signups auto-promoted to admin, per-user demo warmth seeded on first
+      login, plus org-scoped demo data (brains, deals, governance, contacts)
 - [ ] Role-based access (fund, LP, operator, capital provider, partner, admin)
 
 ### Phase 2 — Core data & Command Center
