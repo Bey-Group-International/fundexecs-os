@@ -44,18 +44,19 @@ A private-markets operating system with a 15-AI specialist team
   literals (Atlas Manufacturing, Cedar/DL-220) removed.
 - **5-E**: `components/shell/trust/TrustDrawerHost.tsx` (new) —
   context provider mounted by `MemberDashboardChrome` so the CoT strip
-  + per-deal Trust chips share one drawer instance. `DealTrustChip`
-  ("Start CoT" / "Trust · N%") rendered on GP `InvestmentFirmLayout`
-  and LP `IndividualInvestorLayout` deal rows. `ChainOfTrustStrip`
-  converted to a button that opens the drawer for the member's own
-  profile chain.
+  - per-deal Trust chips share one drawer instance. `DealTrustChip`
+    ("Start CoT" / "Trust · N%") rendered on GP `InvestmentFirmLayout`
+    and LP `IndividualInvestorLayout` deal rows. `ChainOfTrustStrip`
+    converted to a button that opens the drawer for the member's own
+    profile chain.
 
 ## Test surface
 
 5 seeded users on the live `emityvdaeiqxtpxdhyky` project (credentials
-+ row-count snapshot in `/app/memory/test_credentials.md`). The
-investment_firm user (`28bebb95-…`) is `status='complete'` so the GP
-dashboard renders against real data.
+
+- row-count snapshot in `/app/memory/test_credentials.md`). The
+  investment_firm user (`28bebb95-…`) is `status='complete'` so the GP
+  dashboard renders against real data.
 
 ### Phase 5 E2E smoke results (2026-02-07)
 
@@ -63,13 +64,13 @@ dashboard renders against real data.
 → AI-validate → approve → layer-advance → XP-award against the live
 DB as the investment_firm org owner. **Before / after deltas**:
 
-| table                     | before | after | delta |
-| ------------------------- | ------ | ----- | ----- |
-| `chain_of_trust_records`  | 6      | 7     | +1    |
-| `proof_layers`            | 4      | 8     | +4    |
-| `evidence`                | 0      | 1     | +1    |
-| `trust_events`            | 8      | 9     | +1    |
-| `profiles.xp` (IF user)   | 270    | 285   | +15   |
+| table                    | before | after | delta |
+| ------------------------ | ------ | ----- | ----- |
+| `chain_of_trust_records` | 6      | 7     | +1    |
+| `proof_layers`           | 4      | 8     | +4    |
+| `evidence`               | 0      | 1     | +1    |
+| `trust_events`           | 8      | 9     | +1    |
+| `profiles.xp` (IF user)  | 270    | 285   | +15   |
 
 Chain: `Harbor data-center JV` → `Proof of Truth` approved 100% →
 `current_layer='Proof of Concept'`, `completion_percentage=25`.
