@@ -12,6 +12,44 @@
 
 ---
 
+## 0. Platform status — verified live (your starting baseline)
+
+As of 2026-06-05 the production environment is healthy and consolidated. Build
+on this; do not re-provision it.
+
+- **App is live:** `https://www.fundexecs.com` (apex `fundexecs.com` 308-redirects
+  to it). Email + Google OAuth both work; a signed-in user lands in the app.
+- **Supabase:** a single project behind the custom domain
+  `https://auth.fundexecs.com` (ref `emityvdaeiqxtpxdhyky`). All migrations in
+  `supabase/migrations/` are applied; RLS is on; the bootstrap user is an org
+  `admin`.
+- **RAG is seeded:** the 15 global brains are embedded —
+  `knowledge_chunks` = 15/15 via Voyage. `POST /api/knowledge/embed` is
+  idempotent if you ever need to re-run it.
+- **Earn copilot is live:** `ANTHROPIC_API_KEY` + `VOYAGE_API_KEY` are set; Ask
+  Earn answers grounded over the brains.
+- **One project each:** a single Vercel project (`fundexecs-os`, team
+  `bgi-pres-projects`, owns `fundexecs.com` / `www.fundexecs.com`) and a single
+  Supabase project. Earlier duplicate Vercel/Supabase projects were deleted.
+
+**Gotchas — do not reintroduce (each cost real debugging time):**
+
+- `SUPABASE_SERVICE_ROLE_KEY` must be the service-role key of the **same**
+  project `NEXT_PUBLIC_SUPABASE_URL` points at (`auth.fundexecs.com` →
+  `emityvdaeiqxtpxdhyky`). A mismatched key makes admin-gated routes return a
+  misleading `403 Admin only`. `lib/supabase/admin.ts` deliberately prefers the
+  exact env name `SUPABASE_SERVICE_ROLE_KEY` over any integration-prefixed
+  variant — keep a plain one set.
+- The Google OAuth **Authorized redirect URI** is the Supabase host
+  `https://auth.fundexecs.com/auth/v1/callback`, **not** the app's
+  `/auth/callback` (that's only on Supabase's redirect allow-list).
+- Keep auth pinned to `www`: `NEXT_PUBLIC_SITE_URL = https://www.fundexecs.com`
+  so the PKCE code-verifier cookie survives the apex→www hop.
+- Do **not** spin up parallel Supabase/Vercel projects for this repo — that
+  caused a split-brain (app on one project, tooling/integration on another).
+
+---
+
 ## 1. What exists today (do not redo — build on it)
 
 **Stack:** Next.js 16 (App Router / RSC) · TypeScript · Tailwind CSS v4 (design
