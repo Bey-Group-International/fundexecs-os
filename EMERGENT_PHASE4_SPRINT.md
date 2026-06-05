@@ -16,7 +16,7 @@
 
 **Stack:** Next.js 16 (App Router / RSC) · TypeScript · Tailwind CSS v4 (design
 tokens in `app/globals.css`) · Geist fonts · Supabase (Auth + Postgres + RLS,
-project URL `https://emityvdaeiqxtpxdhyky.supabase.co`) · Vercel. Anthropic Claude + Voyage
+custom domain `https://auth.fundexecs.com`) · Vercel. Anthropic Claude + Voyage
 embeddings power the "Earn" copilot. CI = GitHub Actions **"Typecheck, lint &
 build"** (`npm ci` → `format:check` → `build` → `typecheck` → `lint`).
 
@@ -151,15 +151,15 @@ reduced-motion), consistent with the design system, across the whole loop.
 
 ## 5. Environment variables
 
-| Variable                        | Scope  | Required  | Purpose                                                                                      |
-| ------------------------------- | ------ | --------- | -------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | public | yes       | Supabase API base (`https://emityvdaeiqxtpxdhyky.supabase.co`; api.fundexecs.com not active) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | yes       | Browser/SSR auth key (RLS-bounded)                                                           |
-| `NEXT_PUBLIC_SITE_URL`          | public | yes       | Canonical origin for auth redirects (`https://www.fundexecs.com`)                            |
-| `SUPABASE_SERVICE_ROLE_KEY`     | server | yes       | Privileged server writes (bypasses RLS)                                                      |
-| `ANTHROPIC_API_KEY`             | server | yes       | Claude (Earn + Proof-of-Truth)                                                               |
-| `VOYAGE_API_KEY`                | server | yes (RAG) | Embeddings for the 15 brains                                                                 |
-| `EARN_MODEL`                    | server | optional  | Model override (default `claude-sonnet-4-6`)                                                 |
+| Variable                        | Scope  | Required  | Purpose                                                           |
+| ------------------------------- | ------ | --------- | ----------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | public | yes       | Supabase API base — custom domain (`https://auth.fundexecs.com`)  |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | yes       | Browser/SSR auth key (RLS-bounded)                                |
+| `NEXT_PUBLIC_SITE_URL`          | public | yes       | Canonical origin for auth redirects (`https://www.fundexecs.com`) |
+| `SUPABASE_SERVICE_ROLE_KEY`     | server | yes       | Privileged server writes (bypasses RLS)                           |
+| `ANTHROPIC_API_KEY`             | server | yes       | Claude (Earn + Proof-of-Truth)                                    |
+| `VOYAGE_API_KEY`                | server | yes (RAG) | Embeddings for the 15 brains                                      |
+| `EARN_MODEL`                    | server | optional  | Model override (default `claude-sonnet-4-6`)                      |
 
 `VERCEL_URL` / `NEXT_PUBLIC_VERCEL_URL` are auto-injected by Vercel.
 
