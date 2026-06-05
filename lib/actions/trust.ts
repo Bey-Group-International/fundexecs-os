@@ -253,7 +253,7 @@ export async function uploadEvidence(input: UploadEvidenceInput): Promise<Upload
       size_bytes: input.sizeBytes,
       notes: input.notes ?? null,
       approval_status: 'pending'
-    } as never)
+    })
     .select('id')
     .single();
   if (evErr || !ev) {
@@ -300,7 +300,7 @@ export async function finalizeEvidenceUpload(evidenceId: string): Promise<Finali
 
   const { data: ev, error: evErr } = await supabase
     .from('evidence')
-    .select('id, storage_path, mime_type, size_bytes, file_name, org_id' as never)
+    .select('id, storage_path, mime_type, size_bytes, file_name, org_id')
     .eq('id', evidenceId)
     .maybeSingle();
   if (evErr || !ev) return { ok: false, error: 'Evidence not found.' };
@@ -308,18 +308,11 @@ export async function finalizeEvidenceUpload(evidenceId: string): Promise<Finali
   // Confirm the object actually exists in storage (defends against
   // clients calling finalize without uploading).
   const admin = createAdminClient();
-  const evRow = ev as unknown as {
-    id: string;
-    storage_path: string;
-    mime_type: string;
-    size_bytes: number;
-    file_name: string;
-    org_id: string;
-  };
+  const evRow = ev;
   const { data: head } = await admin.storage
     .from(TRUST_BUCKET)
     .list(evRow.storage_path.split('/').slice(0, -1).join('/'), {
-      search: evRow.file_name
+      search: evRow.file_name ?? undefined
     });
   const found = head && head.some((o) => evRow.storage_path.endsWith(`/${o.name}`));
   if (!found) {
@@ -328,7 +321,7 @@ export async function finalizeEvidenceUpload(evidenceId: string): Promise<Finali
 
   await supabase
     .from('evidence')
-    .update({ uploaded_at: new Date().toISOString() } as never)
+    .update({ uploaded_at: new Date().toISOString() })
     .eq('id', evidenceId);
 
   // Inline-await AI validation. The Anthropic call has its own 8s
@@ -368,17 +361,11 @@ export async function approveEvidence(input: ApproveInput): Promise<ApproveResul
   // Authorise: actor must be owner/admin OR the evidence's uploader.
   const { data: ev } = await supabase
     .from('evidence')
-    .select('id, org_id, proof_layer_id, uploaded_by, approval_status' as never)
+    .select('id, org_id, proof_layer_id, uploaded_by, approval_status')
     .eq('id', input.evidenceId)
     .maybeSingle();
   if (!ev) return { ok: false, error: 'Evidence not found.' };
-  const evRow = ev as unknown as {
-    id: string;
-    org_id: string;
-    proof_layer_id: string;
-    uploaded_by: string | null;
-    approval_status: string;
-  };
+  const evRow = ev;
   if (evRow.approval_status === 'approved') {
     return { ok: false, error: 'Evidence is already approved.' };
   }
@@ -410,7 +397,7 @@ export async function approveEvidence(input: ApproveInput): Promise<ApproveResul
       approved_by: org.userId,
       approved_at: now,
       rejection_reason: input.decision === 'rejected' ? (input.rejectionReason ?? null) : null
-    } as never)
+    })
     .eq('id', input.evidenceId);
   if (upErr) return { ok: false, error: upErr.message };
 
@@ -435,7 +422,7 @@ export async function approveEvidence(input: ApproveInput): Promise<ApproveResul
         .from('evidence')
         .select('id', { count: 'exact', head: true })
         .eq('proof_layer_id', layerRow.id)
-        .eq('approval_status' as never, 'approved');
+        .eq('approval_status', 'approved');
       if ((approvedCount ?? 0) >= 1) {
         await supabase
           .from('proof_layers')
@@ -506,16 +493,11 @@ export async function revokeEvidence(evidenceId: string): Promise<RevokeResult> 
   const supabase = await createClient();
   const { data: ev } = await supabase
     .from('evidence')
-    .select('id, storage_path, uploaded_by, approval_status' as never)
+    .select('id, storage_path, uploaded_by, approval_status')
     .eq('id', evidenceId)
     .maybeSingle();
   if (!ev) return { ok: false, error: 'Evidence not found.' };
-  const evRow = ev as unknown as {
-    id: string;
-    storage_path: string;
-    uploaded_by: string | null;
-    approval_status: string;
-  };
+  const evRow = ev;
   if (evRow.uploaded_by !== org.userId) {
     return { ok: false, error: 'Only the uploader can revoke.' };
   }

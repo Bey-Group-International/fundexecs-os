@@ -45,6 +45,10 @@ async function loadContext(evidenceId: string): Promise<EvidenceContext | null> 
     .eq('id', evidenceId)
     .maybeSingle();
   if (error || !data) return null;
+  // PostgREST nested-join: `proof_layer` and `proof_layer.chain` come
+  // back flattened in the runtime payload but supabase-js infers them
+  // as arrays. Cast to the resolved object shape to keep call sites
+  // ergonomic; column list matches the .select() string.
   const row = data as unknown as {
     id: string;
     org_id: string;
@@ -135,7 +139,7 @@ async function writeNotes(
     .update({
       ai_validation_notes: notes,
       ai_validated_at: new Date().toISOString()
-    } as never)
+    })
     .eq('id', evidenceId);
 }
 

@@ -174,11 +174,11 @@ export async function getTrustRecord(recordId: string): Promise<TrustRecord | nu
     const { data: evRaw } = await supabase
       .from('evidence')
       .select(
-        'id, proof_layer_id, file_name, mime_type, size_bytes, uploaded_at, uploaded_by, ai_validation_notes, ai_validated_at, approval_status, approved_at, approved_by, rejection_reason, storage_path' as never
+        'id, proof_layer_id, file_name, mime_type, size_bytes, uploaded_at, uploaded_by, ai_validation_notes, ai_validated_at, approval_status, approved_at, approved_by, rejection_reason, storage_path'
       )
       .in('proof_layer_id', layerIds)
       .order('created_at', { ascending: true });
-    evidence = (evRaw ?? []) as unknown as RawEvidence[];
+    evidence = (evRaw ?? []) as RawEvidence[];
   }
 
   // Resolve uploader + approver names.

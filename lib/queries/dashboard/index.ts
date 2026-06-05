@@ -416,7 +416,7 @@ export async function getStudentDashboardData(
       { data: tasks, error: tErr },
       { data: synergies },
       { data: contacts },
-      { data: brainsCount }
+      { count: brainsCount }
     ] = await Promise.all([
       supabase
         .from('tasks')
@@ -446,7 +446,7 @@ export async function getStudentDashboardData(
         full_name: c.full_name ?? 'Contact',
         company: c.company
       })),
-      brainsKnown: (brainsCount as unknown as { count?: number })?.count ?? 0
+      brainsKnown: brainsCount ?? 0
     };
     const empty =
       (tasks ?? []).length === 0 && (contacts ?? []).length === 0 && (synergies ?? []).length === 0;

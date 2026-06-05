@@ -139,6 +139,10 @@ export async function getConnectionsData(orgId: string): Promise<ConnectionsData
     connector: { full_name: string | null } | null;
   };
 
+  // PostgREST embed-join returns `target` / `connector` as nested object
+  // shapes, but supabase-js inference flattens them to arrays. Cast to
+  // the joined shape so downstream code reads `i.target?.full_name`
+  // cleanly. Safe: column list matches the .select() string.
   const intros: WarmIntroRow[] = ((introsRes.data ?? []) as unknown as IntroJoined[]).map((i) => ({
     id: i.id,
     target: i.target?.full_name ?? 'Unknown contact',
