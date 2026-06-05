@@ -6,7 +6,12 @@ import { Card } from '@/components/ui';
 import { TeamAvatar, getCOO } from '@/lib/team';
 import { cn } from '@/lib/utils';
 
-type Msg = { role: 'user' | 'assistant'; content: string };
+type Msg = {
+  role: 'user' | 'assistant';
+  content: string;
+  /** True when this assistant turn is a degraded fallback (different visual). */
+  degraded?: boolean;
+};
 
 export function EarnChat() {
   const earn = getCOO();
@@ -38,13 +43,30 @@ export function EarnChat() {
         body: JSON.stringify({ messages: next })
       });
       const data = await res.json();
+      // Auth / payload errors still come back as proper 4xx — surface them.
       if (!res.ok) {
         setError(data.error || 'Earn failed to respond.');
-      } else {
-        setMessages((m) => [...m, { role: 'assistant', content: data.text as string }]);
+        return;
       }
+      // Never-block degraded shape: 200 + { ok:false, degraded:true, fallback_message }.
+      if (data && data.degraded === true && typeof data.fallback_message === 'string') {
+        setMessages((m) => [
+          ...m,
+          { role: 'assistant', content: data.fallback_message, degraded: true }
+        ]);
+        return;
+      }
+      setMessages((m) => [...m, { role: 'assistant', content: data.text as string }]);
     } catch {
-      setError('Network error — please try again.');
+      // Hard network/parse failure — surface a calm message inline, no toast.
+      setMessages((m) => [
+        ...m,
+        {
+          role: 'assistant',
+          content: "I couldn't reach the network just now. Try once more — the team's still here.",
+          degraded: true
+        }
+      ]);
     } finally {
       setLoading(false);
     }
@@ -66,7 +88,9 @@ export function EarnChat() {
                   'max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[12.5px] leading-relaxed',
                   m.role === 'user'
                     ? 'bg-white text-[#070b14]'
-                    : 'border border-hairline bg-surface-1 text-fg-2'
+                    : m.degraded
+                      ? 'border border-[var(--gold-line)] bg-[var(--gold-soft)] text-fg-2'
+                      : 'border border-hairline bg-surface-1 text-fg-2'
                 )}
               >
                 {m.content}

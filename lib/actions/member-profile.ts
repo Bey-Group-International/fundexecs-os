@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getActiveOrg } from '@/lib/queries/org';
 import { isMemberType, type MemberType } from '@/lib/member-types';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
@@ -93,6 +94,39 @@ export async function setMemberType(memberType: MemberType): Promise<ActionResul
     .from('member_profiles')
     .upsert({ user_id: userId }, { onConflict: 'user_id' });
   if (rowErr) return { ok: false, error: rowErr.message };
+
+  // Fire the per-member-type top-up seed so the dashboard is alive on first
+  // login. Idempotent server-side. Failure must never block onboarding —
+  // we log and continue. Active-org lookup is best-effort; on a fresh signup
+  // it should be the org `handle_new_user` auto-created.
+  try {
+    const org = await getActiveOrg();
+    if (org) {
+      // The `seed_demo_for_member_type` RPC ships in migration
+      // 20260606120000_general_signup_seed_and_member_type_topup.sql. Until
+      // that migration is applied to the live DB and `database.types.ts` is
+      // regenerated, the generic supabase-js typings won't know about it —
+      // cast the rpc name so the build stays green either way.
+      const { error: seedErr } = await supabase.rpc(
+        'seed_demo_for_member_type' as 'create_organization',
+        {
+          _org: org.orgId,
+          _user: userId,
+          _type: memberType
+        } as unknown as { _name: string; _type: never }
+      );
+      if (seedErr) {
+        // Non-fatal: the seed RPC may not be deployed yet, or RLS may refuse.
+        // Log on the server, keep the user moving.
+        console.warn('[setMemberType] seed_demo_for_member_type skipped:', seedErr.message);
+      }
+    }
+  } catch (err) {
+    console.warn(
+      '[setMemberType] seed_demo_for_member_type threw:',
+      err instanceof Error ? err.message : String(err)
+    );
+  }
 
   return { ok: true };
 }
