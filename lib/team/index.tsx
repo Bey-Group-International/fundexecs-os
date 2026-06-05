@@ -1,13 +1,19 @@
 /**
  * `lib/team` — single source of truth for The Team identity used across every
- * authenticated FundExecs OS surface. Re-exports:
+ * authenticated FundExecs OS surface AND the public landing. Re-exports:
  *
  *   - `TEAM_ROSTER`, `getCOO`, `getSpecialists`, `getMember`, `getMemberOrCOO`
- *     and the `TeamMember` / `TeamGroup` types (see `./roster`).
- *   - `gradientForSlug`, `avatarSvgForSlug`, `initialsForName` and the
- *     `GradientStops` type (see `./avatar`).
- *   - `<TeamAvatar />` — server-safe React renderer that draws either the Earn
- *     coin (for the COO) or a deterministic gradient tile (for specialists).
+ *     and the `TeamMember` / `TeamGroup` / `TeamDiscColor` types
+ *     (see `./roster`).
+ *   - `gradientForSlug`, `avatarSvgForSlug`, `initialsForName`,
+ *     `discColorsFor`, `DISC_PALETTE` (see `./avatar`).
+ *   - `<TeamAvatar />` — server-safe React renderer. Two variants:
+ *       • `tile`  — square gradient with two-letter initials (used by the
+ *                   authenticated EarnDock / AskEarnView / AdminView).
+ *       • `disc`  — round 48 px disc with a Lucide icon on an authored
+ *                   radial-gradient palette (used by the public landing).
+ *     The COO ignores the variant and always renders the established
+ *     `EarnCoin` raster mark, so Earn's brand identity is preserved.
  *
  * Slugs are 1:1 with `ai_brains.slug` in the live DB — do not rename them.
  */
@@ -15,21 +21,31 @@
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { cn } from '@/lib/utils';
 import { getMemberOrCOO, type TeamMember } from './roster';
-import { gradientForSlug, initialsForName } from './avatar';
+import { discColorsFor, gradientForSlug, initialsForName } from './avatar';
 
 export { TEAM_ROSTER, getCOO, getSpecialists, getMember, getMemberOrCOO } from './roster';
-export type { TeamMember, TeamGroup } from './roster';
-export { gradientForSlug, avatarSvgForSlug, initialsForName } from './avatar';
-export type { GradientStops } from './avatar';
+export type { TeamMember, TeamGroup, TeamDiscColor } from './roster';
+export {
+  gradientForSlug,
+  avatarSvgForSlug,
+  initialsForName,
+  discColorsFor,
+  DISC_PALETTE
+} from './avatar';
+export type { GradientStops, DiscPaletteKey } from './avatar';
+
+export type TeamAvatarVariant = 'tile' | 'disc';
 
 export interface TeamAvatarProps {
   /** Either the canonical brain slug or the resolved team member. */
   member: TeamMember | string;
   /** Square size in pixels. */
   size?: number;
-  /** Show a pulsing presence dot at the bottom-right (defaults to true for the COO when explicit). */
+  /** Visual style. Defaults to `'tile'` (used by every authenticated surface). */
+  variant?: TeamAvatarVariant;
+  /** Show a pulsing presence dot at the bottom-right. */
   online?: boolean;
-  /** Show the soft radial glow halo behind the avatar. Gold for the COO, blue for specialists. */
+  /** Show the soft radial glow halo behind the avatar. Gold for COO, blue otherwise. */
   glow?: boolean;
   className?: string;
 }
@@ -37,18 +53,23 @@ export interface TeamAvatarProps {
 /**
  * `<TeamAvatar />` — the visual identity for any team member.
  *
- * - For Earn (COO) it delegates to the existing `EarnCoin` raster mark so the
- *   established brand identity is preserved.
- * - For every specialist it renders a rounded-square tile with the
- *   deterministic gradient from `gradientForSlug` and the member's two-letter
- *   initials. The DOM is plain HTML (no `Math.random`, no client-only APIs)
- *   so it is safe to render on the server.
+ * - The COO (Earn) always delegates to the established `EarnCoin` raster mark.
+ * - `variant='tile'` (default) renders a square gradient with the member's
+ *   two-letter initials. Deterministic from slug. Used by the dock, Ask Earn
+ *   sidebar, and admin team grid.
+ * - `variant='disc'` renders a round 48 px disc with the member's Lucide
+ *   icon on an authored `radial-gradient` derived from `discColor`. Mirrors
+ *   the live www.fundexecs.com landing tiles. If the member has no
+ *   `discColor` (shouldn't happen for specialists), the tile variant is used
+ *   as a graceful fallback.
  *
- * Accessibility: `role="img"` + `aria-label="{name}, {position}"` always set.
+ * Accessibility: `role="img"` + `aria-label="{name}, {position}"` always set
+ * (the COO branch sets the label inside `EarnCoin`).
  */
 export function TeamAvatar({
   member,
   size = 36,
+  variant = 'tile',
   online = false,
   glow = false,
   className
@@ -56,11 +77,56 @@ export function TeamAvatar({
   const resolved = typeof member === 'string' ? getMemberOrCOO(member) : member;
   const ariaLabel = `${resolved.name}, ${resolved.position}`;
 
+  // The COO keeps the established Earn coin mark, regardless of variant.
   if (resolved.chief) {
-    // The COO keeps the established Earn coin mark.
     return <EarnCoin size={size} online={online} glow={glow} className={className} />;
   }
 
+  if (variant === 'disc' && resolved.discColor) {
+    const Icon = resolved.icon;
+    const { from, to } = discColorsFor(resolved.discColor);
+    const iconSize = Math.round(size * (20 / 48));
+    const shineSize = Math.round(size * (32 / 48));
+    const shineOffset = Math.round(size * (-8 / 48));
+
+    const disc = (
+      <span
+        role="img"
+        aria-label={ariaLabel}
+        className={cn(
+          'relative inline-flex flex-none items-center justify-center overflow-hidden rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_2px_8px_-2px_rgba(0,0,0,0.5)] ring-1 ring-white/10',
+          className
+        )}
+        style={{
+          width: size,
+          height: size,
+          background: `radial-gradient(125% 125% at 28% 22%, ${from}, ${to})`
+        }}
+      >
+        {/* Soft top-right "shine" rectangle for material feel. */}
+        <span
+          className="pointer-events-none absolute rotate-45 rounded-md bg-white/10"
+          style={{ width: shineSize, height: shineSize, top: shineOffset, right: shineOffset }}
+          aria-hidden
+        />
+        <Icon size={iconSize} strokeWidth={1.7} className="relative text-white/90" aria-hidden />
+      </span>
+    );
+
+    if (!glow) return disc;
+    return (
+      <span className="relative inline-flex flex-none">
+        <span
+          className="pointer-events-none absolute -inset-1.5 rounded-full blur-[4px]"
+          style={{ background: 'radial-gradient(circle, rgba(91,141,239,0.28), transparent 70%)' }}
+          aria-hidden
+        />
+        <span className="relative">{disc}</span>
+      </span>
+    );
+  }
+
+  // ── Default: square initials tile ────────────────────────────────────────
   const { from, to, angle } = gradientForSlug(resolved.slug);
   const initials = initialsForName(resolved.name);
   const radius = Math.round(size * 0.32);

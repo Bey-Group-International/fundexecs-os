@@ -252,7 +252,7 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
         </div>
       </div>
 
-      {/* Earn presence band + live command bar (the live EarnChat copilot). */}
+      {/* Earn presence band + live command bar (the live EarnChat). */}
       <Card className="bg-[linear-gradient(100deg,rgba(247,201,72,0.09),transparent_60%)] px-[18px] py-3.5">
         <div className="flex items-center gap-4">
           <TeamAvatar member={earn} size={44} glow online />
@@ -263,7 +263,7 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
             <span className="font-semibold text-gold-1">{counts.open}</span> awaiting you.
           </div>
         </div>
-        {/* Live Earn copilot chat (posts to /api/ask-earn). */}
+        {/* Live Earn chat (posts to /api/ask-earn). */}
         <div className="mt-3">
           <EarnChat />
         </div>

@@ -6,6 +6,7 @@ import { Mail, Lock, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getSiteURL } from '@/lib/site-url';
 import { EarnCoin } from '@/components/screens/EarnCoin';
+import { TeamAvatar, getCOO } from '@/lib/team';
 
 const GOOGLE_SCOPES =
   'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.metadata';
@@ -121,10 +122,10 @@ export default function LoginPage() {
         </div>
 
         <div className="flex items-center gap-2.5 text-[12.5px] text-fg-4">
-          <EarnCoin size={22} />
+          <TeamAvatar member={getCOO()} size={22} />
           <span>
-            <span className="font-semibold text-fg-2">Earnest Fundmaker</span>, your Private Market
-            Assistant — call him Earn.
+            <span className="font-semibold text-fg-2">Earnest Fundmaker</span> — Chief Operating
+            Officer of your 15-specialist team. Call him Earn.
           </span>
         </div>
       </section>

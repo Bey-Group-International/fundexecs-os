@@ -5,16 +5,17 @@ import { EarnCoin } from '@/components/screens/EarnCoin';
 import { cn } from '@/lib/utils';
 
 export interface EarnOrbProps {
-  /** Whether the Copilot dock is currently open (flips the orb to a close affordance). */
+  /** Whether the Earn dock is currently open (flips the orb to a close affordance). */
   open: boolean;
-  /** Toggle the Copilot dock. */
+  /** Toggle the Earn dock. */
   onToggle: () => void;
 }
 
 /**
- * EarnOrb — the floating circular gold Earn orb fixed bottom-right. Clicking it
- * toggles the Copilot dock. Gold is reserved for Earn, so the orb wears the gold
- * glow ring. Animates transform/opacity only — never transitions `color`.
+ * EarnOrb — the floating circular gold Earn orb fixed bottom-right. Clicking
+ * it toggles the Earn dock. Gold is reserved for Earn, so the orb wears the
+ * gold glow ring. Animates transform/opacity only — never transitions
+ * `color`.
  */
 export function EarnOrb({ open, onToggle }: EarnOrbProps) {
   return (
@@ -22,7 +23,7 @@ export function EarnOrb({ open, onToggle }: EarnOrbProps) {
       type="button"
       onClick={onToggle}
       aria-label={
-        open ? 'Close Earn Copilot' : 'Earnest Fundmaker, Chief Operating Officer — open chat'
+        open ? 'Close Earn dock' : 'Earnest Fundmaker, Chief Operating Officer — open chat'
       }
       aria-expanded={open}
       className={cn(

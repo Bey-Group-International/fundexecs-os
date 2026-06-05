@@ -1,6 +1,5 @@
 import {
   Workflow,
-  Sparkles,
   ScanSearch,
   Briefcase,
   CloudRain,
@@ -9,43 +8,63 @@ import {
   Scale,
   Megaphone,
   Search,
-  Filter,
+  Funnel,
   Ticket,
   Users,
   Landmark,
   GraduationCap,
+  Sparkles,
   type LucideIcon
 } from 'lucide-react';
 
 /**
- * The Team — a single source of truth for the 15-strong FundExecs OS executive
+ * The Team — single source of truth for the 15-strong FundExecs OS executive
  * desk. Keys are the canonical `ai_brains.slug` values from
- * `lib/ai/brains.ts`, which is what backs the live Voyage embeddings. The
- * slugs MUST NOT change.
+ * `lib/ai/brains.ts`, which backs the live Voyage embeddings. Slugs MUST NOT
+ * change.
  *
- * `position` is the named seat at the desk; `oneLiner` is ≤ 90 chars and reads
- * as a one-sentence answer to "what do they do?".
+ * Display fields (`name`, `position`, `oneLiner`) and the avatar visual on the
+ * landing page (`discColor`) come straight from the live production site
+ * (www.fundexecs.com) so the marketing surface and the authenticated surfaces
+ * read as the same desk end to end.
  *
  * Earn (`earnest-fundmaker`) is the only Chief Operating Officer and the only
- * member with the gold gradient — see `lib/team/avatar.ts`.
+ * member rendered in gold. Specialists use the institutional palette below.
  */
 
-/** Position group, mostly for sectioning the team page later. */
+/** Position group used for any future "Team" page sectioning. */
 export type TeamGroup = 'leadership' | 'capital' | 'sourcing' | 'narrative' | 'enablement';
+
+/**
+ * Authored palette colors for the landing-page disc avatars. Each value maps
+ * to a `(from, to)` radial gradient pair in `lib/team/avatar.ts`. None of
+ * these are gold — gold remains reserved for Earn and XP.
+ */
+export type TeamDiscColor =
+  | 'purple'
+  | 'blue'
+  | 'green'
+  | 'bronze'
+  | 'teal-blue'
+  | 'indigo'
+  | 'teal'
+  | 'burgundy';
 
 export interface TeamMember {
   /** Canonical brain slug, identical to `ai_brains.slug` in the DB. */
   slug: string;
-  /** Display name as shown to operators. */
+  /** Display name as shown to operators (human first name for specialists). */
   name: string;
   /** Position at the desk (e.g. "Chief Operating Officer"). */
   position: string;
-  /** One-line role summary, ≤ 90 chars. */
+  /** One-line role summary in the team voice. */
   oneLiner: string;
   /** Coarse grouping for any future "Team" page sectioning. */
   group: TeamGroup;
-  /** Lucide icon used as a secondary glyph (e.g. in the BrainSwitcher). */
+  /** Lucide icon used inside the disc-variant avatar (and as a secondary glyph). */
   icon: LucideIcon;
+  /** Authored disc-avatar color for the landing surface. Omitted for the COO. */
+  discColor?: TeamDiscColor;
   /** Whether this member is the chief / COO. Exactly one entry must be true. */
   chief?: boolean;
 }
@@ -57,122 +76,151 @@ export const TEAM_ROSTER: readonly TeamMember[] = [
     slug: 'earnest-fundmaker',
     name: 'Earnest Fundmaker',
     position: 'Chief Operating Officer',
-    oneLiner: 'Your private-market COO — orchestrates the team and your next best move.',
+    oneLiner:
+      'Your right hand across the desk. Earnest takes your mandate, fronts the team, and runs all fifteen as one — surfacing your next decision, routing each task to the right specialist, and keeping every engagement moving from first thesis to signed close. Measured, candid, and always on the record.',
     group: 'leadership',
     icon: Sparkles,
     chief: true
   },
   {
     slug: 'master-workflow',
-    name: 'Master Workflow',
+    name: 'Sterling',
     position: 'Chief of Staff',
-    oneLiner: 'Routes every request to the right specialist and keeps work moving end to end.',
+    oneLiner:
+      'Owns your operating rhythm — intakes every request, sequences the work across the desk, and makes sure nothing falls between functions.',
     group: 'leadership',
-    icon: Workflow
-  },
-  {
-    slug: 'executive-advisor',
-    name: 'Executive Advisor',
-    position: 'Chief Strategy Officer',
-    oneLiner: 'Investor intelligence and executive guidance for scaling like an institution.',
-    group: 'leadership',
-    icon: Briefcase
+    icon: Workflow,
+    discColor: 'purple'
   },
   {
     slug: 'automater',
-    name: 'Automater',
-    position: 'Head of Operations',
-    oneLiner: 'Scrubs inbound documents and forms into clean, deduplicated records.',
+    name: 'Dalia',
+    position: 'Head of Data Operations',
+    oneLiner:
+      'Cleans and structures everything inbound — reconciling data into a single, decision-ready record you can act on.',
     group: 'enablement',
-    icon: ScanSearch
+    icon: ScanSearch,
+    discColor: 'blue'
+  },
+  {
+    slug: 'executive-advisor',
+    name: 'Theodore',
+    position: 'Chief Strategy Advisor',
+    oneLiner:
+      'Your sounding board on every consequential call — pressure-tests strategy, frames the trade-offs, and grounds each decision in the institutional playbook.',
+    group: 'leadership',
+    icon: Briefcase,
+    discColor: 'green'
   },
   {
     slug: 'rainmaker',
-    name: 'Rainmaker',
-    position: 'Head of Closings',
-    oneLiner: 'The closer — drives capital commitments and removes the last blockers.',
+    name: 'Vivian',
+    position: 'Managing Director, Demand Generation',
+    oneLiner:
+      'Builds and sustains your pipeline of interest — generating qualified demand and holding momentum from first touch to commitment.',
     group: 'capital',
-    icon: CloudRain
-  },
-  {
-    slug: 'capital-raiser',
-    name: 'Elite Capital Raiser',
-    position: 'Head of Institutional Capital',
-    oneLiner: 'Leads institutional raises end-to-end — targeting, narrative, first-close.',
-    group: 'capital',
-    icon: Landmark
-  },
-  {
-    slug: 'capital-connector',
-    name: 'Capital Connector',
-    position: 'Head of Capital Formation',
-    oneLiner: 'Matches deals to the right capital providers and assembles the stack.',
-    group: 'capital',
-    icon: Link2
-  },
-  {
-    slug: 'investor-relations',
-    name: 'Investor Relations',
-    position: 'Head of Investor Relations',
-    oneLiner: 'Manages LP communications, quarterly updates, and re-up cadence.',
-    group: 'capital',
-    icon: Users
+    icon: CloudRain,
+    discColor: 'bronze'
   },
   {
     slug: 'deal-sourcer',
-    name: 'Deal Sourcer',
-    position: 'Head of Acquisitions',
-    oneLiner: 'Sources proprietary deal flow scored against your thesis.',
+    name: 'Marcus',
+    position: 'Head of Deal Origination',
+    oneLiner:
+      'Surfaces proprietary, on-thesis opportunities ahead of the market — scored against your mandate before they reach your desk.',
     group: 'sourcing',
-    icon: Radar
+    icon: Radar,
+    discColor: 'teal-blue'
   },
   {
-    slug: 'lead-generator',
-    name: 'Lead Generator',
-    position: 'Head of Lead Generation',
-    oneLiner: 'Builds and runs targeted outreach funnels to qualified prospects.',
-    group: 'sourcing',
-    icon: Filter
-  },
-  {
-    slug: 'event-curator',
-    name: 'Private Event Curator',
-    position: 'Head of Network',
-    oneLiner: 'Curates private events and roundtables that create warm connections.',
-    group: 'sourcing',
-    icon: Ticket
+    slug: 'capital-connector',
+    name: 'Priya',
+    position: 'Director of Capital Markets',
+    oneLiner:
+      'Matches the right capital to the right deal — mapping each opportunity to suitable LPs, co-investors, and lenders.',
+    group: 'capital',
+    icon: Link2,
+    discColor: 'indigo'
   },
   {
     slug: 'legal-admin',
-    name: 'Legal & Admin',
-    position: 'General Counsel',
-    oneLiner: 'Manages fund formation, the LPA pack, KYC/AML, and the evidence trail.',
+    name: 'Adrian',
+    position: 'General Counsel & Compliance',
+    oneLiner:
+      'Guards the downside — reviews structure, terms, and risk, keeping every engagement clean, compliant, and audit-ready.',
     group: 'enablement',
-    icon: Scale
+    icon: Scale,
+    discColor: 'bronze'
   },
   {
     slug: 'pr-director',
-    name: 'PR Director',
-    position: 'Chief Marketing Officer',
-    oneLiner: 'Crafts investor-facing collateral and keeps the fund narrative consistent.',
+    name: 'Sienna',
+    position: 'Director of Communications',
+    oneLiner:
+      'Shapes your narrative in market — message, positioning, and media, on brand and on the record.',
     group: 'narrative',
-    icon: Megaphone
+    icon: Megaphone,
+    discColor: 'purple'
   },
   {
     slug: 'seo-disruptor',
-    name: 'SEO Disruptor',
-    position: 'Head of Discovery',
-    oneLiner: 'Improves how the fund is found and perceived by the right LPs online.',
+    name: 'Noah',
+    position: 'Head of Digital Presence',
+    oneLiner:
+      'Builds your organic visibility — so the right counterparties find you and your authority compounds over time.',
     group: 'narrative',
-    icon: Search
+    icon: Search,
+    discColor: 'teal'
+  },
+  {
+    slug: 'lead-generator',
+    name: 'Camille',
+    position: 'Head of Top-of-Funnel',
+    oneLiner:
+      'Fills the top of your funnel — identifying and warming the right prospects so your pipeline never runs dry.',
+    group: 'sourcing',
+    icon: Funnel,
+    discColor: 'teal-blue'
+  },
+  {
+    slug: 'event-curator',
+    name: 'Jasper',
+    position: 'Director of Private Events',
+    oneLiner:
+      'Curates the rooms that matter — convening investors and operators in private settings built to deepen relationships.',
+    group: 'sourcing',
+    icon: Ticket,
+    discColor: 'indigo'
+  },
+  {
+    slug: 'investor-relations',
+    name: 'Eleanor',
+    position: 'Head of Investor Relations',
+    oneLiner:
+      'Keeps your LPs close and confident — structured updates, reporting, and communications that protect and grow the relationship.',
+    group: 'capital',
+    icon: Users,
+    discColor: 'burgundy'
+  },
+  {
+    slug: 'capital-raiser',
+    name: 'Sloane',
+    position: 'Managing Director, Capital Formation',
+    oneLiner:
+      'Runs institutional fundraising at the top of the market — a disciplined raise from target list to final close.',
+    group: 'capital',
+    icon: Landmark,
+    discColor: 'teal'
   },
   {
     slug: 'workflow-instructor',
-    name: 'Workflow Instructor',
-    position: 'Head of Enablement',
-    oneLiner: 'Teaches operators the FundExecs OS workflows and compounds execution.',
+    name: 'Felix',
+    position: 'Director of Enablement',
+    oneLiner:
+      'Gets you and your team to mastery fast — onboarding, education, and the playbooks that keep the whole desk running.',
     group: 'enablement',
-    icon: GraduationCap
+    icon: GraduationCap,
+    discColor: 'purple'
   }
 ] as const;
 

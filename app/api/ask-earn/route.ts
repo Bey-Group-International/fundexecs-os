@@ -4,8 +4,8 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { askEarn, type EarnMessage } from '@/lib/ai/earn';
 
 /**
- * POST /api/ask-earn — chat with the Earn copilot (RAG over the 15 brains +
- * Claude). Body: { messages: { role: 'user'|'assistant', content: string }[] }.
+ * POST /api/ask-earn — chat with Earn (RAG over the 15 brains + Claude).
+ * Body: { messages: { role: 'user'|'assistant', content: string }[] }.
  */
 export async function POST(req: NextRequest) {
   const supabase = await createClient();

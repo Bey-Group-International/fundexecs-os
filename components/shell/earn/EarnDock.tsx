@@ -45,7 +45,7 @@ function PresenceHeader({ onClose }: { onClose: () => void }) {
       <button
         type="button"
         onClick={onClose}
-        aria-label="Close Copilot"
+        aria-label="Close Earn dock"
         className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-surface-1 text-fg-3 transition hover:bg-surface-2 hover:text-fg-1"
       >
         <X size={16} strokeWidth={1.9} aria-hidden />
@@ -143,18 +143,18 @@ function RecommendedActions() {
   );
 }
 
-export interface CopilotDockProps {
+export interface EarnDockProps {
   open: boolean;
   onClose: () => void;
 }
 
 /**
- * CopilotDock — the right-side slide-in Earn Copilot. Houses the COO presence
- * header (Earn + her position), the live chat (reuses `EarnChat`, which POSTs
- * to `/api/ask-earn`), recommended actions, and a compact "Team" strip of the
- * 14 specialists. Slides via transform only; never transitions `color`.
+ * EarnDock — the right-side slide-in Earn surface. Houses the COO presence
+ * header (Earn + position), the live chat (reuses `EarnChat`, which POSTs
+ * to `/api/ask-earn`), recommended actions, and a compact "Team" strip of
+ * the 14 specialists. Slides via transform only; never transitions `color`.
  */
-export function CopilotDock({ open, onClose }: CopilotDockProps) {
+export function EarnDock({ open, onClose }: EarnDockProps) {
   const specialists = getSpecialists();
   const initialSpecialist: TeamMember = specialists[0]!;
   const [activeSpecialist, setActiveSpecialist] = useState<string>(initialSpecialist.slug);
@@ -163,7 +163,7 @@ export function CopilotDock({ open, onClose }: CopilotDockProps) {
     <aside
       role="dialog"
       aria-modal="false"
-      aria-label="Earn Copilot"
+      aria-label="Earn dock"
       aria-hidden={!open}
       className={cn(
         'fixed right-0 top-0 z-[45] flex h-full w-full max-w-[400px] flex-col border-l border-hairline bg-bg-1 shadow-[var(--shadow-lg)]',

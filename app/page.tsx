@@ -1,31 +1,18 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import {
-  ArrowRight,
-  Rocket,
-  Coins,
-  Users,
-  Search,
-  Database,
-  Share2,
-  FileText,
-  BarChart3,
-  Package,
-  MessageSquare,
-  CheckCircle2,
-  type LucideIcon
-} from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Badge, Card } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { LandingNav } from '@/components/landing/LandingNav';
 import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
 import { ActivityTicker } from '@/components/landing/ActivityTicker';
 import { HeroStats } from '@/components/landing/HeroStats';
+import { TeamAvatar, getCOO, getSpecialists } from '@/lib/team';
 
 export const metadata: Metadata = {
-  title: 'AI Copilots for the Full Capital Lifecycle',
+  title: 'An AI executive team for the full capital lifecycle',
   description:
-    'FundExecs is a suite of AI copilots that operate the full capital lifecycle — capital formation, sourcing, diligence, packaging, and closing — for fund managers and dealmakers.'
+    'FundExecs is an AI executive team — fifteen specialists led by Earnest Fundmaker, the Chief Operating Officer — that operates the full capital lifecycle for fund managers and dealmakers.'
 };
 
 // ── Shared CTA styles (match the app's institutional-blue primary) ───────────
@@ -36,111 +23,6 @@ const PRIMARY_CTA =
 const SECONDARY_CTA =
   'inline-flex items-center justify-center gap-2 rounded-xl border border-hairline bg-surface-1 px-5 py-3 text-sm font-medium text-fg-2 transition hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1';
 
-// ── Copilots — 11 capabilities grouped into 4 lifecycle clusters ─────────────
-
-interface Copilot {
-  icon: LucideIcon;
-  /** The copilot's name (a named specialist on the desk). */
-  name: string;
-  /** The function it owns. */
-  title: string;
-  body: string;
-}
-
-interface Cluster {
-  label: string;
-  copilots: Copilot[];
-}
-
-const CLUSTERS: Cluster[] = [
-  {
-    label: 'Raise',
-    copilots: [
-      {
-        icon: Rocket,
-        name: 'Atlas',
-        title: 'Fund Launches',
-        body: 'Stand up a fund with discipline — entity structure, investment thesis, and core materials, assembled to institutional standard.'
-      },
-      {
-        icon: Coins,
-        name: 'Rainmaker',
-        title: 'Capital Raises',
-        body: 'Run a structured raise: target suitable capital, document every conversation, and sustain momentum through final close.'
-      },
-      {
-        icon: Users,
-        name: 'Envoy',
-        title: 'Partner Prospecting',
-        body: 'Identify and qualify LPs, co-investors, and operating partners against your mandate — and establish a credible path to each.'
-      }
-    ]
-  },
-  {
-    label: 'Source',
-    copilots: [
-      {
-        icon: Search,
-        name: 'Scout',
-        title: 'Deal Sourcing',
-        body: 'Surface proprietary, on-thesis opportunities ahead of the broader market.'
-      },
-      {
-        icon: Database,
-        name: 'Oracle',
-        title: 'Data Scouring',
-        body: 'Extract signal from filings, registries, and public sources — reconciled into a clean, decision-ready record.'
-      },
-      {
-        icon: Share2,
-        name: 'Nexus',
-        title: 'Relationship Aggregating',
-        body: 'Consolidate your firm’s relationships into a single graph — and surface the shortest credible path to any counterparty.'
-      }
-    ]
-  },
-  {
-    label: 'Analyze & Package',
-    copilots: [
-      {
-        icon: FileText,
-        name: 'Scribe',
-        title: 'Document Drafting',
-        body: 'Draft memoranda, presentations, and agreements to the standard your investment committee expects.'
-      },
-      {
-        icon: BarChart3,
-        name: 'Auditor',
-        title: 'Deal Analyzing',
-        body: 'Pressure-test the model, comparables, and risks with investment-committee rigor.'
-      },
-      {
-        icon: Package,
-        name: 'Curator',
-        title: 'Deal Packaging',
-        body: 'Assemble an institutional-grade package — data room, narrative, and terms in lockstep.'
-      }
-    ]
-  },
-  {
-    label: 'Close',
-    copilots: [
-      {
-        icon: MessageSquare,
-        name: 'Liaison',
-        title: 'Communicating',
-        body: 'Keep every counterparty informed and every workstream advancing — measured, timely, and on the record.'
-      },
-      {
-        icon: CheckCircle2,
-        name: 'Closer',
-        title: 'Closing',
-        body: 'Drive to signature — track conditions precedent, coordinate signatories, and close cleanly.'
-      }
-    ]
-  }
-];
-
 interface Step {
   n: string;
   title: string;
@@ -150,27 +32,26 @@ interface Step {
 const STEPS: Step[] = [
   {
     n: '01',
-    title: 'Define the mandate',
-    body: 'Set your thesis, targets, and constraints with Earnest. Every copilot aligns to the mandate from the outset.'
+    title: 'Set the mandate',
+    body: 'Define your thesis, targets, and constraints with Earn. The whole team aligns to that mandate from the outset.'
   },
   {
     n: '02',
     title: 'Source & raise',
-    body: 'Surface opportunities and capital, qualified through your relationships and verified data.'
+    body: 'Surface on-thesis opportunities and suitable capital — qualified through your relationships and verified against primary data.'
   },
   {
     n: '03',
     title: 'Analyze & package',
-    body: 'Pressure-test the opportunity and assemble an institutional-grade package — documents and narrative in lockstep.'
+    body: 'Pressure-test the opportunity with committee rigor and assemble an institutional-grade package — model, narrative, and terms in lockstep.'
   },
   {
     n: '04',
     title: 'Communicate & close',
-    body: 'Advance every counterparty and drive to signature — coordinated, documented, and accountable.'
+    body: 'Advance every counterparty and drive to signature — coordinated, documented, and accountable at every step.'
   }
 ];
 
-// Chain of Trust — the 4-layer proof chain (colors from the design tokens).
 interface TrustLayer {
   name: string;
   color: string;
@@ -181,34 +62,34 @@ const TRUST_LAYERS: TrustLayer[] = [
   {
     name: 'Proof of Truth',
     color: 'var(--proof-truth)',
-    body: 'Source data, citations, and verified facts.'
+    body: 'Every claim traced to source data, citations, and verified facts — nothing asserted that cannot be shown.'
   },
   {
     name: 'Proof of Concept',
     color: 'var(--proof-concept)',
-    body: 'Strategy, thesis, and fit logic.'
+    body: 'The strategy, thesis, and fit logic behind each decision, documented as it forms.'
   },
   {
     name: 'Proof of Execution',
     color: 'var(--proof-execution)',
-    body: 'Tasks, workflows, and approvals.'
+    body: 'The tasks, workflows, and approvals that moved it forward — who did what, and when.'
   },
   {
     name: 'Proof of Work',
     color: 'var(--proof-work)',
-    body: 'Evidence, uploads, outcomes, and logs.'
+    body: 'Signed evidence, uploads, and outcomes — the auditable record of work delivered.'
   }
 ];
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
 function Hero() {
+  const earn = getCOO();
   return (
     <section
-      className="relative overflow-hidden pb-20 pt-32 sm:pb-28 sm:pt-40"
+      className="relative overflow-hidden pb-16 pt-28 sm:pb-20 sm:pt-32"
       aria-labelledby="hero-heading"
     >
-      {/* Dark gradient background + tasteful gold glow. */}
       <div
         className="absolute inset-0 -z-10"
         style={{
@@ -217,10 +98,10 @@ function Hero() {
         }}
         aria-hidden
       />
-      <div className="mx-auto grid max-w-[1180px] items-center gap-12 px-5 sm:px-8 lg:grid-cols-12">
+      <div className="mx-auto grid max-w-[1180px] items-center gap-8 px-5 sm:px-8 lg:grid-cols-12 lg:gap-10">
         <div className="lg:col-span-7">
           <Badge tone="gold" dot pulse className="mb-6">
-            Led by Earnest, your live AI guide
+            Led by Earn, your live AI guide
           </Badge>
 
           <h1
@@ -230,9 +111,10 @@ function Hero() {
             Unified intelligence layer for the <span className="text-gold-1">private markets.</span>
           </h1>
 
-          <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-fg-3 sm:text-lg">
-            Twelve AI copilots working as one to optimize workflows, accelerate decisions, and
-            elevate your capacity to execute like an institution.
+          <p className="mt-5 max-w-xl text-[16px] leading-7 text-fg-3 sm:text-[17px]">
+            A fifteen-strong executive team — led by Earn — working as one to optimize your
+            workflows, accelerate your decisions, and elevate your capacity to execute like an
+            institution.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-4">
@@ -240,17 +122,16 @@ function Hero() {
               Get started
               <ArrowRight size={16} strokeWidth={1.9} aria-hidden />
             </Link>
-            <SmoothScrollLink targetId="copilots" className={SECONDARY_CTA}>
-              See how it works
+            <SmoothScrollLink targetId="team" className={SECONDARY_CTA}>
+              Meet the team
             </SmoothScrollLink>
           </div>
 
-          {/* Live proof points — animated count-ups in an elevated strip. */}
           <HeroStats />
         </div>
 
-        {/* Hero mascot with gentle float + gold glow. */}
-        <div className="flex justify-center lg:col-span-5 lg:justify-end">
+        {/* Hero mascot — EarnCoin with gold glow + identity caption. */}
+        <div className="flex flex-col items-center lg:col-span-5 lg:items-end">
           <div className="relative">
             <div
               className="fx-glow-pulse pointer-events-none absolute inset-0 -z-10"
@@ -263,8 +144,18 @@ function Hero() {
             <EarnCoin
               size={300}
               glow
+              online
               className="fx-coin-float h-44 w-44 sm:h-56 sm:w-56 lg:h-72 lg:w-72"
             />
+          </div>
+          <div className="mt-6 text-center lg:text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-1">
+              Meet Earn
+            </p>
+            <p className="mt-1.5 text-[15px] font-semibold text-fg-1">
+              {earn.name} &ldquo;Earn&rdquo;
+            </p>
+            <p className="mt-0.5 text-[12px] text-fg-4">{earn.position} · your live AI guide</p>
           </div>
         </div>
       </div>
@@ -272,91 +163,79 @@ function Hero() {
   );
 }
 
-function CopilotCard({ copilot }: { copilot: Copilot }) {
-  const Icon = copilot.icon;
+function CooSpotlight() {
+  const earn = getCOO();
   return (
-    <Card clickable className="flex h-full flex-col p-4">
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
-          <Icon size={15} strokeWidth={1.9} aria-hidden />
-        </div>
+    <Card className="relative overflow-hidden p-6 sm:p-7">
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background: 'radial-gradient(70% 130% at 0% 0%, rgba(247,201,72,0.1), transparent 60%)'
+        }}
+        aria-hidden
+      />
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+        <TeamAvatar member={earn} size={72} glow online className="flex-none" />
         <div className="min-w-0">
-          <h3 className="truncate text-[13.5px] font-semibold leading-tight text-fg-1">
-            {copilot.name}
-          </h3>
-          <p className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-gold-1">
-            {copilot.title}
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-1">
+            {earn.position} · live AI guide
           </p>
+          <h3 className="mt-1 text-xl font-semibold text-fg-1">{earn.name} &ldquo;Earn&rdquo;</h3>
+          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-fg-3">{earn.oneLiner}</p>
         </div>
       </div>
-      <p className="mt-2.5 text-[11.5px] leading-5 text-fg-3">{copilot.body}</p>
     </Card>
   );
 }
 
-function Copilots() {
+function SpecialistCard({ slug }: { slug: string }) {
+  const member = getSpecialists().find((m) => m.slug === slug);
+  if (!member) return null;
   return (
-    <section id="copilots" className="py-20 sm:py-28" aria-labelledby="copilots-heading">
+    <Card clickable className="flex h-full items-start gap-4 p-5">
+      <TeamAvatar member={member} size={48} variant="disc" className="flex-none" />
+      <div className="min-w-0">
+        <h3 className="text-[14px] font-semibold leading-tight text-fg-1">{member.name}</h3>
+        <p className="mt-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-gold-1">
+          {member.position}
+        </p>
+        <p className="mt-2 text-[11.5px] leading-5 text-fg-3">{member.oneLiner}</p>
+      </div>
+    </Card>
+  );
+}
+
+function Team() {
+  const specialists = getSpecialists();
+  return (
+    <section id="team" className="py-14 sm:py-20" aria-labelledby="team-heading">
       <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
         <div className="max-w-2xl">
           <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-            The Copilots
+            The Team
           </p>
           <h2
-            id="copilots-heading"
+            id="team-heading"
             className="text-3xl font-semibold leading-tight tracking-[-0.02em] text-fg-1 sm:text-4xl lg:text-5xl"
           >
-            Eleven specialists. One orchestrator. One lifecycle.
+            Your executive team. Fifteen specialists, one desk.
           </h2>
           <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
-            Each copilot owns a stage of the work; Earnest leads the eleven as one — carrying a
-            mandate from first thesis to signed close, coordinated, documented, and fully auditable.
+            An institutional-grade desk that works as one — Earnest leads fourteen specialists
+            across capital formation, sourcing, diligence, packaging, and closing. Each carries your
+            mandate; every action is documented and on the record.
           </p>
         </div>
 
-        {/* Earnest — the orchestrator; the first of the twelve. */}
-        <div className="mt-12">
-          <Card className="relative overflow-hidden p-6 sm:p-7">
-            <div
-              className="pointer-events-none absolute inset-0 -z-10"
-              style={{
-                background:
-                  'radial-gradient(70% 130% at 0% 0%, rgba(247,201,72,0.1), transparent 60%)'
-              }}
-              aria-hidden
-            />
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-              <EarnCoin size={72} glow online className="flex-none" />
-              <div className="min-w-0">
-                <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-1">
-                  Orchestrator · live AI guide
-                </p>
-                <h3 className="mt-1 text-xl font-semibold text-fg-1">Earnest</h3>
-                <p className="mt-2 max-w-2xl text-[13px] leading-6 text-fg-3">
-                  Earnest fronts the desk and runs the eleven specialists as one — routing each
-                  task, framing the next decision, and keeping every mandate moving from first
-                  thesis to signed close.
-                </p>
-              </div>
-            </div>
-          </Card>
+        {/* Earnest — the COO; the first of the fifteen. */}
+        <div className="mt-8">
+          <CooSpotlight />
         </div>
 
-        <div className="mt-10 space-y-12">
-          {CLUSTERS.map((cluster) => (
-            <div key={cluster.label}>
-              <div className="mb-6 flex items-center gap-3">
-                <span className="text-[12px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-                  {cluster.label}
-                </span>
-                <span className="h-px flex-1 bg-hairline" aria-hidden />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {cluster.copilots.map((c) => (
-                  <CopilotCard key={c.title} copilot={c} />
-                ))}
-              </div>
-            </div>
+        {/* The fourteen specialists. */}
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {specialists.map((m) => (
+            <SpecialistCard key={m.slug} slug={m.slug} />
           ))}
         </div>
       </div>
@@ -366,7 +245,7 @@ function Copilots() {
 
 function ChainOfTrust() {
   return (
-    <section className="py-20 sm:py-28" aria-labelledby="trust-heading">
+    <section className="py-14 sm:py-20" aria-labelledby="trust-heading">
       <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
         <div className="max-w-2xl">
           <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
@@ -384,7 +263,7 @@ function ChainOfTrust() {
           </p>
         </div>
 
-        <ol className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <ol className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {TRUST_LAYERS.map((layer, i) => (
             <li key={layer.name}>
               <Card className="h-full p-6">
@@ -394,8 +273,8 @@ function ChainOfTrust() {
                     style={{ backgroundColor: layer.color, boxShadow: `0 0 12px ${layer.color}` }}
                     aria-hidden
                   />
-                  <span className="text-[11px] font-semibold tabular-nums text-fg-4">
-                    {`0${i + 1}`}
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] tabular-nums text-fg-4">
+                    {`Layer 0${i + 1}`}
                   </span>
                 </div>
                 <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{layer.name}</h3>
@@ -414,52 +293,11 @@ function ChainOfTrust() {
   );
 }
 
-function MeetEarnest() {
-  return (
-    <section
-      className="border-y border-hairline py-20 sm:py-24"
-      style={{
-        background:
-          'radial-gradient(60% 80% at 80% 50%, rgba(247,201,72,0.08), transparent 70%), var(--bg-1)'
-      }}
-      aria-labelledby="earnest-heading"
-    >
-      <div className="mx-auto grid max-w-[1180px] items-center gap-12 px-5 sm:px-8 lg:grid-cols-12">
-        <div className="lg:col-span-7">
-          <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-            Meet Earnest
-          </p>
-          <h2
-            id="earnest-heading"
-            className="text-3xl font-semibold leading-tight tracking-[-0.02em] text-fg-1 sm:text-4xl"
-          >
-            A live guide with command of the entire lifecycle.
-          </h2>
-          <p className="mt-5 max-w-xl text-[15px] leading-7 text-fg-3 sm:text-lg">
-            Earnest fronts the copilots — answering questions, framing the next decision, and
-            routing each task to the right specialist. Measured, candid, and always on the record.
-            The full engagement continues inside the platform.
-          </p>
-          <div className="mt-8">
-            <Link href="/login" className={PRIMARY_CTA}>
-              Get started
-              <ArrowRight size={16} strokeWidth={1.9} aria-hidden />
-            </Link>
-          </div>
-        </div>
-        <div className="flex justify-center lg:col-span-5 lg:justify-end">
-          <EarnCoin size={224} glow online className="h-40 w-40 sm:h-52 sm:w-52" />
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function HowItWorks() {
   return (
-    <section className="py-20 sm:py-28" aria-labelledby="how-heading">
+    <section className="py-14 sm:py-20" aria-labelledby="how-heading">
       <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
-        <div className="mb-14 max-w-2xl">
+        <div className="mb-10 max-w-2xl">
           <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
             How it works
           </p>
@@ -469,6 +307,10 @@ function HowItWorks() {
           >
             Four steps from thesis to signed close.
           </h2>
+          <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
+            One disciplined operating model — run by your team and recorded end to end, so every
+            engagement compounds into an auditable track record.
+          </p>
         </div>
         <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s) => (
@@ -489,7 +331,7 @@ function HowItWorks() {
 function FinalCta() {
   return (
     <section
-      className="py-20 sm:py-28"
+      className="py-14 sm:py-20"
       style={{
         background:
           'radial-gradient(70% 120% at 50% 0%, rgba(247,201,72,0.12), transparent 70%), var(--bg-0)'
@@ -505,7 +347,7 @@ function FinalCta() {
           Operate your capital lifecycle like a far larger institution.
         </h2>
         <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
-          Bring Earnest and the copilots into your next raise, transaction, or close.
+          Bring Earn and your executive team into your next raise, transaction, or close.
         </p>
         <div className="mt-9 flex justify-center">
           <Link href="/login" className={PRIMARY_CTA}>
@@ -531,17 +373,17 @@ function Footer() {
               </span>
             </div>
             <p className="text-[12.5px] leading-6 text-fg-4">
-              AI copilots for the full capital lifecycle — capital formation, sourcing, diligence,
-              packaging, and closing.
+              An AI executive team for the full capital lifecycle — capital formation, sourcing,
+              diligence, packaging, and closing.
             </p>
           </div>
 
           <nav className="flex flex-wrap gap-x-10 gap-y-3" aria-label="Footer">
             <SmoothScrollLink
-              targetId="copilots"
+              targetId="team"
               className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
             >
-              Copilots
+              The Team
             </SmoothScrollLink>
             <SmoothScrollLink
               targetId="how-heading"
@@ -582,7 +424,6 @@ function Footer() {
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-bg-0 text-fg-1">
-      {/* Skip link for keyboard / screen-reader users. */}
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-xl focus:bg-gold-1 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#070b14]"
@@ -595,9 +436,8 @@ export default function HomePage() {
       <main id="main">
         <Hero />
         <ActivityTicker />
-        <Copilots />
+        <Team />
         <ChainOfTrust />
-        <MeetEarnest />
         <HowItWorks />
         <FinalCta />
       </main>

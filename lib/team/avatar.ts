@@ -30,6 +30,30 @@ export interface GradientStops {
 const COO_SLUG = 'earnest-fundmaker';
 
 /**
+ * Authored palette for the disc-variant landing avatars. Values mirror the
+ * production www.fundexecs.com landing page exactly. Each entry is a
+ * `(from, to)` pair fed into a `radial-gradient(125% 125% at 28% 22%, …)`.
+ * None of these are gold — gold remains reserved for Earn.
+ */
+export const DISC_PALETTE = {
+  purple: { from: '#7e5682', to: '#2f2230' },
+  blue: { from: '#3f63a6', to: '#1a2740' },
+  green: { from: '#2f7e62', to: '#163128' },
+  bronze: { from: '#8a6740', to: '#3a2c1f' },
+  'teal-blue': { from: '#2b6f8f', to: '#142a36' },
+  indigo: { from: '#2f5bb7', to: '#16233f' },
+  teal: { from: '#1f8079', to: '#123634' },
+  burgundy: { from: '#9a5a52', to: '#3a221f' }
+} as const;
+
+export type DiscPaletteKey = keyof typeof DISC_PALETTE;
+
+/** Resolve a disc-palette key (e.g. "purple") to its `(from, to)` color pair. */
+export function discColorsFor(key: DiscPaletteKey): { from: string; to: string } {
+  return DISC_PALETTE[key];
+}
+
+/**
  * Fast deterministic hash (FNV-1a, 32-bit). Pure: same input → same output.
  */
 function fnv1a(input: string): number {

@@ -26,7 +26,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { ShellIdentity } from '@/lib/queries/identity';
 import { cn } from '@/lib/utils';
 import { EarnOrb } from './earn/EarnOrb';
-import { CopilotDock } from './earn/CopilotDock';
+import { EarnDock } from './earn/EarnDock';
 import { TrustToaster } from './trust/TrustToaster';
 
 interface NavItem {
@@ -262,7 +262,7 @@ function Topbar({
 
       <ThemeToggle />
 
-      {/* Gold Earn coin wallet (gamification) — opens the Earn Copilot dock */}
+      {/* Gold Earn coin wallet (gamification) — opens the Earn dock */}
       <button
         type="button"
         onClick={onAskEarn}
@@ -315,7 +315,7 @@ export interface AppShellProps {
 export function AppShell({ title, subtitle, identity, children }: AppShellProps) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [dockOpen, setDockOpen] = useState(false);
   const id = identity ?? DEFAULT_IDENTITY;
 
   return (
@@ -333,7 +333,7 @@ export function AppShell({ title, subtitle, identity, children }: AppShellProps)
           title={title}
           subtitle={subtitle}
           onMenu={() => setNavOpen(true)}
-          onAskEarn={() => setCopilotOpen((v) => !v)}
+          onAskEarn={() => setDockOpen((v) => !v)}
           identity={id}
         />
         <main className="flex-1 overflow-y-auto px-5 pb-20 pt-6 sm:px-7">
@@ -345,10 +345,10 @@ export function AppShell({ title, subtitle, identity, children }: AppShellProps)
         </main>
       </div>
 
-      {/* Shell-level systems: Earn orb + Copilot dock, and the Chain-of-Trust
+      {/* Shell-level systems: Earn orb + Earn dock, and the Chain-of-Trust
           toast layer + drawer. Present on every authenticated screen. */}
-      <EarnOrb open={copilotOpen} onToggle={() => setCopilotOpen((v) => !v)} />
-      <CopilotDock open={copilotOpen} onClose={() => setCopilotOpen(false)} />
+      <EarnOrb open={dockOpen} onToggle={() => setDockOpen((v) => !v)} />
+      <EarnDock open={dockOpen} onClose={() => setDockOpen(false)} />
       <TrustToaster />
     </div>
   );

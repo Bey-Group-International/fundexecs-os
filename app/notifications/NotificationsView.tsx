@@ -31,12 +31,18 @@ const CATEGORY_META: Record<string, { icon: LucideIcon; tone: BadgeTone }> = {
   'Capital match': { icon: Link2, tone: 'info' },
   'Chain of Trust': { icon: ShieldCheck, tone: 'success' },
   Strategy: { icon: Target, tone: 'warning' },
-  Copilot: { icon: Sparkles, tone: 'azure' },
+  Team: { icon: Sparkles, tone: 'azure' },
   Admin: { icon: Shield, tone: 'danger' }
 };
 
+/** Legacy DB category values (pre-team-rename) mapped to the new key. */
+const CATEGORY_ALIASES: Record<string, string> = {
+  Copilot: 'Team'
+};
+
 function metaFor(category: string): { icon: LucideIcon; tone: BadgeTone } {
-  return CATEGORY_META[category] ?? { icon: Bell, tone: 'neutral' };
+  const key = CATEGORY_ALIASES[category] ?? category;
+  return CATEGORY_META[key] ?? { icon: Bell, tone: 'neutral' };
 }
 
 type Action = 'read' | 'archive' | 'delete';
