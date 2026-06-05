@@ -130,7 +130,7 @@ function ObjectiveCard({
       </div>
 
       <div className="mt-2.5">
-        <ProgressBar value={o.pct} color={color} height={5} />
+        <ProgressBar value={o.pct} color={color} height={5} ariaLabel={`Progress on ${o.title}`} />
       </div>
 
       {o.ai && (
@@ -265,7 +265,12 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
               >
                 {avg}%
               </div>
-              <ProgressBar value={avg} color={TIER_COLOR[t]} height={5} />
+              <ProgressBar
+                value={avg}
+                color={TIER_COLOR[t]}
+                height={5}
+                ariaLabel={`Average completion for ${t}`}
+              />
             </div>
           );
         })}

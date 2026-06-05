@@ -172,7 +172,12 @@ function ContactCard({
           <span>Warmth score</span>
           <span className="font-semibold tabular-nums text-fg-2">{row.strength}</span>
         </div>
-        <ProgressBar value={row.strength} color={STATUS_COLOR[status]} height={5} />
+        <ProgressBar
+          value={row.strength}
+          color={STATUS_COLOR[status]}
+          height={5}
+          ariaLabel={`Warmth score for ${row.full_name}`}
+        />
       </div>
 
       <div className="flex items-center justify-between text-[11px] text-fg-5">

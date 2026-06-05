@@ -107,6 +107,7 @@ export function EvidenceUploadForm({ recordId, layer, onUploaded }: EvidenceUplo
         ref={inputRef}
         type="file"
         className="hidden"
+        aria-label={`Upload evidence for ${layer}`}
         accept=".pdf,.docx,.xlsx,.pptx,.zip,.json,.txt,.csv,.md,.png,.jpg,.jpeg,.webp,.gif"
         onChange={onChange}
         data-testid={`evidence-file-${layer}`}

@@ -275,7 +275,10 @@ function Topbar({
           placeholder="Search deals, LPs, partners…"
           className="w-full rounded-[10px] border border-hairline bg-surface-1 py-2 pl-9 pr-12 text-[13px] text-fg-1 outline-none transition-[border-color] placeholder:text-fg-4 focus:border-[var(--accent-line)]"
         />
-        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-hairline px-1.5 py-px font-mono text-[10px] text-fg-5">
+        <kbd
+          aria-hidden="true"
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-hairline px-1.5 py-px font-mono text-[10px] text-fg-5"
+        >
           ⌘K
         </kbd>
       </div>
@@ -295,7 +298,10 @@ function Topbar({
             value={identity.xp}
             className="block text-[12.5px] font-semibold text-gold-1"
           />
-          <div className="text-[8px] font-semibold uppercase tracking-[0.11em] text-fg-5">
+          <div
+            aria-hidden="true"
+            className="text-[8px] font-semibold uppercase tracking-[0.11em] text-fg-5"
+          >
             Earn coins
           </div>
         </div>

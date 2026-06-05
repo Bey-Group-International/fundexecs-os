@@ -28,7 +28,11 @@
   --fg-1: #ffffff;
   --fg-2: #cbd5e1;
   --fg-3: #94a3b8;
-  --fg-4: #64748b;
+  /* fg-4 nudged from slate-500 (#64748b) up to a value that meets WCAG AA
+     (4.5:1) on the dark canvas — measured 5.4:1 against bg-0 (#070b14).
+     Preserves the muted feel below fg-3 while passing axe's
+     color-contrast check on the Phase 7 a11y sweep. */
+  --fg-4: #7a899e;
   --fg-5: #475569;
 
   /* gold — "Earn" / gamification / progress reward */
