@@ -42,16 +42,17 @@ the "member profile id" column below is the same value as `user_id`.
 
 | member_type           | email                                              | user_id (= member_profile_id)            | org_id                                   | member_profile status |
 | --------------------- | -------------------------------------------------- | ---------------------------------------- | ---------------------------------------- | --------------------- |
-| `investment_firm`     | test+investment_firm@fundexecs-staging.dev         | `28bebb95-ab79-4039-b604-8db44d4be4b3`   | `145668b7-f739-4b5a-9207-f479b94b197b`   | `in_progress`         |
+| `investment_firm`     | test+investment_firm@fundexecs-staging.dev         | `28bebb95-ab79-4039-b604-8db44d4be4b3`   | `145668b7-f739-4b5a-9207-f479b94b197b`   | **`complete`** ✅      |
 | `service_provider`    | test+service_provider@fundexecs-staging.dev        | `c1bec9de-0e48-42ac-9ab0-807ca4fd0005`   | `ccbbfee0-ab07-4dc8-8e72-81bbd6b940c2`   | `in_progress`         |
 | `startup`             | test+startup@fundexecs-staging.dev                 | `23d995fa-91d3-4a08-b671-dba690de867b`   | `76fd7336-0e1d-4930-b5ee-26a42b12269d`   | `in_progress`         |
-| `student`             | test+student@fundexecs-staging.dev                 | `f60306b9-644d-46ea-832b-eabf1f6b066a`   | `0b7805d5-4a11-4021-aaa8-602073d77140`   | `in_progress`         |
+| `student`             | test+student@fundexecs-staging.dev                 | `f60306b9-644d-46ea-832b-eabf1f6b066a`   | `0b7805d5-4a11-4021-aaa8-602073d77140`   | **`complete`** ✅      |
 | `individual_investor` | test+individual_investor@fundexecs-staging.dev     | `efd97e2c-4f71-4f8e-a8e1-46891ce90491`   | `12363079-7bd6-4eb5-898d-0269bcf032e7`   | `in_progress`         |
 
-All five users are intentionally left with `member_profiles.status =
-'in_progress'`. That exercises the bidirectional middleware gate:
-hitting any protected route (`/command-center`, `/pipeline`, `/strategy`,
-etc.) redirects to `/onboarding`.
+Two users (`investment_firm`, `student`) are flipped to `complete` so the
+tester can render `/command-center` against real seeded data and verify
+the densest layouts. The other three remain on `in_progress` so the
+tester can verify the incomplete-status → `/onboarding` redirect on real
+authenticated sessions.
 
 ### Flip a user to `complete` so the dashboard renders
 
@@ -115,9 +116,11 @@ Notes for the tester:
   tasks (matches the brief).
 - All 5 orgs have `governance_plans = 1`, `service_providers = 1`,
   `partnerships = 1` from the baseline.
-- Idempotency: re-running `node scripts/provision-test-users.cjs` is a
-  no-op — the seed RPCs key off a tag in `notifications.payload->>'tag'`
-  and skip if the tag exists.
+- Idempotency: re-running `yarn seed:test-users` is a no-op for both
+  data (the seed RPCs key off a tag in `notifications.payload->>'tag'`
+  and skip if the tag exists) AND status (the script's `member_profiles`
+  upsert uses `ignoreDuplicates: true`, so it will NOT clobber a row
+  that has been manually flipped to `complete`).
 
 ## How to re-run / regenerate
 
@@ -129,7 +132,7 @@ psql "host=aws-1-us-east-1.pooler.supabase.com port=5432 dbname=postgres user=po
   -f supabase/migrations/20260606123000_fix_handle_new_user_org_type.sql \
   -f supabase/migrations/20260606123500_fix_seed_baseline_multi_row_returning.sql
 
-# 2) Re-run the provisioning script (idempotent — reuses existing users)
-set -a && source .env.local && set +a
-node scripts/provision-test-users.cjs
+# 2) Re-run the provisioning script via the npm script (preferred —
+#    auto-loads .env.local via Node ≥20.6 native --env-file)
+yarn seed:test-users
 ```

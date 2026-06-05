@@ -1,12 +1,24 @@
 /* eslint-disable no-console */
 /**
- * One-shot provisioning script — DO NOT commit.
+ * One-shot provisioning script — DO NOT commit env values.
  *
  * Creates 5 test users (one per member_type) via the service-role admin
  * client, waits for `handle_new_user` to fire on the live DB, then calls
  * the per-type seed RPC and reports row counts.
  *
- * Run: `node scripts/provision-test-users.cjs`
+ * Run (preferred, auto-loads .env.local via Node ≥20.6 native --env-file):
+ *   yarn seed:test-users
+ *
+ * Run (manual env sourcing):
+ *   set -a && source .env.local && set +a && node scripts/provision-test-users.cjs
+ *
+ * Idempotent: re-runs reuse existing users and the seed RPCs skip rows
+ * they've already inserted (keyed off `notifications.payload->>'tag'`).
+ *
+ * Canonical credentials + row-count snapshot live at:
+ *   /app/memory/test_credentials.md
+ * — keep that file in sync with anything this script changes (member_type,
+ * shared password, status, etc.).
  */
 // Node 20 in this pod lacks a native global WebSocket; the realtime client
 // will crash at import otherwise. Polyfill before requiring supabase-js.
@@ -77,11 +89,12 @@ async function provisionOne(memberType) {
   if (!orgId) throw new Error(`no org for ${memberType} (trigger did not fire?)`);
 
   // Set member_type on the profile (the canonical home for it) and ensure a
-  // member_profiles row exists with a non-'complete' status so the onboarding
-  // gate is exercisable. The CHECK constraint on member_profiles.status
-  // allows only ('in_progress' | 'complete'), so we land on 'in_progress'
-  // — the trigger's baseline seed has already inserted that, but we
-  // upsert to be defensive against re-runs where it may have been mutated.
+  // member_profiles row exists. The trigger's baseline seed already inserts
+  // one with status='in_progress'; we only insert here as a safety net for
+  // re-runs where the baseline row may have been deleted. Crucially, we
+  // DO NOT overwrite an existing row — if a tester (or psql) has manually
+  // flipped the status to 'complete', a re-run of this script must not
+  // silently downgrade them back to 'in_progress'.
   const { error: pErr } = await ADMIN
     .from('profiles')
     .update({ member_type: memberType })
@@ -91,7 +104,7 @@ async function provisionOne(memberType) {
     .from('member_profiles')
     .upsert(
       { user_id: user.id, status: 'in_progress' },
-      { onConflict: 'user_id' }
+      { onConflict: 'user_id', ignoreDuplicates: true }
     );
   if (mpErr) throw new Error(`member_profiles upsert ${memberType}: ${mpErr.message}`);
 
