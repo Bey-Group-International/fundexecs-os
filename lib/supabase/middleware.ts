@@ -10,6 +10,17 @@ import type { Database } from './database.types';
  * `supabase.auth.getUser()` — it can make sessions hard to debug.
  */
 export async function updateSession(request: NextRequest) {
+  // Canonical host: redirect www → apex (https://fundexecs.com) with a
+  // permanent 308 so auth cookies and the OAuth redirect allow-list only ever
+  // need the one host. Runs before any Supabase work.
+  if (request.headers.get('host') === 'www.fundexecs.com') {
+    const target = new URL(
+      request.nextUrl.pathname + request.nextUrl.search,
+      'https://fundexecs.com'
+    );
+    return NextResponse.redirect(target, 308);
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(

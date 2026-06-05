@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { getSiteURL } from '@/lib/site-url';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 
 const GOOGLE_SCOPES =
@@ -48,7 +49,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
+      options: { emailRedirectTo: `${getSiteURL()}/auth/callback` }
     });
     if (error) {
       setMessage(error.message);
@@ -68,7 +69,7 @@ export default function LoginPage() {
       provider: 'google',
       options: {
         // Clean redirect_to (no query string) so it matches any allow-list entry.
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${getSiteURL()}/auth/callback`,
         scopes: GOOGLE_SCOPES,
         queryParams: { access_type: 'offline', prompt: 'consent' }
       }
