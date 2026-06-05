@@ -331,8 +331,14 @@ export async function finalizeEvidenceUpload(evidenceId: string): Promise<Finali
     .update({ uploaded_at: new Date().toISOString() } as never)
     .eq('id', evidenceId);
 
-  // Fire-and-forget AI validation. Never block the parent action.
-  void runAiValidation(evidenceId).catch(() => undefined);
+  // Inline-await AI validation. The Anthropic call has its own 8s
+  // AbortSignal timeout inside `aiValidateEvidence`; every exit path
+  // there (no key / no ctx / Claude error / abort) writes a fallback
+  // note to the row before returning. Awaiting here is what survives
+  // the server-action lifecycle — fire-and-forget gets killed when
+  // the response is flushed, leaving `ai_validation_notes` null and
+  // breaking the never-block contract (Test 2 regression).
+  await runAiValidation(evidenceId).catch(() => undefined);
 
   refresh();
   return { ok: true };

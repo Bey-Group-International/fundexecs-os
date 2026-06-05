@@ -6,6 +6,11 @@ import type { Database } from '@/lib/supabase/database.types';
 const TRUST_BUCKET = 'trust-evidence';
 const MODEL = process.env.EARN_MODEL || 'claude-sonnet-4-6';
 const FALLBACK_NOTE = 'AI validation unavailable; proceed with manual review.';
+/** Hard ceiling on the Claude call so the parent server-action never
+ * exceeds ~8s. AbortSignal.timeout is honoured by the @anthropic-ai/sdk
+ * client and throws an AbortError that the outer try/catch translates
+ * into the never-block fallback. */
+const AI_TIMEOUT_MS = 8_000;
 
 type EvidenceRow = Database['public']['Tables']['evidence']['Row'];
 
@@ -120,20 +125,48 @@ function buildPrompt(ctx: EvidenceContext, snippet: string | null): string {
   return `${head}\n\nThe file was uploaded but no text excerpt is available (binary or unsupported format).\n\nIn ≤200 words: based on the filename, mime type, and the layer it supports, suggest what an approver should verify before signing off. Sentence case, calm and operator-grade.`;
 }
 
+async function writeNotes(
+  admin: ReturnType<typeof createAdminClient>,
+  evidenceId: string,
+  notes: string
+): Promise<void> {
+  await admin
+    .from('evidence')
+    .update({
+      ai_validation_notes: notes,
+      ai_validated_at: new Date().toISOString()
+    } as never)
+    .eq('id', evidenceId);
+}
+
+/**
+ * Run AI validation for an uploaded evidence row. **Never-block**:
+ * every exit path — missing key, missing context, Claude error, Claude
+ * abort/timeout — writes a fallback note + `ai_validated_at` to the
+ * evidence row before returning, so the UI always renders something.
+ *
+ * Designed to be `await`ed inline from the parent server action; the
+ * 8-second AbortSignal timeout on the Claude call caps the worst-case
+ * latency for the uploader.
+ */
 export async function aiValidateEvidence(evidenceId: string): Promise<void> {
   const admin = createAdminClient();
-  const ctx = await loadContext(evidenceId);
-  if (!ctx) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    await admin
-      .from('evidence')
-      .update({
-        ai_validation_notes: FALLBACK_NOTE,
-        ai_validated_at: new Date().toISOString()
-      } as never)
-      .eq('id', evidenceId);
+    await writeNotes(admin, evidenceId, FALLBACK_NOTE);
+    return;
+  }
+
+  // Load context. ANY failure → fallback note (not silent return).
+  let ctx: EvidenceContext | null = null;
+  try {
+    ctx = await loadContext(evidenceId);
+  } catch {
+    // fall through
+  }
+  if (!ctx) {
+    await writeNotes(admin, evidenceId, FALLBACK_NOTE);
     return;
   }
 
@@ -181,13 +214,16 @@ export async function aiValidateEvidence(evidenceId: string): Promise<void> {
       });
     }
 
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 600,
-      system:
-        'You are Earn, the COO of a 15-specialist AI executive team inside FundExecs OS. You are validating an evidence artefact for a Chain-of-Trust layer. Be concise, declarative, operator-grade. ≤200 words.',
-      messages: [{ role: 'user', content: userContent }]
-    });
+    const response = await client.messages.create(
+      {
+        model: MODEL,
+        max_tokens: 600,
+        system:
+          'You are Earn, the COO of a 15-specialist AI executive team inside FundExecs OS. You are validating an evidence artefact for a Chain-of-Trust layer. Be concise, declarative, operator-grade. ≤200 words.',
+        messages: [{ role: 'user', content: userContent }]
+      },
+      { signal: AbortSignal.timeout(AI_TIMEOUT_MS) }
+    );
 
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -196,14 +232,10 @@ export async function aiValidateEvidence(evidenceId: string): Promise<void> {
       .trim();
     if (text) notes = text;
   } catch {
-    // best-effort; FALLBACK_NOTE remains
+    // best-effort; FALLBACK_NOTE remains. Covers Claude API errors,
+    // network failures, AbortError on the 8s timeout, and JSON parse
+    // failures inside the SDK.
   }
 
-  await admin
-    .from('evidence')
-    .update({
-      ai_validation_notes: notes,
-      ai_validated_at: new Date().toISOString()
-    } as never)
-    .eq('id', evidenceId);
+  await writeNotes(admin, evidenceId, notes);
 }
