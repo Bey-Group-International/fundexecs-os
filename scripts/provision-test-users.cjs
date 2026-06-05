@@ -70,6 +70,12 @@ async function provisionOne(memberType) {
     await sleep(2000);
   } else {
     console.log(`  [${memberType}] user already exists, reusing ${user.id}`);
+    // Idempotency guarantee: re-apply the canonical password so the
+    // documented `/app/memory/test_credentials.md` value always works.
+    // Without this, a tester / external admin password change would
+    // silently drift from the docs.
+    const { error: pwErr } = await ADMIN.auth.admin.updateUserById(user.id, { password: PASSWORD });
+    if (pwErr) console.warn(`  [${memberType}] password reset failed: ${pwErr.message}`);
   }
 
   // Resolve org_id (handle_new_user inserts an org_members row with role='owner').
