@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AppShell } from '@/components/shell/AppShell';
+import { getShellIdentity } from '@/lib/queries/identity';
 import { Card } from '@/components/ui';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getPipelineData } from '@/lib/queries/pipeline';
@@ -12,7 +13,11 @@ export default async function PipelinePage() {
 
   if (!org) {
     return (
-      <AppShell title="Pipeline" subtitle="Capital formation, deals, LPs & partners">
+      <AppShell
+        identity={await getShellIdentity()}
+        title="Pipeline"
+        subtitle="Capital formation, deals, LPs & partners"
+      >
         <Card className="p-10 text-center">
           <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
           <p className="mx-auto mt-2 max-w-md text-[12.5px] text-fg-4">
@@ -27,7 +32,11 @@ export default async function PipelinePage() {
   const data = await getPipelineData(org.orgId);
 
   return (
-    <AppShell title="Pipeline" subtitle="Capital formation, deals, LPs & partners">
+    <AppShell
+      identity={await getShellIdentity()}
+      title="Pipeline"
+      subtitle="Capital formation, deals, LPs & partners"
+    >
       <PipelineView data={data} />
     </AppShell>
   );

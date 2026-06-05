@@ -24,3 +24,6 @@ export type { SelectProps, SelectOption } from './Select';
 
 export { SectionTitle } from './SectionTitle';
 export type { SectionTitleProps } from './SectionTitle';
+
+export { AnimatedNumber } from './AnimatedNumber';
+export type { AnimatedNumberProps } from './AnimatedNumber';
