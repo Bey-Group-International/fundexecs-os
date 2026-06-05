@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   ArrowRight,
+  ShieldCheck,
   Workflow,
   ScanSearch,
   Briefcase,
@@ -148,23 +149,23 @@ interface Step {
 const STEPS: Step[] = [
   {
     n: '01',
-    title: 'Define the mandate',
-    body: 'Set your thesis, targets, and constraints with Earnest. Every copilot aligns to the mandate from the outset.'
+    title: 'Set the mandate',
+    body: 'Define your thesis, targets, and constraints with Earn. The whole team aligns to that mandate from the outset.'
   },
   {
     n: '02',
     title: 'Source & raise',
-    body: 'Surface opportunities and capital, qualified through your relationships and verified data.'
+    body: 'Surface on-thesis opportunities and suitable capital — qualified through your relationships and verified against primary data.'
   },
   {
     n: '03',
     title: 'Analyze & package',
-    body: 'Pressure-test the opportunity and assemble an institutional-grade package — documents and narrative in lockstep.'
+    body: 'Pressure-test the opportunity with committee rigor and assemble an institutional-grade package — model, narrative, and terms in lockstep.'
   },
   {
     n: '04',
     title: 'Communicate & close',
-    body: 'Advance every counterparty and drive to signature — coordinated, documented, and accountable.'
+    body: 'Advance every counterparty and drive to signature — coordinated, documented, and accountable at every step.'
   }
 ];
 
@@ -179,22 +180,22 @@ const TRUST_LAYERS: TrustLayer[] = [
   {
     name: 'Proof of Truth',
     color: 'var(--proof-truth)',
-    body: 'Source data, citations, and verified facts.'
+    body: 'Every claim traced to source data, citations, and verified facts — nothing asserted that cannot be shown.'
   },
   {
     name: 'Proof of Concept',
     color: 'var(--proof-concept)',
-    body: 'Strategy, thesis, and fit logic.'
+    body: 'The strategy, thesis, and fit logic behind each decision, documented as it forms.'
   },
   {
     name: 'Proof of Execution',
     color: 'var(--proof-execution)',
-    body: 'Tasks, workflows, and approvals.'
+    body: 'The tasks, workflows, and approvals that moved it forward — who did what, and when.'
   },
   {
     name: 'Proof of Work',
     color: 'var(--proof-work)',
-    body: 'Evidence, uploads, outcomes, and logs.'
+    body: 'Signed evidence, uploads, and outcomes — the auditable record of work delivered.'
   }
 ];
 
@@ -218,7 +219,7 @@ function Hero() {
       <div className="mx-auto grid max-w-[1180px] items-center gap-12 px-5 sm:px-8 lg:grid-cols-12">
         <div className="lg:col-span-7">
           <Badge tone="gold" dot pulse className="mb-6">
-            Led by Earnest, your live AI guide
+            Led by Earn, your live AI guide
           </Badge>
 
           <h1
@@ -229,8 +230,9 @@ function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-fg-3 sm:text-lg">
-            Twelve AI copilots working as one to optimize workflows, accelerate decisions, and
-            elevate your capacity to execute like an institution.
+            A fifteen-strong executive team — led by Earn — working as one to optimize your
+            workflows, accelerate your decisions, and elevate your capacity to execute like an
+            institution.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-4">
@@ -238,8 +240,8 @@ function Hero() {
               Get started
               <ArrowRight size={16} strokeWidth={1.9} aria-hidden />
             </Link>
-            <SmoothScrollLink targetId="copilots" className={SECONDARY_CTA}>
-              See how it works
+            <SmoothScrollLink targetId="team" className={SECONDARY_CTA}>
+              Meet the team
             </SmoothScrollLink>
           </div>
 
@@ -247,8 +249,8 @@ function Hero() {
           <HeroStats />
         </div>
 
-        {/* Hero mascot with gentle float + gold glow. */}
-        <div className="flex justify-center lg:col-span-5 lg:justify-end">
+        {/* Hero mascot with gentle float + gold glow, and a minimal "Meet Earn". */}
+        <div className="flex flex-col items-center lg:col-span-5 lg:items-end">
           <div className="relative">
             <div
               className="fx-glow-pulse pointer-events-none absolute inset-0 -z-10"
@@ -261,8 +263,18 @@ function Hero() {
             <EarnCoin
               size={300}
               glow
+              online
               className="fx-coin-float h-44 w-44 sm:h-56 sm:w-56 lg:h-72 lg:w-72"
             />
+          </div>
+          <div className="mt-6 text-center lg:text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-1">
+              Meet Earn
+            </p>
+            <p className="mt-1.5 text-[15px] font-semibold text-fg-1">Earnest Fundmaker “Earn”</p>
+            <p className="mt-0.5 text-[12px] text-fg-4">
+              Chief Operating Officer · your live AI guide
+            </p>
           </div>
         </div>
       </div>
@@ -389,69 +401,29 @@ function ChainOfTrust() {
         <ol className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {TRUST_LAYERS.map((layer, i) => (
             <li key={layer.name}>
-              <Card className="h-full p-6">
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: layer.color, boxShadow: `0 0 12px ${layer.color}` }}
-                    aria-hidden
-                  />
-                  <span className="text-[11px] font-semibold tabular-nums text-fg-4">
-                    {`0${i + 1}`}
-                  </span>
-                </div>
-                <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{layer.name}</h3>
-                <p className="mt-1.5 text-[12.5px] leading-6 text-fg-3">{layer.body}</p>
-                <div
-                  className="mt-5 h-1 rounded-full"
+              <Card className="relative flex h-full flex-col overflow-hidden p-6">
+                <span
+                  className="absolute inset-x-0 top-0 h-[3px]"
                   style={{ background: `linear-gradient(90deg, ${layer.color}, transparent)` }}
                   aria-hidden
                 />
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-4">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: layer.color, boxShadow: `0 0 10px ${layer.color}` }}
+                      aria-hidden
+                    />
+                    Layer {`0${i + 1}`}
+                  </span>
+                  <ShieldCheck size={14} strokeWidth={1.8} className="text-fg-5" aria-hidden />
+                </div>
+                <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{layer.name}</h3>
+                <p className="mt-2 text-[12.5px] leading-6 text-fg-3">{layer.body}</p>
               </Card>
             </li>
           ))}
         </ol>
-      </div>
-    </section>
-  );
-}
-
-function MeetEarnest() {
-  return (
-    <section
-      className="border-y border-hairline py-20 sm:py-24"
-      style={{
-        background:
-          'radial-gradient(60% 80% at 80% 50%, rgba(247,201,72,0.08), transparent 70%), var(--bg-1)'
-      }}
-      aria-labelledby="earnest-heading"
-    >
-      <div className="mx-auto grid max-w-[1180px] items-center gap-12 px-5 sm:px-8 lg:grid-cols-12">
-        <div className="lg:col-span-7">
-          <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-            Meet Earn
-          </p>
-          <h2
-            id="earnest-heading"
-            className="text-3xl font-semibold leading-tight tracking-[-0.02em] text-fg-1 sm:text-4xl"
-          >
-            A live guide with command of the entire lifecycle.
-          </h2>
-          <p className="mt-5 max-w-xl text-[15px] leading-7 text-fg-3 sm:text-lg">
-            Earnest fronts the team — answering questions, framing the next decision, and routing
-            each task to the right specialist. Measured, candid, and always on the record. The full
-            engagement continues inside the platform.
-          </p>
-          <div className="mt-8">
-            <Link href="/login" className={PRIMARY_CTA}>
-              Get started
-              <ArrowRight size={16} strokeWidth={1.9} aria-hidden />
-            </Link>
-          </div>
-        </div>
-        <div className="flex justify-center lg:col-span-5 lg:justify-end">
-          <EarnCoin size={224} glow online className="h-40 w-40 sm:h-52 sm:w-52" />
-        </div>
       </div>
     </section>
   );
@@ -471,13 +443,19 @@ function HowItWorks() {
           >
             Four steps from thesis to signed close.
           </h2>
+          <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
+            One disciplined operating model — run by your team and recorded end to end, so every
+            engagement compounds into an auditable track record.
+          </p>
         </div>
         <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s) => (
             <li key={s.n}>
-              <Card className="h-full p-6">
-                <div className="text-2xl font-semibold tabular-nums text-gold-1">{s.n}</div>
-                <h3 className="mt-3 text-[15px] font-semibold text-fg-1">{s.title}</h3>
+              <Card className="flex h-full flex-col p-6">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] text-[15px] font-semibold tabular-nums text-gold-1">
+                  {s.n}
+                </span>
+                <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{s.title}</h3>
                 <p className="mt-1.5 text-[12.5px] leading-6 text-fg-3">{s.body}</p>
               </Card>
             </li>
@@ -507,7 +485,7 @@ function FinalCta() {
           Operate your capital lifecycle like a far larger institution.
         </h2>
         <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
-          Bring Earnest and the copilots into your next raise, transaction, or close.
+          Bring Earn and your executive team into your next raise, transaction, or close.
         </p>
         <div className="mt-9 flex justify-center">
           <Link href="/login" className={PRIMARY_CTA}>
@@ -599,7 +577,6 @@ export default function HomePage() {
         <ActivityTicker />
         <Team />
         <ChainOfTrust />
-        <MeetEarnest />
         <HowItWorks />
         <FinalCta />
       </main>
