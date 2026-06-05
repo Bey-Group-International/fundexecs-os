@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
-import { awardTrustXp } from '@/lib/actions/xp';
 import {
   Plus,
   Calendar,
@@ -28,6 +27,8 @@ import {
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { cn } from '@/lib/utils';
 import type { StrategyObjective } from '@/lib/queries/strategy';
+import { deleteObjective, markObjectiveRead, setObjectiveStatus } from '@/lib/actions/strategy';
+import { ObjectiveDrawer, type ObjectiveDraft } from '@/components/drawers/ObjectiveDrawer';
 
 type Tier = '100' | '30' | '10';
 type Priority = 'High' | 'Medium' | 'Low';
@@ -156,11 +157,14 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
     closed: o.state === 'done'
   }));
   const [tier, setTier] = useState<'all' | Tier>('all');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerInitial, setDrawerInitial] = useState<ObjectiveDraft | null>(null);
   const router = useRouter();
 
   function act(id: string, a: Action) {
     if (a === 'delete') {
       cards.delete(id);
+      void deleteObjective(id).then(() => router.refresh());
     } else if (a === 'done') {
       cards.complete(id);
       // Completing an objective advances the Execution layer of Chain of Trust.
@@ -171,14 +175,19 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
         pct: 100,
         entity: id
       });
-      void awardTrustXp({ layer: 'execution', entityType: 'objective', entityId: id }).then(() =>
-        router.refresh()
-      );
+      void setObjectiveStatus(id, 'completed').then(() => router.refresh());
     } else if (a === 'read') {
       cards.markRead(id);
+      void markObjectiveRead(id).then(() => router.refresh());
     } else if (a === 'archive') {
       cards.archive(id);
+      void setObjectiveStatus(id, 'archived').then(() => router.refresh());
     }
+  }
+
+  function openNew() {
+    setDrawerInitial(null);
+    setDrawerOpen(true);
   }
 
   // Project the shared card flags back onto each objective's display shape:
@@ -213,7 +222,7 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
               { id: '10', label: '10-day' }
             ]}
           />
-          <Button variant="primary" icon={Plus}>
+          <Button variant="primary" icon={Plus} onClick={openNew} data-testid="strategy-new">
             New objective
           </Button>
         </div>
@@ -271,6 +280,12 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
           </Card>
         )}
       </div>
+
+      <ObjectiveDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        initial={drawerInitial}
+      />
     </div>
   );
 }
