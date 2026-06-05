@@ -1,50 +1,51 @@
-# Test credentials — Phase 2 / 3 foundationals (partial)
+# FundExecs OS — Test Credentials (live `emityvdaeiqxtpxdhyky` project)
 
-## Status
+## Status: NOT PROVISIONED — DB password rejected
 
-**No test users have been self-provisioned yet.**
+No test users have been created. The migration `20260606120000_general_signup_seed_and_member_type_topup.sql` has NOT been applied to live yet, because the DB password provided (`@10DoobieZ`) was rejected by Postgres on every attempt.
 
-The Phase 2/3 brief asked me to apply the new migration to the live
-`emityvdaeiqxtpxdhyky` project, then create 5 demo users (one per
-`member_type`) via the service-role admin API and record their credentials
-here. I have the service-role key but I am missing the SQL-execution path
-required to apply the migration. See the message that accompanies this file
-for the credential question.
+Reachability checks confirm the project + tenant are correctly located on the
+new Supabase pooler infrastructure at `aws-1-us-east-1.pooler.supabase.com`,
+username `postgres.emityvdaeiqxtpxdhyky`, ports 5432 and 6543. The username
+format is right (other regions reject as `ENOTFOUND`, this one accepts the
+tenant), but every password I tried was rejected with
+`FATAL: password authentication failed for user "postgres"`.
 
-Until the migration is applied to live, calling
-`supabase.auth.admin.createUser(...)` would still create accounts, but
-`handle_new_user` on the live DB is the OLD version (Bey-only) — so those
-accounts would land without an org or a baseline seed. I'd rather not create
-half-broken accounts.
+Service-role REST keeps working — `count(*) from ai_brains` returns 15.
+That's the project's API role, not the `postgres` role used by `psql`.
 
-## What is on the live DB right now (verified via PostgREST + service-role key)
+### Next step (user)
 
-| Check | Result |
-|---|---|
-| Reachability of `https://auth.fundexecs.com` | ✅ |
-| `auth.fundexecs.com` / `emityvdaeiqxtpxdhyky.supabase.co` DNS | ✅ resolves |
-| `select count(*) from public.ai_brains` | **15** |
-| `select count(*) from public.knowledge_chunks` | **15** |
-| All 15 brain slugs match `lib/ai/brains.ts` | ✅ |
+Either:
 
-Live Earn RAG is fully embedded and operational. The migration I authored at
-`supabase/migrations/20260606120000_general_signup_seed_and_member_type_topup.sql`
-is queued for apply.
+- **Reset the DB password** in Supabase Dashboard → Project Settings →
+  Database → "Reset database password" — and paste the new value here.
+  Connect path will be:
+  ```
+  PGHOST=aws-1-us-east-1.pooler.supabase.com
+  PGPORT=5432
+  PGDATABASE=postgres
+  PGUSER=postgres.emityvdaeiqxtpxdhyky
+  PGPASSWORD=<new password>
+  PGSSLMODE=require
+  ```
+- **OR** issue a Personal Access Token at
+  `https://supabase.com/dashboard/account/tokens` and paste it. I'll apply
+  the migration via `POST https://api.supabase.com/v1/projects/emityvdaeiqxtpxdhyky/database/query`
+  instead.
 
-## Once the migration is applied
+### What will happen next, once the credential lands
 
-I will:
-1. Verify idempotency by running it twice.
-2. Create these 5 test users via `supabase.auth.admin.createUser`:
-   - `test+investment_firm@fundexecs-staging.dev`
-   - `test+service_provider@fundexecs-staging.dev`
-   - `test+startup@fundexecs-staging.dev`
-   - `test+student@fundexecs-staging.dev`
-   - `test+individual_investor@fundexecs-staging.dev`
-   Stable password: TBD (will be set during provisioning; recorded here).
-3. For each: confirm `handle_new_user` auto-created the org + ran the
-   baseline seed, then call `setMemberType` server-side to fire the
-   per-type top-up. Record the resulting `user_id` + `org_id` + row counts
-   below.
+1. `psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260606120000_general_signup_seed_and_member_type_topup.sql` — apply twice to prove idempotency.
+2. Verify `\df public.seed_demo_baseline_for_org`, `\df public.seed_demo_for_member_type`, `\df public.handle_new_user`.
+3. Create 5 test users via `supabase.auth.admin.createUser` (one per `member_type`), shared random password, `email_confirm: true`.
+4. Wait for the new `handle_new_user` trigger to fire (auto-creates org + baseline seed).
+5. Call `seed_demo_for_member_type` server-side for each test user to land the per-type top-up rows.
+6. Leave each `member_profiles.status = 'draft'` so the onboarding gate redirect is testable.
+7. Populate the credentials table in this file.
 
-(table to be filled in once provisioning runs)
+| member_type | email       | user_id | org_id | member_profile_id | status |
+| ----------- | ----------- | ------- | ------ | ----------------- | ------ |
+| _(pending)_ | _(pending)_ | —       | —      | —                 | —      |
+
+(table to be filled once the DB password / PAT lands)

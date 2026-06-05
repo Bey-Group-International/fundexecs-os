@@ -28,7 +28,6 @@ declare
   _plan uuid;
   _contact_a uuid; _contact_b uuid; _contact_c uuid;
   _baseline_tag text := private.seed_marker('baseline');
-  _mp_id uuid;
 begin
   if _org is null or _user is null then
     return;
@@ -111,19 +110,16 @@ begin
       'body',  'Pick your member type so Earn can personalize the desk.'
     ));
 
-  -- 5) Chain-of-Trust record in 'intent' state on the member profile itself.
-  --    Find (or create) the member_profiles row first so we have an entity_id.
+  -- 5) Chain-of-Trust record in 'Proof of Truth' state on the member profile
+  --    itself. member_profiles is keyed by user_id, so entity_id = _user.
   insert into public.member_profiles (user_id, draft, status)
   values (_user, '{}'::jsonb, 'in_progress')
   on conflict (user_id) do nothing;
 
-  select id into _mp_id from public.member_profiles where user_id = _user limit 1;
-
-  if _mp_id is not null then
-    insert into public.chain_of_trust_records
-      (org_id, entity_type, entity_id, state, ai_validation_status, human_approval_status)
-    values (_org, 'member_profile', _mp_id, 'intent', 'pending', 'pending');
-  end if;
+  insert into public.chain_of_trust_records
+    (org_id, entity_type, entity_id, current_layer, status)
+  values (_org, 'member_profile', _user, 'Proof of Truth', 'active')
+  on conflict do nothing;
 end;
 $$;
 
