@@ -3,6 +3,15 @@ import type { Database } from '@/lib/supabase/database.types';
 
 type ContactRow = Database['public']['Tables']['contacts']['Row'];
 type RelationshipRow = Database['public']['Tables']['relationships']['Row'];
+type InteractionRow = Database['public']['Tables']['interactions']['Row'];
+
+export interface ConnectionInteraction {
+  id: string;
+  type: string;
+  subject: string | null;
+  summary: string | null;
+  occurred_at: string;
+}
 
 export interface ConnectionRow {
   id: string;
@@ -14,6 +23,8 @@ export interface ConnectionRow {
   status: string;
   last_interaction_at: string | null;
   interaction_count: number;
+  /** Up to the 5 most recent interactions, newest first. */
+  recent_interactions: ConnectionInteraction[];
 }
 
 export interface WarmIntroRow {
@@ -76,8 +87,48 @@ export async function getConnectionsData(orgId: string): Promise<ConnectionsData
       strength: r.strength,
       status: r.status,
       last_interaction_at: r.last_interaction_at,
-      interaction_count: r.interaction_count
+      interaction_count: r.interaction_count,
+      recent_interactions: []
     }));
+
+  // Hydrate up to 5 recent interactions per contact in a single round-trip,
+  // grouped client-side. This keeps the contact-detail drawer's timeline
+  // populated without a per-card N+1 fetch.
+  const contactIds = rows.map((r) => r.id);
+  if (contactIds.length > 0) {
+    const { data: ix } = await supabase
+      .from('interactions')
+      .select('id, contact_id, type, subject, summary, occurred_at')
+      .eq('org_id', orgId)
+      .in('contact_id', contactIds)
+      .order('occurred_at', { ascending: false })
+      .limit(200);
+    if (ix) {
+      type IxRow = Pick<
+        InteractionRow,
+        'id' | 'contact_id' | 'type' | 'subject' | 'summary' | 'occurred_at'
+      >;
+      const byContact = new Map<string, ConnectionInteraction[]>();
+      for (const i of ix as IxRow[]) {
+        if (!i.contact_id) continue;
+        if (!byContact.has(i.contact_id)) byContact.set(i.contact_id, []);
+        const list = byContact.get(i.contact_id)!;
+        if (list.length < 5) {
+          list.push({
+            id: i.id,
+            type: i.type,
+            subject: i.subject,
+            summary: i.summary,
+            occurred_at: i.occurred_at
+          });
+        }
+      }
+      for (const r of rows) {
+        const list = byContact.get(r.id);
+        if (list) r.recent_interactions = list;
+      }
+    }
+  }
 
   type IntroJoined = {
     id: string;
