@@ -5,7 +5,9 @@ import {
   CalendarClock,
   MessageSquare,
   Rocket,
-  Inbox,
+  HardDrive,
+  FileText,
+  Presentation,
   PlugZap,
   CheckCircle2,
   AlertTriangle,
@@ -20,7 +22,15 @@ import { getIntegrationConnections, type ProviderConnection } from '@/lib/querie
 
 export const metadata: Metadata = { title: 'Integrations' };
 
-type Provider = 'gmail' | 'google_calendar' | 'calendly' | 'slack' | 'apollo' | 'outlook';
+type Provider =
+  | 'gmail'
+  | 'google_calendar'
+  | 'google_drive'
+  | 'google_docs'
+  | 'google_slides'
+  | 'calendly'
+  | 'slack'
+  | 'apollo';
 type ConnectionStatus = ProviderConnection['status'];
 
 interface ProviderMeta {
@@ -62,21 +72,35 @@ const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Rocket,
     category: 'Enrichment'
   },
-  outlook: {
-    name: 'Outlook',
-    description: 'Sync Microsoft 365 mail and calendar activity.',
-    icon: Inbox,
-    category: 'Email'
+  google_drive: {
+    name: 'Google Drive',
+    description: 'Sync files and folders into your data room and records.',
+    icon: HardDrive,
+    category: 'Files'
+  },
+  google_docs: {
+    name: 'Google Docs',
+    description: 'Pull in memos and notes as documents and evidence.',
+    icon: FileText,
+    category: 'Documents'
+  },
+  google_slides: {
+    name: 'Google Slides',
+    description: 'Attach decks and pitch materials to deals and records.',
+    icon: Presentation,
+    category: 'Documents'
   }
 };
 
 const PROVIDER_ORDER: Provider[] = [
   'gmail',
   'google_calendar',
+  'google_drive',
+  'google_docs',
+  'google_slides',
   'calendly',
   'slack',
-  'apollo',
-  'outlook'
+  'apollo'
 ];
 
 interface IntegrationView {
