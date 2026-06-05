@@ -76,9 +76,12 @@ async function provisionOne(memberType) {
   const orgId = om?.[0]?.org_id;
   if (!orgId) throw new Error(`no org for ${memberType} (trigger did not fire?)`);
 
-  // Set member_type on the profile + ensure a member_profiles row exists so
-  // the dashboard router has a type to dispatch on. Leave status as 'draft'
-  // (not 'complete') so the onboarding gate is exercisable.
+  // Set member_type on the profile (the canonical home for it) and ensure a
+  // member_profiles row exists with a non-'complete' status so the onboarding
+  // gate is exercisable. The CHECK constraint on member_profiles.status
+  // allows only ('in_progress' | 'complete'), so we land on 'in_progress'
+  // — the trigger's baseline seed has already inserted that, but we
+  // upsert to be defensive against re-runs where it may have been mutated.
   const { error: pErr } = await ADMIN
     .from('profiles')
     .update({ member_type: memberType })
@@ -87,7 +90,7 @@ async function provisionOne(memberType) {
   const { error: mpErr } = await ADMIN
     .from('member_profiles')
     .upsert(
-      { user_id: user.id, member_type: memberType, status: 'draft' },
+      { user_id: user.id, status: 'in_progress' },
       { onConflict: 'user_id' }
     );
   if (mpErr) throw new Error(`member_profiles upsert ${memberType}: ${mpErr.message}`);
