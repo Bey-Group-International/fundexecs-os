@@ -55,85 +55,85 @@ interface TeamMember {
 const TEAM: TeamMember[] = [
   {
     icon: Workflow,
-    name: 'Sterling Vance',
+    name: 'Sterling',
     position: 'Chief of Staff',
     body: 'Owns your operating rhythm — intakes every request, sequences the work across the desk, and makes sure nothing falls between functions.'
   },
   {
     icon: ScanSearch,
-    name: 'Dalia Pruitt',
+    name: 'Dalia',
     position: 'Head of Data Operations',
     body: 'Cleans and structures everything inbound — reconciling data into a single, decision-ready record you can act on.'
   },
   {
     icon: Briefcase,
-    name: 'Theodore Asher',
+    name: 'Theodore',
     position: 'Chief Strategy Advisor',
     body: 'Your sounding board on every consequential call — pressure-tests strategy, frames the trade-offs, and grounds each decision in the institutional playbook.'
   },
   {
     icon: CloudRain,
-    name: 'Vivian Rainmaker',
+    name: 'Vivian',
     position: 'Managing Director, Demand Generation',
     body: 'Builds and sustains your pipeline of interest — generating qualified demand and holding momentum from first touch to commitment.'
   },
   {
     icon: Radar,
-    name: 'Marcus Hale',
+    name: 'Marcus',
     position: 'Head of Deal Origination',
     body: 'Surfaces proprietary, on-thesis opportunities ahead of the market — scored against your mandate before they reach your desk.'
   },
   {
     icon: Link2,
-    name: 'Priya Anand',
+    name: 'Priya',
     position: 'Director of Capital Markets',
     body: 'Matches the right capital to the right deal — mapping each opportunity to suitable LPs, co-investors, and lenders.'
   },
   {
     icon: Scale,
-    name: 'Adrian Cole',
+    name: 'Adrian',
     position: 'General Counsel & Compliance',
     body: 'Guards the downside — reviews structure, terms, and risk, keeping every engagement clean, compliant, and audit-ready.'
   },
   {
     icon: Megaphone,
-    name: 'Sienna Brooks',
+    name: 'Sienna',
     position: 'Director of Communications',
     body: 'Shapes your narrative in market — message, positioning, and media, on brand and on the record.'
   },
   {
     icon: Search,
-    name: 'Noah Vega',
+    name: 'Noah',
     position: 'Head of Digital Presence',
     body: 'Builds your organic visibility — so the right counterparties find you and your authority compounds over time.'
   },
   {
     icon: Filter,
-    name: 'Camille Reyes',
+    name: 'Camille',
     position: 'Head of Top-of-Funnel',
     body: 'Fills the top of your funnel — identifying and warming the right prospects so your pipeline never runs dry.'
   },
   {
     icon: Ticket,
-    name: 'Jasper Lowe',
+    name: 'Jasper',
     position: 'Director of Private Events',
     body: 'Curates the rooms that matter — convening investors and operators in private settings built to deepen relationships.'
   },
   {
     icon: Users,
-    name: 'Eleanor Frost',
+    name: 'Eleanor',
     position: 'Head of Investor Relations',
     body: 'Keeps your LPs close and confident — structured updates, reporting, and communications that protect and grow the relationship.'
   },
   {
     icon: Landmark,
-    name: 'Sloane Whitfield',
+    name: 'Sloane',
     position: 'Managing Director, Capital Formation',
     body: 'Runs institutional fundraising at the top of the market — a disciplined raise from target list to final close.'
   },
   {
     icon: GraduationCap,
-    name: 'Felix Bauer',
+    name: 'Felix',
     position: 'Director of Enablement',
     body: 'Gets you and your team to mastery fast — onboarding, education, and the playbooks that keep the whole desk running.'
   }
