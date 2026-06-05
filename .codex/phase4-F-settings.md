@@ -1,9 +1,11 @@
 # Codex Task Spec — Phase 4 Deliverable F (Settings)
 
 ## Mission
+
 Wire the Settings screen to real DB writes. Today every "Save changes" button is a no-op (no onClick). After this task, account-level and org-level settings persist via RLS-bounded server actions, fire trust-XP where appropriate, and the UI reflects the saved state immediately.
 
 ## Branch + PR
+
 - Branch off: `phase4-core-loop` (NOT `main`).
 - Branch name: `phase4-F-settings`.
 - PR title: `Phase 4 Deliverable F — Settings persistence`.
@@ -11,6 +13,7 @@ Wire the Settings screen to real DB writes. Today every "Save changes" button is
 - Commit grain: small, conventional commits.
 
 ## Files you OWN (you may create/modify freely)
+
 - `app/settings/page.tsx` (existing — extend, do not rewrite)
 - `app/settings/SettingsView.tsx` (existing — extend)
 - `lib/actions/settings.ts` (NEW — server actions)
@@ -19,6 +22,7 @@ Wire the Settings screen to real DB writes. Today every "Save changes" button is
 - `.codex/phase4-F-settings.md` (this file)
 
 ## Files you MUST NOT touch (owned by parallel work on the same branch)
+
 - `lib/actions/deals.ts`, `lib/actions/allocations.ts` — Deliverable A
 - `lib/actions/connections.ts` — Deliverable B
 - `lib/actions/strategy.ts` — Deliverable C
@@ -35,7 +39,9 @@ Wire the Settings screen to real DB writes. Today every "Save changes" button is
 - `app/page.tsx`, `app/login/page.tsx` — frozen per §3H.
 
 ## Schema ground truth (run before coding — fill brackets after running)
+
 Connect via `psql` using the env from `/app/.env.local` (`PGHOST=aws-1-us-east-1.pooler.supabase.com`, `PGUSER=postgres.emityvdaeiqxtpxdhyky`, `PGPASSWORD='@1Emergent2026'`, `PGSSLMODE=require`). Run:
+
 - `\d public.profiles` — record column names + types (expect: id, full_name, role, avatar_url, xp, member_type, created_at, updated_at — but verify).
 - `\d public.organizations` — record columns (expect: id, name, type [enum], created_at — but verify).
 - `\d public.org_members` — record role enum values + status column if present.
@@ -43,6 +49,7 @@ Connect via `psql` using the env from `/app/.env.local` (`PGHOST=aws-1-us-east-1
 Paste the actual column lists into this spec under "Verified schema" before writing code. Codex must NOT guess column names.
 
 ### Verified schema (already run by orchestrator on 2026-02-06)
+
 - `profiles` columns: `id uuid` (PK, FK → auth.users.id), `full_name text`, `role text`, `avatar_url text`, `xp integer`, `member_type text`, `created_at timestamptz`, `updated_at timestamptz`. **NO `timezone` column** — drop the `timezone` field from `saveAccountSettings`'s input or add a migration request to the orchestrator (do NOT create the migration yourself).
 - `organizations` columns: `id uuid`, `name text`, `type org_type` (enum), `tier text`, `created_at timestamptz`, `updated_at timestamptz`.
 - `organizations.type` enum values: `'fund' | 'lp' | 'operator' | 'capital_provider' | 'service_provider' | 'partner'` (the enum is `public.org_type`).
@@ -132,6 +139,7 @@ The current view is presentational with no `onClick` handlers on its "Save chang
 ## When done
 
 Open a PR from `phase4-F-settings` → `phase4-core-loop` with:
+
 - The 4 CI command outputs pasted into the description.
 - A short "before/after" of one account save + one org save against the live DB (paste the SQL `SELECT` results).
 - A 1280×800 screenshot of the saved-state UI.
@@ -140,6 +148,7 @@ Open a PR from `phase4-F-settings` → `phase4-core-loop` with:
 The orchestrator (Claude) will review the PR and merge to `phase4-core-loop` once approved.
 
 ## Out of scope for Codex
+
 - Any other Phase 4 surface (A–E).
 - Chain of Trust (Phase 5).
 - Mocked integrations (Phase 6).
