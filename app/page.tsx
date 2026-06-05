@@ -2,17 +2,20 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   ArrowRight,
-  Rocket,
-  Coins,
-  Users,
+  Workflow,
+  ScanSearch,
+  Briefcase,
+  CloudRain,
+  Radar,
+  Link2,
+  Scale,
+  Megaphone,
   Search,
-  Database,
-  Share2,
-  FileText,
-  BarChart3,
-  Package,
-  MessageSquare,
-  CheckCircle2,
+  Filter,
+  Ticket,
+  Users,
+  Landmark,
+  GraduationCap,
   type LucideIcon
 } from 'lucide-react';
 import { Badge, Card } from '@/components/ui';
@@ -36,108 +39,103 @@ const PRIMARY_CTA =
 const SECONDARY_CTA =
   'inline-flex items-center justify-center gap-2 rounded-xl border border-hairline bg-surface-1 px-5 py-3 text-sm font-medium text-fg-2 transition hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1';
 
-// ── Copilots — 11 capabilities grouped into 4 lifecycle clusters ─────────────
+// ── The Team — Earnest + fourteen specialists (the 15 Earn brains) ───────────
 
-interface Copilot {
+interface TeamMember {
   icon: LucideIcon;
-  /** The copilot's name (a named specialist on the desk). */
+  /** The member's name on your executive desk. */
   name: string;
-  /** The function it owns. */
-  title: string;
+  /** Their position / title. */
+  position: string;
+  /** What they do for you. */
   body: string;
 }
 
-interface Cluster {
-  label: string;
-  copilots: Copilot[];
-}
-
-const CLUSTERS: Cluster[] = [
+// Fourteen specialists; Earnest, the lead, is featured separately above.
+const TEAM: TeamMember[] = [
   {
-    label: 'Raise',
-    copilots: [
-      {
-        icon: Rocket,
-        name: 'Atlas',
-        title: 'Fund Launches',
-        body: 'Stand up a fund with discipline — entity structure, investment thesis, and core materials, assembled to institutional standard.'
-      },
-      {
-        icon: Coins,
-        name: 'Rainmaker',
-        title: 'Capital Raises',
-        body: 'Run a structured raise: target suitable capital, document every conversation, and sustain momentum through final close.'
-      },
-      {
-        icon: Users,
-        name: 'Envoy',
-        title: 'Partner Prospecting',
-        body: 'Identify and qualify LPs, co-investors, and operating partners against your mandate — and establish a credible path to each.'
-      }
-    ]
+    icon: Workflow,
+    name: 'Sterling Vance',
+    position: 'Chief of Staff',
+    body: 'Owns your operating rhythm — intakes every request, sequences the work across the desk, and makes sure nothing falls between functions.'
   },
   {
-    label: 'Source',
-    copilots: [
-      {
-        icon: Search,
-        name: 'Scout',
-        title: 'Deal Sourcing',
-        body: 'Surface proprietary, on-thesis opportunities ahead of the broader market.'
-      },
-      {
-        icon: Database,
-        name: 'Oracle',
-        title: 'Data Scouring',
-        body: 'Extract signal from filings, registries, and public sources — reconciled into a clean, decision-ready record.'
-      },
-      {
-        icon: Share2,
-        name: 'Nexus',
-        title: 'Relationship Aggregating',
-        body: 'Consolidate your firm’s relationships into a single graph — and surface the shortest credible path to any counterparty.'
-      }
-    ]
+    icon: ScanSearch,
+    name: 'Dalia Pruitt',
+    position: 'Head of Data Operations',
+    body: 'Cleans and structures everything inbound — reconciling data into a single, decision-ready record you can act on.'
   },
   {
-    label: 'Analyze & Package',
-    copilots: [
-      {
-        icon: FileText,
-        name: 'Scribe',
-        title: 'Document Drafting',
-        body: 'Draft memoranda, presentations, and agreements to the standard your investment committee expects.'
-      },
-      {
-        icon: BarChart3,
-        name: 'Auditor',
-        title: 'Deal Analyzing',
-        body: 'Pressure-test the model, comparables, and risks with investment-committee rigor.'
-      },
-      {
-        icon: Package,
-        name: 'Curator',
-        title: 'Deal Packaging',
-        body: 'Assemble an institutional-grade package — data room, narrative, and terms in lockstep.'
-      }
-    ]
+    icon: Briefcase,
+    name: 'Theodore Asher',
+    position: 'Chief Strategy Advisor',
+    body: 'Your sounding board on every consequential call — pressure-tests strategy, frames the trade-offs, and grounds each decision in the institutional playbook.'
   },
   {
-    label: 'Close',
-    copilots: [
-      {
-        icon: MessageSquare,
-        name: 'Liaison',
-        title: 'Communicating',
-        body: 'Keep every counterparty informed and every workstream advancing — measured, timely, and on the record.'
-      },
-      {
-        icon: CheckCircle2,
-        name: 'Closer',
-        title: 'Closing',
-        body: 'Drive to signature — track conditions precedent, coordinate signatories, and close cleanly.'
-      }
-    ]
+    icon: CloudRain,
+    name: 'Vivian Rainmaker',
+    position: 'Managing Director, Demand Generation',
+    body: 'Builds and sustains your pipeline of interest — generating qualified demand and holding momentum from first touch to commitment.'
+  },
+  {
+    icon: Radar,
+    name: 'Marcus Hale',
+    position: 'Head of Deal Origination',
+    body: 'Surfaces proprietary, on-thesis opportunities ahead of the market — scored against your mandate before they reach your desk.'
+  },
+  {
+    icon: Link2,
+    name: 'Priya Anand',
+    position: 'Director of Capital Markets',
+    body: 'Matches the right capital to the right deal — mapping each opportunity to suitable LPs, co-investors, and lenders.'
+  },
+  {
+    icon: Scale,
+    name: 'Adrian Cole',
+    position: 'General Counsel & Compliance',
+    body: 'Guards the downside — reviews structure, terms, and risk, keeping every engagement clean, compliant, and audit-ready.'
+  },
+  {
+    icon: Megaphone,
+    name: 'Sienna Brooks',
+    position: 'Director of Communications',
+    body: 'Shapes your narrative in market — message, positioning, and media, on brand and on the record.'
+  },
+  {
+    icon: Search,
+    name: 'Noah Vega',
+    position: 'Head of Digital Presence',
+    body: 'Builds your organic visibility — so the right counterparties find you and your authority compounds over time.'
+  },
+  {
+    icon: Filter,
+    name: 'Camille Reyes',
+    position: 'Head of Top-of-Funnel',
+    body: 'Fills the top of your funnel — identifying and warming the right prospects so your pipeline never runs dry.'
+  },
+  {
+    icon: Ticket,
+    name: 'Jasper Lowe',
+    position: 'Director of Private Events',
+    body: 'Curates the rooms that matter — convening investors and operators in private settings built to deepen relationships.'
+  },
+  {
+    icon: Users,
+    name: 'Eleanor Frost',
+    position: 'Head of Investor Relations',
+    body: 'Keeps your LPs close and confident — structured updates, reporting, and communications that protect and grow the relationship.'
+  },
+  {
+    icon: Landmark,
+    name: 'Sloane Whitfield',
+    position: 'Managing Director, Capital Formation',
+    body: 'Runs institutional fundraising at the top of the market — a disciplined raise from target list to final close.'
+  },
+  {
+    icon: GraduationCap,
+    name: 'Felix Bauer',
+    position: 'Director of Enablement',
+    body: 'Gets you and your team to mastery fast — onboarding, education, and the playbooks that keep the whole desk running.'
   }
 ];
 
@@ -272,49 +270,64 @@ function Hero() {
   );
 }
 
-function CopilotCard({ copilot }: { copilot: Copilot }) {
-  const Icon = copilot.icon;
+/** Two-letter monogram from a member's name — the avatar fallback. */
+function initials(name: string): string {
+  return name
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+function TeamCard({ member }: { member: TeamMember }) {
+  const Icon = member.icon;
   return (
-    <Card clickable className="flex h-full flex-col p-4">
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
-          <Icon size={15} strokeWidth={1.9} aria-hidden />
+    <Card clickable className="flex h-full items-start gap-4 p-5">
+      <div className="relative flex-none">
+        <div
+          className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] text-[13px] font-semibold tracking-wide text-gold-1"
+          aria-hidden
+        >
+          {initials(member.name)}
         </div>
-        <div className="min-w-0">
-          <h3 className="truncate text-[13.5px] font-semibold leading-tight text-fg-1">
-            {copilot.name}
-          </h3>
-          <p className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-gold-1">
-            {copilot.title}
-          </p>
-        </div>
+        <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border border-hairline bg-surface-1 text-fg-3">
+          <Icon size={11} strokeWidth={2} aria-hidden />
+        </span>
       </div>
-      <p className="mt-2.5 text-[11.5px] leading-5 text-fg-3">{copilot.body}</p>
+      <div className="min-w-0">
+        <h3 className="text-[14px] font-semibold leading-tight text-fg-1">{member.name}</h3>
+        <p className="mt-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-gold-1">
+          {member.position}
+        </p>
+        <p className="mt-2 text-[11.5px] leading-5 text-fg-3">{member.body}</p>
+      </div>
     </Card>
   );
 }
 
-function Copilots() {
+function Team() {
   return (
-    <section id="copilots" className="py-20 sm:py-28" aria-labelledby="copilots-heading">
+    <section id="team" className="py-20 sm:py-28" aria-labelledby="team-heading">
       <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
         <div className="max-w-2xl">
           <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-            The Copilots
+            The Team
           </p>
           <h2
-            id="copilots-heading"
+            id="team-heading"
             className="text-3xl font-semibold leading-tight tracking-[-0.02em] text-fg-1 sm:text-4xl lg:text-5xl"
           >
-            Eleven specialists. One orchestrator. One lifecycle.
+            Your executive team. Fifteen specialists, one desk.
           </h2>
           <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
-            Each copilot owns a stage of the work; Earnest leads the eleven as one — carrying a
-            mandate from first thesis to signed close, coordinated, documented, and fully auditable.
+            An institutional-grade desk that works as one — Earnest leads fourteen specialists
+            across capital formation, sourcing, diligence, packaging, and closing. Each carries your
+            mandate; every action is documented and on the record.
           </p>
         </div>
 
-        {/* Earnest — the orchestrator; the first of the twelve. */}
+        {/* Earnest — the lead; Assistant Executive Director. */}
         <div className="mt-12">
           <Card className="relative overflow-hidden p-6 sm:p-7">
             <div
@@ -329,34 +342,23 @@ function Copilots() {
               <EarnCoin size={72} glow online className="flex-none" />
               <div className="min-w-0">
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-1">
-                  Orchestrator · live AI guide
+                  Assistant Executive Director · live AI guide
                 </p>
-                <h3 className="mt-1 text-xl font-semibold text-fg-1">Earnest</h3>
+                <h3 className="mt-1 text-xl font-semibold text-fg-1">Earnest Fundmaker “Earn”</h3>
                 <p className="mt-2 max-w-2xl text-[13px] leading-6 text-fg-3">
-                  Earnest fronts the desk and runs the eleven specialists as one — routing each
-                  task, framing the next decision, and keeping every mandate moving from first
-                  thesis to signed close.
+                  Your right hand across the desk. Earnest takes your mandate, fronts the team, and
+                  runs all fifteen as one — surfacing your next decision, routing each task to the
+                  right specialist, and keeping every engagement moving from first thesis to signed
+                  close. Measured, candid, and always on the record.
                 </p>
               </div>
             </div>
           </Card>
         </div>
 
-        <div className="mt-10 space-y-12">
-          {CLUSTERS.map((cluster) => (
-            <div key={cluster.label}>
-              <div className="mb-6 flex items-center gap-3">
-                <span className="text-[12px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-                  {cluster.label}
-                </span>
-                <span className="h-px flex-1 bg-hairline" aria-hidden />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {cluster.copilots.map((c) => (
-                  <CopilotCard key={c.title} copilot={c} />
-                ))}
-              </div>
-            </div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {TEAM.map((member) => (
+            <TeamCard key={member.name} member={member} />
           ))}
         </div>
       </div>
@@ -427,7 +429,7 @@ function MeetEarnest() {
       <div className="mx-auto grid max-w-[1180px] items-center gap-12 px-5 sm:px-8 lg:grid-cols-12">
         <div className="lg:col-span-7">
           <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-            Meet Earnest
+            Meet Earn
           </p>
           <h2
             id="earnest-heading"
@@ -436,9 +438,9 @@ function MeetEarnest() {
             A live guide with command of the entire lifecycle.
           </h2>
           <p className="mt-5 max-w-xl text-[15px] leading-7 text-fg-3 sm:text-lg">
-            Earnest fronts the copilots — answering questions, framing the next decision, and
-            routing each task to the right specialist. Measured, candid, and always on the record.
-            The full engagement continues inside the platform.
+            Earnest fronts the team — answering questions, framing the next decision, and routing
+            each task to the right specialist. Measured, candid, and always on the record. The full
+            engagement continues inside the platform.
           </p>
           <div className="mt-8">
             <Link href="/login" className={PRIMARY_CTA}>
@@ -538,10 +540,10 @@ function Footer() {
 
           <nav className="flex flex-wrap gap-x-10 gap-y-3" aria-label="Footer">
             <SmoothScrollLink
-              targetId="copilots"
+              targetId="team"
               className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
             >
-              Copilots
+              The Team
             </SmoothScrollLink>
             <SmoothScrollLink
               targetId="how-heading"
@@ -595,7 +597,7 @@ export default function HomePage() {
       <main id="main">
         <Hero />
         <ActivityTicker />
-        <Copilots />
+        <Team />
         <ChainOfTrust />
         <MeetEarnest />
         <HowItWorks />
