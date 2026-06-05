@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
 import {
   Zap,
@@ -22,6 +23,11 @@ import {
 import { Badge, Button, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { NotificationItem } from '@/lib/queries/notifications';
+import {
+  dismissNotification,
+  markAllNotificationsRead,
+  markNotificationRead
+} from '@/lib/actions/notifications';
 
 /** Map a notification category to a display icon + tone. Unknown categories
  * fall back to a neutral bell. */
@@ -204,6 +210,7 @@ export function NotificationsView({ initial }: { initial: NotificationItem[] }) 
   const cards = useCardState(initial, (n) => ({ read: n.read }));
   const [category, setCategory] = useState('All');
   const [open, setOpen] = useState<NotificationItem | null>(null);
+  const router = useRouter();
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -212,9 +219,21 @@ export function NotificationsView({ initial }: { initial: NotificationItem[] }) 
   }, [initial]);
 
   function act(id: string, a: Action) {
-    if (a === 'delete') cards.delete(id);
-    else if (a === 'archive') cards.archive(id);
-    else if (a === 'read') cards.markRead(id);
+    if (a === 'delete') {
+      cards.delete(id);
+      void dismissNotification(id).then(() => router.refresh());
+    } else if (a === 'archive') {
+      cards.archive(id);
+      void dismissNotification(id).then(() => router.refresh());
+    } else if (a === 'read') {
+      cards.markRead(id);
+      void markNotificationRead(id).then(() => router.refresh());
+    }
+  }
+
+  function handleMarkAllRead() {
+    cards.markAllRead();
+    void markAllNotificationsRead().then(() => router.refresh());
   }
 
   // Archived / deleted notifications drop out of the inbox.
@@ -226,7 +245,13 @@ export function NotificationsView({ initial }: { initial: NotificationItem[] }) 
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-end justify-between">
         <SectionTitle eyebrow={`${unread} unread`} title="Notification center" className="mb-0" />
-        <Button variant="secondary" icon={CheckCheck} size="sm" onClick={cards.markAllRead}>
+        <Button
+          variant="secondary"
+          icon={CheckCheck}
+          size="sm"
+          onClick={handleMarkAllRead}
+          data-testid="notif-mark-all-read"
+        >
           Mark all read
         </Button>
       </div>
