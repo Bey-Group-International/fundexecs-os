@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
 import { awardTrustXp } from '@/lib/actions/xp';
+import { getTrustRecord, type TrustRecord } from '@/lib/queries/trust';
 import { aiValidateEvidence as runAiValidation } from '@/lib/ai/trust-validate';
 
 const TRUST_BUCKET = 'trust-evidence';
@@ -59,6 +60,23 @@ function shortLayer(label: string): LayerKey {
 
 function refresh() {
   revalidatePath('/', 'layout');
+}
+
+// ====================================================================
+// 0. loadTrustRecord — server-action wrapper around the read query so
+//    the (client) TrustDrawer can fetch + refresh without leaving the
+//    component. Bound by RLS at every step.
+// ====================================================================
+
+export type LoadTrustResult =
+  | { ok: true; record: TrustRecord }
+  | { ok: false; error: string };
+
+export async function loadTrustRecord(recordId: string): Promise<LoadTrustResult> {
+  if (!recordId) return { ok: false, error: 'Missing record id.' };
+  const record = await getTrustRecord(recordId);
+  if (!record) return { ok: false, error: 'Trust record not found.' };
+  return { ok: true, record };
 }
 
 // ====================================================================
