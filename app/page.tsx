@@ -278,15 +278,21 @@ function Hero() {
 function CopilotCard({ copilot }: { copilot: Copilot }) {
   const Icon = copilot.icon;
   return (
-    <Card clickable className="flex h-full flex-col p-6">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
-        <Icon size={18} strokeWidth={1.8} aria-hidden />
+    <Card clickable className="flex h-full flex-col p-4">
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
+          <Icon size={15} strokeWidth={1.9} aria-hidden />
+        </div>
+        <div className="min-w-0">
+          <h3 className="truncate text-[13.5px] font-semibold leading-tight text-fg-1">
+            {copilot.name}
+          </h3>
+          <p className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-gold-1">
+            {copilot.title}
+          </p>
+        </div>
       </div>
-      <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{copilot.name}</h3>
-      <p className="mt-0.5 text-[10.5px] font-semibold uppercase tracking-[0.13em] text-gold-1">
-        {copilot.title}
-      </p>
-      <p className="mt-2 text-[12.5px] leading-6 text-fg-3">{copilot.body}</p>
+      <p className="mt-2.5 text-[11.5px] leading-5 text-fg-3">{copilot.body}</p>
     </Card>
   );
 }
@@ -339,7 +345,7 @@ function Copilots() {
           </Card>
         </div>
 
-        <div className="mt-10 space-y-14">
+        <div className="mt-10 space-y-12">
           {CLUSTERS.map((cluster) => (
             <div key={cluster.label}>
               <div className="mb-6 flex items-center gap-3">
@@ -348,7 +354,7 @@ function Copilots() {
                 </span>
                 <span className="h-px flex-1 bg-hairline" aria-hidden />
               </div>
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {cluster.copilots.map((c) => (
                   <CopilotCard key={c.title} copilot={c} />
                 ))}
