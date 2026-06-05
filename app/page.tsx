@@ -327,7 +327,7 @@ function Team() {
           </p>
         </div>
 
-        {/* Earnest — the lead; Assistant Executive Director. */}
+        {/* Earnest — the lead; Chief Operating Officer. */}
         <div className="mt-12">
           <Card className="relative overflow-hidden p-6 sm:p-7">
             <div
@@ -342,7 +342,7 @@ function Team() {
               <EarnCoin size={72} glow online className="flex-none" />
               <div className="min-w-0">
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-1">
-                  Assistant Executive Director · live AI guide
+                  Chief Operating Officer · live AI guide
                 </p>
                 <h3 className="mt-1 text-xl font-semibold text-fg-1">Earnest Fundmaker “Earn”</h3>
                 <p className="mt-2 max-w-2xl text-[13px] leading-6 text-fg-3">
