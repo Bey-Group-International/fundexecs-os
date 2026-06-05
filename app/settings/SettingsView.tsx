@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
+  ArrowRight,
   BadgeCheck,
   Bell,
   Building2,
@@ -28,6 +30,7 @@ import {
   type TabItem
 } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
+import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 
 interface SettingsViewProps {
   email: string | null;
@@ -35,6 +38,10 @@ interface SettingsViewProps {
   role: string | null;
   orgName: string | null;
   orgTier: string | null;
+  /** Proof of Truth profile status + completion, for the profile card. */
+  proofStatus: 'in_progress' | 'complete';
+  proofPct: number;
+  proofMemberType: MemberType | null;
 }
 
 // ── Gamification ──────────────────────────────────────────────────────────────
@@ -168,6 +175,60 @@ function ToggleRow({
 }
 
 // ── Section panels ────────────────────────────────────────────────────────────
+
+function ProofOfTruthCard({
+  status,
+  pct,
+  memberType
+}: {
+  status: 'in_progress' | 'complete';
+  pct: number;
+  memberType: MemberType | null;
+}) {
+  const complete = status === 'complete';
+  const started = memberType != null || pct > 0;
+  const cta = complete ? 'Edit profile' : started ? 'Resume profile' : 'Start profile';
+
+  return (
+    <Card>
+      <SectionTitle eyebrow="Proof of Truth" title="Verified profile" />
+      <div className="flex flex-col gap-4 rounded-xl border border-hairline bg-surface-1 px-4 py-3.5 sm:flex-row sm:items-center">
+        <span className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
+          <ShieldCheck size={19} strokeWidth={1.9} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-semibold text-fg-1">
+              {memberType ? MEMBER_TYPE_LABELS[memberType] : 'Member profile'}
+            </span>
+            <Badge tone={complete ? 'success' : 'gold'} dot pulse={!complete}>
+              {complete ? 'Complete' : 'In progress'}
+            </Badge>
+          </div>
+          <p className="mt-0.5 text-[11.5px] text-fg-4">
+            {complete
+              ? 'Your member-type-specific profile is published and verified.'
+              : 'Earn helps you build your verified, member-type-specific profile.'}
+          </p>
+          <div className="mt-2.5">
+            <div className="mb-1 flex items-center justify-between text-[11px] text-fg-4">
+              <span>Completion</span>
+              <span className="tabular-nums">{pct}%</span>
+            </div>
+            <ProgressBar value={pct} height={6} gradient="linear-gradient(90deg,#F7C948,#E5A823)" />
+          </div>
+        </div>
+        <Link
+          href="/onboarding"
+          className="inline-flex flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-3 py-1.5 text-[12.5px] font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] transition hover:brightness-110"
+        >
+          {cta}
+          <ArrowRight size={14} strokeWidth={1.9} aria-hidden />
+        </Link>
+      </div>
+    </Card>
+  );
+}
 
 function AccountSection({
   email,
@@ -393,7 +454,16 @@ const TABS: TabItem[] = [
   { id: 'billing', label: 'Billing', icon: CreditCard }
 ];
 
-export function SettingsView({ email, fullName, role, orgName, orgTier }: SettingsViewProps) {
+export function SettingsView({
+  email,
+  fullName,
+  role,
+  orgName,
+  orgTier,
+  proofStatus,
+  proofPct,
+  proofMemberType
+}: SettingsViewProps) {
   const [tab, setTab] = useState('account');
   const displayName = fullName ?? (email ? email.split('@')[0] : 'Your profile');
 
@@ -403,7 +473,12 @@ export function SettingsView({ email, fullName, role, orgName, orgTier }: Settin
 
       <SegTabs tabs={TABS} active={tab} onChange={setTab} className="flex-wrap" />
 
-      {tab === 'account' && <AccountSection email={email} fullName={fullName} role={role} />}
+      {tab === 'account' && (
+        <>
+          <ProofOfTruthCard status={proofStatus} pct={proofPct} memberType={proofMemberType} />
+          <AccountSection email={email} fullName={fullName} role={role} />
+        </>
+      )}
       {tab === 'notifications' && <NotificationsSection />}
       {tab === 'security' && <SecuritySection />}
       {tab === 'organization' && <OrganizationSection orgName={orgName} orgTier={orgTier} />}

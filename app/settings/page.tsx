@@ -3,6 +3,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { getShellIdentity } from '@/lib/queries/identity';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
+import { getMemberProfile } from '@/lib/queries/member-profile';
 import { SettingsView } from './SettingsView';
 
 export const metadata: Metadata = { title: 'Profile & settings' };
@@ -19,7 +20,7 @@ export default async function SettingsPage() {
     data: { user }
   } = await supabase.auth.getUser();
 
-  const org = await getActiveOrg();
+  const [org, memberProfile] = await Promise.all([getActiveOrg(), getMemberProfile()]);
 
   let orgName: string | null = null;
   let orgTier: string | null = null;
@@ -57,6 +58,9 @@ export default async function SettingsPage() {
         role={role}
         orgName={orgName}
         orgTier={orgTier}
+        proofStatus={memberProfile?.status ?? 'in_progress'}
+        proofPct={memberProfile?.completionPct ?? 0}
+        proofMemberType={memberProfile?.memberType ?? null}
       />
     </AppShell>
   );

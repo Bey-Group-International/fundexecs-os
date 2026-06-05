@@ -1,15 +1,31 @@
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
+import { getMemberProfile, type MemberProfile } from '@/lib/queries/member-profile';
 import { OnboardingView } from './OnboardingView';
 
 export const metadata: Metadata = { title: 'Welcome to FundExecs OS' };
 
+/** A blank in-progress profile, used when there is no row/user yet. */
+const EMPTY_PROFILE: MemberProfile = {
+  userId: '',
+  memberType: null,
+  displayName: null,
+  headline: null,
+  bio: null,
+  focusAreas: [],
+  links: {},
+  details: {},
+  draft: {},
+  status: 'in_progress',
+  completionPct: 0
+};
+
 /**
- * Onboarding — a focused, full-screen 4-step stepper (Identity → Role →
- * Socials → Review). Pre-fills the signed-in identity; the client view writes
- * `profiles.role` (and creates an org if needed) on finish, then routes to the
- * Command Center.
+ * Onboarding — captures identity + organization, then hands off into the
+ * conversational Proof of Truth flow where Earn builds the member's verified,
+ * member-type-specific profile. Pre-fills the signed-in identity and seeds the
+ * flow from any saved `draft` so it resumes.
  */
 export default async function OnboardingPage() {
   const supabase = await createClient();
@@ -18,7 +34,7 @@ export default async function OnboardingPage() {
     data: { user }
   } = await supabase.auth.getUser();
 
-  const org = await getActiveOrg();
+  const [org, profile] = await Promise.all([getActiveOrg(), getMemberProfile()]);
 
   let fullName: string | null = null;
   if (user) {
@@ -31,6 +47,11 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <OnboardingView email={user?.email ?? ''} fullName={fullName ?? ''} hasOrg={org != null} />
+    <OnboardingView
+      email={user?.email ?? ''}
+      fullName={fullName ?? ''}
+      hasOrg={org != null}
+      profile={profile ?? EMPTY_PROFILE}
+    />
   );
 }
