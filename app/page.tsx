@@ -1,35 +1,18 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import {
-  ArrowRight,
-  ShieldCheck,
-  Workflow,
-  ScanSearch,
-  Briefcase,
-  CloudRain,
-  Radar,
-  Link2,
-  Scale,
-  Megaphone,
-  Search,
-  Filter,
-  Ticket,
-  Users,
-  Landmark,
-  GraduationCap,
-  type LucideIcon
-} from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Badge, Card } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { LandingNav } from '@/components/landing/LandingNav';
 import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
 import { ActivityTicker } from '@/components/landing/ActivityTicker';
 import { HeroStats } from '@/components/landing/HeroStats';
+import { TeamAvatar, getCOO, getSpecialists } from '@/lib/team';
 
 export const metadata: Metadata = {
-  title: 'AI Copilots for the Full Capital Lifecycle',
+  title: 'An AI executive team for the full capital lifecycle',
   description:
-    'FundExecs is a suite of AI copilots that operate the full capital lifecycle — capital formation, sourcing, diligence, packaging, and closing — for fund managers and dealmakers.'
+    'FundExecs is an AI executive team — fifteen specialists led by Earnest Fundmaker, the Chief Operating Officer — that operates the full capital lifecycle for fund managers and dealmakers.'
 };
 
 // ── Shared CTA styles (match the app's institutional-blue primary) ───────────
@@ -39,106 +22,6 @@ const PRIMARY_CTA =
 
 const SECONDARY_CTA =
   'inline-flex items-center justify-center gap-2 rounded-xl border border-hairline bg-surface-1 px-5 py-3 text-sm font-medium text-fg-2 transition hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1';
-
-// ── The Team — Earnest + fourteen specialists (the 15 Earn brains) ───────────
-
-interface TeamMember {
-  icon: LucideIcon;
-  /** The member's name on your executive desk. */
-  name: string;
-  /** Their position / title. */
-  position: string;
-  /** What they do for you. */
-  body: string;
-}
-
-// Fourteen specialists; Earnest, the lead, is featured separately above.
-const TEAM: TeamMember[] = [
-  {
-    icon: Workflow,
-    name: 'Sterling',
-    position: 'Chief of Staff',
-    body: 'Owns your operating rhythm — intakes every request, sequences the work across the desk, and makes sure nothing falls between functions.'
-  },
-  {
-    icon: ScanSearch,
-    name: 'Dalia',
-    position: 'Head of Data Operations',
-    body: 'Cleans and structures everything inbound — reconciling data into a single, decision-ready record you can act on.'
-  },
-  {
-    icon: Briefcase,
-    name: 'Theodore',
-    position: 'Chief Strategy Advisor',
-    body: 'Your sounding board on every consequential call — pressure-tests strategy, frames the trade-offs, and grounds each decision in the institutional playbook.'
-  },
-  {
-    icon: CloudRain,
-    name: 'Vivian',
-    position: 'Managing Director, Demand Generation',
-    body: 'Builds and sustains your pipeline of interest — generating qualified demand and holding momentum from first touch to commitment.'
-  },
-  {
-    icon: Radar,
-    name: 'Marcus',
-    position: 'Head of Deal Origination',
-    body: 'Surfaces proprietary, on-thesis opportunities ahead of the market — scored against your mandate before they reach your desk.'
-  },
-  {
-    icon: Link2,
-    name: 'Priya',
-    position: 'Director of Capital Markets',
-    body: 'Matches the right capital to the right deal — mapping each opportunity to suitable LPs, co-investors, and lenders.'
-  },
-  {
-    icon: Scale,
-    name: 'Adrian',
-    position: 'General Counsel & Compliance',
-    body: 'Guards the downside — reviews structure, terms, and risk, keeping every engagement clean, compliant, and audit-ready.'
-  },
-  {
-    icon: Megaphone,
-    name: 'Sienna',
-    position: 'Director of Communications',
-    body: 'Shapes your narrative in market — message, positioning, and media, on brand and on the record.'
-  },
-  {
-    icon: Search,
-    name: 'Noah',
-    position: 'Head of Digital Presence',
-    body: 'Builds your organic visibility — so the right counterparties find you and your authority compounds over time.'
-  },
-  {
-    icon: Filter,
-    name: 'Camille',
-    position: 'Head of Top-of-Funnel',
-    body: 'Fills the top of your funnel — identifying and warming the right prospects so your pipeline never runs dry.'
-  },
-  {
-    icon: Ticket,
-    name: 'Jasper',
-    position: 'Director of Private Events',
-    body: 'Curates the rooms that matter — convening investors and operators in private settings built to deepen relationships.'
-  },
-  {
-    icon: Users,
-    name: 'Eleanor',
-    position: 'Head of Investor Relations',
-    body: 'Keeps your LPs close and confident — structured updates, reporting, and communications that protect and grow the relationship.'
-  },
-  {
-    icon: Landmark,
-    name: 'Sloane',
-    position: 'Managing Director, Capital Formation',
-    body: 'Runs institutional fundraising at the top of the market — a disciplined raise from target list to final close.'
-  },
-  {
-    icon: GraduationCap,
-    name: 'Felix',
-    position: 'Director of Enablement',
-    body: 'Gets you and your team to mastery fast — onboarding, education, and the playbooks that keep the whole desk running.'
-  }
-];
 
 interface Step {
   n: string;
@@ -169,7 +52,6 @@ const STEPS: Step[] = [
   }
 ];
 
-// Chain of Trust — the 4-layer proof chain (colors from the design tokens).
 interface TrustLayer {
   name: string;
   color: string;
@@ -202,12 +84,12 @@ const TRUST_LAYERS: TrustLayer[] = [
 // ── Sections ─────────────────────────────────────────────────────────────────
 
 function Hero() {
+  const earn = getCOO();
   return (
     <section
       className="relative overflow-hidden pb-16 pt-28 sm:pb-20 sm:pt-32"
       aria-labelledby="hero-heading"
     >
-      {/* Dark gradient background + tasteful gold glow. */}
       <div
         className="absolute inset-0 -z-10"
         style={{
@@ -245,11 +127,10 @@ function Hero() {
             </SmoothScrollLink>
           </div>
 
-          {/* Live proof points — animated count-ups in an elevated strip. */}
           <HeroStats />
         </div>
 
-        {/* Hero mascot with gentle float + gold glow, and a minimal "Meet Earn". */}
+        {/* Hero mascot — EarnCoin with gold glow + identity caption. */}
         <div className="flex flex-col items-center lg:col-span-5 lg:items-end">
           <div className="relative">
             <div
@@ -271,10 +152,10 @@ function Hero() {
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-1">
               Meet Earn
             </p>
-            <p className="mt-1.5 text-[15px] font-semibold text-fg-1">Earnest Fundmaker “Earn”</p>
-            <p className="mt-0.5 text-[12px] text-fg-4">
-              Chief Operating Officer · your live AI guide
+            <p className="mt-1.5 text-[15px] font-semibold text-fg-1">
+              {earn.name} &ldquo;Earn&rdquo;
             </p>
+            <p className="mt-0.5 text-[12px] text-fg-4">{earn.position} · your live AI guide</p>
           </div>
         </div>
       </div>
@@ -282,68 +163,50 @@ function Hero() {
   );
 }
 
-// Curated institutional gradient pairs for the generated team avatars. Gold is
-// reserved for Earn, so these stay in the cool / bronze family — each member
-// gets a distinct, deterministic crest derived from their name.
-const AVATAR_GRADIENTS: [string, string][] = [
-  ['#2f5bb7', '#16233f'], // navy
-  ['#1f8079', '#123634'], // teal
-  ['#3f63a6', '#1a2740'], // steel blue
-  ['#6a55a6', '#2a2342'], // indigo
-  ['#8a6740', '#3a2c1f'], // bronze
-  ['#2f7e62', '#163128'], // forest
-  ['#566179', '#22272f'], // graphite
-  ['#7e5682', '#2f2230'], // plum
-  ['#2b6f8f', '#142a36'], // cyan-slate
-  ['#9a5a52', '#3a221f'] // clay
-];
-
-/** Pick a stable gradient for a member from their name (FNV-1a hash). */
-function avatarGradient(name: string): [string, string] {
-  let h = 2166136261;
-  for (let i = 0; i < name.length; i++) {
-    h ^= name.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return AVATAR_GRADIENTS[(h >>> 0) % AVATAR_GRADIENTS.length];
-}
-
-/** Generated avatar graphic embedded per member: a unique gradient crest, a
- * facet highlight, and the member's function glyph. */
-function MemberAvatar({ member }: { member: TeamMember }) {
-  const Icon = member.icon;
-  const [from, to] = avatarGradient(member.name);
+function CooSpotlight() {
+  const earn = getCOO();
   return (
-    <div
-      className="relative flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_2px_8px_-2px_rgba(0,0,0,0.5)] ring-1 ring-white/10"
-      style={{ background: `radial-gradient(125% 125% at 28% 22%, ${from}, ${to})` }}
-      aria-hidden
-    >
-      <span
-        className="pointer-events-none absolute -right-2 -top-3 h-8 w-8 rotate-45 rounded-md bg-white/10"
+    <Card className="relative overflow-hidden p-6 sm:p-7">
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background: 'radial-gradient(70% 130% at 0% 0%, rgba(247,201,72,0.1), transparent 60%)'
+        }}
         aria-hidden
       />
-      <Icon size={20} strokeWidth={1.7} className="relative text-white/90" aria-hidden />
-    </div>
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+        <TeamAvatar member={earn} size={72} glow online className="flex-none" />
+        <div className="min-w-0">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-1">
+            {earn.position} · live AI guide
+          </p>
+          <h3 className="mt-1 text-xl font-semibold text-fg-1">{earn.name} &ldquo;Earn&rdquo;</h3>
+          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-fg-3">{earn.oneLiner}</p>
+        </div>
+      </div>
+    </Card>
   );
 }
 
-function TeamCard({ member }: { member: TeamMember }) {
+function SpecialistCard({ slug }: { slug: string }) {
+  const member = getSpecialists().find((m) => m.slug === slug);
+  if (!member) return null;
   return (
     <Card clickable className="flex h-full items-start gap-4 p-5">
-      <MemberAvatar member={member} />
+      <TeamAvatar member={member} size={48} variant="disc" className="flex-none" />
       <div className="min-w-0">
         <h3 className="text-[14px] font-semibold leading-tight text-fg-1">{member.name}</h3>
         <p className="mt-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-gold-1">
           {member.position}
         </p>
-        <p className="mt-2 text-[11.5px] leading-5 text-fg-3">{member.body}</p>
+        <p className="mt-2 text-[11.5px] leading-5 text-fg-3">{member.oneLiner}</p>
       </div>
     </Card>
   );
 }
 
 function Team() {
+  const specialists = getSpecialists();
   return (
     <section id="team" className="py-14 sm:py-20" aria-labelledby="team-heading">
       <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
@@ -364,38 +227,15 @@ function Team() {
           </p>
         </div>
 
-        {/* Earnest — the lead; Chief Operating Officer. */}
+        {/* Earnest — the COO; the first of the fifteen. */}
         <div className="mt-8">
-          <Card className="relative overflow-hidden p-6 sm:p-7">
-            <div
-              className="pointer-events-none absolute inset-0 -z-10"
-              style={{
-                background:
-                  'radial-gradient(70% 130% at 0% 0%, rgba(247,201,72,0.1), transparent 60%)'
-              }}
-              aria-hidden
-            />
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-              <EarnCoin size={72} glow online className="flex-none" />
-              <div className="min-w-0">
-                <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-1">
-                  Chief Operating Officer · live AI guide
-                </p>
-                <h3 className="mt-1 text-xl font-semibold text-fg-1">Earnest Fundmaker “Earn”</h3>
-                <p className="mt-2 max-w-2xl text-[13px] leading-6 text-fg-3">
-                  Your right hand across the desk. Earnest takes your mandate, fronts the team, and
-                  runs all fifteen as one — surfacing your next decision, routing each task to the
-                  right specialist, and keeping every engagement moving from first thesis to signed
-                  close. Measured, candid, and always on the record.
-                </p>
-              </div>
-            </div>
-          </Card>
+          <CooSpotlight />
         </div>
 
+        {/* The fourteen specialists. */}
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {TEAM.map((member) => (
-            <TeamCard key={member.name} member={member} />
+          {specialists.map((m) => (
+            <SpecialistCard key={m.slug} slug={m.slug} />
           ))}
         </div>
       </div>
@@ -423,28 +263,27 @@ function ChainOfTrust() {
           </p>
         </div>
 
-        <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ol className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {TRUST_LAYERS.map((layer, i) => (
             <li key={layer.name}>
-              <Card className="relative flex h-full flex-col overflow-hidden p-6">
-                <span
-                  className="absolute inset-x-0 top-0 h-[3px]"
+              <Card className="h-full p-6">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: layer.color, boxShadow: `0 0 12px ${layer.color}` }}
+                    aria-hidden
+                  />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] tabular-nums text-fg-4">
+                    {`Layer 0${i + 1}`}
+                  </span>
+                </div>
+                <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{layer.name}</h3>
+                <p className="mt-1.5 text-[12.5px] leading-6 text-fg-3">{layer.body}</p>
+                <div
+                  className="mt-5 h-1 rounded-full"
                   style={{ background: `linear-gradient(90deg, ${layer.color}, transparent)` }}
                   aria-hidden
                 />
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-4">
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{ backgroundColor: layer.color, boxShadow: `0 0 10px ${layer.color}` }}
-                      aria-hidden
-                    />
-                    Layer {`0${i + 1}`}
-                  </span>
-                  <ShieldCheck size={14} strokeWidth={1.8} className="text-fg-5" aria-hidden />
-                </div>
-                <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{layer.name}</h3>
-                <p className="mt-2 text-[12.5px] leading-6 text-fg-3">{layer.body}</p>
               </Card>
             </li>
           ))}
@@ -476,11 +315,9 @@ function HowItWorks() {
         <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s) => (
             <li key={s.n}>
-              <Card className="flex h-full flex-col p-6">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] text-[15px] font-semibold tabular-nums text-gold-1">
-                  {s.n}
-                </span>
-                <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{s.title}</h3>
+              <Card className="h-full p-6">
+                <div className="text-2xl font-semibold tabular-nums text-gold-1">{s.n}</div>
+                <h3 className="mt-3 text-[15px] font-semibold text-fg-1">{s.title}</h3>
                 <p className="mt-1.5 text-[12.5px] leading-6 text-fg-3">{s.body}</p>
               </Card>
             </li>
@@ -536,8 +373,8 @@ function Footer() {
               </span>
             </div>
             <p className="text-[12.5px] leading-6 text-fg-4">
-              AI copilots for the full capital lifecycle — capital formation, sourcing, diligence,
-              packaging, and closing.
+              An AI executive team for the full capital lifecycle — capital formation, sourcing,
+              diligence, packaging, and closing.
             </p>
           </div>
 
@@ -587,7 +424,6 @@ function Footer() {
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-bg-0 text-fg-1">
-      {/* Skip link for keyboard / screen-reader users. */}
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-xl focus:bg-gold-1 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#070b14]"

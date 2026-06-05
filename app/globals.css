@@ -164,6 +164,16 @@ body {
   color: var(--fg-1);
 }
 
+/* Defensive guard against horizontal overflow on narrow viewports. `clip`
+   (rather than `hidden`) preserves sticky positioning and anchor scrolling,
+   but contains any too-wide descendant (e.g. a marquee row, an unwrapped
+   gradient title) so the page never produces a horizontal scrollbar on
+   mobile. Containers that intentionally scroll horizontally must opt in
+   with their own overflow rules. */
+body {
+  overflow-x: clip;
+}
+
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

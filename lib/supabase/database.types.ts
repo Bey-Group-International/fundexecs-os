@@ -439,36 +439,73 @@ export type Database = {
       }
       evidence: {
         Row: {
+          ai_validated_at: string | null
+          ai_validation_notes: string | null
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
           created_at: string
           evidence_type: string | null
+          file_name: string | null
           id: string
+          mime_type: string | null
           notes: string | null
           org_id: string
           proof_layer_id: string
+          rejection_reason: string | null
+          size_bytes: number | null
           storage_path: string
+          uploaded_at: string | null
           uploaded_by: string | null
         }
         Insert: {
+          ai_validated_at?: string | null
+          ai_validation_notes?: string | null
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           evidence_type?: string | null
+          file_name?: string | null
           id?: string
+          mime_type?: string | null
           notes?: string | null
           org_id: string
           proof_layer_id: string
+          rejection_reason?: string | null
+          size_bytes?: number | null
           storage_path: string
+          uploaded_at?: string | null
           uploaded_by?: string | null
         }
         Update: {
+          ai_validated_at?: string | null
+          ai_validation_notes?: string | null
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           evidence_type?: string | null
+          file_name?: string | null
           id?: string
+          mime_type?: string | null
           notes?: string | null
           org_id?: string
           proof_layer_id?: string
+          rejection_reason?: string | null
+          size_bytes?: number | null
           storage_path?: string
+          uploaded_at?: string | null
           uploaded_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "evidence_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "evidence_org_id_fkey"
             columns: ["org_id"]
@@ -918,8 +955,24 @@ export type Database = {
           },
         ]
       }
+      notes: {
+        Row: {
+          id: number
+          title: string
+        }
+        Insert: {
+          id?: never
+          title: string
+        }
+        Update: {
+          id?: never
+          title?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
+          archived_at: string | null
           created_at: string
           id: string
           org_id: string | null
@@ -929,6 +982,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           id?: string
           org_id?: string | null
@@ -938,6 +992,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           id?: string
           org_id?: string | null
@@ -969,6 +1024,7 @@ export type Database = {
           id: string
           org_id: string
           role: Database["public"]["Enums"]["org_member_role"]
+          status: string
           user_id: string
         }
         Insert: {
@@ -976,6 +1032,7 @@ export type Database = {
           id?: string
           org_id: string
           role?: Database["public"]["Enums"]["org_member_role"]
+          status?: string
           user_id: string
         }
         Update: {
@@ -983,6 +1040,7 @@ export type Database = {
           id?: string
           org_id?: string
           role?: Database["public"]["Enums"]["org_member_role"]
+          status?: string
           user_id?: string
         }
         Relationships: [
@@ -1536,6 +1594,18 @@ export type Database = {
       relationship_strength: {
         Args: { _count: number; _last: string }
         Returns: number
+      }
+      seed_demo_baseline_for_org: {
+        Args: { _org: string; _user: string }
+        Returns: undefined
+      }
+      seed_demo_for_member_type: {
+        Args: { _org: string; _type: string; _user: string }
+        Returns: undefined
+      }
+      seed_demo_for_user: {
+        Args: { _org: string; _user: string }
+        Returns: undefined
       }
     }
     Enums: {

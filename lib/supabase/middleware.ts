@@ -64,8 +64,27 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // Gate authenticated areas. Unauthenticated users hitting a protected
-  // route are redirected to /login. Adjust the matcher list as modules land.
+  const pathname = url.pathname;
+
+  // Paths that never receive a status-based redirect — even when the user is
+  // signed in. Anything `_next` / `public` is already filtered out by the
+  // matcher in `proxy.ts`, but defending here too keeps this function safe in
+  // isolation.
+  const isStaticAsset =
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/public') ||
+    pathname.startsWith('/favicon') ||
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml';
+  const isOnboarding = pathname === '/onboarding' || pathname.startsWith('/onboarding/');
+  const isPublic = pathname === '/' || pathname === '/login' || pathname.startsWith('/auth/');
+  const isAllowedApi =
+    pathname === '/api/ask-earn' ||
+    pathname === '/api/earn/profile-suggest' ||
+    pathname.startsWith('/auth/callback');
+
+  // Gate authenticated areas. Unauthenticated users hitting a protected route
+  // are redirected to /login. Adjust the matcher list as modules land.
   const protectedPrefixes = [
     '/dashboard',
     '/pipeline',
@@ -76,15 +95,46 @@ export async function updateSession(request: NextRequest) {
     '/settings',
     '/command-center',
     '/connections',
-    '/integrations'
+    '/integrations',
+    '/onboarding'
   ];
-  const isProtected = protectedPrefixes.some((p) => request.nextUrl.pathname.startsWith(p));
+  const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p));
 
   if (!user && isProtected) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    url.searchParams.set('redirectedFrom', request.nextUrl.pathname);
-    return NextResponse.redirect(url);
+    const login = request.nextUrl.clone();
+    login.pathname = '/login';
+    login.searchParams.set('redirectedFrom', pathname);
+    return NextResponse.redirect(login);
+  }
+
+  // Bidirectional onboarding gate. For an authenticated user, look up their
+  // `member_profiles.status`. Anything other than `'complete'` forces them
+  // onto `/onboarding`; a completed profile is bounced away from `/onboarding`
+  // back into the app. We only run the lookup for routes that actually need
+  // gating — static assets, public pages, and the two allow-listed APIs skip
+  // it so the middleware stays fast on hot paths.
+  if (user && !isStaticAsset && !isPublic && !isAllowedApi) {
+    const { data: mp } = await supabase
+      .from('member_profiles')
+      .select('status')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    const isComplete = mp?.status === 'complete';
+
+    if (!isComplete && !isOnboarding) {
+      const onboarding = request.nextUrl.clone();
+      onboarding.pathname = '/onboarding';
+      onboarding.search = '';
+      onboarding.searchParams.set('from', pathname);
+      return NextResponse.redirect(onboarding);
+    }
+
+    if (isComplete && isOnboarding) {
+      const commandCenter = request.nextUrl.clone();
+      commandCenter.pathname = '/command-center';
+      commandCenter.search = '';
+      return NextResponse.redirect(commandCenter);
+    }
   }
 
   return supabaseResponse;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
   Mail,
@@ -24,6 +25,11 @@ import {
   type TabItem
 } from '@/components/ui';
 import type { ConnectionRow, WarmIntroRow } from '@/lib/queries/connections';
+import { respondToWarmIntro } from '@/lib/actions/connections';
+import {
+  ContactDetailDrawer,
+  type ContactDetailData
+} from '@/components/drawers/ContactDetailDrawer';
 
 /* ---- Display helpers -------------------------------------------------- */
 
@@ -134,11 +140,22 @@ function KpiCard({ kpi }: { kpi: Kpi }) {
   );
 }
 
-function ContactCard({ row }: { row: ConnectionRow }) {
+function ContactCard({
+  row,
+  onOpen
+}: {
+  row: ConnectionRow;
+  onOpen: (row: ConnectionRow) => void;
+}) {
   const status = normalizeStatus(row.status);
   const meta = STATUS_META[status];
   return (
-    <Card clickable className="flex flex-col gap-3 p-4">
+    <Card
+      clickable
+      onClick={() => onOpen(row)}
+      data-testid={`contact-card-${row.id}`}
+      className="flex flex-col gap-3 p-4"
+    >
       <div className="flex items-start gap-3">
         <Avatar name={row.full_name} size={38} tone={AVATAR_TONE[status]} />
         <div className="min-w-0 flex-1">
@@ -174,7 +191,19 @@ function ContactCard({ row }: { row: ConnectionRow }) {
 }
 
 function WarmIntroRowCard({ intro }: { intro: WarmIntroRow }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
   const meta = introMeta(intro.status);
+
+  async function handleRequest() {
+    if (pending) return;
+    setPending(true);
+    await respondToWarmIntro(intro.id, 'request');
+    setPending(false);
+    router.refresh();
+  }
+
+  const isRequestable = intro.status === 'suggested';
   return (
     <div className="flex items-start gap-3 rounded-xl border border-hairline bg-surface-1 p-3.5">
       <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
@@ -203,8 +232,12 @@ function WarmIntroRowCard({ intro }: { intro: WarmIntroRow }) {
         size="sm"
         iconRight={ArrowRight as LucideIcon}
         className="flex-none"
+        disabled={!isRequestable || pending}
+        aria-disabled={!isRequestable || pending}
+        onClick={handleRequest}
+        data-testid={`warm-intro-request-${intro.id}`}
       >
-        Request
+        {pending ? 'Sending…' : isRequestable ? 'Request' : meta.label}
       </Button>
     </div>
   );
@@ -218,6 +251,24 @@ export interface ConnectionsViewProps {
 export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
   const [sort, setSort] = useState<SortKey>('strength');
   const [filter, setFilter] = useState<string>('all');
+  const [activeContact, setActiveContact] = useState<ContactDetailData | null>(null);
+
+  function openContact(row: ConnectionRow) {
+    setActiveContact({
+      id: row.id,
+      fullName: row.full_name,
+      company: row.company,
+      title: row.title,
+      email: row.primary_email,
+      recentInteractions: row.recent_interactions.map((i) => ({
+        id: i.id,
+        type: i.type,
+        subject: i.subject,
+        summary: i.summary,
+        occurredAt: i.occurred_at
+      }))
+    });
+  }
 
   const kpis = useMemo<Kpi[]>(() => {
     const hot = rows.filter((r) => normalizeStatus(r.status) === 'hot').length;
@@ -303,7 +354,7 @@ export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
           ) : (
             <div className="grid gap-3.5 sm:grid-cols-2">
               {visibleRows.map((r) => (
-                <ContactCard key={r.id} row={r} />
+                <ContactCard key={r.id} row={r} onOpen={openContact} />
               ))}
             </div>
           )}
@@ -332,6 +383,12 @@ export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
           )}
         </div>
       </div>
+
+      <ContactDetailDrawer
+        open={activeContact !== null}
+        onClose={() => setActiveContact(null)}
+        contact={activeContact}
+      />
     </div>
   );
 }

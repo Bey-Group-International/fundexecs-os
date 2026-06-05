@@ -6,6 +6,7 @@ import { Mail, Lock, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getSiteURL } from '@/lib/site-url';
 import { EarnCoin } from '@/components/screens/EarnCoin';
+import { TeamAvatar, getCOO } from '@/lib/team';
 
 const GOOGLE_SCOPES =
   'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.metadata';
@@ -94,17 +95,19 @@ export default function LoginPage() {
 
         <div className="max-w-md">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-            Led by Earn, your live AI guide
+            AI-native private-market command center
           </p>
           <h1 className="mt-4 text-[40px] font-semibold leading-[1.06] tracking-[-0.02em]">
-            Unified intelligence layer for the <span className="text-gold-1">private markets.</span>
+            Turn any fund into an
+            <br />
+            <span className="text-gold-1">execution machine.</span>
           </h1>
           <p className="mt-5 max-w-sm text-[13.5px] leading-7 text-fg-3">
-            A fifteen-strong executive team, led by Earn, working as one — so you optimize
-            workflows, accelerate decisions, and execute like an institution.
+            Streamline workflows, accelerate decisions, and scale like a top-tier institution —
+            without adding headcount or friction.
           </p>
 
-          <div className="mt-8 flex gap-8 [font-feature-settings:'tnum']">
+          <div className="mt-10 flex gap-10 [font-feature-settings:'tnum']">
             {[
               { stat: '$612M', label: 'capital facilitated' },
               { stat: '500+', label: 'funds & sponsors' },
@@ -119,10 +122,10 @@ export default function LoginPage() {
         </div>
 
         <div className="flex items-center gap-2.5 text-[12.5px] text-fg-4">
-          <EarnCoin size={22} />
+          <TeamAvatar member={getCOO()} size={22} />
           <span>
-            <span className="font-semibold text-fg-2">Earnest Fundmaker</span>, your Chief Operating
-            Officer — call him Earn.
+            <span className="font-semibold text-fg-2">Earnest Fundmaker</span> — Chief Operating
+            Officer of your 15-specialist team. Call him Earn.
           </span>
         </div>
       </section>

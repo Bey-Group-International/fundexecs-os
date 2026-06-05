@@ -28,7 +28,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  *
  * Per the design handoff, `primary` is the institutional **blue gradient**
  * (option B) used for primary CTAs. `light` is the white button. `gold` is
- * reserved for the Earn Copilot and gamification surfaces only.
+ * reserved for Earn and gamification surfaces only.
  */
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:

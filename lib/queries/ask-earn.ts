@@ -48,7 +48,7 @@ function derivePriority(source: string): EarnTask['priority'] {
 /**
  * Build Earn's suggested next move for a task. Earn drafts a concrete action
  * per task from its title/priority so the UI always has a "Earn note" to show,
- * mirroring the live copilot's recommendations without a round-trip.
+ * mirroring the live recommendations Earn surfaces without a round-trip.
  */
 function deriveEarnNote(title: string, priority: EarnTask['priority']): string {
   const t = title.toLowerCase();

@@ -3,6 +3,12 @@ import type { Database } from '@/lib/supabase/database.types';
 
 type DealRow = Database['public']['Tables']['deals']['Row'];
 
+export interface PipelineDealAllocation {
+  id: string;
+  amount: number | null;
+  status: string;
+}
+
 export interface PipelineDeal {
   id: string;
   name: string;
@@ -11,6 +17,8 @@ export interface PipelineDeal {
   amount: number | null;
   /** A short, human note derived from the deal's stage/status for card context. */
   note: string;
+  /** Allocations logged against this deal (empty array when none). */
+  allocations: PipelineDealAllocation[];
 }
 
 export interface PipelineStage {
@@ -101,6 +109,28 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
 
   const deals = data as Pick<DealRow, 'id' | 'name' | 'stage' | 'status' | 'amount'>[];
 
+  // Fetch allocations for these deals in one go and index by deal_id.
+  const dealIds = deals.map((d) => d.id);
+  const allocByDeal = new Map<string, PipelineDealAllocation[]>();
+  if (dealIds.length > 0) {
+    const { data: allocs } = await supabase
+      .from('allocations')
+      .select('id, deal_id, amount, status')
+      .in('deal_id', dealIds);
+    if (allocs) {
+      for (const a of allocs as Array<{
+        id: string;
+        deal_id: string | null;
+        amount: number | null;
+        status: string;
+      }>) {
+        if (!a.deal_id) continue;
+        if (!allocByDeal.has(a.deal_id)) allocByDeal.set(a.deal_id, []);
+        allocByDeal.get(a.deal_id)!.push({ id: a.id, amount: a.amount, status: a.status });
+      }
+    }
+  }
+
   const buckets = new Map<string, PipelineDeal[]>(STAGE_ORDER.map((s) => [s.key, []]));
   for (const d of deals) {
     const key = normalizeStageKey(d.stage);
@@ -111,7 +141,8 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
       stage: d.stage,
       status: d.status,
       amount: d.amount,
-      note: dealNote(resolvedKey, d.status)
+      note: dealNote(resolvedKey, d.status),
+      allocations: allocByDeal.get(d.id) ?? []
     };
     buckets.get(resolvedKey)!.push(entry);
   }
