@@ -34,6 +34,10 @@ Email + password (Supabase GoTrue). All 5 test users are
 FundExecsTest!2026X9k7Lqr
 ```
 
+`yarn seed:test-users` re-applies this canonical password on every run
+(Phase 7 idempotency fix). If a tester or external admin rotates the
+password, re-running the script restores it to the value above.
+
 ## 5 test users
 
 All organizations were auto-created by the `handle_new_user` trigger on
