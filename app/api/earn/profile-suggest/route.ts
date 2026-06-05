@@ -2,14 +2,14 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isMemberType } from '@/lib/member-types';
 import { getQuestion } from '@/lib/proof-of-truth/questions';
-import { suggestProfileAnswer } from '@/lib/ai/profile-suggest';
+import { recommendProfileAnswers } from '@/lib/ai/profile-suggest';
 
 /**
- * POST /api/earn/profile-suggest — Earn's structured suggestion for one Proof
- * of Truth profile field.
+ * POST /api/earn/profile-suggest — Earn's three recommended answers for one
+ * Proof of Truth profile field.
  *
- * Body: { memberType, questionId, answers?: Record<string,string> }
- * Returns: { ok: true, suggestion } on success, or { ok: false, degraded: true }
+ * Body: { memberType, questionId, answers?: Record<string,string>, disliked?: string[] }
+ * Returns: { ok: true, insight, options } on success, or { ok: false, degraded: true }
  * (HTTP 200) whenever Earn is unavailable — so the UI always falls back to
  * manual entry instead of blocking profile creation.
  */
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  let body: { memberType?: unknown; questionId?: unknown; answers?: unknown };
+  let body: { memberType?: unknown; questionId?: unknown; answers?: unknown; disliked?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -53,18 +53,30 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Sanitize the disliked list: non-empty strings, capped count + length.
+  const disliked: string[] = [];
+  if (Array.isArray(body.disliked)) {
+    for (const v of body.disliked) {
+      if (typeof v === 'string' && v.trim()) {
+        disliked.push(v.trim().slice(0, 600));
+        if (disliked.length >= 12) break;
+      }
+    }
+  }
+
   // Earn unavailable → degrade gracefully (manual entry on the client).
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ ok: false, degraded: true });
   }
 
   try {
-    const suggestion = await suggestProfileAnswer({
+    const { insight, options } = await recommendProfileAnswers({
       memberType: body.memberType,
       question,
-      answers
+      answers,
+      disliked
     });
-    return NextResponse.json({ ok: true, suggestion });
+    return NextResponse.json({ ok: true, insight, options });
   } catch {
     // Timeout / rate limit / malformed output — never block the user.
     return NextResponse.json({ ok: false, degraded: true });
