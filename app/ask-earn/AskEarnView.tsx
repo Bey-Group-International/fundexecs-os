@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
+import { awardTrustXp } from '@/lib/actions/xp';
 import {
   Plus,
   Filter,
@@ -138,6 +140,7 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
     closed: t.state === 'done'
   }));
   const [filter, setFilter] = useState<FilterTab>('open');
+  const router = useRouter();
 
   function act(id: string, a: Action) {
     if (a === 'delete') {
@@ -165,6 +168,9 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
         msg: 'A task was completed in Ask Earn.',
         entity: id
       });
+      void awardTrustXp({ layer: 'execution', entityType: 'task', entityId: id }).then(() =>
+        router.refresh()
+      );
     }
   }
 

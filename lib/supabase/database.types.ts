@@ -1450,6 +1450,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      award_trust_xp: {
+        Args: {
+          _entity_id: string
+          _entity_type: string
+          _layer: string
+          _org: string
+        }
+        Returns: number
+      }
       create_organization: {
         Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
         Returns: string
