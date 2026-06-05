@@ -23,23 +23,17 @@ provider; the same flow mints a `provider_token` that the
 4. Go to **APIs & Services -> Credentials -> Create Credentials -> OAuth client
    ID** and choose **Web application**.
 5. Under **Authorized redirect URIs**, add the Supabase callback URL — this must
-   match the host in `NEXT_PUBLIC_SUPABASE_URL`:
+   match the host in `NEXT_PUBLIC_SUPABASE_URL` exactly. For this project that is
+   the Supabase custom domain:
 
    ```
-   https://<project-ref>.supabase.co/auth/v1/callback
+   https://auth.fundexecs.com/auth/v1/callback
    ```
 
-   Replace `<project-ref>` with your Supabase project ref (Supabase dashboard ->
-   Project Settings -> General). For this project that is currently:
-
-   ```
-   https://emityvdaeiqxtpxdhyky.supabase.co/auth/v1/callback
-   ```
-
-   Only use a custom domain here (e.g. `https://api.fundexecs.com/...`) once that
-   domain actually resolves to Supabase **and** `NEXT_PUBLIC_SUPABASE_URL` points
-   at it. Do **not** point this at the app's `/auth/callback`; that is the
-   app-side redirect target, not Google's.
+   (The bare project URL `https://<project-ref>.supabase.co/auth/v1/callback`
+   also works if `NEXT_PUBLIC_SUPABASE_URL` is set to that instead — register
+   whichever host the app actually uses.) Do **not** point this at the app's
+   `/auth/callback`; that is the app-side redirect target, not Google's.
 
 6. Save and copy the generated **Client ID** and **Client secret**.
 
@@ -49,7 +43,7 @@ provider; the same flow mints a `provider_token` that the
 2. Toggle **Enable**, then paste the **Client ID** and **Client secret** from
    step 1.
 3. Confirm the callback URL Supabase shows matches the redirect URI you added in
-   Google Cloud (`https://<project-ref>.supabase.co/auth/v1/callback`).
+   Google Cloud (`https://auth.fundexecs.com/auth/v1/callback`).
 4. Save. The Calendar + Gmail scopes are requested at sign-in time by the app
    (`signInWithOAuth({ scopes: ... })`), so they do not need to be re-entered in
    Supabase — but they must be approved on the consent screen above.
@@ -88,12 +82,12 @@ Supabase rejects the redirect or the code exchange fails.
 Set these in the Vercel project (Project Settings -> Environment Variables) for
 Production, Preview, and Development:
 
-| Variable                        | Value                                              |
-| ------------------------------- | -------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | `https://emityvdaeiqxtpxdhyky.supabase.co`         |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project anon (publishable) key            |
-| `NEXT_PUBLIC_SITE_URL`          | `https://www.fundexecs.com` (canonical app origin) |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service-role key (used by sync API)       |
+| Variable                        | Value                                                 |
+| ------------------------------- | ----------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | `https://auth.fundexecs.com` (Supabase custom domain) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project anon (publishable) key               |
+| `NEXT_PUBLIC_SITE_URL`          | `https://www.fundexecs.com` (canonical app origin)    |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service-role key (used by sync API)          |
 
 The Google client ID/secret live in Supabase Auth (step 2), not in Vercel.
 
