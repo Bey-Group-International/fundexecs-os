@@ -118,8 +118,11 @@ begin
 
   insert into public.chain_of_trust_records
     (org_id, entity_type, entity_id, current_layer, status)
-  values (_org, 'member_profile', _user, 'Proof of Truth', 'active')
-  on conflict do nothing;
+  select _org, 'member_profile', _user, 'Proof of Truth', 'active'
+  where not exists (
+    select 1 from public.chain_of_trust_records
+    where org_id = _org and entity_type = 'member_profile' and entity_id = _user
+  );
 end;
 $$;
 
