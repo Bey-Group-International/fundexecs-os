@@ -230,12 +230,12 @@ function Hero() {
             id="hero-heading"
             className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-fg-1 sm:text-5xl lg:text-6xl"
           >
-            AI Copilots for the <span className="text-gold-1">full capital lifecycle.</span>
+            Run your capital lifecycle <span className="text-gold-1">end to end.</span>
           </h1>
 
           <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-fg-3 sm:text-lg">
-            FundExecs operates the work behind every raise, sourcing process, diligence, and close —
-            giving fund managers and dealmakers the execution capacity of a far larger institution.
+            Eleven AI copilots, led by Earnest, carry every mandate from first thesis to signed
+            close — sourcing, diligence, drafting, and execution on one platform.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-4">
