@@ -21,6 +21,8 @@ export interface ProfileQuestion {
   placeholder?: string;
   /** Options for `kind: 'select'`. */
   options?: string[];
+  /** When true, the member may skip this question without approving an answer. */
+  optional?: boolean;
 }
 
 // Common questions every member answers (map to member_profiles columns).
@@ -68,7 +70,8 @@ const COMMON: ProfileQuestion[] = [
     label: 'LinkedIn',
     prompt: 'What is your LinkedIn URL? (optional)',
     kind: 'url',
-    placeholder: 'https://linkedin.com/in/…'
+    placeholder: 'https://linkedin.com/in/…',
+    optional: true
   },
   {
     id: 'website',
@@ -77,7 +80,8 @@ const COMMON: ProfileQuestion[] = [
     label: 'Website',
     prompt: 'What is your website? (optional)',
     kind: 'url',
-    placeholder: 'https://…'
+    placeholder: 'https://…',
+    optional: true
   }
 ];
 

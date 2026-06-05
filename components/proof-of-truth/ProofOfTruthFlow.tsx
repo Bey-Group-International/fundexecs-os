@@ -2,12 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Check, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  SkipForward,
+  ShieldCheck,
+  Sparkles,
+  Zap
+} from 'lucide-react';
 import { Badge, Button, Card, Input, ProgressBar, Select } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
-import type { ProfileSuggestion } from '@/lib/proof-of-truth/earn-profile';
+import type { ProfileRecommendation } from '@/lib/proof-of-truth/earn-profile';
 import type { MemberProfile } from '@/lib/queries/member-profile';
 import {
   saveMemberDraft,
@@ -23,7 +31,7 @@ import {
 } from './profile-mapping';
 import { MemberTypePicker } from './MemberTypePicker';
 import { LiveProfilePanel } from './LiveProfilePanel';
-import { EarnSuggestion } from './EarnSuggestion';
+import { Recommendations } from './Recommendations';
 import { TagInput } from './TagInput';
 
 interface ProofOfTruthFlowProps {
@@ -35,13 +43,23 @@ interface ProofOfTruthFlowProps {
 
 type Stage = 'picker' | 'qa' | 'review' | 'done';
 
-interface SuggestState {
+/** Earn's recommendation state for the current question. */
+interface RecState {
+  /** True once the member has asked Earn for this question. */
+  requested: boolean;
   loading: boolean;
   degraded: boolean;
-  suggestion: ProfileSuggestion | null;
+  insight: string;
+  options: ProfileRecommendation[];
 }
 
-const IDLE_SUGGEST: SuggestState = { loading: false, degraded: false, suggestion: null };
+const IDLE_REC: RecState = {
+  requested: false,
+  loading: false,
+  degraded: false,
+  insight: '',
+  options: []
+};
 
 export function ProofOfTruthFlow({
   profile,
@@ -50,20 +68,26 @@ export function ProofOfTruthFlow({
   const router = useRouter();
 
   const [memberType, setMemberType] = useState<MemberType | null>(profile.memberType);
+  // `answers` holds ONLY approved values (the profile derives from this).
   const [answers, setAnswers] = useState<Answers>(() => seedAnswers(profile));
   const [stage, setStage] = useState<Stage>(profile.memberType ? 'qa' : 'picker');
   const [index, setIndex] = useState(0);
   const [pickerBusy, setPickerBusy] = useState(false);
-  const [suggest, setSuggest] = useState<SuggestState>(IDLE_SUGGEST);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Per-question Earn recommendation state, keyed by question id.
+  const [recByQuestion, setRecByQuestion] = useState<Record<string, RecState>>({});
+  // Per-question disliked values (what the member passed on), keyed by question id.
+  const [dislikedByQuestion, setDislikedByQuestion] = useState<Record<string, string[]>>({});
+  // Per-question typed-input drafts (not yet approved), keyed by question id.
+  const [typedByQuestion, setTypedByQuestion] = useState<Record<string, string>>({});
 
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(null);
   // Token guards against a stale fetch resolving onto the wrong question.
   const requestToken = useRef(0);
-  // Latest answers, readable inside the suggestion effect without making
-  // `answers` a dependency (which would re-fetch on every keystroke). Synced in
-  // an effect (never mutated during render).
+  // Latest answers, readable inside async continuations without re-creating the
+  // fetch callback on every keystroke. Synced in an effect (never during render).
   const answersRef = useRef(answers);
   useEffect(() => {
     answersRef.current = answers;
@@ -72,9 +96,23 @@ export function ProofOfTruthFlow({
   const questions = memberType ? getQuestionSet(memberType) : [];
   const question: ProfileQuestion | undefined = questions[index];
 
+  const rec = question ? (recByQuestion[question.id] ?? IDLE_REC) : IDLE_REC;
+  const approvedValue = question ? (answers[question.id] ?? '') : '';
+  // The typed draft falls back to the approved value so re-opening an answered
+  // question (Back nav / resumed draft) shows it, and so it stays editable.
+  const typedValue = question
+    ? Object.prototype.hasOwnProperty.call(typedByQuestion, question.id)
+      ? typedByQuestion[question.id]
+      : approvedValue
+    : '';
+  const isApproved = question
+    ? Object.prototype.hasOwnProperty.call(answers, question.id) && approvedValue.trim().length > 0
+    : false;
+
   // --- answer helpers ---
 
-  const setAnswer = useCallback((id: string, value: string) => {
+  /** Commit an APPROVED value into answers + save the resumable draft. */
+  const commitAnswer = useCallback((id: string, value: string) => {
     setAnswers((prev) => {
       const next = { ...prev, [id]: value };
       // Fire-and-forget draft save so the flow is resumable.
@@ -83,12 +121,19 @@ export function ProofOfTruthFlow({
     });
   }, []);
 
-  // --- Earn suggestion fetch (never in the effect body; in an async continuation) ---
+  const setTyped = useCallback((id: string, value: string) => {
+    setTypedByQuestion((prev) => ({ ...prev, [id]: value }));
+  }, []);
 
-  const fetchSuggestion = useCallback(
-    (q: ProfileQuestion, currentAnswers: Answers, type: MemberType) => {
+  // --- Earn recommendation fetch (setState only in async continuations) ---
+
+  const fetchRecommendations = useCallback(
+    (q: ProfileQuestion, type: MemberType, avoid: string[]) => {
       const token = ++requestToken.current;
-      setSuggest({ loading: true, degraded: false, suggestion: null });
+      setRecByQuestion((prev) => ({
+        ...prev,
+        [q.id]: { requested: true, loading: true, degraded: false, insight: '', options: [] }
+      }));
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 14_000);
@@ -96,43 +141,104 @@ export function ProofOfTruthFlow({
       fetch('/api/earn/profile-suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberType: type, questionId: q.id, answers: currentAnswers }),
+        body: JSON.stringify({
+          memberType: type,
+          questionId: q.id,
+          answers: answersRef.current,
+          disliked: avoid
+        }),
         signal: controller.signal
       })
         .then((res) => (res.ok ? res.json() : { ok: false, degraded: true }))
-        .then((data: { ok?: boolean; degraded?: boolean; suggestion?: ProfileSuggestion }) => {
-          if (token !== requestToken.current) return; // superseded
-          if (data?.ok && data.suggestion) {
-            setSuggest({ loading: false, degraded: false, suggestion: data.suggestion });
-          } else {
-            setSuggest({ loading: false, degraded: true, suggestion: null });
+        .then(
+          (data: {
+            ok?: boolean;
+            degraded?: boolean;
+            insight?: string;
+            options?: ProfileRecommendation[];
+          }) => {
+            if (token !== requestToken.current) return; // superseded
+            if (data?.ok && Array.isArray(data.options) && data.options.length > 0) {
+              setRecByQuestion((prev) => ({
+                ...prev,
+                [q.id]: {
+                  requested: true,
+                  loading: false,
+                  degraded: false,
+                  insight: data.insight ?? '',
+                  options: data.options ?? []
+                }
+              }));
+            } else {
+              setRecByQuestion((prev) => ({
+                ...prev,
+                [q.id]: {
+                  requested: true,
+                  loading: false,
+                  degraded: true,
+                  insight: '',
+                  options: []
+                }
+              }));
+            }
           }
-        })
+        )
         .catch(() => {
           if (token !== requestToken.current) return;
           // Error / timeout → degrade to manual entry. Never block.
-          setSuggest({ loading: false, degraded: true, suggestion: null });
+          setRecByQuestion((prev) => ({
+            ...prev,
+            [q.id]: { requested: true, loading: false, degraded: true, insight: '', options: [] }
+          }));
         })
         .finally(() => clearTimeout(timer));
     },
     []
   );
 
-  // Re-run the suggestion whenever the active question (or member type) changes.
-  // setState happens only inside fetchSuggestion's async continuations — never
-  // in the effect body — and we look the question up by index so a fresh object
-  // reference each render doesn't retrigger the fetch.
+  // Do NOT auto-fetch on entering a question. The member triggers Earn via the
+  // Recommend button. On unmount/question-change, invalidate any in-flight fetch.
   useEffect(() => {
-    if (stage !== 'qa' || !memberType) return;
-    const q = getQuestionSet(memberType)[index];
-    if (!q) return;
-    fetchSuggestion(q, answersRef.current, memberType);
     const tokenRef = requestToken;
     return () => {
-      // Invalidate any in-flight request for the question we're leaving.
       tokenRef.current++;
     };
-  }, [stage, index, memberType, fetchSuggestion]);
+  }, [index, memberType]);
+
+  // --- recommendation actions ---
+
+  function requestRecommendations() {
+    if (!question || !memberType) return;
+    fetchRecommendations(question, memberType, dislikedByQuestion[question.id] ?? []);
+  }
+
+  function approveValue(value: string) {
+    if (!question) return;
+    commitAnswer(question.id, value);
+  }
+
+  function dislikeOption(value: string) {
+    if (!question) return;
+    const qid = question.id;
+    setDislikedByQuestion((prev) => {
+      const list = prev[qid] ?? [];
+      if (list.some((v) => v === value)) return prev;
+      return { ...prev, [qid]: [...list, value] };
+    });
+    // Drop the disliked option from the visible set.
+    setRecByQuestion((prev) => {
+      const cur = prev[qid];
+      if (!cur) return prev;
+      return { ...prev, [qid]: { ...cur, options: cur.options.filter((o) => o.value !== value) } };
+    });
+  }
+
+  function regenerate() {
+    if (!question || !memberType) return;
+    // Pass everything passed on so far (including currently-visible) is handled
+    // by the disliked list already recorded; send that to Earn to avoid.
+    fetchRecommendations(question, memberType, dislikedByQuestion[question.id] ?? []);
+  }
 
   // --- picker ---
 
@@ -163,11 +269,6 @@ export function ProofOfTruthFlow({
   function goBack() {
     if (index > 0) setIndex((i) => i - 1);
     else setStage('picker');
-  }
-
-  function useSuggestion() {
-    if (!question || !suggest.suggestion) return;
-    setAnswer(question.id, suggest.suggestion.suggestedValue);
   }
 
   function focusInput() {
@@ -304,6 +405,9 @@ export function ProofOfTruthFlow({
 
   if (!question || !memberType) return null;
 
+  const isLast = index === questions.length - 1;
+  const canAdvance = isApproved || !!question.optional;
+
   return (
     <Shell>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
@@ -326,22 +430,54 @@ export function ProofOfTruthFlow({
             </div>
           </div>
 
-          {/* Earn suggests (skipped entirely when degraded) */}
-          <EarnSuggestion
-            loading={suggest.loading}
-            suggestion={suggest.suggestion}
-            degraded={suggest.degraded}
-            onUse={useSuggestion}
-            onWriteOwn={focusInput}
+          {/* Earn recommends — only on the Recommend button (never auto). */}
+          <Recommendations
+            requested={rec.requested}
+            loading={rec.loading}
+            degraded={rec.degraded}
+            insight={rec.insight}
+            options={rec.options}
+            approvedValue={approvedValue}
+            onRequest={requestRecommendations}
+            onApprove={approveValue}
+            onDislike={dislikeOption}
+            onRegenerate={regenerate}
           />
 
-          {/* The member answers */}
-          <QuestionField
-            question={question}
-            value={answers[question.id] ?? ''}
-            onChange={(v) => setAnswer(question.id, v)}
-            inputRef={inputRef}
-          />
+          {/* The member can type their own answer; it only enters the profile
+              once approved. */}
+          <div className="flex flex-col gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+              Your answer
+            </div>
+            <QuestionField
+              question={question}
+              value={typedValue}
+              onChange={(v) => setTyped(question.id, v)}
+              inputRef={inputRef}
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="gold"
+                size="sm"
+                icon={Check}
+                disabled={typedValue.trim().length === 0}
+                onClick={() => approveValue(typedValue)}
+              >
+                Approve
+              </Button>
+              {isApproved ? (
+                <span className="inline-flex items-center gap-1 text-[11.5px] text-gold-1">
+                  <Check size={13} strokeWidth={2.2} aria-hidden />
+                  Approved — in your profile
+                </span>
+              ) : (
+                <span className="text-[11.5px] text-fg-4">
+                  Nothing enters your profile until you approve it.
+                </span>
+              )}
+            </div>
+          </div>
 
           {error && (
             <p className="text-[12px] text-danger" role="alert">
@@ -353,13 +489,21 @@ export function ProofOfTruthFlow({
             <Button variant="ghost" icon={ArrowLeft} onClick={goBack}>
               Back
             </Button>
-            <Button
-              variant="primary"
-              iconRight={index < questions.length - 1 ? ArrowRight : Check}
-              onClick={goNext}
-            >
-              {index < questions.length - 1 ? 'Next' : 'Review'}
-            </Button>
+            <div className="flex items-center gap-2">
+              {question.optional && !isApproved && (
+                <Button variant="ghost" icon={SkipForward} onClick={goNext}>
+                  Skip
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                iconRight={isLast ? Check : ArrowRight}
+                disabled={!canAdvance}
+                onClick={goNext}
+              >
+                {isLast ? 'Review' : 'Next'}
+              </Button>
+            </div>
           </div>
         </Card>
 
