@@ -45,10 +45,12 @@ export function LandingNav() {
         <Link
           href="/"
           className="flex items-center gap-2.5 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-          aria-label="FundExecs home"
+          aria-label="FundExecs OS home"
         >
           <EarnCoin size={26} />
-          <span className="text-base font-semibold tracking-[-0.02em] text-fg-1">FundExecs</span>
+          <span className="text-base font-semibold tracking-[-0.02em] text-fg-1">
+            FundExecs <span className="font-medium text-fg-4">OS</span>
+          </span>
         </Link>
         <div className="flex items-center gap-4 sm:gap-5">
           <Link

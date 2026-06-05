@@ -24,7 +24,7 @@ import { ActivityTicker } from '@/components/landing/ActivityTicker';
 export const metadata: Metadata = {
   title: 'AI Copilots for the Full Capital Lifecycle',
   description:
-    'FundExecs is a suite of AI copilots that run the entire capital lifecycle — raise, source, package, and close — for fund builders and dealmakers.'
+    'FundExecs is a suite of AI copilots that operate the full capital lifecycle — capital formation, sourcing, diligence, packaging, and closing — for fund managers and dealmakers.'
 };
 
 // ── Shared CTA styles (match the app's institutional-blue primary) ───────────
@@ -42,6 +42,9 @@ const SECONDARY_CTA =
 
 interface Copilot {
   icon: LucideIcon;
+  /** The copilot's name (a named specialist on the desk). */
+  name: string;
+  /** The function it owns. */
   title: string;
   body: string;
 }
@@ -57,18 +60,21 @@ const CLUSTERS: Cluster[] = [
     copilots: [
       {
         icon: Rocket,
+        name: 'Atlas',
         title: 'Fund Launches',
-        body: 'Stand up a fund — structure, thesis, and materials — with a copilot that has launched the playbook before.'
+        body: 'Stand up a fund with discipline — entity structure, investment thesis, and core materials, assembled to institutional standard.'
       },
       {
         icon: Coins,
+        name: 'Rainmaker',
         title: 'Capital Raises',
-        body: 'Run a disciplined raise: target the right capital, track every conversation, and keep momentum to the wire.'
+        body: 'Run a structured raise: target suitable capital, document every conversation, and sustain momentum through final close.'
       },
       {
         icon: Users,
+        name: 'Envoy',
         title: 'Partner Prospecting',
-        body: 'Identify and qualify LPs, co-investors, and operating partners worth your time — and warm the path to them.'
+        body: 'Identify and qualify LPs, co-investors, and operating partners against your mandate — and establish a credible path to each.'
       }
     ]
   },
@@ -77,18 +83,21 @@ const CLUSTERS: Cluster[] = [
     copilots: [
       {
         icon: Search,
+        name: 'Scout',
         title: 'Deal Sourcing',
-        body: 'Surface proprietary, on-thesis opportunities before they hit the broad market.'
+        body: 'Surface proprietary, on-thesis opportunities ahead of the broader market.'
       },
       {
         icon: Database,
+        name: 'Oracle',
         title: 'Data Scouring',
-        body: 'Pull signal from filings, registries, and the open web — assembled into a clean, decision-ready picture.'
+        body: 'Extract signal from filings, registries, and public sources — reconciled into a clean, decision-ready record.'
       },
       {
         icon: Share2,
+        name: 'Nexus',
         title: 'Relationship Aggregating',
-        body: "Map your network and your team's into one living graph — and find the shortest credible path to anyone."
+        body: 'Consolidate your firm’s relationships into a single graph — and surface the shortest credible path to any counterparty.'
       }
     ]
   },
@@ -97,18 +106,21 @@ const CLUSTERS: Cluster[] = [
     copilots: [
       {
         icon: FileText,
+        name: 'Scribe',
         title: 'Document Drafting',
-        body: 'Generate memos, decks, and agreements that read like they came from your best associate.'
+        body: 'Draft memoranda, presentations, and agreements to the standard your investment committee expects.'
       },
       {
         icon: BarChart3,
+        name: 'Auditor',
         title: 'Deal Analyzing',
-        body: 'Pressure-test the model, the comps, and the risks — with the rigor of an investment committee.'
+        body: 'Pressure-test the model, comparables, and risks with investment-committee rigor.'
       },
       {
         icon: Package,
+        name: 'Curator',
         title: 'Deal Packaging',
-        body: 'Assemble a polished, investor-ready package — data room, narrative, and terms in lockstep.'
+        body: 'Assemble an institutional-grade package — data room, narrative, and terms in lockstep.'
       }
     ]
   },
@@ -117,13 +129,15 @@ const CLUSTERS: Cluster[] = [
     copilots: [
       {
         icon: MessageSquare,
+        name: 'Liaison',
         title: 'Communicating',
-        body: 'Keep every counterparty informed and every thread moving — with the right tone, at the right moment.'
+        body: 'Keep every counterparty informed and every workstream advancing — measured, timely, and on the record.'
       },
       {
         icon: CheckCircle2,
+        name: 'Closer',
         title: 'Closing',
-        body: 'Drive to signature: track conditions, coordinate signers, and land the close cleanly.'
+        body: 'Drive to signature — track conditions precedent, coordinate signatories, and close cleanly.'
       }
     ]
   }
@@ -138,23 +152,53 @@ interface Step {
 const STEPS: Step[] = [
   {
     n: '01',
-    title: 'Set the mandate',
-    body: 'Tell Earnest your thesis, targets, and constraints. The copilots align to it from the first move.'
+    title: 'Define the mandate',
+    body: 'Set your thesis, targets, and constraints with Earnest. Every copilot aligns to the mandate from the outset.'
   },
   {
     n: '02',
     title: 'Source & raise',
-    body: 'Surface opportunities and capital, warmed through your real relationships and clean data.'
+    body: 'Surface opportunities and capital, qualified through your relationships and verified data.'
   },
   {
     n: '03',
     title: 'Analyze & package',
-    body: 'Pressure-test the deal and assemble an investor-ready package — documents and narrative in lockstep.'
+    body: 'Pressure-test the opportunity and assemble an institutional-grade package — documents and narrative in lockstep.'
   },
   {
     n: '04',
     title: 'Communicate & close',
-    body: 'Keep every counterparty moving and drive to signature — coordinated, documented, accountable.'
+    body: 'Advance every counterparty and drive to signature — coordinated, documented, and accountable.'
+  }
+];
+
+// Chain of Trust — the 4-layer proof chain (colors from the design tokens).
+interface TrustLayer {
+  name: string;
+  color: string;
+  body: string;
+}
+
+const TRUST_LAYERS: TrustLayer[] = [
+  {
+    name: 'Proof of Truth',
+    color: 'var(--proof-truth)',
+    body: 'Source data, citations, and verified facts.'
+  },
+  {
+    name: 'Proof of Concept',
+    color: 'var(--proof-concept)',
+    body: 'Strategy, thesis, and fit logic.'
+  },
+  {
+    name: 'Proof of Execution',
+    color: 'var(--proof-execution)',
+    body: 'Tasks, workflows, and approvals.'
+  },
+  {
+    name: 'Proof of Work',
+    color: 'var(--proof-work)',
+    body: 'Evidence, uploads, outcomes, and logs.'
   }
 ];
 
@@ -178,7 +222,7 @@ function Hero() {
       <div className="mx-auto grid max-w-[1180px] items-center gap-12 px-5 sm:px-8 lg:grid-cols-12">
         <div className="lg:col-span-7">
           <Badge tone="gold" dot pulse className="mb-6">
-            Guided by Earnest, your live AI guide
+            Led by Earnest, your live AI guide
           </Badge>
 
           <h1
@@ -189,8 +233,8 @@ function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-fg-3 sm:text-lg">
-            FundExecs runs the work behind every raise, source, package, and close — so fund
-            builders and dealmakers move with the precision of a far larger firm.
+            FundExecs operates the work behind every raise, sourcing process, diligence, and close —
+            giving fund managers and dealmakers the execution capacity of a far larger institution.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-4">
@@ -212,9 +256,9 @@ function Hero() {
               </dd>
             </div>
             <div>
-              <dt className="sr-only">Relationships</dt>
+              <dt className="sr-only">Relationships mapped</dt>
               <dd>
-                <span className="font-semibold text-fg-2">500+</span> relationships
+                <span className="font-semibold text-fg-2">500+</span> relationships mapped
               </dd>
             </div>
             <div>
@@ -224,9 +268,9 @@ function Hero() {
               </dd>
             </div>
             <div>
-              <dt className="sr-only">AI brains</dt>
+              <dt className="sr-only">Specialist copilots</dt>
               <dd>
-                <span className="font-semibold text-fg-2">15</span> AI brains
+                <span className="font-semibold text-fg-2">15</span> specialist copilots
               </dd>
             </div>
           </dl>
@@ -262,8 +306,11 @@ function CopilotCard({ copilot }: { copilot: Copilot }) {
       <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
         <Icon size={18} strokeWidth={1.8} aria-hidden />
       </div>
-      <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{copilot.title}</h3>
-      <p className="mt-1.5 text-[12.5px] leading-6 text-fg-3">{copilot.body}</p>
+      <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{copilot.name}</h3>
+      <p className="mt-0.5 text-[10.5px] font-semibold uppercase tracking-[0.13em] text-gold-1">
+        {copilot.title}
+      </p>
+      <p className="mt-2 text-[12.5px] leading-6 text-fg-3">{copilot.body}</p>
     </Card>
   );
 }
@@ -283,8 +330,8 @@ function Copilots() {
             Eleven copilots. One continuous capital lifecycle.
           </h2>
           <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
-            Each copilot owns a stage of the work. Together they carry a deal from first thesis to
-            signed close — coordinated, documented, and accountable.
+            Each copilot owns a stage of the work. Together they carry a mandate from first thesis
+            to signed close — coordinated, documented, and fully auditable.
           </p>
         </div>
 
@@ -316,6 +363,56 @@ function Copilots() {
   );
 }
 
+function ChainOfTrust() {
+  return (
+    <section className="py-20 sm:py-28" aria-labelledby="trust-heading">
+      <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
+        <div className="max-w-2xl">
+          <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
+            Chain of Trust
+          </p>
+          <h2
+            id="trust-heading"
+            className="text-3xl font-semibold leading-tight tracking-[-0.02em] text-fg-1 sm:text-4xl lg:text-5xl"
+          >
+            Every outcome, proven in four layers.
+          </h2>
+          <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
+            FundExecs OS records the work as it happens, so every result rests on an auditable proof
+            chain — from source data to signed evidence. Nothing is asserted that cannot be shown.
+          </p>
+        </div>
+
+        <ol className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {TRUST_LAYERS.map((layer, i) => (
+            <li key={layer.name}>
+              <Card className="h-full p-6">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: layer.color, boxShadow: `0 0 12px ${layer.color}` }}
+                    aria-hidden
+                  />
+                  <span className="text-[11px] font-semibold tabular-nums text-fg-4">
+                    {`0${i + 1}`}
+                  </span>
+                </div>
+                <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{layer.name}</h3>
+                <p className="mt-1.5 text-[12.5px] leading-6 text-fg-3">{layer.body}</p>
+                <div
+                  className="mt-5 h-1 rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${layer.color}, transparent)` }}
+                  aria-hidden
+                />
+              </Card>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
 function MeetEarnest() {
   return (
     <section
@@ -335,12 +432,12 @@ function MeetEarnest() {
             id="earnest-heading"
             className="text-3xl font-semibold leading-tight tracking-[-0.02em] text-fg-1 sm:text-4xl"
           >
-            A live guide who knows the whole lifecycle.
+            A live guide with command of the entire lifecycle.
           </h2>
           <p className="mt-5 max-w-xl text-[15px] leading-7 text-fg-3 sm:text-lg">
-            Earnest fronts the copilots — answering questions, framing the next move, and routing
-            your work to the right specialist. Steady, candid, and always on the record. The full
-            conversation continues inside the platform.
+            Earnest fronts the copilots — answering questions, framing the next decision, and
+            routing each task to the right specialist. Measured, candid, and always on the record.
+            The full engagement continues inside the platform.
           </p>
           <div className="mt-8">
             <Link href="/login" className={PRIMARY_CTA}>
@@ -404,10 +501,10 @@ function FinalCta() {
           id="cta-heading"
           className="mt-6 text-3xl font-semibold leading-tight tracking-[-0.02em] text-fg-1 sm:text-4xl lg:text-5xl"
         >
-          Run your capital lifecycle like a far larger firm.
+          Operate your capital lifecycle like a far larger institution.
         </h2>
         <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
-          Bring Earnest and the copilots into your next raise, deal, or close.
+          Bring Earnest and the copilots into your next raise, transaction, or close.
         </p>
         <div className="mt-9 flex justify-center">
           <Link href="/login" className={PRIMARY_CTA}>
@@ -429,11 +526,12 @@ function Footer() {
             <div className="mb-4 flex items-center gap-2.5">
               <EarnCoin size={24} />
               <span className="text-base font-semibold tracking-[-0.02em] text-fg-1">
-                FundExecs
+                FundExecs <span className="font-medium text-fg-4">OS</span>
               </span>
             </div>
             <p className="text-[12.5px] leading-6 text-fg-4">
-              AI copilots for the full capital lifecycle — raise, source, package, and close.
+              AI copilots for the full capital lifecycle — capital formation, sourcing, diligence,
+              packaging, and closing.
             </p>
           </div>
 
@@ -471,7 +569,8 @@ function Footer() {
             illustrate platform momentum. It is not an offer or solicitation.
           </p>
           <p className="text-[11.5px] text-fg-5">
-            © 2026 FundExecs. All rights reserved. Not an offer or solicitation.
+            FundExecs OS by FundExecs Technologies · © 2026 FundExecs Technologies. All rights
+            reserved. Not an offer or solicitation.
           </p>
         </div>
       </div>
@@ -496,6 +595,7 @@ export default function HomePage() {
         <Hero />
         <ActivityTicker />
         <Copilots />
+        <ChainOfTrust />
         <MeetEarnest />
         <HowItWorks />
         <FinalCta />
