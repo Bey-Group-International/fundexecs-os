@@ -54,8 +54,8 @@ const DEFAULT_IDENTITY: ShellIdentity = {
   email: null,
   orgName: 'Your fund',
   orgTier: 'Emerging manager',
-  level: 7,
-  xp: 4820
+  level: 1,
+  xp: 0
 };
 
 /** Topbar theme toggle — flips `data-theme`, persists to localStorage('fx-theme').

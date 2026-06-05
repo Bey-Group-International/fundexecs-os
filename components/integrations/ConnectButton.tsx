@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
+import { getSiteURL } from '@/lib/site-url';
 
 /** Google OAuth scopes requested for read-only Calendar + Gmail metadata. */
 const GOOGLE_SCOPES =
@@ -29,7 +30,7 @@ async function signInWithGoogle() {
     options: {
       // Clean redirect_to (no query string) so it matches any allow-list
       // entry shape; the callback defaults to /command-center.
-      redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: `${getSiteURL()}/auth/callback`,
       scopes: GOOGLE_SCOPES,
       queryParams: { access_type: 'offline', prompt: 'consent' }
     }

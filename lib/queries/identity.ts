@@ -4,8 +4,8 @@ import { getActiveOrg } from '@/lib/queries/org';
 /**
  * The identity the workspace shell renders (sidebar org switcher + user footer,
  * topbar wallet). Name / role / org / email are resolved from Supabase auth +
- * `profiles` + `organizations`. `level` / `xp` are presentational gamification
- * values until the Earn ledger is wired to a real source.
+ * `profiles` + `organizations`. `xp` is read from `profiles.xp`; `level` is
+ * derived from it via `xpToLevel`.
  */
 export interface ShellIdentity {
   name: string;
@@ -17,8 +17,13 @@ export interface ShellIdentity {
   xp: number;
 }
 
-/** Presentational gamification defaults (no DB source yet). */
-const GAMIFICATION = { level: 7, xp: 4820 } as const;
+/**
+ * Derive the Earn level from accumulated XP. Level N starts at (N-1)² · 100 XP,
+ * so 100→L2, 400→L3, 4 800→L7 — a gentle curve that keeps early wins frequent.
+ */
+export function xpToLevel(xp: number): number {
+  return Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1;
+}
 
 /**
  * Resolve the signed-in user's shell identity. Returns `null` when there is no
@@ -36,7 +41,7 @@ export async function getShellIdentity(): Promise<ShellIdentity | null> {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, role')
+    .select('full_name, role, xp')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -54,6 +59,7 @@ export async function getShellIdentity(): Promise<ShellIdentity | null> {
   }
 
   const emailHandle = user.email ? user.email.split('@')[0] : null;
+  const xp = profile?.xp ?? 0;
 
   return {
     name: profile?.full_name || emailHandle || 'Your account',
@@ -61,7 +67,7 @@ export async function getShellIdentity(): Promise<ShellIdentity | null> {
     email: user.email ?? null,
     orgName: orgName || 'Your fund',
     orgTier: orgTier || 'Emerging manager',
-    level: GAMIFICATION.level,
-    xp: GAMIFICATION.xp
+    level: xpToLevel(xp),
+    xp
   };
 }
