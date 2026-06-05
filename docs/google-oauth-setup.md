@@ -22,15 +22,24 @@ provider; the same flow mints a `provider_token` that the
    - **Gmail API**
 4. Go to **APIs & Services -> Credentials -> Create Credentials -> OAuth client
    ID** and choose **Web application**.
-5. Under **Authorized redirect URIs**, add the Supabase callback URL:
+5. Under **Authorized redirect URIs**, add the Supabase callback URL — this must
+   match the host in `NEXT_PUBLIC_SUPABASE_URL`:
 
    ```
    https://<project-ref>.supabase.co/auth/v1/callback
    ```
 
    Replace `<project-ref>` with your Supabase project ref (Supabase dashboard ->
-   Project Settings -> General). Do **not** point this at the app's
-   `/auth/callback`; that is the app-side redirect target, not Google's.
+   Project Settings -> General). For this project that is currently:
+
+   ```
+   https://emityvdaeiqxtpxdhyky.supabase.co/auth/v1/callback
+   ```
+
+   Only use a custom domain here (e.g. `https://api.fundexecs.com/...`) once that
+   domain actually resolves to Supabase **and** `NEXT_PUBLIC_SUPABASE_URL` points
+   at it. Do **not** point this at the app's `/auth/callback`; that is the
+   app-side redirect target, not Google's.
 
 6. Save and copy the generated **Client ID** and **Client secret**.
 
@@ -53,27 +62,38 @@ The app requests offline access with `access_type=offline` and
 
 After Google authenticates, Supabase redirects back to the app's
 `/auth/callback` route, which exchanges the code for a session. The login button
-and the integration "Connect & sync" button both set:
+and the integration "Connect & sync" button both set `redirectTo` from
+`getSiteURL()` (`lib/site-url.ts`), which prefers `NEXT_PUBLIC_SITE_URL`:
 
 ```
-redirectTo = `${window.location.origin}/auth/callback?next=/command-center`
+redirectTo = `${getSiteURL()}/auth/callback`
 ```
 
-For production, add the app's domain(s) to **Authentication -> URL
-Configuration -> Redirect URLs** in Supabase (e.g.
-`https://app.fundexecs.com/auth/callback` and any preview URLs), otherwise
-Supabase rejects the redirect.
+In production `NEXT_PUBLIC_SITE_URL` is `https://www.fundexecs.com`, so the
+redirect target is `https://www.fundexecs.com/auth/callback`.
+
+For production, set **Authentication -> URL Configuration** in Supabase:
+
+- **Site URL**: `https://www.fundexecs.com`
+- **Redirect URLs** (allow-list): `https://www.fundexecs.com/auth/callback`,
+  `http://localhost:3000/auth/callback`, and a preview wildcard such as
+  `https://*-bgi-pres-projects.vercel.app/auth/callback`.
+
+Use the `www` host (the apex `fundexecs.com` 308-redirects to it); pin auth to
+that one host so the PKCE code-verifier cookie survives the redirect. Otherwise
+Supabase rejects the redirect or the code exchange fails.
 
 ## 4. Environment variables (Vercel)
 
 Set these in the Vercel project (Project Settings -> Environment Variables) for
 Production, Preview, and Development:
 
-| Variable                        | Value                                        |
-| ------------------------------- | -------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | `https://<project-ref>.supabase.co`          |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project anon (publishable) key      |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service-role key (used by sync API) |
+| Variable                        | Value                                              |
+| ------------------------------- | -------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | `https://emityvdaeiqxtpxdhyky.supabase.co`         |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project anon (publishable) key            |
+| `NEXT_PUBLIC_SITE_URL`          | `https://www.fundexecs.com` (canonical app origin) |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service-role key (used by sync API)       |
 
 The Google client ID/secret live in Supabase Auth (step 2), not in Vercel.
 

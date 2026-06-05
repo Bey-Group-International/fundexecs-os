@@ -9,7 +9,7 @@ const description =
   'FundExecs OS turns any fund into an execution machine — streamlining workflows, accelerating decisions, and leveling up operators so emerging managers can scale like top-tier institutions.';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://fundexecs.com'),
+  metadataBase: new URL('https://www.fundexecs.com'),
   title: {
     default: title,
     template: '%s · FundExecs OS'
