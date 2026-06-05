@@ -76,7 +76,8 @@ export async function updateSession(request: NextRequest) {
     '/settings',
     '/command-center',
     '/connections',
-    '/integrations'
+    '/integrations',
+    '/onboarding'
   ];
   const isProtected = protectedPrefixes.some((p) => request.nextUrl.pathname.startsWith(p));
 
