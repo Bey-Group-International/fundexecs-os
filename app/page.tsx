@@ -282,31 +282,56 @@ function Hero() {
   );
 }
 
-/** Two-letter monogram from a member's name — the avatar fallback. */
-function initials(name: string): string {
-  return name
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+// Curated institutional gradient pairs for the generated team avatars. Gold is
+// reserved for Earn, so these stay in the cool / bronze family — each member
+// gets a distinct, deterministic crest derived from their name.
+const AVATAR_GRADIENTS: [string, string][] = [
+  ['#2f5bb7', '#16233f'], // navy
+  ['#1f8079', '#123634'], // teal
+  ['#3f63a6', '#1a2740'], // steel blue
+  ['#6a55a6', '#2a2342'], // indigo
+  ['#8a6740', '#3a2c1f'], // bronze
+  ['#2f7e62', '#163128'], // forest
+  ['#566179', '#22272f'], // graphite
+  ['#7e5682', '#2f2230'], // plum
+  ['#2b6f8f', '#142a36'], // cyan-slate
+  ['#9a5a52', '#3a221f'] // clay
+];
+
+/** Pick a stable gradient for a member from their name (FNV-1a hash). */
+function avatarGradient(name: string): [string, string] {
+  let h = 2166136261;
+  for (let i = 0; i < name.length; i++) {
+    h ^= name.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return AVATAR_GRADIENTS[(h >>> 0) % AVATAR_GRADIENTS.length];
+}
+
+/** Generated avatar graphic embedded per member: a unique gradient crest, a
+ * facet highlight, and the member's function glyph. */
+function MemberAvatar({ member }: { member: TeamMember }) {
+  const Icon = member.icon;
+  const [from, to] = avatarGradient(member.name);
+  return (
+    <div
+      className="relative flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_2px_8px_-2px_rgba(0,0,0,0.5)] ring-1 ring-white/10"
+      style={{ background: `radial-gradient(125% 125% at 28% 22%, ${from}, ${to})` }}
+      aria-hidden
+    >
+      <span
+        className="pointer-events-none absolute -right-2 -top-3 h-8 w-8 rotate-45 rounded-md bg-white/10"
+        aria-hidden
+      />
+      <Icon size={20} strokeWidth={1.7} className="relative text-white/90" aria-hidden />
+    </div>
+  );
 }
 
 function TeamCard({ member }: { member: TeamMember }) {
-  const Icon = member.icon;
   return (
     <Card clickable className="flex h-full items-start gap-4 p-5">
-      <div className="relative flex-none">
-        <div
-          className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] text-[13px] font-semibold tracking-wide text-gold-1"
-          aria-hidden
-        >
-          {initials(member.name)}
-        </div>
-        <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border border-hairline bg-surface-1 text-fg-3">
-          <Icon size={11} strokeWidth={2} aria-hidden />
-        </span>
-      </div>
+      <MemberAvatar member={member} />
       <div className="min-w-0">
         <h3 className="text-[14px] font-semibold leading-tight text-fg-1">{member.name}</h3>
         <p className="mt-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-gold-1">
