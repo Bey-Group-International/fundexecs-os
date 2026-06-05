@@ -1,9 +1,21 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 
 export type NotificationActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Revalidate every authed surface so the AppShell layout's bell-badge
+ * counter (computed server-side from `getIdentity()`'s unread fetch) is
+ * recomputed on next render. Without this, mark-as-read writes the row
+ * to the DB but the badge stays at its stale count until the user
+ * navigates to a hard route boundary.
+ */
+function revalidateShell() {
+  revalidatePath('/', 'layout');
+}
 
 /**
  * Mark a single notification as read. Idempotent — re-marking a row that
@@ -19,6 +31,7 @@ export async function markNotificationRead(id: string): Promise<NotificationActi
     .eq('id', id)
     .is('read_at', null);
   if (error) return { ok: false, error: error.message };
+  revalidateShell();
   return { ok: true };
 }
 
@@ -38,6 +51,7 @@ export async function dismissNotification(id: string): Promise<NotificationActio
     } as never)
     .eq('id', id);
   if (error) return { ok: false, error: error.message };
+  revalidateShell();
   return { ok: true };
 }
 
@@ -56,5 +70,6 @@ export async function markAllNotificationsRead(): Promise<NotificationActionResu
     .eq('user_id', org.userId)
     .is('read_at', null);
   if (error) return { ok: false, error: error.message };
+  revalidateShell();
   return { ok: true };
 }

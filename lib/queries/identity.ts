@@ -15,6 +15,9 @@ export interface ShellIdentity {
   orgTier: string;
   level: number;
   xp: number;
+  /** Unread, non-archived notifications for this user. Drives the topbar
+   *  bell badge + sidebar nav badge. */
+  unreadCount: number;
 }
 
 /**
@@ -61,6 +64,19 @@ export async function getShellIdentity(): Promise<ShellIdentity | null> {
   const emailHandle = user.email ? user.email.split('@')[0] : null;
   const xp = profile?.xp ?? 0;
 
+  // Unread, non-archived notifications drive the topbar bell + sidebar
+  // nav badge. Computed in the same identity round so every authed page
+  // gets the count fresh on each render — paired with revalidatePath in
+  // the notifications actions, the badge zeros within a single cycle.
+  let unreadCount = 0;
+  const { count } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .is('read_at', null)
+    .is('archived_at', null);
+  unreadCount = count ?? 0;
+
   return {
     name: profile?.full_name || emailHandle || 'Your account',
     role: profile?.role || 'Operator',
@@ -68,6 +84,7 @@ export async function getShellIdentity(): Promise<ShellIdentity | null> {
     orgName: orgName || 'Your fund',
     orgTier: orgTier || 'Emerging manager',
     level: xpToLevel(xp),
-    xp
+    xp,
+    unreadCount
   };
 }
