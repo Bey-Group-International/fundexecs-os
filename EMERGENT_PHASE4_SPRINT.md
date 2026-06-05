@@ -31,6 +31,12 @@ on this; do not re-provision it.
 - **One project each:** a single Vercel project (`fundexecs-os`, team
   `bgi-pres-projects`, owns `fundexecs.com` / `www.fundexecs.com`) and a single
   Supabase project. Earlier duplicate Vercel/Supabase projects were deleted.
+- **Brand canon — "the Team":** the marketing landing now presents the 15 Earn
+  brains as **The Team** — **Earnest Fundmaker ("Earn")**, **Chief Operating
+  Officer**, leads **fourteen named specialists**, each with a position, a
+  one-line role, and a generated gradient avatar. This is the canonical identity
+  for the copilots; the public product is framed as an **executive team**, not
+  "copilots." Mirror it anywhere they surface in-app (see §3H).
 
 **Gotchas — do not reintroduce (each cost real debugging time):**
 
@@ -97,11 +103,21 @@ XP), and **Proof of Truth** (Phases 1–3):
   → live profile panel → review → `saveMemberProfile`. Wired into
   `app/onboarding/*` and a Settings status card.
 
+**Marketing landing (`app/page.tsx`) & brand.** A single-file landing: hero
+("Unified intelligence layer for the private markets") with a minimal **Meet
+Earn** under the Earn avatar; **The Team** (the 15 brains as named executives —
+Earn as COO + 14 first-name specialists in horizontal cards with generated
+gradient avatars, `MemberAvatar`); an elevated **Chain of Trust** (the 4 proof
+layers); **How it works** (4 steps); and the final CTA. `app/login` mirrors the
+landing's language (same headline, "fifteen-strong team," Earn as COO). Spacing
+is intentionally tight across breakpoints — preserve that rhythm.
+
 **Design system:** dark institutional palette; tokens `--bg-*`, `--surface-*`,
 `--fg-1..5`, `--gold-1/2` (Earn/gamification only), `--azure-*`, `--accent`
 (institutional-blue CTAs), proof-layer colors. Components in `@/components/ui`
 (Button, Card, Badge, Input, Select, Tabs/SegTabs, ProgressBar, SectionTitle,
-AnimatedNumber) + `EarnCoin`, `Avatar`. Motion is transform/opacity only on
+AnimatedNumber) + `EarnCoin`, `Avatar`, and the generated team-member gradient
+avatars in `app/page.tsx`. Motion is transform/opacity only on
 `cubic-bezier(.22,.61,.36,1)`, with a `prefers-reduced-motion` guard. Tabular
 figures for numbers. Gold is reserved for Earn/XP/progress.
 
@@ -170,6 +186,13 @@ OAuth). Connections/relationship-intelligence screens render from that.
 
 **G. Polish.** Mobile-responsive, accessible (semantic, focus rings,
 reduced-motion), consistent with the design system, across the whole loop.
+
+**H. Carry the Team identity into the app.** Bring the public **Team** canon
+(names, positions, Earn as **Chief Operating Officer**, the generated avatars)
+into the in-app **Copilot dock**, **Ask Earn**, and the `ai_brains` display so
+the experience reads as one executive team end to end. **Keep the 15 brain
+`slug`s unchanged** — they back the embeddings; this is a presentation/identity
+layer only (a name/position/avatar mapping over the existing brains).
 
 ---
 
