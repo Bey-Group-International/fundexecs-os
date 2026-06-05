@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
+import { awardTrustXp } from '@/lib/actions/xp';
 import {
   Users,
   UserPlus,
@@ -536,6 +538,7 @@ function KnowledgePanel() {
 
 export function AdminView({ data }: { data: AdminData }) {
   const [tab, setTab] = useState<Tab>('users');
+  const router = useRouter();
   // Member rows share the card lifecycle: approving an applicant "completes"
   // the row (closed); archiving sets the archived flag.
   const cards = useCardState(data.members);
@@ -556,6 +559,9 @@ export function AdminView({ data }: { data: AdminData }) {
         msg: 'An applicant was approved into the organization.',
         entity: id
       });
+      void awardTrustXp({ layer: 'work', entityType: 'member', entityId: id }).then(() =>
+        router.refresh()
+      );
     } else if (status === 'Archived') {
       cards.archive(id);
     }

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
+import { awardTrustXp } from '@/lib/actions/xp';
 import {
   Plus,
   Calendar,
@@ -154,6 +156,7 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
     closed: o.state === 'done'
   }));
   const [tier, setTier] = useState<'all' | Tier>('all');
+  const router = useRouter();
 
   function act(id: string, a: Action) {
     if (a === 'delete') {
@@ -168,6 +171,9 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
         pct: 100,
         entity: id
       });
+      void awardTrustXp({ layer: 'execution', entityType: 'objective', entityId: id }).then(() =>
+        router.refresh()
+      );
     } else if (a === 'read') {
       cards.markRead(id);
     } else if (a === 'archive') {
