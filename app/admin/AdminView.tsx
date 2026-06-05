@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
-import { awardTrustXp } from '@/lib/actions/xp';
+import { approveMember, archiveMember } from '@/lib/actions/admin';
 import {
   Users,
   UserPlus,
@@ -537,18 +537,17 @@ export function AdminView({ data }: { data: AdminData }) {
   function setStatus(id: string, status: MemberStatus) {
     if (status === 'Active') {
       cards.complete(id);
-      // Approving a member advances the Work layer of Chain of Trust.
+      // Approving a member advances the Execution layer of Chain of Trust.
       window.emitTrust?.({
-        layer: 'work',
+        layer: 'execution',
         title: 'Member approved',
         msg: 'An applicant was approved into the organization.',
         entity: id
       });
-      void awardTrustXp({ layer: 'work', entityType: 'member', entityId: id }).then(() =>
-        router.refresh()
-      );
+      void approveMember(id).then(() => router.refresh());
     } else if (status === 'Archived') {
       cards.archive(id);
+      void archiveMember(id).then(() => router.refresh());
     }
   }
 
