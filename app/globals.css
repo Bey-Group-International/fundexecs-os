@@ -221,11 +221,48 @@ body {
   animation: fx-glow-pulse 2.4s ease-in-out infinite;
 }
 
+/* Marketing landing — gentle mascot float (transform-only). Used on the
+   public `/` hero. Honored by the reduced-motion guard below. */
+@keyframes fx-coin-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(2deg);
+  }
+}
+.fx-coin-float {
+  animation: fx-coin-float 5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+/* Marketing landing — Live Activity marquee. The track is duplicated in the
+   DOM (the second copy is aria-hidden) so the loop is seamless. Transform-only.
+   Pauses on hover/focus-within of `.fx-marquee-wrap`; fully stopped under
+   reduced-motion (the ticker also renders a static, wrapping row in that case). */
+@keyframes fx-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.fx-marquee-animate {
+  animation: fx-marquee 60s linear infinite;
+}
+.fx-marquee-wrap:hover .fx-marquee-animate,
+.fx-marquee-wrap:focus-within .fx-marquee-animate {
+  animation-play-state: paused;
+}
+
 /* Accessibility: honor reduced-motion by disabling our decorative motion and
    neutralizing long/looping transitions across the app. */
 @media (prefers-reduced-motion: reduce) {
   .fx-rise,
-  .fx-glow-pulse {
+  .fx-glow-pulse,
+  .fx-coin-float,
+  .fx-marquee-animate {
     animation: none !important;
   }
   *,
