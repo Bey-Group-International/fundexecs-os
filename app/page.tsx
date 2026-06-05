@@ -15,11 +15,12 @@ import {
   CheckCircle2,
   type LucideIcon
 } from 'lucide-react';
-import { Badge, Card, AnimatedNumber } from '@/components/ui';
+import { Badge, Card } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { LandingNav } from '@/components/landing/LandingNav';
 import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
 import { ActivityTicker } from '@/components/landing/ActivityTicker';
+import { HeroStats } from '@/components/landing/HeroStats';
 
 export const metadata: Metadata = {
   title: 'AI Copilots for the Full Capital Lifecycle',
@@ -202,20 +203,6 @@ const TRUST_LAYERS: TrustLayer[] = [
   }
 ];
 
-// Hero proof points — animated count-ups (see AnimatedNumber).
-interface Stat {
-  value: number;
-  format: (n: number) => string;
-  label: string;
-}
-
-const STATS: Stat[] = [
-  { value: 612, format: (n) => `$${n.toLocaleString()}M+`, label: 'Capital tracked' },
-  { value: 500, format: (n) => `${n.toLocaleString()}+`, label: 'Relationships mapped' },
-  { value: 4, format: (n) => `${n}-layer`, label: 'Chain of Trust' },
-  { value: 15, format: (n) => `${n}`, label: 'Specialist copilots' }
-];
-
 // ── Sections ─────────────────────────────────────────────────────────────────
 
 function Hero() {
@@ -262,16 +249,7 @@ function Hero() {
           </div>
 
           {/* Live proof points — animated count-ups in an elevated strip. */}
-          <dl className="mt-12 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-hairline bg-hairline sm:grid-cols-4">
-            {STATS.map((s) => (
-              <div key={s.label} className="bg-bg-1 px-5 py-5">
-                <dd className="text-[26px] font-semibold leading-none tracking-[-0.02em] text-fg-1">
-                  <AnimatedNumber value={s.value} durationMs={1100} format={s.format} />
-                </dd>
-                <dt className="mt-2 text-[11.5px] leading-tight text-fg-4">{s.label}</dt>
-              </div>
-            ))}
-          </dl>
+          <HeroStats />
         </div>
 
         {/* Hero mascot with gentle float + gold glow. */}
