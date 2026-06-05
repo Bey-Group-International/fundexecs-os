@@ -865,6 +865,59 @@ export type Database = {
           },
         ]
       }
+      member_profiles: {
+        Row: {
+          bio: string | null
+          completion_pct: number
+          created_at: string
+          details: Json
+          display_name: string | null
+          draft: Json
+          focus_areas: string[]
+          headline: string | null
+          links: Json
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bio?: string | null
+          completion_pct?: number
+          created_at?: string
+          details?: Json
+          display_name?: string | null
+          draft?: Json
+          focus_areas?: string[]
+          headline?: string | null
+          links?: Json
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bio?: string | null
+          completion_pct?: number
+          created_at?: string
+          details?: Json
+          display_name?: string | null
+          draft?: Json
+          focus_areas?: string[]
+          headline?: string | null
+          links?: Json
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_profiles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string
@@ -1020,6 +1073,7 @@ export type Database = {
           created_at: string
           full_name: string
           id: string
+          member_type: string | null
           role: string | null
           updated_at: string
           xp: number
@@ -1029,6 +1083,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id: string
+          member_type?: string | null
           role?: string | null
           updated_at?: string
           xp?: number
@@ -1038,6 +1093,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id?: string
+          member_type?: string | null
           role?: string | null
           updated_at?: string
           xp?: number
