@@ -19,12 +19,10 @@ import {
   FileText,
   Users,
   Search,
-  Layers,
   type LucideIcon
 } from 'lucide-react';
 import { Badge, Button, Card, SectionTitle, SegTabs, type BadgeTone } from '@/components/ui';
-import { EarnCoin } from '@/components/screens/EarnCoin';
-import { BRAINS } from '@/components/screens/brains';
+import { TeamAvatar, getCOO, getSpecialists, TEAM_ROSTER } from '@/lib/team';
 import { cn } from '@/lib/utils';
 import type { EarnTask } from '@/lib/queries/ask-earn';
 import { EarnChat } from './EarnChat';
@@ -133,6 +131,50 @@ function TaskRow({ t, onAct }: { t: EarnTask; onAct: (id: string, a: Action) => 
   );
 }
 
+function TeamRoster() {
+  const coo = getCOO();
+  const specialists = getSpecialists();
+  return (
+    <Card>
+      <SectionTitle eyebrow={`${TEAM_ROSTER.length} members`} title="The Team" className="mb-3" />
+      <ul className="flex flex-col gap-1.5">
+        {/* Earn (COO) — anchored at the top, gold pill. */}
+        <li className="flex items-start gap-2.5 rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-2">
+          <TeamAvatar member={coo} size={32} online className="flex-none" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-[12.5px] font-semibold text-fg-1">{coo.name}</span>
+              <Badge tone="gold" className="text-[9px]">
+                COO
+              </Badge>
+            </div>
+            <div className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gold-1">
+              {coo.position}
+            </div>
+            <p className="mt-0.5 text-[11.5px] leading-5 text-fg-3">{coo.oneLiner}</p>
+          </div>
+        </li>
+
+        {specialists.map((m) => (
+          <li
+            key={m.slug}
+            className="flex items-start gap-2.5 rounded-xl px-2.5 py-2 transition hover:bg-surface-1"
+          >
+            <TeamAvatar member={m} size={28} className="mt-0.5 flex-none" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12.5px] font-semibold text-fg-1">{m.name}</div>
+              <div className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-azure-1">
+                {m.position}
+              </div>
+              <p className="mt-0.5 text-[11.5px] leading-5 text-fg-3">{m.oneLiner}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
   const cards = useCardState(initialTasks, (t) => ({
     read: t.read,
@@ -141,6 +183,8 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
   }));
   const [filter, setFilter] = useState<FilterTab>('open');
   const router = useRouter();
+  const earn = getCOO();
+  const teamSize = TEAM_ROSTER.length;
 
   function act(id: string, a: Action) {
     if (a === 'delete') {
@@ -194,7 +238,7 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-end justify-between gap-3">
         <SectionTitle
-          eyebrow="Earnest Fundmaker · your private-market assistant"
+          eyebrow={`${earn.name} · ${earn.position}`}
           title="Ask Earn"
           className="mb-0"
         />
@@ -211,12 +255,11 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
       {/* Earn presence band + live command bar (the live EarnChat copilot). */}
       <Card className="bg-[linear-gradient(100deg,rgba(247,201,72,0.09),transparent_60%)] px-[18px] py-3.5">
         <div className="flex items-center gap-4">
-          <EarnCoin size={40} glow online />
+          <TeamAvatar member={earn} size={44} glow online />
           <div className="min-w-0 flex-1 text-[13px] text-fg-2">
-            <span className="font-semibold text-fg-1">Earnest Fundmaker</span>, your Private Market
-            Assistant, is running{' '}
-            <span className="font-semibold text-gold-1">{workflowCount} workflows</span> across{' '}
-            {BRAINS.length} brains —{' '}
+            <span className="font-semibold text-fg-1">{earn.name}</span>, your {earn.position}, is
+            running <span className="font-semibold text-gold-1">{workflowCount} workflows</span>{' '}
+            across a team of <span className="font-semibold text-gold-1">{teamSize}</span> —{' '}
             <span className="font-semibold text-gold-1">{counts.open}</span> awaiting you.
           </div>
         </div>
@@ -268,29 +311,7 @@ export function AskEarnView({ initialTasks }: { initialTasks: EarnTask[] }) {
             </div>
           </Card>
 
-          <Card>
-            <SectionTitle
-              eyebrow={`${BRAINS.length} brains`}
-              title="Active brains"
-              className="mb-3"
-              action={<ListChecks size={15} strokeWidth={1.9} className="text-fg-4" aria-hidden />}
-            />
-            <div className="flex flex-wrap gap-1.5">
-              {BRAINS.map((b) => {
-                const Icon = b.icon;
-                return (
-                  <span
-                    key={b.slug}
-                    title={b.role}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-2 px-2.5 py-1 text-[11px] text-fg-2"
-                  >
-                    <Icon size={12} strokeWidth={1.9} className="text-fg-4" aria-hidden />
-                    {b.name}
-                  </span>
-                );
-              })}
-            </div>
-          </Card>
+          <TeamRoster />
         </div>
       </div>
     </div>

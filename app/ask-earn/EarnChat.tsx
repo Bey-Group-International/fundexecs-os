@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Sparkles, ArrowUp } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { EarnCoin } from '@/components/screens/EarnCoin';
+import { TeamAvatar, getCOO } from '@/lib/team';
 import { cn } from '@/lib/utils';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
 export function EarnChat() {
+  const earn = getCOO();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,7 +58,9 @@ export function EarnChat() {
         <Card className="flex max-h-[360px] flex-col gap-3 overflow-y-auto p-4">
           {messages.map((m, i) => (
             <div key={i} className={cn('flex gap-2.5', m.role === 'user' && 'flex-row-reverse')}>
-              {m.role === 'assistant' && <EarnCoin size={24} className="mt-0.5 flex-none" />}
+              {m.role === 'assistant' && (
+                <TeamAvatar member={earn} size={24} className="mt-0.5 flex-none" />
+              )}
               <div
                 className={cn(
                   'max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[12.5px] leading-relaxed',
@@ -72,7 +75,7 @@ export function EarnChat() {
           ))}
           {loading && (
             <div className="flex items-center gap-2 text-[12px] text-fg-4">
-              <EarnCoin size={24} className="flex-none" />
+              <TeamAvatar member={earn} size={24} className="flex-none" />
               <span className="animate-pulse">Earn is thinking…</span>
             </div>
           )}

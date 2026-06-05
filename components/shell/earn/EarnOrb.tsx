@@ -21,7 +21,9 @@ export function EarnOrb({ open, onToggle }: EarnOrbProps) {
     <button
       type="button"
       onClick={onToggle}
-      aria-label={open ? 'Close Earn Copilot' : 'Open Earn Copilot'}
+      aria-label={
+        open ? 'Close Earn Copilot' : 'Earnest Fundmaker, Chief Operating Officer — open chat'
+      }
       aria-expanded={open}
       className={cn(
         'group fixed bottom-5 right-5 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full',
