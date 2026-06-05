@@ -28,6 +28,8 @@ import {
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { TONE_HEX } from '@/components/screens/tone';
 import type { PipelineData, PipelineDeal } from '@/lib/queries/pipeline';
+import { NewDealDrawer } from '@/components/drawers/NewDealDrawer';
+import { DealDetailDrawer, type DealDetailData } from '@/components/drawers/DealDetailDrawer';
 
 function formatCurrency(amount: number): string {
   if (amount >= 1_000_000_000) return `$${(amount / 1_000_000_000).toFixed(1)}B`;
@@ -67,7 +69,13 @@ function EarnBand({ data }: { data: PipelineData }) {
   );
 }
 
-function FormationBoard({ data }: { data: PipelineData }) {
+function FormationBoard({
+  data,
+  onSelectDeal
+}: {
+  data: PipelineData;
+  onSelectDeal: (deal: PipelineDeal) => void;
+}) {
   return (
     <Card>
       <div className="flex gap-3 overflow-x-auto pb-1">
@@ -88,7 +96,9 @@ function FormationBoard({ data }: { data: PipelineData }) {
                   <button
                     key={d.id}
                     type="button"
-                    className="rounded-xl border border-hairline bg-surface-2 p-2.5 text-left transition hover:bg-surface-3"
+                    onClick={() => onSelectDeal(d)}
+                    className="rounded-xl border border-hairline bg-surface-2 p-2.5 text-left transition hover:bg-surface-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-line)]"
+                    data-testid={`pipeline-deal-${d.id}`}
                   >
                     <div className="flex items-center gap-2">
                       <Avatar name={d.name} size={22} tone={avatarTone} />
@@ -292,6 +302,19 @@ function PartnersStack() {
 
 export function PipelineView({ data }: { data: PipelineData }) {
   const [tab, setTab] = useState<Tab>('formation');
+  const [newDealOpen, setNewDealOpen] = useState(false);
+  const [activeDeal, setActiveDeal] = useState<DealDetailData | null>(null);
+
+  function selectDeal(d: PipelineDeal) {
+    setActiveDeal({
+      id: d.id,
+      name: d.name,
+      stage: d.stage,
+      status: d.status,
+      amount: d.amount,
+      allocations: d.allocations
+    });
+  }
 
   const summary: Array<{ label: string; value: string; icon: LucideIcon; tone: BadgeTone }> = [
     {
@@ -329,7 +352,12 @@ export function PipelineView({ data }: { data: PipelineData }) {
         title="Pipeline"
         className="mb-0"
         action={
-          <Button variant="primary" icon={Plus}>
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => setNewDealOpen(true)}
+            data-testid="pipeline-add"
+          >
             Add to pipeline
           </Button>
         }
@@ -367,10 +395,17 @@ export function PipelineView({ data }: { data: PipelineData }) {
         ]}
       />
 
-      {tab === 'formation' && <FormationBoard data={data} />}
+      {tab === 'formation' && <FormationBoard data={data} onSelectDeal={selectDeal} />}
       {tab === 'lpmap' && <LpCapitalMap deals={allDeals} />}
       {tab === 'flow' && <DealFlow data={data} />}
       {tab === 'partners' && <PartnersStack />}
+
+      <NewDealDrawer open={newDealOpen} onClose={() => setNewDealOpen(false)} />
+      <DealDetailDrawer
+        open={activeDeal !== null}
+        onClose={() => setActiveDeal(null)}
+        deal={activeDeal}
+      />
     </div>
   );
 }
