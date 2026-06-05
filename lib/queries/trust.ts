@@ -119,9 +119,7 @@ export async function getTrustRecord(recordId: string): Promise<TrustRecord | nu
 
   const { data: rec } = await supabase
     .from('chain_of_trust_records')
-    .select(
-      'id, org_id, entity_type, entity_id, current_layer, completion_percentage, status'
-    )
+    .select('id, org_id, entity_type, entity_id, current_layer, completion_percentage, status')
     .eq('id', recordId)
     .maybeSingle();
   if (!rec) return null;
@@ -176,11 +174,11 @@ export async function getTrustRecord(recordId: string): Promise<TrustRecord | nu
     const { data: evRaw } = await supabase
       .from('evidence')
       .select(
-        'id, proof_layer_id, file_name, mime_type, size_bytes, uploaded_at, uploaded_by, ai_validation_notes, ai_validated_at, approval_status, approved_at, approved_by, rejection_reason, storage_path'
+        'id, proof_layer_id, file_name, mime_type, size_bytes, uploaded_at, uploaded_by, ai_validation_notes, ai_validated_at, approval_status, approved_at, approved_by, rejection_reason, storage_path' as never
       )
       .in('proof_layer_id', layerIds)
       .order('created_at', { ascending: true });
-    evidence = (evRaw ?? []) as RawEvidence[];
+    evidence = (evRaw ?? []) as unknown as RawEvidence[];
   }
 
   // Resolve uploader + approver names.
@@ -282,8 +280,7 @@ export async function getTrustRecord(recordId: string): Promise<TrustRecord | nu
       .eq('user_id', user.id)
       .maybeSingle();
     const a = actor as { role: string; status: string } | null;
-    viewerCanApprove =
-      !!a && a.status === 'active' && (a.role === 'owner' || a.role === 'admin');
+    viewerCanApprove = !!a && a.status === 'active' && (a.role === 'owner' || a.role === 'admin');
   }
 
   return {

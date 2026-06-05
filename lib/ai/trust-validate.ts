@@ -132,7 +132,7 @@ export async function aiValidateEvidence(evidenceId: string): Promise<void> {
       .update({
         ai_validation_notes: FALLBACK_NOTE,
         ai_validated_at: new Date().toISOString()
-      })
+      } as never)
       .eq('id', evidenceId);
     return;
   }
@@ -156,19 +156,26 @@ export async function aiValidateEvidence(evidenceId: string): Promise<void> {
     const client = new Anthropic({ apiKey });
     const prompt = buildPrompt(ctx, textSnippet);
 
+    type AnthropicMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
     type ContentBlock =
       | { type: 'text'; text: string }
       | {
           type: 'image';
-          source: { type: 'base64'; media_type: string; data: string };
+          source: { type: 'base64'; media_type: AnthropicMediaType; data: string };
         };
     const userContent: ContentBlock[] = [{ type: 'text', text: prompt }];
     if (imageInput) {
+      // Coerce to the narrow allow-list Anthropic accepts; non-matching
+      // mime types fall back to png so the request still validates.
+      const allowed: AnthropicMediaType[] = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+      const mt: AnthropicMediaType =
+        (allowed.find((a) => a === imageInput.media_type) as AnthropicMediaType | undefined) ??
+        'image/png';
       userContent.unshift({
         type: 'image',
         source: {
           type: 'base64',
-          media_type: imageInput.media_type,
+          media_type: mt,
           data: imageInput.data
         }
       });
@@ -197,6 +204,6 @@ export async function aiValidateEvidence(evidenceId: string): Promise<void> {
     .update({
       ai_validation_notes: notes,
       ai_validated_at: new Date().toISOString()
-    })
+    } as never)
     .eq('id', evidenceId);
 }

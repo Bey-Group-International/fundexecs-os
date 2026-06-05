@@ -68,9 +68,7 @@ function refresh() {
 //    component. Bound by RLS at every step.
 // ====================================================================
 
-export type LoadTrustResult =
-  | { ok: true; record: TrustRecord }
-  | { ok: false; error: string };
+export type LoadTrustResult = { ok: true; record: TrustRecord } | { ok: false; error: string };
 
 export async function loadTrustRecord(recordId: string): Promise<LoadTrustResult> {
   if (!recordId) return { ok: false, error: 'Missing record id.' };
@@ -88,9 +86,7 @@ export interface StartChainInput {
   subjectEntityId: string;
   title: string;
 }
-export type StartChainResult =
-  | { ok: true; recordId: string }
-  | { ok: false; error: string };
+export type StartChainResult = { ok: true; recordId: string } | { ok: false; error: string };
 
 export async function startChainOfTrust(input: StartChainInput): Promise<StartChainResult> {
   if (!input.subjectEntityId) return { ok: false, error: 'Missing subject id.' };
@@ -169,9 +165,9 @@ export async function advanceProofLayer(
     .order('layer_order', { ascending: true });
   if (!layers) return { ok: false, error: 'No layers found.' };
 
-  const target = layers.find(
-    (l) => (l as { layer_name: string }).layer_name === targetLabel
-  ) as { layer_name: string; human_approval_status: string; layer_order: number } | undefined;
+  const target = layers.find((l) => (l as { layer_name: string }).layer_name === targetLabel) as
+    | { layer_name: string; human_approval_status: string; layer_order: number }
+    | undefined;
   if (!target) return { ok: false, error: 'Target layer not found.' };
 
   const priors = (
@@ -214,9 +210,7 @@ export type UploadEvidenceResult =
     }
   | { ok: false; error: string };
 
-export async function uploadEvidence(
-  input: UploadEvidenceInput
-): Promise<UploadEvidenceResult> {
+export async function uploadEvidence(input: UploadEvidenceInput): Promise<UploadEvidenceResult> {
   if (!input.recordId || !input.fileName?.trim()) {
     return { ok: false, error: 'Missing record id or file name.' };
   }
@@ -259,7 +253,7 @@ export async function uploadEvidence(
       size_bytes: input.sizeBytes,
       notes: input.notes ?? null,
       approval_status: 'pending'
-    })
+    } as never)
     .select('id')
     .single();
   if (evErr || !ev) {
@@ -269,10 +263,7 @@ export async function uploadEvidence(
   const storagePath = `${layerRow.org_id}/${input.recordId}/${evidenceId}/${safeName}`;
 
   // Update the row with the canonical storage_path now that we have the id.
-  await supabase
-    .from('evidence')
-    .update({ storage_path: storagePath })
-    .eq('id', evidenceId);
+  await supabase.from('evidence').update({ storage_path: storagePath }).eq('id', evidenceId);
 
   // Signed upload URL — expires in 60s. Service-role used here purely
   // to mint the upload token; the actual upload is bound to that token
@@ -309,7 +300,7 @@ export async function finalizeEvidenceUpload(evidenceId: string): Promise<Finali
 
   const { data: ev, error: evErr } = await supabase
     .from('evidence')
-    .select('id, storage_path, mime_type, size_bytes, file_name, org_id')
+    .select('id, storage_path, mime_type, size_bytes, file_name, org_id' as never)
     .eq('id', evidenceId)
     .maybeSingle();
   if (evErr || !ev) return { ok: false, error: 'Evidence not found.' };
@@ -317,7 +308,7 @@ export async function finalizeEvidenceUpload(evidenceId: string): Promise<Finali
   // Confirm the object actually exists in storage (defends against
   // clients calling finalize without uploading).
   const admin = createAdminClient();
-  const evRow = ev as {
+  const evRow = ev as unknown as {
     id: string;
     storage_path: string;
     mime_type: string;
@@ -330,15 +321,14 @@ export async function finalizeEvidenceUpload(evidenceId: string): Promise<Finali
     .list(evRow.storage_path.split('/').slice(0, -1).join('/'), {
       search: evRow.file_name
     });
-  const found =
-    head && head.some((o) => evRow.storage_path.endsWith(`/${o.name}`));
+  const found = head && head.some((o) => evRow.storage_path.endsWith(`/${o.name}`));
   if (!found) {
     return { ok: false, error: 'Upload did not complete.' };
   }
 
   await supabase
     .from('evidence')
-    .update({ uploaded_at: new Date().toISOString() })
+    .update({ uploaded_at: new Date().toISOString() } as never)
     .eq('id', evidenceId);
 
   // Fire-and-forget AI validation. Never block the parent action.
@@ -372,11 +362,11 @@ export async function approveEvidence(input: ApproveInput): Promise<ApproveResul
   // Authorise: actor must be owner/admin OR the evidence's uploader.
   const { data: ev } = await supabase
     .from('evidence')
-    .select('id, org_id, proof_layer_id, uploaded_by, approval_status')
+    .select('id, org_id, proof_layer_id, uploaded_by, approval_status' as never)
     .eq('id', input.evidenceId)
     .maybeSingle();
   if (!ev) return { ok: false, error: 'Evidence not found.' };
-  const evRow = ev as {
+  const evRow = ev as unknown as {
     id: string;
     org_id: string;
     proof_layer_id: string;
@@ -400,7 +390,10 @@ export async function approveEvidence(input: ApproveInput): Promise<ApproveResul
     (actorRow.role === 'owner' || actorRow.role === 'admin');
   const isUploader = evRow.uploaded_by === org.userId;
   if (!isAdmin && !isUploader) {
-    return { ok: false, error: 'Only owners, admins, or the uploader can decide on this evidence.' };
+    return {
+      ok: false,
+      error: 'Only owners, admins, or the uploader can decide on this evidence.'
+    };
   }
 
   const now = new Date().toISOString();
@@ -411,7 +404,7 @@ export async function approveEvidence(input: ApproveInput): Promise<ApproveResul
       approved_by: org.userId,
       approved_at: now,
       rejection_reason: input.decision === 'rejected' ? (input.rejectionReason ?? null) : null
-    })
+    } as never)
     .eq('id', input.evidenceId);
   if (upErr) return { ok: false, error: upErr.message };
 
@@ -423,22 +416,20 @@ export async function approveEvidence(input: ApproveInput): Promise<ApproveResul
       .select('id, layer_name, layer_order, chain_record_id, human_approval_status')
       .eq('id', evRow.proof_layer_id)
       .maybeSingle();
-    const layerRow = layer as
-      | {
-          id: string;
-          layer_name: LayerLabel;
-          layer_order: number;
-          chain_record_id: string;
-          human_approval_status: string;
-        }
-      | null;
+    const layerRow = layer as {
+      id: string;
+      layer_name: LayerLabel;
+      layer_order: number;
+      chain_record_id: string;
+      human_approval_status: string;
+    } | null;
 
     if (layerRow && layerRow.human_approval_status !== 'approved') {
       const { count: approvedCount } = await supabase
         .from('evidence')
         .select('id', { count: 'exact', head: true })
         .eq('proof_layer_id', layerRow.id)
-        .eq('approval_status', 'approved');
+        .eq('approval_status' as never, 'approved');
       if ((approvedCount ?? 0) >= 1) {
         await supabase
           .from('proof_layers')
@@ -509,11 +500,11 @@ export async function revokeEvidence(evidenceId: string): Promise<RevokeResult> 
   const supabase = await createClient();
   const { data: ev } = await supabase
     .from('evidence')
-    .select('id, storage_path, uploaded_by, approval_status')
+    .select('id, storage_path, uploaded_by, approval_status' as never)
     .eq('id', evidenceId)
     .maybeSingle();
   if (!ev) return { ok: false, error: 'Evidence not found.' };
-  const evRow = ev as {
+  const evRow = ev as unknown as {
     id: string;
     storage_path: string;
     uploaded_by: string | null;
