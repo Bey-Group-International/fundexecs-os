@@ -94,19 +94,17 @@ export default function LoginPage() {
 
         <div className="max-w-md">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-            AI-native private-market command center
+            Led by Earn, your live AI guide
           </p>
           <h1 className="mt-4 text-[40px] font-semibold leading-[1.06] tracking-[-0.02em]">
-            Turn any fund into an
-            <br />
-            <span className="text-gold-1">execution machine.</span>
+            Unified intelligence layer for the <span className="text-gold-1">private markets.</span>
           </h1>
           <p className="mt-5 max-w-sm text-[13.5px] leading-7 text-fg-3">
-            Streamline workflows, accelerate decisions, and scale like a top-tier institution —
-            without adding headcount or friction.
+            A fifteen-strong executive team, led by Earn, working as one — so you optimize
+            workflows, accelerate decisions, and execute like an institution.
           </p>
 
-          <div className="mt-10 flex gap-10 [font-feature-settings:'tnum']">
+          <div className="mt-8 flex gap-8 [font-feature-settings:'tnum']">
             {[
               { stat: '$612M', label: 'capital facilitated' },
               { stat: '500+', label: 'funds & sponsors' },
@@ -123,8 +121,8 @@ export default function LoginPage() {
         <div className="flex items-center gap-2.5 text-[12.5px] text-fg-4">
           <EarnCoin size={22} />
           <span>
-            <span className="font-semibold text-fg-2">Earnest Fundmaker</span>, your Private Market
-            Assistant — call him Earn.
+            <span className="font-semibold text-fg-2">Earnest Fundmaker</span>, your Chief Operating
+            Officer — call him Earn.
           </span>
         </div>
       </section>
