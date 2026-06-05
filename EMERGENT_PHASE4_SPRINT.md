@@ -49,6 +49,7 @@ Strategy (100/30/10 governance objectives), Notifications, Admin, **Ask Earn**
 unified card-state model (`lib/ui/useCardState.ts`), **Chain of Trust** (4 proof
 layers Truth→Concept→Execution→Work, `window.emitTrust` bus, `award_trust_xp`
 XP), and **Proof of Truth** (Phases 1–3):
+
 - `lib/member-types.ts` (5 types), `lib/proof-of-truth/questions.ts`,
   `lib/proof-of-truth/earn-profile.ts`, `lib/ai/profile-suggest.ts`,
   `POST /api/earn/profile-suggest` → returns `{ insight, options[3] }`.
@@ -91,13 +92,14 @@ delivery, multi-tenant admin tooling beyond what exists.
 **A. Member-type personalized dashboards (headline deliverable).**
 Make `/command-center` (or a new `/dashboard`) render a layout tailored to
 `profiles.member_type`, fed by the member's `member_profiles` + relevant data:
+
 - `investment_firm` — deal flow / pipeline, capital deployed, sourcing, LP & co-investor matches.
 - `service_provider` — inbound leads / engagements, ideal-client matches, services demand signals.
 - `startup` — raise progress, investor matches against sector/stage, warm intros, materials checklist.
 - `student` — learning path, the 15 brains, curated opportunities, network-building tasks.
 - `individual_investor` — angel/LP deal flow, allocations, syndicate activity, watchlist.
-Each pulls from real tables; each surfaces **Earn next-best-actions** and the
-member's **Chain-of-Trust** standing. Reuse the design system and KPI/AnimatedNumber patterns.
+  Each pulls from real tables; each surfaces **Earn next-best-actions** and the
+  member's **Chain-of-Trust** standing. Reuse the design system and KPI/AnimatedNumber patterns.
 
 **B. Make the core-loop actions real & persistent.** Audit every primary action
 and ensure it writes to Supabase via server actions/route handlers with
@@ -149,15 +151,15 @@ reduced-motion), consistent with the design system, across the whole loop.
 
 ## 5. Environment variables
 
-| Variable | Scope | Required | Purpose |
-|---|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | public | yes | Supabase API base (`https://api.fundexecs.com`) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | yes | Browser/SSR auth key (RLS-bounded) |
-| `NEXT_PUBLIC_SITE_URL` | public | yes | Canonical origin for auth redirects |
-| `SUPABASE_SERVICE_ROLE_KEY` | server | yes | Privileged server writes (bypasses RLS) |
-| `ANTHROPIC_API_KEY` | server | yes | Claude (Earn + Proof-of-Truth) |
-| `VOYAGE_API_KEY` | server | yes (RAG) | Embeddings for the 15 brains |
-| `EARN_MODEL` | server | optional | Model override (default `claude-sonnet-4-6`) |
+| Variable                        | Scope  | Required  | Purpose                                         |
+| ------------------------------- | ------ | --------- | ----------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | public | yes       | Supabase API base (`https://api.fundexecs.com`) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | yes       | Browser/SSR auth key (RLS-bounded)              |
+| `NEXT_PUBLIC_SITE_URL`          | public | yes       | Canonical origin for auth redirects             |
+| `SUPABASE_SERVICE_ROLE_KEY`     | server | yes       | Privileged server writes (bypasses RLS)         |
+| `ANTHROPIC_API_KEY`             | server | yes       | Claude (Earn + Proof-of-Truth)                  |
+| `VOYAGE_API_KEY`                | server | yes (RAG) | Embeddings for the 15 brains                    |
+| `EARN_MODEL`                    | server | optional  | Model override (default `claude-sonnet-4-6`)    |
 
 `VERCEL_URL` / `NEXT_PUBLIC_VERCEL_URL` are auto-injected by Vercel.
 
