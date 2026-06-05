@@ -26,14 +26,18 @@ import { createClient } from '@/lib/supabase/client';
 import type { ShellIdentity } from '@/lib/queries/identity';
 import { cn } from '@/lib/utils';
 import { EarnOrb } from './earn/EarnOrb';
-import { CopilotDock } from './earn/CopilotDock';
+import { EarnDock } from './earn/EarnDock';
 import { TrustToaster } from './trust/TrustToaster';
 
 interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Static numeric badge — usually omitted; prefer `dynamicBadge`. */
   badge?: number;
+  /** Live-data badge slot. Resolved against the current `ShellIdentity`
+   *  on render, so the value stays in sync with server-side state. */
+  dynamicBadge?: 'unread';
 }
 
 const NAV: NavItem[] = [
@@ -42,7 +46,7 @@ const NAV: NavItem[] = [
   { href: '/connections', label: 'Connections', icon: Users },
   { href: '/integrations', label: 'Integrations', icon: Plug },
   { href: '/strategy', label: 'Strategy', icon: Target },
-  { href: '/notifications', label: 'Notifications', icon: Bell, badge: 3 },
+  { href: '/notifications', label: 'Notifications', icon: Bell, dynamicBadge: 'unread' },
   { href: '/settings', label: 'Settings', icon: Settings }
 ];
 
@@ -55,7 +59,8 @@ const DEFAULT_IDENTITY: ShellIdentity = {
   orgName: 'Your fund',
   orgTier: 'Emerging manager',
   level: 1,
-  xp: 0
+  xp: 0,
+  unreadCount: 0
 };
 
 /** Topbar theme toggle — flips `data-theme`, persists to localStorage('fx-theme').
@@ -93,7 +98,15 @@ function ThemeToggle() {
   );
 }
 
-function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
+function SidebarNav({
+  pathname,
+  onNavigate,
+  identity
+}: {
+  pathname: string;
+  onNavigate: () => void;
+  identity: ShellIdentity;
+}) {
   return (
     <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3">
       <div className="px-3 pb-1.5 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
@@ -102,6 +115,9 @@ function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: ()
       {NAV.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         const Icon = item.icon;
+        const badgeValue =
+          item.badge ?? (item.dynamicBadge === 'unread' ? identity.unreadCount : undefined);
+        const showBadge = badgeValue != null && badgeValue > 0;
         return (
           <Link
             key={item.href}
@@ -123,9 +139,13 @@ function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: ()
             )}
             <Icon size={17} strokeWidth={1.9} aria-hidden />
             <span className="flex-1">{item.label}</span>
-            {item.badge != null && (
-              <Badge tone="azure" className="px-1.5 py-0.5 text-[10.5px]">
-                {item.badge}
+            {showBadge && (
+              <Badge
+                tone="azure"
+                className="px-1.5 py-0.5 text-[10.5px]"
+                data-testid={item.dynamicBadge === 'unread' ? 'sidebar-unread-badge' : undefined}
+              >
+                {badgeValue}
               </Badge>
             )}
           </Link>
@@ -190,7 +210,7 @@ function Sidebar({
         </button>
       </div>
 
-      <SidebarNav pathname={pathname} onNavigate={onClose} />
+      <SidebarNav pathname={pathname} onNavigate={onClose} identity={identity} />
 
       <div className="m-3 flex items-center gap-2.5 rounded-[10px] border border-hairline px-2.5 py-2.5">
         <Avatar name={identity.name} size={30} />
@@ -262,7 +282,7 @@ function Topbar({
 
       <ThemeToggle />
 
-      {/* Gold Earn coin wallet (gamification) — opens the Earn Copilot dock */}
+      {/* Gold Earn coin wallet (gamification) — opens the Earn dock */}
       <button
         type="button"
         onClick={onAskEarn}
@@ -283,13 +303,23 @@ function Topbar({
 
       <button
         type="button"
-        aria-label="Notifications"
+        aria-label={
+          identity.unreadCount > 0
+            ? `Notifications, ${identity.unreadCount} unread`
+            : 'Notifications'
+        }
         className="relative flex h-[38px] w-[38px] flex-none items-center justify-center rounded-[10px] border border-hairline bg-surface-1 text-fg-3 transition-[background,box-shadow] hover:bg-surface-2 hover:text-fg-1"
+        data-testid="topbar-notifications-bell"
       >
         <Bell size={17} strokeWidth={1.9} aria-hidden />
-        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-bg-0 bg-azure-1 px-1 text-[10px] font-bold text-white">
-          3
-        </span>
+        {identity.unreadCount > 0 ? (
+          <span
+            className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-bg-0 bg-azure-1 px-1 text-[10px] font-bold text-white"
+            data-testid="topbar-unread-badge"
+          >
+            {identity.unreadCount}
+          </span>
+        ) : null}
       </button>
 
       <Avatar name={identity.name} size={32} />
@@ -315,7 +345,7 @@ export interface AppShellProps {
 export function AppShell({ title, subtitle, identity, children }: AppShellProps) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [dockOpen, setDockOpen] = useState(false);
   const id = identity ?? DEFAULT_IDENTITY;
 
   return (
@@ -333,7 +363,7 @@ export function AppShell({ title, subtitle, identity, children }: AppShellProps)
           title={title}
           subtitle={subtitle}
           onMenu={() => setNavOpen(true)}
-          onAskEarn={() => setCopilotOpen((v) => !v)}
+          onAskEarn={() => setDockOpen((v) => !v)}
           identity={id}
         />
         <main className="flex-1 overflow-y-auto px-5 pb-20 pt-6 sm:px-7">
@@ -345,10 +375,10 @@ export function AppShell({ title, subtitle, identity, children }: AppShellProps)
         </main>
       </div>
 
-      {/* Shell-level systems: Earn orb + Copilot dock, and the Chain-of-Trust
+      {/* Shell-level systems: Earn orb + Earn dock, and the Chain-of-Trust
           toast layer + drawer. Present on every authenticated screen. */}
-      <EarnOrb open={copilotOpen} onToggle={() => setCopilotOpen((v) => !v)} />
-      <CopilotDock open={copilotOpen} onClose={() => setCopilotOpen(false)} />
+      <EarnOrb open={dockOpen} onToggle={() => setDockOpen((v) => !v)} />
+      <EarnDock open={dockOpen} onClose={() => setDockOpen(false)} />
       <TrustToaster />
     </div>
   );

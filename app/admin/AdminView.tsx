@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
-import { awardTrustXp } from '@/lib/actions/xp';
+import { approveMember, archiveMember } from '@/lib/actions/admin';
 import {
   Users,
   UserPlus,
@@ -36,7 +36,7 @@ import {
   type BadgeTone
 } from '@/components/ui';
 import { TONE_HEX } from '@/components/screens/tone';
-import { BRAINS } from '@/components/screens/brains';
+import { TEAM_ROSTER, TeamAvatar } from '@/lib/team';
 import type { AdminData, AdminMember } from '@/lib/queries/admin';
 
 type MemberStatus = AdminMember['status'] | 'Archived';
@@ -421,38 +421,32 @@ function TrustPanel() {
 }
 
 function KnowledgePanel() {
-  const totalDocs = BRAINS.reduce((s, b) => s + b.docs, 0);
-  const totalChunks = BRAINS.reduce((s, b) => s + b.chunks, 0);
+  const coo = TEAM_ROSTER.find((m) => m.chief);
+  const specialists = TEAM_ROSTER.filter((m) => !m.chief);
 
   const stats: Stat[] = [
     {
-      label: 'AI brains',
-      value: String(BRAINS.length),
-      sub: 'Specialized modules',
+      label: 'The Team',
+      value: String(TEAM_ROSTER.length),
+      sub: `${coo?.position ?? 'COO'} + ${specialists.length} specialists`,
       icon: BrainCircuit,
       tone: 'gold'
     },
     {
-      label: 'Source documents',
-      value: String(totalDocs),
-      sub: 'Across all brains',
+      label: 'Knowledge embeddings',
+      value: '15 / 15',
+      sub: 'Voyage 1024-dim brains',
       icon: Database,
       tone: 'azure'
     },
     {
-      label: 'Embedded chunks',
-      value: totalChunks.toLocaleString('en-US'),
-      sub: 'pgvector store',
+      label: 'pgvector store',
+      value: 'Live',
+      sub: 'match_knowledge_chunks',
       icon: Layers,
       tone: 'success'
     }
   ];
-
-  const STATUS_TONE_BRAIN: Record<string, BadgeTone> = {
-    Active: 'success',
-    Review: 'warning',
-    Draft: 'neutral'
-  };
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -465,7 +459,7 @@ function KnowledgePanel() {
       <Card>
         <SectionTitle
           eyebrow="pgvector knowledge store"
-          title="Knowledge base · 15 AI brains"
+          title={`The Team · ${TEAM_ROSTER.length} members`}
           action={
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" icon={GitBranch}>
@@ -478,40 +472,31 @@ function KnowledgePanel() {
           }
         />
         <div className="grid gap-2.5 lg:grid-cols-2">
-          {BRAINS.map((b) => {
-            const Icon = b.icon;
-            return (
-              <div
-                key={b.slug}
-                className="flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3"
-              >
-                <span className="flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-gold-1">
-                  <Icon size={16} strokeWidth={1.9} aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-[13px] font-semibold text-fg-1">{b.name}</span>
-                    <Badge tone={STATUS_TONE_BRAIN[b.status]} className="text-[9px]">
-                      {b.status}
+          {TEAM_ROSTER.map((m) => (
+            <div
+              key={m.slug}
+              className="flex items-start gap-3 rounded-xl border border-hairline bg-surface-1 p-3"
+            >
+              <TeamAvatar member={m} size={36} className="flex-none" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="truncate text-[13px] font-semibold text-fg-1">{m.name}</span>
+                  {m.chief ? (
+                    <Badge tone="gold" className="text-[9px]">
+                      COO
                     </Badge>
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-3 text-[10.5px] tabular-nums text-fg-5">
-                    <span className="flex items-center gap-1">
-                      <Database size={11} strokeWidth={1.9} aria-hidden />
-                      {b.docs} docs
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Layers size={11} strokeWidth={1.9} aria-hidden />
-                      {b.chunks.toLocaleString('en-US')} chunks
-                    </span>
-                  </div>
+                  ) : null}
                 </div>
-                <Button variant="secondary" size="sm" icon={Sparkles}>
-                  Optimize
-                </Button>
+                <div className="mt-0.5 text-[10.5px] font-medium uppercase tracking-[0.1em] text-azure-1">
+                  {m.position}
+                </div>
+                <p className="mt-1 text-[11.5px] leading-5 text-fg-3">{m.oneLiner}</p>
               </div>
-            );
-          })}
+              <Button variant="secondary" size="sm" icon={Sparkles}>
+                Optimize
+              </Button>
+            </div>
+          ))}
         </div>
       </Card>
 
@@ -552,18 +537,17 @@ export function AdminView({ data }: { data: AdminData }) {
   function setStatus(id: string, status: MemberStatus) {
     if (status === 'Active') {
       cards.complete(id);
-      // Approving a member advances the Work layer of Chain of Trust.
+      // Approving a member advances the Execution layer of Chain of Trust.
       window.emitTrust?.({
-        layer: 'work',
+        layer: 'execution',
         title: 'Member approved',
         msg: 'An applicant was approved into the organization.',
         entity: id
       });
-      void awardTrustXp({ layer: 'work', entityType: 'member', entityId: id }).then(() =>
-        router.refresh()
-      );
+      void approveMember(id).then(() => router.refresh());
     } else if (status === 'Archived') {
       cards.archive(id);
+      void archiveMember(id).then(() => router.refresh());
     }
   }
 
@@ -587,7 +571,7 @@ export function AdminView({ data }: { data: AdminData }) {
     },
     {
       label: 'AI brains',
-      value: String(BRAINS.length),
+      value: String(TEAM_ROSTER.length),
       sub: 'Knowledge modules',
       icon: BrainCircuit,
       tone: 'gold'

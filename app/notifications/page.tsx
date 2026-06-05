@@ -22,7 +22,7 @@ export default async function NotificationsPage() {
           <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
           <p className="mx-auto mt-2 max-w-md text-[12.5px] text-fg-4">
             Join or create an organization to start receiving synergy alerts, LP interest signals,
-            and copilot updates.
+            and team updates.
           </p>
         </Card>
       </AppShell>

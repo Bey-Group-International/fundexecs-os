@@ -15,8 +15,8 @@ export interface EarnCoinProps {
 /**
  * EarnCoin — the circular Earn ("Earnest Fundmaker") avatar mark. Renders the
  * real coin asset (`public/earn-coin.png`) on a circular white disc using
- * `next/image` with `object-contain`. Reserved for the Earn copilot /
- * gamification surfaces.
+ * `next/image` with `object-contain`. Reserved for the Earn / gamification
+ * surfaces.
  */
 export function EarnCoin({ size = 32, online = false, glow = false, className }: EarnCoinProps) {
   const coin = (
