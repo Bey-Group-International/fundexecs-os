@@ -104,7 +104,7 @@ export default function LoginPage() {
             workflows, accelerate decisions, and execute like an institution.
           </p>
 
-          <div className="mt-10 flex gap-10 [font-feature-settings:'tnum']">
+          <div className="mt-8 flex gap-8 [font-feature-settings:'tnum']">
             {[
               { stat: '$612M', label: 'capital facilitated' },
               { stat: '500+', label: 'funds & sponsors' },

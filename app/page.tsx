@@ -204,7 +204,7 @@ const TRUST_LAYERS: TrustLayer[] = [
 function Hero() {
   return (
     <section
-      className="relative overflow-hidden pb-20 pt-32 sm:pb-28 sm:pt-40"
+      className="relative overflow-hidden pb-16 pt-28 sm:pb-20 sm:pt-32"
       aria-labelledby="hero-heading"
     >
       {/* Dark gradient background + tasteful gold glow. */}
@@ -216,7 +216,7 @@ function Hero() {
         }}
         aria-hidden
       />
-      <div className="mx-auto grid max-w-[1180px] items-center gap-12 px-5 sm:px-8 lg:grid-cols-12">
+      <div className="mx-auto grid max-w-[1180px] items-center gap-8 px-5 sm:px-8 lg:grid-cols-12 lg:gap-10">
         <div className="lg:col-span-7">
           <Badge tone="gold" dot pulse className="mb-6">
             Led by Earn, your live AI guide
@@ -229,7 +229,7 @@ function Hero() {
             Unified intelligence layer for the <span className="text-gold-1">private markets.</span>
           </h1>
 
-          <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-fg-3 sm:text-lg">
+          <p className="mt-5 max-w-xl text-[16px] leading-7 text-fg-3 sm:text-[17px]">
             A fifteen-strong executive team — led by Earn — working as one to optimize your
             workflows, accelerate your decisions, and elevate your capacity to execute like an
             institution.
@@ -320,7 +320,7 @@ function TeamCard({ member }: { member: TeamMember }) {
 
 function Team() {
   return (
-    <section id="team" className="py-20 sm:py-28" aria-labelledby="team-heading">
+    <section id="team" className="py-14 sm:py-20" aria-labelledby="team-heading">
       <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
         <div className="max-w-2xl">
           <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
@@ -340,7 +340,7 @@ function Team() {
         </div>
 
         {/* Earnest — the lead; Chief Operating Officer. */}
-        <div className="mt-12">
+        <div className="mt-8">
           <Card className="relative overflow-hidden p-6 sm:p-7">
             <div
               className="pointer-events-none absolute inset-0 -z-10"
@@ -380,7 +380,7 @@ function Team() {
 
 function ChainOfTrust() {
   return (
-    <section className="py-20 sm:py-28" aria-labelledby="trust-heading">
+    <section className="py-14 sm:py-20" aria-labelledby="trust-heading">
       <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
         <div className="max-w-2xl">
           <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
@@ -398,7 +398,7 @@ function ChainOfTrust() {
           </p>
         </div>
 
-        <ol className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {TRUST_LAYERS.map((layer, i) => (
             <li key={layer.name}>
               <Card className="relative flex h-full flex-col overflow-hidden p-6">
@@ -431,9 +431,9 @@ function ChainOfTrust() {
 
 function HowItWorks() {
   return (
-    <section className="py-20 sm:py-28" aria-labelledby="how-heading">
+    <section className="py-14 sm:py-20" aria-labelledby="how-heading">
       <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
-        <div className="mb-14 max-w-2xl">
+        <div className="mb-10 max-w-2xl">
           <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
             How it works
           </p>
@@ -469,7 +469,7 @@ function HowItWorks() {
 function FinalCta() {
   return (
     <section
-      className="py-20 sm:py-28"
+      className="py-14 sm:py-20"
       style={{
         background:
           'radial-gradient(70% 120% at 50% 0%, rgba(247,201,72,0.12), transparent 70%), var(--bg-0)'
