@@ -230,12 +230,12 @@ function Hero() {
             id="hero-heading"
             className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-fg-1 sm:text-5xl lg:text-6xl"
           >
-            Run your capital lifecycle <span className="text-gold-1">end to end.</span>
+            Unified intelligence layer for the <span className="text-gold-1">private markets.</span>
           </h1>
 
           <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-fg-3 sm:text-lg">
-            Eleven AI copilots, led by Earnest, carry every mandate from first thesis to signed
-            close — sourcing, diligence, drafting, and execution on one platform.
+            Twelve AI copilots working as one to optimize workflows, accelerate decisions, and
+            elevate your capacity to execute like an institution.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-4">
@@ -278,15 +278,23 @@ function Hero() {
 function CopilotCard({ copilot }: { copilot: Copilot }) {
   const Icon = copilot.icon;
   return (
-    <Card clickable className="p-6">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
-        <Icon size={18} strokeWidth={1.8} aria-hidden />
+    <Card clickable className="group flex h-full flex-col p-6">
+      {/* Capability mark + Earn presence — every copilot runs under Earnest. */}
+      <div className="flex items-start justify-between">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
+          <Icon size={18} strokeWidth={1.8} aria-hidden />
+        </div>
+        <EarnCoin size={24} className="opacity-60 transition group-hover:opacity-100" />
       </div>
       <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{copilot.name}</h3>
       <p className="mt-0.5 text-[10.5px] font-semibold uppercase tracking-[0.13em] text-gold-1">
         {copilot.title}
       </p>
       <p className="mt-2 text-[12.5px] leading-6 text-fg-3">{copilot.body}</p>
+      <div className="mt-auto flex items-center gap-1.5 border-t border-hairline pt-3.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">
+        <EarnCoin size={13} />
+        Orchestrated by Earnest
+      </div>
     </Card>
   );
 }
@@ -303,11 +311,12 @@ function Copilots() {
             id="copilots-heading"
             className="text-3xl font-semibold leading-tight tracking-[-0.02em] text-fg-1 sm:text-4xl lg:text-5xl"
           >
-            Eleven copilots. One continuous capital lifecycle.
+            Eleven specialists. One orchestrator. One lifecycle.
           </h2>
           <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
-            Each copilot owns a stage of the work. Together they carry a mandate from first thesis
-            to signed close — coordinated, documented, and fully auditable.
+            Each copilot owns a stage of the work, and Earnest orchestrates all twelve as one —
+            carrying a mandate from first thesis to signed close, coordinated, documented, and fully
+            auditable.
           </p>
         </div>
 

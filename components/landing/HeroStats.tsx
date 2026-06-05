@@ -14,7 +14,7 @@ const STATS: Stat[] = [
   { value: 612, format: (n) => `$${n.toLocaleString()}M+`, label: 'Capital tracked' },
   { value: 500, format: (n) => `${n.toLocaleString()}+`, label: 'Relationships mapped' },
   { value: 4, format: (n) => `${n}-layer`, label: 'Chain of Trust' },
-  { value: 15, format: (n) => `${n}`, label: 'Specialist copilots' }
+  { value: 12, format: (n) => `${n}`, label: 'AI copilots' }
 ];
 
 /** Hero proof points — animated count-ups in an elevated strip. */
