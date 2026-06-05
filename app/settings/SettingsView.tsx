@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -31,13 +32,24 @@ import {
 } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
+import type { Database } from '@/lib/supabase/database.types';
+import {
+  updateAccountSettings,
+  updateOrganizationSettings,
+  type SettingsActionState
+} from './actions';
+
+type OrgType = Database['public']['Enums']['org_type'];
 
 interface SettingsViewProps {
   email: string | null;
   fullName: string | null;
   role: string | null;
+  bio: string | null;
+  phone: string | null;
   orgName: string | null;
   orgTier: string | null;
+  orgType: OrgType | null;
   /** Proof of Truth profile status + completion, for the profile card. */
   proofStatus: 'in_progress' | 'complete';
   proofPct: number;
@@ -63,6 +75,38 @@ const STATUSES: TrustStatus[] = [
 const LEVEL = 7;
 const XP = 4820;
 const XP_NEXT = 6000;
+const ACTION_INITIAL_STATE: SettingsActionState = { status: 'idle', message: '' };
+
+const ORG_OPTIONS: Array<{ value: OrgType; label: string }> = [
+  { value: 'fund', label: 'Fund' },
+  { value: 'lp', label: 'Limited partner' },
+  { value: 'operator', label: 'Operator' },
+  { value: 'capital_provider', label: 'Capital provider' },
+  { value: 'service_provider', label: 'Service provider' },
+  { value: 'partner', label: 'Partner' }
+];
+
+function SaveButton({ pendingLabel = 'Saving...' }: { pendingLabel?: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button variant="primary" size="sm" type="submit" disabled={pending}>
+      {pending ? pendingLabel : 'Save changes'}
+    </Button>
+  );
+}
+
+function ActionNotice({ state }: { state: SettingsActionState }) {
+  if (state.status === 'idle') return null;
+  const success = state.status === 'success';
+  return (
+    <p
+      className={success ? 'text-[12px] text-success' : 'text-[12px] text-danger'}
+      role={success ? 'status' : 'alert'}
+    >
+      {state.message}
+    </p>
+  );
+}
 
 function GamificationHeader({ name }: { name: string }) {
   const earned = STATUSES.filter((s) => s.earned).length;
@@ -233,34 +277,61 @@ function ProofOfTruthCard({
 function AccountSection({
   email,
   fullName,
-  role
+  role,
+  bio,
+  phone
 }: {
   email: string | null;
   fullName: string | null;
   role: string | null;
+  bio: string | null;
+  phone: string | null;
 }) {
+  const [state, formAction] = useActionState(updateAccountSettings, ACTION_INITIAL_STATE);
+
   return (
     <Card>
-      <SectionTitle
-        eyebrow="Account"
-        title="Profile details"
-        action={
-          <Button variant="primary" size="sm">
-            Save changes
-          </Button>
-        }
-      />
-      <div className="flex flex-col gap-4">
-        <FieldRow>
-          <Input label="Full name" defaultValue={fullName ?? ''} placeholder="Your name" />
-          <Input label="Role" defaultValue={role ?? ''} placeholder="e.g. Managing Partner" />
-        </FieldRow>
-        <FieldRow>
-          <Input label="Email" icon={Mail} defaultValue={email ?? ''} readOnly />
-          <Input label="Phone" icon={Phone} placeholder="+1 (555) 000-0000" />
-        </FieldRow>
-        <Input label="Bio" placeholder="A short institutional bio for your LP-facing profile." />
-      </div>
+      <form action={formAction} className="flex flex-col gap-4">
+        <SectionTitle eyebrow="Account" title="Profile details" action={<SaveButton />} />
+        <div className="flex flex-col gap-4">
+          <FieldRow>
+            <Input
+              label="Full name"
+              name="fullName"
+              defaultValue={fullName ?? ''}
+              placeholder="Your name"
+              required
+              maxLength={120}
+            />
+            <Input
+              label="Role"
+              name="role"
+              defaultValue={role ?? ''}
+              placeholder="e.g. Managing Partner"
+              maxLength={120}
+            />
+          </FieldRow>
+          <FieldRow>
+            <Input label="Email" icon={Mail} defaultValue={email ?? ''} readOnly />
+            <Input
+              label="Phone"
+              name="phone"
+              icon={Phone}
+              defaultValue={phone ?? ''}
+              placeholder="+1 (555) 000-0000"
+              maxLength={40}
+            />
+          </FieldRow>
+          <Input
+            label="Bio"
+            name="bio"
+            defaultValue={bio ?? ''}
+            placeholder="A short institutional bio for your LP-facing profile."
+            maxLength={2000}
+          />
+          <ActionNotice state={state} />
+        </div>
+      </form>
     </Card>
   );
 }
@@ -321,51 +392,47 @@ function SecuritySection() {
 
 function OrganizationSection({
   orgName,
-  orgTier
+  orgTier,
+  orgType
 }: {
   orgName: string | null;
   orgTier: string | null;
+  orgType: OrgType | null;
 }) {
+  const [state, formAction] = useActionState(updateOrganizationSettings, ACTION_INITIAL_STATE);
+
   return (
     <Card>
-      <SectionTitle
-        eyebrow="Organization"
-        title="Workspace"
-        action={
-          <Button variant="primary" size="sm">
-            Save changes
-          </Button>
-        }
-      />
-      <div className="flex flex-col gap-4">
-        <FieldRow>
-          <Input
-            label="Organization name"
-            icon={Building2}
-            defaultValue={orgName ?? ''}
-            placeholder="Your organization"
-          />
-          <Select
-            label="Organization type"
-            defaultValue="fund"
-            options={[
-              { value: 'fund', label: 'Fund' },
-              { value: 'lp', label: 'Limited partner' },
-              { value: 'operator', label: 'Operator' },
-              { value: 'capital_provider', label: 'Capital provider' },
-              { value: 'service_provider', label: 'Service provider' },
-              { value: 'partner', label: 'Partner' }
-            ]}
-          />
-        </FieldRow>
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-hairline bg-surface-1 px-4 py-3">
-          <div>
-            <div className="text-[13px] font-semibold text-fg-1">Tier</div>
-            <div className="mt-0.5 text-[11.5px] text-fg-4">Current institutional standing</div>
+      <form action={formAction} className="flex flex-col gap-4">
+        <SectionTitle eyebrow="Organization" title="Workspace" action={<SaveButton />} />
+        <div className="flex flex-col gap-4">
+          <FieldRow>
+            <Input
+              label="Organization name"
+              name="orgName"
+              icon={Building2}
+              defaultValue={orgName ?? ''}
+              placeholder="Your organization"
+              required
+              maxLength={120}
+            />
+            <Select
+              label="Organization type"
+              name="orgType"
+              defaultValue={orgType ?? 'fund'}
+              options={ORG_OPTIONS}
+            />
+          </FieldRow>
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-hairline bg-surface-1 px-4 py-3">
+            <div>
+              <div className="text-[13px] font-semibold text-fg-1">Tier</div>
+              <div className="mt-0.5 text-[11.5px] text-fg-4">Current institutional standing</div>
+            </div>
+            <Badge tone="info">{orgTier ?? 'Emerging manager'}</Badge>
           </div>
-          <Badge tone="info">{orgTier ?? 'Emerging manager'}</Badge>
+          <ActionNotice state={state} />
         </div>
-      </div>
+      </form>
     </Card>
   );
 }
@@ -458,8 +525,11 @@ export function SettingsView({
   email,
   fullName,
   role,
+  bio,
+  phone,
   orgName,
   orgTier,
+  orgType,
   proofStatus,
   proofPct,
   proofMemberType
@@ -476,12 +546,14 @@ export function SettingsView({
       {tab === 'account' && (
         <>
           <ProofOfTruthCard status={proofStatus} pct={proofPct} memberType={proofMemberType} />
-          <AccountSection email={email} fullName={fullName} role={role} />
+          <AccountSection email={email} fullName={fullName} role={role} bio={bio} phone={phone} />
         </>
       )}
       {tab === 'notifications' && <NotificationsSection />}
       {tab === 'security' && <SecuritySection />}
-      {tab === 'organization' && <OrganizationSection orgName={orgName} orgTier={orgTier} />}
+      {tab === 'organization' && (
+        <OrganizationSection orgName={orgName} orgTier={orgTier} orgType={orgType} />
+      )}
       {tab === 'billing' && <BillingSection />}
     </div>
   );

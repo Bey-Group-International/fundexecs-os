@@ -4,9 +4,12 @@ import { getShellIdentity } from '@/lib/queries/identity';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getMemberProfile } from '@/lib/queries/member-profile';
+import type { Database } from '@/lib/supabase/database.types';
 import { SettingsView } from './SettingsView';
 
 export const metadata: Metadata = { title: 'Profile & settings' };
+
+type OrgType = Database['public']['Enums']['org_type'];
 
 /**
  * Profile & settings — gamification header plus account / notifications /
@@ -24,14 +27,16 @@ export default async function SettingsPage() {
 
   let orgName: string | null = null;
   let orgTier: string | null = null;
+  let orgType: OrgType | null = null;
   if (org) {
     const { data } = await supabase
       .from('organizations')
-      .select('name, tier')
+      .select('name, tier, type')
       .eq('id', org.orgId)
       .maybeSingle();
     orgName = data?.name ?? null;
     orgTier = data?.tier ?? null;
+    orgType = data?.type ?? null;
   }
 
   let fullName: string | null = null;
@@ -58,6 +63,13 @@ export default async function SettingsPage() {
         role={role}
         orgName={orgName}
         orgTier={orgTier}
+        orgType={orgType}
+        bio={memberProfile?.bio ?? null}
+        phone={
+          typeof memberProfile?.details.contact_phone === 'string'
+            ? memberProfile.details.contact_phone
+            : null
+        }
         proofStatus={memberProfile?.status ?? 'in_progress'}
         proofPct={memberProfile?.completionPct ?? 0}
         proofMemberType={memberProfile?.memberType ?? null}
