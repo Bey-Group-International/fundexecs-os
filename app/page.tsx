@@ -33,9 +33,6 @@ export const metadata: Metadata = {
 const PRIMARY_CTA =
   'inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-5 py-3 text-sm font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
-const PRIMARY_CTA_SM =
-  'inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-4 py-2 text-[12.5px] font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-
 const SECONDARY_CTA =
   'inline-flex items-center justify-center gap-2 rounded-xl border border-hairline bg-surface-1 px-5 py-3 text-sm font-medium text-fg-2 transition hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1';
 
@@ -358,12 +355,6 @@ function Copilots() {
                 {cluster.copilots.map((c) => (
                   <CopilotCard key={c.title} copilot={c} />
                 ))}
-              </div>
-              <div className="mt-6">
-                <Link href="/login" className={PRIMARY_CTA_SM}>
-                  Get started
-                  <ArrowRight size={14} strokeWidth={1.9} aria-hidden />
-                </Link>
               </div>
             </div>
           ))}
