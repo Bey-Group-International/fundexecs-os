@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Plus, Trash2 } from 'lucide-react';
 import { Badge, Button, Input, Select } from '@/components/ui';
@@ -50,7 +50,13 @@ export function DealDetailDrawer({
   deal: DealDetailData | null;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  // Each interactive surface gets its own pending flag so that adding an
+  // allocation does not put the parent "Save changes" button into Saving…
+  // state, and a hung allocation request does not lock the whole drawer.
+  const [savePending, startSave] = useTransition();
+  const [stagePending, startStage] = useTransition();
+  const [archivePending, startArchive] = useTransition();
+  const [allocPending, startAlloc] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(deal?.name ?? '');
   const [amount, setAmount] = useState(deal?.amount?.toString() ?? '');
@@ -73,87 +79,111 @@ export function DealDetailDrawer({
     setError(null);
   }
 
+  // Defense in depth: if any pending state is stuck for more than 30s
+  // (e.g. a future regression makes an action hang) we surface a clear
+  // "timed out" message and clear the pending flags so the user can
+  // retry instead of staring at "Saving…" forever.
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anyPending = savePending || stagePending || archivePending || allocPending;
+  useEffect(() => {
+    if (!anyPending) {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      return;
+    }
+    timeoutRef.current = setTimeout(() => {
+      setError(
+        'This action took longer than 30 seconds. The change may still have saved — refresh to confirm.'
+      );
+    }, 30_000);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [anyPending]);
+
   if (!deal) return null;
 
-  function refreshAndClear(msg: string | null = null) {
-    setError(msg);
-    router.refresh();
-  }
-
   function handleStage(next: string) {
-    if (!deal || pending || next === stage) return;
+    if (!deal || stagePending || next === stage) return;
     setStage(next);
-    startTransition(async () => {
+    setError(null);
+    startStage(async () => {
       const r = await updateDealStage(deal.id, next);
       if (!r.ok) {
         setStage(deal.stage);
-        refreshAndClear(r.error);
+        setError(r.error);
         return;
       }
-      refreshAndClear(null);
+      router.refresh();
     });
   }
 
   function handleSave() {
-    if (!deal || pending) return;
+    if (!deal || savePending) return;
+    setError(null);
     const parsed = amount ? Number(amount.replace(/[^0-9.]/g, '')) : null;
-    startTransition(async () => {
+    startSave(async () => {
       const r = await updateDeal(deal.id, {
         name,
         amount: Number.isFinite(parsed) ? (parsed as number) : null
       });
       if (!r.ok) {
-        refreshAndClear(r.error);
+        setError(r.error);
         return;
       }
-      refreshAndClear(null);
+      router.refresh();
     });
   }
 
   function handleArchive() {
-    if (!deal || pending) return;
-    startTransition(async () => {
+    if (!deal || archivePending) return;
+    setError(null);
+    startArchive(async () => {
       const r = await archiveDeal(deal.id);
       if (!r.ok) {
-        refreshAndClear(r.error);
+        setError(r.error);
         return;
       }
       onClose();
-      refreshAndClear(null);
+      router.refresh();
     });
   }
 
   function handleAddAllocation() {
-    if (!deal || pending) return;
+    if (!deal || allocPending) return;
+    setError(null);
     const parsed = Number(allocAmount.replace(/[^0-9.]/g, ''));
     if (!Number.isFinite(parsed) || parsed <= 0) {
       setError('Amount must be a positive number.');
       return;
     }
-    startTransition(async () => {
+    startAlloc(async () => {
       const r = await createAllocation({
         dealId: deal.id,
         amount: parsed,
         status: allocStatus
       });
       if (!r.ok) {
-        refreshAndClear(r.error);
+        setError(r.error);
         return;
       }
       setAllocAmount('');
-      refreshAndClear(null);
+      router.refresh();
     });
   }
 
   function handleRemoveAllocation(allocId: string) {
-    if (pending) return;
-    startTransition(async () => {
+    if (allocPending) return;
+    setError(null);
+    startAlloc(async () => {
       const r = await deleteAllocation(allocId);
       if (!r.ok) {
-        refreshAndClear(r.error);
+        setError(r.error);
         return;
       }
-      refreshAndClear(null);
+      router.refresh();
     });
   }
 
@@ -169,20 +199,20 @@ export function DealDetailDrawer({
             variant="ghost"
             size="sm"
             onClick={handleArchive}
-            disabled={pending}
+            disabled={archivePending}
             icon={Trash2}
             data-testid="deal-detail-archive"
           >
-            Archive deal
+            {archivePending ? 'Archiving…' : 'Archive deal'}
           </Button>
           <Button
             variant="primary"
             size="sm"
             onClick={handleSave}
-            disabled={pending}
+            disabled={savePending}
             data-testid="deal-detail-save"
           >
-            {pending ? 'Saving…' : 'Save changes'}
+            {savePending ? 'Saving…' : 'Save changes'}
           </Button>
         </>
       }
@@ -206,7 +236,7 @@ export function DealDetailDrawer({
           value={stage}
           onChange={(e) => handleStage(e.target.value)}
           options={STAGE_OPTIONS}
-          disabled={pending}
+          disabled={stagePending}
           data-testid="deal-detail-stage"
         />
         <div>
@@ -238,7 +268,8 @@ export function DealDetailDrawer({
                       type="button"
                       onClick={() => handleRemoveAllocation(a.id)}
                       aria-label="Remove allocation"
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-hairline text-fg-4 transition hover:text-danger"
+                      disabled={allocPending}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-hairline text-fg-4 transition hover:text-danger disabled:opacity-50"
                       data-testid={`allocation-delete-${a.id}`}
                     >
                       <Trash2 size={12} strokeWidth={1.9} aria-hidden />
@@ -278,10 +309,10 @@ export function DealDetailDrawer({
                 size="sm"
                 icon={Plus}
                 onClick={handleAddAllocation}
-                disabled={pending || !allocAmount.trim()}
+                disabled={allocPending || !allocAmount.trim()}
                 data-testid="allocation-add"
               >
-                Add
+                {allocPending ? 'Adding…' : 'Add'}
               </Button>
             </div>
           </div>

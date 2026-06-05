@@ -303,17 +303,31 @@ function PartnersStack() {
 export function PipelineView({ data }: { data: PipelineData }) {
   const [tab, setTab] = useState<Tab>('formation');
   const [newDealOpen, setNewDealOpen] = useState(false);
-  const [activeDeal, setActiveDeal] = useState<DealDetailData | null>(null);
+  const [activeDealId, setActiveDealId] = useState<string | null>(null);
+  // Derived from `data` on every render so a `router.refresh()` from a
+  // server action (e.g. createAllocation) immediately repopulates the
+  // drawer's allocations list. A snapshot here would go stale and make
+  // every mutation look like it hung from the user's perspective.
+  let activeDeal: DealDetailData | null = null;
+  if (activeDealId) {
+    for (const stage of data.stages) {
+      const d = stage.deals.find((x) => x.id === activeDealId);
+      if (d) {
+        activeDeal = {
+          id: d.id,
+          name: d.name,
+          stage: d.stage,
+          status: d.status,
+          amount: d.amount,
+          allocations: d.allocations
+        };
+        break;
+      }
+    }
+  }
 
   function selectDeal(d: PipelineDeal) {
-    setActiveDeal({
-      id: d.id,
-      name: d.name,
-      stage: d.stage,
-      status: d.status,
-      amount: d.amount,
-      allocations: d.allocations
-    });
+    setActiveDealId(d.id);
   }
 
   const summary: Array<{ label: string; value: string; icon: LucideIcon; tone: BadgeTone }> = [
@@ -403,7 +417,7 @@ export function PipelineView({ data }: { data: PipelineData }) {
       <NewDealDrawer open={newDealOpen} onClose={() => setNewDealOpen(false)} />
       <DealDetailDrawer
         open={activeDeal !== null}
-        onClose={() => setActiveDeal(null)}
+        onClose={() => setActiveDealId(null)}
         deal={activeDeal}
       />
     </div>
