@@ -6,15 +6,15 @@ A private-markets operating system with a 15-AI specialist team
 
 ## Current sprint status
 
-| phase | scope | status |
-| ----- | ----- | ------ |
-| Phase 1 | §3H Team identity carry-over (15 specialists across landing + auth surfaces, `lib/team/*` single source of truth) | ✅ DONE |
-| Phase 2 | Deliverable D — 5 member-type dashboard layouts (`app/command-center/layouts/*`) with loading/empty/error states + EarnNextBestActions | ✅ DONE |
+| phase   | scope                                                                                                                                                                       | status                    |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Phase 1 | §3H Team identity carry-over (15 specialists across landing + auth surfaces, `lib/team/*` single source of truth)                                                           | ✅ DONE                   |
+| Phase 2 | Deliverable D — 5 member-type dashboard layouts (`app/command-center/layouts/*`) with loading/empty/error states + EarnNextBestActions                                      | ✅ DONE                   |
 | Phase 3 | Foundational: A) bidirectional middleware onboarding gate, B) `/api/ask-earn` never-block (HTTP 200 degraded shape), C) generalized signup seed + per-type top-up migration | ✅ DONE — incl. 2 patches |
-| Phase 3 | C-runtime: apply migration to live + provision 5 test users + row-count snapshot | ✅ DONE 2026-02-06 |
-| Phase 4 | Core-loop persistence — wire Chain of Trust drawer + Supabase Storage buckets, server actions for Pipeline / Strategy / Notifications / Admin / Settings | ⏳ NOT STARTED (next) |
-| Phase 5 | Mocked integrations connect path | ⏳ NOT STARTED |
-| Phase 6 | Polish + re-embed brains in `lib/ai/brains.ts` | ⏳ NOT STARTED |
+| Phase 3 | C-runtime: apply migration to live + provision 5 test users + row-count snapshot                                                                                            | ✅ DONE 2026-02-06        |
+| Phase 4 | Core-loop persistence — wire Chain of Trust drawer + Supabase Storage buckets, server actions for Pipeline / Strategy / Notifications / Admin / Settings                    | ⏳ NOT STARTED (next)     |
+| Phase 5 | Mocked integrations connect path                                                                                                                                            | ⏳ NOT STARTED            |
+| Phase 6 | Polish + re-embed brains in `lib/ai/brains.ts`                                                                                                                              | ⏳ NOT STARTED            |
 
 ## Test surface (live `emityvdaeiqxtpxdhyky`)
 
@@ -53,5 +53,5 @@ snapshot live in `/app/memory/test_credentials.md`.
 - `lib/team/*` is the single source of truth for the 15 specialists.
 - All Supabase secrets are read from `process.env`, never inlined.
 - Keep CI green: `npm run format:check && npm run build && npm run
-  typecheck && npm run lint`.
+typecheck && npm run lint`.
 - Migrations are additive + idempotent. No drops.

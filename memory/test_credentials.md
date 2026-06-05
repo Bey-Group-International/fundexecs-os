@@ -9,9 +9,9 @@ baseline + per-type seed.
 
 ### Patches applied on top of the base migration
 
-| migration | reason |
-| --------- | ------ |
-| `20260606123000_fix_handle_new_user_org_type.sql` | base migration used `'investment'` for `organizations.type`, which is not a member of the `org_type` enum (`fund | lp | operator | capital_provider | service_provider | partner`). Auth signups failed with `invalid input value for enum org_type`. Patch switches the auto-created org to `'operator'`. |
+| migration                                                  | reason                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | -------- | ---------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `20260606123000_fix_handle_new_user_org_type.sql`          | base migration used `'investment'` for `organizations.type`, which is not a member of the `org_type` enum (`fund                                                                                                                                                                                                          | lp  | operator | capital_provider | service_provider | partner`). Auth signups failed with `invalid input value for enum org_type`. Patch switches the auto-created org to `'operator'`. |
 | `20260606123500_fix_seed_baseline_multi_row_returning.sql` | `seed_demo_baseline_for_org` did a multi-row `INSERT … RETURNING id INTO _contact_a` (single scalar). The original author's comment claimed PL/pgSQL would silently capture the last value — it actually throws `TOO_MANY_ROWS`. Patch drops the bogus `RETURNING` and relies on the existing `SELECT id INTO …` lookups. |
 
 Both patches are additive (`CREATE OR REPLACE FUNCTION`) and the SQL is
@@ -40,13 +40,13 @@ All organizations were auto-created by the `handle_new_user` trigger on
 signup. `member_profiles` is keyed by `user_id` (no separate `id` PK), so
 the "member profile id" column below is the same value as `user_id`.
 
-| member_type           | email                                              | user_id (= member_profile_id)            | org_id                                   | member_profile status |
-| --------------------- | -------------------------------------------------- | ---------------------------------------- | ---------------------------------------- | --------------------- |
-| `investment_firm`     | test+investment_firm@fundexecs-staging.dev         | `28bebb95-ab79-4039-b604-8db44d4be4b3`   | `145668b7-f739-4b5a-9207-f479b94b197b`   | **`complete`** ✅      |
-| `service_provider`    | test+service_provider@fundexecs-staging.dev        | `c1bec9de-0e48-42ac-9ab0-807ca4fd0005`   | `ccbbfee0-ab07-4dc8-8e72-81bbd6b940c2`   | `in_progress`         |
-| `startup`             | test+startup@fundexecs-staging.dev                 | `23d995fa-91d3-4a08-b671-dba690de867b`   | `76fd7336-0e1d-4930-b5ee-26a42b12269d`   | `in_progress`         |
-| `student`             | test+student@fundexecs-staging.dev                 | `f60306b9-644d-46ea-832b-eabf1f6b066a`   | `0b7805d5-4a11-4021-aaa8-602073d77140`   | **`complete`** ✅      |
-| `individual_investor` | test+individual_investor@fundexecs-staging.dev     | `efd97e2c-4f71-4f8e-a8e1-46891ce90491`   | `12363079-7bd6-4eb5-898d-0269bcf032e7`   | `in_progress`         |
+| member_type           | email                                          | user_id (= member_profile_id)          | org_id                                 | member_profile status |
+| --------------------- | ---------------------------------------------- | -------------------------------------- | -------------------------------------- | --------------------- |
+| `investment_firm`     | test+investment_firm@fundexecs-staging.dev     | `28bebb95-ab79-4039-b604-8db44d4be4b3` | `145668b7-f739-4b5a-9207-f479b94b197b` | **`complete`** ✅     |
+| `service_provider`    | test+service_provider@fundexecs-staging.dev    | `c1bec9de-0e48-42ac-9ab0-807ca4fd0005` | `ccbbfee0-ab07-4dc8-8e72-81bbd6b940c2` | `in_progress`         |
+| `startup`             | test+startup@fundexecs-staging.dev             | `23d995fa-91d3-4a08-b671-dba690de867b` | `76fd7336-0e1d-4930-b5ee-26a42b12269d` | `in_progress`         |
+| `student`             | test+student@fundexecs-staging.dev             | `f60306b9-644d-46ea-832b-eabf1f6b066a` | `0b7805d5-4a11-4021-aaa8-602073d77140` | **`complete`** ✅     |
+| `individual_investor` | test+individual_investor@fundexecs-staging.dev | `efd97e2c-4f71-4f8e-a8e1-46891ce90491` | `12363079-7bd6-4eb5-898d-0269bcf032e7` | `in_progress`         |
 
 Two users (`investment_firm`, `student`) are flipped to `complete` so the
 tester can render `/command-center` against real seeded data and verify
@@ -95,13 +95,13 @@ provider, 2 welcome notifications, 1 chain-of-trust record) on top of
 the per-type top-up. Counts below are TOTAL per org after both seeds
 ran.
 
-| member_type                                | acceptance criteria from brief                                                                  | deals | allocations | capital_providers | contacts | warm_introductions | governance_objectives | notifications | chain_of_trust_records | synergy_opportunities | tasks | pass? |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------- | ----- | ----------- | ----------------- | -------- | ------------------ | --------------------- | ------------- | ---------------------- | --------------------- | ----- | ----- |
-| `investment_firm`                          | ≥6 deals                                                                                       |   6   |      3      |         3         |    3     |         0          |           3           |       3       |           1            |           1           |   0   |   ✅   |
-| `service_provider`                         | ≥5 inbound deals + ≥3 ideal-client contacts                                                    |   5   |      0      |         1         |    6     |         0          |           3           |       5       |           1            |           0           |   0   |   ✅   |
-| `startup`                                  | ≥4 investor contacts + 1 raise deal + ≥3 tasks + 2 warm intros                                 |   1   |      0      |         1         |    7     |         2          |           3           |       3       |           1            |           0           |   3   |   ✅   |
-| `student`                                  | ≥3 learning tasks + ≥4 curated notifications + ≥2 network contacts                             |   0   |      0      |         1         |    5     |         0          |           3           |       7       |           1            |           0           |   3   |   ✅   |
-| `individual_investor`                      | ≥5 deals + ≥3 allocations + ≥1 watchlist synergy + ≥2 syndicate contacts                       |   5   |      3      |         1         |    5     |         0          |           3           |       3       |           1            |           1           |   0   |   ✅   |
+| member_type           | acceptance criteria from brief                                           | deals | allocations | capital_providers | contacts | warm_introductions | governance_objectives | notifications | chain_of_trust_records | synergy_opportunities | tasks | pass? |
+| --------------------- | ------------------------------------------------------------------------ | ----- | ----------- | ----------------- | -------- | ------------------ | --------------------- | ------------- | ---------------------- | --------------------- | ----- | ----- |
+| `investment_firm`     | ≥6 deals                                                                 | 6     | 3           | 3                 | 3        | 0                  | 3                     | 3             | 1                      | 1                     | 0     | ✅    |
+| `service_provider`    | ≥5 inbound deals + ≥3 ideal-client contacts                              | 5     | 0           | 1                 | 6        | 0                  | 3                     | 5             | 1                      | 0                     | 0     | ✅    |
+| `startup`             | ≥4 investor contacts + 1 raise deal + ≥3 tasks + 2 warm intros           | 1     | 0           | 1                 | 7        | 2                  | 3                     | 3             | 1                      | 0                     | 3     | ✅    |
+| `student`             | ≥3 learning tasks + ≥4 curated notifications + ≥2 network contacts       | 0     | 0           | 1                 | 5        | 0                  | 3                     | 7             | 1                      | 0                     | 3     | ✅    |
+| `individual_investor` | ≥5 deals + ≥3 allocations + ≥1 watchlist synergy + ≥2 syndicate contacts | 5     | 3           | 1                 | 5        | 0                  | 3                     | 3             | 1                      | 1                     | 0     | ✅    |
 
 Notes for the tester:
 

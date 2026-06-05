@@ -36,13 +36,7 @@ const ADMIN = createClient(SUPABASE_URL, SERVICE_ROLE, {
 });
 
 const PASSWORD = 'FundExecsTest!2026X9k7Lqr';
-const TYPES = [
-  'investment_firm',
-  'service_provider',
-  'startup',
-  'student',
-  'individual_investor'
-];
+const TYPES = ['investment_firm', 'service_provider', 'startup', 'student', 'individual_investor'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -79,8 +73,7 @@ async function provisionOne(memberType) {
   }
 
   // Resolve org_id (handle_new_user inserts an org_members row with role='owner').
-  const { data: om, error: omErr } = await ADMIN
-    .from('org_members')
+  const { data: om, error: omErr } = await ADMIN.from('org_members')
     .select('org_id')
     .eq('user_id', user.id)
     .limit(1);
@@ -95,17 +88,14 @@ async function provisionOne(memberType) {
   // DO NOT overwrite an existing row — if a tester (or psql) has manually
   // flipped the status to 'complete', a re-run of this script must not
   // silently downgrade them back to 'in_progress'.
-  const { error: pErr } = await ADMIN
-    .from('profiles')
+  const { error: pErr } = await ADMIN.from('profiles')
     .update({ member_type: memberType })
     .eq('id', user.id);
   if (pErr) throw new Error(`profiles update ${memberType}: ${pErr.message}`);
-  const { error: mpErr } = await ADMIN
-    .from('member_profiles')
-    .upsert(
-      { user_id: user.id, status: 'in_progress' },
-      { onConflict: 'user_id', ignoreDuplicates: true }
-    );
+  const { error: mpErr } = await ADMIN.from('member_profiles').upsert(
+    { user_id: user.id, status: 'in_progress' },
+    { onConflict: 'user_id', ignoreDuplicates: true }
+  );
   if (mpErr) throw new Error(`member_profiles upsert ${memberType}: ${mpErr.message}`);
 
   // Fire the per-type top-up seed.
@@ -155,8 +145,7 @@ async function collectCounts(orgId, userId) {
     }
   }
   // also member_profile id (PK is user_id; use that)
-  const { data: mp } = await ADMIN
-    .from('member_profiles')
+  const { data: mp } = await ADMIN.from('member_profiles')
     .select('user_id, status')
     .eq('user_id', userId)
     .maybeSingle();
