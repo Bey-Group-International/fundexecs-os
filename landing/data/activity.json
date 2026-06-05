@@ -1,0 +1,17 @@
+{
+  "comment": "Seed activity for the Live Activity ticker. Edit freely. Entries are anonymized and illustrative only — not an offer or solicitation. Keep `type` to one of the allowed values: Deal Closed, Capital Allocated, Check Signed, Capital Raised, Connector Intro, Acquisition Review.",
+  "entries": [
+    { "initials": "J.R.", "role": "Family Office", "region": "Chicago", "type": "Capital Allocated", "value": "$250K", "date": "Feb 2026" },
+    { "initials": "M.T.", "role": "Fund Manager", "region": "New York", "type": "Capital Raised", "value": "$4.2M", "date": "Feb 2026" },
+    { "initials": "A.K.", "role": "General Partner", "region": "Austin", "type": "Deal Closed", "value": "$1.8M", "date": "Jan 2026" },
+    { "initials": "S.L.", "role": "Angel Investor", "region": "San Francisco", "type": "Check Signed", "value": "$100K", "date": "Jan 2026" },
+    { "initials": "D.P.", "role": "Connector", "region": "London", "type": "Connector Intro", "value": "Tier-1 LP", "date": "Feb 2026" },
+    { "initials": "R.N.", "role": "Sponsor", "region": "Miami", "type": "Acquisition Review", "value": "$12M Target", "date": "Jan 2026" },
+    { "initials": "C.B.", "role": "Family Office", "region": "Dallas", "type": "Capital Allocated", "value": "$500K", "date": "Dec 2025" },
+    { "initials": "E.V.", "role": "Fund Manager", "region": "Boston", "type": "Capital Raised", "value": "$7.5M", "date": "Feb 2026" },
+    { "initials": "T.H.", "role": "General Partner", "region": "Toronto", "type": "Deal Closed", "value": "$3.1M", "date": "Jan 2026" },
+    { "initials": "P.W.", "role": "Institutional LP", "region": "Singapore", "type": "Check Signed", "value": "$2.0M", "date": "Feb 2026" },
+    { "initials": "G.M.", "role": "Connector", "region": "Dubai", "type": "Connector Intro", "value": "Sovereign Fund", "date": "Dec 2025" },
+    { "initials": "L.F.", "role": "Sponsor", "region": "Los Angeles", "type": "Acquisition Review", "value": "$28M Target", "date": "Feb 2026" }
+  ]
+}

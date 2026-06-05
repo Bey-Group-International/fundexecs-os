@@ -13,3 +13,6 @@ lib/supabase/database.types.ts
 
 # vendored design-system handoff (kept verbatim from the design package)
 design_handoff_fundexecs_os/
+
+# static, self-contained marketing site (CDN-based, no build step)
+landing/
