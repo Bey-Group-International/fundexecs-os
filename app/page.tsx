@@ -278,23 +278,15 @@ function Hero() {
 function CopilotCard({ copilot }: { copilot: Copilot }) {
   const Icon = copilot.icon;
   return (
-    <Card clickable className="group flex h-full flex-col p-6">
-      {/* Capability mark + Earn presence — every copilot runs under Earnest. */}
-      <div className="flex items-start justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
-          <Icon size={18} strokeWidth={1.8} aria-hidden />
-        </div>
-        <EarnCoin size={24} className="opacity-60 transition group-hover:opacity-100" />
+    <Card clickable className="flex h-full flex-col p-6">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
+        <Icon size={18} strokeWidth={1.8} aria-hidden />
       </div>
       <h3 className="mt-4 text-[15px] font-semibold text-fg-1">{copilot.name}</h3>
       <p className="mt-0.5 text-[10.5px] font-semibold uppercase tracking-[0.13em] text-gold-1">
         {copilot.title}
       </p>
       <p className="mt-2 text-[12.5px] leading-6 text-fg-3">{copilot.body}</p>
-      <div className="mt-auto flex items-center gap-1.5 border-t border-hairline pt-3.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">
-        <EarnCoin size={13} />
-        Orchestrated by Earnest
-      </div>
     </Card>
   );
 }
@@ -314,13 +306,40 @@ function Copilots() {
             Eleven specialists. One orchestrator. One lifecycle.
           </h2>
           <p className="mt-5 text-[15px] leading-7 text-fg-3 sm:text-lg">
-            Each copilot owns a stage of the work, and Earnest orchestrates all twelve as one —
-            carrying a mandate from first thesis to signed close, coordinated, documented, and fully
-            auditable.
+            Each copilot owns a stage of the work; Earnest leads the eleven as one — carrying a
+            mandate from first thesis to signed close, coordinated, documented, and fully auditable.
           </p>
         </div>
 
-        <div className="mt-14 space-y-14">
+        {/* Earnest — the orchestrator; the first of the twelve. */}
+        <div className="mt-12">
+          <Card className="relative overflow-hidden p-6 sm:p-7">
+            <div
+              className="pointer-events-none absolute inset-0 -z-10"
+              style={{
+                background:
+                  'radial-gradient(70% 130% at 0% 0%, rgba(247,201,72,0.1), transparent 60%)'
+              }}
+              aria-hidden
+            />
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+              <EarnCoin size={72} glow online className="flex-none" />
+              <div className="min-w-0">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-1">
+                  Orchestrator · live AI guide
+                </p>
+                <h3 className="mt-1 text-xl font-semibold text-fg-1">Earnest</h3>
+                <p className="mt-2 max-w-2xl text-[13px] leading-6 text-fg-3">
+                  Earnest fronts the desk and runs the eleven specialists as one — routing each
+                  task, framing the next decision, and keeping every mandate moving from first
+                  thesis to signed close.
+                </p>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <div className="mt-10 space-y-14">
           {CLUSTERS.map((cluster) => (
             <div key={cluster.label}>
               <div className="mb-6 flex items-center gap-3">
