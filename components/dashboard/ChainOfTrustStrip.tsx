@@ -108,6 +108,7 @@ export function ChainOfTrustStrip({ standing }: { standing: ChainOfTrustStanding
       type="button"
       onClick={() => drawer.open({ recordId: standing.recordId ?? null })}
       data-testid="cot-strip"
+      aria-label={`Open Chain of Trust drawer for ${standing.memberDisplayName ?? 'your profile'}`}
       className="flex w-full flex-col gap-2 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2.5 text-left transition hover:border-azure-1/40 hover:bg-surface-2"
     >
       <div className="flex items-center justify-between gap-2">
