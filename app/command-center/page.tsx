@@ -14,6 +14,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { AppShell } from '@/components/shell/AppShell';
+import { getShellIdentity } from '@/lib/queries/identity';
 import { Badge, Button, Card, ProgressBar, SectionTitle, type BadgeTone } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { TONE_HEX } from '@/components/screens/tone';
@@ -400,9 +401,13 @@ function SynergyFeed() {
   );
 }
 
-function NoOrgState() {
+async function NoOrgState() {
   return (
-    <AppShell title="Command Center" subtitle="Your private-market command center">
+    <AppShell
+      identity={await getShellIdentity()}
+      title="Command Center"
+      subtitle="Your private-market command center"
+    >
       <Card className="p-10 text-center">
         <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
         <p className="mx-auto mt-2 max-w-md text-[12.5px] text-fg-4">
@@ -425,7 +430,11 @@ export default async function CommandCenterPage() {
   const kpis = buildKpis(data);
 
   return (
-    <AppShell title="Command Center" subtitle="Your private-market command center">
+    <AppShell
+      identity={await getShellIdentity()}
+      title="Command Center"
+      subtitle="Your private-market command center"
+    >
       <div className="flex flex-col gap-[22px]">
         <EarnBriefing data={data} />
 

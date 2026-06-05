@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AppShell } from '@/components/shell/AppShell';
+import { getShellIdentity } from '@/lib/queries/identity';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { SettingsView } from './SettingsView';
@@ -45,7 +46,11 @@ export default async function SettingsPage() {
   }
 
   return (
-    <AppShell title="Profile & settings" subtitle="Your account, organization, and trust profile">
+    <AppShell
+      identity={await getShellIdentity()}
+      title="Profile & settings"
+      subtitle="Your account, organization, and trust profile"
+    >
       <SettingsView
         email={user?.email ?? null}
         fullName={fullName}

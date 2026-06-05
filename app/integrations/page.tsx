@@ -12,6 +12,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { AppShell } from '@/components/shell/AppShell';
+import { getShellIdentity } from '@/lib/queries/identity';
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { ConnectButton } from '@/components/integrations/ConnectButton';
 import { getActiveOrg } from '@/lib/queries/org';
@@ -235,7 +236,11 @@ export default async function IntegrationsPage() {
   ];
 
   return (
-    <AppShell title="Integrations" subtitle="Connect your tools to power relationship intelligence">
+    <AppShell
+      identity={await getShellIdentity()}
+      title="Integrations"
+      subtitle="Connect your tools to power relationship intelligence"
+    >
       <div className="mb-[18px] grid grid-cols-3 gap-3.5">
         {summary.map((s) => (
           <SummaryCard key={s.label} stat={s} />

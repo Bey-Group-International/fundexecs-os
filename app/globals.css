@@ -189,3 +189,50 @@ body {
 :root[data-theme='light'] .fx-icon-moon {
   display: inline-block;
 }
+
+/* Page-enter reveal — content gently rises + fades in. Keyed by route in the
+   shell so it replays on each navigation. Transform/opacity only. */
+@keyframes fx-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fx-rise {
+  animation: fx-rise 0.42s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* Soft pulsing glow for "live"/active accents (e.g. presence dots, the Earn
+   orb halo). Opacity only — cheap and transform-free. */
+@keyframes fx-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.fx-glow-pulse {
+  animation: fx-glow-pulse 2.4s ease-in-out infinite;
+}
+
+/* Accessibility: honor reduced-motion by disabling our decorative motion and
+   neutralizing long/looping transitions across the app. */
+@media (prefers-reduced-motion: reduce) {
+  .fx-rise,
+  .fx-glow-pulse {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

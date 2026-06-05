@@ -11,6 +11,7 @@ import {
   Target,
   Bell,
   Search,
+  Settings,
   ChevronsUpDown,
   Sun,
   Moon,
@@ -19,9 +20,10 @@ import {
   LogOut,
   type LucideIcon
 } from 'lucide-react';
-import { Avatar, Badge } from '@/components/ui';
+import { Avatar, Badge, AnimatedNumber } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { createClient } from '@/lib/supabase/client';
+import type { ShellIdentity } from '@/lib/queries/identity';
 import { cn } from '@/lib/utils';
 import { EarnOrb } from './earn/EarnOrb';
 import { CopilotDock } from './earn/CopilotDock';
@@ -40,14 +42,19 @@ const NAV: NavItem[] = [
   { href: '/connections', label: 'Connections', icon: Users },
   { href: '/integrations', label: 'Integrations', icon: Plug },
   { href: '/strategy', label: 'Strategy', icon: Target },
-  { href: '/notifications', label: 'Notifications', icon: Bell, badge: 3 }
+  { href: '/notifications', label: 'Notifications', icon: Bell, badge: 3 },
+  { href: '/settings', label: 'Settings', icon: Settings }
 ];
 
-const USER = {
-  name: 'Avery Sloane',
-  role: 'Managing Partner',
-  org: 'Northwind Capital',
-  tier: 'Emerging manager',
+/** Generic fallback when no signed-in identity is supplied (e.g. SSR before
+ *  auth resolves). Never shows a fabricated person's name. */
+const DEFAULT_IDENTITY: ShellIdentity = {
+  name: 'Your account',
+  role: 'Operator',
+  email: null,
+  orgName: 'Your fund',
+  orgTier: 'Emerging manager',
+  level: 7,
   xp: 4820
 };
 
@@ -102,10 +109,10 @@ function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: ()
             onClick={onNavigate}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'relative flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-[13.5px] font-medium transition-[background,box-shadow]',
+              'relative flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-[13.5px] font-medium transition-[background,box-shadow,transform] will-change-transform',
               active
                 ? 'bg-gradient-to-r from-[var(--azure-soft)] to-surface-1 text-fg-1'
-                : 'text-fg-3 hover:bg-surface-1'
+                : 'text-fg-3 hover:translate-x-0.5 hover:bg-surface-1'
             )}
           >
             {active && (
@@ -131,11 +138,13 @@ function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: ()
 function Sidebar({
   pathname,
   open,
-  onClose
+  onClose,
+  identity
 }: {
   pathname: string;
   open: boolean;
   onClose: () => void;
+  identity: ShellIdentity;
 }) {
   async function signOut() {
     const supabase = createClient();
@@ -172,10 +181,10 @@ function Sidebar({
           type="button"
           className="flex w-full items-center gap-2.5 rounded-[10px] border border-hairline bg-surface-1 px-2.5 py-2 transition-[background,box-shadow] hover:bg-surface-2"
         >
-          <Avatar name={USER.org} size={26} tone="gold" />
+          <Avatar name={identity.orgName} size={26} tone="gold" />
           <div className="flex-1 overflow-hidden text-left">
-            <div className="truncate text-[12.5px] font-semibold text-fg-1">{USER.org}</div>
-            <div className="text-[10.5px] text-fg-4">{USER.tier}</div>
+            <div className="truncate text-[12.5px] font-semibold text-fg-1">{identity.orgName}</div>
+            <div className="truncate text-[10.5px] text-fg-4">{identity.orgTier}</div>
           </div>
           <ChevronsUpDown size={14} strokeWidth={1.9} className="text-fg-4" aria-hidden />
         </button>
@@ -184,13 +193,13 @@ function Sidebar({
       <SidebarNav pathname={pathname} onNavigate={onClose} />
 
       <div className="m-3 flex items-center gap-2.5 rounded-[10px] border border-hairline px-2.5 py-2.5">
-        <Avatar name={USER.name} size={30} />
+        <Avatar name={identity.name} size={30} />
         <div className="flex-1 overflow-hidden">
-          <div className="truncate text-[12.5px] font-semibold text-fg-1">{USER.name}</div>
-          <div className="truncate text-[10.5px] text-fg-4">{USER.role}</div>
+          <div className="truncate text-[12.5px] font-semibold text-fg-1">{identity.name}</div>
+          <div className="truncate text-[10.5px] text-fg-4">{identity.role}</div>
         </div>
         <Badge tone="gold" className="px-1.5 py-0.5 text-[10px]">
-          L7
+          L{identity.level}
         </Badge>
         <button
           type="button"
@@ -210,12 +219,14 @@ function Topbar({
   title,
   subtitle,
   onMenu,
-  onAskEarn
+  onAskEarn,
+  identity
 }: {
   title: string;
   subtitle?: string;
   onMenu: () => void;
   onAskEarn: () => void;
+  identity: ShellIdentity;
 }) {
   return (
     <header className="sticky top-0 z-20 flex h-[60px] flex-none items-center gap-3 border-b border-hairline bg-[var(--topbar-bg)] px-4 backdrop-blur-md sm:px-6">
@@ -260,9 +271,10 @@ function Topbar({
       >
         <EarnCoin size={22} />
         <div className="leading-none">
-          <div className="text-[12.5px] font-semibold text-gold-1 [font-feature-settings:'tnum']">
-            {USER.xp.toLocaleString()}
-          </div>
+          <AnimatedNumber
+            value={identity.xp}
+            className="block text-[12.5px] font-semibold text-gold-1"
+          />
           <div className="text-[8px] font-semibold uppercase tracking-[0.11em] text-fg-5">
             Earn coins
           </div>
@@ -280,7 +292,7 @@ function Topbar({
         </span>
       </button>
 
-      <Avatar name={USER.name} size={32} />
+      <Avatar name={identity.name} size={32} />
     </header>
   );
 }
@@ -288,6 +300,9 @@ function Topbar({
 export interface AppShellProps {
   title: string;
   subtitle?: string;
+  /** Signed-in identity for the sidebar + wallet. Falls back to a generic
+   *  identity (never a fabricated name) when omitted. */
+  identity?: ShellIdentity | null;
   children: ReactNode;
 }
 
@@ -297,10 +312,11 @@ export interface AppShellProps {
  * toggle, gold Earn-coin wallet, notifications), a 1180px content column, and
  * a mobile drawer. Nav state derives from the current route.
  */
-export function AppShell({ title, subtitle, children }: AppShellProps) {
+export function AppShell({ title, subtitle, identity, children }: AppShellProps) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const id = identity ?? DEFAULT_IDENTITY;
 
   return (
     <div className="relative flex h-screen overflow-hidden">
@@ -311,16 +327,21 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
           aria-hidden
         />
       )}
-      <Sidebar pathname={pathname} open={navOpen} onClose={() => setNavOpen(false)} />
+      <Sidebar pathname={pathname} open={navOpen} onClose={() => setNavOpen(false)} identity={id} />
       <div className="relative z-0 flex min-w-0 flex-1 flex-col">
         <Topbar
           title={title}
           subtitle={subtitle}
           onMenu={() => setNavOpen(true)}
           onAskEarn={() => setCopilotOpen((v) => !v)}
+          identity={id}
         />
         <main className="flex-1 overflow-y-auto px-5 pb-20 pt-6 sm:px-7">
-          <div className="mx-auto max-w-[1180px]">{children}</div>
+          {/* Keyed by route so content gently rises in on each navigation —
+              a subtle page-enter that respects prefers-reduced-motion. */}
+          <div key={pathname} className="fx-rise mx-auto max-w-[1180px]">
+            {children}
+          </div>
         </main>
       </div>
 

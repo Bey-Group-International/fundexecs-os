@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AppShell } from '@/components/shell/AppShell';
+import { getShellIdentity } from '@/lib/queries/identity';
 import { Card } from '@/components/ui';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getConnectionsData } from '@/lib/queries/connections';
@@ -12,7 +13,11 @@ export default async function ConnectionsPage() {
 
   if (!org) {
     return (
-      <AppShell title="Connections" subtitle="Relationship intelligence and warm introductions">
+      <AppShell
+        identity={await getShellIdentity()}
+        title="Connections"
+        subtitle="Relationship intelligence and warm introductions"
+      >
         <Card className="p-10 text-center">
           <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
           <p className="mx-auto mt-2 max-w-md text-[12.5px] text-fg-4">
@@ -27,7 +32,11 @@ export default async function ConnectionsPage() {
   const { rows, intros } = await getConnectionsData(org.orgId);
 
   return (
-    <AppShell title="Connections" subtitle="Relationship intelligence and warm introductions">
+    <AppShell
+      identity={await getShellIdentity()}
+      title="Connections"
+      subtitle="Relationship intelligence and warm introductions"
+    >
       <ConnectionsView rows={rows} intros={intros} />
     </AppShell>
   );
