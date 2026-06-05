@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { useTrustDrawer } from '@/components/shell/trust/TrustDrawerHost';
 
 export interface ChainOfTrustStanding {
   /** Whether the member has any chain_of_trust record yet. */
@@ -15,8 +16,12 @@ export interface ChainOfTrustStanding {
   work: number;
   /** Current layer the record sits in (informational — colors the active dot). */
   currentLayer?: 'intent' | 'formation' | 'execution' | 'work';
-  /** Optional record id for deep-linking the drawer (Phase 5 will wire). */
+  /** Record id used to deep-link the drawer when one exists. */
   recordId?: string | null;
+  /** Member profile id used to start a record when none exists yet. */
+  memberProfileId?: string | null;
+  /** Display name used to seed the new chain's title. */
+  memberDisplayName?: string | null;
 }
 
 const LAYERS = [
@@ -33,15 +38,54 @@ const LAYERS = [
 
 /**
  * ChainOfTrustStrip — compact 4-segment progress strip rendered in every
- * dashboard hero. Reads the member's own chain_of_trust standing. When no
- * record exists yet, renders a CTA card pointing to Settings (Phase 5 will
- * wire the real drawer).
+ * dashboard hero. Clickable when a `<TrustDrawerHost />` ancestor is mounted:
+ *   - has record → opens drawer at the record id,
+ *   - no record + memberProfileId set → opens drawer in "starter" mode that
+ *     creates the member-profile chain on demand,
+ *   - no host context available → renders inert (link only).
  */
 export function ChainOfTrustStrip({ standing }: { standing: ChainOfTrustStanding }) {
+  const drawer = useTrustDrawer();
+
   if (!standing.hasRecord) {
+    const canStart = !!standing.memberProfileId;
+    const startTitle = standing.memberDisplayName
+      ? `${standing.memberDisplayName}'s Proof of Truth`
+      : 'Member Proof of Truth';
+    if (canStart) {
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            drawer.open({
+              starter: {
+                subjectEntityType: 'member_profile',
+                subjectEntityId: standing.memberProfileId as string,
+                title: startTitle
+              }
+            })
+          }
+          data-testid="cot-strip-start"
+          className="group flex w-full items-center gap-3 rounded-xl border border-dashed border-hairline bg-surface-1 px-3.5 py-2.5 text-left transition hover:border-[var(--gold-line)] hover:bg-[var(--gold-soft)]"
+        >
+          <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-bg-1 text-fg-4 group-hover:border-[var(--gold-line)] group-hover:text-gold-1">
+            <ShieldCheck size={15} strokeWidth={1.9} aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+              Chain of Trust
+            </p>
+            <p className="truncate text-[12.5px] text-fg-2">
+              Start your Chain of Trust — prove your work in four layers.
+            </p>
+          </div>
+        </button>
+      );
+    }
     return (
       <Link
         href="/settings"
+        data-testid="cot-strip-empty-link"
         className="group flex items-center gap-3 rounded-xl border border-dashed border-hairline bg-surface-1 px-3.5 py-2.5 transition hover:border-[var(--gold-line)] hover:bg-[var(--gold-soft)]"
       >
         <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-bg-1 text-fg-4 group-hover:border-[var(--gold-line)] group-hover:text-gold-1">
@@ -60,7 +104,12 @@ export function ChainOfTrustStrip({ standing }: { standing: ChainOfTrustStanding
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2.5">
+    <button
+      type="button"
+      onClick={() => drawer.open({ recordId: standing.recordId ?? null })}
+      data-testid="cot-strip"
+      className="flex w-full flex-col gap-2 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2.5 text-left transition hover:border-azure-1/40 hover:bg-surface-2"
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
           Chain of Trust
@@ -108,6 +157,6 @@ export function ChainOfTrustStrip({ standing }: { standing: ChainOfTrustStanding
           );
         })}
       </div>
-    </div>
+    </button>
   );
 }
