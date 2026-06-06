@@ -1,6 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   TrendingUp,
   CircleDot,
@@ -27,8 +29,15 @@ import {
 } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { TONE_HEX } from '@/components/screens/tone';
-import type { PipelineData, PipelineDeal } from '@/lib/queries/pipeline';
+import type {
+  PipelineData,
+  PipelineDeal,
+  PipelinePartner,
+  PipelineStage
+} from '@/lib/queries/pipeline';
+import { updateDealStage } from '@/lib/actions/deals';
 import { NewDealDrawer } from '@/components/drawers/NewDealDrawer';
+import { NewPartnerDrawer } from '@/components/drawers/NewPartnerDrawer';
 import { DealDetailDrawer, type DealDetailData } from '@/components/drawers/DealDetailDrawer';
 
 function formatCurrency(amount: number): string {
@@ -70,17 +79,38 @@ function EarnBand({ data }: { data: PipelineData }) {
 }
 
 function FormationBoard({
-  data,
-  onSelectDeal
+  stages,
+  onSelectDeal,
+  onMoveDeal,
+  pendingDealId
 }: {
-  data: PipelineData;
+  stages: PipelineStage[];
   onSelectDeal: (deal: PipelineDeal) => void;
+  onMoveDeal: (dealId: string, toStageKey: string) => void;
+  pendingDealId: string | null;
 }) {
+  const [overKey, setOverKey] = useState<string | null>(null);
+
   return (
     <Card>
+      <p className="mb-2 px-1 text-[11px] text-fg-5">Drag a deal between stages to move it.</p>
       <div className="flex gap-3 overflow-x-auto pb-1">
-        {data.stages.map((stage, i) => (
-          <div key={stage.key} className="w-[200px] flex-none">
+        {stages.map((stage, i) => (
+          <div
+            key={stage.key}
+            className="w-[200px] flex-none"
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (overKey !== stage.key) setOverKey(stage.key);
+            }}
+            onDragLeave={() => setOverKey((k) => (k === stage.key ? null : k))}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOverKey(null);
+              const id = e.dataTransfer.getData('text/plain');
+              if (id) onMoveDeal(id, stage.key);
+            }}
+          >
             <div className="flex items-center justify-between px-1 pb-2.5">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-[10px] tabular-nums text-fg-5">{i + 1}</span>
@@ -88,16 +118,30 @@ function FormationBoard({
               </div>
               <span className="text-[11px] tabular-nums text-fg-5">{stage.deals.length}</span>
             </div>
-            <div className="flex min-h-20 flex-col gap-2 rounded-xl border border-dashed border-hairline-faint bg-white/[0.02] p-2">
+            <div
+              className={`flex min-h-20 flex-col gap-2 rounded-xl border border-dashed p-2 transition ${
+                overKey === stage.key
+                  ? 'border-[var(--accent-line)] bg-[var(--accent-soft,rgba(37,99,235,0.07))]'
+                  : 'border-hairline-faint bg-white/[0.02]'
+              }`}
+            >
               {stage.deals.map((d) => {
                 const tone = dealTone(d.status, stage.key);
                 const avatarTone: AvatarTone = tone === 'danger' ? 'gold' : tone;
+                const pending = pendingDealId === d.id;
                 return (
                   <button
                     key={d.id}
                     type="button"
+                    draggable={!pending}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', d.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
                     onClick={() => onSelectDeal(d)}
-                    className="rounded-xl border border-hairline bg-surface-2 p-2.5 text-left transition hover:bg-surface-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-line)]"
+                    className={`rounded-xl border border-hairline bg-surface-2 p-2.5 text-left transition hover:bg-surface-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-line)] ${
+                      pending ? 'opacity-50' : 'cursor-grab active:cursor-grabbing'
+                    }`}
                     data-testid={`pipeline-deal-${d.id}`}
                   >
                     <div className="flex items-center gap-2">
@@ -136,25 +180,21 @@ function relationshipTier(stage: string): { label: string; tone: BadgeTone } {
   return { label: 'Watch', tone: 'neutral' };
 }
 
-/** A stable, deterministic thesis-fit score for a deal (presentational). */
-function thesisFit(deal: PipelineDeal): number {
-  let h = 0;
-  for (let i = 0; i < deal.id.length; i += 1) h = (h * 31 + deal.id.charCodeAt(i)) % 1000;
-  const base = relationshipTier(deal.stage).label === 'Anchor' ? 82 : 58;
-  return Math.min(98, base + (h % 18));
-}
-
 function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
-  const ranked = useMemo(() => [...deals].sort((a, b) => thesisFit(b) - thesisFit(a)), [deals]);
+  const ranked = useMemo(() => [...deals].sort((a, b) => b.fit - a.fit), [deals]);
   return (
     <Card>
       <SectionTitle
         eyebrow="Relationship tier · thesis-fit scoring"
         title="LP Capital Map"
         action={
-          <Button variant="ghost" size="sm" icon={Sparkles}>
+          <Link
+            href="/connections"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-fg-3 transition hover:bg-surface-2 hover:text-fg-1"
+          >
+            <Sparkles size={14} strokeWidth={1.9} aria-hidden />
             Find intros
-          </Button>
+          </Link>
         }
       />
       {ranked.length === 0 ? (
@@ -173,7 +213,7 @@ function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
           <div className="flex flex-col">
             {ranked.map((d) => {
               const tier = relationshipTier(d.stage);
-              const fit = thesisFit(d);
+              const fit = d.fit;
               const color =
                 fit > 75 ? 'var(--success)' : fit > 55 ? 'var(--gold-1)' : 'var(--fg-4)';
               return (
@@ -260,60 +300,113 @@ function DealFlow({ data }: { data: PipelineData }) {
   );
 }
 
-/** Presentational capital-stack partners — no backing table exists yet. */
-const PARTNERS: Array<{ name: string; role: string; status: string; tone: BadgeTone }> = [
-  { name: 'Fund administrator', role: 'Carta Fund Admin', status: 'Engaged', tone: 'success' },
-  { name: 'Legal counsel', role: 'Cooley LLP', status: 'Engaged', tone: 'success' },
-  { name: 'Placement agent', role: 'Unassigned', status: 'Open', tone: 'warning' },
-  { name: 'Prime broker', role: 'Unassigned', status: 'Open', tone: 'warning' },
-  { name: 'Audit & tax', role: 'In review', status: 'Pending', tone: 'azure' }
-];
+/** Tone for a partner's free-form status string. */
+function partnerTone(status: string): BadgeTone {
+  const s = status.toLowerCase();
+  if (/active|engaged|committed|closed|won|live/.test(s)) return 'success';
+  if (/open|prospect|pending|unassigned/.test(s)) return 'warning';
+  return 'azure';
+}
 
-function PartnersStack() {
+function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd: () => void }) {
   return (
     <Card>
       <SectionTitle
         eyebrow="Service providers · capital stack"
         title="Partners & services"
         action={
-          <Button variant="ghost" size="sm" icon={Plus}>
+          <Button variant="ghost" size="sm" icon={Plus} onClick={onAdd} data-testid="add-partner">
             Add partner
           </Button>
         }
       />
-      <div className="grid gap-2.5 sm:grid-cols-2">
-        {PARTNERS.map((p) => (
-          <div
-            key={p.name}
-            className="flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3"
-          >
-            <Avatar
-              name={p.role === 'Unassigned' || p.role === 'In review' ? '? ?' : p.role}
-              size={32}
-              tone={p.tone}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[12.5px] font-semibold text-fg-1">{p.name}</div>
-              <div className="truncate text-[11px] text-fg-4">{p.role}</div>
-            </div>
-            <Badge tone={p.tone} className="text-[10px]">
-              {p.status}
-            </Badge>
-          </div>
-        ))}
-      </div>
+      {partners.length === 0 ? (
+        <p className="py-6 text-center text-[12.5px] text-fg-5">
+          No partners yet. Add your first service provider to build out the capital stack.
+        </p>
+      ) : (
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {partners.map((p) => {
+            const tone = partnerTone(p.status);
+            return (
+              <div
+                key={p.id}
+                className="flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3"
+              >
+                <Avatar name={p.name} size={32} tone={tone} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-semibold text-fg-1">{p.name}</div>
+                  <div className="truncate text-[11px] capitalize text-fg-4">
+                    {p.role.replace(/_/g, ' ')}
+                  </div>
+                </div>
+                <Badge tone={tone} className="text-[10px] capitalize">
+                  {p.status}
+                </Badge>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }
 
 export function PipelineView({ data }: { data: PipelineData }) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>('formation');
   const [newDealOpen, setNewDealOpen] = useState(false);
+  const [newPartnerOpen, setNewPartnerOpen] = useState(false);
   const [activeDealId, setActiveDealId] = useState<string | null>(null);
-  // Derived from `data` on every render so a `router.refresh()` from a
-  // server action (e.g. createAllocation) immediately repopulates the
-  // drawer's allocations list. A snapshot here would go stale and make
-  // every mutation look like it hung from the user's perspective.
+
+  // Optimistic stage moves (dealId → target stage key) applied over the server
+  // data so a drag feels instant; reconciled by router.refresh() on success and
+  // reverted on failure.
+  const [moves, setMoves] = useState<Record<string, string>>({});
+  const [pendingDealId, setPendingDealId] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const [, startMove] = useTransition();
+
+  const origKeyOf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of data.stages) for (const d of s.deals) m.set(d.id, s.key);
+    return m;
+  }, [data.stages]);
+
+  const displayStages = useMemo(() => {
+    if (Object.keys(moves).length === 0) return data.stages;
+    const all = data.stages.flatMap((s) => s.deals);
+    return data.stages.map((s) => ({
+      ...s,
+      deals: all.filter((d) => (moves[d.id] ?? origKeyOf.get(d.id)) === s.key)
+    }));
+  }, [data.stages, moves, origKeyOf]);
+
+  function moveDeal(dealId: string, toKey: string) {
+    const currentKey = moves[dealId] ?? origKeyOf.get(dealId);
+    if (currentKey === toKey || pendingDealId) return;
+    setMoveError(null);
+    setMoves((m) => ({ ...m, [dealId]: toKey }));
+    setPendingDealId(dealId);
+    startMove(async () => {
+      const r = await updateDealStage(dealId, toKey);
+      setPendingDealId(null);
+      if (r.ok) {
+        router.refresh();
+      } else {
+        setMoves((m) => {
+          const next = { ...m };
+          delete next[dealId];
+          return next;
+        });
+        setMoveError(r.error);
+      }
+    });
+  }
+
+  // Look up the active deal from the server data (real stage for the drawer).
+  // Cheap; computed inline each render so a router.refresh() repopulates the
+  // drawer immediately.
   let activeDeal: DealDetailData | null = null;
   if (activeDealId) {
     for (const stage of data.stages) {
@@ -332,38 +425,34 @@ export function PipelineView({ data }: { data: PipelineData }) {
     }
   }
 
-  function selectDeal(d: PipelineDeal) {
-    setActiveDealId(d.id);
-  }
+  const summary = useMemo<
+    Array<{ label: string; value: string; icon: LucideIcon; tone: BadgeTone }>
+  >(
+    () => [
+      {
+        label: 'Pipeline value',
+        value: formatCurrency(data.pipelineValue),
+        icon: TrendingUp,
+        tone: 'azure'
+      },
+      {
+        label: 'Soft-circled',
+        value: formatCurrency(data.softCircled),
+        icon: CircleDot,
+        tone: 'warning'
+      },
+      {
+        label: 'Committed',
+        value: formatCurrency(data.committed),
+        icon: CheckCircle2,
+        tone: 'success'
+      },
+      { label: 'Visitor → committed', value: `${data.conversionPct}%`, icon: Percent, tone: 'gold' }
+    ],
+    [data.pipelineValue, data.softCircled, data.committed, data.conversionPct]
+  );
 
-  const summary: Array<{ label: string; value: string; icon: LucideIcon; tone: BadgeTone }> = [
-    {
-      label: 'Pipeline value',
-      value: formatCurrency(data.pipelineValue),
-      icon: TrendingUp,
-      tone: 'azure'
-    },
-    {
-      label: 'Soft-circled',
-      value: formatCurrency(data.softCircled),
-      icon: CircleDot,
-      tone: 'warning'
-    },
-    {
-      label: 'Committed',
-      value: formatCurrency(data.committed),
-      icon: CheckCircle2,
-      tone: 'success'
-    },
-    {
-      label: 'Visitor → committed',
-      value: `${data.conversionPct}%`,
-      icon: Percent,
-      tone: 'gold'
-    }
-  ];
-
-  const allDeals = data.stages.flatMap((s) => s.deals);
+  const allDeals = useMemo(() => data.stages.flatMap((s) => s.deals), [data.stages]);
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -384,6 +473,15 @@ export function PipelineView({ data }: { data: PipelineData }) {
       />
 
       <EarnBand data={data} />
+
+      {moveError ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[12.5px] text-danger"
+        >
+          Couldn&rsquo;t move the deal: {moveError}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {summary.map((s) => {
@@ -415,12 +513,22 @@ export function PipelineView({ data }: { data: PipelineData }) {
         ]}
       />
 
-      {tab === 'formation' && <FormationBoard data={data} onSelectDeal={selectDeal} />}
+      {tab === 'formation' && (
+        <FormationBoard
+          stages={displayStages}
+          onSelectDeal={(d) => setActiveDealId(d.id)}
+          onMoveDeal={moveDeal}
+          pendingDealId={pendingDealId}
+        />
+      )}
       {tab === 'lpmap' && <LpCapitalMap deals={allDeals} />}
       {tab === 'flow' && <DealFlow data={data} />}
-      {tab === 'partners' && <PartnersStack />}
+      {tab === 'partners' && (
+        <PartnersStack partners={data.partners} onAdd={() => setNewPartnerOpen(true)} />
+      )}
 
       <NewDealDrawer open={newDealOpen} onClose={() => setNewDealOpen(false)} />
+      <NewPartnerDrawer open={newPartnerOpen} onClose={() => setNewPartnerOpen(false)} />
       <DealDetailDrawer
         open={activeDeal !== null}
         onClose={() => setActiveDealId(null)}
