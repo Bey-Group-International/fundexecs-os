@@ -4,6 +4,7 @@ import { getShellIdentity } from '@/lib/queries/identity';
 import { Card } from '@/components/ui';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getAdminData } from '@/lib/queries/admin';
+import { getBetaInvites } from '@/lib/queries/beta-invites';
 import { AdminView } from './AdminView';
 
 export const metadata: Metadata = { title: 'Admin Portal' };
@@ -29,7 +30,7 @@ export default async function AdminPage() {
     );
   }
 
-  const data = await getAdminData(org.orgId);
+  const [data, invites] = await Promise.all([getAdminData(org.orgId), getBetaInvites(org.orgId)]);
 
   return (
     <AppShell
@@ -37,7 +38,7 @@ export default async function AdminPage() {
       title="Admin Portal"
       subtitle="Platform administration"
     >
-      <AdminView data={data} />
+      <AdminView data={data} invites={invites} />
     </AppShell>
   );
 }
