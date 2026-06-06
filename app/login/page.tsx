@@ -123,7 +123,9 @@ export default function LoginPage() {
             <h2 className="text-[18px] font-semibold tracking-tight">
               {mode === 'signin' ? 'Sign in to FundExecs OS' : 'Create your account'}
             </h2>
-            <p className="mt-1 text-[12.5px] text-fg-4">Your private-market command center.</p>
+            <p className="mt-1 text-[12.5px] text-fg-4">
+              Your private-market command center · invite-only private beta.
+            </p>
 
             {oauthError && (
               <p className="mt-4 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-danger">
