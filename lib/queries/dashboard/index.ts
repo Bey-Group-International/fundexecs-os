@@ -565,3 +565,16 @@ export async function getDashboardContext() {
   const user = await getAuthUser();
   return { supabase, userId: user?.id ?? null };
 }
+
+/* ---------- lifecycle-aware dashboard (Wave 1, lifecycle engine) --------- */
+
+// Re-export the lifecycle-aware Dashboard loader + its types so callers can
+// import everything from `@/lib/queries/dashboard`. Additive: the existing
+// per-member-type loaders above are unchanged.
+export {
+  getDashboardData,
+  type DashboardData,
+  type StageKpi,
+  type RaiseProgress,
+  type DashboardAction
+} from './lifecycle';
