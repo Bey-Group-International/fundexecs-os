@@ -276,15 +276,42 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
         })}
       </Card>
 
-      <div className="grid gap-3.5 lg:grid-cols-2">
-        {visible.length ? (
-          visible.map((o) => <ObjectiveCard key={o.id} o={o} onAct={act} />)
-        ) : (
-          <Card className="col-span-full p-10 text-center text-[13px] text-fg-5">
-            No objectives in this horizon.
-          </Card>
-        )}
-      </div>
+      {active.length === 0 ? (
+        // First-run: no objectives anywhere — invite the member to start a plan.
+        <Card className="flex flex-col items-center gap-3 p-10 text-center">
+          <EarnCoin size={44} glow />
+          <h3 className="text-[15px] font-semibold text-fg-1">Build your first objective</h3>
+          <p className="max-w-md text-[12.5px] leading-relaxed text-fg-4">
+            The 100 / 30 / 10 plan turns your strategy into execution: 100-day bets, 30-day
+            milestones, and 10-day moves. Earn will track progress and recommend next steps.
+          </p>
+          <Button variant="primary" icon={Plus} onClick={openNew} data-testid="strategy-empty-new">
+            New objective
+          </Button>
+        </Card>
+      ) : (
+        <div className="grid gap-3.5 lg:grid-cols-2">
+          {visible.length ? (
+            visible.map((o) => <ObjectiveCard key={o.id} o={o} onAct={act} />)
+          ) : (
+            <Card className="col-span-full flex flex-col items-center gap-3 p-10 text-center">
+              <p className="text-[13px] text-fg-4">
+                No objectives in the {tier === 'all' ? 'plan' : `${TIER_LABEL[tier]} horizon`} yet.
+              </p>
+              <div className="flex items-center gap-2.5">
+                {tier !== 'all' ? (
+                  <Button variant="secondary" onClick={() => setTier('all')}>
+                    View all horizons
+                  </Button>
+                ) : null}
+                <Button variant="primary" icon={Plus} onClick={openNew}>
+                  New objective
+                </Button>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
 
       <ObjectiveDrawer
         open={drawerOpen}
