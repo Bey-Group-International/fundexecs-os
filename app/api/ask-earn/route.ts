@@ -6,18 +6,17 @@ import { askEarn, type EarnMessage } from '@/lib/ai/earn';
 import { earnReviewDeal } from '@/lib/diligence';
 
 /**
- * Detect a clear "review/diligence this deck/deal like an institutional LP"
- * instruction. Deliberately conservative: it must mention BOTH a review-style
- * verb (review/diligence/vet/assess) AND a deal-ish object (deal/deck/company/
- * opportunity/pitch). Anything ambiguous returns false so the normal chat path
- * runs unchanged.
+ * Detect an EXPLICIT "run diligence" instruction. Deliberately conservative:
+ * it requires a literal diligence ask (e.g. "due diligence", "run diligence")
+ * or "vet … like an LP". Generic verbs like review/assess/evaluate do NOT
+ * trigger it, so ordinary Earn chat ("help me review my deck", "evaluate this
+ * investment") is never hijacked — those fall through to the normal chat path.
  */
 function isDiligenceIntent(message: string): boolean {
   const m = message.toLowerCase();
-  const hasReviewVerb =
-    /\b(run\s+diligence|due\s+diligence|diligence|vet|review|assess|evaluate)\b/.test(m);
-  const hasDealObject = /\b(deal|deck|company|opportunity|pitch|startup|investment)\b/.test(m);
-  return hasReviewVerb && hasDealObject;
+  const explicitDiligence = /\b(due\s+diligence|run\s+(a\s+)?diligence|diligence)\b/.test(m);
+  const vetLikeLp = /\bvet\b[\s\S]{0,40}\blike\s+an?\s+(institutional\s+)?lp\b/.test(m);
+  return explicitDiligence || vetLikeLp;
 }
 
 /**
