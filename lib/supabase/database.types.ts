@@ -437,6 +437,214 @@ export type Database = {
           },
         ]
       }
+      diligence_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          created_at: string
+          document_id: string
+          embedding: string | null
+          id: string
+          org_id: string
+          run_id: string
+        }
+        Insert: {
+          chunk_index?: number
+          content: string
+          created_at?: string
+          document_id: string
+          embedding?: string | null
+          id?: string
+          org_id: string
+          run_id: string
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          document_id?: string
+          embedding?: string | null
+          id?: string
+          org_id?: string
+          run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diligence_chunks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "diligence_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diligence_chunks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diligence_chunks_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "diligence_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      diligence_documents: {
+        Row: {
+          created_at: string
+          file_name: string | null
+          id: string
+          kind: string
+          mime_type: string | null
+          org_id: string
+          run_id: string
+          storage_path: string
+        }
+        Insert: {
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          org_id: string
+          run_id: string
+          storage_path: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          org_id?: string
+          run_id?: string
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diligence_documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diligence_documents_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "diligence_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      diligence_findings: {
+        Row: {
+          agent: string
+          citations: Json
+          created_at: string
+          detail: string | null
+          id: string
+          org_id: string
+          run_id: string
+          score: number | null
+          summary: string
+        }
+        Insert: {
+          agent: string
+          citations?: Json
+          created_at?: string
+          detail?: string | null
+          id?: string
+          org_id: string
+          run_id: string
+          score?: number | null
+          summary: string
+        }
+        Update: {
+          agent?: string
+          citations?: Json
+          created_at?: string
+          detail?: string | null
+          id?: string
+          org_id?: string
+          run_id?: string
+          score?: number | null
+          summary?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diligence_findings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diligence_findings_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "diligence_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      diligence_runs: {
+        Row: {
+          conviction: number | null
+          created_at: string
+          created_by: string | null
+          deal_id: string | null
+          id: string
+          org_id: string
+          status: string
+          summary: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          conviction?: number | null
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          id?: string
+          org_id: string
+          status?: string
+          summary?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          conviction?: number | null
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          id?: string
+          org_id?: string
+          status?: string
+          summary?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diligence_runs_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diligence_runs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       evidence: {
         Row: {
           ai_validated_at: string | null
@@ -1577,6 +1785,26 @@ export type Database = {
         Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
         Returns: string
       }
+      get_integration_secret: {
+        Args: { _connection_id: string }
+        Returns: {
+          access_token: string
+          connection_id: string
+          expires_at: string
+          refresh_token: string
+          token_type: string
+          updated_at: string
+        }[]
+      }
+      match_diligence_chunks: {
+        Args: { _run_id: string; match_count?: number; query_embedding: string }
+        Returns: {
+          content: string
+          document_id: string
+          id: string
+          similarity: number
+        }[]
+      }
       match_knowledge_chunks: {
         Args: {
           _org_id?: string
@@ -1605,6 +1833,16 @@ export type Database = {
       }
       seed_demo_for_user: {
         Args: { _org: string; _user: string }
+        Returns: undefined
+      }
+      store_integration_secret: {
+        Args: {
+          _access_token: string
+          _connection_id: string
+          _expires_at?: string
+          _refresh_token?: string
+          _token_type?: string
+        }
         Returns: undefined
       }
     }

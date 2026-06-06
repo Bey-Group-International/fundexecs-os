@@ -27,38 +27,36 @@ net-new UI. Stay in your lane; expose clean contracts the others build on.
 
 ## Your tasks (priority order)
 
-### 1. Diligence data model (migration)
+### 0. ALREADY DONE by Claude (do NOT recreate — build on this)
 
-Create `supabase/migrations/<ts>_diligence_intelligence_layer.sql`:
+The schema + retrieval RPC + storage bucket are **already applied** (migration
+`supabase/migrations/20260606190000_diligence_intelligence_layer.sql`,
+advisor-clean). Available now:
 
-- `public.diligence_runs` — `id uuid pk`, `org_id uuid`, `deal_id uuid null`
-  (fk `deals`), `created_by uuid`, `status text` (`queued|running|complete|error`),
-  `conviction int null` (0–100), `summary text null`, `created_at`, `updated_at`.
-- `public.diligence_documents` — `id`, `run_id fk`, `org_id`, `storage_path text`,
-  `file_name`, `mime_type`, `kind text` (`deck|cim|ppm|ddq|financials|notes|other`),
-  `created_at`.
-- `public.diligence_findings` — `id`, `run_id fk`, `org_id`,
-  `agent text` (`market_size|competitive|customer_demand|unit_economics|stress_test|red_flags|synthesis`),
-  `score int null` (0–100), `summary text`, `detail text null`,
-  `citations jsonb default '[]'`, `created_at`.
-- `public.diligence_chunks` — `id`, `document_id fk`, `org_id`, `content text`,
-  `embedding vector(1024)`, `created_at` (Voyage 1024 dims, match existing).
-- RLS: org members SELECT; INSERT/UPDATE restricted to `service_role`.
+- Tables `public.diligence_runs`, `diligence_documents`, `diligence_findings`,
+  `diligence_chunks` (org-scoped RLS: members SELECT; writes via `service_role`).
+- `public.match_diligence_chunks(_run_id uuid, query_embedding vector(1024),
+match_count int)` — `SECURITY DEFINER`, `service_role`-only, cosine match
+  scoped to a run.
+- Private storage bucket `diligence` (path `diligence/{org_id}/{run_id}/{file}`).
+- `lib/supabase/database.types.ts` regenerated with these.
 
-### 2. Storage bucket
+### 1. Document ingest pipeline (your build)
 
-Private Supabase Storage bucket `diligence` + policies (org-scoped read, service
-write). Document the path convention `diligence/{org_id}/{run_id}/{file}`.
+Server-side ingest that the orchestrator calls: download a `diligence_documents`
+row from storage → extract text (pdf/pptx/docx/xlsx) → chunk → embed with
+**Voyage** (reuse the existing embed path used by `app/api/knowledge/embed`) →
+bulk-insert into `diligence_chunks` via the admin (service-role) client. Idempotent
+per document (clear+reinsert on re-run).
 
-### 3. Ingest + retrieval RPCs (`SECURITY DEFINER`, `service_role`-execute only)
+### 2. Storage upload helper
 
-- `store_diligence_chunks(...)` — bulk insert chunks+embeddings for a document.
-- `match_diligence_chunks(run_id uuid, query_embedding vector, match_count int)`
-  — cosine-similarity retrieval scoped to the run/org (mirror
-  `match_knowledge_chunks`).
-- Pin `search_path`; `revoke execute` from `anon`/`authenticated`.
+Server util to mint a signed upload URL into the `diligence` bucket and create
+the matching `diligence_documents` row. Add org-scoped read policies on
+`storage.objects` for the `diligence` bucket if LP/diligence UIs need signed
+reads (path-prefixed by `org_id`).
 
-### 4. Scoring helpers (optional, if cleaner in SQL)
+### 3. Scoring helpers (optional, if cleaner in SQL)
 
 Expose read helpers Claude can call for **LP Fit Score** and **Fund Readiness
 Score** if they're better as SQL views/RPCs than app code — otherwise leave to
