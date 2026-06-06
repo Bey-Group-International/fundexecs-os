@@ -73,8 +73,8 @@ export function FundProfileHero({ profile, className }: FundProfileHeroProps) {
           </div>
 
           <p className="mt-3 max-w-[60ch] text-[12px] text-fg-3">
-            Everything an LP would probe — thesis, strategy, target raise, terms, track record,
-            and team — kept in one canonical place. Earn drafts, you approve, the Chain of Trust
+            Everything an LP would probe — thesis, strategy, target raise, terms, track record, and
+            team — kept in one canonical place. Earn drafts, you approve, the Chain of Trust
             captures the proof.
           </p>
 

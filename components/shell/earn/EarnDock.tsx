@@ -1,51 +1,53 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  X,
-  ListChecks,
-  FileSearch,
-  Mail,
-  Mic,
-  ClipboardCheck,
-  ArrowUpRight,
-  type LucideIcon
-} from 'lucide-react';
+import { X, ArrowUpRight } from 'lucide-react';
 import { EarnChat } from '@/app/ask-earn/EarnChat';
 import { TeamAvatar, getCOO, getSpecialists, type TeamMember } from '@/lib/team';
 import { cn } from '@/lib/utils';
+import { useEarnContext } from './EarnContext';
+import { copyFor } from './EarnContextCopy';
 
-interface RecommendedAction {
-  label: string;
-  icon: LucideIcon;
-}
-
-const RECOMMENDED: RecommendedAction[] = [
-  { label: 'Build LP list', icon: ListChecks },
-  { label: 'Review deck like an institutional LP', icon: FileSearch },
-  { label: 'Generate investor outreach', icon: Mail },
-  { label: 'Summarize last meeting', icon: Mic },
-  { label: 'Create diligence checklist', icon: ClipboardCheck }
-];
-
-function PresenceHeader({ onClose }: { onClose: () => void }) {
+function PresenceHeader({
+  onClose,
+  subtitle,
+  activity
+}: {
+  onClose: () => void;
+  subtitle: string;
+  activity: string;
+}) {
   const earn = getCOO();
   return (
-    <div className="flex items-start gap-3 border-b border-hairline px-4 py-3.5">
+    <div
+      className="flex items-start gap-3 border-b border-hairline px-4 py-3.5"
+      data-testid="earn-dock-header"
+    >
       <TeamAvatar member={earn} size={40} online glow className="flex-none" />
       <div className="min-w-0 flex-1">
         <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-gold-1">
-          {earn.position}
+          Chief Operating Officer · your live AI guide
         </div>
         <div className="text-[14px] font-semibold tracking-[-0.015em] text-fg-1">{earn.name}</div>
-        <div className="text-[11px] text-fg-4">
-          Leads a team of {getSpecialists().length} specialists
+        <div className="mt-0.5 text-[11px] text-fg-3" data-testid="earn-dock-context-subtitle">
+          {subtitle}
+        </div>
+        <div
+          className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-1 px-2 py-0.5 text-[10.5px] text-fg-4"
+          data-testid="earn-dock-activity-glimpse"
+        >
+          <span
+            aria-hidden
+            className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-gold-1"
+          />
+          {activity}
         </div>
       </div>
       <button
         type="button"
         onClick={onClose}
         aria-label="Close Earn dock"
+        data-testid="earn-dock-close-btn"
         className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-surface-1 text-fg-3 transition hover:bg-surface-2 hover:text-fg-1"
       >
         <X size={16} strokeWidth={1.9} aria-hidden />
@@ -67,8 +69,6 @@ function TeamStrip({ active, onSelect }: { active: string; onSelect: (slug: stri
           specialist. Tap one to see what they do.
         </p>
       </div>
-      {/* Named, readable rows — each specialist's name + role is legible at a
-          glance; the active one expands to show what they do. */}
       <ul className="flex flex-col gap-1">
         {specialists.map((m) => {
           const isActive = m.slug === active;
@@ -102,20 +102,26 @@ function TeamStrip({ active, onSelect }: { active: string; onSelect: (slug: stri
   );
 }
 
-function RecommendedActions() {
+function RecommendedActions({ kind }: { kind: ReturnType<typeof useEarnContext>['kind'] }) {
+  const copy = copyFor(kind);
   return (
-    <section>
+    <section data-testid="earn-dock-actions" data-context={kind}>
       <div className="mb-2 px-0.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-        Recommended next steps
+        Here&apos;s what I can do right now
       </div>
       <div className="flex flex-col gap-1">
-        {RECOMMENDED.map((action) => {
+        {copy.actions.map((action) => {
           const Icon = action.icon;
           return (
             <button
               key={action.label}
               type="button"
               className="group flex items-center gap-2.5 rounded-xl border border-transparent px-2.5 py-2 text-left text-[12.5px] text-fg-2 transition hover:border-hairline hover:bg-surface-1"
+              data-testid={`earn-action-${action.label
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '')}`}
+              title={action.prompt}
             >
               <Icon size={15} strokeWidth={1.9} className="flex-none text-fg-4" aria-hidden />
               <span className="flex-1">{action.label}</span>
@@ -139,15 +145,25 @@ export interface EarnDockProps {
 }
 
 /**
- * EarnDock — the right-side slide-in Earn surface. Houses the COO presence
- * header (Earn + position), the live chat (reuses `EarnChat`, which POSTs
- * to `/api/ask-earn`), recommended actions, and a compact "Team" strip of
- * the 14 specialists. Slides via transform only; never transitions `color`.
+ * EarnDock — the right-side slide-in Earn surface.
+ *
+ * Reads the current `EarnContext` (route default + drawer overrides) and
+ * switches its subtitle, activity-glimpse, and quick-actions accordingly.
+ * Voice stays "Chief Operating Officer · your live AI guide" everywhere —
+ * context-specific copy renders as the focused subtitle and the action chip
+ * list. The chat path (`EarnChat` → `/api/ask-earn`) is untouched.
  */
 export function EarnDock({ open, onClose }: EarnDockProps) {
   const specialists = getSpecialists();
   const initialSpecialist: TeamMember = specialists[0]!;
   const [activeSpecialist, setActiveSpecialist] = useState<string>(initialSpecialist.slug);
+  const earnCtx = useEarnContext();
+  const copy = copyFor(earnCtx.kind);
+
+  // Entity-specific subtitle when a drawer override gives us a label.
+  const subtitle = earnCtx.entityLabel
+    ? `${copy.subtitle} · ${earnCtx.entityLabel}`
+    : copy.subtitle;
 
   return (
     <aside
@@ -155,17 +171,19 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
       aria-modal="false"
       aria-label="Earn dock"
       aria-hidden={!open}
+      data-testid="earn-dock"
+      data-context={earnCtx.kind}
       className={cn(
         'fixed right-0 top-0 z-[45] flex h-full w-full max-w-[400px] flex-col border-l border-hairline bg-bg-1 shadow-[var(--shadow-lg)]',
         'transition-transform duration-300 ease-[cubic-bezier(.22,.61,.36,1)] will-change-transform',
         open ? 'translate-x-0' : 'translate-x-full'
       )}
     >
-      <PresenceHeader onClose={onClose} />
+      <PresenceHeader onClose={onClose} subtitle={subtitle} activity={copy.activity} />
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
         <EarnChat />
-        <RecommendedActions />
+        <RecommendedActions kind={earnCtx.kind} />
         <TeamStrip active={activeSpecialist} onSelect={setActiveSpecialist} />
       </div>
     </aside>

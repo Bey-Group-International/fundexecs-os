@@ -9,6 +9,7 @@ import { Drawer } from './Drawer';
 import { updateDeal, updateDealStage, archiveDeal } from '@/lib/actions/deals';
 import { createAllocation, deleteAllocation } from '@/lib/actions/allocations';
 import { runDiligenceForDeal } from '@/lib/actions/diligence';
+import { EarnContextProvider } from '@/components/shell/earn/EarnContext';
 
 export interface DealDetailData {
   id: string;
@@ -228,198 +229,200 @@ export function DealDetailDrawer({
   }
 
   return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      title={deal.name}
-      subtitle={`Stage: ${stage} · ${formatMoney(deal.amount)}`}
-      footer={
-        <>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleArchive}
-            disabled={archivePending}
-            icon={Trash2}
-            data-testid="deal-detail-archive"
-          >
-            {archivePending ? 'Archiving…' : 'Archive deal'}
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleSave}
-            disabled={savePending}
-            data-testid="deal-detail-save"
-          >
-            {savePending ? 'Saving…' : 'Save changes'}
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-5">
-        <Input
-          label="Deal name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          data-testid="deal-detail-name"
-        />
-        <Input
-          label="Amount (USD)"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          inputMode="numeric"
-          data-testid="deal-detail-amount"
-        />
-        <Select
-          label="Stage"
-          value={stage}
-          onChange={(e) => handleStage(e.target.value)}
-          options={STAGE_OPTIONS}
-          disabled={stagePending}
-          data-testid="deal-detail-stage"
-        />
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-              Allocations
-            </span>
-            <span className="text-[11px] tabular-nums text-fg-5">
-              {deal.allocations.length} logged
-            </span>
-          </div>
-          <div className="mt-2 flex flex-col gap-1.5">
-            {deal.allocations.length === 0 ? (
-              <p className="text-[12px] text-fg-5">No allocations yet.</p>
-            ) : (
-              deal.allocations.map((a) => (
-                <div
-                  key={a.id}
-                  className="flex items-center justify-between rounded-md border border-hairline bg-surface-1 px-3 py-2"
-                >
-                  <span className="font-mono text-[12px] tabular-nums text-fg-1">
-                    {formatMoney(a.amount)}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Badge tone="azure" className="text-[10px]">
-                      {a.status}
-                    </Badge>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveAllocation(a.id)}
-                      aria-label="Remove allocation"
-                      disabled={allocPending}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-hairline text-fg-4 transition hover:text-danger disabled:opacity-50"
-                      data-testid={`allocation-delete-${a.id}`}
-                    >
-                      <Trash2 size={12} strokeWidth={1.9} aria-hidden />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          <div className="mt-3 rounded-xl border border-dashed border-hairline-faint p-3">
-            <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-              Log new allocation
+    <EarnContextProvider value={{ kind: 'deal', entityId: deal.id, entityLabel: deal.name }}>
+      <Drawer
+        open={open}
+        onClose={onClose}
+        title={deal.name}
+        subtitle={`Stage: ${stage} · ${formatMoney(deal.amount)}`}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleArchive}
+              disabled={archivePending}
+              icon={Trash2}
+              data-testid="deal-detail-archive"
+            >
+              {archivePending ? 'Archiving…' : 'Archive deal'}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSave}
+              disabled={savePending}
+              data-testid="deal-detail-save"
+            >
+              {savePending ? 'Saving…' : 'Save changes'}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-5">
+          <Input
+            label="Deal name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            data-testid="deal-detail-name"
+          />
+          <Input
+            label="Amount (USD)"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputMode="numeric"
+            data-testid="deal-detail-amount"
+          />
+          <Select
+            label="Stage"
+            value={stage}
+            onChange={(e) => handleStage(e.target.value)}
+            options={STAGE_OPTIONS}
+            disabled={stagePending}
+            data-testid="deal-detail-stage"
+          />
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                Allocations
+              </span>
+              <span className="text-[11px] tabular-nums text-fg-5">
+                {deal.allocations.length} logged
+              </span>
             </div>
-            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_140px_auto]">
-              <Input
-                aria-label="Allocation amount"
-                placeholder="500000"
-                inputMode="numeric"
-                value={allocAmount}
-                onChange={(e) => setAllocAmount(e.target.value)}
-                data-testid="allocation-amount"
-              />
-              <Select
-                aria-label="Allocation status"
-                value={allocStatus}
-                onChange={(e) => setAllocStatus(e.target.value)}
-                options={[
-                  { value: 'proposed', label: 'Proposed' },
-                  { value: 'accepted', label: 'Accepted' },
-                  { value: 'committed', label: 'Committed' },
-                  { value: 'declined', label: 'Declined' }
-                ]}
-                data-testid="allocation-status"
-              />
+            <div className="mt-2 flex flex-col gap-1.5">
+              {deal.allocations.length === 0 ? (
+                <p className="text-[12px] text-fg-5">No allocations yet.</p>
+              ) : (
+                deal.allocations.map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex items-center justify-between rounded-md border border-hairline bg-surface-1 px-3 py-2"
+                  >
+                    <span className="font-mono text-[12px] tabular-nums text-fg-1">
+                      {formatMoney(a.amount)}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Badge tone="azure" className="text-[10px]">
+                        {a.status}
+                      </Badge>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAllocation(a.id)}
+                        aria-label="Remove allocation"
+                        disabled={allocPending}
+                        className="flex h-7 w-7 items-center justify-center rounded-md border border-hairline text-fg-4 transition hover:text-danger disabled:opacity-50"
+                        data-testid={`allocation-delete-${a.id}`}
+                      >
+                        <Trash2 size={12} strokeWidth={1.9} aria-hidden />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="mt-3 rounded-xl border border-dashed border-hairline-faint p-3">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                Log new allocation
+              </div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_140px_auto]">
+                <Input
+                  aria-label="Allocation amount"
+                  placeholder="500000"
+                  inputMode="numeric"
+                  value={allocAmount}
+                  onChange={(e) => setAllocAmount(e.target.value)}
+                  data-testid="allocation-amount"
+                />
+                <Select
+                  aria-label="Allocation status"
+                  value={allocStatus}
+                  onChange={(e) => setAllocStatus(e.target.value)}
+                  options={[
+                    { value: 'proposed', label: 'Proposed' },
+                    { value: 'accepted', label: 'Accepted' },
+                    { value: 'committed', label: 'Committed' },
+                    { value: 'declined', label: 'Declined' }
+                  ]}
+                  data-testid="allocation-status"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Plus}
+                  onClick={handleAddAllocation}
+                  disabled={allocPending || !allocAmount.trim()}
+                  data-testid="allocation-add"
+                >
+                  {allocPending ? 'Adding…' : 'Add'}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                <Scale size={12} strokeWidth={1.9} aria-hidden />
+                Diligence
+              </span>
               <Button
                 variant="secondary"
                 size="sm"
-                icon={Plus}
-                onClick={handleAddAllocation}
-                disabled={allocPending || !allocAmount.trim()}
-                data-testid="allocation-add"
+                icon={Scale}
+                onClick={handleRunDiligence}
+                disabled={diligencePending}
+                data-testid="deal-detail-run-diligence"
               >
-                {allocPending ? 'Adding…' : 'Add'}
+                {diligencePending ? 'Running…' : 'Run diligence'}
               </Button>
             </div>
+            <div className="mt-2 flex flex-col gap-1.5">
+              {deal.diligenceRuns.length === 0 ? (
+                <p className="text-[12px] text-fg-5">
+                  No diligence runs yet. Run Earn&rsquo;s committee on this deal.
+                </p>
+              ) : (
+                deal.diligenceRuns.map((run) => (
+                  <Link
+                    key={run.id}
+                    href={`/diligence/${run.id}`}
+                    className="flex items-center justify-between gap-2 rounded-md border border-hairline bg-surface-1 px-3 py-2 transition hover:border-[var(--accent-line)]"
+                    data-testid={`diligence-run-${run.id}`}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-fg-1">
+                      {run.summary || 'Diligence review'}
+                    </span>
+                    <div className="flex flex-none items-center gap-1.5">
+                      {run.conviction != null ? (
+                        <span className="font-mono text-[11px] tabular-nums text-fg-3">
+                          {run.conviction}
+                        </span>
+                      ) : null}
+                      <Badge tone={diligenceTone(run.status)} className="text-[10px]">
+                        {run.status}
+                      </Badge>
+                      <ArrowUpRight size={13} strokeWidth={1.9} className="text-fg-4" aria-hidden />
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
           </div>
-        </div>
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-              <Scale size={12} strokeWidth={1.9} aria-hidden />
-              Diligence
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={Scale}
-              onClick={handleRunDiligence}
-              disabled={diligencePending}
-              data-testid="deal-detail-run-diligence"
+          {error ? (
+            <div
+              role="alert"
+              className="rounded-md border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[12px] text-danger"
             >
-              {diligencePending ? 'Running…' : 'Run diligence'}
-            </Button>
-          </div>
-          <div className="mt-2 flex flex-col gap-1.5">
-            {deal.diligenceRuns.length === 0 ? (
-              <p className="text-[12px] text-fg-5">
-                No diligence runs yet. Run Earn&rsquo;s committee on this deal.
-              </p>
-            ) : (
-              deal.diligenceRuns.map((run) => (
-                <Link
-                  key={run.id}
-                  href={`/diligence/${run.id}`}
-                  className="flex items-center justify-between gap-2 rounded-md border border-hairline bg-surface-1 px-3 py-2 transition hover:border-[var(--accent-line)]"
-                  data-testid={`diligence-run-${run.id}`}
-                >
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-fg-1">
-                    {run.summary || 'Diligence review'}
-                  </span>
-                  <div className="flex flex-none items-center gap-1.5">
-                    {run.conviction != null ? (
-                      <span className="font-mono text-[11px] tabular-nums text-fg-3">
-                        {run.conviction}
-                      </span>
-                    ) : null}
-                    <Badge tone={diligenceTone(run.status)} className="text-[10px]">
-                      {run.status}
-                    </Badge>
-                    <ArrowUpRight size={13} strokeWidth={1.9} className="text-fg-4" aria-hidden />
-                  </div>
-                </Link>
-              ))
-            )}
+              {error}
+            </div>
+          ) : null}
+          <div className="text-[11px] text-fg-5">
+            Advance the stage to log a Chain-of-Trust event.
+            <ArrowRight size={12} className="ml-1 inline-block" aria-hidden />
           </div>
         </div>
-        {error ? (
-          <div
-            role="alert"
-            className="rounded-md border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[12px] text-danger"
-          >
-            {error}
-          </div>
-        ) : null}
-        <div className="text-[11px] text-fg-5">
-          Advance the stage to log a Chain-of-Trust event.
-          <ArrowRight size={12} className="ml-1 inline-block" aria-hidden />
-        </div>
-      </div>
-    </Drawer>
+      </Drawer>
+    </EarnContextProvider>
   );
 }
 

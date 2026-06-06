@@ -11,7 +11,8 @@ import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import {
   FundProfileHero,
   FundProfileSections,
-  FundProfileGapsCard
+  FundProfileGapsCard,
+  FundProfileRailSummary
 } from '@/components/fund-profile';
 
 export const metadata: Metadata = {
@@ -71,6 +72,7 @@ export default async function FundProfilePage() {
       identity={identity}
       wallet={wallet}
       navSignals={navSignals}
+      sourceOfTruthSummary={<FundProfileRailSummary profile={profile} />}
     >
       <div className="flex flex-col gap-[18px]" data-testid="fund-profile-page">
         <FundProfileHero profile={profile} />

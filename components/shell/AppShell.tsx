@@ -8,6 +8,7 @@ import { Wave1SideRail, type NavSignals } from './Wave1SideRail';
 import { Wave1TopNav } from './Wave1TopNav';
 import { EarnOrb } from './earn/EarnOrb';
 import { EarnDock } from './earn/EarnDock';
+import { EarnContextProvider } from './earn/EarnContext';
 import { TrustToaster } from './trust/TrustToaster';
 
 /** Generic fallback when no signed-in identity is supplied (e.g. SSR before
@@ -36,6 +37,10 @@ export interface AppShellProps {
   /** Live signals for the side rail (current lifecycle stage + per-item
    *  badges). When omitted the rail renders without badges. */
   navSignals?: NavSignals;
+  /** Optional compact card the rail renders at the top of the
+   *  "Source of Truth" area. Wave-1: typically a `<FundProfileRailSummary>`
+   *  resolved on the server in `AuthedShell`. */
+  sourceOfTruthSummary?: ReactNode;
   children: ReactNode;
 }
 
@@ -46,6 +51,10 @@ export interface AppShellProps {
  * Credit Wallet fuel-gauge), a 1180px content column, and the shell-level
  * Earn + Chain-of-Trust systems. Every visual value sources from the
  * design tokens in `app/globals.css`; no inline hex.
+ *
+ * Mounts a top-level `<EarnContextProvider>` whose value derives from the
+ * route — entity drawers can wrap their content in their own
+ * `<EarnContextProvider value={{ kind: 'deal', ... }}>` to override.
  */
 export function AppShell({
   title,
@@ -53,6 +62,7 @@ export function AppShell({
   identity,
   wallet,
   navSignals,
+  sourceOfTruthSummary,
   children
 }: AppShellProps) {
   const pathname = usePathname();
@@ -61,44 +71,47 @@ export function AppShell({
   const id = identity ?? DEFAULT_IDENTITY;
 
   return (
-    <div className="relative flex h-screen overflow-hidden">
-      {navOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
-          onClick={() => setNavOpen(false)}
-          aria-hidden
-        />
-      )}
-      <Wave1SideRail
-        pathname={pathname}
-        open={navOpen}
-        onClose={() => setNavOpen(false)}
-        identity={id}
-        signals={navSignals}
-      />
-      <div className="relative z-0 flex min-w-0 flex-1 flex-col">
-        <Wave1TopNav
-          title={title}
-          subtitle={subtitle}
+    <EarnContextProvider>
+      <div className="relative flex h-screen overflow-hidden">
+        {navOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+            onClick={() => setNavOpen(false)}
+            aria-hidden
+          />
+        )}
+        <Wave1SideRail
+          pathname={pathname}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
           identity={id}
-          wallet={wallet}
-          onMenu={() => setNavOpen(true)}
-          onAskEarn={() => setDockOpen((v) => !v)}
+          signals={navSignals}
+          sourceOfTruthSummary={sourceOfTruthSummary}
         />
-        <main className="flex-1 overflow-y-auto px-5 pb-20 pt-6 sm:px-7">
-          {/* Keyed by route so content gently rises in on each navigation —
-              a subtle page-enter that respects prefers-reduced-motion. */}
-          <div key={pathname} className="fx-rise mx-auto max-w-[1180px]">
-            {children}
-          </div>
-        </main>
-      </div>
+        <div className="relative z-0 flex min-w-0 flex-1 flex-col">
+          <Wave1TopNav
+            title={title}
+            subtitle={subtitle}
+            identity={id}
+            wallet={wallet}
+            onMenu={() => setNavOpen(true)}
+            onAskEarn={() => setDockOpen((v) => !v)}
+          />
+          <main className="flex-1 overflow-y-auto px-5 pb-20 pt-6 sm:px-7">
+            {/* Keyed by route so content gently rises in on each navigation —
+                a subtle page-enter that respects prefers-reduced-motion. */}
+            <div key={pathname} className="fx-rise mx-auto max-w-[1180px]">
+              {children}
+            </div>
+          </main>
+        </div>
 
-      {/* Shell-level systems — present on every authenticated screen. */}
-      <EarnOrb open={dockOpen} onToggle={() => setDockOpen((v) => !v)} />
-      <EarnDock open={dockOpen} onClose={() => setDockOpen(false)} />
-      <TrustToaster />
-    </div>
+        {/* Shell-level systems — present on every authenticated screen. */}
+        <EarnOrb open={dockOpen} onToggle={() => setDockOpen((v) => !v)} />
+        <EarnDock open={dockOpen} onClose={() => setDockOpen(false)} />
+        <TrustToaster />
+      </div>
+    </EarnContextProvider>
   );
 }
 

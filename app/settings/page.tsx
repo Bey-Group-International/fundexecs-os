@@ -4,6 +4,11 @@ import { getShellIdentity } from '@/lib/queries/identity';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getMemberProfile } from '@/lib/queries/member-profile';
+import { getCreditWallet } from '@/lib/queries/credit-wallet';
+import { getFundProfile } from '@/lib/queries/fund-profile';
+import { getDashboardData } from '@/lib/queries/dashboard';
+import { buildRailSignals } from '@/lib/dashboard-rail-signals';
+import { FundProfileRailSummary } from '@/components/fund-profile';
 import type { Database } from '@/lib/supabase/database.types';
 import { SettingsView } from './SettingsView';
 
@@ -12,9 +17,11 @@ export const metadata: Metadata = { title: 'Profile & settings' };
 type OrgType = Database['public']['Enums']['org_type'];
 
 /**
- * Profile & settings — gamification header plus account / notifications /
- * security / organization / billing sections. The signed-in email and active
- * org are resolved on the server; everything else is presentational.
+ * Profile & settings — gamification header plus account / trust / notifications /
+ * security / organization / billing sections rendered as a vertical detail rail.
+ * The signed-in email and active org are resolved on the server; everything else
+ * is presentational. Wallet + rail-signals + Source-of-Truth summary keep the
+ * shell lifecycle-aware on this surface.
  */
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -23,6 +30,7 @@ export default async function SettingsPage() {
     data: { user }
   } = await supabase.auth.getUser();
 
+  const identity = await getShellIdentity();
   const [org, memberProfile] = await Promise.all([getActiveOrg(), getMemberProfile()]);
 
   let orgName: string | null = null;
@@ -51,9 +59,24 @@ export default async function SettingsPage() {
     role = data?.role ?? null;
   }
 
+  const [wallet, fundProfile, dashboard] = org
+    ? await Promise.all([
+        getCreditWallet(org.orgId).catch(() => null),
+        getFundProfile(org.orgId).catch(() => null),
+        getDashboardData(org.orgId).catch(() => null)
+      ])
+    : [null, null, null];
+  const navSignals = dashboard ? buildRailSignals(dashboard) : undefined;
+  const sourceOfTruthSummary = fundProfile ? (
+    <FundProfileRailSummary profile={fundProfile} />
+  ) : undefined;
+
   return (
     <AppShell
-      identity={await getShellIdentity()}
+      identity={identity}
+      wallet={wallet}
+      navSignals={navSignals}
+      sourceOfTruthSummary={sourceOfTruthSummary}
       title="Profile & settings"
       subtitle="Your account, organization, and trust profile"
     >

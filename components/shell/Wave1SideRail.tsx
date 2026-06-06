@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
   // Source of Truth
@@ -88,6 +89,9 @@ export interface Wave1SideRailProps {
   identity: ShellIdentity;
   /** Live signals from the Dashboard loader (current stage + per-item counts). */
   signals?: NavSignals;
+  /** Optional card the rail mounts at the top of the "Source of Truth" group.
+   *  Wave-1: typically `<FundProfileRailSummary>` server-rendered upstream. */
+  sourceOfTruthSummary?: ReactNode;
   /** Override default sign-out (defaults to Supabase client signOut). */
   onSignOut?: () => void | Promise<void>;
 }
@@ -184,6 +188,7 @@ export function Wave1SideRail({
   onClose,
   identity,
   signals,
+  sourceOfTruthSummary,
   onSignOut
 }: Wave1SideRailProps) {
   const emphasizedGroups = signals?.currentStage
@@ -257,6 +262,7 @@ export function Wave1SideRail({
       >
         {RAIL_GROUPS.map((group) => {
           const emphasized = emphasizedGroups.has(group.key);
+          const extraTop = group.key === 'source-of-truth' ? sourceOfTruthSummary : undefined;
           return (
             <NavGroup
               key={group.key}
@@ -265,6 +271,7 @@ export function Wave1SideRail({
               emphasized={emphasized}
               badges={signals?.badges}
               onLinkClick={onClose}
+              extraTop={extraTop}
             />
           );
         })}
@@ -308,9 +315,12 @@ interface NavGroupProps {
   emphasized: boolean;
   badges?: Record<string, RailSignal>;
   onLinkClick: () => void;
+  /** Optional node rendered between the group heading and the link list.
+   *  Used for FundProfileRailSummary on the source-of-truth group. */
+  extraTop?: ReactNode;
 }
 
-function NavGroup({ group, pathname, emphasized, badges, onLinkClick }: NavGroupProps) {
+function NavGroup({ group, pathname, emphasized, badges, onLinkClick, extraTop }: NavGroupProps) {
   return (
     <section data-testid={`rail-group-${group.key}`}>
       <div
@@ -325,6 +335,7 @@ function NavGroup({ group, pathname, emphasized, badges, onLinkClick }: NavGroup
         ) : null}
         <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">{group.label}</span>
       </div>
+      {extraTop ? <div className="mb-1.5 px-1">{extraTop}</div> : null}
       <ul className="flex flex-col gap-0.5">
         {group.items.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);

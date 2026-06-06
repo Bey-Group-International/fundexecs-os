@@ -12,8 +12,5 @@ export type { FundProfileSectionsProps } from './FundProfileSections';
 export { FundProfileGapsCard } from './FundProfileGapsCard';
 export type { FundProfileGapsCardProps } from './FundProfileGapsCard';
 
-export {
-  FundProfileRailSummary,
-  FundProfileRailSummaryEmpty
-} from './FundProfileRailSummary';
+export { FundProfileRailSummary, FundProfileRailSummaryEmpty } from './FundProfileRailSummary';
 export type { FundProfileRailSummaryProps } from './FundProfileRailSummary';

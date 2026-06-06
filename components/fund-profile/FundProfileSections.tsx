@@ -140,7 +140,12 @@ function SectionCard({
           </h3>
         </div>
       </div>
-      <p className={cn('mt-3 max-w-[60ch] text-[12.5px] leading-relaxed', present ? 'text-fg-2' : 'text-fg-4')}>
+      <p
+        className={cn(
+          'mt-3 max-w-[60ch] text-[12.5px] leading-relaxed',
+          present ? 'text-fg-2' : 'text-fg-4'
+        )}
+      >
         {present ? body : empty}
       </p>
     </Card>

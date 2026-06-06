@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import {
@@ -25,14 +25,13 @@ import {
   Input,
   ProgressBar,
   SectionTitle,
-  SegTabs,
   Select,
-  type BadgeTone,
-  type TabItem
+  type BadgeTone
 } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 import type { Database } from '@/lib/supabase/database.types';
+import { cn } from '@/lib/utils';
 import {
   updateAccountSettings,
   updateOrganizationSettings,
@@ -56,7 +55,9 @@ interface SettingsViewProps {
   proofMemberType: MemberType | null;
 }
 
-// ── Gamification ──────────────────────────────────────────────────────────────
+/* ----------------------------------------------------------------------------
+ * Gamification header
+ * --------------------------------------------------------------------------*/
 
 interface TrustStatus {
   label: string;
@@ -112,7 +113,7 @@ function GamificationHeader({ name }: { name: string }) {
   const earned = STATUSES.filter((s) => s.earned).length;
   const pct = Math.round((XP / XP_NEXT) * 100);
   return (
-    <Card className="overflow-hidden p-0">
+    <Card className="overflow-hidden p-0" data-testid="settings-gamification">
       <div className="flex flex-col gap-5 bg-[linear-gradient(105deg,rgba(247,201,72,0.12),rgba(247,201,72,0.02)_46%,transparent_72%)] px-5 py-[18px]">
         <div className="flex items-center gap-4">
           <EarnCoin size={52} glow className="flex-none" />
@@ -171,7 +172,9 @@ function GamificationHeader({ name }: { name: string }) {
   );
 }
 
-// ── Section primitives ────────────────────────────────────────────────────────
+/* ----------------------------------------------------------------------------
+ * Section primitives
+ * --------------------------------------------------------------------------*/
 
 function FieldRow({ children }: { children: React.ReactNode }) {
   return <div className="grid gap-4 sm:grid-cols-2">{children}</div>;
@@ -218,7 +221,9 @@ function ToggleRow({
   );
 }
 
-// ── Section panels ────────────────────────────────────────────────────────────
+/* ----------------------------------------------------------------------------
+ * Section panels — unchanged behaviour, restructured into the right pane
+ * --------------------------------------------------------------------------*/
 
 function ProofOfTruthCard({
   status,
@@ -511,15 +516,69 @@ function BillingSection() {
   );
 }
 
-// ── View ──────────────────────────────────────────────────────────────────────
+/* ----------------------------------------------------------------------------
+ * Vertical detail rail — left = section list, right = active section detail
+ *
+ * Wave-1 spec: settings render as a vertical detail rail with the capability
+ * each section unlocks stated up front. Pattern: 240px sticky left column +
+ * ~640px right detail pane (Notion / Linear / Stripe / Vercel style). The
+ * active section gets a left-border accent + surface fill in the rail. URL
+ * hash sync (`/settings#integrations`) lets sections be deep-linked.
+ * --------------------------------------------------------------------------*/
 
-const TABS: TabItem[] = [
-  { id: 'account', label: 'Account', icon: User },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'security', label: 'Security', icon: Lock },
-  { id: 'organization', label: 'Organization', icon: Building2 },
-  { id: 'billing', label: 'Billing', icon: CreditCard }
+interface SettingsSection {
+  id: 'account' | 'notifications' | 'security' | 'organization' | 'billing' | 'trust';
+  label: string;
+  icon: LucideIcon;
+  /** What completing this section unlocks across the app. */
+  unlocks: string;
+}
+
+const SECTIONS: SettingsSection[] = [
+  {
+    id: 'account',
+    label: 'Account',
+    icon: User,
+    unlocks: 'The identity Earn uses when speaking on your behalf — name, bio, contact.'
+  },
+  {
+    id: 'trust',
+    label: 'Trust profile',
+    icon: ShieldCheck,
+    unlocks: 'The Source-of-Truth proof package every LP probes before they commit.'
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: Bell,
+    unlocks: 'What Earn surfaces in your day — synergy alerts, briefings, deal-stage signal.'
+  },
+  {
+    id: 'security',
+    label: 'Security',
+    icon: Lock,
+    unlocks: 'Sign-in policy, 2FA, and trusted-device controls for your workspace.'
+  },
+  {
+    id: 'organization',
+    label: 'Organization',
+    icon: Building2,
+    unlocks: 'Workspace identity + the institutional tier shown on LP-facing surfaces.'
+  },
+  {
+    id: 'billing',
+    label: 'Billing & credits',
+    icon: CreditCard,
+    unlocks: 'The plan + Credit Wallet that fuels every AI workload Earn coordinates.'
+  }
 ];
+
+const VALID_IDS = new Set(SECTIONS.map((s) => s.id));
+
+function hashToSection(hash: string): SettingsSection['id'] | null {
+  const raw = hash.replace(/^#/, '').toLowerCase();
+  return VALID_IDS.has(raw as SettingsSection['id']) ? (raw as SettingsSection['id']) : null;
+}
 
 export function SettingsView({
   email,
@@ -534,27 +593,131 @@ export function SettingsView({
   proofPct,
   proofMemberType
 }: SettingsViewProps) {
-  const [tab, setTab] = useState('account');
+  // Lazy init — read the URL hash on first client render so deep links open
+  // the right section without a flash. SSR returns 'account'; hydration runs
+  // the lazy initializer on the client where `window` exists.
+  const [active, setActive] = useState<SettingsSection['id']>(() => {
+    if (typeof window === 'undefined') return 'account';
+    return hashToSection(window.location.hash) ?? 'account';
+  });
+
+  // Subscribe to hash changes for cross-tab / browser-history navigation.
+  // setState only fires inside the event handler — not during render or
+  // synchronously inside the effect body.
+  useEffect(() => {
+    const onHash = () => {
+      const next = hashToSection(window.location.hash);
+      if (next) setActive(next);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  function selectSection(id: SettingsSection['id']) {
+    setActive(id);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.hash = id;
+      window.history.replaceState(null, '', url.toString());
+    }
+  }
+
   const displayName = fullName ?? (email ? email.split('@')[0] : 'Your profile');
+  const activeSection = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0]!;
+  const ActiveIcon = activeSection.icon;
 
   return (
-    <div className="flex flex-col gap-[22px]">
+    <div className="flex flex-col gap-[22px]" data-testid="settings-rail-view">
       <GamificationHeader name={displayName} />
 
-      <SegTabs tabs={TABS} active={tab} onChange={setTab} className="flex-wrap" />
+      <div className="grid gap-[18px] lg:grid-cols-[240px_minmax(0,1fr)]">
+        {/* Sticky left rail — section list with capability copy */}
+        <aside
+          className="lg:sticky lg:top-[18px] lg:self-start"
+          data-testid="settings-section-rail"
+          aria-label="Settings sections"
+        >
+          <nav className="flex flex-col gap-1 rounded-2xl border border-hairline bg-bg-1 p-1.5">
+            {SECTIONS.map((s) => {
+              const Icon = s.icon;
+              const isActive = s.id === active;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => selectSection(s.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  data-testid={`settings-rail-${s.id}`}
+                  className={cn(
+                    'relative flex w-full items-start gap-2.5 rounded-xl px-3 py-2.5 text-left transition-[background,box-shadow,transform]',
+                    isActive
+                      ? 'bg-gradient-to-r from-[var(--azure-soft)] to-surface-1 text-fg-1'
+                      : 'text-fg-3 hover:translate-x-0.5 hover:bg-surface-1'
+                  )}
+                >
+                  {isActive ? (
+                    <span
+                      className="absolute -left-1.5 bottom-2 top-2 w-[3px] rounded-full bg-azure-1"
+                      aria-hidden
+                    />
+                  ) : null}
+                  <Icon
+                    size={15}
+                    strokeWidth={1.9}
+                    className={cn('mt-0.5 flex-none', isActive ? 'text-azure-1' : 'text-fg-4')}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12.5px] font-semibold leading-tight">
+                      {s.label}
+                    </span>
+                    <span
+                      className={cn(
+                        'mt-0.5 block text-[10.5px] leading-snug',
+                        isActive ? 'text-fg-3' : 'text-fg-5'
+                      )}
+                    >
+                      {s.unlocks}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
 
-      {tab === 'account' && (
-        <>
-          <ProofOfTruthCard status={proofStatus} pct={proofPct} memberType={proofMemberType} />
-          <AccountSection email={email} fullName={fullName} role={role} bio={bio} phone={phone} />
-        </>
-      )}
-      {tab === 'notifications' && <NotificationsSection />}
-      {tab === 'security' && <SecuritySection />}
-      {tab === 'organization' && (
-        <OrganizationSection orgName={orgName} orgTier={orgTier} orgType={orgType} />
-      )}
-      {tab === 'billing' && <BillingSection />}
+        {/* Right detail pane — active section content */}
+        <div
+          className="flex max-w-[640px] flex-col gap-[18px]"
+          data-testid={`settings-pane-${activeSection.id}`}
+          key={activeSection.id}
+        >
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl border border-hairline bg-surface-1 text-azure-1">
+              <ActiveIcon size={16} strokeWidth={1.9} aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+                Unlocks
+              </p>
+              <p className="mt-0.5 text-[13px] leading-snug text-fg-2">{activeSection.unlocks}</p>
+            </div>
+          </div>
+
+          {activeSection.id === 'account' && (
+            <AccountSection email={email} fullName={fullName} role={role} bio={bio} phone={phone} />
+          )}
+          {activeSection.id === 'trust' && (
+            <ProofOfTruthCard status={proofStatus} pct={proofPct} memberType={proofMemberType} />
+          )}
+          {activeSection.id === 'notifications' && <NotificationsSection />}
+          {activeSection.id === 'security' && <SecuritySection />}
+          {activeSection.id === 'organization' && (
+            <OrganizationSection orgName={orgName} orgTier={orgTier} orgType={orgType} />
+          )}
+          {activeSection.id === 'billing' && <BillingSection />}
+        </div>
+      </div>
     </div>
   );
 }

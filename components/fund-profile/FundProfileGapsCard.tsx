@@ -4,7 +4,10 @@ import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { FundProfile, FundProfileGap } from '@/lib/queries/fund-profile';
 
-const SEVERITY_META: Record<FundProfileGap['severity'], { tone: BadgeTone; color: string; icon: LucideIcon }> = {
+const SEVERITY_META: Record<
+  FundProfileGap['severity'],
+  { tone: BadgeTone; color: string; icon: LucideIcon }
+> = {
   missing: { tone: 'danger', color: 'var(--danger)', icon: AlertTriangle },
   weak: { tone: 'warning', color: 'var(--warning)', icon: AlertTriangle }
 };
@@ -25,10 +28,7 @@ export function FundProfileGapsCard({ profile, className }: FundProfileGapsCardP
   return (
     <Card className={cn('p-5', className)} data-testid="fund-profile-gaps">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <SectionTitle
-          eyebrow="LP probe · audit-ready"
-          title="Gaps an LP would press on"
-        />
+        <SectionTitle eyebrow="LP probe · audit-ready" title="Gaps an LP would press on" />
         {gaps.length === 0 ? (
           <Badge tone="success" dot className="text-[10px]">
             Clear
@@ -42,12 +42,7 @@ export function FundProfileGapsCard({ profile, className }: FundProfileGapsCardP
 
       {gaps.length === 0 ? (
         <div className="rounded-xl border border-dashed border-hairline bg-surface-1 px-4 py-6 text-center">
-          <ShieldCheck
-            size={18}
-            strokeWidth={1.9}
-            className="mx-auto text-success"
-            aria-hidden
-          />
+          <ShieldCheck size={18} strokeWidth={1.9} className="mx-auto text-success" aria-hidden />
           <p className="mt-2 text-[12.5px] font-medium text-fg-2">
             Every LP-probed field on the record.
           </p>
@@ -79,9 +74,7 @@ export function FundProfileGapsCard({ profile, className }: FundProfileGapsCardP
                       <Badge tone={meta.tone} className="text-[9.5px] uppercase">
                         {gap.severity}
                       </Badge>
-                      <p className="truncate text-[12.5px] font-semibold text-fg-1">
-                        {gap.label}
-                      </p>
+                      <p className="truncate text-[12.5px] font-semibold text-fg-1">{gap.label}</p>
                     </div>
                     <p className="mt-0.5 text-[11.5px] text-fg-3">{gap.reason}</p>
                   </div>
