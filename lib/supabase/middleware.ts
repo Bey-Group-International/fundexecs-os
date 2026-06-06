@@ -72,9 +72,8 @@ export async function updateSession(request: NextRequest) {
     }
   });
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const { data: getUserData, error: getUserError } = await supabase.auth.getUser();
+  const user = getUserData.user;
 
   // Build a redirect that carries the refreshed session cookies. Returning a
   // bare NextResponse.redirect() would DROP the cookies `setAll` wrote on
@@ -153,6 +152,18 @@ export async function updateSession(request: NextRequest) {
     '/onboarding'
   ];
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p));
+
+  // TEMP auth diagnostic — logged on gated paths only. Remove once resolved.
+  if (isProtected || isOnboarding) {
+    const authCookies = request.cookies
+      .getAll()
+      .filter((c) => c.name.startsWith('sb-') && c.name.includes('auth-token'))
+      .map((c) => `${c.name}(${c.value.length})`)
+      .join(',');
+    console.log(
+      `[authdiag] path=${pathname} user=${user ? 'yes' : 'no'} err=${getUserError?.message ?? 'none'} cookies=[${authCookies || 'NONE'}]`
+    );
+  }
 
   if (!user && isProtected) {
     const login = request.nextUrl.clone();
