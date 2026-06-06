@@ -103,23 +103,68 @@ export function ChainOfTrustStrip({ standing }: { standing: ChainOfTrustStanding
     );
   }
 
+  // Gamified growth score: each proof layer is a step toward completing the
+  // private-market lifecycle. Overall = mean of the four proofs; tier rises as
+  // proofs are cleared.
+  const overall = Math.round(
+    (standing.truth + standing.concept + standing.execution + standing.work) / 4
+  );
+  const proofsComplete = LAYERS.filter((l) => standing[l.key] >= 100).length;
+  const tier =
+    overall >= 100
+      ? 'Institutional'
+      : overall >= 75
+        ? 'Trusted'
+        : overall >= 50
+          ? 'Proven'
+          : overall >= 25
+            ? 'Building'
+            : 'Forming';
+
   return (
     <button
       type="button"
       onClick={() => drawer.open({ recordId: standing.recordId ?? null })}
       data-testid="cot-strip"
       aria-label={`Open Chain of Trust drawer for ${standing.memberDisplayName ?? 'your profile'}`}
-      className="flex w-full flex-col gap-2 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2.5 text-left transition hover:border-azure-1/40 hover:bg-surface-2"
+      className="flex w-full flex-col gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-left transition hover:border-azure-1/40 hover:bg-surface-2"
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
           Chain of Trust
         </span>
-        {standing.currentLayer ? (
-          <Badge tone="azure" className="text-[9px]">
-            Active: {standing.currentLayer}
-          </Badge>
-        ) : null}
+        <Badge tone="azure" className="text-[9px]">
+          {tier}
+        </Badge>
+      </div>
+      {/* Overall lifecycle-trust meter — the gamified growth score. */}
+      <div className="flex items-end justify-between gap-2">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[22px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-fg-1">
+            {overall}%
+          </span>
+          <span className="text-[11px] text-fg-4">lifecycle trust</span>
+        </div>
+        <span className="text-[11px] tabular-nums text-fg-3">
+          {proofsComplete}/4 proofs cleared
+        </span>
+      </div>
+      <div
+        className="h-2 overflow-hidden rounded-full bg-surface-2"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={overall}
+        aria-label="Overall lifecycle trust"
+      >
+        <span
+          className="block h-full rounded-full"
+          style={{
+            width: `${overall}%`,
+            background:
+              'linear-gradient(90deg, var(--proof-truth), var(--proof-concept), var(--proof-execution), var(--proof-work))'
+          }}
+        />
       </div>
       <div className="grid grid-cols-4 gap-2">
         {LAYERS.map((layer) => {
