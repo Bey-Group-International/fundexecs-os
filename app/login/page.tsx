@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -23,6 +23,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Already signed in? Don't strand the user on the login form — send them into
+  // the app (or back to wherever they were headed). The middleware handles the
+  // onboarding gate from there.
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) window.location.replace(redirectedFrom);
+    });
+  }, [redirectedFrom]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
