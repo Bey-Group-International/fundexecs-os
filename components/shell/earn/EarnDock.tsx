@@ -58,14 +58,18 @@ function TeamStrip({ active, onSelect }: { active: string; onSelect: (slug: stri
   const specialists = getSpecialists();
   return (
     <section>
-      <div className="mb-2 flex items-baseline justify-between px-0.5">
+      <div className="mb-2 px-0.5">
         <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-          The Team · {specialists.length} specialists
+          Your specialist team · {specialists.length}
         </div>
-        <div className="text-[10.5px] text-fg-5">tap to focus</div>
+        <p className="mt-1 text-[11.5px] leading-5 text-fg-3">
+          Ask Earn anything — he coordinates the whole team and routes your request to the right
+          specialist. Tap one to see what they do.
+        </p>
       </div>
-      {/* Compact avatar row with name + position revealed on hover/focus. */}
-      <ul className="grid grid-cols-7 gap-1.5">
+      {/* Named, readable rows — each specialist's name + role is legible at a
+          glance; the active one expands to show what they do. */}
+      <ul className="flex flex-col gap-1">
         {specialists.map((m) => {
           const isActive = m.slug === active;
           return (
@@ -74,41 +78,27 @@ function TeamStrip({ active, onSelect }: { active: string; onSelect: (slug: stri
                 type="button"
                 onClick={() => onSelect(m.slug)}
                 aria-pressed={isActive}
-                aria-label={`${m.name}, ${m.position}`}
-                title={`${m.name} — ${m.position}`}
                 className={cn(
-                  'group relative flex w-full items-center justify-center rounded-xl border p-1.5 transition',
+                  'flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition',
                   isActive
                     ? 'border-[var(--azure-line)] bg-[var(--azure-soft)]'
-                    : 'border-transparent bg-transparent hover:border-hairline hover:bg-surface-1'
+                    : 'border-transparent hover:border-hairline hover:bg-surface-1'
                 )}
               >
-                <TeamAvatar member={m} size={28} />
+                <TeamAvatar member={m} size={30} className="flex-none" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-semibold text-fg-1">{m.name}</div>
+                  <div className="truncate text-[11px] text-fg-3">{m.position}</div>
+                </div>
               </button>
+              {isActive ? (
+                <p className="mb-1 mt-1 px-2.5 text-[11.5px] leading-5 text-fg-3">{m.oneLiner}</p>
+              ) : null}
             </li>
           );
         })}
       </ul>
-      <ActiveSpecialistCard slug={active} />
     </section>
-  );
-}
-
-function ActiveSpecialistCard({ slug }: { slug: string }) {
-  const specialists = getSpecialists();
-  const member = specialists.find((m) => m.slug === slug) ?? specialists[0];
-  if (!member) return null;
-  return (
-    <div className="mt-2.5 flex items-start gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
-      <TeamAvatar member={member} size={32} className="flex-none" />
-      <div className="min-w-0">
-        <div className="text-[12.5px] font-semibold text-fg-1">{member.name}</div>
-        <div className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-azure-1">
-          {member.position}
-        </div>
-        <p className="mt-1 text-[11.5px] leading-5 text-fg-3">{member.oneLiner}</p>
-      </div>
-    </div>
   );
 }
 
