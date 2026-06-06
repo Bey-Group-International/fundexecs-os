@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from './database.types';
+import { authCookieDomain } from './cookie-domain';
 
 /**
  * Supabase client for use in Server Components, Route Handlers, and
@@ -14,6 +15,7 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: { domain: authCookieDomain() },
       cookies: {
         getAll() {
           return cookieStore.getAll();
