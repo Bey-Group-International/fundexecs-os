@@ -8,9 +8,6 @@ import { getSiteURL } from '@/lib/site-url';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { TeamAvatar, getCOO } from '@/lib/team';
 
-const GOOGLE_SCOPES =
-  'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.metadata';
-
 export default function LoginPage() {
   const searchParams = useSearchParams();
   // Only allow same-origin relative paths to avoid open-redirects.
@@ -62,24 +59,13 @@ export default function LoginPage() {
     setLoading(false);
   }
 
-  async function handleGoogleSignIn() {
+  function handleGoogleSignIn() {
     setLoading(true);
     setMessage(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        // Clean redirect_to (no query string) so it matches any allow-list entry.
-        redirectTo: `${getSiteURL()}/auth/callback`,
-        scopes: GOOGLE_SCOPES,
-        queryParams: { access_type: 'offline', prompt: 'consent' }
-      }
-    });
-    if (error) {
-      setMessage(error.message);
-      setLoading(false);
-    }
-    // On success the browser redirects to Google.
+    // Initiate Google OAuth server-side so the PKCE code-verifier is written as a
+    // server-readable cookie. The browser-side flow stranded the verifier,
+    // causing "PKCE code verifier not found" at /auth/callback.
+    window.location.assign(`/api/auth/google?next=${encodeURIComponent(redirectedFrom)}`);
   }
 
   return (
