@@ -45,12 +45,17 @@ export async function updateSession(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser();
 
-  // OAuth safety net: if a provider redirect lands on a non-callback path
+  // OAuth safety net: if a *page* redirect lands on a non-callback path
   // (e.g. Supabase fell back to the Site URL because the callback URL was not
   // in the redirect allowlist), forward the auth `code` to /auth/callback so
   // it gets exchanged — and surface any OAuth `error` on the login page.
+  //
+  // API routes are excluded: the integration OAuth callbacks
+  // (/api/integrations/{provider}/callback) receive and exchange their OWN
+  // provider `code`. Forwarding theirs to /auth/callback would hand a
+  // Calendly/Slack code to Supabase and fail with "PKCE code verifier not found".
   const url = request.nextUrl;
-  if (url.pathname !== '/auth/callback') {
+  if (url.pathname !== '/auth/callback' && !url.pathname.startsWith('/api/')) {
     if (url.searchParams.has('code')) {
       const callback = url.clone();
       callback.pathname = '/auth/callback';
