@@ -206,6 +206,66 @@ export type Database = {
           },
         ]
       }
+      capital_commitments: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          expected_close: string | null
+          id: string
+          lp_id: string | null
+          lp_type: string | null
+          notes: string | null
+          org_id: string
+          stage: string
+          tranche: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          expected_close?: string | null
+          id?: string
+          lp_id?: string | null
+          lp_type?: string | null
+          notes?: string | null
+          org_id: string
+          stage?: string
+          tranche?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          expected_close?: string | null
+          id?: string
+          lp_id?: string | null
+          lp_type?: string | null
+          notes?: string | null
+          org_id?: string
+          stage?: string
+          tranche?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_commitments_lp_id_fkey"
+            columns: ["lp_id"]
+            isOneToOne: false
+            referencedRelation: "capital_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_commitments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       capital_providers: {
         Row: {
           capital_types: string[]
@@ -381,6 +441,76 @@ export type Database = {
             foreignKeyName: "contacts_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_transactions: {
+        Row: {
+          balance_after: number
+          created_at: string
+          delta: number
+          id: string
+          org_id: string
+          reason: string
+          ref_id: string | null
+        }
+        Insert: {
+          balance_after: number
+          created_at?: string
+          delta: number
+          id?: string
+          org_id: string
+          reason: string
+          ref_id?: string | null
+        }
+        Update: {
+          balance_after?: number
+          created_at?: string
+          delta?: number
+          id?: string
+          org_id?: string
+          reason?: string
+          ref_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_transactions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_wallets: {
+        Row: {
+          balance: number
+          created_at: string
+          org_id: string
+          plan: string
+          updated_at: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          org_id: string
+          plan?: string
+          updated_at?: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          org_id?: string
+          plan?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_wallets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
@@ -1154,6 +1284,50 @@ export type Database = {
           },
         ]
       }
+      matches: {
+        Row: {
+          acted_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          org_id: string
+          rationale: Json
+          score: number
+          status: string
+          subject_id: string
+        }
+        Insert: {
+          acted_at?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          org_id: string
+          rationale?: Json
+          score: number
+          status?: string
+          subject_id: string
+        }
+        Update: {
+          acted_at?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          org_id?: string
+          rationale?: Json
+          score?: number
+          status?: string
+          subject_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matches_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notes: {
         Row: {
           id: number
@@ -1763,6 +1937,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      act_on_match: {
+        Args: { _action: string; _match_id: string }
+        Returns: Json
+      }
       award_trust_xp: {
         Args: {
           _entity_id: string
@@ -1776,6 +1954,31 @@ export type Database = {
         Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
         Returns: string
       }
+      capital_stack_summary: {
+        Args: { _org_id: string }
+        Returns: {
+          active_total: number
+          closed_total: number
+          committed_total: number
+          currency: string
+          gap_to_target: number
+          lp_type_totals: Json
+          org_id: string
+          soft_circle_total: number
+          stage_totals: Json
+          target_total: number
+          withdrawn_total: number
+        }[]
+      }
+      consume_credits: {
+        Args: {
+          _amount: number
+          _org_id: string
+          _reason: string
+          _ref_id?: string
+        }
+        Returns: number
+      }
       get_integration_secret: {
         Args: { _connection_id: string }
         Returns: {
@@ -1786,6 +1989,15 @@ export type Database = {
           token_type: string
           updated_at: string
         }[]
+      }
+      grant_credits: {
+        Args: {
+          _amount: number
+          _org_id: string
+          _reason?: string
+          _ref_id?: string
+        }
+        Returns: number
       }
       match_diligence_chunks: {
         Args: { match_count?: number; query_embedding: string; run_id: string }
