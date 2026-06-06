@@ -14,6 +14,57 @@ concrete **new features / components / functions** added.
 
 ## 2026-06-06
 
+### Overnight automation session — UX optimization sweep _(Claude · autonomous)_
+
+A timed, hands-off loop (one focused, CI-verified change per ~30 min;
+format → typecheck → lint → build green before every merge to `main`). Targets:
+earn modal, /pipeline, /connections, /strategy, /notifications, /command-center.
+
+- **`c76cd69` (#71) — /pipeline.** Drag-and-drop kanban (native HTML5, optimistic
+  move overlay + revert on failure), real thesis-fit scoring (`computeFit`: stage
+  progression + accepted allocations + relative size), live Partners wired to
+  `service_providers`/`partnerships`, "Find intros" → /connections. **Added:**
+  `lib/actions/partners.ts` (`addServiceProvider`), `components/drawers/NewPartnerDrawer.tsx`,
+  `PipelinePartner` + `fit` on `lib/queries/pipeline.ts`.
+- **`ead4e72` (#72) — platform legibility.** Killed translucency that made
+  overlays/drawers hard to read: drawer + modal panels now solid `bg-bg-1`;
+  pipeline columns/cards use opaque surfaces; muted text lifted a step.
+- **`8fad11a` — top-nav activation + integrations catalog.** Wired the bell
+  (→ /notifications), the search box (Enter → `/connections?q=`), and ⌘K focus in
+  `components/shell/AppShell.tsx`. Added **Zoom** + **Google Meet** catalog
+  entries to `app/integrations/page.tsx` as "Coming soon" (adapters wired
+  post-launch).
+- **`0c8574c` — earn modal simplified.** Replaced the wall-of-avatars team grid
+  with a clear, named specialist list (avatar + name + role; active row expands to
+  the one-liner), framed as "Ask Earn — he routes to the right specialist"
+  (`components/shell/earn/EarnDock.tsx`).
+- **`6c9f95e` — Chain of Trust gamified.** `ChainOfTrustStrip` now leads with an
+  overall lifecycle-trust score (mean of the four proofs), a tier badge
+  (Forming → Building → Proven → Trusted → Institutional), an "{n}/4 proofs
+  cleared" counter, and a gradient progress meter — each proof a step toward
+  completing the private-market lifecycle.
+- **`b7f89ad` — /command-center self-aware hero.** Earn's greeting now reads the
+  member's trust standing and surfaces a one-line lifecycle nudge (e.g. "You're
+  60% through Proof of Execution — clearing it is your next step")
+  (`app/command-center/layouts/MemberDashboardChrome.tsx`). No new queries.
+- **`1fcea84` — /connections search wired.** The top-nav search routed to
+  `/connections?q=` but nothing consumed it. Added an in-page search box seeded
+  from the URL query (kept in sync), filtering by name/company/title/email, with a
+  clear control + search-aware empty state.
+- **`3ed56f7` — /strategy actionable empty states.** Replaced dead-end "No
+  objectives" text with a first-run onboarding card (explains the 100/30/10 plan,
+  starts the first objective) and a filtered-horizon empty state ("View all
+  horizons" + "New objective").
+- **`0751c51` — /notifications Take-action wired.** Surfaced a same-origin `href`
+  from the notification payload (open-redirect guarded) and wired the previously
+  inert "Take action" button to navigate to it (rendered only when a target
+  exists). Opening a notification now marks it read.
+
+**Human follow-ups prepared:** `FundExecs-OS-Setup-Steps.docx` — 8th-grade,
+step-by-step setup instructions (invite-only signup, invite testers, leaked-
+password toggle, `NEXT_PUBLIC_SITE_URL`, SMTP, legal review, Google verification,
+branch cleanup, post-launch Zoom/Meet wiring). Delivered out-of-band (gitignored).
+
 ### #63–#68 — Make OAuth integrations work end to end _(Claude · auth/integrations)_
 
 Brought every OAuth provider live (Calendly, Slack, and all 5 Google providers
