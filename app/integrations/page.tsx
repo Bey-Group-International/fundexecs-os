@@ -4,7 +4,6 @@ import {
   Calendar,
   CalendarClock,
   MessageSquare,
-  Rocket,
   HardDrive,
   FileText,
   Presentation,
@@ -21,7 +20,6 @@ import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { ConnectButton } from '@/components/integrations/ConnectButton';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getIntegrationConnections, type ProviderConnection } from '@/lib/queries/integrations';
-import { getOAuthProviderConfig } from '@/lib/integrations/oauth';
 
 export const metadata: Metadata = { title: 'Integrations' };
 
@@ -33,7 +31,6 @@ type Provider =
   | 'google_slides'
   | 'calendly'
   | 'slack'
-  | 'apollo'
   | 'zoom'
   | 'google_meet';
 type ConnectionStatus = ProviderConnection['status'];
@@ -70,12 +67,6 @@ const PROVIDER_META: Record<Provider, ProviderMeta> = {
     description: 'Push synergy alerts and digests to your channels.',
     icon: MessageSquare,
     category: 'Messaging'
-  },
-  apollo: {
-    name: 'Apollo',
-    description: 'Enrich contacts with firmographic and role data.',
-    icon: Rocket,
-    category: 'Enrichment'
   },
   google_drive: {
     name: 'Google Drive',
@@ -117,39 +108,18 @@ const PROVIDER_ORDER: Provider[] = [
   'google_slides',
   'calendly',
   'slack',
-  'apollo',
   'zoom',
   'google_meet'
 ];
 
 /**
- * The Google Workspace file providers ride the sensitive `drive.readonly` scope
- * already requested at Google sign-in, but Google requires OAuth-app
- * verification before that scope can be used in production. They stay "Coming
- * soon" until the app is verified and `GOOGLE_WORKSPACE_FILES_ENABLED=true` is
- * set — flipping that flag enables them with no code change.
+ * All integrations are activated — every card shows "Connect". Providers that
+ * still need server-side credentials surface a clear error on connect until
+ * those are set: Slack/Calendly/Zoom need their OAuth client id + secret; the
+ * Google providers ride the user's Google sign-in (the Workspace file scopes
+ * additionally need Google OAuth-app verification before consent succeeds).
  */
-const GOOGLE_FILE_PROVIDERS: ReadonlySet<Provider> = new Set([
-  'google_drive',
-  'google_docs',
-  'google_slides'
-]);
-
-/**
- * A provider is connectable when its server-side prerequisites are present.
- * Slack/Calendly/Zoom require their OAuth client id + secret (config-driven, so
- * the card self-upgrades from "Coming soon" the moment the secrets are set);
- * Gmail/Google Calendar/Google Meet ride the existing Google sign-in scopes
- * (Meet reuses Calendar); Apollo uses a UI-entered API key; the Google file
- * providers are gated behind OAuth-app verification (see above).
- */
-function providerAvailable(provider: Provider): boolean {
-  if (provider === 'slack' || provider === 'calendly' || provider === 'zoom') {
-    return getOAuthProviderConfig(provider) !== null;
-  }
-  if (GOOGLE_FILE_PROVIDERS.has(provider)) {
-    return process.env.GOOGLE_WORKSPACE_FILES_ENABLED === 'true';
-  }
+function providerAvailable(_provider: Provider): boolean {
   return true;
 }
 
