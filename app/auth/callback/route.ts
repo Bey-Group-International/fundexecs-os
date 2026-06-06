@@ -90,31 +90,19 @@ export async function GET(request: NextRequest) {
       ? requestedNext
       : '/command-center';
 
-  // TEMP diagnostic for PKCE "verifier not found" — logs host + which auth
-  // cookies actually arrive at the exchange. Remove once root-caused.
-  console.error(
-    '[auth/callback:diag]',
-    JSON.stringify({
-      host: request.headers.get('host'),
-      origin,
-      hasCode: !!code,
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-      cookies: request.cookies.getAll().map((c) => c.name)
-    })
-  );
-
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      console.error('[auth/callback:exchange-error]', error.message);
-    }
     if (!error) {
       const integrationResult = await persistGoogleIntegration(request).catch((err) => ({
         attempted: true as const,
         ok: false as const,
         error: err instanceof Error ? err.message : 'Could not persist Google integration.'
       }));
+      if (integrationResult.attempted && !integrationResult.ok) {
+        // Surface the real persist failure for ops; the user sees a friendly message.
+        console.error('[auth/callback] integration persist failed:', integrationResult.error);
+      }
       const response = NextResponse.redirect(integrationRedirect(origin, integrationResult, next));
       response.cookies.delete(INTEGRATION_GOOGLE_INTENT_COOKIE);
       return response;
