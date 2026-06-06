@@ -8,6 +8,8 @@ import {
   HardDrive,
   FileText,
   Presentation,
+  Video,
+  Webcam,
   PlugZap,
   CheckCircle2,
   AlertTriangle,
@@ -31,7 +33,9 @@ type Provider =
   | 'google_slides'
   | 'calendly'
   | 'slack'
-  | 'apollo';
+  | 'apollo'
+  | 'zoom'
+  | 'google_meet';
 type ConnectionStatus = ProviderConnection['status'];
 
 interface ProviderMeta {
@@ -90,6 +94,18 @@ const PROVIDER_META: Record<Provider, ProviderMeta> = {
     description: 'Attach decks and pitch materials to deals and records.',
     icon: Presentation,
     category: 'Documents'
+  },
+  zoom: {
+    name: 'Zoom',
+    description: 'Log Zoom meetings as interactions across your network.',
+    icon: Video,
+    category: 'Meetings'
+  },
+  google_meet: {
+    name: 'Google Meet',
+    description: 'Capture Meet calls as interactions on deals and contacts.',
+    icon: Webcam,
+    category: 'Meetings'
   }
 };
 
@@ -101,18 +117,23 @@ const PROVIDER_ORDER: Provider[] = [
   'google_slides',
   'calendly',
   'slack',
-  'apollo'
+  'apollo',
+  'zoom',
+  'google_meet'
 ];
 
 /**
  * Providers deferred for this release. The Google Workspace file providers need
  * the `drive.readonly` scope granted at sign-in plus Google OAuth-app
- * verification before they can connect, so they surface as "Coming soon".
+ * verification before they can connect; Zoom + Google Meet are catalog entries
+ * pending their adapters. All surface as "Coming soon".
  */
 const COMING_SOON: ReadonlySet<Provider> = new Set([
   'google_drive',
   'google_docs',
-  'google_slides'
+  'google_slides',
+  'zoom',
+  'google_meet'
 ]);
 
 /**

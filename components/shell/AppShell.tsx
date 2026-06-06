@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   TrendingUp,
@@ -248,6 +248,21 @@ function Topbar({
   onAskEarn: () => void;
   identity: ShellIdentity;
 }) {
+  const router = useRouter();
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // ⌘K / Ctrl-K focuses the search box.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <header className="sticky top-0 z-20 flex h-[60px] flex-none items-center gap-3 border-b border-hairline bg-[var(--topbar-bg)] px-4 backdrop-blur-md sm:px-6">
       <button
@@ -271,8 +286,14 @@ function Topbar({
           <Search size={15} strokeWidth={1.9} aria-hidden />
         </span>
         <input
+          ref={searchRef}
           type="search"
           placeholder="Search deals, LPs, partners…"
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            const q = e.currentTarget.value.trim();
+            router.push(q ? `/connections?q=${encodeURIComponent(q)}` : '/connections');
+          }}
           className="w-full rounded-[10px] border border-hairline bg-surface-1 py-2 pl-9 pr-12 text-[13px] text-fg-1 outline-none transition-[border-color] placeholder:text-fg-4 focus:border-[var(--accent-line)]"
         />
         <kbd
@@ -309,6 +330,7 @@ function Topbar({
 
       <button
         type="button"
+        onClick={() => router.push('/notifications')}
         aria-label={
           identity.unreadCount > 0
             ? `Notifications, ${identity.unreadCount} unread`
