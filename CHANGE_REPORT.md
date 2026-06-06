@@ -14,6 +14,20 @@ concrete **new features / components / functions** added.
 
 ## 2026-06-06
 
+### #60 — Consolidate multiple permissive RLS policies _(Claude · perf)_
+
+Clears the last 4 performance WARNs (`multiple_permissive_policies`) on
+`brain_routing_rules`, `integration_connections`, `org_members`,
+`relationships`. Each table had an `ALL` (admin/owner) policy plus a broader
+`SELECT` (member) policy, so SELECT evaluated two permissive policies. In every
+case the `ALL` policy's predicate is a subset of the SELECT policy's for reads,
+so each `ALL` policy was split into explicit INSERT/UPDATE/DELETE policies of the
+same predicate — one policy per action, read/write semantics unchanged.
+
+**Added — migration:**
+`supabase/migrations/20260606170000_consolidate_permissive_policies.sql`.
+Advisor-verified: 0 WARN-level performance findings remain.
+
 ### #58 — Harden database-linter advisor findings _(Claude · security + perf)_
 
 The parked advisor batch, applied to the live DB and advisor-verified. One
