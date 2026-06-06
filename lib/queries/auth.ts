@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { cache } from 'react';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 
 /** The minimal authenticated-user shape the server loaders need. */
@@ -30,14 +30,19 @@ export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
   const h = await headers();
   const id = h.get('x-fx-user-id');
   if (id) {
-    // TEMP root-cause probe: compare the (reliable) edge-validated header to a
-    // serverless getUser() to capture WHY they diverge. Behaviour uses the
-    // header regardless. Remove once the root cause is confirmed.
+    // TEMP root-cause probe: does the serverless render actually receive the
+    // auth cookie, and does getUser() see a session? Behaviour uses the header
+    // regardless. Remove once confirmed.
     try {
+      const authCookieNames = (await cookies())
+        .getAll()
+        .filter((c) => c.name.startsWith('sb-') && c.name.includes('auth-token'))
+        .map((c) => `${c.name}(${c.value.length})`)
+        .join(',');
       const supabase = await createClient();
       const { data, error } = await supabase.auth.getUser();
       console.log(
-        `[authsrc] header=yes serverlessUser=${data.user ? 'yes' : 'NO'} err=${error?.message ?? 'none'}`
+        `[authsrc] serverlessUser=${data.user ? 'yes' : 'NO'} err=${error?.message ?? 'none'} authCookies=[${authCookieNames || 'NONE'}]`
       );
     } catch (e) {
       console.log(

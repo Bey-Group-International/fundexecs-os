@@ -1,16 +1,14 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/queries/auth';
 
 /**
  * Legacy route. The authenticated home is the Command Center — redirect there
  * (or to login if unauthenticated) so old `/dashboard` links never dead-end on
- * a stale stub.
+ * a stale stub. Uses the edge-validated `getAuthUser` (a serverless
+ * `getUser()` returns null here even on a valid session, which would wrongly
+ * bounce signed-in users to /login).
  */
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
+  const user = await getAuthUser();
   redirect(user ? '/command-center' : '/login');
 }
