@@ -8,6 +8,7 @@ import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
 import { ActivityTicker } from '@/components/landing/ActivityTicker';
 import { HeroStats } from '@/components/landing/HeroStats';
 import { TeamAvatar, getCOO, getSpecialists } from '@/lib/team';
+import { WelcomeBanner } from '@/components/beta/WelcomeBanner';
 
 export const metadata: Metadata = {
   title: 'An AI executive team for the full capital lifecycle',
@@ -451,6 +452,7 @@ export default function HomePage() {
       <LandingNav />
 
       <main id="main">
+        <WelcomeBanner />
         <Hero />
         <ActivityTicker />
         <Team />
