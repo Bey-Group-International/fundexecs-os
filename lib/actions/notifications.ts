@@ -48,7 +48,7 @@ export async function dismissNotification(id: string): Promise<NotificationActio
     .update({
       archived_at: new Date().toISOString(),
       read_at: new Date().toISOString()
-    } as never)
+    })
     .eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidateShell();

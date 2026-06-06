@@ -295,36 +295,40 @@ function ActivityPanel({ actions }: { actions: AdminData['actions'] }) {
 }
 
 function TrustPanel() {
-  const verified = 51;
   return (
     <div className="flex flex-col gap-[18px]">
       <Card className="bg-[linear-gradient(100deg,rgba(52,211,153,0.07),transparent_60%)]">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-hairline bg-surface-2 text-success">
-              <ShieldCheck size={18} strokeWidth={1.9} aria-hidden />
-            </span>
-            <div>
-              <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-                Chain of trust
-              </div>
-              <div className="flex items-center gap-2 text-[15px] font-semibold text-fg-1">
-                Atlas Manufacturing
-                <Badge tone="success" className="text-[9.5px]">
-                  M&amp;A · Closing
-                </Badge>
-              </div>
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-hairline bg-surface-2 text-success">
+            <ShieldCheck size={18} strokeWidth={1.9} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+              Chain of Trust
+            </div>
+            <div className="text-[15px] font-semibold tracking-[-0.01em] text-fg-1">
+              Real chains live on each deal
+            </div>
+            <p className="mt-1 max-w-prose text-[12.5px] leading-relaxed text-fg-3">
+              Open Command Center or Pipeline and click the Trust chip on any deal to start or
+              inspect a four-layer Chain of Trust (Proof of Truth, Concept, Execution, Work) with
+              evidence uploads, AI validation, and human approvals.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a
+                href="/command-center"
+                className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-1 px-3 py-1.5 text-[11.5px] font-medium text-fg-2 transition hover:border-azure-1/40 hover:text-fg-1"
+              >
+                Open Command Center
+              </a>
+              <a
+                href="/pipeline"
+                className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-1 px-3 py-1.5 text-[11.5px] font-medium text-fg-2 transition hover:border-azure-1/40 hover:text-fg-1"
+              >
+                View Pipeline
+              </a>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-[22px] font-semibold tabular-nums text-success">{verified}%</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-              Verified
-            </div>
-          </div>
-        </div>
-        <div className="mt-3 text-[12px] text-fg-4">
-          $32M · 4-layer verification pipeline · from Cedar · DL-220 · last activity 2h ago
         </div>
       </Card>
 
@@ -339,82 +343,11 @@ function TrustPanel() {
             </div>
             <div className="mt-3 text-[13.5px] font-semibold text-fg-1">{l.name}</div>
             <div className="mt-1 text-[11px] leading-snug text-fg-5">{l.desc}</div>
-            <div
-              className="mt-3 text-[20px] font-semibold tabular-nums"
-              style={{ color: TONE_HEX[l.tone] }}
-            >
-              {l.value}%
-            </div>
-            <ProgressBar className="mt-2" value={l.value} color={TONE_HEX[l.tone]} height={5} />
+            <p className="mt-3 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-5">
+              Layer reference
+            </p>
           </Card>
         ))}
-      </div>
-
-      <div className="grid items-start gap-[18px] lg:grid-cols-2">
-        <Card>
-          <SectionTitle title="Required documents" className="mb-3" />
-          <div className="flex flex-col gap-2">
-            {[
-              { label: 'Investment thesis memo', done: true },
-              { label: 'Market sizing (TAM)', done: true },
-              { label: 'Competitive map', done: false }
-            ].map((d) => (
-              <div key={d.label} className="flex items-center gap-2.5 text-[12.5px]">
-                {d.done ? (
-                  <CircleCheck size={15} strokeWidth={1.9} className="text-success" aria-hidden />
-                ) : (
-                  <CircleDot size={15} strokeWidth={1.9} className="text-fg-5" aria-hidden />
-                )}
-                <span className={d.done ? 'text-fg-1' : 'text-fg-4'}>{d.label}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <SectionTitle title="Required tasks" className="mb-3" />
-          <div className="flex flex-col gap-2">
-            {[
-              { label: 'Validate thesis vs LP appetite', done: true },
-              { label: 'Complete competitive mapping', done: false }
-            ].map((d) => (
-              <div key={d.label} className="flex items-center gap-2.5 text-[12.5px]">
-                {d.done ? (
-                  <CircleCheck size={15} strokeWidth={1.9} className="text-success" aria-hidden />
-                ) : (
-                  <CircleDot size={15} strokeWidth={1.9} className="text-fg-5" aria-hidden />
-                )}
-                <span className={d.done ? 'text-fg-1' : 'text-fg-4'}>{d.label}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <SectionTitle
-            title="Human approval"
-            className="mb-3"
-            action={<UserCog size={15} strokeWidth={1.9} className="text-fg-4" aria-hidden />}
-          />
-          <Badge tone="warning">Pending review</Badge>
-          <p className="mt-3 text-[12px] text-fg-4">
-            A managing partner must sign off before the chain advances to Proof of execution.
-          </p>
-          <Button variant="primary" size="sm" className="mt-3" icon={Check}>
-            Approve chain
-          </Button>
-        </Card>
-
-        <Card className="bg-[linear-gradient(100deg,rgba(247,201,72,0.08),transparent_60%)]">
-          <SectionTitle
-            title="AI validation"
-            className="mb-3"
-            action={<Sparkles size={15} strokeWidth={1.9} className="text-gold-1" aria-hidden />}
-          />
-          <p className="text-[12.5px] text-fg-2">
-            Thesis aligns with 3 of 4 LP mandates. Competitive map incomplete — add 2 incumbents.
-          </p>
-        </Card>
       </div>
     </div>
   );

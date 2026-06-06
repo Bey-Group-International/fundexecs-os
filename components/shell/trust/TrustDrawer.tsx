@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition, useCallback } from 'react';
+import { useEffect, useState, useTransition, useCallback, useRef } from 'react';
 import {
   ShieldCheck,
   CircleCheck,
@@ -42,10 +42,11 @@ export interface TrustDrawerSubject {
 }
 
 const DEFAULT_SUBJECT: TrustDrawerSubject = {
-  entity: 'Atlas Manufacturing',
-  stage: 'M&A · Closing',
-  pct: 51,
-  summary: '$32M · 4-layer verification pipeline · from Cedar · DL-220 · last activity 2h ago'
+  entity: 'No record selected',
+  stage: 'Chain of Trust',
+  pct: 0,
+  summary:
+    'Open a Chain of Trust from a deal, profile, or objective to see real verification evidence here.'
 };
 
 type StarterContext = StartChainInput;
@@ -172,7 +173,6 @@ function EvidenceRow({
   function decide(decision: 'approved' | 'rejected') {
     setError(null);
     startTransition(async () => {
-      const { approveEvidence } = await import('@/lib/actions/trust');
       const r = await approveEvidence({
         evidenceId: ev.id,
         decision,
@@ -191,7 +191,6 @@ function EvidenceRow({
   function revoke() {
     setError(null);
     startTransition(async () => {
-      const { revokeEvidence } = await import('@/lib/actions/trust');
       const r = await revokeEvidence(ev.id);
       if (!r.ok) {
         setError(r.error);
@@ -845,40 +844,51 @@ export function TrustDrawer({
   starterContext,
   subject
 }: TrustDrawerProps) {
-  const [record, setRecord] = useState<TrustRecord | null>(null);
+  const [loaded, setLoaded] = useState<{ id: string; record: TrustRecord } | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   // local override so the starter view can swap to db-driven view once a
   // record is created without forcing the parent to update its props.
-  const [createdRecordId, setCreatedRecordId] = useState<string | null>(null);
+  // Tracked alongside its source starter key so a new starter context
+  // automatically discards a stale created id by derivation (no effect).
+  const [created, setCreated] = useState<{ starterKey: string; id: string } | null>(null);
+
+  const starterKey = starterContext
+    ? `${starterContext.subjectEntityType}:${starterContext.subjectEntityId}`
+    : null;
+  const createdRecordId =
+    created && starterKey && created.starterKey === starterKey ? created.id : null;
 
   const effectiveRecordId = createdRecordId ?? recordId ?? null;
+  // Derived: only show the cached record when it matches the active id —
+  // avoids resetting state inside an effect on id change.
+  const record =
+    loaded && effectiveRecordId && loaded.id === effectiveRecordId ? loaded.record : null;
 
   const refresh = useCallback(async () => {
     if (!effectiveRecordId) return;
     setLoading(true);
     setLoadError(null);
     const r: LoadTrustResult = await loadTrustRecord(effectiveRecordId);
-    if (r.ok) setRecord(r.record);
+    if (r.ok) setLoaded({ id: effectiveRecordId, record: r.record });
     else setLoadError(r.error);
     setLoading(false);
   }, [effectiveRecordId]);
+  // Hold the latest refresh in a ref so the load effect can call it without
+  // synchronously invoking setState in the effect body (which trips the
+  // react-hooks/set-state-in-effect rule). The ref is updated in an effect
+  // so we never mutate it during render.
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
 
   // Load whenever the drawer opens with a record id, or the id changes.
   useEffect(() => {
     if (!open) return;
-    // Defer all state writes to a microtask so nothing runs synchronously
-    // inside the effect body (react-hooks/set-state-in-effect).
-    queueMicrotask(() => {
-      if (effectiveRecordId) void refresh();
-      else setRecord(null);
-    });
-  }, [open, effectiveRecordId, refresh]);
-
-  // Reset created-id on close so reopening with new props is clean.
-  useEffect(() => {
-    if (!open) queueMicrotask(() => setCreatedRecordId(null));
-  }, [open]);
+    if (!effectiveRecordId) return;
+    void refreshRef.current();
+  }, [open, effectiveRecordId]);
 
   // ESC to close.
   useEffect(() => {
@@ -919,9 +929,10 @@ export function TrustDrawer({
         aria-modal="true"
         aria-label="Chain of Trust detail"
         data-testid="trust-drawer"
+        aria-hidden={!open}
         className={cn(
           'fixed right-0 top-0 z-[80] flex h-full w-full max-w-[640px] flex-col border-l border-hairline bg-bg-1 shadow-[var(--shadow-lg)] transition-transform duration-300 ease-[cubic-bezier(.22,.61,.36,1)] will-change-transform',
-          open ? 'translate-x-0' : 'translate-x-full'
+          open ? 'translate-x-0' : 'pointer-events-none invisible translate-x-full'
         )}
       >
         {mode === 'db' && effectiveRecordId && record ? (
@@ -934,7 +945,7 @@ export function TrustDrawer({
           <StarterView
             starter={starterContext}
             onClose={onClose}
-            onStarted={(id) => setCreatedRecordId(id)}
+            onStarted={(id) => setCreated(starterKey ? { starterKey, id } : null)}
           />
         ) : (
           <LegacyView subject={subject ?? DEFAULT_SUBJECT} onClose={onClose} />

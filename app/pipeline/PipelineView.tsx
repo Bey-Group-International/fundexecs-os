@@ -201,7 +201,13 @@ function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
                     {d.amount != null ? formatCurrency(d.amount) : '—'}
                   </span>
                   <div className="flex items-center gap-2">
-                    <ProgressBar value={fit} color={color} height={5} className="flex-1" />
+                    <ProgressBar
+                      value={fit}
+                      color={color}
+                      height={5}
+                      className="flex-1"
+                      ariaLabel={`Fit score for ${d.name}`}
+                    />
                     <span className="w-7 text-right text-[11px] tabular-nums text-fg-3">
                       {fit}%
                     </span>

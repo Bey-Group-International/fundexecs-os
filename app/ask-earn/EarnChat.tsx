@@ -117,6 +117,7 @@ export function EarnChat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask Earn or run a command — “Build an LP list”, “Review my deck like an LP”…"
+          aria-label="Ask Earn — your AI Chief Operating Officer"
           className="flex-1 bg-transparent text-[12.5px] text-fg-1 placeholder:text-fg-5 focus:outline-none"
         />
         <button

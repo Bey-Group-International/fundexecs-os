@@ -6,6 +6,11 @@ import type { Database } from '@/lib/supabase/database.types';
 const TRUST_BUCKET = 'trust-evidence';
 const MODEL = process.env.EARN_MODEL || 'claude-sonnet-4-6';
 const FALLBACK_NOTE = 'AI validation unavailable; proceed with manual review.';
+/** Hard ceiling on the Claude call so the parent server-action never
+ * exceeds ~8s. AbortSignal.timeout is honoured by the @anthropic-ai/sdk
+ * client and throws an AbortError that the outer try/catch translates
+ * into the never-block fallback. */
+const AI_TIMEOUT_MS = 8_000;
 
 type EvidenceRow = Database['public']['Tables']['evidence']['Row'];
 
@@ -14,22 +19,6 @@ const IMAGE_MIME_PREFIXES = ['image/'];
 // Hard cap on the snippet we send to Claude — keeps the prompt under
 // 1k tokens regardless of file size.
 const SNIPPET_MAX_CHARS = 4000;
-
-// Anthropic's image blocks only accept this media-type union. The upload
-// allowlist already restricts images to these, but coerce defensively.
-type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
-function toImageMediaType(mime: string): ImageMediaType {
-  switch (mime) {
-    case 'image/jpeg':
-      return 'image/jpeg';
-    case 'image/gif':
-      return 'image/gif';
-    case 'image/webp':
-      return 'image/webp';
-    default:
-      return 'image/png';
-  }
-}
 
 interface EvidenceContext {
   evidence: EvidenceRow & {
@@ -56,6 +45,10 @@ async function loadContext(evidenceId: string): Promise<EvidenceContext | null> 
     .eq('id', evidenceId)
     .maybeSingle();
   if (error || !data) return null;
+  // PostgREST nested-join: `proof_layer` and `proof_layer.chain` come
+  // back flattened in the runtime payload but supabase-js infers them
+  // as arrays. Cast to the resolved object shape to keep call sites
+  // ergonomic; column list matches the .select() string.
   const row = data as unknown as {
     id: string;
     org_id: string;
@@ -100,13 +93,13 @@ async function fetchTextSnippet(storagePath: string): Promise<string | null> {
 async function fetchImageBase64(
   storagePath: string,
   mimeType: string
-): Promise<{ media_type: ImageMediaType; data: string } | null> {
+): Promise<{ media_type: string; data: string } | null> {
   const admin = createAdminClient();
   const { data, error } = await admin.storage.from(TRUST_BUCKET).download(storagePath);
   if (error || !data) return null;
   try {
     const buffer = Buffer.from(await data.arrayBuffer());
-    return { media_type: toImageMediaType(mimeType), data: buffer.toString('base64') };
+    return { media_type: mimeType, data: buffer.toString('base64') };
   } catch {
     return null;
   }
@@ -136,20 +129,48 @@ function buildPrompt(ctx: EvidenceContext, snippet: string | null): string {
   return `${head}\n\nThe file was uploaded but no text excerpt is available (binary or unsupported format).\n\nIn ≤200 words: based on the filename, mime type, and the layer it supports, suggest what an approver should verify before signing off. Sentence case, calm and operator-grade.`;
 }
 
+async function writeNotes(
+  admin: ReturnType<typeof createAdminClient>,
+  evidenceId: string,
+  notes: string
+): Promise<void> {
+  await admin
+    .from('evidence')
+    .update({
+      ai_validation_notes: notes,
+      ai_validated_at: new Date().toISOString()
+    })
+    .eq('id', evidenceId);
+}
+
+/**
+ * Run AI validation for an uploaded evidence row. **Never-block**:
+ * every exit path — missing key, missing context, Claude error, Claude
+ * abort/timeout — writes a fallback note + `ai_validated_at` to the
+ * evidence row before returning, so the UI always renders something.
+ *
+ * Designed to be `await`ed inline from the parent server action; the
+ * 8-second AbortSignal timeout on the Claude call caps the worst-case
+ * latency for the uploader.
+ */
 export async function aiValidateEvidence(evidenceId: string): Promise<void> {
   const admin = createAdminClient();
-  const ctx = await loadContext(evidenceId);
-  if (!ctx) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    await admin
-      .from('evidence')
-      .update({
-        ai_validation_notes: FALLBACK_NOTE,
-        ai_validated_at: new Date().toISOString()
-      })
-      .eq('id', evidenceId);
+    await writeNotes(admin, evidenceId, FALLBACK_NOTE);
+    return;
+  }
+
+  // Load context. ANY failure → fallback note (not silent return).
+  let ctx: EvidenceContext | null = null;
+  try {
+    ctx = await loadContext(evidenceId);
+  } catch {
+    // fall through
+  }
+  if (!ctx) {
+    await writeNotes(admin, evidenceId, FALLBACK_NOTE);
     return;
   }
 
@@ -159,7 +180,7 @@ export async function aiValidateEvidence(evidenceId: string): Promise<void> {
     const isImage = IMAGE_MIME_PREFIXES.some((p) => (ctx.evidence.mime_type ?? '').startsWith(p));
 
     let textSnippet: string | null = null;
-    let imageInput: { media_type: ImageMediaType; data: string } | null = null;
+    let imageInput: { media_type: string; data: string } | null = null;
     if (isText) {
       textSnippet = await fetchTextSnippet(ctx.evidence.storage_path);
     } else if (isImage) {
@@ -172,31 +193,41 @@ export async function aiValidateEvidence(evidenceId: string): Promise<void> {
     const client = new Anthropic({ apiKey });
     const prompt = buildPrompt(ctx, textSnippet);
 
+    type AnthropicMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
     type ContentBlock =
       | { type: 'text'; text: string }
       | {
           type: 'image';
-          source: { type: 'base64'; media_type: ImageMediaType; data: string };
+          source: { type: 'base64'; media_type: AnthropicMediaType; data: string };
         };
     const userContent: ContentBlock[] = [{ type: 'text', text: prompt }];
     if (imageInput) {
+      // Coerce to the narrow allow-list Anthropic accepts; non-matching
+      // mime types fall back to png so the request still validates.
+      const allowed: AnthropicMediaType[] = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+      const mt: AnthropicMediaType =
+        (allowed.find((a) => a === imageInput.media_type) as AnthropicMediaType | undefined) ??
+        'image/png';
       userContent.unshift({
         type: 'image',
         source: {
           type: 'base64',
-          media_type: imageInput.media_type,
+          media_type: mt,
           data: imageInput.data
         }
       });
     }
 
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 600,
-      system:
-        'You are Earn, the COO of a 15-specialist AI executive team inside FundExecs OS. You are validating an evidence artefact for a Chain-of-Trust layer. Be concise, declarative, operator-grade. ≤200 words.',
-      messages: [{ role: 'user', content: userContent }]
-    });
+    const response = await client.messages.create(
+      {
+        model: MODEL,
+        max_tokens: 600,
+        system:
+          'You are Earn, the COO of a 15-specialist AI executive team inside FundExecs OS. You are validating an evidence artefact for a Chain-of-Trust layer. Be concise, declarative, operator-grade. ≤200 words.',
+        messages: [{ role: 'user', content: userContent }]
+      },
+      { signal: AbortSignal.timeout(AI_TIMEOUT_MS) }
+    );
 
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -205,14 +236,10 @@ export async function aiValidateEvidence(evidenceId: string): Promise<void> {
       .trim();
     if (text) notes = text;
   } catch {
-    // best-effort; FALLBACK_NOTE remains
+    // best-effort; FALLBACK_NOTE remains. Covers Claude API errors,
+    // network failures, AbortError on the 8s timeout, and JSON parse
+    // failures inside the SDK.
   }
 
-  await admin
-    .from('evidence')
-    .update({
-      ai_validation_notes: notes,
-      ai_validated_at: new Date().toISOString()
-    })
-    .eq('id', evidenceId);
+  await writeNotes(admin, evidenceId, notes);
 }
