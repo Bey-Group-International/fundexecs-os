@@ -90,9 +90,29 @@ export async function GET(request: NextRequest) {
       ? requestedNext
       : '/command-center';
 
+  // TEMP diagnostic — host + which auth cookies reach the exchange. Remove once
+  // the verifier-loss root cause is confirmed.
+  {
+    const names = request.cookies.getAll().map((c) => c.name);
+    console.error(
+      '[auth/callback:diag2]',
+      JSON.stringify({
+        host: request.headers.get('host'),
+        origin,
+        hasCode: !!code,
+        verifierCookies: names.filter((n) => n.includes('code-verifier') || n.includes('verifier')),
+        sbCookies: names.filter((n) => n.startsWith('sb-')),
+        intent: request.cookies.get(INTEGRATION_GOOGLE_INTENT_COOKIE)?.value ?? null
+      })
+    );
+  }
+
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      console.error('[auth/callback:diag2] exchange error:', error.message);
+    }
     if (!error) {
       const integrationResult = await persistGoogleIntegration(request).catch((err) => ({
         attempted: true as const,
