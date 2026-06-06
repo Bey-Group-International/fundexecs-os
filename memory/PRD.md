@@ -19,6 +19,38 @@ Next.js 16 App Router + Supabase (Auth / Postgres / pgvector / Storage)
 | Phase 5 | Fix — never-block AI validation writes placeholder on all failure paths (Test 2 regression)                                          | ✅ DONE 2026-02-07 |
 | Phase 6 | Mocked integrations + real-OAuth path for Slack / Calendly                                                                           | ⏳ Codex (own PR)  |
 | Phase 7 | Polish + release prep — type augmentation, dead-end / empty / error audit, mobile 390×844 sweep, a11y sweep, README + memory updates | ✅ DONE 2026-02-07 |
+| Wave-1  | UI shell sprint — Side rail + TopNav + Dashboard + Fund Profile + Earn context + Settings rail                                       | ✅ DONE 2026-02-08 |
+
+## Wave-1 shell sprint (this branch — `emergent/wave1-shell`)
+
+Strict UI-only lane. Backend / auth / loaders / middleware / app/login left
+untouched. Three commits ship a net-new chrome on top of Claude's read-only
+data-layer (`getDashboardData`, `getFundProfile`, `getCreditWallet`).
+
+| commit  | sha       | scope                                                                                                                                                          | screenshots                                  |
+| ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| 1       | `3c50211` | Unified 6-area side rail (Source-of-Truth / Daily / Capital / Deal / Intelligence / Audit), top nav with org switcher + alerts + Credit-Wallet gauge, 14 stubs | `.screenshots/wave1-commit1/` (6 frames)     |
+| 2       | `b4b756d` | LifecycleDashboard — single canvas replaces 5 legacy layouts; 9 sub-components; legacy moved to `app/command-center/layouts/_legacy/`                          | `.screenshots/wave1-commit2/` (6 frames)     |
+| 3       | `376d70f` | Fund Profile (4 sub-components) + EarnContext (route default + drawer overrides, DealDetailDrawer wraps as POC) + Settings rebuilt as vertical detail rail     | `.screenshots/wave1-commit3/` (7 frames)     |
+
+CI gate green on every commit: `npx tsc --noEmit`, `yarn lint`,
+`yarn format:check`, `yarn build`.
+
+## Branches
+
+- `phase4-core-loop`: Phase 4 A–E + Codex F spec doc. Push to
+  `emergent/phase4-core-loop` is **parked** on the user's side (pod
+  CLI is read-only; user pushes via Emergent's "Save to GitHub").
+- `phase5-chain-of-trust`: Phase 5 A–E + Test-2 fix. 6 commits delta
+  vs `phase4-core-loop`.
+- `phase6-integrations` _(Codex)_: in flight; pod must NOT touch
+  `lib/integrations/`, `app/api/integrations/`, `app/integrations/`,
+  `lib/actions/integrations.ts`, or `components/integrations/`.
+- `phase7-polish` _(this branch)_: 7 commits delta vs
+  `phase5-chain-of-trust`.
+- `emergent/wave1-shell`: 3 Wave-1 commits + 2 auto-commits sitting on
+  top of PR #81 (`b8b80ce`). Awaiting draft PR. Push handled by user
+  via "Save to GitHub".
 
 ## Phase 7 deliverables (this sprint)
 
