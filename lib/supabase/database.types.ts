@@ -1231,6 +1231,50 @@ export type Database = {
           },
         ]
       }
+      matches: {
+        Row: {
+          acted_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          org_id: string
+          rationale: Json
+          score: number
+          status: string
+          subject_id: string
+        }
+        Insert: {
+          acted_at?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          org_id: string
+          rationale?: Json
+          score: number
+          status?: string
+          subject_id: string
+        }
+        Update: {
+          acted_at?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          org_id?: string
+          rationale?: Json
+          score?: number
+          status?: string
+          subject_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matches_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_profiles: {
         Row: {
           bio: string | null
@@ -1280,50 +1324,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: true
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      matches: {
-        Row: {
-          acted_at: string | null
-          created_at: string
-          id: string
-          kind: string
-          org_id: string
-          rationale: Json
-          score: number
-          status: string
-          subject_id: string
-        }
-        Insert: {
-          acted_at?: string | null
-          created_at?: string
-          id?: string
-          kind: string
-          org_id: string
-          rationale?: Json
-          score: number
-          status?: string
-          subject_id: string
-        }
-        Update: {
-          acted_at?: string | null
-          created_at?: string
-          id?: string
-          kind?: string
-          org_id?: string
-          rationale?: Json
-          score?: number
-          status?: string
-          subject_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "matches_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1950,10 +1950,6 @@ export type Database = {
         }
         Returns: number
       }
-      create_organization: {
-        Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
-        Returns: string
-      }
       capital_stack_summary: {
         Args: { _org_id: string }
         Returns: {
@@ -1978,6 +1974,10 @@ export type Database = {
           _ref_id?: string
         }
         Returns: number
+      }
+      create_organization: {
+        Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
+        Returns: string
       }
       get_integration_secret: {
         Args: { _connection_id: string }
