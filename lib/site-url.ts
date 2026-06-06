@@ -9,10 +9,15 @@
  * `/auth/callback` code exchange doesn't break across an apex→www redirect. Falls
  * back to the live browser origin on the client and Vercel's deployment URL on
  * the server, then to localhost for local dev.
+ *
+ * The result is always normalized to an absolute origin with an explicit scheme
+ * and no trailing slash. Provider OAuth (Calendly, Slack) rejects a schemeless
+ * `redirect_uri`, so a value like `www.fundexecs.com` is coerced to
+ * `https://www.fundexecs.com`.
  */
 export function getSiteURL(): string {
   const fromEnv = process.env.NEXT_PUBLIC_SITE_URL;
-  if (fromEnv) return fromEnv.replace(/\/+$/, '');
+  if (fromEnv) return normalizeOrigin(fromEnv);
 
   if (typeof window !== 'undefined') return window.location.origin;
 
@@ -20,4 +25,11 @@ export function getSiteURL(): string {
   if (vercel) return `https://${vercel.replace(/^https?:\/\//, '')}`;
 
   return 'http://localhost:3000';
+}
+
+/** Trim trailing slashes and guarantee an explicit scheme (defaults to https). */
+function normalizeOrigin(value: string): string {
+  const trimmed = value.trim().replace(/\/+$/, '');
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed.replace(/^\/+/, '')}`;
 }
