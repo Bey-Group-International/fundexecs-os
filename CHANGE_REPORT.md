@@ -14,6 +14,55 @@ concrete **new features / components / functions** added.
 
 ## 2026-06-06
 
+### #58 — Harden database-linter advisor findings _(Claude · security + perf)_
+
+The parked advisor batch, applied to the live DB and advisor-verified. One
+additive, idempotent migration.
+
+**Added — migration:** `supabase/migrations/20260606160000_harden_advisor_findings.sql`.
+
+- **`auth_rls_initplan` — 14/14 cleared.** Wrapped `auth.uid()` → `(select
+  auth.uid())` across RLS policies on `profiles`, `notifications`,
+  `interactions`, `integration_connections`, `relationships`, `member_profiles`
+  so it evaluates once per query instead of per row. Predicates otherwise
+  unchanged.
+- **SECURITY DEFINER seed functions.** Revoked `EXECUTE` from `authenticated`
+  on `seed_demo_baseline_for_org` (only the `handle_new_user` signup trigger
+  calls it — warning cleared); added an in-function authz guard to
+  `seed_demo_for_member_type` (a signed-in caller may only seed their own
+  workspace). `award_trust_xp`, `create_organization`, `match_knowledge_chunks`
+  already guard themselves and keep their grants.
+- **`unindexed_foreign_keys` — 19/19 cleared.** Covering indexes for every
+  flagged FK.
+
+### #59 — Reconcile Emergent's Phase-5 trust/dashboard/a11y work _(Emergent · via Claude)_
+
+Emergent's `emergent/main` was branched from an old base (pre-#45), so its
+net-new work was reconciled onto current `main` without reverting any shipped
+work.
+
+**Added — components:** `components/dashboard/DealTrustChip.tsx`,
+`components/shell/trust/TrustDrawerHost.tsx`, `components/ui/ProgressBar.tsx`
+(labelled). **Added — scripts:** `scripts/phase5-e2e-smoke.cjs`,
+`scripts/introspect-schema.cjs`.
+**Changed — features:**
+
+- **Trust:** drawer now reads real DB records; AI validation never blocks —
+  writes a placeholder on every failure path (`lib/actions/trust.ts`,
+  `lib/ai/trust-validate.ts`, `TrustDrawer`).
+- **Dashboard:** `DealTrustChip`, clickable Chain-of-Trust strip, dashboard
+  query-layer refinements (`lib/queries/dashboard/index.ts`).
+- **Accessibility:** muted-text contrast, labelled progress bars, aria-labels,
+  decorative chrome hidden.
+- Admin/notification refinements; README/PRD updates.
+
+**Reconciliation hygiene:** kept main's #45–#57 (landing, auth host, Google
+integrations, seed `search_path`) over Emergent's older base; stripped
+`memory/test_credentials.md` (gitignored — never in the public repo);
+`scripts/provision-test-users.cjs` now reads `TEST_USER_PASSWORD` from env
+instead of a hardcoded credential; dropped a stray `.gitconfig`. No migration
+drift.
+
 ### #57 — Pin `search_path` on `private.seed_marker` _(Claude · security)_
 
 Closes the only new database-linter finding after the Phase-4 + integrations
