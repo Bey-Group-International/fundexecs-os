@@ -12,6 +12,70 @@ concrete **new features / components / functions** added.
 
 ---
 
+## 2026-06-06
+
+### #57 — Pin `search_path` on `private.seed_marker` _(Claude · security)_
+
+Closes the only new database-linter finding after the Phase-4 + integrations
+merges (`0011_function_search_path_mutable`). The signup-seed migration added
+`seed_marker` without a fixed `search_path` while every other `seed_*` function
+sets one; its body only concatenates a string literal, so an empty `search_path`
+is safe. Applied to the live DB, then captured in repo history.
+
+**Added — migration:** `supabase/migrations/20260606150000_harden_seed_marker_search_path.sql`
+(`alter function private.seed_marker(text) set search_path = ''`). Additive,
+idempotent, no app-code change.
+
+### #56 — Wire integrations end to end _(Codex)_
+
+Slack, Calendly, Apollo and the Google Workspace providers now connect, store
+tokens privately, and sync — turning the Integrations catalog into live
+connections.
+
+**Added — server/lib:** `lib/integrations/oauth.ts` (provider OAuth via
+`resolveServerEnv()` for Slack/Calendly/Google client IDs + secrets, scopes from
+env with defaults), `lib/integrations/constants.ts` (`GOOGLE_PROVIDER_IDS`,
+`GOOGLE_SCOPES`, `OAUTH_PROVIDER_IDS`, `API_KEY_PROVIDER_IDS`, cookie helpers).
+**Added — routes:** per-provider `connect`/`callback`/`sync` under
+`/api/integrations/*`; Apollo `connect` (API key → `private.integration_secrets`).
+**Added — docs:** `docs/google-oauth-setup.md` → "Integration OAuth setup"
+(env vars + redirect URIs for Google → `auth.fundexecs.com/auth/v1/callback`,
+Slack/Calendly → `www.fundexecs.com/api/integrations/{provider}/callback`;
+Apollo = UI API key). Tokens stay in `private.integration_secrets`; public
+`integration_connections` holds only status/scopes/account metadata.
+
+### #55 — Integrations: swap Outlook → Google Drive; add Docs & Slides _(Claude)_
+
+The Integrations catalog drops Outlook and adds the Google Workspace file
+providers, matching the read-only Drive consent.
+
+**Changed — `app/integrations/page.tsx`:** `Provider` union, `PROVIDER_META`
+and `PROVIDER_ORDER` now carry `google_drive` / `google_docs` / `google_slides`
+(icons `HardDrive` / `FileText` / `Presentation`; dropped `Inbox`/Outlook).
+
+### #54 — Phase 4 core loop: member command center _(Emergent)_
+
+The per-member-type command center with deals, allocations, strategy,
+connections, notifications, admin and trust flows — the working-beta core loop —
+plus the Team brand wired through a central module.
+
+**Added — layouts (`app/command-center/layouts/*`):** `InvestmentFirmLayout`,
+`ServiceProviderLayout`, `StartupLayout`, `StudentLayout`,
+`IndividualInvestorLayout`, and `MemberDashboardChrome`.
+**Added — components:** `components/dashboard/{KpiTile,ChainOfTrustStrip,EarnNextBestActions}.tsx`,
+`components/drawers/*`, `components/shell/trust/TrustDrawer.tsx`,
+`EarnDock` (renamed from `CopilotDock`).
+**Added — server actions (`lib/actions/*`):** `deals`, `allocations`, `strategy`,
+`connections`, `notifications`, `admin`, `trust`, `member-profile`
+(`setMemberType` → `seed_demo_for_member_type` RPC).
+**Added — AI/team libs:** `lib/ai/trust-validate.ts` (`toImageMediaType` +
+`ImageMediaType` for the Anthropic image union), `lib/team/{roster,index,avatar}`
+(`getCOO`, `getSpecialists`, `TeamAvatar`; Earn = COO). `app/page.tsx` /
+`app/login/page.tsx` now consume `lib/team`.
+**Added — migrations:** `20260606120000`–`20260606140000` (5 files: evidence
+columns `file_name`/`mime_type`/`ai_validation_notes`, seed-demo functions,
+command-center tables). Additive + idempotent; `database.types.ts` regenerated.
+
 ## 2026-06-05
 
 ### #52 — Persist Settings account & organization saves _(Codex · Phase 4 §3B)_
