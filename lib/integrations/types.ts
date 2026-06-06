@@ -42,7 +42,7 @@ export interface ProviderSignals {
 }
 
 export interface FetchContext {
-  /** OAuth access token for the provider (e.g. Google `provider_token`). */
+  /** OAuth access token or API key resolved from private integration storage. */
   token: string;
   /** Only fetch signals newer than this ISO timestamp, when supported. */
   since?: string;

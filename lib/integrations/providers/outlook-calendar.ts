@@ -24,10 +24,8 @@ interface GraphEvent {
  * Outlook Calendar adapter (Microsoft Graph). Mirrors google-calendar.ts: each
  * external attendee becomes a contact + a `meeting` interaction.
  *
- * OAuth: Microsoft has its own OAuth app (NOT the Google session token).
- * Register an Azure AD app with the `Calendars.Read` delegated scope, store the
- * Graph access token on `integration_connections.metadata.access_token`. The
- * sync route resolves the token from there.
+ * OAuth: Microsoft has its own OAuth app. If this provider is re-enabled in
+ * the catalog, store the Graph access token in private.integration_secrets.
  * Docs: https://learn.microsoft.com/graph/api/user-list-events
  */
 export const outlookCalendarProvider: Provider = {

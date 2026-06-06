@@ -26,11 +26,9 @@ interface SlackUser {
  * counterpart becomes a contact. Best-effort: we map what the Web API returns
  * and resolve emails via users.info where available.
  *
- * OAuth: Slack has its own OAuth app (NOT the Google session token). Create a
- * Slack app, request the user/bot token scopes (`im:history`, `im:read`,
- * `users:read`, `users:read.email`), and store the access token on
- * `integration_connections.metadata.access_token`. The sync route resolves the
- * token from there. Docs: https://api.slack.com/web
+ * OAuth: Slack has its own OAuth app. The connect route requests user scopes
+ * (`im:history`, `im:read`, `users:read`, `users:read.email`) and stores the
+ * resulting access token in private.integration_secrets.
  */
 export const slackProvider: Provider = {
   id: 'slack',

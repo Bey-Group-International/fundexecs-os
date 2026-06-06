@@ -1,17 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Plus, RefreshCw } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Check, KeyRound, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui';
-import { createClient } from '@/lib/supabase/client';
-import { getSiteURL } from '@/lib/site-url';
-
-/** Google OAuth scopes requested for read-only Calendar + Gmail metadata. */
-const GOOGLE_SCOPES =
-  'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.metadata';
-
-/** Providers that authenticate via the Supabase Google OAuth provider. */
-const GOOGLE_PROVIDERS = new Set(['gmail', 'google_calendar']);
 
 export interface ConnectButtonProps {
   provider: string;
@@ -19,58 +11,52 @@ export interface ConnectButtonProps {
   connected: boolean;
 }
 
-/**
- * Starts the Google OAuth flow with offline access so the session carries a
- * `provider_token` the sync endpoint can use against Calendar / Gmail.
- */
-async function signInWithGoogle() {
-  const supabase = createClient();
-  return supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      // Clean redirect_to (no query string) so it matches any allow-list
-      // entry shape; the callback defaults to /command-center.
-      redirectTo: `${getSiteURL()}/auth/callback`,
-      scopes: GOOGLE_SCOPES,
-      queryParams: { access_type: 'offline', prompt: 'consent' }
-    }
-  });
-}
-
 export function ConnectButton({ provider, connected }: ConnectButtonProps) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const isGoogle = GOOGLE_PROVIDERS.has(provider);
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const isApiKeyProvider = provider === 'apollo';
 
-  // Non-Google providers have no live OAuth yet — surface a disabled control
-  // that points operators at the documented setup.
-  if (!isGoogle) {
-    return (
-      <Button
-        variant="secondary"
-        size="sm"
-        icon={Plus}
-        disabled
-        title="Setup required — see docs/google-oauth-setup.md for the OAuth flow; this provider has no live connect yet."
-        aria-label="Setup required"
-      >
-        Setup required
-      </Button>
-    );
-  }
-
-  async function handleConnect() {
+  async function handleOAuthConnect() {
     setBusy(true);
     setError(null);
     setResult(null);
-    const { error: oauthError } = await signInWithGoogle();
-    if (oauthError) {
-      setError(oauthError.message);
+    window.location.assign(`/api/integrations/${provider}/connect`);
+  }
+
+  async function handleApiKeyConnect() {
+    if (!showApiKey) {
+      setShowApiKey(true);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/integrations/${provider}/connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey })
+      });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.ok) {
+        setError(data?.error ?? `Connect failed (${res.status})`);
+        return;
+      }
+      setResult('Connected');
+      await handleSync();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Connect failed');
+    } finally {
       setBusy(false);
     }
-    // On success the browser is redirected to Google, so no further state
-    // updates are needed here.
   }
 
   async function handleSync() {
@@ -89,6 +75,7 @@ export function ConnectButton({ provider, connected }: ConnectButtonProps) {
         setError(data?.error ?? `Sync failed (${res.status})`);
       } else {
         setResult(`Synced ${data.contacts ?? 0} contacts, ${data.interactions ?? 0} interactions`);
+        router.refresh();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sync failed');
@@ -98,7 +85,18 @@ export function ConnectButton({ provider, connected }: ConnectButtonProps) {
   }
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
+    <div className="flex max-w-[210px] flex-col items-end gap-1.5">
+      {!connected && isApiKeyProvider && showApiKey ? (
+        <input
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder="Apollo API key"
+          type="password"
+          className="h-8 w-full rounded-xl border border-hairline bg-surface-2 px-3 text-[12px] text-fg-1 outline-none placeholder:text-fg-5 focus:border-[var(--azure-1)]"
+          disabled={busy}
+        />
+      ) : null}
+
       {connected ? (
         <Button
           variant="secondary"
@@ -107,15 +105,21 @@ export function ConnectButton({ provider, connected }: ConnectButtonProps) {
           disabled={busy}
           onClick={handleSync}
         >
-          {busy ? 'Syncing…' : 'Connect & sync'}
+          {busy ? 'Syncing...' : 'Sync'}
         </Button>
       ) : (
-        <Button variant="primary" size="sm" icon={Plus} disabled={busy} onClick={handleConnect}>
-          {busy ? 'Redirecting…' : 'Connect & sync'}
+        <Button
+          variant="primary"
+          size="sm"
+          icon={isApiKeyProvider ? KeyRound : Plus}
+          disabled={busy || (isApiKeyProvider && showApiKey && apiKey.trim().length === 0)}
+          onClick={isApiKeyProvider ? handleApiKeyConnect : handleOAuthConnect}
+        >
+          {busy ? 'Connecting...' : showApiKey ? 'Save & sync' : 'Connect'}
         </Button>
       )}
-      {result && <span className="text-[11px] text-emerald-400">{result}</span>}
-      {error && <span className="text-[11px] text-rose-400">{error}</span>}
+      {result && <span className="text-right text-[11px] text-emerald-400">{result}</span>}
+      {error && <span className="text-right text-[11px] text-rose-400">{error}</span>}
     </div>
   );
 }

@@ -21,11 +21,9 @@ interface ApolloContact {
  * contacts only (company + title), no interactions, since Apollo records are
  * a CRM enrichment source rather than a touchpoint signal.
  *
- * OAuth/auth: Apollo authenticates with an API key (NOT the Google session
- * token). Store the key on `integration_connections.metadata.access_token`;
- * the sync route resolves it from there and passes it as `token`. Apollo
- * expects it in the `X-Api-Key` header.
- * Docs: https://docs.apollo.io/reference/contact-search
+ * Auth: Apollo authenticates with an API key stored server-side in
+ * private.integration_secrets. The sync route resolves it and passes it as
+ * `token`; Apollo expects it in the `X-Api-Key` header.
  */
 export const apolloProvider: Provider = {
   id: 'apollo',

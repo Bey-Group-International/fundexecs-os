@@ -1,103 +1,98 @@
-# Google OAuth setup
+# Integration OAuth setup
 
-How to wire up "Continue with Google" sign-in and the Gmail / Google Calendar
-integration sync for FundExecs OS. Sign-in uses Supabase Auth's Google
-provider; the same flow mints a `provider_token` that the
-`POST /api/integrations/{provider}/sync` endpoint uses against the Google APIs.
+FundExecs OS connects providers through server-side routes and stores provider
+tokens in `private.integration_secrets`. Public `integration_connections` rows
+only contain provider status, scopes and non-secret account metadata.
 
-## 1. Create a Google Cloud OAuth 2.0 Client
+## Google Workspace
 
-1. Open the [Google Cloud Console](https://console.cloud.google.com/) and select
-   (or create) a project.
-2. Configure the **OAuth consent screen** (APIs & Services -> OAuth consent
-   screen): pick **External**, fill in the app name, support email, and
-   developer contact. Add the scopes below under "Data access":
-   - `https://www.googleapis.com/auth/calendar.readonly`
-   - `https://www.googleapis.com/auth/gmail.metadata`
-   - the default `openid`, `email`, `profile` scopes
-     While the app is in **Testing**, add each operator's Google account under
-     "Test users" (or publish the app).
-3. Enable the APIs the scopes require (APIs & Services -> Library):
-   - **Google Calendar API**
-   - **Gmail API**
-4. Go to **APIs & Services -> Credentials -> Create Credentials -> OAuth client
-   ID** and choose **Web application**.
-5. Under **Authorized redirect URIs**, add the Supabase callback URL — this must
-   match the host in `NEXT_PUBLIC_SUPABASE_URL` exactly. For this project that is
-   the Supabase custom domain:
+Google sign-in and Google Workspace integrations use Supabase Auth's Google
+provider. The app requests one read-only consent covering:
 
-   ```
-   https://auth.fundexecs.com/auth/v1/callback
-   ```
+- `https://www.googleapis.com/auth/gmail.metadata`
+- `https://www.googleapis.com/auth/calendar.readonly`
+- `https://www.googleapis.com/auth/drive.readonly`
+- the default `openid`, `email`, `profile` scopes
 
-   (The bare project URL `https://<project-ref>.supabase.co/auth/v1/callback`
-   also works if `NEXT_PUBLIC_SUPABASE_URL` is set to that instead — register
-   whichever host the app actually uses.) Do **not** point this at the app's
-   `/auth/callback`; that is the app-side redirect target, not Google's.
+Enable these APIs in Google Cloud:
 
-6. Save and copy the generated **Client ID** and **Client secret**.
+- Gmail API
+- Google Calendar API
+- Google Drive API
 
-## 2. Enable Google in Supabase Auth
+In Google Cloud, add the Supabase callback URL as an authorized redirect URI:
 
-1. In the Supabase dashboard go to **Authentication -> Providers -> Google**.
-2. Toggle **Enable**, then paste the **Client ID** and **Client secret** from
-   step 1.
-3. Confirm the callback URL Supabase shows matches the redirect URI you added in
-   Google Cloud (`https://auth.fundexecs.com/auth/v1/callback`).
-4. Save. The Calendar + Gmail scopes are requested at sign-in time by the app
-   (`signInWithOAuth({ scopes: ... })`), so they do not need to be re-entered in
-   Supabase — but they must be approved on the consent screen above.
-
-The app requests offline access with `access_type=offline` and
-`prompt=consent` so Google returns a refresh token and a usable
-`provider_token` for the sync endpoint.
-
-## 3. App redirect target
-
-After Google authenticates, Supabase redirects back to the app's
-`/auth/callback` route, which exchanges the code for a session. The login button
-and the integration "Connect & sync" button both set `redirectTo` from
-`getSiteURL()` (`lib/site-url.ts`), which prefers `NEXT_PUBLIC_SITE_URL`:
-
-```
-redirectTo = `${getSiteURL()}/auth/callback`
+```text
+https://auth.fundexecs.com/auth/v1/callback
 ```
 
-In production `NEXT_PUBLIC_SITE_URL` is `https://www.fundexecs.com`, so the
-redirect target is `https://www.fundexecs.com/auth/callback`.
+Enable Google in Supabase Auth with the Google client ID and client secret. The
+app-side redirect target remains:
 
-For production, set **Authentication -> URL Configuration** in Supabase:
+```text
+https://www.fundexecs.com/auth/callback
+```
 
-- **Site URL**: `https://www.fundexecs.com`
-- **Redirect URLs** (allow-list): `https://www.fundexecs.com/auth/callback`,
-  `http://localhost:3000/auth/callback`, and a preview wildcard such as
-  `https://*-bgi-pres-projects.vercel.app/auth/callback`.
+The `/auth/callback` route exchanges the Supabase OAuth code, detects the
+integration intent cookie, persists connected rows for Gmail, Google Calendar,
+Google Drive, Google Docs and Google Slides, then stores the Google access token
+and refresh token privately.
 
-Use the `www` host (the apex `fundexecs.com` 308-redirects to it); pin auth to
-that one host so the PKCE code-verifier cookie survives the redirect. Otherwise
-Supabase rejects the redirect or the code exchange fails.
+For token refresh during background sync, set these server env vars when they
+are available outside Supabase Auth:
 
-## 4. Environment variables (Vercel)
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
 
-Set these in the Vercel project (Project Settings -> Environment Variables) for
-Production, Preview, and Development:
+If those are missing and a stored Google token expires, users can reconnect to
+mint a fresh token.
 
-| Variable                        | Value                                                 |
-| ------------------------------- | ----------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | `https://auth.fundexecs.com` (Supabase custom domain) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project anon (publishable) key               |
-| `NEXT_PUBLIC_SITE_URL`          | `https://www.fundexecs.com` (canonical app origin)    |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service-role key (used by sync API)          |
+## Slack
 
-The Google client ID/secret live in Supabase Auth (step 2), not in Vercel.
+Create a Slack OAuth app and set its redirect URL to:
 
-## 5. Verify
+```text
+https://www.fundexecs.com/api/integrations/slack/callback
+```
 
-1. Visit `/login` and click **Continue with Google**. Approve the Calendar +
-   Gmail scopes; you should land on `/command-center` signed in.
-2. Visit `/integrations`. For **Gmail** and **Google Calendar**, click
-   **Connect & sync**: when not yet connected it runs the Google OAuth flow;
-   once connected it POSTs to `/api/integrations/{provider}/sync` and shows the
-   synced contact / interaction counts.
-3. Non-Google providers (Calendly, Slack, Apollo, Outlook) render a disabled
-   **Setup required** control until their own OAuth apps are wired up.
+Set server env vars:
+
+- `SLACK_CLIENT_ID`
+- `SLACK_CLIENT_SECRET`
+- `SLACK_USER_SCOPES` (optional; defaults to `im:read im:history users:read users:read.email`)
+
+The connect route sends users through Slack OAuth with a state cookie. The
+callback exchanges the code, stores the returned user token privately, and
+persists the `slack` connection row.
+
+## Calendly
+
+Create a Calendly OAuth app and set its redirect URL to:
+
+```text
+https://www.fundexecs.com/api/integrations/calendly/callback
+```
+
+Set server env vars:
+
+- `CALENDLY_CLIENT_ID`
+- `CALENDLY_CLIENT_SECRET`
+- `CALENDLY_SCOPES` (optional; defaults to `users:read scheduled_events:read`)
+
+Calendly OAuth uses PKCE. The callback exchanges the code, resolves the current
+Calendly user, stores access and refresh tokens privately, and persists the
+`calendly` connection row.
+
+## Apollo
+
+Apollo connects with an API key entered on the Integrations page. The API key is
+POSTed to `/api/integrations/apollo/connect`, stored only in
+`private.integration_secrets`, and never written to public metadata.
+
+## Verify
+
+1. Visit `/integrations`.
+2. Connect each provider.
+3. For connected providers, click `Sync`.
+4. Confirm `/api/integrations/{provider}/sync` returns contact and interaction
+   counts and that `contacts` / `interactions` are populated.
