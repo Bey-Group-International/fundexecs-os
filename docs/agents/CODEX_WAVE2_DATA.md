@@ -46,9 +46,30 @@ Daily triage of scored LP↔fund and deal↔mandate matches.
   (coordinate the pipeline insert shape with Claude). Pin `search_path`; revoke
   from anon/authenticated.
 
+## 3. Credit Wallet + Billing (wire the infrastructure now)
+
+A per-org credit wallet that AI-agent work consumes (diligence runs, Earn, the
+15-agent team). Stripe payment is a later connect step — model the ledger now.
+
+- `public.credit_wallets` — `org_id uuid primary key references organizations`,
+  `balance integer not null default 0` (credits), `plan text default 'standard'`,
+  `created_at`, `updated_at` (+ `set_updated_at` trigger).
+- `public.credit_transactions` — `id`, `org_id`, `delta integer not null`
+  (negative = consumption, positive = top-up/grant), `reason text` (e.g.
+  `diligence_run|earn_chat|agent_task|topup|grant`), `ref_id uuid null` (the run/
+  task it paid for), `balance_after integer`, `created_at`. Index `(org_id, created_at desc)`.
+- RPC `consume_credits(_org_id uuid, _amount int, _reason text, _ref_id uuid)`
+  (service_role): atomically check + decrement the wallet, insert a transaction,
+  return the new balance; raise if insufficient. RPC `grant_credits(...)` for
+  top-ups/grants. Pin `search_path`; revoke from anon/authenticated.
+- RLS: members SELECT their org's wallet + transactions; writes service_role only.
+- Seed each existing org a starter balance (idempotent) so the wallet isn't empty.
+
 ## Contract to hand Claude (in the PR)
 
-Exact columns, the summary view/RPC signatures, the `matches` shape, and the
-`act_on_match` behavior — so Claude can build `lib/queries/capital-stack.ts`,
-`lib/queries/match-inbox.ts`, and the accept→pipeline wiring. Then STOP for
-review.
+Exact columns, the summary view/RPC signatures, the `matches` shape,
+`act_on_match`, and the `consume_credits`/`grant_credits` signatures — so Claude
+can build `lib/queries/capital-stack.ts`, `lib/queries/match-inbox.ts`,
+`lib/queries/credit-wallet.ts`, the accept→pipeline wiring, and the
+**credit-consumption hooks** on AI-agent runs (diligence/Earn deduct credits via
+`consume_credits`). Then STOP for review.

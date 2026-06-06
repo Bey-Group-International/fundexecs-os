@@ -117,4 +117,36 @@ That's the manager's morning: where am I, what's next, who/what just matched.
   readiness computation), Earn wiring, review/merge. Owns `lib/queries/*`,
   `lib/actions/*`, types; does NOT build the Wave-1 pages/components (Emergent's).
 
+## 5. Command-center surface, Settings, Wallet & the automation vision
+
+**Vision.** A **BlackRock-style command center for private-market operators**,
+co-piloted by the **15-agent AI executive team (Earn = COO)** that works _with_
+the manager and **keeps working via automations even when they're away**. The
+Dashboard is the cockpit; every number is actionable and tied to the lifecycle.
+
+**Dashboard composition (Wave 1, mimic the prototype):**
+
+- **Major Alerts** — top items needing attention now.
+- **Execution Score** — front-facing Chain of Trust + gamification (XP/level/
+  streak/layer %) surfaced to drive execution & completion.
+- **Fund Readiness** — front-facing readiness with its component functions beside it.
+- **Next Best Action** — the single highest-leverage move.
+- **Daily Command** — today's prioritized action list.
+- **Activity Feed** — recent activity, including work the AI team did autonomously.
+
+**Settings** — a **vertical detail rail** with each section's details infused
+inline (profile, org, integrations, notifications, billing/wallet, security).
+
+**Credit Wallet (top nav) + billing** — per-org credit balance with usage +
+top-up; **AI-agent work consumes credits** (diligence, Earn, the 15-agent team).
+Codex models `credit_wallets` + `credit_transactions` + `consume_credits`;
+Claude adds consumption hooks on agent runs; Emergent shows the wallet in the top
+nav. (Reverses the earlier "defer billing" — we now wire the credit/billing
+infra; Stripe payment connect is the final step.)
+
+**Automation principle** — agent runs (diligence ingest + orchestration already
+do this server-side) extend to **scheduled/event-triggered** automations so the
+team advances work between sessions. Engine lands in a later wave; design all
+agent entrypoints to be callable headlessly (no UI dependency).
+
 _Maintained by Claude. Encodes the Jun-6 lifecycle adoption decision._
