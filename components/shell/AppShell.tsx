@@ -9,6 +9,7 @@ import {
   Users,
   Plug,
   Target,
+  Scale,
   Bell,
   Search,
   Settings,
@@ -43,6 +44,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: '/command-center', label: 'Command Center', icon: LayoutDashboard },
   { href: '/pipeline', label: 'Pipeline', icon: TrendingUp },
+  { href: '/diligence', label: 'Diligence', icon: Scale },
   { href: '/connections', label: 'Connections', icon: Users },
   { href: '/integrations', label: 'Integrations', icon: Plug },
   { href: '/strategy', label: 'Strategy', icon: Target },

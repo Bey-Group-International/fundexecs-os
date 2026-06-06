@@ -1,7 +1,23 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
+import { getAuthUser } from '@/lib/queries/auth';
 import { askEarn, type EarnMessage } from '@/lib/ai/earn';
+import { earnReviewDeal } from '@/lib/diligence';
+
+/**
+ * Detect an EXPLICIT "run diligence" instruction. Deliberately conservative:
+ * it requires a literal diligence ask (e.g. "due diligence", "run diligence")
+ * or "vet … like an LP". Generic verbs like review/assess/evaluate do NOT
+ * trigger it, so ordinary Earn chat ("help me review my deck", "evaluate this
+ * investment") is never hijacked — those fall through to the normal chat path.
+ */
+function isDiligenceIntent(message: string): boolean {
+  const m = message.toLowerCase();
+  const explicitDiligence = /\b(due\s+diligence|run\s+(a\s+)?diligence|diligence)\b/.test(m);
+  const vetLikeLp = /\bvet\b[\s\S]{0,40}\blike\s+an?\s+(institutional\s+)?lp\b/.test(m);
+  return explicitDiligence || vetLikeLp;
+}
 
 /**
  * POST /api/ask-earn — chat with Earn (RAG over the 15 brains + Claude).
@@ -52,7 +68,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No organization yet' }, { status: 400 });
   }
 
-  let body: { messages?: EarnMessage[] };
+  let body: { messages?: EarnMessage[]; dealId?: string };
   try {
     body = await req.json();
   } catch {
@@ -78,6 +94,53 @@ export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return degraded('missing_key', FALLBACK.missing_key);
   }
+
+  // --- Additive diligence intent (safe pre-pass) ---------------------------
+  // ONLY when the latest user message clearly asks for a diligence-style review.
+  // On any non-match we fall straight through to the unchanged askEarn flow.
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (lastUser && isDiligenceIntent(lastUser.content)) {
+    if (body.dealId) {
+      // A deal is resolvable from context — run the real 7-agent review.
+      try {
+        const user = await getAuthUser();
+        if (user) {
+          const result = await earnReviewDeal({
+            orgId: org.orgId,
+            createdBy: user.id,
+            dealId: body.dealId
+          });
+          if (result.status === 'complete') {
+            const conviction =
+              result.conviction != null ? `Conviction ${result.conviction}/100. ` : '';
+            return NextResponse.json({
+              text:
+                `I ran the full committee on this deal. ${conviction}` +
+                `See the breakdown and my memo here: /diligence/${result.runId}`,
+              sources: []
+            });
+          }
+          return NextResponse.json({
+            text:
+              `I started a diligence run but it didn't complete cleanly. ` +
+              `You can review what came back here: /diligence/${result.runId}`,
+            sources: []
+          });
+        }
+      } catch {
+        // Fall through to the guidance reply below if the run can't be started.
+      }
+    }
+    // No deal context (or run couldn't start) — guide the user, don't guess.
+    return NextResponse.json({
+      text:
+        'I can run a full institutional-grade diligence review, but I need to know which deal. ' +
+        'Open the deal in your Pipeline and hit "Run diligence" in the deal drawer — ' +
+        "I'll have the committee weigh in and post a memo to /diligence.",
+      sources: []
+    });
+  }
+  // --- End diligence intent pre-pass ---------------------------------------
 
   try {
     const reply = await askEarn(supabase, org.orgId, messages);

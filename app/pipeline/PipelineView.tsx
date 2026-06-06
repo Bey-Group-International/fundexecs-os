@@ -418,7 +418,8 @@ export function PipelineView({ data }: { data: PipelineData }) {
           stage: d.stage,
           status: d.status,
           amount: d.amount,
-          allocations: d.allocations
+          allocations: d.allocations,
+          diligenceRuns: d.diligenceRuns
         };
         break;
       }
