@@ -69,9 +69,7 @@ export function Sparkline({
       aria-label={ariaLabel}
       aria-hidden={ariaLabel ? undefined : true}
     >
-      {area && (
-        <path d={areaPath} fill={stroke} opacity={0.14} stroke="none" />
-      )}
+      {area && <path d={areaPath} fill={stroke} opacity={0.14} stroke="none" />}
       <path
         d={path}
         fill="none"

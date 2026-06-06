@@ -35,6 +35,13 @@ export interface EarnBriefingBandProps {
   status?: string;
   /** 1–3 ranked priorities. The first one renders with stronger emphasis. */
   priorities: EarnBriefingPriority[];
+  /** Optional override of the gold eyebrow above the headline. Defaults to
+   *  "Earnest Fundmaker · Chief Operating Officer · your live AI guide" — the
+   *  exact framing used on www.fundexecs.com. */
+  eyebrow?: string;
+  /** Optional audit-trail caption beneath the priorities. Defaults to the
+   *  brand's signature "on the record" line; pass empty string to hide. */
+  audit?: string;
 }
 
 const TONE_DOT: Record<EarnPriorityTone, string> = {
@@ -54,17 +61,16 @@ const TONE_DOT: Record<EarnPriorityTone, string> = {
  */
 export function EarnBriefingBand({
   displayName,
-  subtitle = 'Earn has surfaced the next moves that matter most.',
+  subtitle = 'Today’s ranked priorities — surfaced from across the desk, recorded as they happen.',
   status = 'Live',
-  priorities
+  priorities,
+  eyebrow = 'Earnest Fundmaker · Chief Operating Officer · your live AI guide',
+  audit = 'On the record · every decision and approval logged to your Chain of Trust.'
 }: EarnBriefingBandProps) {
   const firstName = displayName.split(' ')[0] || displayName;
 
   return (
-    <Card
-      data-testid="earn-briefing-band"
-      className="relative overflow-hidden p-[18px]"
-    >
+    <Card data-testid="earn-briefing-band" className="relative overflow-hidden p-[18px]">
       {/* Soft radial gold wash for the briefing — strictly via tokens. */}
       <div
         aria-hidden
@@ -86,9 +92,9 @@ export function EarnBriefingBand({
           <EarnCoin size={56} className="relative" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gold-1">
-              Earnest Fundmaker · your Private Market Assistant
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
+              {eyebrow}
             </p>
             <Badge tone="success" dot pulse className="text-[10px]">
               {status}
@@ -103,32 +109,19 @@ export function EarnBriefingBand({
 
       {/* Priorities */}
       {priorities.length > 0 && (
-        <ol
-          className="mt-5 flex flex-col gap-2"
-          data-testid="earn-briefing-priorities"
-        >
+        <ol className="mt-5 flex flex-col gap-2" data-testid="earn-briefing-priorities">
           {priorities.map((p, idx) => {
             const Icon = p.icon ?? Sparkles;
             const tone = p.tone ?? 'azure';
-            const RowBase = p.href ? Link : 'div';
-            const rowProps = p.href
-              ? { href: p.href, 'data-testid': `earn-priority-${p.id}` }
-              : { 'data-testid': `earn-priority-${p.id}` };
-            return (
-              <RowBase
-                key={p.id}
-                {...(rowProps as Record<string, string>)}
-                className={cn(
-                  'group relative flex items-start gap-3 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2.5 transition-[background,transform,box-shadow]',
-                  p.href && 'hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-[var(--shadow-md)]'
-                )}
-              >
+            const rowClass = cn(
+              'group relative flex items-start gap-3 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2.5 transition-[background,transform,box-shadow]',
+              p.href && 'hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-[var(--shadow-md)]'
+            );
+            const inner = (
+              <>
                 <span
                   aria-hidden
-                  className={cn(
-                    'mt-1.5 h-1.5 w-1.5 flex-none rounded-full',
-                    TONE_DOT[tone]
-                  )}
+                  className={cn('mt-1.5 h-1.5 w-1.5 flex-none rounded-full', TONE_DOT[tone])}
                 />
                 <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-bg-1 text-fg-3 group-hover:text-fg-1">
                   <Icon size={15} strokeWidth={1.9} aria-hidden />
@@ -167,11 +160,35 @@ export function EarnBriefingBand({
                     />
                   </span>
                 )}
-              </RowBase>
+              </>
+            );
+            return p.href ? (
+              <Link
+                key={p.id}
+                href={p.href}
+                data-testid={`earn-priority-${p.id}`}
+                className={rowClass}
+              >
+                {inner}
+              </Link>
+            ) : (
+              <li key={p.id} data-testid={`earn-priority-${p.id}`} className={rowClass}>
+                {inner}
+              </li>
             );
           })}
         </ol>
       )}
+
+      {audit ? (
+        <p
+          className="mt-4 flex items-center gap-2 text-[10.5px] font-medium text-fg-4"
+          data-testid="earn-briefing-audit"
+        >
+          <span aria-hidden className="inline-flex h-1 w-1 rounded-full bg-success" />
+          {audit}
+        </p>
+      ) : null}
     </Card>
   );
 }

@@ -1,50 +1,15 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  LayoutDashboard,
-  TrendingUp,
-  Users,
-  Plug,
-  Target,
-  Bell,
-  Search,
-  Settings,
-  ChevronsUpDown,
-  Sun,
-  Moon,
-  Menu,
-  X,
-  LogOut,
-  type LucideIcon
-} from 'lucide-react';
-import { Avatar, Badge, AnimatedNumber } from '@/components/ui';
+import { Bell, Search, Sun, Moon, Menu } from 'lucide-react';
+import { Avatar, AnimatedNumber } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
-import { createClient } from '@/lib/supabase/client';
 import type { ShellIdentity } from '@/lib/queries/identity';
-import { cn } from '@/lib/utils';
+import { UnifiedSideRail } from './UnifiedSideRail';
 import { EarnOrb } from './earn/EarnOrb';
 import { EarnDock } from './earn/EarnDock';
 import { TrustToaster } from './trust/TrustToaster';
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  badge?: number;
-}
-
-const NAV: NavItem[] = [
-  { href: '/command-center', label: 'Command Center', icon: LayoutDashboard },
-  { href: '/pipeline', label: 'Pipeline', icon: TrendingUp },
-  { href: '/connections', label: 'Connections', icon: Users },
-  { href: '/integrations', label: 'Integrations', icon: Plug },
-  { href: '/strategy', label: 'Strategy', icon: Target },
-  { href: '/notifications', label: 'Notifications', icon: Bell, badge: 3 },
-  { href: '/settings', label: 'Settings', icon: Settings }
-];
 
 /** Generic fallback when no signed-in identity is supplied (e.g. SSR before
  *  auth resolves). Never shows a fabricated person's name. */
@@ -93,128 +58,6 @@ function ThemeToggle() {
   );
 }
 
-function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
-  return (
-    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3">
-      <div className="px-3 pb-1.5 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-        Workspace
-      </div>
-      {NAV.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              'relative flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-[13.5px] font-medium transition-[background,box-shadow,transform] will-change-transform',
-              active
-                ? 'bg-gradient-to-r from-[var(--azure-soft)] to-surface-1 text-fg-1'
-                : 'text-fg-3 hover:translate-x-0.5 hover:bg-surface-1'
-            )}
-          >
-            {active && (
-              <span
-                className="absolute -left-3 bottom-2 top-2 w-[3px] rounded-full bg-azure-1"
-                aria-hidden
-              />
-            )}
-            <Icon size={17} strokeWidth={1.9} aria-hidden />
-            <span className="flex-1">{item.label}</span>
-            {item.badge != null && (
-              <Badge tone="azure" className="px-1.5 py-0.5 text-[10.5px]">
-                {item.badge}
-              </Badge>
-            )}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
-function Sidebar({
-  pathname,
-  open,
-  onClose,
-  identity
-}: {
-  pathname: string;
-  open: boolean;
-  onClose: () => void;
-  identity: ShellIdentity;
-}) {
-  async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    window.location.assign('/login');
-  }
-
-  return (
-    <aside
-      className={cn(
-        'fixed inset-y-0 left-0 z-40 flex h-full w-[244px] flex-none flex-col border-r border-hairline bg-bg-1 transition-transform duration-200 lg:static lg:z-10 lg:translate-x-0',
-        open ? 'translate-x-0' : '-translate-x-full'
-      )}
-    >
-      <div className="flex items-center gap-2.5 px-[18px] pb-4 pt-[18px]">
-        <span className="inline-flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg bg-gradient-to-br from-gold-1 to-gold-2 text-[15px] font-bold text-[#070b14]">
-          F
-        </span>
-        <div className="flex-1 text-base font-semibold tracking-[-0.02em]">
-          FundExecs <span className="font-medium text-fg-4">OS</span>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close menu"
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-4 hover:bg-surface-1 hover:text-fg-1 lg:hidden"
-        >
-          <X size={16} strokeWidth={1.9} aria-hidden />
-        </button>
-      </div>
-
-      <div className="px-3 pb-3">
-        <button
-          type="button"
-          className="flex w-full items-center gap-2.5 rounded-[10px] border border-hairline bg-surface-1 px-2.5 py-2 transition-[background,box-shadow] hover:bg-surface-2"
-        >
-          <Avatar name={identity.orgName} size={26} tone="gold" />
-          <div className="flex-1 overflow-hidden text-left">
-            <div className="truncate text-[12.5px] font-semibold text-fg-1">{identity.orgName}</div>
-            <div className="truncate text-[10.5px] text-fg-4">{identity.orgTier}</div>
-          </div>
-          <ChevronsUpDown size={14} strokeWidth={1.9} className="text-fg-4" aria-hidden />
-        </button>
-      </div>
-
-      <SidebarNav pathname={pathname} onNavigate={onClose} />
-
-      <div className="m-3 flex items-center gap-2.5 rounded-[10px] border border-hairline px-2.5 py-2.5">
-        <Avatar name={identity.name} size={30} />
-        <div className="flex-1 overflow-hidden">
-          <div className="truncate text-[12.5px] font-semibold text-fg-1">{identity.name}</div>
-          <div className="truncate text-[10.5px] text-fg-4">{identity.role}</div>
-        </div>
-        <Badge tone="gold" className="px-1.5 py-0.5 text-[10px]">
-          L{identity.level}
-        </Badge>
-        <button
-          type="button"
-          onClick={signOut}
-          aria-label="Sign out"
-          title="Sign out"
-          className="flex h-7 w-7 flex-none items-center justify-center rounded-lg text-fg-4 transition-[background,box-shadow] hover:bg-surface-1 hover:text-fg-1"
-        >
-          <LogOut size={15} strokeWidth={1.9} aria-hidden />
-        </button>
-      </div>
-    </aside>
-  );
-}
-
 function Topbar({
   title,
   subtitle,
@@ -255,7 +98,10 @@ function Topbar({
           placeholder="Search deals, LPs, partners…"
           className="w-full rounded-[10px] border border-hairline bg-surface-1 py-2 pl-9 pr-12 text-[13px] text-fg-1 outline-none transition-[border-color] placeholder:text-fg-4 focus:border-[var(--accent-line)]"
         />
-        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-hairline px-1.5 py-px font-mono text-[10px] text-fg-5">
+        <kbd
+          aria-hidden="true"
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-hairline px-1.5 py-px font-mono text-[10px] text-fg-5"
+        >
           ⌘K
         </kbd>
       </div>
@@ -267,6 +113,7 @@ function Topbar({
         type="button"
         onClick={onAskEarn}
         aria-label="Ask Earn"
+        data-testid="topbar-earn-wallet"
         className="hidden items-center gap-2 rounded-[10px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-1 transition-[background,box-shadow] hover:bg-[var(--gold-soft)] hover:brightness-110 sm:flex"
       >
         <EarnCoin size={22} />
@@ -275,7 +122,10 @@ function Topbar({
             value={identity.xp}
             className="block text-[12.5px] font-semibold text-gold-1"
           />
-          <div className="text-[8px] font-semibold uppercase tracking-[0.11em] text-fg-5">
+          <div
+            aria-hidden="true"
+            className="text-[8px] font-semibold uppercase tracking-[0.11em] text-fg-5"
+          >
             Earn coins
           </div>
         </div>
@@ -285,11 +135,9 @@ function Topbar({
         type="button"
         aria-label="Notifications"
         className="relative flex h-[38px] w-[38px] flex-none items-center justify-center rounded-[10px] border border-hairline bg-surface-1 text-fg-3 transition-[background,box-shadow] hover:bg-surface-2 hover:text-fg-1"
+        data-testid="topbar-notifications-bell"
       >
         <Bell size={17} strokeWidth={1.9} aria-hidden />
-        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-bg-0 bg-azure-1 px-1 text-[10px] font-bold text-white">
-          3
-        </span>
       </button>
 
       <Avatar name={identity.name} size={32} />
@@ -307,10 +155,11 @@ export interface AppShellProps {
 }
 
 /**
- * AppShell — the authenticated workspace shell: a 244px sidebar (brand, org
- * switcher, nav, user footer + sign-out), a sticky topbar (search, theme
- * toggle, gold Earn-coin wallet, notifications), a 1180px content column, and
- * a mobile drawer. Nav state derives from the current route.
+ * AppShell — the authenticated workspace shell. Composes the canonical
+ * `<UnifiedSideRail>` (single side-rail used by every authenticated surface),
+ * a sticky topbar, a 1180px content column, and the shell-level Earn +
+ * Chain-of-Trust systems. The side rail was extracted from this file so it
+ * can be reused across demo / preview surfaces without duplicating chrome.
  */
 export function AppShell({ title, subtitle, identity, children }: AppShellProps) {
   const pathname = usePathname();
@@ -327,7 +176,12 @@ export function AppShell({ title, subtitle, identity, children }: AppShellProps)
           aria-hidden
         />
       )}
-      <Sidebar pathname={pathname} open={navOpen} onClose={() => setNavOpen(false)} identity={id} />
+      <UnifiedSideRail
+        pathname={pathname}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+        identity={id}
+      />
       <div className="relative z-0 flex min-w-0 flex-1 flex-col">
         <Topbar
           title={title}

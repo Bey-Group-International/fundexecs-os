@@ -3,13 +3,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
-export type DealFlowStage =
-  | 'sourcing'
-  | 'screening'
-  | 'diligence'
-  | 'ic'
-  | 'closing'
-  | 'closed';
+export type DealFlowStage = 'sourcing' | 'screening' | 'diligence' | 'ic' | 'closing' | 'closed';
 
 export interface DealFlowRow {
   id: string;
@@ -107,55 +101,58 @@ export function DealFlowTable({
           <ul className="flex flex-col">
             {rows.map((row) => {
               const tone = STAGE_TONE[row.stage] ?? 'neutral';
-              const Row = row.href ? Link : 'div';
-              const rowProps = row.href
-                ? { href: row.href, 'data-testid': `deal-row-${row.id}` }
-                : { 'data-testid': `deal-row-${row.id}` };
-              return (
-                <li key={row.id}>
-                  <Row
-                    {...(rowProps as Record<string, string>)}
-                    className={cn(
-                      'group grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl px-1 py-2.5 transition-[background,transform]',
-                      'sm:grid-cols-[2fr_1fr_1fr_0.6fr_24px]',
-                      row.href && 'hover:bg-surface-1'
-                    )}
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-surface-2 text-[11px] font-semibold text-fg-2">
-                        {row.initials ?? initialsFor(row.name)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-[13px] font-semibold text-fg-1">
-                          {row.name}
-                        </p>
-                        {row.sector && (
-                          <p className="truncate text-[10.5px] text-fg-4">{row.sector}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-end gap-3 sm:contents">
-                      <Badge tone={tone} className="text-[10px] uppercase">
-                        {row.stage}
-                      </Badge>
-                      <span className="hidden text-[12px] font-medium tabular-nums text-fg-2 sm:block">
-                        {row.size ?? '—'}
-                      </span>
-                      <span className="hidden text-[11px] text-fg-4 sm:block">
-                        {row.lastTouch ?? '—'}
-                      </span>
-                      {row.href ? (
-                        <ArrowUpRight
-                          size={14}
-                          strokeWidth={2}
-                          className="hidden text-fg-4 transition-transform group-hover:translate-x-0.5 group-hover:text-azure-1 sm:block"
-                          aria-hidden
-                        />
-                      ) : (
-                        <span aria-hidden className="hidden sm:block" />
+              const rowClass = cn(
+                'group grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl px-1 py-2.5 transition-[background,transform]',
+                'sm:grid-cols-[2fr_1fr_1fr_0.6fr_24px]',
+                row.href && 'hover:bg-surface-1'
+              );
+              const inner = (
+                <>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-surface-2 text-[11px] font-semibold text-fg-2">
+                      {row.initials ?? initialsFor(row.name)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-semibold text-fg-1">{row.name}</p>
+                      {row.sector && (
+                        <p className="truncate text-[10.5px] text-fg-4">{row.sector}</p>
                       )}
                     </div>
-                  </Row>
+                  </div>
+                  <div className="flex items-center justify-end gap-3 sm:contents">
+                    <Badge tone={tone} className="text-[10px] uppercase">
+                      {row.stage}
+                    </Badge>
+                    <span className="hidden text-[12px] font-medium tabular-nums text-fg-2 sm:block">
+                      {row.size ?? '—'}
+                    </span>
+                    <span className="hidden text-[11px] text-fg-4 sm:block">
+                      {row.lastTouch ?? '—'}
+                    </span>
+                    {row.href ? (
+                      <ArrowUpRight
+                        size={14}
+                        strokeWidth={2}
+                        className="hidden text-fg-4 transition-transform group-hover:translate-x-0.5 group-hover:text-azure-1 sm:block"
+                        aria-hidden
+                      />
+                    ) : (
+                      <span aria-hidden className="hidden sm:block" />
+                    )}
+                  </div>
+                </>
+              );
+              return (
+                <li key={row.id}>
+                  {row.href ? (
+                    <Link href={row.href} data-testid={`deal-row-${row.id}`} className={rowClass}>
+                      {inner}
+                    </Link>
+                  ) : (
+                    <div data-testid={`deal-row-${row.id}`} className={rowClass}>
+                      {inner}
+                    </div>
+                  )}
                 </li>
               );
             })}

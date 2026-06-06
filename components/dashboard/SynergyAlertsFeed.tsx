@@ -76,19 +76,12 @@ export function SynergyAlertsFeed({
           {alerts.map((a) => {
             const Icon = a.icon ?? Zap;
             const tone = a.tone ?? 'azure';
-            const Row = a.href ? Link : 'div';
-            const rowProps = a.href
-              ? { href: a.href, 'data-testid': `synergy-alert-${a.id}` }
-              : { 'data-testid': `synergy-alert-${a.id}` };
-            return (
-              <Row
-                key={a.id}
-                {...(rowProps as Record<string, string>)}
-                className={cn(
-                  'group flex items-start gap-3 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5 transition-[background,transform]',
-                  a.href && 'hover:-translate-y-0.5 hover:bg-surface-2'
-                )}
-              >
+            const rowClass = cn(
+              'group flex items-start gap-3 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5 transition-[background,transform]',
+              a.href && 'hover:-translate-y-0.5 hover:bg-surface-2'
+            );
+            const inner = (
+              <>
                 <span
                   aria-hidden
                   className={cn('mt-1.5 h-1.5 w-1.5 flex-none rounded-full', TONE_DOT[tone])}
@@ -117,7 +110,21 @@ export function SynergyAlertsFeed({
                     aria-hidden
                   />
                 )}
-              </Row>
+              </>
+            );
+            return a.href ? (
+              <Link
+                key={a.id}
+                href={a.href}
+                data-testid={`synergy-alert-${a.id}`}
+                className={rowClass}
+              >
+                {inner}
+              </Link>
+            ) : (
+              <li key={a.id} data-testid={`synergy-alert-${a.id}`} className={rowClass}>
+                {inner}
+              </li>
             );
           })}
         </ul>

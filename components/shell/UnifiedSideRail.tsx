@@ -24,11 +24,8 @@ export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  /** Static numeric badge — usually omitted; prefer `dynamicBadge`. */
+  /** Static numeric badge — optional. */
   badge?: number;
-  /** Live-data badge slot. Resolved against the current `ShellIdentity`
-   *  on render, so the value stays in sync with server-side state. */
-  dynamicBadge?: 'unread';
   /** Optional tone for a leading status pill (e.g. NEW for Fund Room). */
   meta?: { label: string; tone?: 'gold' | 'azure' | 'success' };
 }
@@ -49,7 +46,7 @@ export const DEFAULT_NAV: NavItem[] = [
   { href: '/connections', label: 'Connections', icon: Users },
   { href: '/integrations', label: 'Integrations', icon: Plug },
   { href: '/strategy', label: 'Strategy', icon: Target },
-  { href: '/notifications', label: 'Notifications', icon: Bell, dynamicBadge: 'unread' },
+  { href: '/notifications', label: 'Notifications', icon: Bell, badge: 3 },
   { href: '/settings', label: 'Settings', icon: Settings }
 ];
 
@@ -136,9 +133,7 @@ export function UnifiedSideRail({
         >
           <Avatar name={identity.orgName} size={26} tone="gold" />
           <div className="flex-1 overflow-hidden text-left">
-            <div className="truncate text-[12.5px] font-semibold text-fg-1">
-              {identity.orgName}
-            </div>
+            <div className="truncate text-[12.5px] font-semibold text-fg-1">{identity.orgName}</div>
             <div className="truncate text-[10.5px] text-fg-4">{identity.orgTier}</div>
           </div>
           <ChevronsUpDown size={14} strokeWidth={1.9} className="text-fg-4" aria-hidden />
@@ -156,8 +151,7 @@ export function UnifiedSideRail({
         {nav.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
-          const badgeValue =
-            item.badge ?? (item.dynamicBadge === 'unread' ? identity.unreadCount : undefined);
+          const badgeValue = item.badge;
           const showBadge = badgeValue != null && badgeValue > 0;
           return (
             <Link
@@ -187,13 +181,7 @@ export function UnifiedSideRail({
                 </Badge>
               )}
               {showBadge && (
-                <Badge
-                  tone="azure"
-                  className="px-1.5 py-0.5 text-[10.5px]"
-                  data-testid={
-                    item.dynamicBadge === 'unread' ? 'sidebar-unread-badge' : undefined
-                  }
-                >
+                <Badge tone="azure" className="px-1.5 py-0.5 text-[10.5px]">
                   {badgeValue}
                 </Badge>
               )}

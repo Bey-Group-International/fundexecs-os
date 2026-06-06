@@ -49,13 +49,15 @@ export function MemberDashboardChrome({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
           <TeamAvatar member={coo} size={48} glow online className="flex-none" />
           <div className="min-w-0 flex-1">
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gold-1">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
               {coo.position} · your live AI guide
             </p>
             <h1 className="mt-0.5 text-[20px] font-semibold tracking-[-0.015em] text-fg-1 sm:text-[22px]">
               Good to see you, {displayName.split(' ')[0]}.
             </h1>
-            <p className="mt-0.5 text-[12.5px] text-fg-3">{position} · your workspace</p>
+            <p className="mt-0.5 text-[12.5px] text-fg-3">
+              {position} · your workspace, documented as it forms.
+            </p>
           </div>
         </div>
         <div className="mt-4">

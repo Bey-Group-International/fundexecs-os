@@ -31,15 +31,23 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * reserved for Earn and gamification surfaces only.
  */
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
+  // Primary references the shared `--cta-gradient` + `--shadow-cta` tokens so
+  // every CTA in the product (and matched to live www.fundexecs.com) renders
+  // the same institutional blue glow without inline hex.
   primary:
-    'bg-[linear-gradient(135deg,#3B74F0,#2152D8)] text-white border border-transparent shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] hover:brightness-110',
+    'text-white border border-transparent hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent bg-[var(--cta-gradient)] shadow-[var(--shadow-cta)]',
   light: 'bg-white text-[#070b14] hover:bg-slate-200 border border-transparent',
-  secondary: 'bg-surface-2 text-fg-1 border border-hairline hover:bg-surface-3',
-  ghost: 'bg-transparent text-fg-3 border border-transparent hover:bg-surface-1 hover:text-fg-1',
+  // Hairline secondaries pick up a gold focus ring per live spec — keeps the
+  // Earn brand visible at the focus boundary on every non-primary surface.
+  secondary:
+    'bg-surface-2 text-fg-1 border border-hairline hover:bg-surface-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1',
+  ghost:
+    'bg-transparent text-fg-3 border border-transparent hover:bg-surface-1 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1',
   gold: 'bg-gradient-to-br from-gold-1 to-gold-2 text-[#070b14] font-semibold border border-transparent hover:brightness-105',
   danger:
     'bg-[var(--danger-soft)] text-danger border border-[var(--danger-line)] hover:bg-[rgba(251,113,133,0.18)]',
-  outline: 'bg-transparent text-fg-2 border border-hairline hover:bg-surface-2'
+  outline:
+    'bg-transparent text-fg-2 border border-hairline hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1'
 };
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
