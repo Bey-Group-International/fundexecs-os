@@ -29,10 +29,10 @@ UI against **typed props + placeholder data**; Claude wires the real data.
 
 ### Task A — Demo dashboard + unified side rail
 
-1. **Merge the two side rails into ONE** intentional nav (current `AppShell` rail
-   - the demo's rail). Single source of nav items; keep the live routes
-     (`/command-center`, `/pipeline`, `/connections`, `/integrations`,
-     `/strategy`, `/notifications`, `/settings`).
+1. **Merge the two side rails into ONE** intentional nav — the current `AppShell`
+   rail combined with the demo's rail. Single source of nav items; keep the live
+   routes (`/command-center`, `/pipeline`, `/connections`, `/integrations`,
+   `/strategy`, `/notifications`, `/settings`).
 2. **Per-user-type desks** — extend the existing
    `app/command-center/layouts/*` (InvestmentFirm, ServiceProvider, Startup,
    Student, IndividualInvestor) + `MemberDashboardChrome` so each member type
