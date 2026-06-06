@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui';
 import {
   ChainOfTrustStrip,
@@ -10,6 +11,34 @@ import {
 } from '@/components/dashboard/EarnNextBestActions';
 import { TrustDrawerHost } from '@/components/shell/trust/TrustDrawerHost';
 import { TeamAvatar, getCOO } from '@/lib/team';
+
+/** Ordered lifecycle layers — each proof is a step toward completion. */
+const LIFECYCLE: {
+  key: keyof Pick<ChainOfTrustStanding, 'truth' | 'concept' | 'execution' | 'work'>;
+  proof: string;
+}[] = [
+  { key: 'truth', proof: 'Truth' },
+  { key: 'concept', proof: 'Concept' },
+  { key: 'execution', proof: 'Execution' },
+  { key: 'work', proof: 'Work' }
+];
+
+/**
+ * Earn's self-aware coaching line for the hero — derived purely from the trust
+ * standing the layout already loaded. Earn names exactly where the member sits
+ * in the private-market lifecycle and the single next step that grows it.
+ */
+function earnCoachingLine(trust: ChainOfTrustStanding): string {
+  if (!trust.hasRecord) {
+    return 'Let’s lay your first proof — Proof of Truth sets the foundation for everything else.';
+  }
+  const next = LIFECYCLE.find((l) => trust[l.key] < 100);
+  if (!next) {
+    return 'Full institutional trust — your lifecycle proof is complete. I’ll keep it warm.';
+  }
+  const pct = Math.max(0, Math.min(100, Math.round(trust[next.key])));
+  return `You’re ${pct}% through Proof of ${next.proof} — clearing it is your next step in the lifecycle.`;
+}
 
 export interface MemberDashboardChromeProps {
   displayName: string;
@@ -41,6 +70,7 @@ export function MemberDashboardChrome({
   children
 }: MemberDashboardChromeProps) {
   const coo = getCOO();
+  const coachingLine = earnCoachingLine(trust);
   return (
     <TrustDrawerHost>
       <div className="flex flex-col gap-[18px]">
@@ -63,6 +93,15 @@ export function MemberDashboardChrome({
                 Good to see you, {displayName.split(' ')[0]}.
               </h1>
               <p className="mt-0.5 text-[12.5px] text-fg-3">{position} · your workspace</p>
+              <p className="mt-2 inline-flex items-start gap-1.5 text-[12px] leading-5 text-fg-2">
+                <Sparkles
+                  size={13}
+                  strokeWidth={1.9}
+                  className="mt-[3px] flex-none text-gold-1"
+                  aria-hidden
+                />
+                <span>{coachingLine}</span>
+              </p>
             </div>
           </div>
           <div className="mt-4">
