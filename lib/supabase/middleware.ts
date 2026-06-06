@@ -2,36 +2,6 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from './database.types';
 
-/** Legacy scope: auth cookies were briefly written to the shared parent domain
- * (see cookie-domain.ts). Those shadow the host-only cookies and break refresh,
- * so we expire them on fundexecs.com hosts until they're gone. */
-const LEGACY_COOKIE_DOMAIN = '.fundexecs.com';
-
-function isAuthCookie(name: string): boolean {
-  return name.startsWith('sb-') && name.includes('auth-token');
-}
-
-/**
- * Expire any auth cookies still scoped to the parent `.fundexecs.com` domain so
- * they can't shadow the host-only cookies. Host-only cookies of the same name
- * are a separate cookie and are left untouched. No-op off fundexecs.com and once
- * no parent-domain cookies remain — so it self-heals existing sessions.
- */
-function clearLegacyDomainCookies(request: NextRequest, response: NextResponse) {
-  if (!request.nextUrl.hostname.endsWith('fundexecs.com')) return;
-  for (const c of request.cookies.getAll()) {
-    if (isAuthCookie(c.name)) {
-      response.cookies.set({
-        name: c.name,
-        value: '',
-        domain: LEGACY_COOKIE_DOMAIN,
-        path: '/',
-        maxAge: 0
-      });
-    }
-  }
-}
-
 /**
  * Refreshes the Supabase auth session on every request and keeps the
  * session cookies in sync. Call this from the root proxy (proxy.ts).
@@ -104,7 +74,6 @@ export async function updateSession(request: NextRequest) {
   const redirectTo = (url: URL) => {
     const res = NextResponse.redirect(url);
     supabaseResponse.cookies.getAll().forEach((cookie) => res.cookies.set(cookie));
-    clearLegacyDomainCookies(request, res);
     return res;
   };
 
@@ -212,6 +181,5 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  clearLegacyDomainCookies(request, supabaseResponse);
   return supabaseResponse;
 }
