@@ -7,7 +7,8 @@ import { createClient } from '@/lib/supabase/client';
 import { getSiteURL } from '@/lib/site-url';
 import { signInWithPasswordAction } from './actions';
 import { EarnCoin } from '@/components/screens/EarnCoin';
-import { TeamAvatar, getCOO } from '@/lib/team';
+import { Badge } from '@/components/ui';
+import { getCOO } from '@/lib/team';
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -18,6 +19,7 @@ export default function LoginPage() {
       ? requestedRedirect
       : '/command-center';
   const oauthError = searchParams.get('error_description') || searchParams.get('error');
+  const earn = getCOO();
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -69,49 +71,57 @@ export default function LoginPage() {
 
   return (
     <main className="grid min-h-screen bg-bg-0 text-fg-1 lg:grid-cols-2">
-      {/* Value panel (left) */}
-      <section className="relative hidden flex-col justify-between overflow-hidden border-r border-hairline bg-[radial-gradient(120%_80%_at_0%_0%,rgba(37,99,235,0.10),transparent_55%)] px-12 py-10 lg:flex">
+      {/* Value panel (left) — mirrors the landing hero's identity + messaging. */}
+      <section
+        className="relative hidden flex-col justify-between overflow-hidden border-r border-hairline px-12 py-10 lg:flex"
+        style={{
+          background:
+            'radial-gradient(60% 50% at 80% 15%, rgba(247,201,72,0.12), transparent 70%), radial-gradient(55% 55% at 0% 90%, rgba(37,99,235,0.12), transparent 70%), linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%)'
+        }}
+      >
         <div className="flex items-center gap-2.5">
-          <EarnCoin size={30} />
-          <span className="text-[15px] font-semibold tracking-tight">
-            FundExecs <span className="text-fg-3">OS</span>
+          <EarnCoin size={28} />
+          <span className="text-[15px] font-semibold tracking-[-0.02em]">
+            FundExecs <span className="font-medium text-fg-4">OS</span>
           </span>
         </div>
 
         <div className="max-w-md">
-          <p className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-            AI-native private-market command center
-          </p>
-          <h1 className="mt-4 text-[40px] font-semibold leading-[1.06] tracking-[-0.02em]">
-            Turn any fund into an
-            <br />
-            <span className="text-gold-1">execution machine.</span>
+          <Badge tone="gold" dot pulse className="mb-6">
+            Led by Earn, your live AI guide
+          </Badge>
+          <h1 className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-fg-1">
+            Unified intelligence layer for the <span className="text-gold-1">private markets.</span>
           </h1>
-          <p className="mt-5 max-w-sm text-[13.5px] leading-7 text-fg-3">
-            Streamline workflows, accelerate decisions, and scale like a top-tier institution —
-            without adding headcount or friction.
+          <p className="mt-5 max-w-sm text-[14px] leading-7 text-fg-3">
+            A fifteen-strong executive team — led by Earn — working as one to optimize your
+            workflows, accelerate your decisions, and elevate your capacity to execute like an
+            institution.
           </p>
-
-          <div className="mt-10 flex gap-10 [font-feature-settings:'tnum']">
-            {[
-              { stat: '$612M', label: 'capital facilitated' },
-              { stat: '500+', label: 'funds & sponsors' },
-              { stat: '4-layer', label: 'Chain of Trust' }
-            ].map((s) => (
-              <div key={s.label}>
-                <div className="text-[22px] font-semibold tracking-tight">{s.stat}</div>
-                <div className="mt-1 text-[11.5px] text-fg-4">{s.label}</div>
-              </div>
-            ))}
-          </div>
         </div>
 
-        <div className="flex items-center gap-2.5 text-[12.5px] text-fg-4">
-          <TeamAvatar member={getCOO()} size={22} />
-          <span>
-            <span className="font-semibold text-fg-2">Earnest Fundmaker</span> — Chief Operating
-            Officer of your 15-specialist team. Call him Earn.
-          </span>
+        {/* Earn identity — same treatment as the landing hero. */}
+        <div className="flex items-center gap-4">
+          <div className="relative flex-none">
+            <div
+              className="pointer-events-none absolute inset-0 -z-10"
+              style={{
+                background: 'radial-gradient(circle, rgba(247,201,72,0.4), transparent 65%)',
+                filter: 'blur(22px)'
+              }}
+              aria-hidden
+            />
+            <EarnCoin size={52} glow online />
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-1">
+              Meet Earn
+            </p>
+            <p className="mt-1 text-[14px] font-semibold text-fg-1">
+              {earn.name} &ldquo;Earn&rdquo;
+            </p>
+            <p className="mt-0.5 text-[12px] text-fg-4">{earn.position} · your live AI guide</p>
+          </div>
         </div>
       </section>
 
