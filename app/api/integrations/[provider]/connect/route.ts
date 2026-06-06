@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSiteURL } from '@/lib/site-url';
+import type { Database } from '@/lib/supabase/database.types';
 import {
   API_KEY_PROVIDERS,
   GOOGLE_PROVIDERS,
@@ -47,7 +50,7 @@ async function requireUser() {
 
 export async function GET(request: NextRequest, ctx: { params: Promise<{ provider: string }> }) {
   const { provider } = await ctx.params;
-  const { supabase, user } = await requireUser();
+  const { user } = await requireUser();
 
   if (!user) {
     const loginUrl = new URL('/login', request.url);
@@ -56,7 +59,28 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ provide
   }
 
   if (GOOGLE_PROVIDERS.has(provider)) {
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    // signInWithOAuth generates the PKCE code-verifier and persists it via the
+    // client's cookie adapter. The shared server client writes to the
+    // `next/headers` store, which does NOT reliably attach to a freshly built
+    // NextResponse.redirect — so the verifier is lost and `/auth/callback`
+    // fails with "PKCE code verifier not found". Capture the cookies it wants
+    // to set and apply them to the redirect response we return.
+    const cookieStore = await cookies();
+    const pending: { name: string; value: string; options: CookieOptions }[] = [];
+    const oauthClient = createServerClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => cookieStore.getAll(),
+          setAll: (toSet) => {
+            for (const cookie of toSet) pending.push(cookie);
+          }
+        }
+      }
+    );
+
+    const { data, error } = await oauthClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${getSiteURL()}/auth/callback`,
@@ -70,6 +94,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ provide
     }
 
     const response = NextResponse.redirect(data.url);
+    for (const cookie of pending) {
+      response.cookies.set(cookie.name, cookie.value, cookie.options);
+    }
     response.cookies.set(INTEGRATION_GOOGLE_INTENT_COOKIE, provider, {
       httpOnly: true,
       sameSite: 'lax',
