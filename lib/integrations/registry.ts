@@ -4,8 +4,10 @@ import { gmailProvider } from './providers/gmail';
 import { googleDriveProvider } from './providers/google-drive';
 import { googleDocsProvider } from './providers/google-docs';
 import { googleSlidesProvider } from './providers/google-slides';
+import { googleMeetProvider } from './providers/google-meet';
 import { calendlyProvider } from './providers/calendly';
 import { slackProvider } from './providers/slack';
+import { zoomProvider } from './providers/zoom';
 import { apolloProvider } from './providers/apollo';
 import { GOOGLE_PROVIDERS } from './constants';
 
@@ -20,8 +22,10 @@ export const providers: Record<string, Provider> = {
   [googleDriveProvider.id]: googleDriveProvider,
   [googleDocsProvider.id]: googleDocsProvider,
   [googleSlidesProvider.id]: googleSlidesProvider,
+  [googleMeetProvider.id]: googleMeetProvider,
   [calendlyProvider.id]: calendlyProvider,
   [slackProvider.id]: slackProvider,
+  [zoomProvider.id]: zoomProvider,
   [apolloProvider.id]: apolloProvider
 };
 

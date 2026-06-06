@@ -63,7 +63,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ provide
 
     const redirectUri = `${getSiteURL()}/api/integrations/${provider}/callback`;
     const token = await exchangeProviderOAuthCode({
-      provider: provider as 'slack' | 'calendly',
+      provider: provider as 'slack' | 'calendly' | 'zoom',
       code,
       redirectUri,
       codeVerifier

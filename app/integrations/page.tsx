@@ -123,30 +123,32 @@ const PROVIDER_ORDER: Provider[] = [
 ];
 
 /**
- * Providers deferred for this release. The Google Workspace file providers need
- * the `drive.readonly` scope granted at sign-in plus Google OAuth-app
- * verification before they can connect; Zoom + Google Meet are catalog entries
- * pending their adapters. All surface as "Coming soon".
+ * The Google Workspace file providers ride the sensitive `drive.readonly` scope
+ * already requested at Google sign-in, but Google requires OAuth-app
+ * verification before that scope can be used in production. They stay "Coming
+ * soon" until the app is verified and `GOOGLE_WORKSPACE_FILES_ENABLED=true` is
+ * set — flipping that flag enables them with no code change.
  */
-const COMING_SOON: ReadonlySet<Provider> = new Set([
+const GOOGLE_FILE_PROVIDERS: ReadonlySet<Provider> = new Set([
   'google_drive',
   'google_docs',
-  'google_slides',
-  'zoom',
-  'google_meet'
+  'google_slides'
 ]);
 
 /**
  * A provider is connectable when its server-side prerequisites are present.
- * Slack/Calendly require their OAuth client id + secret (config-driven, so the
- * card self-upgrades from "Coming soon" the moment the secrets are set);
- * Gmail/Google Calendar ride the existing Google sign-in scopes; Apollo uses a
- * UI-entered API key.
+ * Slack/Calendly/Zoom require their OAuth client id + secret (config-driven, so
+ * the card self-upgrades from "Coming soon" the moment the secrets are set);
+ * Gmail/Google Calendar/Google Meet ride the existing Google sign-in scopes
+ * (Meet reuses Calendar); Apollo uses a UI-entered API key; the Google file
+ * providers are gated behind OAuth-app verification (see above).
  */
 function providerAvailable(provider: Provider): boolean {
-  if (COMING_SOON.has(provider)) return false;
-  if (provider === 'slack' || provider === 'calendly') {
+  if (provider === 'slack' || provider === 'calendly' || provider === 'zoom') {
     return getOAuthProviderConfig(provider) !== null;
+  }
+  if (GOOGLE_FILE_PROVIDERS.has(provider)) {
+    return process.env.GOOGLE_WORKSPACE_FILES_ENABLED === 'true';
   }
   return true;
 }
