@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/queries/auth';
 
 export type TrustLayerKey = 'truth' | 'concept' | 'execution' | 'work';
 
@@ -268,9 +269,7 @@ export async function getTrustRecord(recordId: string): Promise<TrustRecord | nu
   }));
 
   // Viewer permission lookup.
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   let viewerCanApprove = false;
   if (user) {
     const { data: actor } = await supabase

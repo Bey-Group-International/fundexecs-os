@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/queries/auth';
 import type { MemberType } from '@/lib/member-types';
 
 /**
@@ -29,9 +30,7 @@ export interface MemberProfile {
 export async function getMemberProfile(): Promise<MemberProfile | null> {
   const supabase = await createClient();
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return null;
 
   const [{ data: profile }, { data: mp }] = await Promise.all([

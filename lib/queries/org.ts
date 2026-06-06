@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/queries/auth';
 
 /**
  * Resolve the signed-in user's active organization. We pick the first
@@ -12,9 +13,7 @@ export async function getActiveOrg(): Promise<{
 } | null> {
   const supabase = await createClient();
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
 
   if (!user) return null;
 

@@ -1,5 +1,6 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/queries/auth';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import type { MemberType } from '@/lib/member-types';
@@ -561,8 +562,6 @@ export async function getIndividualInvestorDashboardData(
  */
 export async function getDashboardContext() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   return { supabase, userId: user?.id ?? null };
 }

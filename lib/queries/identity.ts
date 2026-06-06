@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
+import { getAuthUser } from '@/lib/queries/auth';
 
 /**
  * The identity the workspace shell renders (sidebar org switcher + user footer,
@@ -36,9 +37,7 @@ export function xpToLevel(xp: number): number {
 export async function getShellIdentity(): Promise<ShellIdentity | null> {
   const supabase = await createClient();
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
 
   if (!user) return null;
 
