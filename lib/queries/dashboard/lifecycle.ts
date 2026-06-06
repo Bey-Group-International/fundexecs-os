@@ -181,8 +181,34 @@ const SOFT_STATUSES = new Set([
  */
 async function loadRaiseProgress(orgId: string, fundProfile: FundProfile): Promise<RaiseProgress> {
   const supabase = await createClient();
-  const { data } = await supabase.from('allocations').select('amount, status').eq('org_id', orgId);
+  const target = fundProfile.targetRaise ?? 0;
+  const pct = (n: number) => (target > 0 ? Math.min(100, Math.round((n / target) * 100)) : 0);
 
+  // Prefer the live capital stack (capital_commitments via capital_stack_summary).
+  // Fall back to the legacy allocations rollup when the stack has no activity yet,
+  // so existing data isn't hidden during the transition.
+  try {
+    const { data, error } = await supabase.rpc('capital_stack_summary', { _org_id: orgId });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!error && row) {
+      const softCircled = Number(row.soft_circle_total ?? 0);
+      const committed = Number(row.committed_total ?? 0) + Number(row.closed_total ?? 0);
+      if (softCircled > 0 || committed > 0) {
+        return {
+          target,
+          softCircled,
+          committed,
+          committedPct: pct(committed),
+          coveragePct: pct(committed + softCircled),
+          source: 'capital_stack_summary'
+        };
+      }
+    }
+  } catch {
+    /* fall through to the allocations rollup */
+  }
+
+  const { data } = await supabase.from('allocations').select('amount, status').eq('org_id', orgId);
   let committed = 0;
   let softCircled = 0;
   for (const a of (data ?? []) as Array<{ amount: number | null; status: string }>) {
@@ -192,17 +218,12 @@ async function loadRaiseProgress(orgId: string, fundProfile: FundProfile): Promi
     else if (SOFT_STATUSES.has(status)) softCircled += amt;
   }
 
-  const target = fundProfile.targetRaise ?? 0;
-  const committedPct = target > 0 ? Math.min(100, Math.round((committed / target) * 100)) : 0;
-  const coveragePct =
-    target > 0 ? Math.min(100, Math.round(((committed + softCircled) / target) * 100)) : 0;
-
   return {
     target,
     softCircled,
     committed,
-    committedPct,
-    coveragePct,
+    committedPct: pct(committed),
+    coveragePct: pct(committed + softCircled),
     source: 'allocations'
   };
 }
