@@ -93,7 +93,7 @@ function FormationBoard({
 
   return (
     <Card>
-      <p className="mb-2 px-1 text-[11px] text-fg-5">Drag a deal between stages to move it.</p>
+      <p className="mb-2 px-1 text-[11px] text-fg-4">Drag a deal between stages to move it.</p>
       <div className="flex gap-3 overflow-x-auto pb-1">
         {stages.map((stage, i) => (
           <div
@@ -113,16 +113,16 @@ function FormationBoard({
           >
             <div className="flex items-center justify-between px-1 pb-2.5">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-[10px] tabular-nums text-fg-5">{i + 1}</span>
+                <span className="font-mono text-[10px] tabular-nums text-fg-4">{i + 1}</span>
                 <span className="text-xs font-semibold text-fg-2">{stage.label}</span>
               </div>
-              <span className="text-[11px] tabular-nums text-fg-5">{stage.deals.length}</span>
+              <span className="text-[11px] tabular-nums text-fg-3">{stage.deals.length}</span>
             </div>
             <div
               className={`flex min-h-20 flex-col gap-2 rounded-xl border border-dashed p-2 transition ${
                 overKey === stage.key
-                  ? 'border-[var(--accent-line)] bg-[var(--accent-soft,rgba(37,99,235,0.07))]'
-                  : 'border-hairline-faint bg-white/[0.02]'
+                  ? 'border-[var(--accent-line)] bg-[var(--accent-soft,rgba(37,99,235,0.12))]'
+                  : 'border-hairline bg-bg-2'
               }`}
             >
               {stage.deals.map((d) => {
@@ -139,7 +139,7 @@ function FormationBoard({
                       e.dataTransfer.effectAllowed = 'move';
                     }}
                     onClick={() => onSelectDeal(d)}
-                    className={`rounded-xl border border-hairline bg-surface-2 p-2.5 text-left transition hover:bg-surface-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-line)] ${
+                    className={`rounded-xl border border-hairline bg-surface-3 p-2.5 text-left transition hover:border-[var(--accent-line)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-line)] ${
                       pending ? 'opacity-50' : 'cursor-grab active:cursor-grabbing'
                     }`}
                     data-testid={`pipeline-deal-${d.id}`}
@@ -151,7 +151,7 @@ function FormationBoard({
                       </span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-[10.5px] text-fg-4">
+                      <span className="min-w-0 truncate text-[10.5px] text-fg-3">
                         {d.amount != null ? `${formatCurrency(d.amount)} · ${d.note}` : d.note}
                       </span>
                       <span
@@ -198,7 +198,7 @@ function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
         }
       />
       {ranked.length === 0 ? (
-        <p className="py-6 text-center text-[12.5px] text-fg-5">
+        <p className="py-6 text-center text-[12.5px] text-fg-4">
           No investors in the pipeline yet.
         </p>
       ) : (
@@ -229,7 +229,7 @@ function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
                     />
                     <div className="min-w-0">
                       <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
-                      <div className="text-[10.5px] text-fg-5">{d.note}</div>
+                      <div className="text-[10.5px] text-fg-4">{d.note}</div>
                     </div>
                   </div>
                   <span>
@@ -270,7 +270,7 @@ function DealFlow({ data }: { data: PipelineData }) {
     <Card>
       <SectionTitle eyebrow="Recent movement · last 30 days" title="Deal flow" />
       {recent.length === 0 ? (
-        <p className="py-6 text-center text-[12.5px] text-fg-5">No deal activity yet.</p>
+        <p className="py-6 text-center text-[12.5px] text-fg-4">No deal activity yet.</p>
       ) : (
         <div className="flex flex-col">
           {recent.map(({ deal, stageLabel, stageKey }) => {
@@ -283,7 +283,7 @@ function DealFlow({ data }: { data: PipelineData }) {
                 <Avatar name={deal.name} size={28} tone={tone === 'danger' ? 'gold' : tone} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold text-fg-1">{deal.name}</div>
-                  <div className="text-[11px] text-fg-4">{deal.note}</div>
+                  <div className="text-[11px] text-fg-3">{deal.note}</div>
                 </div>
                 <Badge tone={tone} className="text-[10px]">
                   {stageLabel}
@@ -321,7 +321,7 @@ function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd
         }
       />
       {partners.length === 0 ? (
-        <p className="py-6 text-center text-[12.5px] text-fg-5">
+        <p className="py-6 text-center text-[12.5px] text-fg-4">
           No partners yet. Add your first service provider to build out the capital stack.
         </p>
       ) : (
@@ -336,7 +336,7 @@ function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd
                 <Avatar name={p.name} size={32} tone={tone} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[12.5px] font-semibold text-fg-1">{p.name}</div>
-                  <div className="truncate text-[11px] capitalize text-fg-4">
+                  <div className="truncate text-[11px] capitalize text-fg-3">
                     {p.role.replace(/_/g, ' ')}
                   </div>
                 </div>

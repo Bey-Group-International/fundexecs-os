@@ -109,7 +109,9 @@ export function Drawer({
       <div
         ref={panelRef}
         className={cn(
-          'relative ml-auto flex h-full w-full flex-col bg-surface-1 shadow-2xl',
+          // Solid panel background — surface-* tokens are translucent and let
+          // the page bleed through, making drawer content hard to read.
+          'relative ml-auto flex h-full w-full flex-col bg-bg-1 shadow-2xl',
           'animate-in slide-in-from-right duration-150',
           widthClass,
           'border-l border-hairline'
