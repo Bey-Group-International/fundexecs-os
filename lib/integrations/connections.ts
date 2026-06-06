@@ -18,45 +18,31 @@ export interface IntegrationSecretRow {
   updated_at: string;
 }
 
-interface IntegrationSecretInsert {
-  connection_id: string;
-  access_token: string | null;
-  refresh_token: string | null;
-  token_type: string | null;
-  expires_at: string | null;
-  updated_at?: string;
+/**
+ * private.integration_secrets is not exposed to the REST API. Read/write it
+ * through the service_role-only SECURITY DEFINER functions in the public schema
+ * (migration 20260606180000). These RPCs aren't in the generated types yet, so
+ * call them through a narrow structural cast.
+ */
+interface SecretRpcClient {
+  rpc(
+    fn: 'get_integration_secret',
+    args: { _connection_id: string }
+  ): Promise<{ data: IntegrationSecretRow[] | null; error: unknown }>;
+  rpc(
+    fn: 'store_integration_secret',
+    args: {
+      _connection_id: string;
+      _access_token: string;
+      _refresh_token: string | null;
+      _token_type: string | null;
+      _expires_at: string | null;
+    }
+  ): Promise<{ data: unknown; error: unknown }>;
 }
 
-interface PrivateResult<T> {
-  data: T | null;
-  error: unknown;
-}
-
-interface PrivateIntegrationSecretsTable {
-  select(columns: string): {
-    eq(
-      column: 'connection_id',
-      value: string
-    ): {
-      maybeSingle(): Promise<PrivateResult<IntegrationSecretRow>>;
-    };
-  };
-  upsert(
-    row: IntegrationSecretInsert,
-    options: { onConflict: string }
-  ): {
-    select(columns: string): {
-      single(): Promise<PrivateResult<IntegrationSecretRow>>;
-    };
-  };
-}
-
-interface PrivateSchemaClient {
-  from(table: 'integration_secrets'): PrivateIntegrationSecretsTable;
-}
-
-function privateSchema(admin: Admin): PrivateSchemaClient {
-  return (admin as unknown as { schema(schema: 'private'): PrivateSchemaClient }).schema('private');
+function secretRpc(admin: Admin): SecretRpcClient {
+  return admin as unknown as SecretRpcClient;
 }
 
 export async function getFirstOrgId(admin: Admin, userId: string): Promise<string | null> {
@@ -141,14 +127,12 @@ export async function getIntegrationSecret(
   admin: Admin,
   connectionId: string
 ): Promise<IntegrationSecretRow | null> {
-  const { data, error } = await privateSchema(admin)
-    .from('integration_secrets')
-    .select('connection_id, access_token, refresh_token, token_type, expires_at, updated_at')
-    .eq('connection_id', connectionId)
-    .maybeSingle();
+  const { data, error } = await secretRpc(admin).rpc('get_integration_secret', {
+    _connection_id: connectionId
+  });
 
   if (error) throw error;
-  return data;
+  return data?.[0] ?? null;
 }
 
 export async function storeIntegrationSecret({
@@ -167,23 +151,24 @@ export async function storeIntegrationSecret({
   expiresAt?: string | null;
 }): Promise<IntegrationSecretRow> {
   const existing = await getIntegrationSecret(admin, connectionId);
-  const row: IntegrationSecretInsert = {
+  const resolved = {
     connection_id: connectionId,
     access_token: accessToken,
     refresh_token: refreshToken === undefined ? (existing?.refresh_token ?? null) : refreshToken,
     token_type: tokenType ?? existing?.token_type ?? null,
-    expires_at: expiresAt === undefined ? (existing?.expires_at ?? null) : expiresAt,
-    updated_at: new Date().toISOString()
+    expires_at: expiresAt === undefined ? (existing?.expires_at ?? null) : expiresAt
   };
 
-  const { data, error } = await privateSchema(admin)
-    .from('integration_secrets')
-    .upsert(row, { onConflict: 'connection_id' })
-    .select('connection_id, access_token, refresh_token, token_type, expires_at, updated_at')
-    .single();
+  const { error } = await secretRpc(admin).rpc('store_integration_secret', {
+    _connection_id: resolved.connection_id,
+    _access_token: resolved.access_token,
+    _refresh_token: resolved.refresh_token,
+    _token_type: resolved.token_type,
+    _expires_at: resolved.expires_at
+  });
 
-  if (error || !data) throw error ?? new Error('Could not store integration secret');
-  return data;
+  if (error) throw error;
+  return { ...resolved, updated_at: new Date().toISOString() };
 }
 
 export function isSecretExpired(secret: IntegrationSecretRow, graceMs = 5 * 60 * 1000): boolean {
