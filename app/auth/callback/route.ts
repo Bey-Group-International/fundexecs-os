@@ -90,29 +90,9 @@ export async function GET(request: NextRequest) {
       ? requestedNext
       : '/command-center';
 
-  // TEMP diagnostic — host + which auth cookies reach the exchange. Remove once
-  // the verifier-loss root cause is confirmed.
-  {
-    const names = request.cookies.getAll().map((c) => c.name);
-    console.error(
-      '[auth/callback:diag2]',
-      JSON.stringify({
-        host: request.headers.get('host'),
-        origin,
-        hasCode: !!code,
-        verifierCookies: names.filter((n) => n.includes('code-verifier') || n.includes('verifier')),
-        sbCookies: names.filter((n) => n.startsWith('sb-')),
-        intent: request.cookies.get(INTEGRATION_GOOGLE_INTENT_COOKIE)?.value ?? null
-      })
-    );
-  }
-
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      console.error('[auth/callback:diag2] exchange error:', error.message);
-    }
     if (!error) {
       const integrationResult = await persistGoogleIntegration(request).catch((err) => ({
         attempted: true as const,
@@ -127,19 +107,7 @@ export async function GET(request: NextRequest) {
       response.cookies.delete(INTEGRATION_GOOGLE_INTENT_COOKIE);
       return response;
     }
-    // TEMP: surface the cookie/host context in the redirect URL so it can be
-    // captured from a paste (runtime-log table truncates it). Remove after RCA.
-    const diag = [
-      `host=${request.headers.get('host')}`,
-      `supabaseUrl=${process.env.NEXT_PUBLIC_SUPABASE_URL}`,
-      `cookies=${request.cookies
-        .getAll()
-        .map((c) => c.name)
-        .join('|')}`
-    ].join(';;');
-    return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(error.message)}&d=${encodeURIComponent(diag)}`
-    );
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
   }
 
   // Pass through any provider error (e.g. flow_state_already_used) to /login.
