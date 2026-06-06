@@ -77,7 +77,12 @@ export async function updateSession(request: NextRequest) {
     pathname === '/robots.txt' ||
     pathname === '/sitemap.xml';
   const isOnboarding = pathname === '/onboarding' || pathname.startsWith('/onboarding/');
-  const isPublic = pathname === '/' || pathname === '/login' || pathname.startsWith('/auth/');
+  const isPublic =
+    pathname === '/' ||
+    pathname === '/login' ||
+    pathname === '/privacy' ||
+    pathname === '/terms' ||
+    pathname.startsWith('/auth/');
   const isAllowedApi =
     pathname === '/api/ask-earn' ||
     pathname === '/api/earn/profile-suggest' ||

@@ -19,6 +19,7 @@ import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { ConnectButton } from '@/components/integrations/ConnectButton';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getIntegrationConnections, type ProviderConnection } from '@/lib/queries/integrations';
+import { getOAuthProviderConfig } from '@/lib/integrations/oauth';
 
 export const metadata: Metadata = { title: 'Integrations' };
 
@@ -103,11 +104,38 @@ const PROVIDER_ORDER: Provider[] = [
   'apollo'
 ];
 
+/**
+ * Providers deferred for this release. The Google Workspace file providers need
+ * the `drive.readonly` scope granted at sign-in plus Google OAuth-app
+ * verification before they can connect, so they surface as "Coming soon".
+ */
+const COMING_SOON: ReadonlySet<Provider> = new Set([
+  'google_drive',
+  'google_docs',
+  'google_slides'
+]);
+
+/**
+ * A provider is connectable when its server-side prerequisites are present.
+ * Slack/Calendly require their OAuth client id + secret (config-driven, so the
+ * card self-upgrades from "Coming soon" the moment the secrets are set);
+ * Gmail/Google Calendar ride the existing Google sign-in scopes; Apollo uses a
+ * UI-entered API key.
+ */
+function providerAvailable(provider: Provider): boolean {
+  if (COMING_SOON.has(provider)) return false;
+  if (provider === 'slack' || provider === 'calendly') {
+    return getOAuthProviderConfig(provider) !== null;
+  }
+  return true;
+}
+
 interface IntegrationView {
   provider: Provider;
   status: ConnectionStatus;
   external_account: string | null;
   last_synced_at: string | null;
+  available: boolean;
 }
 
 function syncedLabel(iso: string | null): string {
@@ -165,6 +193,7 @@ function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const Icon = meta.icon;
   const connected = conn.status === 'connected';
   const error = conn.status === 'error';
+  const available = conn.available;
 
   return (
     <Card className="flex flex-col gap-4 p-5">
@@ -172,7 +201,9 @@ function IntegrationCard({ conn }: { conn: IntegrationView }) {
         <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl border border-hairline bg-surface-2 text-fg-2">
           <Icon size={20} strokeWidth={1.9} aria-hidden />
         </span>
-        {connected ? (
+        {!available ? (
+          <Badge tone="info">Coming soon</Badge>
+        ) : connected ? (
           <Badge tone="success" dot>
             Connected
           </Badge>
@@ -205,10 +236,16 @@ function IntegrationCard({ conn }: { conn: IntegrationView }) {
             <div className="text-[12px] text-fg-5">No account linked</div>
           )}
           <div className="text-[11px] tabular-nums text-fg-5">
-            {syncedLabel(conn.last_synced_at)}
+            {available ? syncedLabel(conn.last_synced_at) : 'Available soon'}
           </div>
         </div>
-        <ConnectButton provider={conn.provider} connected={connected} />
+        {available ? (
+          <ConnectButton provider={conn.provider} connected={connected} />
+        ) : (
+          <span className="rounded-xl border border-hairline bg-surface-2 px-3 py-1.5 text-[12px] font-medium text-fg-5">
+            Coming soon
+          </span>
+        )}
       </div>
     </Card>
   );
@@ -223,7 +260,8 @@ function mergeConnections(rows: ProviderConnection[]): IntegrationView[] {
       provider,
       status: row?.status ?? 'disconnected',
       external_account: row?.external_account ?? null,
-      last_synced_at: row?.last_synced_at ?? null
+      last_synced_at: row?.last_synced_at ?? null,
+      available: providerAvailable(provider)
     };
   });
 }
