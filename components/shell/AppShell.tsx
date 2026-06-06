@@ -13,6 +13,7 @@ import {
   Bell,
   Search,
   Settings,
+  Shield,
   ChevronsUpDown,
   Sun,
   Moon,
@@ -49,6 +50,7 @@ const NAV: NavItem[] = [
   { href: '/integrations', label: 'Integrations', icon: Plug },
   { href: '/strategy', label: 'Strategy', icon: Target },
   { href: '/notifications', label: 'Notifications', icon: Bell, dynamicBadge: 'unread' },
+  { href: '/admin', label: 'Admin', icon: Shield },
   { href: '/settings', label: 'Settings', icon: Settings }
 ];
 
