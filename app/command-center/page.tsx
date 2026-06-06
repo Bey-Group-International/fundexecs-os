@@ -39,6 +39,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function CommandCenterPage() {
   const identity = await getShellIdentity();
+  console.log(`[ccdiag] identity=${identity ? 'yes' : 'NULL'}`);
   if (!identity) redirect('/login?redirectedFrom=%2Fcommand-center');
 
   const org = await getActiveOrg();
@@ -62,6 +63,7 @@ export default async function CommandCenterPage() {
   }
 
   const { supabase, userId } = await getDashboardContext();
+  console.log(`[ccdiag] org=${org ? 'yes' : 'no'} userId=${userId ? 'yes' : 'NULL'}`);
   if (!userId) redirect('/login?redirectedFrom=%2Fcommand-center');
 
   const common = await getDashboardCommon(
