@@ -392,6 +392,18 @@ function Footer() {
               How it works
             </SmoothScrollLink>
             <Link
+              href="/privacy"
+              className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
+            >
+              Privacy
+            </Link>
+            <Link
+              href="/terms"
+              className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
+            >
+              Terms
+            </Link>
+            <Link
               href="/login"
               className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
             >

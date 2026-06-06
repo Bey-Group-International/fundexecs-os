@@ -14,6 +14,25 @@ concrete **new features / components / functions** added.
 
 ## 2026-06-06
 
+### #62 — Private-beta release prep _(Claude)_
+
+Integration gating, legal pages, and release tracking for the private-beta launch.
+
+**Added — pages/components:** `app/privacy/page.tsx`, `app/terms/page.tsx`,
+`components/legal/LegalShell.tsx` (public, server-rendered; linked from the
+landing footer). **Added — docs:** `RELEASE_CHECKLIST.md` (every beta item with
+owner + status). **Changed:**
+
+- `app/integrations/page.tsx` — config-driven availability: each provider shows
+  `Connect` only when its server-side prerequisites exist (`providerAvailable()`
+  via `getOAuthProviderConfig`), else `Coming soon`. Slack/Calendly self-upgrade
+  once their secrets are set; Gmail/Calendar live via Google sign-in; Apollo via
+  UI key; Google Drive/Docs/Slides deferred (need `drive.readonly` + Google
+  verification).
+- `lib/supabase/middleware.ts` — `/privacy` + `/terms` treated as public routes.
+- `app/page.tsx` — Privacy/Terms links in the footer.
+- `.env.example` — corrected to the real integration OAuth vars + `TEST_USER_PASSWORD`.
+
 ### #60 — Consolidate multiple permissive RLS policies _(Claude · perf)_
 
 Clears the last 4 performance WARNs (`multiple_permissive_policies`) on
