@@ -576,5 +576,8 @@ export {
   type DashboardData,
   type StageKpi,
   type RaiseProgress,
-  type DashboardAction
+  type DashboardAction,
+  type ExecutionScore,
+  type MajorAlert,
+  type ActivityItem
 } from './lifecycle';

@@ -2,6 +2,7 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { getCommandCenterData, type CommandCenterData } from '@/lib/queries/command-center';
 import { getFundProfile, type FundProfile } from '@/lib/queries/fund-profile';
+import { getShellIdentity } from '@/lib/queries/identity';
 import {
   computeLifecycleStageResult,
   computeReadinessScore,
@@ -76,6 +77,39 @@ export interface DashboardAction {
   tone: 'azure' | 'gold' | 'success' | 'warning';
 }
 
+/** Front-facing Execution Score = Chain of Trust + gamification. */
+export interface ExecutionScore {
+  /** 0–100 weighted chain-of-trust execution score (drives the gauge). */
+  score: number;
+  /** Per-layer completion, 0–100 each. */
+  layers: { truth: number; concept: number; execution: number; work: number };
+  /** Gamification — accumulated XP and derived level. */
+  xp: number;
+  level: number;
+  /** Consecutive-active-day streak. 0 until streak tracking lands (seam). */
+  streak: number;
+}
+
+/** A high-priority item for the dashboard's Major Alerts. */
+export interface MajorAlert {
+  id: string;
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  detail: string;
+  href: string;
+}
+
+/** A recent activity entry — includes work the AI team did autonomously. */
+export interface ActivityItem {
+  id: string;
+  kind: 'trust' | 'diligence' | 'system';
+  title: string;
+  /** ISO timestamp. */
+  at: string;
+  /** 'Earn', the AI committee, a teammate, or 'You'. */
+  actor: string;
+}
+
 /** The full lifecycle-aware Dashboard payload. */
 export interface DashboardData {
   /** Current lifecycle stage (one of the seven). */
@@ -100,6 +134,21 @@ export interface DashboardData {
 
   /** Earn's top 3 lifecycle-aware actions. */
   topActions: DashboardAction[];
+
+  /** Front-facing Execution Score (Chain of Trust + gamification). */
+  executionScore: ExecutionScore;
+
+  /** High-priority items needing attention now. */
+  majorAlerts: MajorAlert[];
+
+  /** The single highest-leverage move (headline of `topActions`). */
+  nextBestAction: DashboardAction | null;
+
+  /** Today's prioritized action list (the daily operating loop). */
+  dailyCommand: DashboardAction[];
+
+  /** Recent activity, incl. autonomous AI-team work. */
+  activityFeed: ActivityItem[];
 
   /** Fund-profile credibility surfaced on the dashboard side rail. */
   fundProfile: {
@@ -502,6 +551,140 @@ function buildTopActions(
 }
 
 /* ---------------------------------------------------------------------------
+ * Command-center surfaces — execution score, alerts, activity feed.
+ * ------------------------------------------------------------------------- */
+
+/** Execution Score = weighted Chain-of-Trust completion + XP/level. */
+function buildExecutionScore(
+  layers: { truth: number; concept: number; execution: number; work: number },
+  identity: { xp: number; level: number } | null
+): ExecutionScore {
+  // Weighted toward later layers — execution & work prove you ship, not just plan.
+  const score = Math.round(
+    0.2 * layers.truth + 0.25 * layers.concept + 0.3 * layers.execution + 0.25 * layers.work
+  );
+  return {
+    score,
+    layers,
+    xp: identity?.xp ?? 0,
+    level: identity?.level ?? 1,
+    streak: 0 // SEAM: wire to active-day streak tracking when it lands.
+  };
+}
+
+/** Derive the few high-priority alerts from already-loaded signals. */
+function buildMajorAlerts(
+  fundProfile: FundProfile,
+  readinessScore: number,
+  raiseProgress: RaiseProgress,
+  pipeline: { contacted: number; total: number },
+  unreadCount: number
+): MajorAlert[] {
+  const alerts: MajorAlert[] = [];
+  for (const gap of fundProfile.gaps.filter((g) => g.severity === 'missing').slice(0, 2)) {
+    alerts.push({
+      id: `gap-${gap.field}`,
+      severity: 'critical',
+      title: `Missing: ${gap.label}`,
+      detail: gap.reason,
+      href: '/settings'
+    });
+  }
+  if (readinessScore < 50) {
+    alerts.push({
+      id: 'readiness-low',
+      severity: 'warning',
+      title: 'Fund readiness below the institutional bar',
+      detail: `Readiness is ${readinessScore}/100 — close the gaps before heavy LP outreach.`,
+      href: '/command-center'
+    });
+  }
+  if (raiseProgress.target > 0 && raiseProgress.coveragePct < 100 && pipeline.contacted < 3) {
+    alerts.push({
+      id: 'pipeline-thin',
+      severity: 'warning',
+      title: 'LP pipeline is thin',
+      detail: 'Add and contact more targets to build coverage toward your raise target.',
+      href: '/pipeline'
+    });
+  }
+  if (unreadCount > 0) {
+    alerts.push({
+      id: 'unread',
+      severity: 'info',
+      title: `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`,
+      detail: 'Catch up on what changed since your last session.',
+      href: '/notifications'
+    });
+  }
+  return alerts.slice(0, 4);
+}
+
+function humanizeAction(action: string): string {
+  return action.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Recent activity feed: Chain-of-Trust events + diligence runs, merged and
+ * sorted newest-first. RLS-scoped; degrades to an empty feed on any read error
+ * (e.g. a table not yet readable in a given environment).
+ */
+async function loadActivityFeed(orgId: string): Promise<ActivityItem[]> {
+  const supabase = await createClient();
+  const items: ActivityItem[] = [];
+
+  try {
+    const { data: events } = await supabase
+      .from('trust_events')
+      .select('id, action, created_at')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(8);
+    for (const e of (events ?? []) as Array<{ id: string; action: string; created_at: string }>) {
+      items.push({
+        id: `trust-${e.id}`,
+        kind: 'trust',
+        title: humanizeAction(e.action),
+        at: e.created_at,
+        actor: 'Earn'
+      });
+    }
+  } catch {
+    /* trust_events unreadable here — skip */
+  }
+
+  try {
+    const { data: runs } = await supabase
+      .from('diligence_runs')
+      .select('id, status, conviction, created_at')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    for (const r of (runs ?? []) as Array<{
+      id: string;
+      status: string;
+      conviction: number | null;
+      created_at: string;
+    }>) {
+      items.push({
+        id: `dili-${r.id}`,
+        kind: 'diligence',
+        title:
+          r.status === 'complete'
+            ? `Diligence committee completed${r.conviction != null ? ` — conviction ${r.conviction}/100` : ''}`
+            : `Diligence run ${r.status}`,
+        at: r.created_at,
+        actor: 'AI committee'
+      });
+    }
+  } catch {
+    /* diligence_runs unreadable here — skip */
+  }
+
+  return items.sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 10);
+}
+
+/* ---------------------------------------------------------------------------
  * Entry point
  * ------------------------------------------------------------------------- */
 
@@ -517,13 +700,16 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
   // need for the trust lookup, so it runs first; the rest run in parallel.
   const fundProfile = await getFundProfile(orgId);
 
-  const [cmd, trust, pipeline, materialsReadiness, raiseProgress] = await Promise.all([
-    getCommandCenterData(orgId),
-    loadTrustProgress(orgId, fundProfile.managerUserId),
-    loadPipelineSignals(orgId),
-    loadMaterialsReadiness(orgId),
-    loadRaiseProgress(orgId, fundProfile)
-  ]);
+  const [cmd, trust, pipeline, materialsReadiness, raiseProgress, identity, activityFeed] =
+    await Promise.all([
+      getCommandCenterData(orgId),
+      loadTrustProgress(orgId, fundProfile.managerUserId),
+      loadPipelineSignals(orgId),
+      loadMaterialsReadiness(orgId),
+      loadRaiseProgress(orgId, fundProfile),
+      getShellIdentity(),
+      loadActivityFeed(orgId)
+    ]);
 
   const inputs: LifecycleInputs = {
     profileCompleteness: fundProfile.completenessScore,
@@ -554,6 +740,19 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
   const stageResult = computeLifecycleStageResult(inputs);
   const readiness = computeReadinessScore(inputs);
 
+  const topActions = buildTopActions(stageResult.stage, fundProfile, raiseProgress, pipeline);
+  const executionScore = buildExecutionScore(
+    { truth: trust.truth, concept: trust.concept, execution: trust.execution, work: trust.work },
+    identity
+  );
+  const majorAlerts = buildMajorAlerts(
+    fundProfile,
+    readiness.score,
+    raiseProgress,
+    { contacted: pipeline.contacted, total: pipeline.total },
+    identity?.unreadCount ?? 0
+  );
+
   return {
     stage: stageResult.stage,
     stageLabel: stageResult.label,
@@ -563,7 +762,12 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     readinessBreakdown: readiness.breakdown,
     stageKpis: buildStageKpis(stageResult.stage, cmd, fundProfile, raiseProgress, pipeline),
     raiseProgress,
-    topActions: buildTopActions(stageResult.stage, fundProfile, raiseProgress, pipeline),
+    topActions,
+    executionScore,
+    majorAlerts,
+    nextBestAction: topActions[0] ?? null,
+    dailyCommand: topActions,
+    activityFeed,
     fundProfile: {
       fundName: fundProfile.fundName,
       completenessScore: fundProfile.completenessScore,
