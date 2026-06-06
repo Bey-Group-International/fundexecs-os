@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getSiteURL } from '@/lib/site-url';
+import { signInWithPasswordAction } from './actions';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { TeamAvatar, getCOO } from '@/lib/team';
 
@@ -24,36 +25,24 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Already signed in? Don't strand the user on the login form — send them into
-  // the app (or back to wherever they were headed). The middleware handles the
-  // onboarding gate from there.
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) window.location.replace(redirectedFrom);
-    });
-  }, [redirectedFrom]);
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
 
-    const supabase = createClient();
-
     if (mode === 'signin') {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        setMessage(error.message);
+      // Sign in on the SERVER so the session is written to server-readable
+      // cookies (same path as the Google callback). On success the action
+      // redirects; only errors return here.
+      const result = await signInWithPasswordAction(redirectedFrom, email, password);
+      if (result?.error) {
+        setMessage(result.error);
         setLoading(false);
-        return;
       }
-      // Hard navigation so the freshly-set auth cookies are sent on the next
-      // request (a client router push races the cookie write and bounces back).
-      window.location.assign(redirectedFrom);
       return;
     }
 
+    const supabase = createClient();
     const { error } = await supabase.auth.signUp({
       email,
       password,
