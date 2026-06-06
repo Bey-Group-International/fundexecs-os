@@ -15,6 +15,7 @@ A private-markets operating system with a 15-AI specialist team
 | Phase 4 | Core-loop persistence — wire Chain of Trust drawer + Supabase Storage buckets, server actions for Pipeline / Strategy / Notifications / Admin / Settings | ⏳ NOT STARTED (next) |
 | Phase 5 | Mocked integrations connect path | ⏳ NOT STARTED |
 | Phase 6 | Polish + re-embed brains in `lib/ai/brains.ts` | ⏳ NOT STARTED |
+| Emergent UI lane (sprint, 2026-02) | UnifiedSideRail extraction · `/lp-room` shell · flagship `InvestmentFirmLayout` rebuild · live-site voice + 4-step lifecycle · `--cta-gradient` / `--shadow-cta` token promotion | ✅ DONE 2026-02-06 (UI-only, no schema, no `lib/team` touch) |
 
 ## Test surface (live `emityvdaeiqxtpxdhyky`)
 
@@ -38,6 +39,11 @@ snapshot live in `/app/memory/test_credentials.md`.
 
 - **P0** Wait on the comprehensive tester sweep against Deliverables A–D
   before starting Phase 4.
+- **P0** Backend wiring of the Emergent UI lane: replace
+  `components/lp-room/fixtures.ts` with real Supabase queries against the
+  `LpRoomData` contract; wire `InvestmentFirmLayout` optional flagship
+  props (`briefingPriorities`, `synergyAlerts`,
+  `lifecycleActiveIndex/Pct`, `fundReadinessPct`) to live data.
 - **P1** Phase 4: Chain of Trust drawer + Supabase Storage buckets +
   server actions across Pipeline, Strategy, Notifications, Admin,
   Settings.
