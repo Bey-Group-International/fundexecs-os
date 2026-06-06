@@ -3,7 +3,8 @@ export const GOOGLE_PROVIDER_IDS = [
   'google_calendar',
   'google_drive',
   'google_docs',
-  'google_slides'
+  'google_slides',
+  'google_meet'
 ] as const;
 
 export type GoogleProviderId = (typeof GOOGLE_PROVIDER_IDS)[number];
@@ -20,7 +21,7 @@ export const GOOGLE_SCOPE_STRING = GOOGLE_SCOPES.join(' ');
 
 export const INTEGRATION_GOOGLE_INTENT_COOKIE = 'fundexecs.integration.google_provider';
 
-export const OAUTH_PROVIDER_IDS = ['slack', 'calendly'] as const;
+export const OAUTH_PROVIDER_IDS = ['slack', 'calendly', 'zoom'] as const;
 
 export type OAuthProviderId = (typeof OAUTH_PROVIDER_IDS)[number];
 

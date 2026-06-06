@@ -10,9 +10,13 @@ const SLACK_AUTH_URL = 'https://slack.com/oauth/v2/authorize';
 const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
 const CALENDLY_AUTH_URL = 'https://auth.calendly.com/oauth/authorize';
 const CALENDLY_TOKEN_URL = 'https://auth.calendly.com/oauth/token';
+const ZOOM_AUTH_URL = 'https://zoom.us/oauth/authorize';
+const ZOOM_TOKEN_URL = 'https://zoom.us/oauth/token';
+
+type ProviderOAuthId = 'slack' | 'calendly' | 'zoom';
 
 interface OAuthProviderConfig {
-  provider: 'slack' | 'calendly';
+  provider: ProviderOAuthId;
   clientId: string;
   clientSecret: string;
   scopes: string[];
@@ -74,6 +78,23 @@ export function getOAuthProviderConfig(provider: string): OAuthProviderConfig | 
     };
   }
 
+  if (provider === 'zoom') {
+    const clientId = resolveServerEnv('ZOOM_CLIENT_ID');
+    const clientSecret = resolveServerEnv('ZOOM_CLIENT_SECRET');
+    if (!clientId || !clientSecret) return null;
+    return {
+      provider,
+      clientId,
+      clientSecret,
+      // Granular OAuth scopes: read the user + their meetings/registrants.
+      scopes: splitScopes(process.env.ZOOM_SCOPES, [
+        'user:read:user',
+        'meeting:read:list_meetings',
+        'meeting:read:list_registrants'
+      ])
+    };
+  }
+
   return null;
 }
 
@@ -121,7 +142,8 @@ export function buildOAuthAuthorizationUrl({
     params.set('code_challenge_method', 'S256');
     params.set('code_challenge', codeChallenge);
   }
-  return `${CALENDLY_AUTH_URL}?${params}`;
+  const authBase = config.provider === 'zoom' ? ZOOM_AUTH_URL : CALENDLY_AUTH_URL;
+  return `${authBase}?${params}`;
 }
 
 export async function exchangeProviderOAuthCode({
@@ -130,7 +152,7 @@ export async function exchangeProviderOAuthCode({
   redirectUri,
   codeVerifier
 }: {
-  provider: 'slack' | 'calendly';
+  provider: ProviderOAuthId;
   code: string;
   redirectUri: string;
   codeVerifier?: string;
@@ -142,6 +164,9 @@ export async function exchangeProviderOAuthCode({
 
   if (provider === 'slack') {
     return exchangeSlackCode(config, code, redirectUri);
+  }
+  if (provider === 'zoom') {
+    return exchangeZoomCode(config, code, redirectUri);
   }
   return exchangeCalendlyCode(config, code, redirectUri, codeVerifier);
 }
@@ -268,6 +293,73 @@ async function exchangeCalendlyCode(
   };
 }
 
+async function exchangeZoomCode(
+  config: OAuthProviderConfig,
+  code: string,
+  redirectUri: string
+): Promise<ExchangedProviderToken> {
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri
+  });
+  const res = await fetch(ZOOM_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString(
+        'base64'
+      )}`
+    },
+    body
+  });
+  const json = (await res.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    token_type?: string;
+    expires_in?: number;
+    scope?: string;
+    reason?: string;
+    error?: string;
+  };
+
+  if (!res.ok || !json.access_token) {
+    throw new Error(`Zoom OAuth error: ${json.reason ?? json.error ?? res.statusText}`);
+  }
+
+  const meRes = await fetch('https://api.zoom.us/v2/users/me', {
+    headers: { Authorization: `Bearer ${json.access_token}` }
+  });
+  const me = (await meRes.json().catch(() => null)) as {
+    id?: string;
+    email?: string;
+    account_id?: string;
+    first_name?: string;
+    last_name?: string;
+  } | null;
+  const user = meRes.ok ? me : null;
+  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
+
+  return {
+    accessToken: json.access_token,
+    refreshToken: json.refresh_token ?? null,
+    tokenType: json.token_type ?? 'bearer',
+    expiresAt:
+      typeof json.expires_in === 'number'
+        ? new Date(Date.now() + json.expires_in * 1000).toISOString()
+        : null,
+    scopes: splitScopes(json.scope, config.scopes),
+    externalAccount: user?.email ?? user?.id ?? 'Zoom account',
+    metadata: {
+      auth_type: 'oauth',
+      zoom_user_id: user?.id ?? null,
+      zoom_account_id: user?.account_id ?? null,
+      user_email: user?.email ?? null,
+      user_name: name || null
+    }
+  };
+}
+
 export async function refreshProviderToken({
   provider,
   secret
@@ -312,6 +404,46 @@ export async function refreshProviderToken({
     return {
       accessToken: json.access_token,
       refreshToken: secret.refresh_token,
+      tokenType: json.token_type ?? secret.token_type,
+      expiresAt:
+        typeof json.expires_in === 'number'
+          ? new Date(Date.now() + json.expires_in * 1000).toISOString()
+          : null
+    };
+  }
+
+  if (provider === 'zoom') {
+    const config = getOAuthProviderConfig('zoom');
+    if (!config) return null;
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: secret.refresh_token
+    });
+    const res = await fetch(ZOOM_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString(
+          'base64'
+        )}`
+      },
+      body
+    });
+    const json = (await res.json()) as {
+      access_token?: string;
+      refresh_token?: string;
+      token_type?: string;
+      expires_in?: number;
+      reason?: string;
+      error?: string;
+    };
+    if (!res.ok || !json.access_token) {
+      throw new Error(`Zoom token refresh failed: ${json.reason ?? json.error ?? res.statusText}`);
+    }
+    return {
+      accessToken: json.access_token,
+      // Zoom rotates refresh tokens on every refresh — persist the new one.
+      refreshToken: json.refresh_token ?? secret.refresh_token,
       tokenType: json.token_type ?? secret.token_type,
       expiresAt:
         typeof json.expires_in === 'number'

@@ -16,16 +16,23 @@ export const metadata: Metadata = {
   },
   description,
   applicationName: 'FundExecs OS',
+  icons: {
+    icon: '/earn-coin.png',
+    shortcut: '/earn-coin.png',
+    apple: '/earn-coin.png'
+  },
   openGraph: {
     title,
     description,
     type: 'website',
-    siteName: 'FundExecs OS'
+    siteName: 'FundExecs OS',
+    images: [{ url: '/earn-coin.png', width: 1024, height: 1024, alt: 'FundExecs OS' }]
   },
   twitter: {
     card: 'summary_large_image',
     title,
-    description
+    description,
+    images: ['/earn-coin.png']
   },
   robots: {
     index: true,
