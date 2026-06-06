@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowRight,
   Mail,
@@ -11,6 +11,8 @@ import {
   Users,
   Activity,
   GitBranch,
+  Search,
+  X,
   type LucideIcon
 } from 'lucide-react';
 import {
@@ -18,6 +20,7 @@ import {
   Badge,
   Button,
   Card,
+  Input,
   ProgressBar,
   SectionTitle,
   SegTabs,
@@ -254,9 +257,20 @@ export interface ConnectionsViewProps {
 }
 
 export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
+  const searchParams = useSearchParams();
+  // The top-nav search routes here as `/connections?q=…`; seed the in-page
+  // search from it and keep them in sync when the URL query changes.
+  const urlQuery = searchParams.get('q') ?? '';
   const [sort, setSort] = useState<SortKey>('strength');
   const [filter, setFilter] = useState<string>('all');
+  const [query, setQuery] = useState(urlQuery);
   const [activeContact, setActiveContact] = useState<ContactDetailData | null>(null);
+
+  useEffect(() => {
+    // Defer to satisfy the no-set-state-in-effect rule; only fires when the
+    // URL's `q` actually changes (e.g. a fresh top-nav search on this page).
+    queueMicrotask(() => setQuery(urlQuery));
+  }, [urlQuery]);
 
   function openContact(row: ConnectionRow) {
     setActiveContact({
@@ -316,7 +330,14 @@ export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
   }, [rows, intros]);
 
   const visibleRows = useMemo<ConnectionRow[]>(() => {
-    const base = rows.filter((r) => filter === 'all' || normalizeStatus(r.status) === filter);
+    const q = query.trim().toLowerCase();
+    const base = rows.filter((r) => {
+      if (filter !== 'all' && normalizeStatus(r.status) !== filter) return false;
+      if (!q) return true;
+      return [r.full_name, r.company, r.title, r.primary_email]
+        .filter(Boolean)
+        .some((field) => (field as string).toLowerCase().includes(q));
+    });
     const sorted = [...base];
     sorted.sort((a, b) => {
       if (sort === 'strength') return b.strength - a.strength;
@@ -328,7 +349,7 @@ export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
       return a.full_name.localeCompare(b.full_name);
     });
     return sorted;
-  }, [rows, sort, filter]);
+  }, [rows, sort, filter, query]);
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -347,13 +368,39 @@ export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
               <SegTabs tabs={SORT_TABS} active={sort} onChange={(id) => setSort(id as SortKey)} />
             }
           />
-          <div className="mb-4">
+          <div className="mb-4 flex flex-col gap-3">
+            <div className="relative">
+              <Input
+                icon={Search}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name, company, title or email…"
+                aria-label="Search connections"
+                data-testid="connections-search"
+                className={query ? 'pr-9' : undefined}
+              />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-fg-4 transition hover:bg-surface-3 hover:text-fg-2"
+                >
+                  <X size={14} strokeWidth={2} aria-hidden />
+                </button>
+              ) : null}
+            </div>
             <SegTabs tabs={STATUS_TABS} active={filter} onChange={setFilter} />
           </div>
           {visibleRows.length === 0 ? (
             <Card className="p-8 text-center">
               <p className="text-[12.5px] text-fg-4">
-                {rows.length === 0 ? 'No connections yet.' : 'No connections match this filter.'}
+                {rows.length === 0
+                  ? 'No connections yet.'
+                  : query.trim()
+                    ? `No connections match “${query.trim()}”.`
+                    : 'No connections match this filter.'}
               </p>
             </Card>
           ) : (
