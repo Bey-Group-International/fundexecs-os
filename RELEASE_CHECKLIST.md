@@ -17,8 +17,7 @@ verification · ⬜ not started. Owner: **Claude** (code/docs in-repo) vs **You*
 
 - ✅ RLS on all tables; 0 WARN-level performance advisors
 - ✅ Security advisors resolved except the items below
-- 🟡 **Leaked-password protection** — _You_: Dashboard → Authentication →
-  Providers → Email → enable "Prevent use of leaked passwords"
+- ✅ **Leaked-password protection** — enabled (advisor WARN cleared)
 - ⬜ **Full `database.types.ts` regen** — _Claude_: needs a `SUPABASE_ACCESS_TOKEN`
   to drop the remaining casts (low priority; cosmetic)
 
@@ -37,10 +36,10 @@ verification · ⬜ not started. Owner: **Claude** (code/docs in-repo) vs **You*
 
 - ✅ Backend wired end-to-end for all 8 providers (#56/#59)
 - ✅ UI gates each card on server-side config (no broken buttons)
-- 🟡 **Slack** — secrets set in Vercel ✅; _You_: confirm the OAuth app's redirect
-  URI is `https://www.fundexecs.com/api/integrations/slack/callback`
-- 🟡 **Calendly** — secrets set in Vercel ✅; _You_: confirm redirect URI
-  `https://www.fundexecs.com/api/integrations/calendly/callback`
+- ✅ **Slack** — secrets in Vercel + redirect URI registered
+  (`https://www.fundexecs.com/api/integrations/slack/callback`)
+- ✅ **Calendly** — secrets in Vercel + redirect URI registered
+  (`https://www.fundexecs.com/api/integrations/calendly/callback`)
 - ✅ **Gmail / Google Calendar** — live via Google sign-in scopes
 - ✅ **Apollo** — live (API key entered in the UI)
 - 🟡 **Google Drive / Docs / Slides** — show "Coming soon". To enable later:
@@ -73,6 +72,7 @@ verification · ⬜ not started. Owner: **Claude** (code/docs in-repo) vs **You*
 
 ---
 
-_Gating to launch private beta: enable leaked-password protection (§2), confirm
-the Slack/Calendly redirect URIs (§4), and have the legal drafts reviewed (§5).
-Everything else is either done or post-beta._
+_Technical gating items are DONE. Remaining to launch private beta: confirm the
+`privacy@` / `legal@` inboxes deliver and (optionally) have the legal drafts
+reviewed (§5), then smoke-test a live Slack/Calendly connect. Everything else is
+post-beta._
