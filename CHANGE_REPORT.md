@@ -22,7 +22,7 @@ additive, idempotent migration.
 **Added — migration:** `supabase/migrations/20260606160000_harden_advisor_findings.sql`.
 
 - **`auth_rls_initplan` — 14/14 cleared.** Wrapped `auth.uid()` → `(select
-  auth.uid())` across RLS policies on `profiles`, `notifications`,
+auth.uid())` across RLS policies on `profiles`, `notifications`,
   `interactions`, `integration_connections`, `relationships`, `member_profiles`
   so it evaluates once per query instead of per row. Predicates otherwise
   unchanged.
