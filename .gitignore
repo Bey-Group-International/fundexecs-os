@@ -54,3 +54,6 @@ credentials.json
 
 # Stray agent git identity
 .gitconfig
+
+# Generated human-setup deliverable (sent via download, not source)
+FundExecs-OS-Setup-Steps.docx
