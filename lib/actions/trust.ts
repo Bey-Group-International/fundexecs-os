@@ -308,18 +308,11 @@ export async function finalizeEvidenceUpload(evidenceId: string): Promise<Finali
   // Confirm the object actually exists in storage (defends against
   // clients calling finalize without uploading).
   const admin = createAdminClient();
-  const evRow = ev as {
-    id: string;
-    storage_path: string;
-    mime_type: string;
-    size_bytes: number;
-    file_name: string;
-    org_id: string;
-  };
+  const evRow = ev;
   const { data: head } = await admin.storage
     .from(TRUST_BUCKET)
     .list(evRow.storage_path.split('/').slice(0, -1).join('/'), {
-      search: evRow.file_name
+      search: evRow.file_name ?? undefined
     });
   const found = head && head.some((o) => evRow.storage_path.endsWith(`/${o.name}`));
   if (!found) {
@@ -331,8 +324,14 @@ export async function finalizeEvidenceUpload(evidenceId: string): Promise<Finali
     .update({ uploaded_at: new Date().toISOString() })
     .eq('id', evidenceId);
 
-  // Fire-and-forget AI validation. Never block the parent action.
-  void runAiValidation(evidenceId).catch(() => undefined);
+  // Inline-await AI validation. The Anthropic call has its own 8s
+  // AbortSignal timeout inside `aiValidateEvidence`; every exit path
+  // there (no key / no ctx / Claude error / abort) writes a fallback
+  // note to the row before returning. Awaiting here is what survives
+  // the server-action lifecycle — fire-and-forget gets killed when
+  // the response is flushed, leaving `ai_validation_notes` null and
+  // breaking the never-block contract (Test 2 regression).
+  await runAiValidation(evidenceId).catch(() => undefined);
 
   refresh();
   return { ok: true };
@@ -366,13 +365,7 @@ export async function approveEvidence(input: ApproveInput): Promise<ApproveResul
     .eq('id', input.evidenceId)
     .maybeSingle();
   if (!ev) return { ok: false, error: 'Evidence not found.' };
-  const evRow = ev as {
-    id: string;
-    org_id: string;
-    proof_layer_id: string;
-    uploaded_by: string | null;
-    approval_status: string;
-  };
+  const evRow = ev;
   if (evRow.approval_status === 'approved') {
     return { ok: false, error: 'Evidence is already approved.' };
   }
@@ -504,12 +497,7 @@ export async function revokeEvidence(evidenceId: string): Promise<RevokeResult> 
     .eq('id', evidenceId)
     .maybeSingle();
   if (!ev) return { ok: false, error: 'Evidence not found.' };
-  const evRow = ev as {
-    id: string;
-    storage_path: string;
-    uploaded_by: string | null;
-    approval_status: string;
-  };
+  const evRow = ev;
   if (evRow.uploaded_by !== org.userId) {
     return { ok: false, error: 'Only the uploader can revoke.' };
   }

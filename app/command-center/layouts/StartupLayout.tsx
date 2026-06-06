@@ -112,7 +112,7 @@ export function StartupLayout({ displayName, position, trust, load }: StartupLay
                 </span>
                 <span className="text-[12.5px] text-fg-4">of {money(data.raise.targetAmount)}</span>
               </div>
-              <ProgressBar value={data.raise.progressPct} />
+              <ProgressBar value={data.raise.progressPct} ariaLabel="Raise progress" />
               <p className="text-[11.5px] text-fg-4">{data.raise.progressPct}% committed</p>
             </div>
           ) : (

@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { awardTrustXp } from '@/lib/actions/xp';
-import type { Database } from '@/lib/supabase/database.types';
+import type { Database, Json } from '@/lib/supabase/database.types';
 
 type OrgMemberRow = Database['public']['Tables']['org_members']['Row'];
 type OrgMemberRole = Database['public']['Enums']['org_member_role'];
@@ -28,7 +28,11 @@ async function writeAudit(input: AuditInput): Promise<void> {
       action_type: input.actionType,
       target_type: input.targetType,
       target_id: input.targetId,
-      metadata: (input.metadata ?? {}) as never
+      // Cast `Record<string, unknown>` → `Json` is safe: caller-supplied
+      // metadata is a plain object literal at every call site (no
+      // functions, no symbols). Supabase's auto-generated `Json` type is
+      // narrower than `Record<string, unknown>` only by structural shape.
+      metadata: (input.metadata ?? {}) as Json
     });
   } catch {
     // Audit best-effort — never block the primary action.
@@ -44,8 +48,7 @@ async function isOrgAdmin(orgId: string, userId: string): Promise<boolean> {
     .eq('user_id', userId)
     .maybeSingle();
   if (!data) return false;
-  const row = data as unknown as Pick<OrgMemberRow, 'role'> & { status: string | null };
-  return (row.role === 'owner' || row.role === 'admin') && row.status === 'active';
+  return (data.role === 'owner' || data.role === 'admin') && data.status === 'active';
 }
 
 /**
@@ -64,7 +67,7 @@ export async function approveMember(memberId: string): Promise<AdminResult> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('org_members')
-    .update({ status: 'active' } as never)
+    .update({ status: 'active' })
     .eq('id', memberId)
     .eq('org_id', org.orgId)
     .select('*')
@@ -116,7 +119,7 @@ export async function archiveMember(memberId: string): Promise<AdminResult> {
 
   const { data, error } = await supabase
     .from('org_members')
-    .update({ status: 'archived' } as never)
+    .update({ status: 'archived' })
     .eq('id', memberId)
     .eq('org_id', org.orgId)
     .select('*')
@@ -154,11 +157,8 @@ export async function setMemberRole(memberId: string, role: OrgMemberRole): Prom
     .eq('org_id', org.orgId)
     .eq('user_id', org.userId)
     .maybeSingle();
-  const actorRow = (actor ?? null) as unknown as
-    | (Pick<OrgMemberRow, 'role'> & { status: string | null })
-    | null;
-  const actorRole = actorRow?.role;
-  const actorActive = actorRow?.status === 'active';
+  const actorRole = actor?.role;
+  const actorActive = actor?.status === 'active';
   if (!actorActive || (actorRole !== 'owner' && actorRole !== 'admin')) {
     return { ok: false, error: 'Only owners or admins can change roles.' };
   }

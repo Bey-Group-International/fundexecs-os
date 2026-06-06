@@ -1,6 +1,7 @@
 import { Coins, Eye, Radar, Users, Sparkles, type LucideIcon } from 'lucide-react';
 import { Badge, Card, SectionTitle } from '@/components/ui';
 import { KpiTile } from '@/components/dashboard/KpiTile';
+import { DealTrustChipFromRefs } from '@/components/dashboard/DealTrustChip';
 import type { NextBestAction } from '@/components/dashboard/EarnNextBestActions';
 import type { ChainOfTrustStanding } from '@/components/dashboard/ChainOfTrustStrip';
 import { MemberDashboardChrome } from './MemberDashboardChrome';
@@ -155,12 +156,19 @@ export function IndividualInvestorLayout({
                     <p className="truncate text-[13px] font-medium text-fg-1">{d.name}</p>
                     <p className="text-[11px] text-fg-4">{money(d.amount ?? 0)}</p>
                   </div>
-                  <Badge
-                    tone={d.status === 'passed' ? 'neutral' : 'azure'}
-                    className="text-[10px] uppercase"
-                  >
-                    {d.stage}
-                  </Badge>
+                  <div className="flex flex-none items-center gap-2">
+                    <DealTrustChipFromRefs
+                      dealId={d.id}
+                      dealName={d.name}
+                      refs={data.dealTrustRefs}
+                    />
+                    <Badge
+                      tone={d.status === 'passed' ? 'neutral' : 'azure'}
+                      className="text-[10px] uppercase"
+                    >
+                      {d.stage}
+                    </Badge>
+                  </div>
                 </li>
               ))}
             </ul>

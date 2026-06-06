@@ -1,3 +1,4 @@
+ 
 /**
  * One-shot provisioning script — DO NOT commit env values.
  *
@@ -34,7 +35,10 @@ const ADMIN = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
 
-const PASSWORD = 'FundExecsTest!2026X9k7Lqr';
+// Never bake a working credential into the (public) repo. The canonical test
+// password is provisioned per-environment via TEST_USER_PASSWORD.
+const PASSWORD = process.env.TEST_USER_PASSWORD;
+if (!PASSWORD) throw new Error('TEST_USER_PASSWORD missing');
 const TYPES = ['investment_firm', 'service_provider', 'startup', 'student', 'individual_investor'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -69,6 +73,12 @@ async function provisionOne(memberType) {
     await sleep(2000);
   } else {
     console.log(`  [${memberType}] user already exists, reusing ${user.id}`);
+    // Idempotency guarantee: re-apply the canonical password so the
+    // documented `/app/memory/test_credentials.md` value always works.
+    // Without this, a tester / external admin password change would
+    // silently drift from the docs.
+    const { error: pwErr } = await ADMIN.auth.admin.updateUserById(user.id, { password: PASSWORD });
+    if (pwErr) console.warn(`  [${memberType}] password reset failed: ${pwErr.message}`);
   }
 
   // Resolve org_id (handle_new_user inserts an org_members row with role='owner').

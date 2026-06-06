@@ -68,7 +68,9 @@ export async function getDashboardCommon(
     truth: 0,
     concept: 0,
     execution: 0,
-    work: 0
+    work: 0,
+    memberProfileId: userId,
+    memberDisplayName: displayName
   };
   const { data: rec } = await supabase
     .from('chain_of_trust_records')
@@ -103,7 +105,9 @@ export async function getDashboardCommon(
       execution: pctOf('execution'),
       work: pctOf('work'),
       currentLayer: currentLayerMap[rec.current_layer ?? 'Proof of Truth'] ?? 'intent',
-      recordId: rec.id
+      recordId: rec.id,
+      memberProfileId: userId,
+      memberDisplayName: displayName
     };
   }
 
@@ -114,6 +118,46 @@ export async function getDashboardCommon(
 }
 
 /* ---------- investment_firm ---------------------------------------------- */
+
+export interface DealTrustRef {
+  dealId: string;
+  recordId: string;
+  /** Layer label as stored, e.g. 'Proof of Truth'. */
+  currentLayer: string;
+  /** Layer short key for chip styling. */
+  currentLayerKey: 'truth' | 'concept' | 'execution' | 'work';
+  completionPercentage: number;
+}
+
+function layerShortKey(label: string | null | undefined): DealTrustRef['currentLayerKey'] {
+  switch (label) {
+    case 'Proof of Concept':
+      return 'concept';
+    case 'Proof of Execution':
+      return 'execution';
+    case 'Proof of Work':
+      return 'work';
+    default:
+      return 'truth';
+  }
+}
+
+async function loadDealTrustRefs(supabase: S, orgId: string, dealIds: string[]) {
+  if (dealIds.length === 0) return [] as DealTrustRef[];
+  const { data } = await supabase
+    .from('chain_of_trust_records')
+    .select('id, entity_id, current_layer, completion_percentage')
+    .eq('org_id', orgId)
+    .eq('entity_type', 'deal')
+    .in('entity_id', dealIds);
+  return (data ?? []).map((r) => ({
+    dealId: r.entity_id as string,
+    recordId: r.id as string,
+    currentLayer: (r.current_layer as string) ?? 'Proof of Truth',
+    currentLayerKey: layerShortKey(r.current_layer as string | null),
+    completionPercentage: Math.round(Number(r.completion_percentage ?? 0))
+  }));
+}
 
 export interface InvestmentFirmData {
   kpis: {
@@ -131,6 +175,7 @@ export interface InvestmentFirmData {
   }[];
   capitalProviders: { id: string; name: string }[];
   partnerships: { id: string; counterparty: string; stage: string | null }[];
+  dealTrustRefs: DealTrustRef[];
 }
 
 export async function getInvestmentFirmDashboardData(
@@ -171,7 +216,12 @@ export async function getInvestmentFirmDashboardData(
       kpis: { pipelineValue, activeDeals, capitalDeployed, sourcingThisMonth },
       deals: (deals ?? []).slice(0, 6),
       capitalProviders: cps ?? [],
-      partnerships: parts ?? []
+      partnerships: parts ?? [],
+      dealTrustRefs: await loadDealTrustRefs(
+        supabase,
+        orgId,
+        (deals ?? []).map((d) => d.id)
+      )
     };
     const empty = (deals ?? []).length === 0 && (alloc ?? []).length === 0;
     return ok(data, empty);
@@ -366,7 +416,7 @@ export async function getStudentDashboardData(
       { data: tasks, error: tErr },
       { data: synergies },
       { data: contacts },
-      { data: brainsCount }
+      { count: brainsCount }
     ] = await Promise.all([
       supabase
         .from('tasks')
@@ -396,7 +446,7 @@ export async function getStudentDashboardData(
         full_name: c.full_name ?? 'Contact',
         company: c.company
       })),
-      brainsKnown: (brainsCount as unknown as { count?: number })?.count ?? 0
+      brainsKnown: brainsCount ?? 0
     };
     const empty =
       (tasks ?? []).length === 0 && (contacts ?? []).length === 0 && (synergies ?? []).length === 0;
@@ -425,6 +475,7 @@ export interface IndividualInvestorData {
   allocations: { id: string; amount: number | null; status: string | null; dealName: string }[];
   watchlist: { id: string; rationale: string; score: number | null }[];
   syndicateContacts: { id: string; full_name: string; company: string | null }[];
+  dealTrustRefs: DealTrustRef[];
 }
 
 export async function getIndividualInvestorDashboardData(
@@ -488,7 +539,12 @@ export async function getIndividualInvestorDashboardData(
         id: c.id,
         full_name: c.full_name ?? 'Contact',
         company: c.company
-      }))
+      })),
+      dealTrustRefs: await loadDealTrustRefs(
+        supabase,
+        orgId,
+        (deals ?? []).map((d) => d.id)
+      )
     };
     const empty = (deals ?? []).length === 0 && (allocs ?? []).length === 0;
     return ok(data, empty);

@@ -101,15 +101,30 @@ export function EvidenceUploadForm({ recordId, layer, onUploaded }: EvidenceUplo
     });
   }
 
+  // Stable per-layer id so the visually-hidden <label> binds to the
+  // file input via htmlFor. Two of these forms can render simultaneously
+  // in one drawer (one per layer), so the id includes the layer key.
+  const fileInputId = `evidence-file-${layer}`;
+
   return (
     <div className="flex flex-col gap-2">
+      {/* Visually hidden but exposed to assistive tech — gives the
+          file input an accessible name beyond what the screen-reader
+          would synthesise. Tailwind's `sr-only` keeps it off-screen
+          without setting display:none (which would remove it from the
+          accessibility tree). */}
+      <label htmlFor={fileInputId} className="sr-only">
+        Upload evidence for {layer}
+      </label>
       <input
+        id={fileInputId}
         ref={inputRef}
         type="file"
         className="hidden"
+        aria-label={`Upload evidence for ${layer}`}
         accept=".pdf,.docx,.xlsx,.pptx,.zip,.json,.txt,.csv,.md,.png,.jpg,.jpeg,.webp,.gif"
         onChange={onChange}
-        data-testid={`evidence-file-${layer}`}
+        data-testid={fileInputId}
       />
       <Button
         variant="secondary"

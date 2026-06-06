@@ -44,3 +44,13 @@ next-env.d.ts
 
 # Test credentials are provisioned per-environment, never committed
 memory/test_credentials.md
+
+# Secrets / env files
+.env.*
+*.env
+credentials.json
+*.key
+.credentials
+
+# Stray agent git identity
+.gitconfig
