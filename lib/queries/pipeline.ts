@@ -19,12 +19,27 @@ export interface PipelineDeal {
   note: string;
   /** Allocations logged against this deal (empty array when none). */
   allocations: PipelineDealAllocation[];
+  /**
+   * Thesis-fit score (0–100) from real signals: how far the deal has advanced
+   * through the formation stages, whether it has accepted allocations, and its
+   * size relative to the rest of the pipeline.
+   */
+  fit: number;
 }
 
 export interface PipelineStage {
   key: string;
   label: string;
   deals: PipelineDeal[];
+}
+
+/** A capital-stack partner — a service provider or a partnership counterparty. */
+export interface PipelinePartner {
+  id: string;
+  name: string;
+  role: string;
+  status: string;
+  kind: 'service' | 'partnership';
 }
 
 export interface PipelineData {
@@ -34,6 +49,7 @@ export interface PipelineData {
   softCircled: number;
   committed: number;
   conversionPct: number;
+  partners: PipelinePartner[];
 }
 
 /**
@@ -57,8 +73,32 @@ const EMPTY: PipelineData = {
   pipelineValue: 0,
   softCircled: 0,
   committed: 0,
-  conversionPct: 0
+  conversionPct: 0,
+  partners: []
 };
+
+const STAGE_INDEX = new Map(STAGE_ORDER.map((s, i) => [s.key, i]));
+
+/**
+ * Thesis-fit (0–98) from real signals — stage progression (most weight),
+ * accepted allocations, and deal size relative to the pipeline's largest deal.
+ */
+function computeFit(
+  stageKey: string,
+  amount: number | null,
+  maxAmount: number,
+  allocations: PipelineDealAllocation[]
+): number {
+  const idx = STAGE_INDEX.get(stageKey) ?? 0;
+  const stageWeight = (idx / (STAGE_ORDER.length - 1)) * 55;
+  const allocBoost = allocations.some((a) => a.status.toLowerCase() === 'accepted')
+    ? 25
+    : allocations.length > 0
+      ? 12
+      : 0;
+  const amountBoost = maxAmount > 0 && amount ? (amount / maxAmount) * 18 : 0;
+  return Math.max(0, Math.min(98, Math.round(2 + stageWeight + allocBoost + amountBoost)));
+}
 
 function normalizeStageKey(stage: string): string {
   return stage
@@ -131,10 +171,13 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
     }
   }
 
+  const maxAmount = deals.reduce((m, d) => Math.max(m, d.amount ?? 0), 0);
+
   const buckets = new Map<string, PipelineDeal[]>(STAGE_ORDER.map((s) => [s.key, []]));
   for (const d of deals) {
     const key = normalizeStageKey(d.stage);
     const resolvedKey = buckets.has(key) ? key : 'prospect';
+    const allocations = allocByDeal.get(d.id) ?? [];
     const entry: PipelineDeal = {
       id: d.id,
       name: d.name,
@@ -142,10 +185,47 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
       status: d.status,
       amount: d.amount,
       note: dealNote(resolvedKey, d.status),
-      allocations: allocByDeal.get(d.id) ?? []
+      allocations,
+      fit: computeFit(resolvedKey, d.amount, maxAmount, allocations)
     };
     buckets.get(resolvedKey)!.push(entry);
   }
+
+  // Capital-stack partners: real service providers + partnership counterparties.
+  const [spRes, pnRes] = await Promise.all([
+    supabase.from('service_providers').select('id, name, category, status').eq('org_id', orgId),
+    supabase.from('partnerships').select('id, counterparty, type, stage').eq('org_id', orgId)
+  ]);
+  const partners: PipelinePartner[] = [
+    ...(
+      (spRes.data ?? []) as Array<{
+        id: string;
+        name: string;
+        category: string | null;
+        status: string | null;
+      }>
+    ).map((s) => ({
+      id: s.id,
+      name: s.name,
+      role: s.category ?? 'Service provider',
+      status: s.status ?? 'active',
+      kind: 'service' as const
+    })),
+    ...(
+      (pnRes.data ?? []) as Array<{
+        id: string;
+        counterparty: string;
+        type: string | null;
+        stage: string | null;
+      }>
+    ).map((p) => ({
+      id: p.id,
+      name: p.counterparty,
+      role: p.type ?? 'Partnership',
+      status: p.stage ?? 'prospect',
+      kind: 'partnership' as const
+    }))
+  ];
 
   const stages: PipelineStage[] = STAGE_ORDER.map((s) => ({
     key: s.key,
@@ -169,6 +249,7 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
     pipelineValue,
     softCircled,
     committed,
-    conversionPct
+    conversionPct,
+    partners
   };
 }
