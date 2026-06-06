@@ -76,6 +76,27 @@ export async function updateSession(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser();
 
+  // Pass the edge-validated user to the (serverless) page via a TRUSTED request
+  // header. The serverless runtime's `getUser()` can fail to reach the Auth
+  // server even on a valid session — which made pages see a null user and
+  // redirect authenticated members to /login. The header lets the page trust the
+  // user the edge already validated, with no second network round-trip.
+  // Security: strip any client-supplied value first, then set only from the
+  // validated user — the matcher runs this on every app route, so it can't be
+  // spoofed past the middleware.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete('x-fx-user-id');
+  requestHeaders.delete('x-fx-user-email');
+  if (user) {
+    requestHeaders.set('x-fx-user-id', user.id);
+    if (user.email) requestHeaders.set('x-fx-user-email', user.email);
+  }
+  {
+    const rebuilt = NextResponse.next({ request: { headers: requestHeaders } });
+    supabaseResponse.cookies.getAll().forEach((cookie) => rebuilt.cookies.set(cookie));
+    supabaseResponse = rebuilt;
+  }
+
   // Build a redirect that carries the refreshed session cookies. Returning a
   // bare NextResponse.redirect() would DROP the cookies `setAll` wrote on
   // `supabaseResponse`, so a rotated refresh token would be lost and the next

@@ -1,28 +1,55 @@
 import 'server-only';
 
 import { cache } from 'react';
-import type { User } from '@supabase/supabase-js';
+import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 
+/** The minimal authenticated-user shape the server loaders need. */
+export interface AuthUser {
+  id: string;
+  email: string | null;
+}
+
 /**
- * Per-request cached authenticated user.
+ * Per-request authenticated user.
  *
- * A single page render fans out to several loaders (shell identity, active org,
- * member profile, dashboard context, trust…), each of which previously called
- * `supabase.auth.getUser()` independently. `getUser()` hits the Auth server, and
- * with that server capped at a small connection pool, the burst of concurrent
- * validations (multiplied across the document + RSC requests) intermittently
- * failed — returning a null user on a perfectly valid session and bouncing the
- * member to /login.
+ * The edge middleware validates the session with `getUser()` (which works
+ * reliably there) and forwards the result on the trusted `x-fx-user-id` /
+ * `x-fx-user-email` request headers. We read those here instead of calling
+ * `getUser()` again in the page render, because the serverless runtime's
+ * `getUser()` call to the Auth server can fail on a perfectly valid session —
+ * which previously returned a null user and bounced authenticated members to
+ * /login. (RLS data queries are unaffected: PostgREST verifies the JWT from the
+ * cookies locally, no Auth-server round-trip.)
  *
- * Wrapping the call in React `cache()` dedupes every `getAuthUser()` in one
- * render to a SINGLE `getUser()` network call, keeping us well under the cap and
- * making the result consistent across all loaders in that render.
+ * Falls back to a direct `getUser()` only if the header is absent (e.g. a route
+ * the middleware matcher doesn't cover). Wrapped in React `cache()` so repeated
+ * calls within one render share a single result.
  */
-export const getAuthUser = cache(async (): Promise<User | null> => {
+export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
+  const h = await headers();
+  const id = h.get('x-fx-user-id');
+  if (id) {
+    // TEMP root-cause probe: compare the (reliable) edge-validated header to a
+    // serverless getUser() to capture WHY they diverge. Behaviour uses the
+    // header regardless. Remove once the root cause is confirmed.
+    try {
+      const supabase = await createClient();
+      const { data, error } = await supabase.auth.getUser();
+      console.log(
+        `[authsrc] header=yes serverlessUser=${data.user ? 'yes' : 'NO'} err=${error?.message ?? 'none'}`
+      );
+    } catch (e) {
+      console.log(
+        `[authsrc] serverless getUser threw: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+    return { id, email: h.get('x-fx-user-email') };
+  }
+
   const supabase = await createClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  return user;
+  return user ? { id: user.id, email: user.email ?? null } : null;
 });
