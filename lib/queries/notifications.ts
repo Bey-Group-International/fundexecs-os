@@ -12,6 +12,18 @@ export interface NotificationItem {
   meta: string;
   time: string;
   read: boolean;
+  /** Same-origin route the "Take action" CTA navigates to, when provided. */
+  href?: string;
+}
+
+/**
+ * Accept only same-origin relative paths to avoid open-redirects from
+ * author-controlled payloads (mirrors the login redirect guard).
+ */
+function safeHref(v: unknown): string | undefined {
+  const s = asString(v);
+  if (s && s.startsWith('/') && !s.startsWith('//')) return s;
+  return undefined;
 }
 
 /** Coerce an unknown JSON value to a trimmed string, or undefined. */
@@ -70,7 +82,8 @@ export async function getNotifications(userId: string): Promise<NotificationItem
       body: asString(payload.body) ?? asString(payload.message) ?? '',
       meta: asString(payload.meta) ?? n.type,
       time: relativeTime(n.created_at),
-      read: n.read_at != null
+      read: n.read_at != null,
+      href: safeHref(payload.href) ?? safeHref(payload.link) ?? safeHref(payload.url)
     } satisfies NotificationItem;
   });
 }

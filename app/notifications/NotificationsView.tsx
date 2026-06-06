@@ -134,11 +134,13 @@ function NotifRow({
 function NotifDetail({
   n,
   onClose,
-  onAct
+  onAct,
+  onTakeAction
 }: {
   n: NotificationItem;
   onClose: () => void;
   onAct: (id: string, a: Action) => void;
+  onTakeAction: (href: string) => void;
 }) {
   const { icon: Icon, tone } = metaFor(n.category);
   return (
@@ -178,12 +180,21 @@ function NotifDetail({
           {n.meta} · {n.time}
         </div>
         <div className="mt-5 flex gap-2.5">
-          <Button variant="primary" iconRight={ArrowRight} className="flex-1">
-            Take action
-          </Button>
+          {n.href ? (
+            <Button
+              variant="primary"
+              iconRight={ArrowRight}
+              className="flex-1"
+              onClick={() => onTakeAction(n.href as string)}
+              data-testid="notif-take-action"
+            >
+              Take action
+            </Button>
+          ) : null}
           <Button
             variant="secondary"
             icon={Archive}
+            className={n.href ? undefined : 'flex-1'}
             onClick={() => {
               onAct(n.id, 'archive');
               onClose();
@@ -236,6 +247,21 @@ export function NotificationsView({ initial }: { initial: NotificationItem[] }) 
     void markAllNotificationsRead().then(() => router.refresh());
   }
 
+  // Opening a notification marks it read; the detail modal then surfaces it.
+  function openNotification(n: NotificationItem) {
+    setOpen(n);
+    if (!n.read) {
+      cards.markRead(n.id);
+      void markNotificationRead(n.id);
+    }
+  }
+
+  // "Take action" routes to the notification's same-origin target.
+  function takeAction(href: string) {
+    setOpen(null);
+    router.push(href);
+  }
+
   // Archived / deleted notifications drop out of the inbox.
   const present = cards.items.filter((n) => !n.archived && !n.deleted);
   const visible = present.filter((n) => category === 'All' || n.category === category);
@@ -281,7 +307,7 @@ export function NotificationsView({ initial }: { initial: NotificationItem[] }) 
         {visible.length ? (
           visible.map((n, i) => (
             <div key={n.id}>
-              <NotifRow n={n} onAct={act} onOpen={setOpen} />
+              <NotifRow n={n} onAct={act} onOpen={openNotification} />
               {i < visible.length - 1 && <div className="mx-3.5 h-px bg-hairline-faint" />}
             </div>
           ))
@@ -292,7 +318,9 @@ export function NotificationsView({ initial }: { initial: NotificationItem[] }) 
         )}
       </Card>
 
-      {open && <NotifDetail n={open} onClose={() => setOpen(null)} onAct={act} />}
+      {open && (
+        <NotifDetail n={open} onClose={() => setOpen(null)} onAct={act} onTakeAction={takeAction} />
+      )}
     </div>
   );
 }
