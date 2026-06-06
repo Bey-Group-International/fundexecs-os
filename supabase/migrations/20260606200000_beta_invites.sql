@@ -45,9 +45,9 @@ create trigger set_updated_at before update on public.beta_invites
 alter table public.beta_invites enable row level security;
 
 -- Only org owners/admins manage invites for their org. Reuses the
--- security-definer helper from the core schema so the policy never
--- recurses into org_members.
+-- security-definer helper (relocated to the non-API-exposed `private`
+-- schema in 20260604120500) so the policy never recurses into org_members.
 create policy "admins manage beta invites" on public.beta_invites
   for all to authenticated
-  using (public.is_org_admin(org_id))
-  with check (public.is_org_admin(org_id));
+  using (private.is_org_admin(org_id))
+  with check (private.is_org_admin(org_id));
