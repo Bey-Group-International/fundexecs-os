@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Plus, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight, Plus, Trash2, Scale, ArrowUpRight } from 'lucide-react';
 import { Badge, Button, Input, Select } from '@/components/ui';
 import { Drawer } from './Drawer';
 import { updateDeal, updateDealStage, archiveDeal } from '@/lib/actions/deals';
 import { createAllocation, deleteAllocation } from '@/lib/actions/allocations';
+import { runDiligenceForDeal } from '@/lib/actions/diligence';
 
 export interface DealDetailData {
   id: string;
@@ -19,6 +21,29 @@ export interface DealDetailData {
     amount: number | null;
     status: string;
   }>;
+  diligenceRuns: Array<{
+    id: string;
+    status: string;
+    conviction: number | null;
+    summary: string | null;
+    createdAt: string;
+  }>;
+}
+
+type DiligenceRunStatus = DealDetailData['diligenceRuns'][number]['status'];
+
+function diligenceTone(status: DiligenceRunStatus): 'success' | 'azure' | 'danger' | 'neutral' {
+  switch (status) {
+    case 'complete':
+      return 'success';
+    case 'running':
+    case 'queued':
+      return 'azure';
+    case 'error':
+      return 'danger';
+    default:
+      return 'neutral';
+  }
 }
 
 const STAGE_OPTIONS = [
@@ -57,6 +82,7 @@ export function DealDetailDrawer({
   const [stagePending, startStage] = useTransition();
   const [archivePending, startArchive] = useTransition();
   const [allocPending, startAlloc] = useTransition();
+  const [diligencePending, startDiligence] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(deal?.name ?? '');
   const [amount, setAmount] = useState(deal?.amount?.toString() ?? '');
@@ -84,7 +110,8 @@ export function DealDetailDrawer({
   // "timed out" message and clear the pending flags so the user can
   // retry instead of staring at "Saving…" forever.
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const anyPending = savePending || stagePending || archivePending || allocPending;
+  const anyPending =
+    savePending || stagePending || archivePending || allocPending || diligencePending;
   useEffect(() => {
     if (!anyPending) {
       if (timeoutRef.current) {
@@ -179,6 +206,19 @@ export function DealDetailDrawer({
     setError(null);
     startAlloc(async () => {
       const r = await deleteAllocation(allocId);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function handleRunDiligence() {
+    if (!deal || diligencePending) return;
+    setError(null);
+    startDiligence(async () => {
+      const r = await runDiligenceForDeal(deal.id);
       if (!r.ok) {
         setError(r.error);
         return;
@@ -315,6 +355,55 @@ export function DealDetailDrawer({
                 {allocPending ? 'Adding…' : 'Add'}
               </Button>
             </div>
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+              <Scale size={12} strokeWidth={1.9} aria-hidden />
+              Diligence
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Scale}
+              onClick={handleRunDiligence}
+              disabled={diligencePending}
+              data-testid="deal-detail-run-diligence"
+            >
+              {diligencePending ? 'Running…' : 'Run diligence'}
+            </Button>
+          </div>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {deal.diligenceRuns.length === 0 ? (
+              <p className="text-[12px] text-fg-5">
+                No diligence runs yet. Run Earn&rsquo;s committee on this deal.
+              </p>
+            ) : (
+              deal.diligenceRuns.map((run) => (
+                <Link
+                  key={run.id}
+                  href={`/diligence/${run.id}`}
+                  className="flex items-center justify-between gap-2 rounded-md border border-hairline bg-surface-1 px-3 py-2 transition hover:border-[var(--accent-line)]"
+                  data-testid={`diligence-run-${run.id}`}
+                >
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-fg-1">
+                    {run.summary || 'Diligence review'}
+                  </span>
+                  <div className="flex flex-none items-center gap-1.5">
+                    {run.conviction != null ? (
+                      <span className="font-mono text-[11px] tabular-nums text-fg-3">
+                        {run.conviction}
+                      </span>
+                    ) : null}
+                    <Badge tone={diligenceTone(run.status)} className="text-[10px]">
+                      {run.status}
+                    </Badge>
+                    <ArrowUpRight size={13} strokeWidth={1.9} className="text-fg-4" aria-hidden />
+                  </div>
+                </Link>
+              ))
+            )}
           </div>
         </div>
         {error ? (

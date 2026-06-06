@@ -9,6 +9,15 @@ export interface PipelineDealAllocation {
   status: string;
 }
 
+/** A diligence run summarised for the deal drawer's Diligence panel. */
+export interface PipelineDealDiligenceRun {
+  id: string;
+  status: string;
+  conviction: number | null;
+  summary: string | null;
+  createdAt: string;
+}
+
 export interface PipelineDeal {
   id: string;
   name: string;
@@ -19,6 +28,8 @@ export interface PipelineDeal {
   note: string;
   /** Allocations logged against this deal (empty array when none). */
   allocations: PipelineDealAllocation[];
+  /** Diligence runs for this deal, newest-first (empty array when none). */
+  diligenceRuns: PipelineDealDiligenceRun[];
   /**
    * Thesis-fit score (0–100) from real signals: how far the deal has advanced
    * through the formation stages, whether it has accepted allocations, and its
@@ -171,6 +182,36 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
     }
   }
 
+  // Fetch diligence runs for these deals in one go and index by deal_id.
+  const dilByDeal = new Map<string, PipelineDealDiligenceRun[]>();
+  if (dealIds.length > 0) {
+    const { data: runs } = await supabase
+      .from('diligence_runs')
+      .select('id, deal_id, status, conviction, summary, created_at')
+      .in('deal_id', dealIds)
+      .order('created_at', { ascending: false });
+    if (runs) {
+      for (const r of runs as Array<{
+        id: string;
+        deal_id: string | null;
+        status: string;
+        conviction: number | null;
+        summary: string | null;
+        created_at: string;
+      }>) {
+        if (!r.deal_id) continue;
+        if (!dilByDeal.has(r.deal_id)) dilByDeal.set(r.deal_id, []);
+        dilByDeal.get(r.deal_id)!.push({
+          id: r.id,
+          status: r.status,
+          conviction: r.conviction,
+          summary: r.summary,
+          createdAt: r.created_at
+        });
+      }
+    }
+  }
+
   const maxAmount = deals.reduce((m, d) => Math.max(m, d.amount ?? 0), 0);
 
   const buckets = new Map<string, PipelineDeal[]>(STAGE_ORDER.map((s) => [s.key, []]));
@@ -186,6 +227,7 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
       amount: d.amount,
       note: dealNote(resolvedKey, d.status),
       allocations,
+      diligenceRuns: dilByDeal.get(d.id) ?? [],
       fit: computeFit(resolvedKey, d.amount, maxAmount, allocations)
     };
     buckets.get(resolvedKey)!.push(entry);
