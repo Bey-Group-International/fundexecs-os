@@ -144,7 +144,7 @@ function NotifDetail({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
-      <Card className="relative z-10 w-[460px] max-w-[92vw] p-6">
+      <Card className="relative z-10 w-[460px] max-w-[92vw] bg-bg-1 p-6">
         <div className="flex items-center gap-3">
           <span
             className="flex h-10 w-10 flex-none items-center justify-center rounded-[11px] border"
