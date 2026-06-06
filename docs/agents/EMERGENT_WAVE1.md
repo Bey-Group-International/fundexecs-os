@@ -40,6 +40,11 @@ Keep existing live routes wired (`/command-center`, `/pipeline`, `/connections`,
 not-yet-built modules, route to a tasteful "coming in this sprint" placeholder
 page (clearly stubbed, not a dead link). Persist **Fund Profile** in the rail.
 
+**Make the rail an attention router, not a link list** (spec §6): each item
+carries **live signal** — a count/health badge (Action Queue items, new Match
+Inbox matches, stuck LPs, readiness %) from Claude's loaders (placeholder until
+wired) — with subtle emphasis on the operator's **current lifecycle stage**.
+
 ### 2. Dashboard — BlackRock-style command center (MIMIC THE PROTOTYPE, high fidelity)
 
 Frame: a **command center for a private-market operator, co-piloted by a 15-AI-
@@ -75,13 +80,29 @@ Settings as a **vertical side rail** (not a flat page of links): each section
 with its details inline in the rail. Reuse existing `/settings` data. UI only;
 match the prototype's settings interaction if present.
 
-### 5. Credit Wallet — top nav (billing wired in)
+### 5. Top Nav — global context + fuel + urgent (spec §6)
 
-A **credit wallet indicator in the top nav** showing the org's credit balance,
-with a popover for usage + top-up. Wire it to Claude's `getCreditWallet(orgId)`
-loader + the top-up action (Stripe connect is a later step — render test/stub
-state cleanly when unconfigured). Credits are consumed by AI-agent work
-(diligence runs, Earn, the 15-agent team); show recent consumption.
+The top nav is the **global control + resource bar**, not just a header: org/fund
+switcher · **⌘K command/search** (jump to any entity or agent action) · alerts
+bell (urgent layer) · **Credit Wallet fuel-gauge** · account. The wallet lives
+here because every AI action spends credits — capacity + one-click top-up must be
+globally visible. Wallet binds to `getCreditWallet(orgId)` (balance + recent
+consumption + plan); Stripe top-up is a later step (render stub state cleanly).
+
+### 6. Earn Modal — make it context-aware (spec §6)
+
+Earn (COO + 15 agents) is the **delegation surface**, present everywhere. Reuse
+`EarnDock`/`EarnOrb`, but make its quick-actions **context-aware**: read the
+current route/entity and surface that context's agent actions (deal → "run
+diligence / draft IC memo"; LP → "draft follow-up / handle objection"; dashboard
+→ "what should I do today"). Also surface a compact **AI-team activity** glimpse
+(what the team is doing / did autonomously). Keep the existing chat path intact.
+
+### 7. Settings — vertical detail rail that explains what it unlocks (spec §6)
+
+(See §4 above.) Each section states the **capability it enables** (integrations →
+power Inbox Intelligence/Knowledge; notifications → tune signal; billing/wallet →
+fuel + plan) — config as enablement, not a flat list.
 
 ## Data contract (Claude provides; bind to these, with placeholder fallback)
 

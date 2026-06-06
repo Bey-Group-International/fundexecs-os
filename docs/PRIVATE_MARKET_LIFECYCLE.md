@@ -149,4 +149,33 @@ do this server-side) extend to **scheduled/event-triggered** automations so the
 team advances work between sessions. Engine lands in a later wave; design all
 agent entrypoints to be callable headlessly (no UI dependency).
 
+## 6. Chrome intentionality (workflow lens — build to this, don't just place)
+
+The four persistent chrome components each own one beat of the operator's loop:
+_where am I & what's urgent → which area needs me → do/delegate → watch the team
+execute → keep inputs flowing._ Nothing decorative.
+
+- **Top Nav — global context + fuel + urgent.** Org/fund switcher, **⌘K
+  command/search** (jump to any entity or agent action), alerts bell, and the
+  **Credit Wallet fuel-gauge** (here because every AI action spends credits —
+  capacity + one-click top-up must be globally visible), account.
+- **Side Rail — lifecycle map + attention router.** The 6 logic-area groups teach
+  the capital cycle; **each item carries live signal** (Action Queue count, new
+  Match Inbox matches, stuck LPs, readiness %), with subtle emphasis on the
+  current lifecycle stage. A prioritization instrument, not a link list.
+- **Earn Modal — delegation surface + AI-team window.** Earn (COO) + 15 agents,
+  everywhere, **context-aware**: reads the current page/entity and offers that
+  context's agent actions (deal → run diligence/draft IC memo; LP → draft
+  follow-up/handle objection; dashboard → "what should I do today"). It's how you
+  delegate execution and watch the team work (incl. autonomous automation runs).
+- **Settings Rail — control panel that explains what it unlocks.** Vertical,
+  details inline, grouped by what the operator manages; each setting states the
+  capability it enables (integrations → Inbox Intelligence/Knowledge; notifications
+  → signal tuning; billing/wallet → fuel + plan; team/security; profile).
+
+**Cohesion (the loop):** Top nav (global state + fuel) → Side rail (which area
+needs me) → enter module → Earn modal (delegate, contextual) → AI team executes
+(spends wallet) → Activity Feed + rail badges update → Settings keeps data/fuel/
+signal flowing. Every component feeds the next.
+
 _Maintained by Claude. Encodes the Jun-6 lifecycle adoption decision._
