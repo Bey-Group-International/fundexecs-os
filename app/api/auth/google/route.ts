@@ -3,6 +3,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { getSiteURL } from '@/lib/site-url';
 import type { Database } from '@/lib/supabase/database.types';
+import { authCookieDomain } from '@/lib/supabase/cookie-domain';
 
 /**
  * Server-initiated Google sign-in.
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: { domain: authCookieDomain() },
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll: (toSet) => {

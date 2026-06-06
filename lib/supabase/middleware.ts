@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from './database.types';
+import { authCookieDomain } from './cookie-domain';
 
 /**
  * Refreshes the Supabase auth session on every request and keeps the
@@ -25,6 +26,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
+    cookieOptions: { domain: authCookieDomain() },
     cookies: {
       getAll() {
         return request.cookies.getAll();

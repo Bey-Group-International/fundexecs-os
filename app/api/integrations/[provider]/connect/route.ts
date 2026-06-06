@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSiteURL } from '@/lib/site-url';
 import type { Database } from '@/lib/supabase/database.types';
+import { authCookieDomain } from '@/lib/supabase/cookie-domain';
 import {
   API_KEY_PROVIDERS,
   GOOGLE_PROVIDERS,
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ provide
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
+        cookieOptions: { domain: authCookieDomain() },
         cookies: {
           getAll: () => cookieStore.getAll(),
           setAll: (toSet) => {
