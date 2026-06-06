@@ -127,7 +127,19 @@ export async function GET(request: NextRequest) {
       response.cookies.delete(INTEGRATION_GOOGLE_INTENT_COOKIE);
       return response;
     }
-    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
+    // TEMP: surface the cookie/host context in the redirect URL so it can be
+    // captured from a paste (runtime-log table truncates it). Remove after RCA.
+    const diag = [
+      `host=${request.headers.get('host')}`,
+      `supabaseUrl=${process.env.NEXT_PUBLIC_SUPABASE_URL}`,
+      `cookies=${request.cookies
+        .getAll()
+        .map((c) => c.name)
+        .join('|')}`
+    ].join(';;');
+    return NextResponse.redirect(
+      `${origin}/login?error=${encodeURIComponent(error.message)}&d=${encodeURIComponent(diag)}`
+    );
   }
 
   // Pass through any provider error (e.g. flow_state_already_used) to /login.
