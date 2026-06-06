@@ -127,6 +127,11 @@ function Hero() {
             </SmoothScrollLink>
           </div>
 
+          <p className="mt-4 text-[12px] text-fg-5">
+            FundExecs OS is currently in <span className="text-fg-3">invite-only private beta</span>
+            .
+          </p>
+
           <HeroStats />
         </div>
 
