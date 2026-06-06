@@ -32,18 +32,19 @@ verification · ⬜ not started. Owner: **Claude** (code/docs in-repo) vs **You*
   sign-in is opened beyond `@beygroupintl.com` / test users. Privacy policy
   URL is now live at `/privacy` for when you submit.
 
-## 4. Integrations (config-driven; cards self-upgrade from "Coming soon")
+## 4. Integrations — ✅ verified live end to end
 
-- ✅ Backend wired end-to-end for all 8 providers (#56/#59)
+All OAuth providers connect and store a token in `private.integration_secrets`
+(DB-verified 2026-06-06). The long PKCE saga's root cause was the middleware
+hijacking integration callback codes — fixed in #68.
+
+- ✅ Backend wired end to end (#56/#59); token persistence via service_role RPC (#64)
 - ✅ UI gates each card on server-side config (no broken buttons)
-- ✅ **Slack** — secrets in Vercel + redirect URI registered
-  (`https://www.fundexecs.com/api/integrations/slack/callback`)
-- ✅ **Calendly** — secrets in Vercel + redirect URI registered
-  (`https://www.fundexecs.com/api/integrations/calendly/callback`)
-- ✅ **Gmail / Google Calendar** — live via Google sign-in scopes
-- ✅ **Apollo** — live (API key entered in the UI)
-- 🟡 **Google Drive / Docs / Slides** — show "Coming soon". To enable later:
-  add `drive.readonly` to the sign-in scopes + complete Google verification
+- ✅ **Calendly** — connected + token verified
+- ✅ **Slack** — connected + token verified
+- ✅ **Gmail / Google Calendar** — connected + token verified
+- ✅ **Google Drive / Docs / Slides** — connected + token verified
+- ✅ **Apollo** — API-key connector, available on demand
 
 ## 5. Legal / compliance
 

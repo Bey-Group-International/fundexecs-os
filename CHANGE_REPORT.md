@@ -14,6 +14,26 @@ concrete **new features / components / functions** added.
 
 ## 2026-06-06
 
+### #63–#68 — Make OAuth integrations work end to end _(Claude · auth/integrations)_
+
+Brought every OAuth provider live (Calendly, Slack, and all 5 Google providers
+connect and store tokens). DB-verified: each provider has a `connected` row with
+a token in `private.integration_secrets`.
+
+- **#63** — Google connect: persist the PKCE verifier cookie on the connect
+  redirect response.
+- **#64** — Persist integration tokens via service_role-only `SECURITY DEFINER`
+  RPCs (`public.store_integration_secret` / `get_integration_secret`); the admin
+  client couldn't reach the unexposed `private.integration_secrets`.
+- **#65** — `getSiteURL()` normalizes to an absolute `https://` origin so OAuth
+  `redirect_uri`s aren't schemeless (Calendly/Slack rejected the malformed URI).
+- **#66** — Server-initiate Google sign-in via `GET /api/auth/google`.
+- **#67** — Scope Supabase auth cookies to `.fundexecs.com` (`authCookieDomain()`).
+- **#68 — the actual root cause.** The middleware OAuth safety net forwarded any
+  `?code=` on a non-`/auth/callback` path to `/auth/callback`, hijacking the
+  Calendly/Slack callbacks' provider code into Supabase's `exchangeCodeForSession`
+  → "PKCE code verifier not found." Exempted `/api/` routes from the safety net.
+
 ### #62 — Private-beta release prep _(Claude)_
 
 Integration gating, legal pages, and release tracking for the private-beta launch.
