@@ -439,42 +439,36 @@ export type Database = {
       }
       diligence_chunks: {
         Row: {
-          chunk_index: number
           content: string
           created_at: string
           document_id: string
           embedding: string | null
           id: string
           org_id: string
-          run_id: string
         }
         Insert: {
-          chunk_index?: number
           content: string
           created_at?: string
           document_id: string
           embedding?: string | null
           id?: string
           org_id: string
-          run_id: string
         }
         Update: {
-          chunk_index?: number
           content?: string
           created_at?: string
           document_id?: string
           embedding?: string | null
           id?: string
           org_id?: string
-          run_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "diligence_chunks_document_id_fkey"
-            columns: ["document_id"]
+            foreignKeyName: "diligence_chunks_document_id_org_id_fkey"
+            columns: ["document_id", "org_id"]
             isOneToOne: false
             referencedRelation: "diligence_documents"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "org_id"]
           },
           {
             foreignKeyName: "diligence_chunks_org_id_fkey"
@@ -483,42 +477,35 @@ export type Database = {
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "diligence_chunks_run_id_fkey"
-            columns: ["run_id"]
-            isOneToOne: false
-            referencedRelation: "diligence_runs"
-            referencedColumns: ["id"]
-          },
         ]
       }
       diligence_documents: {
         Row: {
           created_at: string
-          file_name: string | null
+          file_name: string
           id: string
           kind: string
-          mime_type: string | null
+          mime_type: string
           org_id: string
           run_id: string
           storage_path: string
         }
         Insert: {
           created_at?: string
-          file_name?: string | null
+          file_name: string
           id?: string
           kind?: string
-          mime_type?: string | null
+          mime_type: string
           org_id: string
           run_id: string
           storage_path: string
         }
         Update: {
           created_at?: string
-          file_name?: string | null
+          file_name?: string
           id?: string
           kind?: string
-          mime_type?: string | null
+          mime_type?: string
           org_id?: string
           run_id?: string
           storage_path?: string
@@ -532,11 +519,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "diligence_documents_run_id_fkey"
-            columns: ["run_id"]
+            foreignKeyName: "diligence_documents_run_id_org_id_fkey"
+            columns: ["run_id", "org_id"]
             isOneToOne: false
             referencedRelation: "diligence_runs"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "org_id"]
           },
         ]
       }
@@ -583,11 +570,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "diligence_findings_run_id_fkey"
-            columns: ["run_id"]
+            foreignKeyName: "diligence_findings_run_id_org_id_fkey"
+            columns: ["run_id", "org_id"]
             isOneToOne: false
             referencedRelation: "diligence_runs"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "org_id"]
           },
         ]
       }
@@ -595,40 +582,44 @@ export type Database = {
         Row: {
           conviction: number | null
           created_at: string
-          created_by: string | null
+          created_by: string
           deal_id: string | null
           id: string
           org_id: string
           status: string
           summary: string | null
-          title: string | null
           updated_at: string
         }
         Insert: {
           conviction?: number | null
           created_at?: string
-          created_by?: string | null
+          created_by: string
           deal_id?: string | null
           id?: string
           org_id: string
           status?: string
           summary?: string | null
-          title?: string | null
           updated_at?: string
         }
         Update: {
           conviction?: number | null
           created_at?: string
-          created_by?: string | null
+          created_by?: string
           deal_id?: string | null
           id?: string
           org_id?: string
           status?: string
           summary?: string | null
-          title?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "diligence_runs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "diligence_runs_deal_id_fkey"
             columns: ["deal_id"]
@@ -1797,12 +1788,14 @@ export type Database = {
         }[]
       }
       match_diligence_chunks: {
-        Args: { _run_id: string; match_count?: number; query_embedding: string }
+        Args: { match_count?: number; query_embedding: string; run_id: string }
         Returns: {
           content: string
           document_id: string
+          file_name: string
           id: string
           similarity: number
+          storage_path: string
         }[]
       }
       match_knowledge_chunks: {
@@ -1834,6 +1827,10 @@ export type Database = {
       seed_demo_for_user: {
         Args: { _org: string; _user: string }
         Returns: undefined
+      }
+      store_diligence_chunks: {
+        Args: { _chunks: Json; _document_id: string }
+        Returns: number
       }
       store_integration_secret: {
         Args: {
