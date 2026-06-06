@@ -23,11 +23,9 @@ interface CalendlyInvitee {
  * Calendly adapter. Scheduled events become `meeting` interactions and each
  * invitee becomes a contact — booked meetings are a strong warmth signal.
  *
- * OAuth: Calendly has its own OAuth app (NOT the Google session token). Create
- * a Calendly OAuth app, store the access token on
- * `integration_connections.metadata.access_token`. The sync route resolves the
- * token from there. Scope required: read access to scheduled events/invitees.
- * Docs: https://developer.calendly.com/api-docs
+ * OAuth: Calendly has its own OAuth app. The connect callback stores access
+ * and refresh tokens in private.integration_secrets; sync receives only the
+ * resolved access token. Scopes: users:read, scheduled_events:read.
  */
 export const calendlyProvider: Provider = {
   id: 'calendly',

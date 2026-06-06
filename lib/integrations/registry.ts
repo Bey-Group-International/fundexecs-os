@@ -1,28 +1,31 @@
 import type { Provider } from './types';
 import { googleCalendarProvider } from './providers/google-calendar';
 import { gmailProvider } from './providers/gmail';
+import { googleDriveProvider } from './providers/google-drive';
+import { googleDocsProvider } from './providers/google-docs';
+import { googleSlidesProvider } from './providers/google-slides';
 import { calendlyProvider } from './providers/calendly';
 import { slackProvider } from './providers/slack';
 import { apolloProvider } from './providers/apollo';
-import { outlookCalendarProvider } from './providers/outlook-calendar';
+import { GOOGLE_PROVIDERS } from './constants';
 
 /**
- * Providers wired for ingestion. The Google providers use the Google
- * `provider_token` from the user's Supabase session. The remaining providers
- * (Calendly, Slack, Apollo, Outlook) each have their own OAuth/API key and
- * resolve their token from `integration_connections.metadata.access_token`.
+ * Providers wired for ingestion. Every provider resolves its access token from
+ * private.integration_secrets; public integration_connections rows only carry
+ * status, scopes and non-secret account metadata.
  */
 export const providers: Record<string, Provider> = {
   [googleCalendarProvider.id]: googleCalendarProvider,
   [gmailProvider.id]: gmailProvider,
+  [googleDriveProvider.id]: googleDriveProvider,
+  [googleDocsProvider.id]: googleDocsProvider,
+  [googleSlidesProvider.id]: googleSlidesProvider,
   [calendlyProvider.id]: calendlyProvider,
   [slackProvider.id]: slackProvider,
-  [apolloProvider.id]: apolloProvider,
-  [outlookCalendarProvider.id]: outlookCalendarProvider
+  [apolloProvider.id]: apolloProvider
 };
 
-/** Providers that authenticate via the Google session provider_token. */
-export const googleProviders = new Set([googleCalendarProvider.id, gmailProvider.id]);
+export const googleProviders = GOOGLE_PROVIDERS;
 
 export function getProvider(id: string): Provider | undefined {
   return providers[id];

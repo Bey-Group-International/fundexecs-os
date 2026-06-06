@@ -19,7 +19,7 @@ interface GoogleEvent {
 /**
  * Google Calendar adapter. Each external attendee on an event becomes a
  * contact + a `meeting` interaction — meetings are a strong warmth signal.
- * Uses the Google `provider_token` from the user's Supabase session.
+ * Uses the stored Google OAuth access token from private.integration_secrets.
  */
 export const googleCalendarProvider: Provider = {
   id: 'google_calendar',
