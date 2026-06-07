@@ -2,7 +2,6 @@ import {
   Inbox,
   Layers,
   MessagesSquare,
-  Mail,
   FilePlus,
   Handshake,
   History,
@@ -23,6 +22,9 @@ import {
  * /command-center, Action Queue → /notifications, Knowledge Base → /ask-earn)
  * no longer live here — those pages `redirect()` to the real surface, so the
  * rail is intentional rather than a dead-end.
+ *
+ * Inbox Intelligence (/inbox-intelligence) is now a live read surface over
+ * `market_signals` + signal `matches`, so it no longer lives here either.
  * ========================================================================= */
 
 export interface StubRoute {
@@ -76,20 +78,6 @@ export const STUB_ROUTES: Record<string, StubRoute> = {
     ],
     icon: MessagesSquare,
     stageLabel: 'Convert LPs'
-  },
-  '/inbox-intelligence': {
-    area: 'Intelligence',
-    title: 'Inbox Intelligence',
-    blurb:
-      'Earn reads your inbox and meeting transcripts to extract commitments, objections, and warm intros — and routes each one to the right place.',
-    capabilities: [
-      'Pull commitments out of email threads and meeting notes.',
-      'File objections to the Objections library automatically.',
-      'Surface warm intros into the LP Pipeline with provenance.',
-      'Every extraction is reviewable — Earn never invents context.'
-    ],
-    icon: Mail,
-    stageLabel: 'Operate & leverage'
   },
   '/materials': {
     area: 'Intelligence',
