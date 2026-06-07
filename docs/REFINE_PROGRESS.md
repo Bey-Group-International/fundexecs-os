@@ -19,27 +19,27 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 
 ## Sequencing gate (must finish before area work starts)
 
-| Item | Branch / PR | Status |
-| --- | --- | --- |
-| Gamification refinement | `claude/gamification-refine` | ⏳ agent running |
-| Account menu | `claude/account-menu` | ⏳ agent running |
-| Replace rail brand **F → Earn avatar** | `claude/earn-avatar` | ⬜ after account-menu merges |
+| Item                                   | Branch / PR                  | Status                       |
+| -------------------------------------- | ---------------------------- | ---------------------------- |
+| Gamification refinement                | `claude/gamification-refine` | ⏳ agent running             |
+| Account menu                           | `claude/account-menu`        | ⏳ agent running             |
+| Replace rail brand **F → Earn avatar** | `claude/earn-avatar`         | ⬜ after account-menu merges |
 
 ---
 
 ## Area checklist (one per iteration, in order)
 
-| # | Area | Routes / components | Status | PR |
-| --- | --- | --- | --- | --- |
-| 1 | Earn modal | `components/shell/earn/*` | ⬜ pending | — |
-| 2 | Source of Truth | `/profile`, `/trust`, `components/fund-profile/*` | ⬜ pending | — |
-| 3 | Daily Execution | `/command-center`, `/action-queue`, `/match-inbox` | ⬜ pending | — |
-| 4 | Capital Formation | `/pipeline`, `/capital-stack`, `/objections` | ⬜ pending | — |
-| 5 | Deal Execution | `/deal-desk`, `/ic-memos`, `/governance` | ⬜ pending | — |
-| 6 | Intelligence | `/inbox-intelligence`, `/knowledge`, `/materials`, `/partners` | ⬜ pending | — |
-| 7 | Audit | `/trust`, `/audit` | ⬜ pending | — |
-| 8 | Profile account | account menu + `/settings` | ⬜ pending | — |
-| 9 | Dashboard | `/command-center` `LifecycleDashboard` | ⬜ pending | — |
+| #   | Area              | Routes / components                                            | Status     | PR  |
+| --- | ----------------- | -------------------------------------------------------------- | ---------- | --- |
+| 1   | Earn modal        | `components/shell/earn/*`                                      | ⬜ pending | —   |
+| 2   | Source of Truth   | `/profile`, `/trust`, `components/fund-profile/*`              | ⬜ pending | —   |
+| 3   | Daily Execution   | `/command-center`, `/action-queue`, `/match-inbox`             | ⬜ pending | —   |
+| 4   | Capital Formation | `/pipeline`, `/capital-stack`, `/objections`                   | ⬜ pending | —   |
+| 5   | Deal Execution    | `/deal-desk`, `/ic-memos`, `/governance`                       | ⬜ pending | —   |
+| 6   | Intelligence      | `/inbox-intelligence`, `/knowledge`, `/materials`, `/partners` | ⬜ pending | —   |
+| 7   | Audit             | `/trust`, `/audit`                                             | ⬜ pending | —   |
+| 8   | Profile account   | account menu + `/settings`                                     | ⬜ pending | —   |
+| 9   | Dashboard         | `/command-center` `LifecycleDashboard`                         | ⬜ pending | —   |
 
 ---
 

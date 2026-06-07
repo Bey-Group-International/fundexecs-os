@@ -23,13 +23,10 @@ const STUB_REDIRECTS: {
   /** True when the destination is middleware-gated (preserves redirectedFrom). */
   expectsRedirectedFrom: boolean;
 }[] = [
-  // /diligence is gated at the page level → bare /login (no redirectedFrom).
-  { from: '/ic-memos', to: '/diligence', expectsRedirectedFrom: false },
-  // The rest are middleware-gated → /login?redirectedFrom=<dest>.
-  { from: '/deal-desk', to: '/pipeline', expectsRedirectedFrom: true },
-  { from: '/governance', to: '/strategy', expectsRedirectedFrom: true },
-  { from: '/action-queue', to: '/notifications', expectsRedirectedFrom: true },
-  { from: '/knowledge', to: '/ask-earn', expectsRedirectedFrom: true }
+  // deal-desk, ic-memos, governance, and knowledge are now real surfaces (not
+  // stubs), so their redirect assertions were removed. Only the entries below
+  // remain thin redirects.
+  { from: '/action-queue', to: '/notifications', expectsRedirectedFrom: true }
 ];
 
 for (const { from, to, expectsRedirectedFrom } of STUB_REDIRECTS) {
