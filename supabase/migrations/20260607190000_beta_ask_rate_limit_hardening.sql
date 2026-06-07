@@ -1,6 +1,10 @@
 -- =====================================================================
 -- Hardening follow-up for 20260607170000_beta_ask_rate_limit.sql.
 --
+-- Versioned 20260607190000: the original follow-up was authored as
+-- 20260607180000, which collided with 20260607180000_member_profile_shares
+-- (already applied to production), so it is renumbered to the next free slot.
+--
 -- Two fixes that landed after the original migration was applied:
 --
 --   1. Drop public.beta_ask_rate_limits_key_idx — it duplicates the primary
