@@ -27,11 +27,11 @@ Strict UI-only lane. Backend / auth / loaders / middleware / app/login left
 untouched. Three commits ship a net-new chrome on top of Claude's read-only
 data-layer (`getDashboardData`, `getFundProfile`, `getCreditWallet`).
 
-| commit  | sha       | scope                                                                                                                                                          | screenshots                                  |
-| ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| 1       | `3c50211` | Unified 6-area side rail (Source-of-Truth / Daily / Capital / Deal / Intelligence / Audit), top nav with org switcher + alerts + Credit-Wallet gauge, 14 stubs | `.screenshots/wave1-commit1/` (6 frames)     |
-| 2       | `b4b756d` | LifecycleDashboard — single canvas replaces 5 legacy layouts; 9 sub-components; legacy moved to `app/command-center/layouts/_legacy/`                          | `.screenshots/wave1-commit2/` (6 frames)     |
-| 3       | `376d70f` | Fund Profile (4 sub-components) + EarnContext (route default + drawer overrides, DealDetailDrawer wraps as POC) + Settings rebuilt as vertical detail rail     | `.screenshots/wave1-commit3/` (7 frames)     |
+| commit | sha       | scope                                                                                                                                                          | screenshots                              |
+| ------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| 1      | `3c50211` | Unified 6-area side rail (Source-of-Truth / Daily / Capital / Deal / Intelligence / Audit), top nav with org switcher + alerts + Credit-Wallet gauge, 14 stubs | `.screenshots/wave1-commit1/` (6 frames) |
+| 2      | `b4b756d` | LifecycleDashboard — single canvas replaces 5 legacy layouts; 9 sub-components; legacy moved to `app/command-center/layouts/_legacy/`                          | `.screenshots/wave1-commit2/` (6 frames) |
+| 3      | `376d70f` | Fund Profile (4 sub-components) + EarnContext (route default + drawer overrides, DealDetailDrawer wraps as POC) + Settings rebuilt as vertical detail rail     | `.screenshots/wave1-commit3/` (7 frames) |
 
 CI gate green on every commit: `npx tsc --noEmit`, `yarn lint`,
 `yarn format:check`, `yarn build`.
