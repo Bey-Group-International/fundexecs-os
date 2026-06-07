@@ -24,6 +24,7 @@ surfaces real.
 ## Tasks (priority order)
 
 ### 1. Capital Stack read path — confirm/extend `capital_stack_summary`
+
 The Capital Stack UI (`lib/queries/capital-stack.ts`) expects an org-scoped
 summary: **stage breakdown**, **lp_type breakdown**, **target raise**,
 **gap-to-target**, and a **commitments** list. Confirm the existing
@@ -33,6 +34,7 @@ the RPC doesn't exist, create it (SECURITY DEFINER, member-gated). Document the
 exact return shape so the loader can be tightened off placeholder fallback.
 
 ### 2. `act_on_match(_match_id uuid, _action text)` RPC
+
 Atomic, guarded match triage so the UI's `act_on_match` server action is a thin
 wrapper. Validate org membership + current status; allow transitions
 `new → accepted` and `new → dismissed`; set actioned timestamp/actor. On
@@ -41,6 +43,7 @@ synergy link — propose the cleanest mapping in the PR). `authenticated` execut
 membership-checked internally. Return the updated row.
 
 ### 3. `get_audit_trail(_org_id uuid, _limit int)` RPC
+
 One RLS-safe call that merges `trust_events` + `admin_actions` +
 `diligence_findings` into a unified, time-ordered feed (the audit loader does
 three separate client reads today). Member-gated; stable column contract
@@ -48,22 +51,26 @@ three separate client reads today). Member-gated; stable column contract
 loader and guarantees consistent authorization.
 
 ### 4. Objections write path
+
 The `objections` table landed but has no RPCs. Add `upsert_objection(...)` and
 `resolve_objection(_id uuid)` (member-gated, org-scoped, `updated_at` touched)
 so the Objections module gets a clean write path under RLS.
 
 ### 5. `generate_deal_matches(_org_id uuid)` — the deferred scorer
+
 `generate_lp_matches` explicitly left deal-to-mandate matches for a follow-up.
 Add the symmetric deterministic scorer that inserts `matches(kind = 'deal')`
 rows (deal ↔ capital-provider mandate), same rationale-array shape, service-role
 only. This fills the other half of Match Inbox.
 
 ### 6. Performance advisor pass
+
 Run the performance advisors mentally against the new tables and add any missing
 FK/lookup indexes (e.g. `matches(org_id, status)`, objections/capital-stack
 hot paths). Flag — don't fix — anything that needs an app-code change.
 
 ### 7. Beta demo seed (optional, if credits remain)
+
 Extend the demo seed so a fresh demo org renders **populated** capital stack,
 match inbox, partners, and audit surfaces (a handful of `capital_providers`,
 `service_providers`, `allocations`, and a `generate_lp_matches` call). Keep it
