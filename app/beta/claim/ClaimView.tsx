@@ -146,9 +146,20 @@ function Chip({
 const PRIMARY_BTN =
   'inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-5 py-2.5 text-[13.5px] font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] transition hover:brightness-110 disabled:opacity-60';
 
+// Keep the carried cookie small and bounded — the /complete route truncates
+// server-side too (name → 120, goal → 400), this is the matching client cap so
+// we never write an oversized cookie the browser would silently drop.
+const NAME_MAX = 120;
+const GOAL_MAX = 400;
+
 function persistApplication(app: BetaApplication) {
   try {
-    const val = encodeURIComponent(JSON.stringify(app));
+    const trimmed: BetaApplication = {
+      ...app,
+      name: app.name?.slice(0, NAME_MAX),
+      goal: app.goal?.slice(0, GOAL_MAX)
+    };
+    const val = encodeURIComponent(JSON.stringify(trimmed));
     const secure =
       typeof location !== 'undefined' && location.protocol === 'https:' ? '; secure' : '';
     document.cookie = `${BETA_APPLICATION_COOKIE}=${val}; path=/; max-age=86400; samesite=lax${secure}`;
@@ -567,10 +578,16 @@ export function ClaimView({ token }: { token: string }) {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && name.trim()) {
                     e.preventDefault();
-                    document.getElementById('goal')?.focus();
+                    // #goal only renders after a member type is picked. Until
+                    // then, advance to the member-type chooser instead.
+                    const next =
+                      document.getElementById('goal') ??
+                      document.getElementById('member-type-group')?.querySelector('button');
+                    (next as HTMLElement | null)?.focus();
                   }
                 }}
                 enterKeyHint="next"
+                maxLength={NAME_MAX}
                 placeholder="Sam Rivera"
                 className="mt-1.5 w-full rounded-xl border border-hairline bg-surface-2 px-3 py-2.5 text-[13.5px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
               />
@@ -579,7 +596,7 @@ export function ClaimView({ token }: { token: string }) {
             {name.trim() && (
               <div className="fx-rise">
                 <p className="mb-2 text-[12px] font-medium text-fg-3">I am a…</p>
-                <div className="flex flex-wrap gap-2">
+                <div id="member-type-group" className="flex flex-wrap gap-2">
                   {MEMBER_TYPES.map((mt) => (
                     <Chip key={mt} active={memberType === mt} onClick={() => setMemberType(mt)}>
                       {memberType === mt && <Check size={14} strokeWidth={2.2} aria-hidden />}
@@ -606,6 +623,7 @@ export function ClaimView({ token }: { token: string }) {
                     }
                   }}
                   enterKeyHint="go"
+                  maxLength={GOAL_MAX}
                   placeholder="e.g. close my next raise faster"
                   className="mt-1.5 w-full rounded-xl border border-hairline bg-surface-2 px-3 py-2.5 text-[13.5px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
                 />
