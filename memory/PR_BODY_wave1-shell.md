@@ -17,13 +17,13 @@ Strict UI-only lane:
 
 ## Commits
 
-| Commit | SHA       | Summary                                                                                                                                                          |
-| ------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Commit | SHA       | Summary                                                                                                                                                                      |
+| ------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1      | `3c50211` | Unified 6-area side rail (Source-of-Truth · Daily · Capital · Deal · Intelligence · Audit), top nav (org switcher · ⌘K · alerts · Earn coin · Credit Wallet), 14 stub routes |
 | 2      | `b4b756d` | `LifecycleDashboard` — single canvas replaces 5 legacy layouts. 9 sub-components, member-type variant matrix internal. Legacy moved to `app/command-center/layouts/_legacy/` |
-| 3      | `376d70f` | Fund Profile (4 sub-components) + EarnContext (route default + drawer overrides) + Settings rebuilt as vertical detail rail. DealDetailDrawer wraps as POC override |
-| —      | `9d37f77` | `chore(scripts):` Wave-1 dashboard variant capture helper                                                                                                        |
-| —      | `8142251` | `chore(prettier):` ignore `.emergent/` platform metadata                                                                                                         |
+| 3      | `376d70f` | Fund Profile (4 sub-components) + EarnContext (route default + drawer overrides) + Settings rebuilt as vertical detail rail. DealDetailDrawer wraps as POC override          |
+| —      | `9d37f77` | `chore(scripts):` Wave-1 dashboard variant capture helper                                                                                                                    |
+| —      | `8142251` | `chore(prettier):` ignore `.emergent/` platform metadata                                                                                                                     |
 
 Plus 2 platform auto-commits: `ca2f53b`, `58864d8`, `bf09f1f`.
 
@@ -206,17 +206,34 @@ export interface FundProfileRailSummaryProps {
   href?: string; // defaults to /profile
   className?: string;
 }
-export function FundProfileRailSummaryEmpty(props: { href?: string; className?: string }): JSX.Element;
+export function FundProfileRailSummaryEmpty(props: {
+  href?: string;
+  className?: string;
+}): JSX.Element;
 ```
 
 ### Earn context — `components/shell/earn/EarnContext.tsx`
 
 ```ts
 export type EarnContextKind =
-  | 'dashboard' | 'fund-profile' | 'trust' | 'pipeline' | 'lp'
-  | 'deal-desk' | 'deal' | 'capital-stack' | 'objection'
-  | 'intelligence' | 'materials' | 'partners' | 'audit'
-  | 'settings' | 'action-queue' | 'match-inbox' | 'onboarding' | 'generic';
+  | 'dashboard'
+  | 'fund-profile'
+  | 'trust'
+  | 'pipeline'
+  | 'lp'
+  | 'deal-desk'
+  | 'deal'
+  | 'capital-stack'
+  | 'objection'
+  | 'intelligence'
+  | 'materials'
+  | 'partners'
+  | 'audit'
+  | 'settings'
+  | 'action-queue'
+  | 'match-inbox'
+  | 'onboarding'
+  | 'generic';
 
 export interface EarnContextValue {
   kind: EarnContextKind;
@@ -247,19 +264,19 @@ export function buildRailSignals(data: DashboardData): NavSignals;
 
 Every Wave-1 surface reads from Claude's Wave-1 loaders (`lib/queries/*`). No new server actions, no schema changes. The matrix below shows which component consumes which loader field.
 
-| Component                                | Loader                                              | Fields consumed                                                                                                                                                              |
-| ---------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AuthedShell`                            | `getShellIdentity()`                                | full payload                                                                                                                                                                 |
-| `AuthedShell`                            | `getActiveOrg()`                                    | `orgId`                                                                                                                                                                      |
-| `AuthedShell`                            | `getCreditWallet(orgId)`                            | full payload (renders `<CreditWalletGauge>`)                                                                                                                                 |
-| `AuthedShell`                            | `getDashboardData(orgId)` → `buildRailSignals(d)`   | `data.stage`, `data.majorAlerts.length`, `data.fundProfile.completenessScore`, `data.fundProfile.gaps.length`, `data.dailyCommand.length`                                    |
-| `AuthedShell`                            | `getFundProfile(orgId)`                             | full payload → `<FundProfileRailSummary profile>`                                                                                                                            |
-| `app/command-center/page.tsx`            | `getDashboardData(orgId)`                           | full payload → `<LifecycleDashboard data>`                                                                                                                                   |
-| `app/command-center/page.tsx`            | `getFundProfile(orgId)`                             | full payload → rail summary (parallel fetch)                                                                                                                                 |
-| `app/profile/page.tsx`                   | `getFundProfile(orgId)`                             | full payload → hero / gaps / sections / rail summary                                                                                                                         |
-| `app/settings/page.tsx`                  | `getFundProfile(orgId)` + `getDashboardData(orgId)` | profile → rail summary · dashboard → `buildRailSignals`                                                                                                                      |
-| `LifecycleDashboard`                     | `DashboardData`                                     | `stage`, `stageBlurb`, `loopProgress`, `nextBestAction`, `executionScore`, `readinessScore`, `readinessBreakdown`, `majorAlerts`, `dailyCommand`, `stageKpis`, `raiseProgress`, `activityFeed`, `fundProfile.{fundName,completenessScore}` |
-| `FundProfileHero` / `Sections` / `Gaps` / `RailSummary` | `FundProfile`                            | `fundName`, `managerName`, `fundTier`, `memberType`, `focusAreas`, `completenessScore`, `gaps[]`, `thesis`, `strategy`, `targetRaise`, `terms`, `trackRecord`, `team`         |
+| Component                                               | Loader                                              | Fields consumed                                                                                                                                                                                                                            |
+| ------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `AuthedShell`                                           | `getShellIdentity()`                                | full payload                                                                                                                                                                                                                               |
+| `AuthedShell`                                           | `getActiveOrg()`                                    | `orgId`                                                                                                                                                                                                                                    |
+| `AuthedShell`                                           | `getCreditWallet(orgId)`                            | full payload (renders `<CreditWalletGauge>`)                                                                                                                                                                                               |
+| `AuthedShell`                                           | `getDashboardData(orgId)` → `buildRailSignals(d)`   | `data.stage`, `data.majorAlerts.length`, `data.fundProfile.completenessScore`, `data.fundProfile.gaps.length`, `data.dailyCommand.length`                                                                                                  |
+| `AuthedShell`                                           | `getFundProfile(orgId)`                             | full payload → `<FundProfileRailSummary profile>`                                                                                                                                                                                          |
+| `app/command-center/page.tsx`                           | `getDashboardData(orgId)`                           | full payload → `<LifecycleDashboard data>`                                                                                                                                                                                                 |
+| `app/command-center/page.tsx`                           | `getFundProfile(orgId)`                             | full payload → rail summary (parallel fetch)                                                                                                                                                                                               |
+| `app/profile/page.tsx`                                  | `getFundProfile(orgId)`                             | full payload → hero / gaps / sections / rail summary                                                                                                                                                                                       |
+| `app/settings/page.tsx`                                 | `getFundProfile(orgId)` + `getDashboardData(orgId)` | profile → rail summary · dashboard → `buildRailSignals`                                                                                                                                                                                    |
+| `LifecycleDashboard`                                    | `DashboardData`                                     | `stage`, `stageBlurb`, `loopProgress`, `nextBestAction`, `executionScore`, `readinessScore`, `readinessBreakdown`, `majorAlerts`, `dailyCommand`, `stageKpis`, `raiseProgress`, `activityFeed`, `fundProfile.{fundName,completenessScore}` |
+| `FundProfileHero` / `Sections` / `Gaps` / `RailSummary` | `FundProfile`                                       | `fundName`, `managerName`, `fundTier`, `memberType`, `focusAreas`, `completenessScore`, `gaps[]`, `thesis`, `strategy`, `targetRaise`, `terms`, `trackRecord`, `team`                                                                      |
 
 **Resilience:** Every fetch in `AuthedShell`, `app/profile/page.tsx`, `app/settings/page.tsx`, and `app/command-center/page.tsx` for non-required surfaces wraps in `.catch(() => null)` — the shell degrades gracefully (rail without badges, no summary card, no wallet gauge) rather than failing the whole route.
 
@@ -269,14 +286,14 @@ Every Wave-1 surface reads from Claude's Wave-1 loaders (`lib/queries/*`). No ne
 
 Source of truth: `MEMBER_TYPE_VARIANTS` in `components/dashboard/LifecycleDashboard.tsx`. All five personas were re-captured against HEAD `8142251` with the staging accounts at `member_profiles.status = complete` (idempotent re-flip via `yarn wave1:complete-test-onboarding`).
 
-| Persona             | Greeting line                                  | Operate-row order                       | Summary copy                                                                                                                  |
-| ------------------- | ---------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| investment_firm     | `Today's plan, {name}.`                        | stage → raise → alerts → daily          | Run the desk like a far larger institution — every move on the record, audit-ready, documented as it forms.                   |
-| individual_investor | `Good to see you, {name}.`                     | stage → alerts → daily → raise          | Your private allocator desk — Earn keeps the watchlist warm, the diligence clean, and the conviction sharp.                   |
-| service_provider    | `Welcome back, {name}.`                        | daily → stage → alerts → raise          | Inbound, ideal-client matches, and demand signal — Earn keeps the practice on the record.                                     |
-| startup             | `Hey {name} — let's get the raise closed.`     | raise → daily → stage → alerts          | Raise materials, warm intros, investor targets — Earn keeps every conversation audit-ready.                                   |
-| student             | `Welcome, {name}.`                             | daily → stage → alerts → raise          | Your student-led-fund desk — Earn shapes the loop while you build the institution's instincts.                                |
-| _default (unset)_   | `Good to see you, {name}.`                     | stage → alerts → daily → raise          | Your private-markets command center — Earn coordinates the team and your Chain of Trust holds the proof.                      |
+| Persona             | Greeting line                              | Operate-row order              | Summary copy                                                                                                |
+| ------------------- | ------------------------------------------ | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| investment_firm     | `Today's plan, {name}.`                    | stage → raise → alerts → daily | Run the desk like a far larger institution — every move on the record, audit-ready, documented as it forms. |
+| individual_investor | `Good to see you, {name}.`                 | stage → alerts → daily → raise | Your private allocator desk — Earn keeps the watchlist warm, the diligence clean, and the conviction sharp. |
+| service_provider    | `Welcome back, {name}.`                    | daily → stage → alerts → raise | Inbound, ideal-client matches, and demand signal — Earn keeps the practice on the record.                   |
+| startup             | `Hey {name} — let's get the raise closed.` | raise → daily → stage → alerts | Raise materials, warm intros, investor targets — Earn keeps every conversation audit-ready.                 |
+| student             | `Welcome, {name}.`                         | daily → stage → alerts → raise | Your student-led-fund desk — Earn shapes the loop while you build the institution's instincts.              |
+| _default (unset)_   | `Good to see you, {name}.`                 | stage → alerts → daily → raise | Your private-markets command center — Earn coordinates the team and your Chain of Trust holds the proof.    |
 
 **Invariants across all variants:**
 
@@ -291,18 +308,18 @@ Source of truth: `MEMBER_TYPE_VARIANTS` in `components/dashboard/LifecycleDashbo
 
 Source of truth: `CONTEXT_COPY` in `components/shell/earn/EarnContextCopy.ts`. Voice line is **uniform** ("Chief Operating Officer · your live AI guide") across every surface; only the subtitle, the AI-team activity glimpse, and the quick-action chips switch with `kind`.
 
-| Kind            | Subtitle                                              | Example actions                                                                |
-| --------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------ |
-| dashboard       | Today's command center · what to act on next          | Rank today's priorities · Where am I in the lifecycle? · Summarize last 24h    |
-| fund-profile    | Source of Truth · documented as it forms              | Close my profile gaps · Sharpen my thesis · LP-probe stress test               |
-| trust           | Chain of Trust · every claim provable                 | Validate latest evidence · Highlight any gaps · Audit-ready summary            |
-| pipeline        | LP Pipeline · move warm conversations forward         | Rank LPs by convertibility · Draft outreach to stalled LPs · Build target list |
-| lp              | LP focus · move this relationship forward             | Draft next-touch email · Snapshot the relationship · Forecast convertibility   |
-| deal            | Deal in focus · diligence, conviction, capital        | Run diligence on this deal · Draft IC memo · Pressure-test conviction          |
-| capital-stack   | Capital Stack · raise pacing on the record            | Pace the raise · Show concentration risk · Close-document checklist            |
-| audit           | Audit · every decision provable + reusable            | Replay last big decision · Audit-ready export                                  |
-| settings        | Profile & settings · how Earn speaks for you          | What does each setting unlock? · Help me complete my profile                   |
-| _generic_       | Your live AI guide · the team behind every action     | What should I do next? · Brief me on my fund · Pull a comp / play              |
+| Kind          | Subtitle                                          | Example actions                                                                |
+| ------------- | ------------------------------------------------- | ------------------------------------------------------------------------------ |
+| dashboard     | Today's command center · what to act on next      | Rank today's priorities · Where am I in the lifecycle? · Summarize last 24h    |
+| fund-profile  | Source of Truth · documented as it forms          | Close my profile gaps · Sharpen my thesis · LP-probe stress test               |
+| trust         | Chain of Trust · every claim provable             | Validate latest evidence · Highlight any gaps · Audit-ready summary            |
+| pipeline      | LP Pipeline · move warm conversations forward     | Rank LPs by convertibility · Draft outreach to stalled LPs · Build target list |
+| lp            | LP focus · move this relationship forward         | Draft next-touch email · Snapshot the relationship · Forecast convertibility   |
+| deal          | Deal in focus · diligence, conviction, capital    | Run diligence on this deal · Draft IC memo · Pressure-test conviction          |
+| capital-stack | Capital Stack · raise pacing on the record        | Pace the raise · Show concentration risk · Close-document checklist            |
+| audit         | Audit · every decision provable + reusable        | Replay last big decision · Audit-ready export                                  |
+| settings      | Profile & settings · how Earn speaks for you      | What does each setting unlock? · Help me complete my profile                   |
+| _generic_     | Your live AI guide · the team behind every action | What should I do next? · Brief me on my fund · Pull a comp / play              |
 
 (17 kinds total — full table in `EarnContextCopy.ts`.)
 
