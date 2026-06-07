@@ -13,6 +13,13 @@ import {
 } from '@/lib/lifecycle';
 import { readDailyDone, readDismissedAlerts, readLastVisit } from '@/lib/dashboard/state';
 import { getSpecialists } from '@/lib/team/roster';
+import {
+  getAchievements,
+  getQuests,
+  GAMIFICATION_IS_PLACEHOLDER,
+  type Achievement,
+  type Quest
+} from '@/lib/queries/gamification';
 
 /* ============================================================================
  * lib/queries/dashboard/lifecycle.ts — the lifecycle-aware Dashboard payload.
@@ -90,8 +97,18 @@ export interface ExecutionScore {
   /** Gamification — accumulated XP and derived level. */
   xp: number;
   level: number;
-  /** Consecutive-active-day streak. 0 until streak tracking lands (seam). */
+  /**
+   * Consecutive-active-day streak, derived from distinct UTC active days in
+   * `trust_events` with a 1-day grace (see `deriveStreak`). 0 when there's no
+   * on-the-record activity yet.
+   */
   streak: number;
+  /** Best (longest) consecutive-active-day run on record — "personal best". */
+  streakBest: number;
+  /** Completed daily-command check-offs today (drives the daily-loop ring). */
+  dailyDone: number;
+  /** Total daily-command items today. */
+  dailyTotal: number;
 }
 
 /** A high-priority item for the dashboard's Major Alerts. */
@@ -211,6 +228,17 @@ export interface DashboardData {
 
   /** The 15-strong executive desk with per-stage status. */
   agentTeam: AgentStatus[];
+
+  /**
+   * Gamification "Progress" section. PLACEHOLDER until Phase 2 — `getAchievements`
+   * / `getQuests` return the launch badges/quests in a locked/not-started state.
+   */
+  progress: {
+    achievements: Achievement[];
+    quests: Quest[];
+    /** True while the gamification layer is pre-Phase-2 placeholder data. */
+    placeholder: boolean;
+  };
 }
 
 /* ---------------------------------------------------------------------------
@@ -630,10 +658,12 @@ function buildTopActions(
  * Command-center surfaces — execution score, alerts, activity feed.
  * ------------------------------------------------------------------------- */
 
-/** Execution Score = weighted Chain-of-Trust completion + XP/level. */
+/** Execution Score = weighted Chain-of-Trust completion + XP/level + streak. */
 function buildExecutionScore(
   layers: { truth: number; concept: number; execution: number; work: number },
-  identity: { xp: number; level: number } | null
+  identity: { xp: number; level: number } | null,
+  streak: StreakResult,
+  daily: { done: number; total: number }
 ): ExecutionScore {
   // Weighted toward later layers — execution & work prove you ship, not just plan.
   const score = Math.round(
@@ -644,7 +674,10 @@ function buildExecutionScore(
     layers,
     xp: identity?.xp ?? 0,
     level: identity?.level ?? 1,
-    streak: 0 // SEAM: wire to active-day streak tracking when it lands.
+    streak: streak.current,
+    streakBest: streak.best,
+    dailyDone: daily.done,
+    dailyTotal: daily.total
   };
 }
 
@@ -758,6 +791,87 @@ async function loadActivityFeed(orgId: string): Promise<ActivityItem[]> {
   }
 
   return items.sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 10);
+}
+
+/* ---------------------------------------------------------------------------
+ * Streak — consecutive-active-day run derived from existing trust_events.
+ *
+ * ADDITIVE READ (no migration, no new table): we already query `trust_events`
+ * for the activity feed. Here we read a wider window of `created_at` timestamps,
+ * collapse them to distinct UTC calendar days, and count the run of consecutive
+ * days ending today (or yesterday — a 1-day grace so a single missed day never
+ * shames the operator into a reset). We also compute the longest run on record
+ * for "personal best". Pure date math over the rows; degrades to 0 on any read
+ * error so the surface never breaks.
+ * ------------------------------------------------------------------------- */
+
+export interface StreakResult {
+  /** Current consecutive-active-day streak (1-day grace). */
+  current: number;
+  /** Longest consecutive-active-day run observed in the window. */
+  best: number;
+}
+
+/** UTC day index (days since epoch) for an ISO timestamp. */
+function utcDayIndex(iso: string): number {
+  return Math.floor(new Date(iso).getTime() / 86400_000);
+}
+
+/**
+ * Pure streak math over a set of activity timestamps. Exported for unit reuse;
+ * `now` is injectable for determinism. A streak is "alive" if the latest active
+ * day is today or yesterday (the 1-day grace).
+ */
+export function deriveStreak(timestamps: string[], now: number = Date.now()): StreakResult {
+  if (timestamps.length === 0) return { current: 0, best: 0 };
+  const days = Array.from(new Set(timestamps.map(utcDayIndex))).sort((a, b) => a - b);
+
+  // Longest run anywhere in the window.
+  let best = 1;
+  let run = 1;
+  for (let i = 1; i < days.length; i++) {
+    run = days[i] - days[i - 1] === 1 ? run + 1 : 1;
+    if (run > best) best = run;
+  }
+
+  // Current run ending at the most recent active day, honored only if that day
+  // is today or yesterday (1-day grace).
+  const today = Math.floor(now / 86400_000);
+  const latest = days[days.length - 1];
+  let current = 0;
+  if (today - latest <= 1) {
+    current = 1;
+    for (let i = days.length - 1; i > 0; i--) {
+      if (days[i] - days[i - 1] === 1) current += 1;
+      else break;
+    }
+  }
+
+  return { current, best: Math.max(best, current) };
+}
+
+/**
+ * Load the active-day streak from `trust_events`. Reads up to 120 days of
+ * `created_at` to keep it cheap while covering meaningful runs. RLS-scoped;
+ * returns a zero streak on any read error.
+ */
+async function loadStreak(orgId: string): Promise<StreakResult> {
+  try {
+    const supabase = await createClient();
+    const since = new Date(Date.now() - 120 * 86400_000).toISOString();
+    const { data } = await supabase
+      .from('trust_events')
+      .select('created_at')
+      .eq('org_id', orgId)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false });
+    const stamps = (data ?? [])
+      .map((r) => (r as { created_at: string | null }).created_at)
+      .filter((c): c is string => Boolean(c));
+    return deriveStreak(stamps);
+  } catch {
+    return { current: 0, best: 0 };
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -967,7 +1081,10 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     identity,
     activityFeed,
     momentum,
-    newActivityCount
+    newActivityCount,
+    streak,
+    achievements,
+    quests
   ] = await Promise.all([
     getCommandCenterData(orgId),
     loadTrustProgress(orgId, fundProfile.managerUserId),
@@ -977,7 +1094,10 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     getShellIdentity(),
     loadActivityFeed(orgId),
     loadMomentum(orgId),
-    loadSinceCounts(orgId, lastVisitISO)
+    loadSinceCounts(orgId, lastVisitISO),
+    loadStreak(orgId),
+    getAchievements(orgId),
+    getQuests(orgId)
   ]);
 
   const inputs: LifecycleInputs = {
@@ -1010,9 +1130,20 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
   const readiness = computeReadinessScore(inputs);
 
   const topActions = buildTopActions(stageResult.stage, fundProfile, raiseProgress, pipeline);
+
+  // Daily command = top actions tagged with today's check-off state. Computed
+  // here so the daily-loop ring + Execution Score share the same counts.
+  const dailyCommand: DashboardAction[] = topActions.map((a) => ({
+    ...a,
+    done: dailyDoneIds.has(a.id)
+  }));
+  const dailyDone = dailyCommand.filter((a) => a.done).length;
+
   const executionScore = buildExecutionScore(
     { truth: trust.truth, concept: trust.concept, execution: trust.execution, work: trust.work },
-    identity
+    identity,
+    streak,
+    { done: dailyDone, total: dailyCommand.length }
   );
   const majorAlerts = buildMajorAlerts(
     fundProfile,
@@ -1021,12 +1152,6 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     { contacted: pipeline.contacted, total: pipeline.total },
     identity?.unreadCount ?? 0
   ).filter((a) => !dismissedAlertIds.has(a.id));
-
-  // Daily command = top actions tagged with today's check-off state.
-  const dailyCommand: DashboardAction[] = topActions.map((a) => ({
-    ...a,
-    done: dailyDoneIds.has(a.id)
-  }));
 
   const sinceLastVisit = buildSinceLastVisit(lastVisitISO, newActivityCount, activityFeed);
   const briefing = buildBriefing(
@@ -1062,6 +1187,11 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     sinceLastVisit,
     momentum,
     briefing,
-    agentTeam
+    agentTeam,
+    progress: {
+      achievements,
+      quests,
+      placeholder: GAMIFICATION_IS_PLACEHOLDER
+    }
   };
 }
