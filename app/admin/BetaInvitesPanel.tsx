@@ -137,16 +137,22 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
   }
 
   async function handleDelete(id: string, email: string) {
+    if (busyId) return;
     if (!window.confirm(`Delete the invite for ${email}? This can’t be undone.`)) return;
     setBusyId(id);
     setError(null);
-    const result = await deleteBetaInvite(id);
-    setBusyId(null);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await deleteBetaInvite(id);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not delete invite. Please try again.');
+    } finally {
+      setBusyId(null);
     }
-    router.refresh();
   }
 
   const pending = invites.filter((i) => i.status === 'pending').length;

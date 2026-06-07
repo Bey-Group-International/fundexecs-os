@@ -261,12 +261,21 @@ export async function deleteBetaInvite(inviteId: string): Promise<DeleteInviteRe
     return { ok: false, error: 'This person already joined — their invite can’t be deleted.' };
   }
 
-  const { error } = await admin
+  // Guard the accepted check atomically: `.neq('status','accepted')` means a
+  // status that flips to accepted between the read above and here deletes 0 rows
+  // rather than erasing the record that they joined.
+  const { data: deleted, error } = await admin
     .from('beta_invites')
     .delete()
     .eq('id', inviteId)
-    .eq('org_id', org.orgId);
+    .eq('org_id', org.orgId)
+    .neq('status', 'accepted')
+    .select('id')
+    .maybeSingle();
   if (error) return { ok: false, error: error.message };
+  if (!deleted) {
+    return { ok: false, error: 'This person already joined — their invite can’t be deleted.' };
+  }
 
   await writeAudit(org.orgId, org.userId, 'delete_beta_invite', inviteId);
   return { ok: true };

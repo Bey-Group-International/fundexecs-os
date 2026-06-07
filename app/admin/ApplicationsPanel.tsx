@@ -234,7 +234,7 @@ export function ApplicationsPanel({ applications }: { applications: BetaApplicat
             <ApplicationCard
               key={app.claimId}
               app={app}
-              busy={busyId === app.claimId}
+              busy={busyId !== null}
               onReview={(next) => review(app.claimId, next)}
             />
           ))}

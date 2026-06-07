@@ -20,7 +20,13 @@ alter table public.beta_link_claims
 do $$
 begin
   if not exists (
-    select 1 from pg_constraint where conname = 'beta_link_claims_review_status_check'
+    select 1
+    from pg_constraint c
+    join pg_class t on t.oid = c.conrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    where c.conname = 'beta_link_claims_review_status_check'
+      and n.nspname = 'public'
+      and t.relname = 'beta_link_claims'
   ) then
     alter table public.beta_link_claims
       add constraint beta_link_claims_review_status_check

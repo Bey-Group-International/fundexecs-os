@@ -60,11 +60,18 @@ export async function getBetaApplications(orgId: string): Promise<BetaApplicatio
   const linkIds = [...new Set(claims.map((c) => c.beta_link_id))];
   const userIds = [...new Set(claims.map((c) => c.user_id))];
 
-  const [{ data: links }, { data: profiles }, { data: memberProfiles }] = await Promise.all([
+  const [
+    { data: links, error: linksErr },
+    { data: profiles, error: profilesErr },
+    { data: memberProfiles, error: memberProfilesErr }
+  ] = await Promise.all([
     admin.from('beta_links').select('id, label').in('id', linkIds),
     admin.from('profiles').select('id, full_name, member_type').in('id', userIds),
     admin.from('member_profiles').select('user_id, draft').in('user_id', userIds)
   ]);
+  // Fail closed: a partial enrichment would render misleading cards (missing
+  // names/goals), so drop the whole list rather than show half-built ones.
+  if (linksErr || profilesErr || memberProfilesErr) return [];
 
   const labelById = new Map((links ?? []).map((l) => [l.id, l.label]));
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
