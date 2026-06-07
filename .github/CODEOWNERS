@@ -1,0 +1,22 @@
+# Code owners — auto-requests review from the right people and (with the
+# "require review from Code Owners" ruleset) blocks merge until they approve.
+#
+# Replace @BGI-Pres with a team handle (e.g. @bey-group-international/eng) once
+# teams are set up — team-based ownership scales better than a single user.
+# Order matters: the LAST matching pattern wins.
+
+# Default owner for everything.
+*                           @BGI-Pres
+
+# ── High-blast-radius lanes (security / data / auth) — extra scrutiny ──────────
+/supabase/                  @BGI-Pres
+/lib/supabase/              @BGI-Pres
+/lib/actions/               @BGI-Pres
+/middleware.ts              @BGI-Pres
+/proxy.ts                   @BGI-Pres
+/app/login/                 @BGI-Pres
+/app/auth/                  @BGI-Pres
+
+# ── CI / repo policy ─────────────────────────────────────────────────────────
+/.github/                   @BGI-Pres
+/.coderabbit.yaml           @BGI-Pres
