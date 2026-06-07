@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Link2, Send, Copy, Check, Ban } from 'lucide-react';
+import QRCode from 'qrcode';
+import { Link2, Copy, Check, Ban, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { Badge, Button, Card, Input, SectionTitle, type BadgeTone } from '@/components/ui';
 import { createBetaLink, revokeBetaLink } from '@/lib/actions/beta-links';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
@@ -34,9 +35,24 @@ function relativeExpiry(iso: string): string {
   return `${Math.floor(hours / 24)}d left`;
 }
 
-/** Copyable link box shown after link creation. */
-function LinkBox({ link, onDone }: { link: string; onDone: () => void }) {
+/** The freshly-minted link: big copy field + scannable QR for sharing to phones. */
+function FreshLink({ link, onDone }: { link: string; onDone: () => void }) {
   const [copied, setCopied] = useState(false);
+  const [qr, setQr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    QRCode.toDataURL(link, { margin: 1, width: 220 })
+      .then((url) => {
+        if (alive) setQr(url);
+      })
+      .catch(() => {
+        // QR is a nicety — fall back to link-only.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [link]);
 
   async function copy() {
     try {
@@ -44,31 +60,17 @@ function LinkBox({ link, onDone }: { link: string; onDone: () => void }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard can be blocked.
+      // Clipboard can be blocked (insecure context) — the field stays selectable.
     }
   }
 
   return (
     <div className="mt-4 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] p-3.5">
-      <div className="flex items-center gap-2 text-[12px] font-semibold text-success">
-        <Link2 size={14} strokeWidth={1.9} aria-hidden />
-        Beta link ready — copy and share it
-      </div>
-      <div className="mt-2.5 flex items-center gap-2">
-        <input
-          readOnly
-          value={link}
-          onFocus={(e) => e.currentTarget.select()}
-          className="w-full truncate rounded-lg border border-hairline bg-surface-1 px-3 py-2 font-mono text-[11.5px] text-fg-2 outline-none"
-        />
-        <Button variant="primary" size="sm" icon={copied ? Check : Copy} onClick={copy}>
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
-      </div>
-      <div className="mt-2 flex items-center justify-between">
-        <p className="text-[11px] text-fg-5">
-          Share this link to let recipients claim beta access via email or Google.
-        </p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[12px] font-semibold text-success">
+          <Link2 size={14} strokeWidth={1.9} aria-hidden />
+          Invite link ready — copy and share it
+        </div>
         <button
           type="button"
           onClick={onDone}
@@ -76,6 +78,41 @@ function LinkBox({ link, onDone }: { link: string; onDone: () => void }) {
         >
           Dismiss
         </button>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              aria-label="Invite link"
+              value={link}
+              onFocus={(e) => e.currentTarget.select()}
+              className="w-full truncate rounded-lg border border-hairline bg-surface-1 px-3 py-2.5 font-mono text-[12px] text-fg-2 outline-none"
+            />
+            <Button variant="primary" size="md" icon={copied ? Check : Copy} onClick={copy}>
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+          <p className="mt-2 text-[11px] text-fg-5">
+            Anyone who opens it claims access via email or Google, then lands straight in
+            onboarding.
+          </p>
+        </div>
+
+        {qr && (
+          <div className="flex flex-none flex-col items-center gap-1.5 rounded-xl border border-hairline bg-surface-1 p-2.5">
+            {/* eslint-disable-next-line @next/next/no-img-element -- client-side QR data URL */}
+            <img
+              src={qr}
+              alt="QR code for the invite link"
+              width={120}
+              height={120}
+              className="rounded-md"
+            />
+            <span className="text-[10px] text-fg-5">Scan to open</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -86,13 +123,13 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
   const [label, setLabel] = useState('');
   const [maxUses, setMaxUses] = useState('25');
   const [expiryDays, setExpiryDays] = useState('14');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleCreate() {
     if (loading) return;
     setLoading(true);
     setError(null);
@@ -109,12 +146,9 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
         return;
       }
       setLink(result.link);
-      setLabel('');
-      setMaxUses('25');
-      setExpiryDays('14');
       router.refresh();
     } catch {
-      setError('Could not create beta link. Please try again.');
+      setError('Could not create invite link. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -132,7 +166,7 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
       }
       router.refresh();
     } catch {
-      setError('Could not revoke beta link. Please try again.');
+      setError('Could not revoke invite link. Please try again.');
     } finally {
       setBusyId(null);
     }
@@ -142,28 +176,44 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <Card>
+      {/* Hero — one-click generation. */}
+      <Card className="bg-[linear-gradient(110deg,rgba(247,201,72,0.10),transparent_55%)]">
         <SectionTitle
-          eyebrow="Shareable links"
-          title="Create beta access links"
+          eyebrow="Private beta"
+          title="Shareable invite link"
           className="mb-3"
           action={<span className="text-[11px] text-fg-5">{active} active</span>}
         />
         <p className="mb-4 max-w-prose text-[12.5px] leading-relaxed text-fg-3">
-          Generate a reusable link that anyone can claim via email or Google sign-in. No email
-          delivery needed — just copy and share.
+          Generate one link to share anywhere — DM, deck, or email. Recipients claim access via
+          email or Google and land straight in onboarding. No email delivery needed.
         </p>
 
-        <form onSubmit={handleCreate} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button variant="gold" icon={Sparkles} disabled={loading} onClick={handleCreate}>
+            {loading ? 'Generating…' : 'Generate invite link'}
+          </Button>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2 text-[12px] font-medium text-fg-3 transition hover:text-fg-1"
+          >
+            <SlidersHorizontal size={13} strokeWidth={1.9} aria-hidden />
+            {showAdvanced ? 'Hide options' : 'Options'}
+          </button>
+          <span className="text-[11px] text-fg-5">
+            Defaults: {maxUses || 25} uses · {expiryDays || 14}-day expiry
+          </span>
+        </div>
+
+        {showAdvanced && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <Input
               label="Label (optional)"
               placeholder="e.g., Wave 2 LPs"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
-          </div>
-          <div className="flex-0">
             <Input
               label="Max uses"
               type="number"
@@ -173,8 +223,6 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
               value={maxUses}
               onChange={(e) => setMaxUses(e.target.value)}
             />
-          </div>
-          <div className="flex-0">
             <Input
               label="Expires (days)"
               type="number"
@@ -185,10 +233,7 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
               onChange={(e) => setExpiryDays(e.target.value)}
             />
           </div>
-          <Button type="submit" variant="primary" icon={Send} disabled={loading}>
-            {loading ? 'Creating…' : 'Create link'}
-          </Button>
-        </form>
+        )}
 
         {error && (
           <p className="mt-3 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-danger">
@@ -196,9 +241,10 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
           </p>
         )}
 
-        {link && <LinkBox link={link} onDone={() => setLink(null)} />}
+        {link && <FreshLink link={link} onDone={() => setLink(null)} />}
       </Card>
 
+      {/* Existing links. */}
       <Card className="p-2">
         <div className="grid grid-cols-[1fr_1fr_0.8fr_0.9fr_0.9fr_1fr] gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
           <span>Label</span>
@@ -211,7 +257,7 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
         <div className="h-px bg-hairline" />
         {links.length === 0 ? (
           <div className="p-10 text-center text-[13px] text-fg-5">
-            No beta links yet. Create one above to get started.
+            No invite links yet. Generate one above to get started.
           </div>
         ) : (
           links.map((l) => {
