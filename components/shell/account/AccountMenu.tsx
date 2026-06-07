@@ -331,9 +331,14 @@ function WorkspaceSwitcher({
     setSwitchingTo(orgId);
     setError(null);
     startTransition(async () => {
-      const result = await setActiveWorkspace(orgId);
-      if (!result.ok) {
-        setError(result.error);
+      try {
+        const result = await setActiveWorkspace(orgId);
+        if (!result.ok) {
+          setError(result.error);
+        }
+      } catch {
+        setError('Unable to switch workspace right now. Please try again.');
+      } finally {
         setSwitchingTo(null);
       }
       // On success, revalidatePath('/') re-renders the shell with the new org.

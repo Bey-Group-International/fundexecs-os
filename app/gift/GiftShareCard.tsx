@@ -35,8 +35,10 @@ export function GiftShareCard() {
           url: REFERRAL_URL
         });
         return;
-      } catch {
-        // User dismissed or share failed — fall through to clipboard.
+      } catch (error) {
+        // User intentionally cancelled the native share — don't overwrite the
+        // clipboard. Only fall through to copy on a real share failure.
+        if (error instanceof DOMException && error.name === 'AbortError') return;
       }
     }
     await copy(SHARE_MESSAGE, 'message');

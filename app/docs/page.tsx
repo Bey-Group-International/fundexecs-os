@@ -31,7 +31,6 @@ const TRUST_LAYERS = [
 const AGENTS: { name: string; role: string }[] = [
   { name: 'Earn (COO)', role: 'Operator-facing concierge that orchestrates the whole desk.' },
   { name: 'Master Workflow', role: 'Command layer — routes each request to the right agent.' },
-  { name: 'Earnest Fundmaker', role: 'Showrunner that surfaces the day’s highest-impact actions.' },
   { name: 'Automater / Scrubber', role: 'Intake & data hygiene — clean, structured records.' },
   { name: 'Executive Advisor', role: 'Investor intelligence and strategy guidance.' },
   { name: 'Rainmaker', role: 'The closer — drives commitments and deal closes.' },

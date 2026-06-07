@@ -43,6 +43,7 @@ export async function setActiveWorkspace(orgId: string): Promise<SetActiveWorksp
   (await cookies()).set(ACTIVE_ORG_COOKIE, clean, {
     httpOnly: true,
     sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: ONE_YEAR
   });

@@ -22,6 +22,13 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
     if (!open) return;
     closeRef.current?.focus();
     function onKey(e: KeyboardEvent) {
+      if (e.key === 'Tab') {
+        // Trap focus inside the dialog — keep it on the close control rather
+        // than letting Tab reach the underlying account menu.
+        e.preventDefault();
+        closeRef.current?.focus();
+        return;
+      }
       if (e.key === 'Escape') {
         e.stopPropagation();
         onClose();
