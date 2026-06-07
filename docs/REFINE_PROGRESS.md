@@ -38,12 +38,31 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 | 5   | Deal Execution    | `/deal-desk`, `/ic-memos`, `/governance`                       | ✅ merged  | #103 |
 | 6   | Intelligence      | `/inbox-intelligence`, `/knowledge`, `/materials`, `/partners` | ✅ merged  | #105 |
 | 7   | Audit             | `/trust`, `/audit`                                             | ✅ merged  | #111 |
-| 8   | Profile account   | account menu + `/settings`                                     | ⏳ PR #112 | #112 |
-| 9   | Dashboard         | `/command-center` `LifecycleDashboard`                         | ⬜ pending | —    |
+| 8   | Profile account   | account menu + `/settings`                                     | ✅ merged  | #112 |
+| 9   | Dashboard         | `/command-center` `LifecycleDashboard`                         | ⏳ PR #113 | #113 |
 
 ---
 
 ## Entries (OLD → NEW)
+
+### [6] Dashboard — 2026-06-07 — PR #113 — campaign complete 🎉
+
+**OLD:** The dashboard hero greeting is spoken in Earn's COO voice (the gold
+"Earnest Fundmaker · Chief Operating Officer" eyebrow) but showed **no Earn
+face**, and the hero's right side sat empty — reading left-heavy/flat. (The rest
+of the dashboard was already refined in #95/#102, so this is a targeted anchor,
+not a rework.)
+**NEW (visual, bold not flat):** the hero's right side now carries the **Earn
+coin** (glow + live presence dot) and an **"On the desk"** gold status pill (sm+),
+balancing the layout and tying the dashboard to the new Earn-coin brand mark from
+#106. The greeting now reads as Earn speaking, with his face beside it.
+**Scope:** layout-only, tokens-only (gold reserved for Earn); no data/loader/auth
+changes.
+**Files:** `components/dashboard/LifecycleDashboard.tsx`.
+**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+
+> **Campaign complete** — all 9 rail areas refined + the brand swap (#106) and
+> semantic-token spec-sweep (#109). 12 PRs shipped this run (#104–#113).
 
 ### [5] Profile account — 2026-06-07 — PR #112
 
@@ -62,7 +81,7 @@ aspirations instead of hardcoded.
 **Scope:** additive reads only (reuses `identity` + `memberProfile`, no new
 loaders); tokens-only; no auth/migration changes.
 **Files:** `app/settings/SettingsView.tsx`, `app/settings/page.tsx`.
-**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+**Checks:** tsc/lint/format/build ✓ · CodeRabbit ✓ (no actionable comments).
 
 ### [4] Audit — 2026-06-07 — PR #111
 
