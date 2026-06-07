@@ -46,7 +46,7 @@ export function MomentumCard({ momentum, className }: MomentumCardProps) {
             >
               <Trend size={11} strokeWidth={2.2} aria-hidden />
               {up ? '+' : ''}
-              {momentum.deltaPct}% over period
+              {momentum.deltaPct}% vs. last period
             </span>
           ) : (
             <p className="mt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-fg-4">

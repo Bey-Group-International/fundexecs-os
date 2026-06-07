@@ -95,8 +95,8 @@ export function AchievementGrid({ achievements, placeholder, className }: Achiev
       )}
 
       {placeholder ? (
-        <p className="mt-3 text-[10.5px] text-fg-5">
-          Preview · badges unlock automatically when the intelligence layer ships.
+        <p className="mt-3 text-[10.5px] text-fg-4">
+          Preview · badges unlock automatically once Earn&rsquo;s intelligence comes online.
         </p>
       ) : null}
     </Card>

@@ -58,7 +58,7 @@ export function NextBestActionCard({ action, className }: NextBestActionCardProp
 
       {!action ? (
         <p className="text-[12.5px] text-fg-3">
-          Your desk is in order — Earn will surface the next move the moment one materializes.
+          Your desk is in order — Earn will surface the next move as soon as one&rsquo;s ready.
         </p>
       ) : (
         <div
