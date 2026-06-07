@@ -6,9 +6,11 @@ import {
   TrendingUp,
   Target,
   CircleDollarSign,
+  Flag,
   AlertCircle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  type LucideIcon
 } from 'lucide-react';
 import { Badge, Card, ProgressBar, SectionTitle, type BadgeTone } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
@@ -47,39 +49,60 @@ function stageLabel(stage: string): string {
 
 /* ---- Sub-components ----------------------------------------------------- */
 
+const TONE_TEXT: Record<BadgeTone, string> = {
+  neutral: 'text-fg-4',
+  gold: 'text-gold-1',
+  azure: 'text-azure-1',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
+  info: 'text-info'
+};
+
+const TONE_VAR: Record<BadgeTone, string> = {
+  neutral: 'var(--fg-4)',
+  gold: 'var(--gold-1)',
+  azure: 'var(--azure-1)',
+  success: 'var(--success)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)',
+  info: 'var(--info)'
+};
+
 function KpiTile({
   label,
   value,
   hint,
+  icon: Icon,
   tone = 'neutral'
 }: {
   label: string;
   value: string;
   hint?: string;
+  icon: LucideIcon;
   tone?: BadgeTone;
 }) {
-  const dotColor: Record<BadgeTone, string> = {
-    neutral: 'bg-fg-4',
-    gold: 'bg-gold-1',
-    azure: 'bg-azure-1',
-    success: 'bg-success',
-    warning: 'bg-warning',
-    danger: 'bg-danger',
-    info: 'bg-info'
-  };
   return (
-    <div className="rounded-2xl border border-hairline bg-bg-1 px-4 py-4">
-      <div className="flex items-center gap-1.5">
-        <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', dotColor[tone])} />
+    <Card className="relative overflow-hidden p-4">
+      {/* Tone accent rail — adds depth without flooding the surface. */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-[3px]"
+        style={{ background: TONE_VAR[tone] }}
+      />
+      <div className="flex items-center justify-between">
         <dt className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
           {label}
         </dt>
+        <span className={TONE_TEXT[tone]}>
+          <Icon size={15} strokeWidth={1.9} aria-hidden />
+        </span>
       </div>
-      <dd className="mt-1.5 text-[22px] font-semibold tabular-nums tracking-[-0.015em] text-fg-1">
+      <dd className="mt-2 text-[22px] font-semibold tabular-nums tracking-[-0.015em] text-fg-1">
         {value}
       </dd>
       {hint ? <p className="mt-0.5 text-[11px] text-fg-4">{hint}</p> : null}
-    </div>
+    </Card>
   );
 }
 
@@ -101,15 +124,7 @@ function BreakdownRow({
       <ProgressBar
         value={p}
         height={5}
-        color={
-          tone === 'success'
-            ? 'var(--success)'
-            : tone === 'azure'
-              ? 'var(--azure-1)'
-              : tone === 'warning'
-                ? 'var(--warning)'
-                : 'var(--fg-4)'
-        }
+        color={TONE_VAR[tone]}
         ariaLabel={`${label} allocation`}
         className="flex-1"
       />
@@ -117,6 +132,109 @@ function BreakdownRow({
         {money(amount)}
       </div>
       <div className="w-10 flex-none text-right text-[11px] tabular-nums text-fg-4">{p}%</div>
+    </div>
+  );
+}
+
+/* ---- LP-type donut ------------------------------------------------------ */
+
+/** A rotating palette for donut/legend segments (tokens only). */
+const DONUT_COLORS = [
+  'var(--azure-1)',
+  'var(--success)',
+  'var(--gold-1)',
+  'var(--info)',
+  'var(--warning)',
+  'var(--fg-4)'
+];
+
+function LpTypeDonut({
+  entries,
+  currency
+}: {
+  entries: Array<[string, number]>;
+  currency: string;
+}) {
+  const total = entries.reduce((sum, [, v]) => sum + v, 0);
+  const radius = 52;
+  const stroke = 18;
+  const circumference = 2 * Math.PI * radius;
+
+  // Build cumulative segments for the SVG ring. Each segment's rotation is the
+  // running sum of all prior amounts — computed without mutating outer state so
+  // the render stays pure (React Compiler-safe).
+  const segments = entries.map(([label, amount], i) => {
+    const fraction = total > 0 ? amount / total : 0;
+    const priorSum = entries.slice(0, i).reduce((sum, [, v]) => sum + v, 0);
+    return {
+      label,
+      amount,
+      color: DONUT_COLORS[i % DONUT_COLORS.length],
+      dash: fraction * circumference,
+      gap: circumference - fraction * circumference,
+      rotation: (priorSum / (total || 1)) * 360
+    };
+  });
+
+  return (
+    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-7">
+      <div className="relative flex-none">
+        <svg
+          width={140}
+          height={140}
+          viewBox="0 0 140 140"
+          role="img"
+          aria-label="LP type allocation donut"
+        >
+          <circle
+            cx={70}
+            cy={70}
+            r={radius}
+            fill="none"
+            stroke="var(--surface-2)"
+            strokeWidth={stroke}
+          />
+          {segments.map((seg) => (
+            <circle
+              key={seg.label}
+              cx={70}
+              cy={70}
+              r={radius}
+              fill="none"
+              stroke={seg.color}
+              strokeWidth={stroke}
+              strokeDasharray={`${seg.dash} ${seg.gap}`}
+              strokeDashoffset={0}
+              transform={`rotate(${seg.rotation - 90} 70 70)`}
+              strokeLinecap="butt"
+            />
+          ))}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-fg-4">
+            Total
+          </span>
+          <span className="text-[15px] font-semibold tabular-nums text-fg-1">
+            {money(total, currency)}
+          </span>
+        </div>
+      </div>
+      <ul className="flex w-full flex-1 flex-col gap-2">
+        {segments.map((seg) => (
+          <li key={seg.label} className="flex items-center gap-2.5 text-[12.5px]">
+            <span
+              aria-hidden
+              className="h-2.5 w-2.5 flex-none rounded-[3px]"
+              style={{ background: seg.color }}
+            />
+            <span className="min-w-0 flex-1 truncate text-fg-2">{stageLabel(seg.label)}</span>
+            <span className="flex-none tabular-nums text-fg-2">{money(seg.amount, currency)}</span>
+            <span className="w-10 flex-none text-right tabular-nums text-fg-4">
+              {pct(seg.amount, total)}%
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -249,6 +367,20 @@ export function CapitalStackView({ data }: CapitalStackViewProps) {
   const coveragePct = pct(totalRaised, targetTotal);
   const committedPct = pct(s?.committedTotal ?? 0, targetTotal);
 
+  // Derived breakdowns (React Compiler memoizes) — sorted desc, with each
+  // breakdown's own sum as the percentage denominator.
+  const stageEntries = s
+    ? Object.entries(s.stageTotals)
+        .filter(([, v]) => v > 0)
+        .sort(([, a], [, b]) => b - a)
+    : [];
+  const stageSum = stageEntries.reduce((sum, [, v]) => sum + v, 0);
+  const lpTypeEntries = s
+    ? Object.entries(s.lpTypeTotals)
+        .filter(([, v]) => v > 0)
+        .sort(([, a], [, b]) => b - a)
+    : [];
+
   return (
     <div className="space-y-8">
       {/* KPI tiles */}
@@ -260,24 +392,28 @@ export function CapitalStackView({ data }: CapitalStackViewProps) {
               label="Target"
               value={money(targetTotal, s.currency)}
               hint="Fund raise target"
+              icon={Target}
               tone="neutral"
             />
             <KpiTile
               label="Committed"
               value={money(s.committedTotal, s.currency)}
               hint={`${committedPct}% of target`}
+              icon={CircleDollarSign}
               tone="success"
             />
             <KpiTile
               label="Soft-circled"
               value={money(s.softCircleTotal, s.currency)}
               hint="Indicative interest"
+              icon={TrendingUp}
               tone="azure"
             />
             <KpiTile
               label="Gap to target"
               value={money(Math.max(0, gapToTarget), s.currency)}
               hint={gapToTarget <= 0 ? 'Target reached' : 'Still to close'}
+              icon={Flag}
               tone={gapToTarget <= 0 ? 'success' : 'warning'}
             />
           </dl>
@@ -323,42 +459,31 @@ export function CapitalStackView({ data }: CapitalStackViewProps) {
         </section>
       ) : null}
 
-      {/* Stage breakdown */}
-      {s && Object.keys(s.stageTotals).length > 0 ? (
+      {/* Stage breakdown — percentages are relative to the stage total so the
+          rows sum to 100%, not to committed+soft-circled. */}
+      {s && stageEntries.length > 0 ? (
         <section aria-label="Stage breakdown">
           <SectionTitle eyebrow="Breakdown" title="By Stage" />
           <Card className="space-y-3">
-            {Object.entries(s.stageTotals)
-              .sort(([, a], [, b]) => b - a)
-              .map(([stage, amount]) => (
-                <BreakdownRow
-                  key={stage}
-                  label={stageLabel(stage)}
-                  amount={amount}
-                  total={totalRaised || 1}
-                  tone={stageTone(stage)}
-                />
-              ))}
+            {stageEntries.map(([stage, amount]) => (
+              <BreakdownRow
+                key={stage}
+                label={stageLabel(stage)}
+                amount={amount}
+                total={stageSum || 1}
+                tone={stageTone(stage)}
+              />
+            ))}
           </Card>
         </section>
       ) : null}
 
-      {/* LP type breakdown */}
-      {s && Object.keys(s.lpTypeTotals).length > 0 ? (
+      {/* LP type breakdown — donut + legend. */}
+      {s && lpTypeEntries.length > 0 ? (
         <section aria-label="LP type breakdown">
           <SectionTitle eyebrow="Breakdown" title="By LP Type" />
-          <Card className="space-y-3">
-            {Object.entries(s.lpTypeTotals)
-              .sort(([, a], [, b]) => b - a)
-              .map(([lpType, amount]) => (
-                <BreakdownRow
-                  key={lpType}
-                  label={stageLabel(lpType)}
-                  amount={amount}
-                  total={totalRaised || 1}
-                  tone="azure"
-                />
-              ))}
+          <Card>
+            <LpTypeDonut entries={lpTypeEntries} currency={s.currency} />
           </Card>
         </section>
       ) : null}
