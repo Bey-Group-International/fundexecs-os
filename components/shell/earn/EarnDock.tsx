@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { X, ArrowUpRight } from 'lucide-react';
-import { EarnChat } from '@/app/ask-earn/EarnChat';
+import { EarnChat, type EarnChatHandle } from '@/app/ask-earn/EarnChat';
 import { TeamAvatar, getCOO, getSpecialists, type TeamMember } from '@/lib/team';
 import { cn } from '@/lib/utils';
 import { useEarnContext } from './EarnContext';
@@ -56,7 +56,15 @@ function PresenceHeader({
   );
 }
 
-function TeamStrip({ active, onSelect }: { active: string; onSelect: (slug: string) => void }) {
+function TeamStrip({
+  active,
+  onSelect,
+  onSeed
+}: {
+  active: string;
+  onSelect: (slug: string) => void;
+  onSeed: (text: string) => void;
+}) {
   const specialists = getSpecialists();
   return (
     <section>
@@ -92,7 +100,21 @@ function TeamStrip({ active, onSelect }: { active: string; onSelect: (slug: stri
                 </div>
               </button>
               {isActive ? (
-                <p className="mb-1 mt-1 px-2.5 text-[11.5px] leading-5 text-fg-3">{m.oneLiner}</p>
+                <div className="mb-1 mt-1 px-2.5">
+                  <p className="text-[11.5px] leading-5 text-fg-3">{m.oneLiner}</p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSeed(
+                        `Bring in ${m.name} (${m.position}) to help me with this — here's what I need: `
+                      )
+                    }
+                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-gold-1 transition hover:text-gold-2 focus-visible:underline focus-visible:outline-none"
+                  >
+                    Ask {m.name.split(' ')[0]} to step in
+                    <ArrowUpRight size={12} strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
               ) : null}
             </li>
           );
@@ -102,7 +124,13 @@ function TeamStrip({ active, onSelect }: { active: string; onSelect: (slug: stri
   );
 }
 
-function RecommendedActions({ kind }: { kind: ReturnType<typeof useEarnContext>['kind'] }) {
+function RecommendedActions({
+  kind,
+  onSeed
+}: {
+  kind: ReturnType<typeof useEarnContext>['kind'];
+  onSeed: (text: string) => void;
+}) {
   const copy = copyFor(kind);
   return (
     <section data-testid="earn-dock-actions" data-context={kind}>
@@ -116,19 +144,25 @@ function RecommendedActions({ kind }: { kind: ReturnType<typeof useEarnContext>[
             <button
               key={action.label}
               type="button"
-              className="group flex items-center gap-2.5 rounded-xl border border-transparent px-2.5 py-2 text-left text-[12.5px] text-fg-2 transition hover:border-hairline hover:bg-surface-1"
+              onClick={() => onSeed(action.prompt)}
+              className="group flex items-center gap-2.5 rounded-xl border border-transparent px-2.5 py-2 text-left text-[12.5px] text-fg-2 transition hover:border-[var(--gold-line)] hover:bg-[var(--gold-soft)] focus-visible:border-[var(--gold-line)] focus-visible:outline-none"
               data-testid={`earn-action-${action.label
                 .toLowerCase()
                 .replace(/[^a-z0-9]+/g, '-')
                 .replace(/^-|-$/g, '')}`}
-              title={action.prompt}
+              title={`Ask Earn: ${action.prompt}`}
             >
-              <Icon size={15} strokeWidth={1.9} className="flex-none text-fg-4" aria-hidden />
+              <Icon
+                size={15}
+                strokeWidth={1.9}
+                className="flex-none text-fg-4 transition group-hover:text-gold-1"
+                aria-hidden
+              />
               <span className="flex-1">{action.label}</span>
               <ArrowUpRight
                 size={14}
                 strokeWidth={1.9}
-                className="flex-none text-fg-5 opacity-0 transition group-hover:opacity-100"
+                className="flex-none -translate-x-1 text-gold-1 opacity-0 transition group-hover:translate-x-0 group-hover:opacity-100"
                 aria-hidden
               />
             </button>
@@ -157,8 +191,15 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
   const specialists = getSpecialists();
   const initialSpecialist: TeamMember = specialists[0]!;
   const [activeSpecialist, setActiveSpecialist] = useState<string>(initialSpecialist.slug);
+  // Imperative seed into the chat from a quick-action chip or specialist row —
+  // fills + focuses the input in the click handler (no effect, no setState sync).
+  const chatRef = useRef<EarnChatHandle>(null);
   const earnCtx = useEarnContext();
   const copy = copyFor(earnCtx.kind);
+
+  function seedChat(text: string) {
+    chatRef.current?.seed(text);
+  }
 
   // Entity-specific subtitle when a drawer override gives us a label.
   const subtitle = earnCtx.entityLabel
@@ -183,12 +224,17 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
         open ? 'translate-x-0' : 'translate-x-full'
       )}
     >
+      {/* Gold top-accent — keeps the dock from reading flat; gold = Earn. */}
+      <div
+        aria-hidden
+        className="h-0.5 flex-none bg-gradient-to-r from-transparent via-gold-1 to-transparent"
+      />
       <PresenceHeader onClose={onClose} subtitle={subtitle} activity={copy.activity} />
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-        <EarnChat />
-        <RecommendedActions kind={earnCtx.kind} />
-        <TeamStrip active={activeSpecialist} onSelect={setActiveSpecialist} />
+        <EarnChat ref={chatRef} />
+        <RecommendedActions kind={earnCtx.kind} onSeed={seedChat} />
+        <TeamStrip active={activeSpecialist} onSelect={setActiveSpecialist} onSeed={seedChat} />
       </div>
     </aside>
   );
