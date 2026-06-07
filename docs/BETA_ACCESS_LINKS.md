@@ -6,17 +6,17 @@ on-brand experience.
 
 ## Decisions (locked)
 
-| Area | Decision |
-| --- | --- |
-| Identity capture | Generic link → branded **claim page** where the recipient signs in with **Google** or **their own email** (identity captured at claim time, not at generation). |
-| Reusability | **Reusable with a cap** — one link, claimable by up to N people (default **25**), each becoming their own account. |
-| Expiry / security | **14-day expiry** (configurable) + **revoke** anytime from the admin panel. |
-| Visual scope | **Admin panel card** (no email field) **+ recipient claim page** matching the login screen's aesthetic. |
+| Area              | Decision                                                                                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity capture  | Generic link → branded **claim page** where the recipient signs in with **Google** or **their own email** (identity captured at claim time, not at generation). |
+| Reusability       | **Reusable with a cap** — one link, claimable by up to N people (default **25**), each becoming their own account.                                              |
+| Expiry / security | **14-day expiry** (configurable) + **revoke** anytime from the admin panel.                                                                                     |
+| Visual scope      | **Admin panel card** (no email field) **+ recipient claim page** matching the login screen's aesthetic.                                                         |
 
 ## Why this is an architectural change
 
 Supabase magic links are bound to a user identity: `auth.admin.generateLink()`
-**requires an email** and `verifyOtp()` signs in a *specific* user. So "no email
+**requires an email** and `verifyOtp()` signs in a _specific_ user. So "no email
 to generate" means shifting identity capture from the admin (types each email)
 to the recipient (provides Google/email at claim time). The existing per-email
 flow (`lib/actions/beta-invites.ts`) stays as-is; this is **additive**.
