@@ -463,5 +463,37 @@ export function copyFor(kind: EarnContextKind): EarnContextCopy {
   return CONTEXT_COPY[kind] ?? CONTEXT_COPY.generic;
 }
 
+/* ----------------------------------------------------------------------------
+ * Specialists "on point" per context — drives the live agent-activity strip in
+ * the dock. Slugs match `lib/team/roster`. The COO (earnest-fundmaker) is
+ * always coordinating and is shown separately, so it isn't repeated here.
+ * --------------------------------------------------------------------------*/
+export const CONTEXT_SPECIALISTS: Record<EarnContextKind, string[]> = {
+  dashboard: ['master-workflow', 'executive-advisor', 'automater'],
+  'fund-profile': ['executive-advisor', 'legal-admin', 'pr-director'],
+  trust: ['legal-admin', 'master-workflow', 'investor-relations'],
+  pipeline: ['deal-sourcer', 'rainmaker', 'lead-generator'],
+  lp: ['investor-relations', 'capital-connector', 'capital-raiser'],
+  'deal-desk': ['deal-sourcer', 'executive-advisor', 'legal-admin'],
+  deal: ['deal-sourcer', 'legal-admin', 'executive-advisor'],
+  'capital-stack': ['capital-raiser', 'capital-connector', 'investor-relations'],
+  objection: ['investor-relations', 'pr-director', 'executive-advisor'],
+  strategy: ['executive-advisor', 'master-workflow', 'rainmaker'],
+  intelligence: ['automater', 'seo-disruptor', 'deal-sourcer'],
+  materials: ['pr-director', 'executive-advisor', 'workflow-instructor'],
+  partners: ['rainmaker', 'capital-connector', 'event-curator'],
+  audit: ['legal-admin', 'master-workflow', 'automater'],
+  settings: ['workflow-instructor', 'master-workflow'],
+  'action-queue': ['master-workflow', 'automater', 'executive-advisor'],
+  'match-inbox': ['rainmaker', 'lead-generator', 'capital-connector'],
+  onboarding: ['workflow-instructor', 'executive-advisor', 'pr-director'],
+  generic: ['master-workflow', 'executive-advisor', 'rainmaker']
+};
+
+/** Specialist slugs on point for a context kind — guarantees a fallback. */
+export function specialistsFor(kind: EarnContextKind): string[] {
+  return CONTEXT_SPECIALISTS[kind] ?? CONTEXT_SPECIALISTS.generic;
+}
+
 /** Default-export icon used elsewhere if a consumer wants the wallet glyph. */
 export { CreditCard as WalletIcon, Users as TeamIcon };
