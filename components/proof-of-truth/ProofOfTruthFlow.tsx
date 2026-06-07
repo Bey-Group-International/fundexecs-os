@@ -53,6 +53,8 @@ interface ProofOfTruthFlowProps {
   profile: MemberProfile;
   /** Where to go on Finish. */
   redirectTo?: string;
+  /** Optional question id to start on (Profile "close gap" deep-link). */
+  focusField?: string;
 }
 
 type Stage = 'picker' | 'qa' | 'review' | 'done';
@@ -77,7 +79,8 @@ const IDLE_REC: RecState = {
 
 export function ProofOfTruthFlow({
   profile,
-  redirectTo = '/command-center'
+  redirectTo = '/command-center',
+  focusField
 }: ProofOfTruthFlowProps) {
   const router = useRouter();
 
@@ -85,7 +88,13 @@ export function ProofOfTruthFlow({
   // `answers` holds ONLY approved values (the profile derives from this).
   const [answers, setAnswers] = useState<Answers>(() => seedAnswers(profile));
   const [stage, setStage] = useState<Stage>(profile.memberType ? 'qa' : 'picker');
-  const [index, setIndex] = useState(0);
+  // Start on the focused question when a "close gap" deep-link points at one
+  // (only meaningful once a member type is set, so the question set exists).
+  const [index, setIndex] = useState(() => {
+    if (!profile.memberType || !focusField) return 0;
+    const i = getQuestionSet(profile.memberType).findIndex((q) => q.id === focusField);
+    return i >= 0 ? i : 0;
+  });
   const [pickerBusy, setPickerBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
