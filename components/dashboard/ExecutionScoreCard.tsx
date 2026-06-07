@@ -108,7 +108,7 @@ export function ExecutionScoreCard({ execution, className }: ExecutionScoreCardP
 
   return (
     <Card
-      className={cn('relative overflow-hidden p-5', className)}
+      className={cn('@container relative overflow-hidden p-5', className)}
       data-testid="execution-score-card"
     >
       <div
@@ -124,7 +124,7 @@ export function ExecutionScoreCard({ execution, className }: ExecutionScoreCardP
         className="mb-3"
       />
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-4 @md:flex-row @md:items-center">
         {/* Ring gauge — score in the center, CoT layers as ring segments */}
         <div className="flex flex-none justify-center">
           <RingGauge
@@ -183,7 +183,7 @@ export function ExecutionScoreCard({ execution, className }: ExecutionScoreCardP
           </div>
 
           {/* Streak + daily loop */}
-          <div className="mt-2 flex items-stretch gap-2">
+          <div className="mt-2 flex flex-wrap items-stretch gap-2">
             <div
               data-testid="execution-score-streak"
               className={cn(

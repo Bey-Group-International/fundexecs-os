@@ -199,12 +199,21 @@ export function Wave1SideRail({
         open ? 'translate-x-0' : '-translate-x-full'
       )}
     >
-      {/* Brand — the Earn coin is the OS mark (gold reserved for Earn). */}
+      {/* Brand — the Earn coin is the OS mark (gold reserved for Earn) and the
+          home affordance: clicking it returns to the Command Center dashboard. */}
       <div className="flex items-center gap-2.5 px-[18px] pb-3 pt-[18px]">
-        <EarnCoin size={30} className="flex-none" />
-        <div className="flex-1 text-[15px] font-semibold tracking-[-0.02em]">
-          FundExecs <span className="font-medium text-fg-4">OS</span>
-        </div>
+        <Link
+          href="/command-center"
+          onClick={onClose}
+          aria-label="FundExecs OS — go to Command Center"
+          data-testid="side-rail-brand-home"
+          className="flex flex-1 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-gold-1 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-1"
+        >
+          <EarnCoin size={30} className="flex-none" />
+          <span className="text-[15px] font-semibold tracking-[-0.02em]">
+            FundExecs <span className="font-medium text-fg-4">OS</span>
+          </span>
+        </Link>
         <button
           type="button"
           onClick={onClose}

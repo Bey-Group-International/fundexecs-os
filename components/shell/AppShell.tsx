@@ -23,7 +23,8 @@ const DEFAULT_IDENTITY: ShellIdentity = {
   xp: 0,
   unreadCount: 0,
   memberships: [],
-  activeOrgId: null
+  activeOrgId: null,
+  avatarUrl: null
 };
 
 export interface AppShellProps {
@@ -97,7 +98,6 @@ export function AppShell({
             identity={id}
             wallet={wallet}
             onMenu={() => setNavOpen(true)}
-            onAskEarn={() => setDockOpen((v) => !v)}
           />
           <main className="flex-1 overflow-y-auto px-5 pb-20 pt-6 sm:px-7">
             {/* Keyed by route so content gently rises in on each navigation —
