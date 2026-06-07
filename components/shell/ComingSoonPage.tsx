@@ -29,7 +29,7 @@ export interface ComingSoonPageProps {
  * ComingSoonPage — the tasteful placeholder mounted by the 11 not-yet-built
  * Wave-1 rail destinations. Single component, per-route copy. Reads as a
  * deliberate sprint stub (not a dead link): logic-area eyebrow, module title,
- * blurb, capability bullets, Back-to-Command-Center CTA + optional Ask Earn
+ * blurb, capability bullets, "Back to dashboard" CTA + optional Ask Earn
  * secondary. Solid `bg-bg-1`. No inline hex.
  */
 export function ComingSoonPage({
@@ -40,7 +40,7 @@ export function ComingSoonPage({
   icon: Icon,
   stageLabel,
   backHref = '/command-center',
-  backLabel = 'Back to Command Center',
+  backLabel = 'Back to dashboard',
   askEarnHref = '/ask-earn',
   className
 }: ComingSoonPageProps) {

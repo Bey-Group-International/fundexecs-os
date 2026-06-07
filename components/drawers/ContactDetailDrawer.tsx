@@ -6,6 +6,7 @@ import { GitMerge, MessageSquarePlus } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { Drawer } from './Drawer';
 import { logInteraction, requestWarmIntro } from '@/lib/actions/connections';
+import { EarnContextProvider } from '@/components/shell/earn/EarnContext';
 
 export interface ContactDetailData {
   id: string;
@@ -101,17 +102,20 @@ export function ContactDetailDrawer({
   }
 
   return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      title={contact.fullName}
-      subtitle={[contact.title, contact.company].filter(Boolean).join(' · ') || contact.email || ''}
-      footer={
-        <Button variant="ghost" size="sm" onClick={onClose} data-testid="contact-detail-close">
-          Close
-        </Button>
-      }
+    <EarnContextProvider
+      value={{ kind: 'lp', entityId: contact.id, entityLabel: contact.fullName }}
     >
+      <Drawer
+        open={open}
+        onClose={onClose}
+        title={contact.fullName}
+        subtitle={[contact.title, contact.company].filter(Boolean).join(' · ') || contact.email || ''}
+        footer={
+          <Button variant="ghost" size="sm" onClick={onClose} data-testid="contact-detail-close">
+            Close
+          </Button>
+        }
+      >
       <div className="flex flex-col gap-5">
         <section>
           <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
@@ -218,7 +222,8 @@ export function ContactDetailDrawer({
           </div>
         ) : null}
       </div>
-    </Drawer>
+      </Drawer>
+    </EarnContextProvider>
   );
 }
 
