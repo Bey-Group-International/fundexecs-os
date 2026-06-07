@@ -18,12 +18,11 @@ Three lanes, in priority order:
 
 ## 1) Harden now — what this PR adds **[in repo]**
 
-| File                                           | What it does                                                                                                                                                                                                                       | How to activate                                                                                                            |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `.github/CODEOWNERS`                           | Auto-requests review from owners; high-blast-radius lanes (`supabase/`, `lib/supabase`, `lib/actions`, `middleware.ts`, `proxy.ts`, `app/login`, `.github/`) flagged for extra scrutiny                                            | Active once merged. Swap `@BGI-Pres` for a team handle when teams exist                                                    |
-| `.github/dependabot.yml`                       | Weekly grouped dependency PRs (npm) + Actions version bumps                                                                                                                                                                        | Active once merged; pair with Dependabot alerts (step 2)                                                                   |
-| `.github/workflows/codeql.yml`                 | CodeQL static analysis (security-extended)                                                                                                                                                                                         | **Dormant** until `ENABLE_CODEQL=true` repo variable is set (after step 2) — so it never red-lights a PR before GHAS is on |
-| `.github/rulesets/main-branch-protection.json` | Importable branch ruleset: PR + 1 approval, Code-Owner review, dismiss-stale, conversation resolution, required checks (`Typecheck, lint & build`, `Playwright e2e smoke`), linear history, block force-push/deletion, squash-only | Import in step 2                                                                                                           |
+| File                                           | What it does                                                                                                                                                                                                                       | How to activate                                                         |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `.github/CODEOWNERS`                           | Auto-requests review from owners; high-blast-radius lanes (`supabase/`, `lib/supabase`, `lib/actions`, `middleware.ts`, `proxy.ts`, `app/login`, `.github/`) flagged for extra scrutiny                                            | Active once merged. Swap `@BGI-Pres` for a team handle when teams exist |
+| `.github/dependabot.yml`                       | Weekly grouped dependency PRs (npm) + Actions version bumps                                                                                                                                                                        | Active once merged; pair with Dependabot alerts (step 2)                |
+| `.github/rulesets/main-branch-protection.json` | Importable branch ruleset: PR + 1 approval, Code-Owner review, dismiss-stale, conversation resolution, required checks (`Typecheck, lint & build`, `Playwright e2e smoke`), linear history, block force-push/deletion, squash-only | Import in step 2                                                        |
 
 These capture most of the "enterprise hardening" value at $0.
 
@@ -48,9 +47,9 @@ These capture most of the "enterprise hardening" value at $0.
 - [ ] **Secret Protection**: enable **secret scanning** + **push protection**
       (blocks commits that contain Supabase service-role keys, Stripe, Voyage,
       Anthropic tokens, etc.). Highest ROI for you.
-- [ ] **Code Security**: enable **code scanning**, then set repo variable
-      **`ENABLE_CODEQL=true`** (Settings → Secrets and variables → Actions →
-      Variables) to wake `codeql.yml`.
+- [ ] **Code Security**: enable **code scanning** via GitHub's **default CodeQL
+      setup** (Settings → Code security → Code scanning → Set up → Default). The
+      repo already runs default code scanning, so no in-repo workflow is needed.
 - [ ] **Dependabot**: enable **Dependabot alerts** + **security updates** (free)
       so CVE bumps are raised even between weekly runs.
 - [ ] **Require 2FA** for all org members.
@@ -60,8 +59,8 @@ These capture most of the "enterprise hardening" value at $0.
 ### 2c. Import the branch ruleset
 
 Settings → **Rules → Rulesets → New ruleset → Import** →
-`.github/rulesets/main-branch-protection.json`. After CodeQL's first green run,
-add **`CodeQL`** to the ruleset's required checks too.
+`.github/rulesets/main-branch-protection.json`. Once default code scanning is on,
+add the **`CodeQL`** check to the ruleset's required checks too.
 
 > Private-repo rulesets/branch protection require **Team** or **Enterprise** —
 > the JSON is ready regardless of when you upgrade.
@@ -108,7 +107,7 @@ If the goal is to move FundExecs into a (new or existing) **Enterprise org**.
 ### Post-transfer re-wire (the part people forget)
 
 - [ ] **Actions secrets + variables** — recreate (`SUPABASE_*`, `STRIPE_*`,
-      `ANTHROPIC_*`, `VOYAGE_*`, `ENABLE_CODEQL`, etc.). Re-confirm the default
+      `ANTHROPIC_*`, `VOYAGE_*`, etc.). Re-confirm the default
       token is read-only.
 - [ ] **Vercel** — reconnect the Git repo to the project (Vercel → Project →
       Settings → Git) so preview/prod deploys keep working; re-add env vars there
@@ -124,7 +123,7 @@ If the goal is to move FundExecs into a (new or existing) **Enterprise org**.
       vp@, secretary@); confirm each maps to a GitHub account with repo access in
       the new org, or switch to team handles.
 - [ ] **Enable Advanced Security** on the repo in the new org (step 2) and flip
-      `ENABLE_CODEQL=true` again.
+      default code scanning again.
 - [ ] Update any **hardcoded repo URLs** (README badges, docs, the
       `claude/...` automation remotes) to the new org.
 
@@ -132,10 +131,10 @@ If the goal is to move FundExecs into a (new or existing) **Enterprise org**.
 
 ## Recommended sequence
 
-1. Merge this PR → CODEOWNERS + Dependabot + ruleset JSON + dormant CodeQL land.
+1. Merge this PR → CODEOWNERS + Dependabot + ruleset JSON land.
 2. Import the ruleset; enable Dependabot alerts + secret scanning/push protection
    (cheap, immediate).
-3. Add Code Security (CodeQL), set `ENABLE_CODEQL=true`, add `CodeQL` to required
-   checks.
+3. Enable Code Security (default CodeQL setup); add the `CodeQL` check to the
+   ruleset's required checks.
 4. Only then evaluate full Enterprise (SSO/SCIM/audit streaming/CI scale) and/or
    an org migration using §3.
