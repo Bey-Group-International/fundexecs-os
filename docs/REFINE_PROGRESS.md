@@ -45,6 +45,30 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 
 ## Entries (OLD → NEW)
 
+### [A1] Admin portal — 2026-06-07 — PR #116 (post-campaign)
+
+**Scope:** Admin lives in Settings → Admin (owner/admin-gated). Functional +
+visual pass; backend metrics + invite→membership dispatched to Codex (#115).
+**OLD:** the per-member "Assign role" button was **dead** (despite an existing
+`setMemberRole` action); the Notifications panel, Knowledge stats ("15/15
+embeddings", "pgvector Live"), and Chain-of-Trust layer values were
+**hardcoded/fake**; the Routing/Intake/Optimize buttons were inert; avatar tone
+was arbitrary (`i % 2`).
+**NEW (functional):** inline **role menu** wired to `setMemberRole` with
+owner-only gating + a **last-owner guard** (UI + action), optimistic w/ revert +
+inline errors; **member search + role filter**; a first-class **Invite member**
+panel reusing the existing magic-link plumbing (email + role + note, copy-link);
+**real notifications** derived from open invites + recent `admin_actions`;
+role-based avatar tone; "Open invites" stat (real).
+**NEW (honesty):** typed `getAdminMetrics` loader with an honest placeholder —
+Knowledge + Chain-of-Trust panels show "reference · soon" until Codex (#115)
+fills real metrics; no fabricated numbers; dead Knowledge buttons removed.
+**NEW (visual):** tone icon discs + accent rails, tokens-only (no inline hex),
+bold hierarchy.
+**Files:** `app/admin/AdminView.tsx`, `lib/queries/admin-metrics.ts`,
+`lib/actions/admin.ts` (last-owner guard), `app/settings/{page,SettingsView}.tsx`.
+**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+
 ### [6] Dashboard — 2026-06-07 — PR #113 — campaign complete 🎉
 
 **OLD:** The dashboard hero greeting is spoken in Earn's COO voice (the gold
