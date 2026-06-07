@@ -40,15 +40,17 @@ import { NewDealDrawer } from '@/components/drawers/NewDealDrawer';
 import { NewPartnerDrawer } from '@/components/drawers/NewPartnerDrawer';
 import { DealDetailDrawer, type DealDetailData } from '@/components/drawers/DealDetailDrawer';
 
+const USD_NO_CENTS = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0
+});
+
 function formatCurrency(amount: number): string {
   if (amount >= 1_000_000_000) return `$${(amount / 1_000_000_000).toFixed(1)}B`;
   if (amount >= 1_000_000) return `$${Math.round(amount / 1_000_000)}M`;
   if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0
-  }).format(amount);
+  return USD_NO_CENTS.format(amount);
 }
 
 /** Pick a card accent tone from a deal's status. */

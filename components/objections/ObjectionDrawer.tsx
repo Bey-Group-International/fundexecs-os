@@ -41,6 +41,7 @@ export function ObjectionDrawer({ open, onClose, lps, editing }: ObjectionDrawer
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (pending) return;
+    if (!lpId || !objection.trim() || !category.trim()) return;
     setError(null);
     setPending(true);
     const result = await upsertObjection({

@@ -152,7 +152,7 @@ function ObjectionCard({
               size="sm"
               icon={RotateCcw}
               onClick={() => onReopen(item)}
-              disabled={pending}
+              disabled={pending || !item.lpId}
               data-testid={`objection-reopen-${item.id}`}
             >
               Reopen
