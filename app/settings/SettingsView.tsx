@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Sparkles,
   User,
+  Users,
   Zap,
   type LucideIcon
 } from 'lucide-react';
@@ -32,6 +33,9 @@ import { EarnCoin } from '@/components/screens/EarnCoin';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 import type { Database } from '@/lib/supabase/database.types';
 import { cn } from '@/lib/utils';
+import { AdminView } from '@/app/admin/AdminView';
+import type { AdminData } from '@/lib/queries/admin';
+import type { BetaInvite } from '@/lib/queries/beta-invites';
 import {
   updateAccountSettings,
   updateOrganizationSettings,
@@ -53,6 +57,10 @@ interface SettingsViewProps {
   proofStatus: 'in_progress' | 'complete';
   proofPct: number;
   proofMemberType: MemberType | null;
+  /** Owner/admin only — surfaces the Admin section (members, roles, beta invites). */
+  isAdmin: boolean;
+  adminData: AdminData | null;
+  invites: BetaInvite[];
 }
 
 /* ----------------------------------------------------------------------------
@@ -527,7 +535,7 @@ function BillingSection() {
  * --------------------------------------------------------------------------*/
 
 interface SettingsSection {
-  id: 'account' | 'notifications' | 'security' | 'organization' | 'billing' | 'trust';
+  id: 'account' | 'notifications' | 'security' | 'organization' | 'billing' | 'trust' | 'admin';
   label: string;
   icon: LucideIcon;
   /** What completing this section unlocks across the app. */
@@ -570,6 +578,12 @@ const SECTIONS: SettingsSection[] = [
     label: 'Billing & credits',
     icon: CreditCard,
     unlocks: 'The plan + Credit Wallet that fuels every AI workload Earn coordinates.'
+  },
+  {
+    id: 'admin',
+    label: 'Admin',
+    icon: Users,
+    unlocks: 'Owner controls — members & roles, the audit log, and magic-link beta invites.'
   }
 ];
 
@@ -591,8 +605,13 @@ export function SettingsView({
   orgType,
   proofStatus,
   proofPct,
-  proofMemberType
+  proofMemberType,
+  isAdmin,
+  adminData,
+  invites
 }: SettingsViewProps) {
+  // The Admin section is owner/admin-only; hide it from the rail otherwise.
+  const visibleSections = SECTIONS.filter((s) => s.id !== 'admin' || isAdmin);
   // Lazy init — read the URL hash on first client render so deep links open
   // the right section without a flash. SSR returns 'account'; hydration runs
   // the lazy initializer on the client where `window` exists.
@@ -623,7 +642,7 @@ export function SettingsView({
   }
 
   const displayName = fullName ?? (email ? email.split('@')[0] : 'Your profile');
-  const activeSection = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0]!;
+  const activeSection = visibleSections.find((s) => s.id === active) ?? visibleSections[0]!;
   const ActiveIcon = activeSection.icon;
 
   return (
@@ -638,7 +657,7 @@ export function SettingsView({
           aria-label="Settings sections"
         >
           <nav className="flex flex-col gap-1 rounded-2xl border border-hairline bg-bg-1 p-1.5">
-            {SECTIONS.map((s) => {
+            {visibleSections.map((s) => {
               const Icon = s.icon;
               const isActive = s.id === active;
               return (
@@ -716,6 +735,9 @@ export function SettingsView({
             <OrganizationSection orgName={orgName} orgTier={orgTier} orgType={orgType} />
           )}
           {activeSection.id === 'billing' && <BillingSection />}
+          {activeSection.id === 'admin' && isAdmin && adminData && (
+            <AdminView data={adminData} invites={invites} />
+          )}
         </div>
       </div>
     </div>

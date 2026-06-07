@@ -7,6 +7,8 @@ import { getMemberProfile } from '@/lib/queries/member-profile';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { getDashboardData } from '@/lib/queries/dashboard';
+import { getAdminData, type AdminData } from '@/lib/queries/admin';
+import { getBetaInvites, type BetaInvite } from '@/lib/queries/beta-invites';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import { FundProfileRailSummary } from '@/components/fund-profile';
 import type { Database } from '@/lib/supabase/database.types';
@@ -66,6 +68,22 @@ export default async function SettingsPage() {
         getDashboardData(org.orgId).catch(() => null)
       ])
     : [null, null, null];
+  // Admin section data — owner/admin only. Derive the viewer's role from the
+  // members list, then load invites only when authorized (beta_invites RLS is
+  // admin-scoped, so a non-admin would get an empty list anyway).
+  let isAdmin = false;
+  let adminData: AdminData | null = null;
+  let invites: BetaInvite[] = [];
+  if (org && user) {
+    const ad = await getAdminData(org.orgId).catch(() => null);
+    const me = ad?.members.find((m) => m.userId === user.id);
+    isAdmin = me?.role === 'owner' || me?.role === 'admin';
+    if (isAdmin && ad) {
+      adminData = ad;
+      invites = await getBetaInvites(org.orgId).catch(() => []);
+    }
+  }
+
   const navSignals = dashboard ? buildRailSignals(dashboard) : undefined;
   const sourceOfTruthSummary = fundProfile ? (
     <FundProfileRailSummary profile={fundProfile} />
@@ -96,6 +114,9 @@ export default async function SettingsPage() {
         proofStatus={memberProfile?.status ?? 'in_progress'}
         proofPct={memberProfile?.completionPct ?? 0}
         proofMemberType={memberProfile?.memberType ?? null}
+        isAdmin={isAdmin}
+        adminData={adminData}
+        invites={invites}
       />
     </AppShell>
   );

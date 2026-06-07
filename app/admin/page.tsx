@@ -1,44 +1,11 @@
-import type { Metadata } from 'next';
-import { AppShell } from '@/components/shell/AppShell';
-import { getShellIdentity } from '@/lib/queries/identity';
-import { Card } from '@/components/ui';
-import { getActiveOrg } from '@/lib/queries/org';
-import { getAdminData } from '@/lib/queries/admin';
-import { getBetaInvites } from '@/lib/queries/beta-invites';
-import { AdminView } from './AdminView';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Admin Portal' };
-
-export default async function AdminPage() {
-  const org = await getActiveOrg();
-
-  if (!org) {
-    return (
-      <AppShell
-        identity={await getShellIdentity()}
-        title="Admin Portal"
-        subtitle="Platform administration"
-      >
-        <Card className="p-10 text-center">
-          <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
-          <p className="mx-auto mt-2 max-w-md text-[12.5px] text-fg-4">
-            Join or create an organization to manage members, review the audit log, and configure AI
-            brains.
-          </p>
-        </Card>
-      </AppShell>
-    );
-  }
-
-  const [data, invites] = await Promise.all([getAdminData(org.orgId), getBetaInvites(org.orgId)]);
-
-  return (
-    <AppShell
-      identity={await getShellIdentity()}
-      title="Admin Portal"
-      subtitle="Platform administration"
-    >
-      <AdminView data={data} invites={invites} />
-    </AppShell>
-  );
+/**
+ * Admin now lives inside Settings as the owner/admin-only "Admin" section
+ * (members & roles + magic-link beta invites), rendered by `SettingsView` from
+ * `app/admin/AdminView.tsx`. This route redirects to that section so there's a
+ * single, consistent entry point.
+ */
+export default function AdminPage() {
+  redirect('/settings#admin');
 }
