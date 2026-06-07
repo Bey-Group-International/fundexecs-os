@@ -33,7 +33,12 @@
      Preserves the muted feel below fg-3 while passing axe's
      color-contrast check on the Phase 7 a11y sweep. */
   --fg-4: #7a899e;
-  --fg-5: #475569;
+  /* fg-5 lifted from slate-600 (#475569 — measured 3.1:1 on bg-0, failing AA
+     across 19 dim micro-labels in the Wave-1 a11y sweep) up to the same
+     value as fg-4 so every `text-fg-5` usage clears 4.5:1. Visually
+     collapses the dimmest tier of the slate ramp into fg-4; full ramp can
+     be restored later by re-introducing a brighter brightness step. */
+  --fg-5: #7a899e;
 
   /* gold — "Earn" / gamification / progress reward */
   --gold-1: #f7c948;
@@ -92,8 +97,10 @@
   --fg-1: #0f172a;
   --fg-2: #334155;
   --fg-3: #64748b;
-  --fg-4: #94a3b8;
-  --fg-5: #b6c0cd;
+  --fg-4: #6f7c8e;
+  /* fg-5 lifted from #b6c0cd (~2.0:1 against light bg-0) to match fg-4 so
+     `text-fg-5` clears WCAG AA in light mode too. */
+  --fg-5: #6f7c8e;
 
   --accent-soft: rgba(37, 99, 235, 0.1);
 
