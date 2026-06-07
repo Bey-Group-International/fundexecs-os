@@ -1,5 +1,6 @@
 import { ScrollText } from 'lucide-react';
 import { Card, SectionTitle } from '@/components/ui';
+import { EarnCoin } from '@/components/screens/EarnCoin';
 import type { MemberType } from '@/lib/member-types';
 import type { LifecycleStage } from '@/lib/lifecycle';
 import type { DashboardData } from '@/lib/queries/dashboard';
@@ -152,6 +153,16 @@ export function LifecycleDashboard({ displayName, memberType, data }: LifecycleD
               <ScrollText size={11} strokeWidth={2} aria-hidden />
               {data.fundProfile.fundName} · {data.fundProfile.completenessScore}% on the record
             </p>
+          </div>
+
+          {/* Earn presence — anchors the hero with the COO's face (gold = Earn)
+              and a live status, so the greeting reads as Earn speaking. */}
+          <div className="hidden flex-none flex-col items-center gap-1.5 sm:flex">
+            <EarnCoin size={48} glow online className="flex-none" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-gold-1">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-1" aria-hidden />
+              On the desk
+            </span>
           </div>
         </div>
       </Card>
