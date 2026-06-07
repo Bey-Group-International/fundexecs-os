@@ -19,6 +19,7 @@ import {
   type FindingForSynthesis,
   type RetrievedChunk
 } from './prompts';
+import { log } from '@/lib/observability/log';
 
 /**
  * Earn Diligence Intelligence Layer — the 7-agent orchestrator.
@@ -271,7 +272,12 @@ export async function runDiligence(runId: string): Promise<RunDiligenceResult> {
           .eq('id', runId);
         return { runId, status: 'error', conviction: null, error: 'insufficient_credits' };
       }
-      console.warn(`[diligence] credit charge skipped for org ${orgId}: ${chargeErr.message}`);
+      log.warn('diligence_credit_charge_skipped', {
+        orgId,
+        runId,
+        cost: DILIGENCE_RUN_COST,
+        reason: chargeErr.message
+      });
     } else {
       creditsConsumed = true;
     }
@@ -322,6 +328,7 @@ export async function runDiligence(runId: string): Promise<RunDiligenceResult> {
     return { runId, status: 'complete', conviction: synthesis.conviction };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown diligence error';
+    log.error('diligence_run_failed', { runId, orgId, creditsConsumed, error: err });
     // Refund — the operator shouldn't pay for a run that didn't deliver.
     if (creditsConsumed) {
       await admin
@@ -333,7 +340,12 @@ export async function runDiligence(runId: string): Promise<RunDiligenceResult> {
         })
         .then(({ error }) => {
           if (error)
-            console.warn(`[diligence] credit refund failed for org ${orgId}: ${error.message}`);
+            log.error('diligence_credit_refund_failed', {
+              orgId,
+              runId,
+              cost: DILIGENCE_RUN_COST,
+              reason: error.message
+            });
         });
     }
     await admin

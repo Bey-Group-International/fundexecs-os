@@ -65,7 +65,7 @@ Panels reorder by engagement (Adaptivity).
   `dashboard_action_events`, `profiles.dashboard_seen_at`. RLS org/member-scoped.
 - **Claude (logic):** extend `getDashboardData` → `momentumDeltas`,
   `sinceYouWereAway[]`, behavior-aware `nextBestAction`/panel order; the last-seen
-  + interaction write hooks (server actions).
+  - interaction write hooks (server actions).
 - **Emergent (UI):** resume hero, "since you were away" band, lifecycle strip,
   dense panel grid + drill-ins, behavior-aware reordering. Tokens-only; solid
   `bg-bg-1`; voice "Chief Operating Officer · your live AI guide".
