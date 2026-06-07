@@ -1,18 +1,10 @@
-import { AuthedShell } from '@/components/shell/AuthedShell';
-import { ComingSoonPage } from '@/components/shell/ComingSoonPage';
-import { STUB_ROUTES } from '@/components/shell/stub-routes';
+import { redirect } from 'next/navigation';
 
-const ROUTE = '/knowledge';
-const stub = STUB_ROUTES[ROUTE];
-
-export const dynamic = 'force-dynamic';
-
-export const metadata = { title: stub.title };
-
-export default function KnowledgeStubPage() {
-  return (
-    <AuthedShell title={stub.title} subtitle={stub.area} redirectFrom={ROUTE}>
-      <ComingSoonPage {...stub} />
-    </AuthedShell>
-  );
+/**
+ * The Knowledge Base is the 15-specialist RAG surfaced through Ask Earn
+ * (`/ask-earn`) — query the team over your own documents and history. Route the
+ * rail's "Knowledge Base" entry to that real surface instead of a placeholder.
+ */
+export default function KnowledgePage() {
+  redirect('/ask-earn');
 }

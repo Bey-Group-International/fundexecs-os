@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Sparkles, type LucideIcon } from 'lucide-react';
 import { Card, SectionTitle } from '@/components/ui';
@@ -22,6 +23,10 @@ export interface ComingSoonPageProps {
   backLabel?: string;
   /** Optional secondary CTA — e.g. "Ask Earn what we'll do here". */
   askEarnHref?: string;
+  /** Optional live data preview rendered above the capability bullets — used
+   *  where a real loader already exists (e.g. Capital Stack raise progress) so
+   *  the stub shows real numbers instead of pure placeholder copy. */
+  preview?: ReactNode;
   className?: string;
 }
 
@@ -42,6 +47,7 @@ export function ComingSoonPage({
   backHref = '/command-center',
   backLabel = 'Back to dashboard',
   askEarnHref = '/ask-earn',
+  preview,
   className
 }: ComingSoonPageProps) {
   return (
@@ -80,6 +86,8 @@ export function ComingSoonPage({
             </p>
           </div>
         </div>
+
+        {preview ? <div className="mt-7">{preview}</div> : null}
 
         <SectionTitle
           eyebrow="What this surface will do"
