@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { EarnCoin } from '@/components/screens/EarnCoin';
 import { getCOO } from '@/lib/team/roster';
-import { gradientForSlug } from '@/lib/team/avatar';
 import type { EarnBriefing } from '@/lib/queries/dashboard';
 
 export interface EarnBriefingCardProps {
@@ -18,7 +18,6 @@ export interface EarnBriefingCardProps {
 export function EarnBriefingCard({ briefing, className }: EarnBriefingCardProps) {
   if (!briefing.lines.length) return null;
   const earn = getCOO();
-  const g = gradientForSlug(earn.slug);
 
   return (
     <Card
@@ -26,13 +25,7 @@ export function EarnBriefingCard({ briefing, className }: EarnBriefingCardProps)
       data-testid="earn-briefing-card"
     >
       <div className="flex items-start gap-3.5">
-        <span
-          aria-hidden
-          className="flex h-11 w-11 flex-none items-center justify-center rounded-xl text-[14px] font-bold text-white shadow-[var(--shadow-sm)]"
-          style={{ background: `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})` }}
-        >
-          EF
-        </span>
+        <EarnCoin size={44} online className="flex-none" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-1">
