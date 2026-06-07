@@ -2,26 +2,40 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowUpRight,
   Check,
   SkipForward,
-  ShieldCheck,
   Sparkles,
   Zap
 } from 'lucide-react';
 import { Badge, Button, Card, Input, ProgressBar, Select } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
+import { OnboardingStepper, type OnboardingStep } from '@/components/onboarding/OnboardingStepper';
+import { CelebrationToast, type Celebration } from '@/components/dashboard/CelebrationToast';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
 import type { ProfileRecommendation } from '@/lib/proof-of-truth/earn-profile';
 import type { MemberProfile } from '@/lib/queries/member-profile';
+import { awardTrustXp } from '@/lib/actions/xp';
 import {
   saveMemberDraft,
   saveMemberProfile,
   setMemberType as setMemberTypeAction
 } from '@/lib/actions/member-profile';
+
+/** Where each member type goes first after onboarding — carries momentum into
+ *  one concrete action instead of dropping them on a cold dashboard. */
+const FIRST_ACTION: Record<MemberType, { label: string; href: string }> = {
+  investment_firm: { label: 'Add your first LP', href: '/pipeline' },
+  individual_investor: { label: 'Build your watchlist', href: '/pipeline' },
+  startup: { label: 'Prep your materials', href: '/materials' },
+  service_provider: { label: 'See your matches', href: '/partners' },
+  student: { label: 'Open your command center', href: '/command-center' }
+};
 import {
   answersToProfileInput,
   completionPct,
@@ -75,6 +89,9 @@ export function ProofOfTruthFlow({
   const [pickerBusy, setPickerBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Completion reward — XP total returned by awardTrustXp + the celebration toast.
+  const [awardedXp, setAwardedXp] = useState<number | null>(null);
+  const [celebration, setCelebration] = useState<Celebration | null>(null);
 
   // Per-question Earn recommendation state, keyed by question id.
   const [recByQuestion, setRecByQuestion] = useState<Record<string, RecState>>({});
@@ -287,30 +304,98 @@ export function ProofOfTruthFlow({
       setSubmitting(false);
       return;
     }
+    // Reward the completed Proof-of-Truth layer (idempotent per user server-side;
+    // returns the new XP total). Best-effort — never blocks the finish.
+    const xp = await awardTrustXp({
+      layer: 'truth',
+      entityType: 'member_profile',
+      entityId: profile.userId || 'member_profile'
+    }).catch(() => null);
+    setAwardedXp(xp);
+    setCelebration({
+      kind: 'badge',
+      title: 'Profile verified',
+      detail: 'Proof of Truth complete — Earn built your verified profile.'
+    });
+    // No auto-redirect: the completion screen lets the operator choose where to go.
     setStage('done');
-    setTimeout(() => router.push(redirectTo), 1100);
   }
 
   const pct = memberType ? completionPct(memberType, answers) : 0;
 
   // --- render: done ---
 
-  if (stage === 'done') {
+  if (stage === 'done' && memberType) {
+    const nextAction = FIRST_ACTION[memberType];
     return (
-      <Shell>
-        <Card className="overflow-hidden p-0">
-          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <span className="inline-flex h-14 w-14 items-center justify-center rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
-              <ShieldCheck size={26} strokeWidth={2.1} aria-hidden />
-            </span>
-            <div className="text-[16px] font-semibold text-fg-1">Your profile is verified</div>
-            <Badge tone="gold" className="gap-1 px-2.5 py-1 text-[11.5px]">
-              <Zap size={13} strokeWidth={2.2} aria-hidden />
-              Proof of Truth complete
-            </Badge>
-            <p className="text-[12px] text-fg-4">Taking you to your Command Center…</p>
+      <Shell step="done">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+          <Card className="overflow-hidden p-0">
+            {/* Celebration header */}
+            <div className="flex flex-col items-center gap-3 bg-[linear-gradient(105deg,rgba(247,201,72,0.14),rgba(247,201,72,0.02)_46%,transparent_72%)] px-6 py-8 text-center">
+              <EarnCoin size={56} glow online className="flex-none" />
+              <div className="text-[18px] font-semibold tracking-[-0.015em] text-fg-1">
+                Your profile is verified 🎉
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Badge tone="gold" className="gap-1 px-2.5 py-1 text-[11.5px]">
+                  <Zap size={13} strokeWidth={2.2} aria-hidden />
+                  Proof of Truth complete
+                </Badge>
+                {awardedXp != null ? (
+                  <Badge tone="gold" className="px-2.5 py-1 text-[11.5px] tabular-nums">
+                    {awardedXp.toLocaleString()} XP
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+
+            {/* What Earn set up */}
+            <div className="border-t border-hairline px-5 py-5">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-[12.5px] font-semibold text-fg-1">What Earn set up</div>
+                <span className="text-[11px] tabular-nums text-fg-4">{pct}% complete</span>
+              </div>
+              <div className="rounded-xl border border-hairline bg-surface-1 px-4 py-1">
+                {questions.map((q) => {
+                  const value = answers[q.id] ?? '';
+                  const display = q.kind === 'tags' ? splitTags(value).join(', ') : value.trim();
+                  if (!display) return null;
+                  return (
+                    <div
+                      key={q.id}
+                      className="flex items-start justify-between gap-4 border-b border-hairline py-2 last:border-0"
+                    >
+                      <span className="flex-none text-[11.5px] text-fg-4">{q.label}</span>
+                      <span className="min-w-0 break-words text-right text-[12px] font-medium text-fg-1">
+                        {display}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* First-action nudge — carry momentum into one concrete step. */}
+              <div className="mt-5 flex flex-col gap-2">
+                <Button
+                  variant="primary"
+                  iconRight={ArrowUpRight}
+                  onClick={() => router.push(nextAction.href)}
+                >
+                  {nextAction.label}
+                </Button>
+                <Button variant="ghost" onClick={() => router.push(redirectTo)}>
+                  Go to your command center
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          <div className="lg:sticky lg:top-4 lg:self-start">
+            <LiveProfilePanel memberType={memberType} answers={answers} />
           </div>
-        </Card>
+        </div>
+        <CelebrationToast celebration={celebration} onDone={() => setCelebration(null)} />
       </Shell>
     );
   }
@@ -319,7 +404,7 @@ export function ProofOfTruthFlow({
 
   if (stage === 'picker') {
     return (
-      <Shell>
+      <Shell step="profile">
         <Card>
           <MemberTypePicker selected={memberType} busy={pickerBusy} onSelect={pickType} />
           {error && (
@@ -336,7 +421,7 @@ export function ProofOfTruthFlow({
 
   if (stage === 'review' && memberType) {
     return (
-      <Shell>
+      <Shell step="review">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
           <Card>
             <div className="mb-4 flex items-center gap-3">
@@ -409,7 +494,7 @@ export function ProofOfTruthFlow({
   const canAdvance = isApproved || !!question.optional;
 
   return (
-    <Shell>
+    <Shell step="profile" pct={pct}>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
         <Card className="flex flex-col gap-5">
           <div>
@@ -591,21 +676,38 @@ function QuestionField({
 
 // --- chrome ---
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  step,
+  pct
+}: {
+  children: React.ReactNode;
+  step: OnboardingStep;
+  pct?: number;
+}) {
   return (
     <main className="min-h-screen bg-bg-0 px-4 py-8 sm:py-10">
       <div className="mx-auto w-full max-w-4xl">
-        <div className="mb-6 flex items-center gap-2.5">
-          <span className="inline-flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg bg-gradient-to-br from-gold-1 to-gold-2 text-[15px] font-bold text-[#070b14]">
-            F
-          </span>
+        <div className="mb-5 flex items-center gap-2.5">
+          <EarnCoin size={30} className="flex-none" />
           <div className="text-base font-semibold tracking-[-0.02em]">
             FundExecs <span className="font-medium text-fg-4">OS</span>
           </div>
           <Badge tone="gold" className="ml-1 px-2 py-px text-[10.5px]">
             Proof of Truth
           </Badge>
+          {step !== 'done' ? (
+            <Link
+              href="/command-center"
+              className="ml-auto text-[11.5px] font-medium text-fg-4 transition hover:text-fg-1"
+            >
+              Saved · finish later
+            </Link>
+          ) : null}
         </div>
+
+        <OnboardingStepper current={step} pct={pct} className="mb-5" />
+
         {children}
       </div>
     </main>
