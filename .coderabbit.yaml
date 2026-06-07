@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit configuration. We open PRs as drafts for Claude review, so draft
+# auto-review must be enabled or CodeRabbit skips every PR.
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: true
+    base_branches:
+      - main
+chat:
+  auto_reply: true
