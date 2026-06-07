@@ -27,7 +27,7 @@ export function QuestProgressCard({ quests, placeholder, className }: QuestProgr
 
       {quests.length === 0 ? (
         <p className="rounded-xl border border-dashed border-hairline bg-surface-1 px-4 py-5 text-center text-[12px] text-fg-3">
-          Guided quests will appear here to compound your next best moves.
+          Guided quests will appear here to guide your next moves.
         </p>
       ) : (
         <ul className="flex flex-col gap-2.5" data-testid="quest-progress-items">
@@ -127,8 +127,8 @@ export function QuestProgressCard({ quests, placeholder, className }: QuestProgr
       )}
 
       {placeholder ? (
-        <p className="mt-3 text-[10.5px] text-fg-5">
-          Preview · quests begin tracking when the intelligence layer ships.
+        <p className="mt-3 text-[10.5px] text-fg-4">
+          Preview · quests begin tracking once Earn&rsquo;s intelligence comes online.
         </p>
       ) : null}
     </Card>
