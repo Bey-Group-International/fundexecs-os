@@ -43,7 +43,9 @@ import { cn } from '@/lib/utils';
 import type { AdminData, AdminMember } from '@/lib/queries/admin';
 import type { AdminMetrics, TrustLayerKey } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
+import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import { BetaInvitesPanel } from './BetaInvitesPanel';
+import { BetaLinksPanel } from './BetaLinksPanel';
 
 type OrgMemberRole = 'owner' | 'admin' | 'member';
 type MemberStatus = AdminMember['status'] | 'Archived';
@@ -750,11 +752,13 @@ function KnowledgePanel({ metrics }: { metrics: AdminMetrics | null }) {
 export function AdminView({
   data,
   invites,
+  betaLinks,
   metrics,
   viewerRole
 }: {
   data: AdminData;
   invites: BetaInvite[];
+  betaLinks: BetaLinkWithStatus[];
   metrics: AdminMetrics | null;
   viewerRole: OrgMemberRole | null;
 }) {
@@ -914,7 +918,12 @@ export function AdminView({
           onRole={changeRole}
         />
       )}
-      {tab === 'invites' && <BetaInvitesPanel invites={invites} />}
+      {tab === 'invites' && (
+        <div className="flex flex-col gap-[18px]">
+          <BetaInvitesPanel invites={invites} />
+          <BetaLinksPanel links={betaLinks} />
+        </div>
+      )}
       {tab === 'activity' && <ActivityPanel actions={data.actions} notifications={notifications} />}
       {tab === 'trust' && <TrustPanel metrics={metrics} />}
       {tab === 'knowledge' && <KnowledgePanel metrics={metrics} />}

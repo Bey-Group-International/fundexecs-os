@@ -221,6 +221,112 @@ export type Database = {
           },
         ]
       }
+      beta_links: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          label: string | null
+          max_uses: number
+          org_id: string
+          revoked_at: string | null
+          role: Database["public"]["Enums"]["org_member_role"]
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          label?: string | null
+          max_uses?: number
+          org_id: string
+          revoked_at?: string | null
+          role?: Database["public"]["Enums"]["org_member_role"]
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          label?: string | null
+          max_uses?: number
+          org_id?: string
+          revoked_at?: string | null
+          role?: Database["public"]["Enums"]["org_member_role"]
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beta_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "beta_links_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      beta_link_claims: {
+        Row: {
+          beta_link_id: string
+          claimed_at: string
+          email: string
+          id: string
+          org_id: string
+          user_id: string
+        }
+        Insert: {
+          beta_link_id: string
+          claimed_at?: string
+          email: string
+          id?: string
+          org_id: string
+          user_id: string
+        }
+        Update: {
+          beta_link_id?: string
+          claimed_at?: string
+          email?: string
+          id?: string
+          org_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beta_link_claims_beta_link_id_fkey"
+            columns: ["beta_link_id"]
+            isOneToOne: false
+            referencedRelation: "beta_links"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "beta_link_claims_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "beta_link_claims_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brain_routing_rules: {
         Row: {
           brain_id: string
@@ -2195,6 +2301,10 @@ export type Database = {
       accept_beta_invite: {
         Args: { _email: string; _invite_id?: string; _user_id: string }
         Returns: Json
+      }
+      claim_beta_link: {
+        Args: { _email: string; _token: string; _user_id: string }
+        Returns: { ok: boolean; error_reason: string }[]
       }
       act_on_match: {
         Args: { _action: string; _match_id: string }
