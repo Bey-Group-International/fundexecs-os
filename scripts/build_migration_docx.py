@@ -196,7 +196,7 @@ bullet(
 
 # ── Step 5: verify ─────────────────────────────────────────────────────────────
 heading("Step 5 — Verify", 1)
-bullet("Open a throwaway PR — confirm CI ('Typecheck, lint & build' + 'Playwright e2e smoke') runs and the ruleset blocks merge until green + approved.", checkbox=True)
+bullet("Open a throwaway PR — confirm CI ('Typecheck, lint & build' + 'Playwright e2e smoke') runs and the ruleset blocks merge until CI is green.", checkbox=True)
 bullet("Confirm the Vercel preview deploy posts on the PR.", checkbox=True)
 bullet("Confirm CodeRabbit reviews the PR.", checkbox=True)
 bullet("Confirm Dependabot is enabled (Settings → Code security).", checkbox=True)
