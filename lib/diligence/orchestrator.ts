@@ -31,6 +31,13 @@ import {
 
 type Admin = ReturnType<typeof createAdminClient>;
 
+/**
+ * Credits a single diligence run consumes (6 Haiku analysts + 1 Opus synthesis).
+ * Orgs are seeded 500 starter credits. Charged atomically up-front via
+ * `consume_credits`; refunded via `grant_credits` if the run errors.
+ */
+const DILIGENCE_RUN_COST = 25;
+
 export interface CreateRunInput {
   orgId: string;
   createdBy: string;
@@ -239,8 +246,36 @@ export async function runDiligence(runId: string): Promise<RunDiligenceResult> {
     throw new Error(`Diligence run not found: ${runId}`);
   }
   const orgId = run.org_id;
+  let creditsConsumed = false;
 
   try {
+    // Charge credits up-front — atomic check-and-decrement. On insufficient
+    // balance, block the run with a clear message. If the wallet is missing
+    // (e.g. a new org created after the starter-credit seed), don't block on the
+    // billing gap — proceed uncharged and log it (a wallet-on-signup trigger is
+    // a follow-up).
+    const { error: chargeErr } = await admin.rpc('consume_credits', {
+      _org_id: orgId,
+      _amount: DILIGENCE_RUN_COST,
+      _reason: 'diligence_run',
+      _ref_id: runId
+    });
+    if (chargeErr) {
+      if (/insufficient/i.test(chargeErr.message)) {
+        await admin
+          .from('diligence_runs')
+          .update({
+            status: 'error',
+            summary: `Insufficient credits — a diligence run costs ${DILIGENCE_RUN_COST} credits. Top up your wallet to run the committee.`
+          })
+          .eq('id', runId);
+        return { runId, status: 'error', conviction: null, error: 'insufficient_credits' };
+      }
+      console.warn(`[diligence] credit charge skipped for org ${orgId}: ${chargeErr.message}`);
+    } else {
+      creditsConsumed = true;
+    }
+
     await admin.from('diligence_runs').update({ status: 'running' }).eq('id', runId);
 
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -287,6 +322,20 @@ export async function runDiligence(runId: string): Promise<RunDiligenceResult> {
     return { runId, status: 'complete', conviction: synthesis.conviction };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown diligence error';
+    // Refund — the operator shouldn't pay for a run that didn't deliver.
+    if (creditsConsumed) {
+      await admin
+        .rpc('grant_credits', {
+          _org_id: orgId,
+          _amount: DILIGENCE_RUN_COST,
+          _reason: 'refund:diligence_error',
+          _ref_id: runId
+        })
+        .then(({ error }) => {
+          if (error)
+            console.warn(`[diligence] credit refund failed for org ${orgId}: ${error.message}`);
+        });
+    }
     await admin
       .from('diligence_runs')
       .update({ status: 'error', summary: `Diligence failed: ${message}`.slice(0, 500) })
