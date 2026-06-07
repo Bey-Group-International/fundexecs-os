@@ -100,7 +100,12 @@ export default async function CommandCenterPage() {
       navSignals={navSignals}
       sourceOfTruthSummary={<ProfileRailSummary profile={fundProfile} />}
     >
-      <LifecycleDashboard displayName={displayName} memberType={memberType} data={dashboard} />
+      <LifecycleDashboard
+        displayName={displayName}
+        memberType={memberType}
+        data={dashboard}
+        fundProfile={fundProfile}
+      />
     </AppShell>
   );
 }

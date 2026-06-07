@@ -16,6 +16,8 @@ interface OnboardingViewProps {
   hasOrg: boolean;
   /** Seeded from `getMemberProfile()` so the Proof of Truth flow resumes. */
   profile: MemberProfile;
+  /** Optional question id to jump to (from a Profile "close gap" deep-link). */
+  focusField?: string;
 }
 
 const ROLES = [
@@ -37,7 +39,13 @@ const ROLES = [
  * the identity step and go straight into the Proof of Truth flow — which itself
  * resumes from the saved draft.
  */
-export function OnboardingView({ email, fullName, hasOrg, profile }: OnboardingViewProps) {
+export function OnboardingView({
+  email,
+  fullName,
+  hasOrg,
+  profile,
+  focusField
+}: OnboardingViewProps) {
   const router = useRouter();
 
   // Skip the identity capture when there's nothing org-shaped left to collect
@@ -90,7 +98,9 @@ export function OnboardingView({ email, fullName, hasOrg, profile }: OnboardingV
   }
 
   if (stage === 'profile') {
-    return <ProofOfTruthFlow profile={profile} redirectTo="/command-center" />;
+    return (
+      <ProofOfTruthFlow profile={profile} redirectTo="/command-center" focusField={focusField} />
+    );
   }
 
   return (

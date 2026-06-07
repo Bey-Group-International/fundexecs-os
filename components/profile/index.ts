@@ -14,3 +14,6 @@ export type { ProfileGapsCardProps } from './ProfileGapsCard';
 
 export { ProfileRailSummary, ProfileRailSummaryEmpty } from './ProfileRailSummary';
 export type { ProfileRailSummaryProps } from './ProfileRailSummary';
+
+export { ProfileActionButton } from './ProfileActionButton';
+export type { ProfileActionButtonProps } from './ProfileActionButton';
