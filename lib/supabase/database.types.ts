@@ -354,6 +354,9 @@ export type Database = {
           email: string
           id: string
           org_id: string
+          review_status: string
+          reviewed_at: string | null
+          reviewed_by: string | null
           user_id: string
         }
         Insert: {
@@ -362,6 +365,9 @@ export type Database = {
           email: string
           id?: string
           org_id: string
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           user_id: string
         }
         Update: {
@@ -370,6 +376,9 @@ export type Database = {
           email?: string
           id?: string
           org_id?: string
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           user_id?: string
         }
         Relationships: [

@@ -2,9 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mail, Send, Copy, Check, RefreshCw, Ban, Link2 } from 'lucide-react';
+import { Mail, Send, Copy, Check, RefreshCw, Ban, Link2, Trash2 } from 'lucide-react';
 import { Badge, Button, Card, Input, SectionTitle, type BadgeTone } from '@/components/ui';
-import { inviteBetaUser, resendBetaInvite, revokeBetaInvite } from '@/lib/actions/beta-invites';
+import {
+  inviteBetaUser,
+  resendBetaInvite,
+  revokeBetaInvite,
+  deleteBetaInvite
+} from '@/lib/actions/beta-invites';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 
 const STATUS_TONE: Record<BetaInvite['status'], BadgeTone> = {
@@ -131,6 +136,19 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
     router.refresh();
   }
 
+  async function handleDelete(id: string, email: string) {
+    if (!window.confirm(`Delete the invite for ${email}? This can’t be undone.`)) return;
+    setBusyId(id);
+    setError(null);
+    const result = await deleteBetaInvite(id);
+    setBusyId(null);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
   const pending = invites.filter((i) => i.status === 'pending').length;
   const joined = invites.filter((i) => i.status === 'accepted').length;
 
@@ -241,6 +259,18 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
                       aria-label={`Revoke invite for ${inv.email}`}
                     >
                       Revoke
+                    </Button>
+                  )}
+                  {inv.status !== 'accepted' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={Trash2}
+                      disabled={isBusy}
+                      onClick={() => handleDelete(inv.id, inv.email)}
+                      aria-label={`Delete invite for ${inv.email}`}
+                    >
+                      Delete
                     </Button>
                   )}
                 </div>

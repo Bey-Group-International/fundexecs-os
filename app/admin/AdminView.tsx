@@ -20,6 +20,7 @@ import {
   Bell,
   CircleDot,
   Mail,
+  Inbox,
   Search,
   Copy,
   X,
@@ -44,8 +45,10 @@ import type { AdminData, AdminMember } from '@/lib/queries/admin';
 import type { AdminMetrics, TrustLayerKey } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
+import type { BetaApplication } from '@/lib/queries/beta-applications';
 import { BetaInvitesPanel } from './BetaInvitesPanel';
 import { BetaLinksPanel } from './BetaLinksPanel';
+import { ApplicationsPanel } from './ApplicationsPanel';
 
 type OrgMemberRole = 'owner' | 'admin' | 'member';
 type MemberStatus = AdminMember['status'] | 'Archived';
@@ -109,7 +112,7 @@ function coverageTone(pct: number): BadgeTone {
   return 'neutral';
 }
 
-type Tab = 'users' | 'invites' | 'activity' | 'trust' | 'knowledge';
+type Tab = 'users' | 'applications' | 'invites' | 'activity' | 'trust' | 'knowledge';
 
 /* ---- Stat tile (bold: tone disc + accent rail) -------------------------- */
 
@@ -753,12 +756,14 @@ export function AdminView({
   data,
   invites,
   betaLinks,
+  applications,
   metrics,
   viewerRole
 }: {
   data: AdminData;
   invites: BetaInvite[];
   betaLinks: BetaLinkWithStatus[];
+  applications: BetaApplication[];
   metrics: AdminMetrics | null;
   viewerRole: OrgMemberRole | null;
 }) {
@@ -897,6 +902,7 @@ export function AdminView({
         onChange={(id) => setTab(id as Tab)}
         tabs={[
           { id: 'users', label: 'Users & roles', icon: Users },
+          { id: 'applications', label: 'Applications', icon: Inbox },
           { id: 'invites', label: 'Beta invites', icon: Mail },
           { id: 'activity', label: 'Activity', icon: Activity },
           { id: 'trust', label: 'Chain of trust', icon: ShieldCheck },
@@ -918,6 +924,7 @@ export function AdminView({
           onRole={changeRole}
         />
       )}
+      {tab === 'applications' && <ApplicationsPanel applications={applications} />}
       {tab === 'invites' && (
         <div className="flex flex-col gap-[18px]">
           <BetaInvitesPanel invites={invites} />

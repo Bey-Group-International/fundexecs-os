@@ -15,6 +15,10 @@ export type BetaLinkResult =
   | { ok: false; error: string };
 export type RevokeLinkResult = { ok: true } | { ok: false; error: string };
 export type ClaimLinkResult = { ok: true; message: string } | { ok: false; error: string };
+export type DeleteLinkResult = { ok: true } | { ok: false; error: string };
+export type ReviewResult = { ok: true } | { ok: false; error: string };
+
+type ApplicationReview = 'pending' | 'approved' | 'rejected';
 
 /** Conservative email shape check — Supabase is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -126,6 +130,88 @@ export async function revokeBetaLink(linkId: string): Promise<RevokeLinkResult> 
   if (!data) return { ok: false, error: 'Beta link not found.' };
 
   await writeAudit(org.orgId, org.userId, 'revoke_beta_link', linkId);
+  return { ok: true };
+}
+
+/**
+ * Permanently delete a beta link. Admin-gated. Guardrail: a link that has been
+ * claimed by anyone is NOT deletable — those people are in, and the claim rows
+ * are the audit trail of who joined through it. Revoke a used link instead.
+ * Use delete to clean up links that were never claimed (typos, test links).
+ */
+export async function deleteBetaLink(linkId: string): Promise<DeleteLinkResult> {
+  if (!linkId) return { ok: false, error: 'Missing link id.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
+  }
+
+  const admin = createAdminClient();
+
+  // Block delete when the link has any claims — keep the join history intact.
+  const { count, error: countErr } = await admin
+    .from('beta_link_claims')
+    .select('id', { count: 'exact', head: true })
+    .eq('beta_link_id', linkId)
+    .eq('org_id', org.orgId);
+  if (countErr) return { ok: false, error: countErr.message };
+  if ((count ?? 0) > 0) {
+    return { ok: false, error: 'This link has been claimed — revoke it instead of deleting.' };
+  }
+
+  const { data, error } = await admin
+    .from('beta_links')
+    .delete()
+    .eq('id', linkId)
+    .eq('org_id', org.orgId)
+    .select('id')
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: 'Beta link not found.' };
+
+  await writeAudit(org.orgId, org.userId, 'delete_beta_link', linkId);
+  return { ok: true };
+}
+
+/**
+ * Set the review state on a single beta-link application (claim). Observational
+ * only — it does not grant or revoke access (the claimant is already in); it is
+ * the admin's triage marker. Admin-gated, scoped to the org.
+ */
+export async function setApplicationReview(
+  claimId: string,
+  review: ApplicationReview
+): Promise<ReviewResult> {
+  if (!claimId) return { ok: false, error: 'Missing application id.' };
+  if (review !== 'pending' && review !== 'approved' && review !== 'rejected') {
+    return { ok: false, error: 'Invalid review state.' };
+  }
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('beta_link_claims')
+    .update({
+      review_status: review,
+      // Clear the audit stamp when sent back to pending; set it otherwise.
+      reviewed_at: review === 'pending' ? null : new Date().toISOString(),
+      reviewed_by: review === 'pending' ? null : org.userId
+    })
+    .eq('id', claimId)
+    .eq('org_id', org.orgId)
+    .select('id')
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: 'Application not found.' };
+
+  await writeAudit(org.orgId, org.userId, `review_beta_application_${review}`, claimId);
   return { ok: true };
 }
 
