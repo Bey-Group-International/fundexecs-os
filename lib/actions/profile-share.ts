@@ -59,6 +59,17 @@ export async function createProfileShareLink(): Promise<ShareLinkResult> {
     .insert({ org_id: org.orgId, token, created_by: user?.id ?? null });
 
   if (error) {
+    // A concurrent mint may have won the one-active-per-org unique index race —
+    // return the link that now exists rather than surfacing a false error.
+    const { data: raced } = await supabase
+      .from('member_profile_shares')
+      .select('token')
+      .eq('org_id', org.orgId)
+      .is('revoked_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (raced?.token) return { ok: true, url: shareUrl(raced.token), token: raced.token };
     return {
       ok: false,
       error: 'Only a workspace owner or admin can create a share link.'
@@ -73,13 +84,17 @@ export async function revokeProfileShareLink(token: string): Promise<RevokeShare
   if (!org) return { ok: false, error: 'No active workspace.' };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  // Return the affected row so a 0-row update (wrong token, already revoked, or
+  // blocked by RLS) is treated as a failure rather than a false success.
+  const { data, error } = await supabase
     .from('member_profile_shares')
     .update({ revoked_at: new Date().toISOString() })
     .eq('org_id', org.orgId)
     .eq('token', token)
-    .is('revoked_at', null);
+    .is('revoked_at', null)
+    .select('id')
+    .maybeSingle();
 
-  if (error) return { ok: false, error: 'Could not revoke the link.' };
+  if (error || !data) return { ok: false, error: 'Could not revoke the link.' };
   return { ok: true };
 }

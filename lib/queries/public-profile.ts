@@ -8,9 +8,13 @@ import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
  * Resolves a shareable Profile link (/p/<token>) using the service-role admin
  * client on the public route. It validates the share token (exists, not
  * revoked, not expired) and returns ONLY a safe subset of the org's
- * Source-of-Truth profile. Sensitive fields — thesis, strategy, target raise,
- * terms (fee/carry), track record, team, bio, check size, contact details, and
- * any draft — are deliberately never read into this shape, so they cannot leak.
+ * Source-of-Truth profile.
+ *
+ * Defense in depth: rather than reading the whole `member_profiles.details`
+ * JSON and picking fields in JS, the query PROJECTS only the safe keys
+ * (firm_type, sectors, stage, website, linkedin, …). Sensitive keys — thesis,
+ * strategy, target raise, terms (fee/carry), track record, team, bio, check
+ * size, contact — are never selected, so they never enter this execution path.
  * ========================================================================= */
 
 export interface PublicProfile {
@@ -32,27 +36,34 @@ export interface PublicProfile {
   linkedin: string | null;
 }
 
-type Details = Record<string, unknown>;
-
-function str(details: Details, ...keys: string[]): string | null {
-  for (const k of keys) {
-    const v = details[k];
-    if (typeof v === 'string' && v.trim().length > 0) return v.trim();
-  }
-  return null;
+/** Shape of the projected (safe-keys-only) member_profiles select. */
+interface SafeMemberRow {
+  display_name: string | null;
+  headline: string | null;
+  focus_areas: string[] | null;
+  firm_type: string | null;
+  service_category: string | null;
+  investor_profile: string | null;
+  website: string | null;
+  linkedin: string | null;
+  sectors: unknown;
+  sector: unknown;
+  stage_focus: unknown;
+  stage: string | null;
 }
 
-function tagList(details: Details, ...keys: string[]): string[] {
-  for (const k of keys) {
-    const v = details[k];
-    if (Array.isArray(v)) {
-      const out = v.map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean);
-      if (out.length > 0) return out;
-    }
-    // A select-style single value (e.g. startup `stage`) still reads as one tag.
-    if (typeof v === 'string' && v.trim().length > 0) return [v.trim()];
+/** Trimmed non-empty string, or null. */
+function cleanStr(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+/** Coerce a JSON value to a string[] — array of strings, or a single string. */
+function strArr(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean);
   }
-  return [];
+  const single = cleanStr(value);
+  return single ? [single] : [];
 }
 
 function normHref(value: string | null): string | null {
@@ -101,24 +112,41 @@ export async function getPublicProfile(token: string): Promise<PublicProfile | n
   let ownerName: string | null = null;
   let headline: string | null = null;
   let focusAreas: string[] = [];
-  let details: Details = {};
+  let category: string | null = null;
+  let sectors: string[] = [];
+  let stageFocus: string[] = [];
+  let website: string | null = null;
+  let linkedin: string | null = null;
 
   if (owner) {
-    const [{ data: profile }, { data: mp }] = await Promise.all([
+    const [{ data: profile }, { data: mpRaw }] = await Promise.all([
       admin.from('profiles').select('full_name, member_type').eq('id', owner.user_id).maybeSingle(),
       admin
         .from('member_profiles')
-        .select('display_name, headline, focus_areas, details')
+        // Project ONLY safe keys out of the details JSON — sensitive keys are
+        // never selected, so they can't leak onto the public route.
+        .select(
+          'display_name, headline, focus_areas, ' +
+            'firm_type:details->>firm_type, service_category:details->>service_category, ' +
+            'investor_profile:details->>investor_profile, website:details->>website, ' +
+            'linkedin:details->>linkedin, sectors:details->sectors, sector:details->sector, ' +
+            'stage_focus:details->stage_focus, stage:details->>stage'
+        )
         .eq('user_id', owner.user_id)
         .maybeSingle()
     ]);
+
+    const mp = mpRaw as unknown as SafeMemberRow | null;
     memberType = (profile?.member_type ?? null) as MemberType | null;
     ownerName = (mp?.display_name ?? '').trim() || profile?.full_name || null;
-    headline = mp?.headline?.trim() || null;
-    focusAreas = ((mp?.focus_areas as string[] | null) ?? [])
-      .map((f) => (typeof f === 'string' ? f.trim() : ''))
-      .filter(Boolean);
-    details = ((mp?.details as Details) ?? {}) as Details;
+    headline = cleanStr(mp?.headline);
+    focusAreas = strArr(mp?.focus_areas);
+    category =
+      cleanStr(mp?.firm_type) ?? cleanStr(mp?.service_category) ?? cleanStr(mp?.investor_profile);
+    sectors = strArr(mp?.sectors).length > 0 ? strArr(mp?.sectors) : strArr(mp?.sector);
+    stageFocus = strArr(mp?.stage_focus).length > 0 ? strArr(mp?.stage_focus) : strArr(mp?.stage);
+    website = normHref(cleanStr(mp?.website));
+    linkedin = normHref(cleanStr(mp?.linkedin));
   }
 
   return {
@@ -129,10 +157,10 @@ export async function getPublicProfile(token: string): Promise<PublicProfile | n
     ownerName,
     headline,
     focusAreas,
-    category: str(details, 'firm_type', 'service_category', 'investor_profile'),
-    sectors: tagList(details, 'sectors', 'sector'),
-    stageFocus: tagList(details, 'stage_focus', 'stage'),
-    website: normHref(str(details, 'website')),
-    linkedin: normHref(str(details, 'linkedin'))
+    category,
+    sectors,
+    stageFocus,
+    website,
+    linkedin
   };
 }

@@ -108,7 +108,13 @@ export function ProfileActionButton({
           reset();
           return;
         }
-        void navigator.clipboard?.writeText(res.url).then(
+        const writePromise = navigator.clipboard?.writeText?.(res.url);
+        if (!writePromise) {
+          setShareState('error');
+          reset();
+          return;
+        }
+        void writePromise.then(
           () => {
             setShareState('copied');
             reset();
