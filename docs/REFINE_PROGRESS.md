@@ -31,7 +31,7 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 
 | #   | Area              | Routes / components                                            | Status     | PR   |
 | --- | ----------------- | -------------------------------------------------------------- | ---------- | ---- |
-| 1   | Earn modal        | `components/shell/earn/*`                                      | ⬜ pending | —    |
+| 1   | Earn modal        | `components/shell/earn/*`                                      | ⏳ PR #107 | #107 |
 | 2   | Source of Truth   | `/profile`, `/trust`, `components/fund-profile/*`              | ⬜ pending | —    |
 | 3   | Daily Execution   | `/command-center`, `/action-queue`, `/match-inbox`             | ⬜ pending | —    |
 | 4   | Capital Formation | `/pipeline`, `/capital-stack`, `/objections`                   | ✅ merged  | #104 |
@@ -45,7 +45,28 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 
 ## Entries (OLD → NEW)
 
-### [0] Rail brand: F → Earn avatar (+ live flags) — 2026-06-07 — PR #earn-avatar
+### [1] Earn modal — 2026-06-07 — PR #107
+
+**OLD:** The Earn dock's "Here's what I can do right now" quick-action chips and
+the specialist rows were **dead** — the dock's own comment promised they
+"pre-seed the EarnChat input", but nothing connected them to `EarnChat`, which
+owned its input state internally. Tapping a chip did nothing; selecting a
+specialist only revealed a one-liner. The dock also read fairly flat.
+**NEW (functionality):** `EarnChat` exposes an imperative `seed(text)` handle
+(`forwardRef` + `useImperativeHandle`); `EarnDock` holds a chat ref and seeds it
+from (a) every quick-action chip and (b) a new **"Ask &lt;name&gt; to step in"**
+button on the active specialist. Seeding fills + focuses the input (caret at end)
+and does **not** auto-send, so the operator edits before firing. `/api/ask-earn`
+chat path untouched.
+**NEW (visual, bold not flat):** gold top-accent bar on the dock; chips gain a
+gold hover/focus surface, gold icon tint on hover, and a sliding arrow; the
+specialist CTA is gold.
+**NEW (perf/correctness):** no `setState`-in-effect (React-Compiler lint clean);
+seeding runs in the click handler. Standalone `/ask-earn` usage unaffected.
+**Files:** `components/shell/earn/EarnDock.tsx`, `app/ask-earn/EarnChat.tsx`.
+**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+
+### [0] Rail brand: F → Earn avatar (+ live flags) — 2026-06-07 — PR #106 ✅ merged
 
 **OLD:** The side-rail brand mark was a flat gold rounded-square showing the
 letter **"F"**. Rail nav still flagged `/objections` and `/inbox-intelligence`
@@ -56,7 +77,7 @@ still reserved for Earn. Flipped `/objections` and `/inbox-intelligence` to
 `live: true` so the rail no longer shows a "Soon" pill on shipped surfaces;
 `/materials` stays SOON (preview only).
 **Files:** `components/shell/Wave1SideRail.tsx`, `components/shell/rail-nav.ts`.
-**Checks:** tsc/lint/format/build ✓ · CodeRabbit pending.
+**Checks:** tsc/lint/format/build ✓ · CodeRabbit ✓ (no actionable comments).
 
 ### Swarm convergence (areas 4–6) — 2026-06-07
 
