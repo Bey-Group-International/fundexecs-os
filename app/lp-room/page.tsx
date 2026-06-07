@@ -1,7 +1,18 @@
+import type { Metadata } from 'next';
 import { AppShell } from '@/components/shell/AppShell';
 import { getShellIdentity } from '@/lib/queries/identity';
 import { LpRoom } from '@/components/lp-room';
 import { FIXTURE_LP_ROOM } from '@/components/lp-room/fixtures';
+
+export const metadata: Metadata = {
+  title: 'Fund Room',
+  description:
+    'Every LP commitment, update, and answer — on the record. The secure data room for your fund.',
+  openGraph: {
+    title: 'Fund Room · FundExecs OS',
+    description: 'Every LP commitment, update, and answer — on the record.'
+  }
+};
 
 /**
  * Fund Room (LP Room) — UI-only shell.

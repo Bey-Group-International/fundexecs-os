@@ -32,6 +32,11 @@ export default function PrivacyPage() {
             provide the features you request. You can disconnect at any time.
           </li>
           <li>
+            <strong>Billing information</strong> — if you purchase AI credits, Stripe processes your
+            payment on our behalf. We receive only a confirmation and the credit amount; full card
+            details are never stored by FundExecs.
+          </li>
+          <li>
             <strong>Usage data</strong> — standard logs and device/browser metadata used to operate
             and secure the service.
           </li>
@@ -42,8 +47,8 @@ export default function PrivacyPage() {
         <LegalHeading>How we use information</LegalHeading>
         <p>
           We use your information to provide and improve the product, personalize your workspace,
-          power AI assistance (&ldquo;Earn&rdquo;), maintain security, and communicate with you
-          about the service. We do not sell your personal information.
+          power AI assistance (&ldquo;Earn&rdquo;), process credit purchases, maintain security, and
+          communicate with you about the service. We do not sell your personal information.
         </p>
       </div>
 
@@ -51,9 +56,11 @@ export default function PrivacyPage() {
         <LegalHeading>Service providers</LegalHeading>
         <p>
           We rely on a small set of trusted processors to run FundExecs OS: Supabase
-          (authentication, database, storage), Vercel (hosting), Anthropic (AI assistance), and
-          Voyage AI (embeddings for retrieval). Each processes data only to provide its function.
-          Integration data stays within your workspace.
+          (authentication, database, storage), Vercel (hosting), Anthropic (AI assistance), Voyage
+          AI (embeddings for retrieval), and Stripe (payment processing for credit top-ups). Each
+          processes data only to provide its function. Integration data stays within your workspace.
+          Stripe processes payment information directly and is subject to its own privacy policy;
+          FundExecs does not store full card details.
         </p>
       </div>
 

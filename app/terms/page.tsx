@@ -10,10 +10,11 @@ export default function TermsPage() {
   return (
     <LegalShell title="Terms of Service" updated="June 6, 2026">
       <p>
-        These Terms govern your access to and use of FundExecs OS, operated by FundExecs
-        Technologies. By creating an account or using the service, you agree to these Terms. If you
-        are using FundExecs OS on behalf of an organization, you represent that you are authorized
-        to accept these Terms for that organization.
+        These Terms govern your access to and use of FundExecs OS, operated by Bey Group
+        International (&ldquo;FundExecs Technologies&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;). By
+        creating an account or using the service, you agree to these Terms. If you are using
+        FundExecs OS on behalf of an organization, you represent that you are authorized to accept
+        these Terms for that organization.
       </p>
 
       <div className="space-y-3">
@@ -39,6 +40,16 @@ export default function TermsPage() {
           You agree not to misuse the service: no unlawful activity, no attempts to breach security
           or access data you are not authorized to view, no reverse engineering, and no uploading of
           content you do not have the right to use.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <LegalHeading>AI credits &amp; payments</LegalHeading>
+        <p>
+          AI-agent features consume credits from your organization&rsquo;s wallet. Beta accounts
+          receive a free credit grant. Additional credits may be purchased via Stripe. Credits are
+          non-refundable except where required by applicable law. Unused credits expire if your
+          account is closed. We reserve the right to adjust credit pricing with reasonable notice.
         </p>
       </div>
 
