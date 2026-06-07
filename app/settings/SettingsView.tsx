@@ -35,6 +35,7 @@ import type { Database } from '@/lib/supabase/database.types';
 import { cn } from '@/lib/utils';
 import { AdminView } from '@/app/admin/AdminView';
 import type { AdminData } from '@/lib/queries/admin';
+import type { AdminMetrics } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import {
   updateAccountSettings,
@@ -43,6 +44,7 @@ import {
 } from './actions';
 
 type OrgType = Database['public']['Enums']['org_type'];
+type OrgMemberRole = Database['public']['Enums']['org_member_role'];
 
 interface SettingsViewProps {
   email: string | null;
@@ -64,6 +66,10 @@ interface SettingsViewProps {
   isAdmin: boolean;
   adminData: AdminData | null;
   invites: BetaInvite[];
+  /** Platform metrics for the Admin Knowledge / Chain-of-Trust panels. */
+  adminMetrics: AdminMetrics | null;
+  /** The viewing admin's own role — gates owner-only role changes. */
+  viewerRole: OrgMemberRole | null;
 }
 
 /* ----------------------------------------------------------------------------
@@ -642,7 +648,9 @@ export function SettingsView({
   xp,
   isAdmin,
   adminData,
-  invites
+  invites,
+  adminMetrics,
+  viewerRole
 }: SettingsViewProps) {
   // The Admin section is owner/admin-only; hide it from the rail otherwise.
   const visibleSections = SECTIONS.filter((s) => s.id !== 'admin' || isAdmin);
@@ -776,7 +784,12 @@ export function SettingsView({
           )}
           {activeSection.id === 'billing' && <BillingSection />}
           {activeSection.id === 'admin' && isAdmin && adminData && (
-            <AdminView data={adminData} invites={invites} />
+            <AdminView
+              data={adminData}
+              invites={invites}
+              metrics={adminMetrics}
+              viewerRole={viewerRole}
+            />
           )}
         </div>
       </div>

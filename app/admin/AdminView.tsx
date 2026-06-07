@@ -3,26 +3,26 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
-import { approveMember, archiveMember } from '@/lib/actions/admin';
+import { approveMember, archiveMember, setMemberRole } from '@/lib/actions/admin';
+import { inviteBetaUser } from '@/lib/actions/beta-invites';
 import {
   Users,
   UserPlus,
   Activity,
   Check,
-  UserCog,
+  ChevronDown,
   Archive,
   Shield,
   BrainCircuit,
   Database,
   Layers,
-  GitBranch,
-  Upload,
-  Sparkles,
   ShieldCheck,
   Bell,
-  CircleCheck,
   CircleDot,
   Mail,
+  Search,
+  Copy,
+  X,
   type LucideIcon
 } from 'lucide-react';
 import {
@@ -30,18 +30,22 @@ import {
   Badge,
   Button,
   Card,
+  Input,
   ProgressBar,
   SectionTitle,
   SegTabs,
+  Select,
   type AvatarTone,
   type BadgeTone
 } from '@/components/ui';
-import { TONE_HEX } from '@/components/screens/tone';
 import { TEAM_ROSTER, TeamAvatar } from '@/lib/team';
+import { cn } from '@/lib/utils';
 import type { AdminData, AdminMember } from '@/lib/queries/admin';
+import type { AdminMetrics, TrustLayerKey } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import { BetaInvitesPanel } from './BetaInvitesPanel';
 
+type OrgMemberRole = 'owner' | 'admin' | 'member';
 type MemberStatus = AdminMember['status'] | 'Archived';
 
 const STATUS_TONE: Record<MemberStatus, BadgeTone> = {
@@ -56,6 +60,25 @@ const ROLE_LABEL: Record<string, string> = {
   member: 'Member'
 };
 
+/** Role → avatar/accent tone (meaningful, not arbitrary). Gold is Earn's, so
+ *  owners read gold-free via the warm-neutral disc; admins azure; members slate. */
+const ROLE_TONE: Record<OrgMemberRole, AvatarTone> = {
+  owner: 'gold',
+  admin: 'azure',
+  member: 'azure'
+};
+
+/** Token (not hex) accents per tone — drives icon discs + accent rails. */
+const TONE_VAR: Record<BadgeTone, string> = {
+  neutral: 'var(--fg-4)',
+  info: 'var(--info)',
+  azure: 'var(--azure-1)',
+  success: 'var(--success)',
+  gold: 'var(--gold-1)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)'
+};
+
 interface Stat {
   label: string;
   value: string;
@@ -64,89 +87,49 @@ interface Stat {
   tone: BadgeTone;
 }
 
-const PIPELINE_STEPS = [
-  'Intake',
-  'Scrub',
-  'Classify',
-  'Score',
-  'Route',
-  'Process',
-  'Synthesize',
-  'Output',
-  'Execute',
-  'Track',
-  'Optimize'
-];
-
-/** Chain-of-Trust verification layers shown on the oversight panel. */
-const TRUST_LAYERS: Array<{
-  no: string;
-  name: string;
-  desc: string;
-  value: number;
-  tone: BadgeTone;
-}> = [
+/** Chain-of-Trust layers, in order, mapped to the metrics coverage keys. */
+const TRUST_LAYERS: Array<{ no: string; key: TrustLayerKey; name: string; desc: string }> = [
   {
     no: '01',
+    key: 'truth',
     name: 'Proof of truth',
-    desc: 'Source data, citations, verified facts',
-    value: 100,
-    tone: 'success'
+    desc: 'Source data, citations, verified facts'
   },
-  {
-    no: '02',
-    name: 'Proof of concept',
-    desc: 'Strategy, thesis, fit logic',
-    value: 70,
-    tone: 'gold'
-  },
-  {
-    no: '03',
-    name: 'Proof of execution',
-    desc: 'Tasks, workflows, approvals',
-    value: 35,
-    tone: 'warning'
-  },
-  {
-    no: '04',
-    name: 'Proof of work',
-    desc: 'Evidence, uploads, outcomes, logs',
-    value: 0,
-    tone: 'neutral'
-  }
+  { no: '02', key: 'concept', name: 'Proof of concept', desc: 'Strategy, thesis, fit logic' },
+  { no: '03', key: 'execution', name: 'Proof of execution', desc: 'Tasks, workflows, approvals' },
+  { no: '04', key: 'work', name: 'Proof of work', desc: 'Evidence, uploads, outcomes, logs' }
 ];
 
-/** Platform notifications surfaced to admins. */
-const NOTIFICATIONS: Array<{ title: string; detail: string; tone: BadgeTone }> = [
-  {
-    title: 'Vector index optimized',
-    detail: 'pgvector reindex completed across 14 brains',
-    tone: 'success'
-  },
-  {
-    title: 'New knowledge intake',
-    detail: '3 documents queued for embedding',
-    tone: 'azure'
-  },
-  {
-    title: 'Approval pending',
-    detail: 'Chain-of-Trust review needs a human sign-off',
-    tone: 'warning'
-  }
-];
+function coverageTone(pct: number): BadgeTone {
+  if (pct >= 75) return 'success';
+  if (pct >= 40) return 'gold';
+  if (pct > 0) return 'warning';
+  return 'neutral';
+}
 
 type Tab = 'users' | 'invites' | 'activity' | 'trust' | 'knowledge';
 
+/* ---- Stat tile (bold: tone disc + accent rail) -------------------------- */
+
 function StatTile({ stat }: { stat: Stat }) {
   const Icon = stat.icon;
+  const accent = TONE_VAR[stat.tone];
   return (
-    <Card className="flex-1 p-4">
+    <Card className="relative flex-1 overflow-hidden p-4">
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: accent }}
+      />
       <div className="flex items-center justify-between">
         <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
           {stat.label}
         </span>
-        <span style={{ color: TONE_HEX[stat.tone] }}>
-          <Icon size={15} strokeWidth={1.9} aria-hidden />
+        <span
+          className="flex h-7 w-7 items-center justify-center rounded-lg border bg-bg-1"
+          style={{ color: accent, borderColor: accent }}
+        >
+          <Icon size={14} strokeWidth={1.9} aria-hidden />
         </span>
       </div>
       <div className="mt-3 text-[26px] font-semibold tabular-nums tracking-[-0.02em] text-fg-1">
@@ -157,89 +140,395 @@ function StatTile({ stat }: { stat: Stat }) {
   );
 }
 
-function UsersPanel({
-  members,
-  statuses,
-  onSetStatus
-}: {
-  members: AdminMember[];
-  statuses: Record<string, MemberStatus>;
-  onSetStatus: (id: string, status: MemberStatus) => void;
-}) {
-  if (members.length === 0) {
-    return (
-      <Card className="p-10 text-center text-[13px] text-fg-5">
-        No members in this organization.
-      </Card>
-    );
-  }
+/** Small "reference / coming soon" pill for not-yet-real metric panels. */
+function ReferencePill() {
   return (
-    <Card className="p-2">
-      <div className="grid grid-cols-[1.8fr_1.2fr_0.9fr_1.1fr] gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-        <span>Member</span>
-        <span>Role</span>
-        <span>Status</span>
-        <span>Actions</span>
-      </div>
-      <div className="h-px bg-hairline" />
-      {members.map((m, i) => {
-        const tone: AvatarTone = i % 2 ? 'gold' : 'azure';
-        const status = statuses[m.id] ?? m.status;
-        return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-hairline bg-surface-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-fg-5">
+      Reference · soon
+    </span>
+  );
+}
+
+/* ---- Role menu ---------------------------------------------------------- */
+
+function RoleMenu({
+  role,
+  canGrantOwner,
+  isLastOwner,
+  pending,
+  onChange
+}: {
+  role: OrgMemberRole;
+  canGrantOwner: boolean;
+  isLastOwner: boolean;
+  pending: boolean;
+  onChange: (role: OrgMemberRole) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const options: OrgMemberRole[] = ['owner', 'admin', 'member'];
+
+  function disabledFor(opt: OrgMemberRole): boolean {
+    if (opt === role) return true;
+    if (opt === 'owner' && !canGrantOwner) return true;
+    // Demoting the last owner is blocked (server enforces too).
+    if (role === 'owner' && opt !== 'owner' && isLastOwner) return true;
+    return false;
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="inline-flex items-center gap-1 rounded-md border border-hairline bg-surface-1 px-2 py-1 text-[11.5px] font-medium text-fg-2 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+      >
+        {ROLE_LABEL[role]}
+        <ChevronDown size={12} strokeWidth={2} aria-hidden />
+      </button>
+      {open ? (
+        <>
+          <button
+            type="button"
+            aria-hidden
+            tabIndex={-1}
+            className="fixed inset-0 z-40 cursor-default"
+            onClick={() => setOpen(false)}
+          />
           <div
-            key={m.id}
-            className="grid grid-cols-[1.8fr_1.2fr_0.9fr_1.1fr] items-center gap-2 border-b border-hairline-faint px-3 py-2.5 last:border-b-0"
+            role="menu"
+            className="absolute right-0 z-50 mt-1 w-36 overflow-hidden rounded-xl border border-hairline bg-bg-1 shadow-[var(--shadow-md)]"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setOpen(false);
+            }}
           >
-            <div className="flex min-w-0 items-center gap-2.5">
-              <Avatar name={m.name} size={30} tone={tone} />
-              <div className="min-w-0">
-                <div className="truncate text-[12.5px] font-semibold text-fg-1">{m.name}</div>
-              </div>
-            </div>
-            <span className="text-xs text-fg-2">{ROLE_LABEL[m.role] ?? m.role}</span>
-            <div>
-              <Badge tone={STATUS_TONE[status]} className="text-[10px]">
-                {status}
-              </Badge>
-            </div>
-            <div className="flex gap-1.5">
-              {status === 'Pending' && (
+            {options.map((opt) => {
+              const disabled = disabledFor(opt);
+              return (
                 <button
+                  key={opt}
                   type="button"
-                  title="Approve"
-                  aria-label="Approve"
-                  onClick={() => onSetStatus(m.id, 'Active')}
-                  className="flex h-[27px] w-[27px] items-center justify-center rounded-md border border-[var(--success-line)] bg-[var(--success-soft)] text-success transition hover:brightness-110"
+                  role="menuitem"
+                  disabled={disabled}
+                  onClick={() => {
+                    setOpen(false);
+                    onChange(opt);
+                  }}
+                  className={cn(
+                    'flex w-full items-center justify-between px-3 py-2 text-left text-[12px] transition',
+                    disabled
+                      ? 'cursor-not-allowed text-fg-5'
+                      : 'text-fg-2 hover:bg-surface-1 hover:text-fg-1'
+                  )}
                 >
-                  <Check size={13} strokeWidth={1.9} aria-hidden />
+                  {ROLE_LABEL[opt]}
+                  {opt === role ? <Check size={12} strokeWidth={2} aria-hidden /> : null}
                 </button>
-              )}
-              <button
-                type="button"
-                title="Assign role"
-                aria-label="Assign role"
-                className="flex h-[27px] w-[27px] items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-4 transition hover:bg-surface-2 hover:text-fg-1"
-              >
-                <UserCog size={13} strokeWidth={1.9} aria-hidden />
-              </button>
-              <button
-                type="button"
-                title="Archive"
-                aria-label="Archive"
-                onClick={() => onSetStatus(m.id, 'Archived')}
-                className="flex h-[27px] w-[27px] items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-4 transition hover:bg-surface-2 hover:text-fg-1"
-              >
-                <Archive size={13} strokeWidth={1.9} aria-hidden />
-              </button>
-            </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/* ---- Invite member panel (reuses the magic-link plumbing) --------------- */
+
+function InviteMemberPanel({ onClose }: { onClose: () => void }) {
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<OrgMemberRole>('member');
+  const [note, setNote] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const router = useRouter();
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (pending || !email.trim()) return;
+    setPending(true);
+    setError(null);
+    // Capture the intended role on the invite note until acceptance wires the
+    // org_members row at that role (backend task #115).
+    const composedNote = [`role: ${role}`, note.trim()].filter(Boolean).join(' · ');
+    const res = await inviteBetaUser(email, composedNote);
+    setPending(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setLink(res.link);
+    router.refresh();
+  }
+
+  async function copy() {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError('Could not copy — select and copy the link manually.');
+    }
+  }
+
+  return (
+    <Card className="border-[var(--azure-line)] bg-[var(--azure-soft)] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-[12.5px] font-semibold text-fg-1">Invite a member</div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close invite"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 transition hover:bg-surface-1 hover:text-fg-1"
+        >
+          <X size={14} strokeWidth={1.9} aria-hidden />
+        </button>
+      </div>
+
+      {link ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-[12px] text-fg-2">
+            Magic link minted for <span className="font-semibold">{email}</span>. Share it — the
+            member joins as <span className="font-semibold">{ROLE_LABEL[role]}</span> on acceptance.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={link}
+              className="min-w-0 flex-1 truncate rounded-lg border border-hairline bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-fg-3"
+            />
+            <Button variant="secondary" size="sm" icon={Copy} onClick={copy}>
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="flex flex-col gap-2.5">
+          <div className="grid gap-2.5 sm:grid-cols-[1.6fr_1fr]">
+            <Input
+              type="email"
+              required
+              icon={Mail}
+              placeholder="name@firm.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              aria-label="Invite email"
+            />
+            <Select
+              value={role}
+              onChange={(e) => setRole(e.target.value as OrgMemberRole)}
+              aria-label="Invite role"
+              options={[
+                { value: 'member', label: 'Member' },
+                { value: 'admin', label: 'Admin' },
+                { value: 'owner', label: 'Owner' }
+              ]}
+            />
+          </div>
+          <Input
+            placeholder="Optional note (e.g. how you know them)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            aria-label="Invite note"
+          />
+          {error ? <p className="text-[12px] text-danger">{error}</p> : null}
+          <div className="flex justify-end">
+            <Button variant="primary" size="sm" type="submit" disabled={pending || !email.trim()}>
+              {pending ? 'Minting link…' : 'Send invite'}
+            </Button>
+          </div>
+        </form>
+      )}
     </Card>
   );
 }
 
-function ActivityPanel({ actions }: { actions: AdminData['actions'] }) {
+/* ---- Users panel -------------------------------------------------------- */
+
+function UsersPanel({
+  members,
+  statuses,
+  roles,
+  ownerCount,
+  viewerRole,
+  rowErrors,
+  pendingId,
+  onApprove,
+  onArchive,
+  onRole
+}: {
+  members: AdminMember[];
+  statuses: Record<string, MemberStatus>;
+  roles: Record<string, OrgMemberRole>;
+  ownerCount: number;
+  viewerRole: OrgMemberRole | null;
+  rowErrors: Record<string, string>;
+  pendingId: string | null;
+  onApprove: (id: string) => void;
+  onArchive: (id: string) => void;
+  onRole: (id: string, role: OrgMemberRole) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | OrgMemberRole>('all');
+  const [inviteOpen, setInviteOpen] = useState(false);
+
+  const q = query.trim().toLowerCase();
+  const filtered = members.filter((m) => {
+    const role = roles[m.id] ?? m.role;
+    if (roleFilter !== 'all' && role !== roleFilter) return false;
+    if (q && !m.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const roleChips: Array<{ id: 'all' | OrgMemberRole; label: string }> = [
+    { id: 'all', label: 'All' },
+    { id: 'owner', label: 'Owners' },
+    { id: 'admin', label: 'Admins' },
+    { id: 'member', label: 'Members' }
+  ];
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Controls */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {roleChips.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setRoleFilter(c.id)}
+              aria-pressed={roleFilter === c.id}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[11.5px] font-medium transition',
+                roleFilter === c.id
+                  ? 'border-[var(--azure-line)] bg-[var(--azure-soft)] text-azure-1'
+                  : 'border-hairline bg-surface-1 text-fg-3 hover:text-fg-1'
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-full sm:w-56">
+            <Input
+              icon={Search}
+              placeholder="Search members…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Search members"
+            />
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={UserPlus}
+            onClick={() => setInviteOpen((v) => !v)}
+          >
+            Invite
+          </Button>
+        </div>
+      </div>
+
+      {inviteOpen ? <InviteMemberPanel onClose={() => setInviteOpen(false)} /> : null}
+
+      {filtered.length === 0 ? (
+        <Card className="p-10 text-center text-[13px] text-fg-5">
+          {members.length === 0 ? 'No members in this organization.' : 'No members match.'}
+        </Card>
+      ) : (
+        <Card className="p-2">
+          <div className="grid grid-cols-[1.8fr_1.1fr_0.9fr_1fr] gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+            <span>Member</span>
+            <span>Role</span>
+            <span>Status</span>
+            <span>Actions</span>
+          </div>
+          <div className="h-px bg-hairline" />
+          {filtered.map((m) => {
+            const role = roles[m.id] ?? m.role;
+            const status = statuses[m.id] ?? m.status;
+            const tone: AvatarTone = ROLE_TONE[role] ?? 'azure';
+            const isLastOwner = role === 'owner' && ownerCount <= 1;
+            const err = rowErrors[m.id];
+            return (
+              <div
+                key={m.id}
+                className="grid grid-cols-[1.8fr_1.1fr_0.9fr_1fr] items-center gap-2 border-b border-hairline-faint px-3 py-2.5 last:border-b-0"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <Avatar name={m.name} size={30} tone={tone} />
+                  <div className="min-w-0">
+                    <div className="truncate text-[12.5px] font-semibold text-fg-1">{m.name}</div>
+                    {err ? <div className="truncate text-[10.5px] text-danger">{err}</div> : null}
+                  </div>
+                </div>
+                <div>
+                  <RoleMenu
+                    role={role}
+                    canGrantOwner={viewerRole === 'owner'}
+                    isLastOwner={isLastOwner}
+                    pending={pendingId === m.id}
+                    onChange={(next) => onRole(m.id, next)}
+                  />
+                </div>
+                <div>
+                  <Badge tone={STATUS_TONE[status]} className="text-[10px]">
+                    {status}
+                  </Badge>
+                </div>
+                <div className="flex gap-1.5">
+                  {status === 'Pending' && (
+                    <button
+                      type="button"
+                      title="Approve"
+                      aria-label="Approve"
+                      onClick={() => onApprove(m.id)}
+                      className="flex h-[27px] w-[27px] items-center justify-center rounded-md border border-[var(--success-line)] bg-[var(--success-soft)] text-success transition hover:brightness-110"
+                    >
+                      <Check size={13} strokeWidth={1.9} aria-hidden />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    title={isLastOwner ? 'The last owner cannot be archived' : 'Archive'}
+                    aria-label="Archive"
+                    disabled={isLastOwner || status === 'Archived'}
+                    onClick={() => onArchive(m.id)}
+                    className="flex h-[27px] w-[27px] items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Archive size={13} strokeWidth={1.9} aria-hidden />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ---- Activity panel (real notifications) -------------------------------- */
+
+interface NoteItem {
+  title: string;
+  detail: string;
+  tone: BadgeTone;
+}
+
+function ActivityPanel({
+  actions,
+  notifications
+}: {
+  actions: AdminData['actions'];
+  notifications: NoteItem[];
+}) {
   return (
     <div className="grid items-start gap-[18px] lg:grid-cols-[1fr_320px]">
       <Card className="p-2">
@@ -276,31 +565,41 @@ function ActivityPanel({ actions }: { actions: AdminData['actions'] }) {
           className="mb-3"
           action={<Bell size={15} strokeWidth={1.9} className="text-fg-4" aria-hidden />}
         />
-        <div className="flex flex-col gap-2.5">
-          {NOTIFICATIONS.map((n) => (
-            <div
-              key={n.title}
-              className="flex items-start gap-2.5 rounded-xl border border-hairline bg-surface-1 p-3"
-            >
-              <span className="mt-0.5 flex-none" style={{ color: TONE_HEX[n.tone] }}>
-                <CircleDot size={13} strokeWidth={1.9} aria-hidden />
-              </span>
-              <div className="min-w-0">
-                <div className="text-[12.5px] font-semibold text-fg-1">{n.title}</div>
-                <div className="text-[11px] text-fg-4">{n.detail}</div>
+        {notifications.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-hairline bg-surface-1 p-4 text-center text-[12px] text-fg-4">
+            All clear — nothing needs your attention.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {notifications.map((n) => (
+              <div
+                key={n.title}
+                className="flex items-start gap-2.5 rounded-xl border border-hairline bg-surface-1 p-3"
+              >
+                <span className="mt-0.5 flex-none" style={{ color: TONE_VAR[n.tone] }}>
+                  <CircleDot size={13} strokeWidth={1.9} aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[12.5px] font-semibold text-fg-1">{n.title}</div>
+                  <div className="text-[11px] text-fg-4">{n.detail}</div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );
 }
 
-function TrustPanel() {
+/* ---- Trust panel (metrics-driven) --------------------------------------- */
+
+function TrustPanel({ metrics }: { metrics: AdminMetrics | null }) {
+  const placeholder = metrics?.placeholder ?? true;
+  const coverage = metrics?.trust.layerCoverage;
   return (
     <div className="flex flex-col gap-[18px]">
-      <Card className="bg-[linear-gradient(100deg,rgba(52,211,153,0.07),transparent_60%)]">
+      <Card className="bg-[linear-gradient(100deg,var(--success-soft),transparent_60%)]">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-hairline bg-surface-2 text-success">
             <ShieldCheck size={18} strokeWidth={1.9} aria-hidden />
@@ -320,13 +619,13 @@ function TrustPanel() {
             <div className="mt-3 flex flex-wrap gap-2">
               <a
                 href="/command-center"
-                className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-1 px-3 py-1.5 text-[11.5px] font-medium text-fg-2 transition hover:border-azure-1/40 hover:text-fg-1"
+                className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-1 px-3 py-1.5 text-[11.5px] font-medium text-fg-2 transition hover:border-[var(--azure-line)] hover:text-fg-1"
               >
                 Open Command Center
               </a>
               <a
                 href="/pipeline"
-                className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-1 px-3 py-1.5 text-[11.5px] font-medium text-fg-2 transition hover:border-azure-1/40 hover:text-fg-1"
+                className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-1 px-3 py-1.5 text-[11.5px] font-medium text-fg-2 transition hover:border-[var(--azure-line)] hover:text-fg-1"
               >
                 View Pipeline
               </a>
@@ -335,30 +634,53 @@ function TrustPanel() {
         </div>
       </Card>
 
+      <div className="flex items-center justify-between">
+        <SectionTitle eyebrow="Org-wide" title="Layer coverage" className="mb-0" />
+        {placeholder ? <ReferencePill /> : null}
+      </div>
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-        {TRUST_LAYERS.map((l) => (
-          <Card key={l.no} className="p-4">
-            <div className="flex items-center justify-between">
-              <span style={{ color: TONE_HEX[l.tone] }}>
-                <ShieldCheck size={15} strokeWidth={1.9} aria-hidden />
-              </span>
-              <span className="font-mono text-[11px] tabular-nums text-fg-5">{l.no}</span>
-            </div>
-            <div className="mt-3 text-[13.5px] font-semibold text-fg-1">{l.name}</div>
-            <div className="mt-1 text-[11px] leading-snug text-fg-5">{l.desc}</div>
-            <p className="mt-3 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-5">
-              Layer reference
-            </p>
-          </Card>
-        ))}
+        {TRUST_LAYERS.map((l) => {
+          const pct = coverage?.[l.key] ?? 0;
+          const tone = coverageTone(pct);
+          return (
+            <Card key={l.no} className="relative overflow-hidden p-4">
+              <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 w-1"
+                style={{ backgroundColor: TONE_VAR[tone] }}
+              />
+              <div className="flex items-center justify-between">
+                <span style={{ color: TONE_VAR[tone] }}>
+                  <ShieldCheck size={15} strokeWidth={1.9} aria-hidden />
+                </span>
+                <span className="font-mono text-[11px] tabular-nums text-fg-5">{l.no}</span>
+              </div>
+              <div className="mt-3 text-[13.5px] font-semibold text-fg-1">{l.name}</div>
+              <div className="mt-1 text-[11px] leading-snug text-fg-5">{l.desc}</div>
+              <div className="mt-3 flex items-center justify-between text-[11px] text-fg-4">
+                <span>{placeholder ? 'Coming soon' : 'Coverage'}</span>
+                <span className="tabular-nums" style={{ color: TONE_VAR[tone] }}>
+                  {placeholder ? '—' : `${pct}%`}
+                </span>
+              </div>
+              <div className="mt-1.5">
+                <ProgressBar value={placeholder ? 0 : pct} height={6} />
+              </div>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function KnowledgePanel() {
+/* ---- Knowledge panel (metrics-driven) ----------------------------------- */
+
+function KnowledgePanel({ metrics }: { metrics: AdminMetrics | null }) {
+  const placeholder = metrics?.placeholder ?? true;
   const coo = TEAM_ROSTER.find((m) => m.chief);
   const specialists = TEAM_ROSTER.filter((m) => !m.chief);
+  const brainsTotal = metrics?.brains.total || TEAM_ROSTER.length;
 
   const stats: Stat[] = [
     {
@@ -370,22 +692,32 @@ function KnowledgePanel() {
     },
     {
       label: 'Knowledge embeddings',
-      value: '15 / 15',
-      sub: 'Voyage 1024-dim brains',
+      value: placeholder ? '—' : `${metrics?.brains.embedded ?? 0} / ${brainsTotal}`,
+      sub: placeholder ? 'Coverage coming soon' : 'Voyage 1024-dim brains',
       icon: Database,
       tone: 'azure'
     },
     {
       label: 'pgvector store',
-      value: 'Live',
-      sub: 'match_knowledge_chunks',
+      value: placeholder ? '—' : metrics?.vector.status === 'live' ? 'Live' : 'Degraded',
+      sub: placeholder
+        ? 'Status coming soon'
+        : `${(metrics?.vector.chunks ?? 0).toLocaleString()} chunks`,
       icon: Layers,
-      tone: 'success'
+      tone: placeholder ? 'neutral' : metrics?.vector.status === 'live' ? 'success' : 'warning'
     }
   ];
 
   return (
     <div className="flex flex-col gap-[18px]">
+      <div className="flex items-center justify-between">
+        <SectionTitle
+          eyebrow="pgvector knowledge store"
+          title="Platform metrics"
+          className="mb-0"
+        />
+        {placeholder ? <ReferencePill /> : null}
+      </div>
       <div className="grid gap-3.5 sm:grid-cols-3">
         {stats.map((s) => (
           <StatTile key={s.label} stat={s} />
@@ -393,63 +725,19 @@ function KnowledgePanel() {
       </div>
 
       <Card>
-        <SectionTitle
-          eyebrow="pgvector knowledge store"
-          title={`The Team · ${TEAM_ROSTER.length} members`}
-          action={
-            <div className="flex gap-2">
-              <Button variant="secondary" size="sm" icon={GitBranch}>
-                Routing rules
-              </Button>
-              <Button variant="primary" size="sm" icon={Upload}>
-                Intake knowledge
-              </Button>
-            </div>
-          }
-        />
+        <SectionTitle eyebrow="The Team" title={`${TEAM_ROSTER.length} members`} className="mb-3" />
         <div className="grid gap-2.5 lg:grid-cols-2">
           {TEAM_ROSTER.map((m) => (
             <div
               key={m.slug}
-              className="flex items-start gap-3 rounded-xl border border-hairline bg-surface-1 p-3"
+              className="flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3"
             >
               <TeamAvatar member={m} size={36} className="flex-none" />
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="truncate text-[13px] font-semibold text-fg-1">{m.name}</span>
-                  {m.chief ? (
-                    <Badge tone="gold" className="text-[9px]">
-                      COO
-                    </Badge>
-                  ) : null}
-                </div>
-                <div className="mt-0.5 text-[10.5px] font-medium uppercase tracking-[0.1em] text-azure-1">
-                  {m.position}
-                </div>
-                <p className="mt-1 text-[11.5px] leading-5 text-fg-3">{m.oneLiner}</p>
+                <div className="truncate text-[13px] font-semibold text-fg-1">{m.name}</div>
+                <div className="truncate text-[11px] text-fg-4">{m.position}</div>
               </div>
-              <Button variant="secondary" size="sm" icon={Sparkles}>
-                Optimize
-              </Button>
             </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Intake → route → optimize" className="mb-3" />
-        <div className="flex flex-wrap items-center gap-1.5">
-          {PIPELINE_STEPS.map((s, i) => (
-            <span key={s} className="flex items-center gap-1.5">
-              <span className="rounded-full border border-hairline bg-surface-2 px-2.5 py-1 text-[11.5px] font-medium text-fg-2">
-                {s}
-              </span>
-              {i < PIPELINE_STEPS.length - 1 && (
-                <span className="text-fg-5" aria-hidden>
-                  ›
-                </span>
-              )}
-            </span>
           ))}
         </div>
       </Card>
@@ -457,57 +745,95 @@ function KnowledgePanel() {
   );
 }
 
-export function AdminView({ data, invites }: { data: AdminData; invites: BetaInvite[] }) {
+/* ---- Main view ---------------------------------------------------------- */
+
+export function AdminView({
+  data,
+  invites,
+  metrics,
+  viewerRole
+}: {
+  data: AdminData;
+  invites: BetaInvite[];
+  metrics: AdminMetrics | null;
+  viewerRole: OrgMemberRole | null;
+}) {
   const [tab, setTab] = useState<Tab>('users');
   const router = useRouter();
   // Member rows share the card lifecycle: approving an applicant "completes"
   // the row (closed); archiving sets the archived flag.
   const cards = useCardState(data.members);
 
-  // Resolve each member's effective status from its shared card flags.
+  // Optimistic role overrides + per-row error/pending state for role changes.
+  const [roleOverrides, setRoleOverrides] = useState<Record<string, OrgMemberRole>>({});
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
   const statuses: Record<string, MemberStatus> = {};
   for (const m of cards.items) {
     statuses[m.id] = m.archived ? 'Archived' : m.closed ? 'Active' : m.status;
   }
+  const roles: Record<string, OrgMemberRole> = {};
+  for (const m of data.members) {
+    roles[m.id] = roleOverrides[m.id] ?? (m.role as OrgMemberRole);
+  }
+  const ownerCount = data.members.filter((m) => roles[m.id] === 'owner').length;
 
-  function setStatus(id: string, status: MemberStatus) {
-    if (status === 'Active') {
-      cards.complete(id);
-      // Approving a member advances the Execution layer of Chain of Trust.
-      window.emitTrust?.({
-        layer: 'execution',
-        title: 'Member approved',
-        msg: 'An applicant was approved into the organization.',
-        entity: id
-      });
-      void approveMember(id).then(() => router.refresh());
-    } else if (status === 'Archived') {
-      cards.archive(id);
-      void archiveMember(id).then(() => router.refresh());
-    }
+  function approve(id: string) {
+    cards.complete(id);
+    window.emitTrust?.({
+      layer: 'execution',
+      title: 'Member approved',
+      msg: 'An applicant was approved into the organization.',
+      entity: id
+    });
+    void approveMember(id).then(() => router.refresh());
   }
 
-  const activeCount = data.members.filter((m) => statuses[m.id] === 'Active').length;
-  const pendingCount = data.members.filter((m) => statuses[m.id] === 'Pending').length;
+  function archive(id: string) {
+    cards.archive(id);
+    void archiveMember(id).then((res) => {
+      if (!res.ok) setRowErrors((e) => ({ ...e, [id]: res.error }));
+      router.refresh();
+    });
+  }
+
+  function changeRole(id: string, role: OrgMemberRole) {
+    const prev = roles[id];
+    setPendingId(id);
+    setRowErrors((e) => ({ ...e, [id]: '' }));
+    setRoleOverrides((r) => ({ ...r, [id]: role })); // optimistic
+    void setMemberRole(id, role).then((res) => {
+      setPendingId(null);
+      if (!res.ok) {
+        setRoleOverrides((r) => ({ ...r, [id]: prev })); // revert
+        setRowErrors((e) => ({ ...e, [id]: res.error }));
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  const openInvites = invites.filter((i) => i.status === 'pending');
 
   const adminStats: Stat[] = [
     {
       label: 'Members',
       value: String(data.members.length),
-      sub: `${activeCount} active`,
+      sub: `${ownerCount} owner${ownerCount === 1 ? '' : 's'}`,
       icon: Users,
       tone: 'azure'
     },
     {
-      label: 'Pending approval',
-      value: String(pendingCount),
-      sub: pendingCount ? 'Action needed' : 'All clear',
-      icon: UserPlus,
-      tone: 'warning'
+      label: 'Open invites',
+      value: String(openInvites.length),
+      sub: openInvites.length ? 'Awaiting acceptance' : 'All accepted',
+      icon: Mail,
+      tone: openInvites.length ? 'warning' : 'success'
     },
     {
       label: 'AI brains',
-      value: String(TEAM_ROSTER.length),
+      value: String(metrics?.brains.total || TEAM_ROSTER.length),
       sub: 'Knowledge modules',
       icon: BrainCircuit,
       tone: 'gold'
@@ -520,6 +846,27 @@ export function AdminView({ data, invites }: { data: AdminData; invites: BetaInv
       tone: 'success'
     }
   ];
+
+  // Real notifications, derived from live signals (no fabricated data).
+  const notifications: NoteItem[] = [];
+  if (openInvites.length > 0) {
+    notifications.push({
+      title: `${openInvites.length} invite${openInvites.length === 1 ? '' : 's'} awaiting acceptance`,
+      detail: openInvites
+        .slice(0, 3)
+        .map((i) => i.email)
+        .join(', '),
+      tone: 'warning'
+    });
+  }
+  const lastAction = data.actions[0];
+  if (lastAction) {
+    notifications.push({
+      title: 'Latest admin action',
+      detail: `${lastAction.actionType} · ${lastAction.actor} · ${lastAction.time}`,
+      tone: 'azure'
+    });
+  }
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -554,12 +901,23 @@ export function AdminView({ data, invites }: { data: AdminData; invites: BetaInv
       />
 
       {tab === 'users' && (
-        <UsersPanel members={data.members} statuses={statuses} onSetStatus={setStatus} />
+        <UsersPanel
+          members={data.members}
+          statuses={statuses}
+          roles={roles}
+          ownerCount={ownerCount}
+          viewerRole={viewerRole}
+          rowErrors={rowErrors}
+          pendingId={pendingId}
+          onApprove={approve}
+          onArchive={archive}
+          onRole={changeRole}
+        />
       )}
       {tab === 'invites' && <BetaInvitesPanel invites={invites} />}
-      {tab === 'activity' && <ActivityPanel actions={data.actions} />}
-      {tab === 'trust' && <TrustPanel />}
-      {tab === 'knowledge' && <KnowledgePanel />}
+      {tab === 'activity' && <ActivityPanel actions={data.actions} notifications={notifications} />}
+      {tab === 'trust' && <TrustPanel metrics={metrics} />}
+      {tab === 'knowledge' && <KnowledgePanel metrics={metrics} />}
     </div>
   );
 }
