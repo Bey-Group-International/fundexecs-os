@@ -58,10 +58,12 @@ export interface EarnChatProps {
   context?: EarnChatContext;
   /** Notifies the dock whether there's an active thread (drives chat-first layout). */
   onThreadChange?: (hasThread: boolean) => void;
+  /** Notifies the dock when a turn is in flight (drives the live agent strip). */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnChat(
-  { context, onThreadChange },
+  { context, onThreadChange, onBusyChange },
   ref
 ) {
   const earn = getCOO();
@@ -96,6 +98,10 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
   useEffect(() => {
     onThreadChange?.(messages.length > 0 || loading);
   }, [messages.length, loading, onThreadChange]);
+
+  useEffect(() => {
+    onBusyChange?.(loading);
+  }, [loading, onBusyChange]);
 
   const send = useCallback(
     async (text: string) => {
