@@ -1,0 +1,45 @@
+# CodeQL static analysis (GitHub Advanced Security / "Code Security").
+#
+# Gated behind the `ENABLE_CODEQL` repo variable so it stays DORMANT until the
+# org enables Advanced Security on this private repo (otherwise the upload step
+# errors). Flip it on with:  Settings → Secrets and variables → Actions →
+# Variables → New variable → ENABLE_CODEQL = true  (after enabling Code Security
+# at the org/billing level — see docs/SECURITY_SETUP.md). Until then the job is
+# skipped (neutral), so it never red-lights a PR.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, Monday 03:27 UTC — catches newly-disclosed CVEs in unchanged code.
+    - cron: '27 3 * * 1'
+
+jobs:
+  analyze:
+    name: CodeQL
+    # Dormant until Advanced Security is enabled + the variable is set to 'true'.
+    if: ${{ vars.ENABLE_CODEQL == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # security-extended adds higher-recall security queries beyond the
+          # default set — appropriate for a fintech handling secrets + money.
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

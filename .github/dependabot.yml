@@ -1,0 +1,38 @@
+# Dependabot — automated dependency + security update PRs.
+# Works on any plan (no Advanced Security required). Pair with Dependabot
+# alerts + security updates enabled at the repo/org level (free) so security
+# bumps are raised even between scheduled runs. See docs/SECURITY_SETUP.md.
+version: 2
+updates:
+  # Application dependencies (npm).
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+    # Group routine bumps into two PRs to cut review noise; security updates
+    # still come through individually so they're easy to prioritise.
+    groups:
+      production-dependencies:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+
+  # The GitHub Actions used by our workflows (CI, CodeQL).
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+      - github-actions
