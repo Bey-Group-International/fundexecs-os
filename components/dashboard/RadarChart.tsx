@@ -67,6 +67,10 @@ export function RadarChart({
   const cy = size / 2;
   const labelPad = 34;
   const radius = size / 2 - labelPad;
+  // Horizontal breathing room in the viewBox so the left/right axis labels
+  // (anchored start/end and placed beyond the radius) don't clip at the SVG
+  // edge — the chart stays centered because the padding is symmetric.
+  const labelPadX = 44;
   const n = axes.length;
 
   // Angle for axis i (start at top, clockwise).
@@ -96,7 +100,7 @@ export function RadarChart({
 
   return (
     <svg
-      viewBox={`0 0 ${size} ${size}`}
+      viewBox={`${-labelPadX} 0 ${size + labelPadX * 2} ${size}`}
       className={cn('block h-auto w-full max-w-full', className)}
       role="img"
       aria-label={ariaLabel}
