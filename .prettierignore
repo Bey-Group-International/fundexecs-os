@@ -13,3 +13,6 @@ lib/supabase/database.types.ts
 
 # vendored design-system handoff (kept verbatim from the design package)
 design_handoff_fundexecs_os/
+
+# platform metadata — managed by Emergent, not subject to repo formatting
+.emergent/

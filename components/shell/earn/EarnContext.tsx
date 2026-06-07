@@ -32,6 +32,7 @@ export type EarnContextKind =
   | 'deal'
   | 'capital-stack'
   | 'objection'
+  | 'strategy'
   | 'intelligence'
   | 'materials'
   | 'partners'

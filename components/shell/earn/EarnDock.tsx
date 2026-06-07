@@ -171,6 +171,10 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
       aria-modal="false"
       aria-label="Earn dock"
       aria-hidden={!open}
+      // `inert` keeps the entire subtree out of the tab order + a11y tree
+      // when the dock is closed — fixes the axe `aria-hidden-focus` rule
+      // (focusable chat textarea + buttons inside an aria-hidden ancestor).
+      {...(open ? {} : { inert: '' as unknown as boolean })}
       data-testid="earn-dock"
       data-context={earnCtx.kind}
       className={cn(

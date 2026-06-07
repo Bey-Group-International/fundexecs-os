@@ -269,6 +269,32 @@ export const CONTEXT_COPY: Record<EarnContextKind, EarnContextCopy> = {
       }
     ]
   },
+  strategy: {
+    subtitle: 'Strategy · 100 / 30 / 10 objectives on the record',
+    activity: 'Strategist + Chief of Staff are sequencing the plan.',
+    actions: [
+      {
+        label: 'Sharpen this objective',
+        prompt: 'Sharpen this 100/30/10 objective so it is specific and measurable.',
+        icon: Target
+      },
+      {
+        label: 'Break it into 30 / 10 steps',
+        prompt: 'Break this objective into 30-day and 10-day milestones.',
+        icon: ListChecks
+      },
+      {
+        label: "What's blocking this?",
+        prompt: 'What is blocking this objective and what unblocks it fastest?',
+        icon: AlertCircle
+      },
+      {
+        label: 'Sequence against the raise',
+        prompt: 'Sequence this objective against my capital-formation lifecycle stage.',
+        icon: Compass
+      }
+    ]
+  },
   intelligence: {
     subtitle: 'Intelligence · signal in, knowledge out',
     activity: 'Inbox specialist + librarian are filing what came in.',
