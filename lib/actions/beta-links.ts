@@ -25,19 +25,13 @@ function normalizeRole(input?: string): OrgMemberRole {
   return role === 'owner' || role === 'admin' ? role : 'member';
 }
 
-async function isOrgAdmin(orgId: string, userId: string): Promise<boolean> {
-  // Admin is reserved for the Bey Group team (@beygroupintl.com), not org role.
+/**
+ * Platform-admin gate: reserved for the Bey Group team (`@beygroupintl.com`).
+ * Any Bey account is an admin across every workspace, independent of org role.
+ */
+async function isOrgAdmin(): Promise<boolean> {
   const user = await getAuthUser();
-  if (!isPlatformAdmin(user?.email)) return false;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('org_members')
-    .select('role, status')
-    .eq('org_id', orgId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (!data) return false;
-  return (data.role === 'owner' || data.role === 'admin') && data.status === 'active';
+  return isPlatformAdmin(user?.email);
 }
 
 async function writeAudit(
@@ -79,7 +73,7 @@ export async function createBetaLink(
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await isOrgAdmin(org.orgId, org.userId))) {
+  if (!(await isOrgAdmin())) {
     return { ok: false, error: 'Only owners or admins can create beta links.' };
   }
 
@@ -123,7 +117,7 @@ export async function revokeBetaLink(linkId: string): Promise<RevokeLinkResult> 
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await isOrgAdmin(org.orgId, org.userId))) {
+  if (!(await isOrgAdmin())) {
     return { ok: false, error: 'Only owners or admins can revoke beta links.' };
   }
 
