@@ -15,7 +15,7 @@
     "wave1:complete-test-onboarding": "node --env-file=.env.local scripts/wave1-complete-test-onboarding.cjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
+    "@anthropic-ai/sdk": "^0.102.0",
     "@sentry/nextjs": "^10.56.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
