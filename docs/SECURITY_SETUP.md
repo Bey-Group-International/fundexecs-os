@@ -120,7 +120,9 @@ If the goal is to move FundExecs into a (new or existing) **Enterprise org**.
 - [ ] **GitHub Apps / OAuth** — reinstall any others on the new org.
 - [ ] **Branch ruleset** — re-import `main-branch-protection.json` (rulesets are
       per-repo/org, not carried by transfer).
-- [ ] **CODEOWNERS** — switch `@BGI-Pres` to the new org's team handle.
+- [ ] **CODEOWNERS** — lists the BGI owners by email (pres@, businessdevelopment@,
+      vp@, secretary@); confirm each maps to a GitHub account with repo access in
+      the new org, or switch to team handles.
 - [ ] **Enable Advanced Security** on the repo in the new org (step 2) and flip
       `ENABLE_CODEQL=true` again.
 - [ ] Update any **hardcoded repo URLs** (README badges, docs, the

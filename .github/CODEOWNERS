@@ -1,22 +1,32 @@
 # Code owners — auto-requests review from the right people and (with the
 # "require review from Code Owners" ruleset) blocks merge until they approve.
 #
-# Replace @BGI-Pres with a team handle (e.g. @bey-group-international/eng) once
-# teams are set up — team-based ownership scales better than a single user.
+# Owners are listed by email. For this to work, each email MUST be the verified
+# email of a GitHub account that is a collaborator/member with at least write
+# access to this repo. (Swap to team handles — e.g. @bey-group-international/eng
+# — once GitHub teams are set up; teams scale better than individuals.)
 # Order matters: the LAST matching pattern wins.
+#
+#   pres@beygroupintl.com               President        — overall owner
+#   businessdevelopment@beygroupintl.com Main developer  — default code reviewer
+#   vp@beygroupintl.com                 Extended team    — docs / team-facing
+#   secretary@beygroupintl.com          Extended team    — docs / team-facing
 
-# Default owner for everything.
-*                           @BGI-Pres
+# Default — main developer + president review everything.
+*                           businessdevelopment@beygroupintl.com pres@beygroupintl.com
 
-# ── High-blast-radius lanes (security / data / auth) — extra scrutiny ──────────
-/supabase/                  @BGI-Pres
-/lib/supabase/              @BGI-Pres
-/lib/actions/               @BGI-Pres
-/middleware.ts              @BGI-Pres
-/proxy.ts                   @BGI-Pres
-/app/login/                 @BGI-Pres
-/app/auth/                  @BGI-Pres
+# ── High-blast-radius lanes (security / data / auth) — president sign-off ──────
+/supabase/                  pres@beygroupintl.com businessdevelopment@beygroupintl.com
+/lib/supabase/              pres@beygroupintl.com businessdevelopment@beygroupintl.com
+/lib/actions/               pres@beygroupintl.com businessdevelopment@beygroupintl.com
+/middleware.ts              pres@beygroupintl.com businessdevelopment@beygroupintl.com
+/proxy.ts                   pres@beygroupintl.com businessdevelopment@beygroupintl.com
+/app/login/                 pres@beygroupintl.com businessdevelopment@beygroupintl.com
+/app/auth/                  pres@beygroupintl.com businessdevelopment@beygroupintl.com
 
-# ── CI / repo policy ─────────────────────────────────────────────────────────
-/.github/                   @BGI-Pres
-/.coderabbit.yaml           @BGI-Pres
+# ── CI / repo policy — president ──────────────────────────────────────────────
+/.github/                   pres@beygroupintl.com
+/.coderabbit.yaml           pres@beygroupintl.com
+
+# ── Docs & team-facing material — extended team (+ main dev) ──────────────────
+/docs/                      vp@beygroupintl.com secretary@beygroupintl.com businessdevelopment@beygroupintl.com
