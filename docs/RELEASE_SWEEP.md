@@ -48,6 +48,16 @@ their ComingSoon):
 - **Stripe top-up UI** in the wallet popover (calls the checkout action Claude/
   Codex provide; render test state cleanly).
   Keep ComingSoon ONLY for `materials` + `inbox-intelligence` (deeper work).
+  _(Partner Marketplace moved to Lane 5 — Emergent.)_
+
+## Lane 5 — Emergent (≈150 cr · bounded UI)
+
+**Partner Marketplace** (`/partners`) — replace the ComingSoon stub with a
+directory UI over Claude's `getPartners(orgId)` loader (service providers +
+capital providers, org-scoped). Cards/list with type, name, and a tasteful empty
+state; bind to the typed loader with placeholder fallback. Self-contained, no
+cross-agent dependency. Same shared guardrails (UI-only, tokens-only, solid
+`bg-bg-1`, branch `emergent/partners`, draft PR, stop for Claude review).
 
 ## Lane 3 — Codex (pro · backend/data)
 
