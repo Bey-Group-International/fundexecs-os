@@ -1,50 +1,68 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import type { MemberType } from '@/lib/member-types';
+import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
 
 /* ============================================================================
- * lib/queries/fund-profile.ts — the Source-of-Truth fund/manager record.
+ * lib/queries/fund-profile.ts — the Profile, the Source-of-Truth record.
  *
- * Per the spec, Fund Profile is "the canonical fund/manager record everything
- * else reads from": thesis, strategy, target raise, terms, track record, team.
- * Wave 1 reuses `member_profiles` (no schema churn) — the org owner's profile
- * row is the manager record, joined with the `organizations` row for fund-level
- * name/tier. We layer a `completenessScore` and a `gaps[]` list on top so the
- * Dashboard, Fund Readiness, and the lifecycle engine can all read the same
- * credibility signal an LP would probe.
+ * The Profile is the canonical record every counterparty reads from. It is
+ * built during onboarding and adapts to who the member is: an investment firm,
+ * a service provider, a startup, an individual investor, or a student.
  *
- * Structured fields (thesis, strategy, target raise, terms, track record,
- * team) live in `member_profiles.details` (Json) until/unless a dedicated
- * schema lands. We read them defensively so a partially-filled profile never
- * throws.
+ * Single source of truth: the Profile's sections, completeness, and gaps are
+ * derived from the SAME per-member-type question set onboarding uses
+ * (`lib/proof-of-truth/questions.ts`). That keeps the two in lockstep — every
+ * gap shown here is one you can close in onboarding, and onboarding is exactly
+ * the act of building this record.
+ *
+ * Wave 1 reuses `member_profiles` (no schema churn): the org owner's profile
+ * row is the entity record, joined with the `organizations` row for entity-level
+ * name/tier. We layer a `completenessScore`, a `gaps[]` list, and the rendered
+ * `sections[]` on top so the Profile surface, the Dashboard, Fund Readiness, and
+ * the lifecycle engine all read the same credibility signal.
+ *
+ * A handful of fund-specific fields (target raise, terms, track record, team)
+ * are still extracted defensively for the fund-raise lifecycle, which is
+ * intrinsically fund-centric.
  * ========================================================================= */
 
-/** The dimensions an LP probes — each maps to a gap when missing/weak. */
-export type FundProfileField =
-  | 'thesis'
-  | 'strategy'
-  | 'targetRaise'
-  | 'terms'
-  | 'trackRecord'
-  | 'team';
-
-/** A missing-or-weak field an LP would probe, with why it matters. */
+/** A missing-or-weak field a counterparty would probe, with why it matters. */
 export interface FundProfileGap {
-  field: FundProfileField;
+  /** The question id this gap maps to (stable within a member type's set). */
+  field: string;
   label: string;
-  /** Why an LP cares — used as Earn's prompt to fill it. */
+  /** Why a counterparty cares — used as Earn's prompt to fill it. */
   reason: string;
   /** 'missing' = absent; 'weak' = present but thin. */
   severity: 'missing' | 'weak';
 }
 
+/**
+ * One rendered Profile section, derived from a question + the member's answer.
+ * `kind` drives how the value renders (chips for tags, link for url, etc.).
+ */
+export interface ProfileSection {
+  /** Question id. */
+  id: string;
+  label: string;
+  kind: ProfileQuestion['kind'];
+  /** Display text for text/textarea/select; null when absent. */
+  text: string | null;
+  /** Values for `kind: 'tags'`; empty otherwise. */
+  tags: string[];
+  /** Normalized href for `kind: 'url'`; null otherwise. */
+  href: string | null;
+  present: boolean;
+  optional: boolean;
+  /** Why this section matters, for empty-state coaching. */
+  why: string | null;
+}
+
 /** Track-record summary an LP scans first. All optional until entered. */
 export interface FundTrackRecord {
-  /** Prior funds / deals count, when stated. */
   priorDeals: number | null;
-  /** Realized or marked returns blurb (free text in Wave 1). */
   returnsSummary: string | null;
-  /** Notable exits / wins (free text). */
   highlights: string | null;
 }
 
@@ -56,51 +74,56 @@ export interface FundTeamMember {
 
 /** Economic terms an LP diligences. */
 export interface FundTerms {
-  /** Management fee %, e.g. 2. */
   managementFeePct: number | null;
-  /** Carried interest %, e.g. 20. */
   carryPct: number | null;
-  /** Fund structure / vehicle blurb. */
   structure: string | null;
 }
 
 /**
  * The canonical Source-of-Truth payload. Numbers + plain objects only, so it
- * serializes cleanly to the Fund Profile UI and the Dashboard side rail.
+ * serializes cleanly to the Profile UI and the Dashboard side rail.
  */
 export interface FundProfile {
   orgId: string;
-  /** The org/fund display name (from `organizations.name`). */
+  /** The org/entity display name (from `organizations.name`). */
   fundName: string;
   /** Org tier label, e.g. "Emerging manager". */
   fundTier: string | null;
-  /** The owning manager's user id (null when no owner resolved). */
+  /** The owning member's user id (null when no owner resolved). */
   managerUserId: string | null;
-  /** Manager display name (member_profiles.display_name or profile name). */
+  /** Owner display name (member_profiles.display_name or profile name). */
   managerName: string | null;
-  /** Manager member type — investment_firm for most funds. */
+  /** The member's type — drives which sections/gaps apply. */
   memberType: MemberType | null;
+  /** One-line headline from the member profile, when set. */
+  headline: string | null;
 
-  /** Investment thesis — the "why now / why us". */
+  /** Member-type-aware sections, in display order (common, then specific). */
+  sections: ProfileSection[];
+
+  /** Investment thesis — the "why now / why us" (fund-specific). */
   thesis: string | null;
-  /** Strategy: stage, sector, geography focus (free text in Wave 1). */
+  /** Strategy: stage, sector, geography focus (fund-specific). */
   strategy: string | null;
-  /** Target raise amount in dollars (0/null until sized). */
+  /** Target raise amount in dollars (fund-specific; feeds the raise lifecycle). */
   targetRaise: number | null;
   terms: FundTerms;
   trackRecord: FundTrackRecord;
   team: FundTeamMember[];
-  /** Focus areas from member_profiles (used as a strategy fallback signal). */
+  /** Focus areas from member_profiles. */
   focusAreas: string[];
 
-  /** 0–100 completeness of the LP-probed fields. Feeds readiness + lifecycle. */
+  /** 0–100 completeness of the required profile fields. Feeds readiness. */
   completenessScore: number;
-  /** The fields an LP would probe that are missing or weak. */
+  /** The required fields that are missing or weak. */
   gaps: FundProfileGap[];
 }
 
+/** Back-compat alias — the Profile record. */
+export type ProfileRecord = FundProfile;
+
 /* ---------------------------------------------------------------------------
- * Field extraction helpers — read defensively from member_profiles.details.
+ * Field extraction helpers — read defensively from member_profiles.
  * ------------------------------------------------------------------------- */
 
 type Details = Record<string, unknown>;
@@ -125,6 +148,11 @@ function num(details: Details, ...keys: string[]): number | null {
   return null;
 }
 
+function strList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((v) => (typeof v === 'string' ? v.trim() : '')).filter((v) => v.length > 0);
+}
+
 function team(details: Details): FundTeamMember[] {
   const raw = details['team'];
   if (!Array.isArray(raw)) return [];
@@ -144,118 +172,110 @@ function team(details: Details): FundTeamMember[] {
 /** A string is "weak" (vs. absent) when present but shorter than this. */
 const WEAK_TEXT_LEN = 40;
 
+/** Free-text kinds where a too-short answer counts as "weak", not done. */
+const PROSE_KINDS = new Set<ProfileQuestion['kind']>(['textarea']);
+
+/** The columns on `member_profiles` a 'profile'-target question can read. */
+interface MemberRow {
+  display_name: string | null;
+  headline: string | null;
+  bio: string | null;
+  focus_areas: string[] | null;
+  details: Details;
+}
+
+/** Resolve a question's raw answer from the member row. */
+function answerFor(q: ProfileQuestion, row: MemberRow): string | string[] | null {
+  if (q.target === 'profile') {
+    switch (q.field) {
+      case 'display_name':
+        return row.display_name?.trim() || null;
+      case 'headline':
+        return row.headline?.trim() || null;
+      case 'bio':
+        return row.bio?.trim() || null;
+      case 'focus_areas':
+        return strList(row.focus_areas);
+      default:
+        return null;
+    }
+  }
+  // details-target
+  const raw = row.details[q.field];
+  if (q.kind === 'tags') return strList(raw);
+  if (typeof raw === 'string' && raw.trim().length > 0) return raw.trim();
+  return null;
+}
+
+function normalizeHref(value: string): string {
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://${value}`;
+}
+
 /**
- * Score completeness and collect gaps over the six LP-probed fields. Each
- * field is worth an equal share (100 / 6). A present-but-thin text field
- * scores half and is reported as a `weak` gap.
+ * Build the member-type-aware sections + completeness + gaps from the question
+ * schema and the member's answers. This is the heart of the Profile: it adapts
+ * to the member type and stays in lockstep with onboarding.
  */
-function scoreAndGaps(p: {
-  thesis: string | null;
-  strategy: string | null;
-  targetRaise: number | null;
-  terms: FundTerms;
-  trackRecord: FundTrackRecord;
-  team: FundTeamMember[];
-}): { completenessScore: number; gaps: FundProfileGap[] } {
+function buildFromSchema(
+  memberType: MemberType,
+  row: MemberRow
+): { sections: ProfileSection[]; completenessScore: number; gaps: FundProfileGap[] } {
+  const questions = getQuestionSet(memberType);
+  const sections: ProfileSection[] = [];
   const gaps: FundProfileGap[] = [];
-  const per = 100 / 6;
-  let score = 0;
 
-  const textField = (
-    value: string | null,
-    field: FundProfileField,
-    label: string,
-    reason: string
-  ) => {
-    if (!value) {
-      gaps.push({ field, label, reason, severity: 'missing' });
-    } else if (value.length < WEAK_TEXT_LEN) {
-      gaps.push({ field, label, reason, severity: 'weak' });
-      score += per / 2;
-    } else {
-      score += per;
+  let required = 0;
+  let earned = 0;
+
+  for (const q of questions) {
+    const answer = answerFor(q, row);
+    const isTags = q.kind === 'tags';
+    const tags = isTags && Array.isArray(answer) ? answer : [];
+    const text = !isTags && typeof answer === 'string' ? answer : null;
+    const present = isTags ? tags.length > 0 : Boolean(text);
+    const weak =
+      present && !isTags && PROSE_KINDS.has(q.kind) && (text?.length ?? 0) < WEAK_TEXT_LEN;
+
+    sections.push({
+      id: q.id,
+      label: q.label,
+      kind: q.kind,
+      text,
+      tags,
+      href: q.kind === 'url' && text ? normalizeHref(text) : null,
+      present,
+      optional: Boolean(q.optional),
+      why: q.why ?? null
+    });
+
+    if (!q.optional) {
+      required += 1;
+      if (present && !weak) earned += 1;
+      else if (present && weak) earned += 0.5;
+
+      if (!present) {
+        gaps.push({
+          field: q.id,
+          label: q.label,
+          reason: q.why ?? `${q.label} helps counterparties trust the record.`,
+          severity: 'missing'
+        });
+      } else if (weak) {
+        gaps.push({
+          field: q.id,
+          label: q.label,
+          reason: q.why ?? `${q.label} reads thin — a little more detail goes a long way.`,
+          severity: 'weak'
+        });
+      }
     }
-  };
-
-  textField(
-    p.thesis,
-    'thesis',
-    'Investment thesis',
-    'LPs lead with "why now, why you" — a sharp thesis is table stakes.'
-  );
-  textField(
-    p.strategy,
-    'strategy',
-    'Strategy',
-    'Stage, sector, and geography focus let LPs check mandate fit.'
-  );
-
-  if (p.targetRaise && p.targetRaise > 0) {
-    score += per;
-  } else {
-    gaps.push({
-      field: 'targetRaise',
-      label: 'Target raise',
-      reason: 'LPs need the fund size to size their own check and assess concentration.',
-      severity: 'missing'
-    });
   }
 
-  const hasTerms =
-    p.terms.managementFeePct != null || p.terms.carryPct != null || !!p.terms.structure;
-  if (hasTerms) {
-    // Full credit only when fee, carry, and structure are all present.
-    const filled = [
-      p.terms.managementFeePct != null,
-      p.terms.carryPct != null,
-      !!p.terms.structure
-    ];
-    const ratio = filled.filter(Boolean).length / filled.length;
-    score += per * ratio;
-    if (ratio < 1) {
-      gaps.push({
-        field: 'terms',
-        label: 'Terms',
-        reason: 'Fee, carry, and structure must all be explicit before an LP commits.',
-        severity: 'weak'
-      });
-    }
-  } else {
-    gaps.push({
-      field: 'terms',
-      label: 'Terms',
-      reason: 'Fee, carry, and structure must all be explicit before an LP commits.',
-      severity: 'missing'
-    });
-  }
+  const completenessScore =
+    required === 0 ? 0 : Math.max(0, Math.min(100, Math.round((earned / required) * 100)));
 
-  const hasTrack =
-    (p.trackRecord.priorDeals ?? 0) > 0 ||
-    !!p.trackRecord.returnsSummary ||
-    !!p.trackRecord.highlights;
-  if (hasTrack) {
-    score += per;
-  } else {
-    gaps.push({
-      field: 'trackRecord',
-      label: 'Track record',
-      reason: 'Prior deals and realized returns are the single biggest LP diligence item.',
-      severity: 'missing'
-    });
-  }
-
-  if (p.team.length > 0) {
-    score += per;
-  } else {
-    gaps.push({
-      field: 'team',
-      label: 'Team',
-      reason: 'LPs back people — name the GP and key team with their roles.',
-      severity: 'missing'
-    });
-  }
-
-  return { completenessScore: Math.max(0, Math.min(100, Math.round(score))), gaps };
+  return { sections, completenessScore, gaps };
 }
 
 /* ---------------------------------------------------------------------------
@@ -263,15 +283,15 @@ function scoreAndGaps(p: {
  * ------------------------------------------------------------------------- */
 
 /**
- * Resolve the org's canonical Source-of-Truth fund profile. RLS-scoped via the
- * server client. The manager record is the org owner's `member_profiles` row;
- * fund-level name/tier come from `organizations`. Any query error degrades to
- * a name-only profile (with every field reported as a gap) so callers never
- * throw at render time.
+ * Resolve the org's canonical Profile (Source of Truth). RLS-scoped via the
+ * server client. The member record is the org owner's `member_profiles` row;
+ * entity-level name/tier come from `organizations`. Any query error degrades to
+ * a name-only profile (with every required field reported as a gap) so callers
+ * never throw at render time.
  *
- * The owner is the org's `owner` (falling back to `admin`) member, resolved
- * from `org_members`; their `profiles` + `member_profiles` rows supply the
- * manager identity and the structured fields.
+ * The owner is the org's `owner` (falling back to `admin`, then earliest
+ * member), resolved from `org_members`; their `profiles` + `member_profiles`
+ * rows supply the member identity, type, and answers.
  */
 export async function getFundProfile(orgId: string): Promise<FundProfile> {
   const supabase = await createClient();
@@ -286,11 +306,9 @@ export async function getFundProfile(orgId: string): Promise<FundProfile> {
       .order('created_at', { ascending: true })
   ]);
 
-  const fundName = org?.name ?? 'Your fund';
+  const fundName = org?.name ?? 'Your workspace';
   const fundTier = org?.tier ?? null;
 
-  // Pick the owning manager: prefer an owner, then an admin, then the earliest
-  // member. `members` is already ascending by created_at.
   const memberList = (members ?? []) as Array<{ user_id: string; role: string }>;
   const owner =
     memberList.find((m) => m.role === 'owner') ??
@@ -298,26 +316,54 @@ export async function getFundProfile(orgId: string): Promise<FundProfile> {
     memberList[0] ??
     null;
 
-  const base: FundProfile = {
-    orgId,
-    fundName,
-    fundTier,
-    managerUserId: owner?.user_id ?? null,
-    managerName: null,
-    memberType: null,
-    thesis: null,
-    strategy: null,
-    targetRaise: null,
-    terms: { managementFeePct: null, carryPct: null, structure: null },
-    trackRecord: { priorDeals: null, returnsSummary: null, highlights: null },
-    team: [],
-    focusAreas: [],
-    completenessScore: 0,
-    gaps: []
+  // Default to the app's primary persona when no member type is set yet, so the
+  // Profile still has a meaningful schema to render and score against.
+  const buildBase = (memberType: MemberType | null, row: MemberRow): FundProfile => {
+    const schema = buildFromSchema(memberType ?? 'investment_firm', row);
+    const details = row.details;
+    return {
+      orgId,
+      fundName,
+      fundTier,
+      managerUserId: owner?.user_id ?? null,
+      managerName: (row.display_name ?? '').trim() || null,
+      memberType,
+      headline: row.headline?.trim() || null,
+      sections: schema.sections,
+      thesis: str(details, 'thesis', 'investment_thesis') ?? row.bio ?? null,
+      strategy:
+        str(details, 'strategy', 'sector', 'focus') ??
+        (strList(row.focus_areas).length > 0 ? strList(row.focus_areas).join(', ') : null) ??
+        row.headline ??
+        null,
+      targetRaise: num(details, 'target_raise', 'targetRaise', 'fund_size', 'raise_target'),
+      terms: {
+        managementFeePct: num(details, 'management_fee', 'managementFeePct', 'mgmt_fee'),
+        carryPct: num(details, 'carry', 'carryPct', 'carried_interest'),
+        structure: str(details, 'structure', 'vehicle', 'fund_structure')
+      },
+      trackRecord: {
+        priorDeals: num(details, 'prior_deals', 'priorDeals', 'deals_count'),
+        returnsSummary: str(details, 'returns', 'returns_summary', 'track_record'),
+        highlights: str(details, 'highlights', 'exits', 'notable_wins')
+      },
+      team: team(details),
+      focusAreas: strList(row.focus_areas),
+      completenessScore: schema.completenessScore,
+      gaps: schema.gaps
+    };
+  };
+
+  const emptyRow: MemberRow = {
+    display_name: null,
+    headline: null,
+    bio: null,
+    focus_areas: [],
+    details: {}
   };
 
   if (!owner) {
-    return { ...base, ...scoreAndGaps(base) };
+    return buildBase(null, emptyRow);
   }
 
   const [{ data: profile }, { data: mp }] = await Promise.all([
@@ -333,49 +379,17 @@ export async function getFundProfile(orgId: string): Promise<FundProfile> {
       .maybeSingle()
   ]);
 
-  const details = ((mp?.details as Details) ?? {}) as Details;
-  const focusAreas = mp?.focus_areas ?? [];
-
-  // Strategy falls back to focus areas / headline when no explicit field set.
-  const strategy =
-    str(details, 'strategy', 'sector', 'focus') ??
-    (focusAreas.length > 0 ? focusAreas.join(', ') : null) ??
-    mp?.headline ??
-    null;
-
-  const terms: FundTerms = {
-    managementFeePct: num(details, 'management_fee', 'managementFeePct', 'mgmt_fee'),
-    carryPct: num(details, 'carry', 'carryPct', 'carried_interest'),
-    structure: str(details, 'structure', 'vehicle', 'fund_structure')
+  const row: MemberRow = {
+    display_name: (mp?.display_name ?? '').trim() || profile?.full_name || null,
+    headline: mp?.headline ?? null,
+    bio: mp?.bio ?? null,
+    focus_areas: (mp?.focus_areas as string[] | null) ?? [],
+    details: ((mp?.details as Details) ?? {}) as Details
   };
 
-  const trackRecord: FundTrackRecord = {
-    priorDeals: num(details, 'prior_deals', 'priorDeals', 'deals_count'),
-    returnsSummary: str(details, 'returns', 'returns_summary', 'track_record'),
-    highlights: str(details, 'highlights', 'exits', 'notable_wins')
-  };
-
-  const partial = {
-    thesis: str(details, 'thesis', 'investment_thesis') ?? mp?.bio ?? null,
-    strategy,
-    targetRaise: num(details, 'target_raise', 'targetRaise', 'fund_size', 'raise_target'),
-    terms,
-    trackRecord,
-    team: team(details)
-  };
-
-  const profile_: FundProfile = {
-    ...base,
-    managerName: (mp?.display_name ?? '').trim() || profile?.full_name || null,
-    memberType: (profile?.member_type ?? null) as MemberType | null,
-    thesis: partial.thesis,
-    strategy: partial.strategy,
-    targetRaise: partial.targetRaise,
-    terms: partial.terms,
-    trackRecord: partial.trackRecord,
-    team: partial.team,
-    focusAreas
-  };
-
-  return { ...profile_, ...scoreAndGaps(partial) };
+  const memberType = (profile?.member_type ?? null) as MemberType | null;
+  return buildBase(memberType, row);
 }
+
+/** Back-compat alias — `getProfile` is the preferred name for the loader. */
+export const getProfile = getFundProfile;

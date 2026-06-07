@@ -55,14 +55,14 @@ export function RaiseProgressBar({ progress, className }: RaiseProgressBarProps)
       {!targetSet ? (
         <div className="rounded-xl border border-dashed border-hairline bg-surface-1 p-4">
           <p className="text-[12px] text-fg-3">
-            Set a target raise in your Fund Profile so Earn can size every move against the goal.
+            Set a target raise in your Profile so Earn can size every move against the goal.
           </p>
           <Link
             href="/profile"
             data-testid="raise-progress-set-target-cta"
             className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-semibold text-azure-1 hover:underline"
           >
-            Open Fund Profile
+            Open Profile
             <ArrowUpRight size={11} strokeWidth={2} aria-hidden />
           </Link>
         </div>

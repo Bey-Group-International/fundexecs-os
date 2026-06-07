@@ -11,7 +11,7 @@ import { getDashboardData } from '@/lib/queries/dashboard';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { LifecycleDashboard } from '@/components/dashboard/LifecycleDashboard';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
-import { FundProfileRailSummary } from '@/components/fund-profile';
+import { ProfileRailSummary } from '@/components/profile';
 
 export const metadata: Metadata = {
   title: 'Command Center'
@@ -98,7 +98,7 @@ export default async function CommandCenterPage() {
       identity={identity}
       wallet={wallet}
       navSignals={navSignals}
-      sourceOfTruthSummary={<FundProfileRailSummary profile={fundProfile} />}
+      sourceOfTruthSummary={<ProfileRailSummary profile={fundProfile} />}
     >
       <LifecycleDashboard displayName={displayName} memberType={memberType} data={dashboard} />
     </AppShell>

@@ -7,5 +7,5 @@ export default function ProfileError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  return <RouteError error={error} reset={reset} label="Fund Profile" />;
+  return <RouteError error={error} reset={reset} label="Profile" />;
 }

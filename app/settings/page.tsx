@@ -12,7 +12,7 @@ import { getAdminMetrics, type AdminMetrics } from '@/lib/queries/admin-metrics'
 import { getBetaInvites, type BetaInvite } from '@/lib/queries/beta-invites';
 import { getBetaLinks, type BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
-import { FundProfileRailSummary } from '@/components/fund-profile';
+import { ProfileRailSummary } from '@/components/profile';
 import type { Database } from '@/lib/supabase/database.types';
 import { SettingsView } from './SettingsView';
 
@@ -97,7 +97,7 @@ export default async function SettingsPage() {
 
   const navSignals = dashboard ? buildRailSignals(dashboard) : undefined;
   const sourceOfTruthSummary = fundProfile ? (
-    <FundProfileRailSummary profile={fundProfile} />
+    <ProfileRailSummary profile={fundProfile} />
   ) : undefined;
 
   return (

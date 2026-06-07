@@ -2,6 +2,7 @@ import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { Badge, Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { MEMBER_TYPE_LABELS } from '@/lib/member-types';
 import type { FundProfile } from '@/lib/queries/fund-profile';
 
 function toneForScore(score: number): { color: string; bg: string; label: string } {
@@ -11,28 +12,46 @@ function toneForScore(score: number): { color: string; bg: string; label: string
   return { color: 'var(--danger)', bg: 'var(--danger-soft)', label: 'Gap' };
 }
 
-export interface FundProfileHeroProps {
+/** One-line framing of what the Profile is, per member type. */
+const PROFILE_BLURB: Record<string, string> = {
+  investment_firm:
+    'Everything an LP would probe — thesis, sectors, stage, and check size — kept in one canonical place. Earn drafts, you approve, the Chain of Trust captures the proof.',
+  service_provider:
+    'What every prospective client checks first — your category, services, ideal client, and how you engage — in one credible record. Earn drafts, you approve.',
+  startup:
+    'What every investor checks first — sector, stage, what you’re raising, and traction — in one credible record. Earn drafts, you approve.',
+  individual_investor:
+    'What founders and syndicate leads check first — your investor profile, check size, sectors, and value-add — in one place. Earn drafts, you approve.',
+  student:
+    'A credible introduction mentors and firms can trust — your institution, field, interests, and goals — documented as it forms.'
+};
+
+const DEFAULT_BLURB =
+  'The canonical record every counterparty reads from — built as you onboard, documented as it forms. Earn drafts, you approve.';
+
+export interface ProfileHeroProps {
   profile: FundProfile;
   className?: string;
 }
 
 /**
- * FundProfileHero — the Source-of-Truth header. Eyebrow voice ("Source of Truth
- * · documented as it forms"), fund name + manager identity, an inline ring gauge
- * for the LP-probed completeness, and a CTA to extend the profile via the
- * onboarding/quiz surface. Solid `bg-bg-1` everywhere.
+ * ProfileHero — the Source-of-Truth header. Eyebrow voice, entity name + owner
+ * identity, an inline ring gauge for completeness, and a CTA to extend the
+ * Profile via onboarding. Copy adapts to the member type so the framing is
+ * right for funds, service providers, startups, investors, and students alike.
  */
-export function FundProfileHero({ profile, className }: FundProfileHeroProps) {
+export function ProfileHero({ profile, className }: ProfileHeroProps) {
   const tone = toneForScore(profile.completenessScore);
   const gaugeC = 2 * Math.PI * 42;
   const dashOffset = gaugeC - (profile.completenessScore / 100) * gaugeC;
-  const manager = profile.managerName ?? 'Unassigned manager';
+  const owner = profile.managerName ?? 'Owner unassigned';
+  const memberLabel = profile.memberType
+    ? MEMBER_TYPE_LABELS[profile.memberType]
+    : 'Member type unset';
+  const blurb = (profile.memberType && PROFILE_BLURB[profile.memberType]) || DEFAULT_BLURB;
 
   return (
-    <Card
-      data-testid="fund-profile-hero"
-      className={cn('relative overflow-hidden p-[18px]', className)}
-    >
+    <Card data-testid="profile-hero" className={cn('relative overflow-hidden p-[18px]', className)}>
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10"
@@ -51,7 +70,7 @@ export function FundProfileHero({ profile, className }: FundProfileHeroProps) {
             {profile.fundName}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-fg-3">
-            Manager · {manager}
+            {owner}
             {profile.fundTier ? ` · ${profile.fundTier}` : null}
           </p>
 
@@ -60,7 +79,7 @@ export function FundProfileHero({ profile, className }: FundProfileHeroProps) {
               On the record
             </Badge>
             <Badge tone="gold" className="text-[10.5px]">
-              {profile.memberType ?? 'member type unset'}
+              {memberLabel}
             </Badge>
             {profile.focusAreas.slice(0, 3).map((fa) => (
               <span
@@ -72,19 +91,15 @@ export function FundProfileHero({ profile, className }: FundProfileHeroProps) {
             ))}
           </div>
 
-          <p className="mt-3 max-w-[60ch] text-[12px] text-fg-3">
-            Everything an LP would probe — thesis, strategy, target raise, terms, track record, and
-            team — kept in one canonical place. Earn drafts, you approve, the Chain of Trust
-            captures the proof.
-          </p>
+          <p className="mt-3 max-w-[60ch] text-[12px] text-fg-3">{blurb}</p>
 
           <Link
             href="/onboarding"
-            data-testid="fund-profile-edit-cta"
+            data-testid="profile-edit-cta"
             className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-[var(--cta-gradient)] px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-[var(--shadow-cta)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             {profile.completenessScore >= 100
-              ? 'Open profile'
+              ? 'Review profile'
               : profile.completenessScore > 0
                 ? 'Resume profile'
                 : 'Start profile'}
@@ -95,7 +110,7 @@ export function FundProfileHero({ profile, className }: FundProfileHeroProps) {
         {/* Completeness ring */}
         <div
           className="flex flex-col items-center gap-2 sm:w-[180px]"
-          data-testid="fund-profile-completeness"
+          data-testid="profile-completeness"
         >
           <div className="relative h-[140px] w-[140px]">
             <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
@@ -139,7 +154,7 @@ export function FundProfileHero({ profile, className }: FundProfileHeroProps) {
           </span>
           <p className="text-center text-[10.5px] text-fg-4">
             {profile.gaps.length === 0
-              ? 'Every LP-probed field on the record.'
+              ? 'Every required field on the record.'
               : `${profile.gaps.length} gap${profile.gaps.length === 1 ? '' : 's'} for Earn to close.`}
           </p>
         </div>
