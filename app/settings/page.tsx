@@ -8,6 +8,7 @@ import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { getDashboardData } from '@/lib/queries/dashboard';
 import { getAdminData, type AdminData } from '@/lib/queries/admin';
+import { getAdminMetrics, type AdminMetrics } from '@/lib/queries/admin-metrics';
 import { getBetaInvites, type BetaInvite } from '@/lib/queries/beta-invites';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import { FundProfileRailSummary } from '@/components/fund-profile';
@@ -17,6 +18,7 @@ import { SettingsView } from './SettingsView';
 export const metadata: Metadata = { title: 'Profile & settings' };
 
 type OrgType = Database['public']['Enums']['org_type'];
+type OrgMemberRole = Database['public']['Enums']['org_member_role'];
 
 /**
  * Profile & settings — gamification header plus account / trust / notifications /
@@ -74,13 +76,19 @@ export default async function SettingsPage() {
   let isAdmin = false;
   let adminData: AdminData | null = null;
   let invites: BetaInvite[] = [];
+  let adminMetrics: AdminMetrics | null = null;
+  let viewerRole: OrgMemberRole | null = null;
   if (org && user) {
     const ad = await getAdminData(org.orgId).catch(() => null);
     const me = ad?.members.find((m) => m.userId === user.id);
+    viewerRole = me?.role ?? null;
     isAdmin = me?.role === 'owner' || me?.role === 'admin';
     if (isAdmin && ad) {
       adminData = ad;
-      invites = await getBetaInvites(org.orgId).catch(() => []);
+      [invites, adminMetrics] = await Promise.all([
+        getBetaInvites(org.orgId).catch(() => []),
+        getAdminMetrics(org.orgId).catch(() => null)
+      ]);
     }
   }
 
@@ -119,6 +127,8 @@ export default async function SettingsPage() {
         isAdmin={isAdmin}
         adminData={adminData}
         invites={invites}
+        adminMetrics={adminMetrics}
+        viewerRole={viewerRole}
       />
     </AppShell>
   );

@@ -166,6 +166,27 @@ export async function setMemberRole(memberId: string, role: OrgMemberRole): Prom
     return { ok: false, error: 'Only owners can promote another member to owner.' };
   }
 
+  // Don't let the org lose its last owner: block demoting the sole owner.
+  if (role !== 'owner') {
+    const { data: target } = await supabase
+      .from('org_members')
+      .select('role')
+      .eq('id', memberId)
+      .eq('org_id', org.orgId)
+      .maybeSingle();
+    if ((target as Pick<OrgMemberRow, 'role'> | null)?.role === 'owner') {
+      const { count: ownerCount } = await supabase
+        .from('org_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', org.orgId)
+        .eq('role', 'owner')
+        .eq('status', 'active');
+      if ((ownerCount ?? 0) <= 1) {
+        return { ok: false, error: 'Cannot demote the last owner of the organization.' };
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from('org_members')
     .update({ role })
