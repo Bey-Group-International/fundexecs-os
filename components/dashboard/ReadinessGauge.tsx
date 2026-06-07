@@ -221,8 +221,9 @@ function ReadinessDetail({
         {gap > 0 ? (
           <p className="mt-1 text-[12px] text-fg-3">
             Your fastest path: focus on{' '}
-            <span className="font-semibold text-fg-1">{focusLabels.join(' and ')}</span> — the
-            weakest dimension{focusLabels.length > 1 ? 's' : ''} carrying the most untapped points.
+            <span className="font-semibold text-fg-1">{focusLabels.join(' and ')}</span> — your
+            smallest gap{focusLabels.length > 1 ? 's' : ''} to close, and the fastest points to
+            gain.
           </p>
         ) : (
           <p className="mt-1 text-[12px] text-fg-3">
