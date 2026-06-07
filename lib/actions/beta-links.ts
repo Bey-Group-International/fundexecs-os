@@ -4,8 +4,7 @@ import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getAuthUser } from '@/lib/queries/auth';
-import { isPlatformAdmin } from '@/lib/access';
+import { requirePlatformAdmin } from '@/lib/access.server';
 import { getSiteURL } from '@/lib/site-url';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
@@ -20,20 +19,13 @@ export type ClaimLinkResult = { ok: true; message: string } | { ok: false; error
 /** Conservative email shape check — Supabase is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Coerce free-form role input to a valid org role, defaulting to `member`. */
 function normalizeRole(input?: string): OrgMemberRole {
   const role = input?.trim().toLowerCase();
   return role === 'owner' || role === 'admin' ? role : 'member';
 }
 
-/**
- * Platform-admin gate: reserved for the Bey Group team (`@beygroupintl.com`).
- * Any Bey account is an admin across every workspace, independent of org role.
- */
-async function isOrgAdmin(): Promise<boolean> {
-  const user = await getAuthUser();
-  return isPlatformAdmin(user?.email);
-}
-
+/** Append a row to `admin_actions` recording a beta-link action (best-effort; never blocks). */
 async function writeAudit(
   orgId: string,
   actorId: string,
@@ -73,8 +65,8 @@ export async function createBetaLink(
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await isOrgAdmin())) {
-    return { ok: false, error: 'Only owners or admins can create beta links.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
   }
 
   // 256-bit url-safe bearer token (a capability, like the magic link itself).
@@ -117,8 +109,8 @@ export async function revokeBetaLink(linkId: string): Promise<RevokeLinkResult> 
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await isOrgAdmin())) {
-    return { ok: false, error: 'Only owners or admins can revoke beta links.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
   }
 
   const supabase = await createClient();

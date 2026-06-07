@@ -2,8 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getAuthUser } from '@/lib/queries/auth';
-import { isPlatformAdmin } from '@/lib/access';
+import { requirePlatformAdmin } from '@/lib/access.server';
 import { awardTrustXp } from '@/lib/actions/xp';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
@@ -21,6 +20,7 @@ interface AuditInput {
   metadata?: Record<string, unknown>;
 }
 
+/** Append a row to `admin_actions` recording an admin action (best-effort; never blocks). */
 async function writeAudit(input: AuditInput): Promise<void> {
   const supabase = await createClient();
   try {
@@ -42,16 +42,6 @@ async function writeAudit(input: AuditInput): Promise<void> {
 }
 
 /**
- * Platform-admin gate: admin actions are reserved for the Bey Group team
- * (`@beygroupintl.com`). Any Bey account is an admin across every workspace,
- * independent of org role; everyone else is denied.
- */
-async function isOrgAdmin(): Promise<boolean> {
-  const user = await getAuthUser();
-  return isPlatformAdmin(user?.email);
-}
-
-/**
  * Approve a pending member — flip `org_members.status` to 'active' and
  * append an audit row. Fires execution-layer XP on the actor's profile.
  */
@@ -60,8 +50,8 @@ export async function approveMember(memberId: string): Promise<AdminResult> {
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await isOrgAdmin())) {
-    return { ok: false, error: 'Only owners or admins can approve members.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
   }
 
   const supabase = await createClient();
@@ -100,8 +90,8 @@ export async function archiveMember(memberId: string): Promise<AdminResult> {
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await isOrgAdmin())) {
-    return { ok: false, error: 'Only owners or admins can archive members.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
   }
 
   const supabase = await createClient();
