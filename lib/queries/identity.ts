@@ -8,6 +8,18 @@ import { getAuthUser } from '@/lib/queries/auth';
  * `profiles` + `organizations`. `xp` is read from `profiles.xp`; `level` is
  * derived from it via `xpToLevel`.
  */
+/**
+ * One organization the signed-in user is an active member of, with their role
+ * and the org's tier. Powers the account-menu workspace/role switcher.
+ */
+export interface ShellMembership {
+  orgId: string;
+  orgName: string;
+  /** The user's role in this org (`owner` | `admin` | `member`). */
+  role: string;
+  tier: string;
+}
+
 export interface ShellIdentity {
   name: string;
   role: string;
@@ -19,6 +31,13 @@ export interface ShellIdentity {
   /** Unread, non-archived notifications for this user. Drives the topbar
    *  bell badge + sidebar nav badge. */
   unreadCount: number;
+  /** Every org the user is an active member of, with their role + the org's
+   *  tier. Drives the account-menu workspace/role switcher. The currently
+   *  active org is identified by matching `orgId` against the active org. */
+  memberships: ShellMembership[];
+  /** The active workspace's org id (matches one of `memberships[].orgId` when
+   *  the user has any membership). `null` when there is no active org. */
+  activeOrgId: string | null;
 }
 
 /**
@@ -47,18 +66,40 @@ export async function getShellIdentity(): Promise<ShellIdentity | null> {
     .eq('id', user.id)
     .maybeSingle();
 
-  let orgName: string | null = null;
-  let orgTier: string | null = null;
   const org = await getActiveOrg();
-  if (org) {
-    const { data } = await supabase
-      .from('organizations')
-      .select('name, tier')
-      .eq('id', org.orgId)
-      .maybeSingle();
-    orgName = data?.name ?? null;
-    orgTier = data?.tier ?? null;
-  }
+  const activeOrgId = org?.orgId ?? null;
+
+  // Every active membership, joined to the org for name + tier. RLS scopes the
+  // rows to orgs the user actually belongs to, so the switcher can only ever
+  // offer workspaces the user is authorized for.
+  const { data: memberRows } = await supabase
+    .from('org_members')
+    .select('role, org_id, organizations(id, name, tier)')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .order('created_at', { ascending: true });
+
+  type MemberJoin = {
+    role: string;
+    org_id: string;
+    organizations: { id: string; name: string; tier: string | null } | null;
+  };
+  const memberships = ((memberRows ?? []) as MemberJoin[])
+    .filter((m) => m.organizations)
+    .map((m) => ({
+      orgId: m.org_id,
+      orgName: m.organizations?.name || 'Your fund',
+      role: m.role || 'member',
+      tier: m.organizations?.tier || 'Emerging manager'
+    }));
+
+  // The active org's display name/tier + the viewer's role within it. Prefer
+  // the membership row (already fetched) so we reuse one round-trip.
+  const activeMembership = activeOrgId
+    ? (memberships.find((m) => m.orgId === activeOrgId) ?? null)
+    : null;
+  const orgName: string | null = activeMembership?.orgName ?? null;
+  const orgTier: string | null = activeMembership?.tier ?? null;
 
   const emailHandle = user.email ? user.email.split('@')[0] : null;
   const xp = profile?.xp ?? 0;
@@ -84,6 +125,8 @@ export async function getShellIdentity(): Promise<ShellIdentity | null> {
     orgTier: orgTier || 'Emerging manager',
     level: xpToLevel(xp),
     xp,
-    unreadCount
+    unreadCount,
+    memberships,
+    activeOrgId
   };
 }

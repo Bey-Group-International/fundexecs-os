@@ -18,6 +18,8 @@ import { EarnBriefingCard } from './EarnBriefingCard';
 import { AgentTeamStrip } from './AgentTeamStrip';
 import { MomentumCard } from './MomentumCard';
 import { MarkVisited } from './MarkVisited';
+import { AchievementGrid } from './AchievementGrid';
+import { QuestProgressCard } from './QuestProgressCard';
 
 /* ============================================================================
  * LifecycleDashboard — the single, lifecycle-aware Dashboard canvas.
@@ -174,7 +176,16 @@ export function LifecycleDashboard({ displayName, memberType, data }: LifecycleD
       <MomentumCard momentum={data.momentum} />
 
       {/* 5) Team — the 15-strong desk, working the current stage */}
-      <AgentTeamStrip team={data.agentTeam} />
+      <AgentTeamStrip team={data.agentTeam} activity={data.activityFeed} />
+
+      {/* 5.5) Progress — achievements + quests (Phase-2 scaffold, honest placeholder) */}
+      <div className="grid gap-[14px] lg:grid-cols-[1.4fr_1fr]">
+        <AchievementGrid
+          achievements={data.progress.achievements}
+          placeholder={data.progress.placeholder}
+        />
+        <QuestProgressCard quests={data.progress.quests} placeholder={data.progress.placeholder} />
+      </div>
 
       {/* 6) Operate — order per member-type variant */}
       <div className={cn('grid gap-[14px]', operateGridClass(variant.operateOrder.length))}>

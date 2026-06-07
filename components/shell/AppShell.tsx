@@ -21,7 +21,9 @@ const DEFAULT_IDENTITY: ShellIdentity = {
   orgTier: 'Emerging manager',
   level: 1,
   xp: 0,
-  unreadCount: 0
+  unreadCount: 0,
+  memberships: [],
+  activeOrgId: null
 };
 
 export interface AppShellProps {
