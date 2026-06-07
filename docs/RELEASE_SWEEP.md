@@ -29,7 +29,15 @@ Fund Profile, dashboard) are the beta value and are already live.
 - Mobile sweep at 390×844: no horizontal overflow, tap targets ≥44px, the rail +
   top-nav + drawers behave on small screens. Report a before/after checklist.
 
-## Lane 2 — Manus (≈1300 cr · broad UI + module surfaces)
+## Lane 2 — DROPPED (Manus unavailable) → absorbed by Claude
+
+> Manus is out. Split: **release hygiene** (robots/sitemap/metadata/error+loading/
+> empty states) is taken by a **Claude agent now**. The **module UIs** (Capital
+> Stack, Audit, Match Inbox, Stripe top-up) are **deferred to a post-data
+> follow-up** (they depend on Codex data + Claude wiring) — kept ComingSoon until
+> then. Original Manus scope retained below for reference.
+
+### (reference) original Manus scope
 
 **A) Release hygiene:** `app/robots.ts` + `app/sitemap.ts`; metadata/OG for the 9
 routes missing it; per-route `error.tsx` + `loading.tsx` + tasteful empty states
