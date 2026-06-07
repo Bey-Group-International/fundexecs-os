@@ -1377,6 +1377,7 @@ export type Database = {
       matches: {
         Row: {
           acted_at: string | null
+          acted_by: string | null
           created_at: string
           id: string
           kind: string
@@ -1388,6 +1389,7 @@ export type Database = {
         }
         Insert: {
           acted_at?: string | null
+          acted_by?: string | null
           created_at?: string
           id?: string
           kind: string
@@ -1399,6 +1401,7 @@ export type Database = {
         }
         Update: {
           acted_at?: string | null
+          acted_by?: string | null
           created_at?: string
           id?: string
           kind?: string
@@ -1409,6 +1412,13 @@ export type Database = {
           subject_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "matches_acted_by_fkey"
+            columns: ["acted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "matches_org_id_fkey"
             columns: ["org_id"]
@@ -2152,6 +2162,7 @@ export type Database = {
         Returns: {
           active_total: number
           closed_total: number
+          commitments: Json
           committed_total: number
           currency: string
           gap_to_target: number
@@ -2176,7 +2187,19 @@ export type Database = {
         Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
         Returns: string
       }
+      generate_deal_matches: { Args: { _org_id: string }; Returns: number }
       generate_lp_matches: { Args: { _org_id: string }; Returns: number }
+      get_audit_trail: {
+        Args: { _limit?: number; _org_id: string }
+        Returns: {
+          actor: string
+          detail: string
+          occurred_at: string
+          score: number
+          source: string
+          title: string
+        }[]
+      }
       get_integration_secret: {
         Args: { _connection_id: string }
         Returns: {
@@ -2237,6 +2260,21 @@ export type Database = {
         Args: { _count: number; _last: string }
         Returns: number
       }
+      resolve_objection: {
+        Args: { _id: string }
+        Returns: {
+          category: string
+          created_at: string
+          id: string
+          lp_id: string
+          objection: string
+          org_id: string
+          rebuttal: string
+          resolved_at: string
+          status: string
+          updated_at: string
+        }[]
+      }
       seed_demo_baseline_for_org: {
         Args: { _org: string; _user: string }
         Returns: undefined
@@ -2262,6 +2300,29 @@ export type Database = {
           _token_type?: string
         }
         Returns: undefined
+      }
+      upsert_objection: {
+        Args: {
+          _category: string
+          _id?: string
+          _lp_id: string
+          _objection: string
+          _org_id: string
+          _rebuttal?: string
+          _status?: string
+        }
+        Returns: {
+          category: string
+          created_at: string
+          id: string
+          lp_id: string
+          objection: string
+          org_id: string
+          rebuttal: string
+          resolved_at: string
+          status: string
+          updated_at: string
+        }[]
       }
     }
     Enums: {
