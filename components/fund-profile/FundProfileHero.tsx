@@ -17,10 +17,10 @@ export interface FundProfileHeroProps {
 }
 
 /**
- * FundProfileHero — the Source-of-Truth header. Eyebrow voice ("Eleanor / on
- * the record / documented as it forms"), fund name + manager identity, an
- * inline ring gauge for the LP-probed completeness, and a CTA to extend the
- * profile via the onboarding/quiz surface. Solid `bg-bg-1` everywhere.
+ * FundProfileHero — the Source-of-Truth header. Eyebrow voice ("Source of Truth
+ * · documented as it forms"), fund name + manager identity, an inline ring gauge
+ * for the LP-probed completeness, and a CTA to extend the profile via the
+ * onboarding/quiz surface. Solid `bg-bg-1` everywhere.
  */
 export function FundProfileHero({ profile, className }: FundProfileHeroProps) {
   const tone = toneForScore(profile.completenessScore);
