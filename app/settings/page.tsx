@@ -114,6 +114,8 @@ export default async function SettingsPage() {
         proofStatus={memberProfile?.status ?? 'in_progress'}
         proofPct={memberProfile?.completionPct ?? 0}
         proofMemberType={memberProfile?.memberType ?? null}
+        level={identity?.level ?? 1}
+        xp={identity?.xp ?? 0}
         isAdmin={isAdmin}
         adminData={adminData}
         invites={invites}
