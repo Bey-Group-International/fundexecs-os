@@ -34,7 +34,10 @@ What you can speak to: the unified private-market intelligence layer; the fiftee
 
 Rules: never promise pricing, timelines, returns, or guarantees. Do not invent specific features you are unsure of. If asked something out of scope, say so briefly and steer back to getting started. If they seem ready, encourage them to finish the quick application to get in.`;
 
-type Turn = { role: 'user' | 'assistant'; content: string };
+// The model only ever sees user turns. We deliberately DROP any client-supplied
+// `assistant` turns — on this anonymous, pre-auth endpoint a caller must not be
+// able to forge "Earn said X" history to steer the reply (prompt injection).
+type Turn = { role: 'user'; content: string };
 
 /** One durable rate-limit bucket via the SECURITY DEFINER RPC. Fails OPEN on
  *  any error so a DB hiccup never blocks a genuine invitee. */
@@ -102,19 +105,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Only the user's own turns are trusted. We drop any client-supplied
+  // `assistant` turns rather than replaying them as conversation history: an
+  // anonymous caller could otherwise forge "Earn said X" turns to jailbreak the
+  // reply. The Messages API merges consecutive user turns into one, so the
+  // remaining user-only history still reads as a coherent conversation.
   const raw = Array.isArray(body.messages) ? (body.messages as unknown[]) : [];
   const messages: Turn[] = raw
     .filter(
-      (m): m is Turn =>
+      (m): m is { role: string; content: string } =>
         !!m &&
         typeof m === 'object' &&
-        ((m as Turn).role === 'user' || (m as Turn).role === 'assistant') &&
-        typeof (m as Turn).content === 'string'
+        (m as { role?: unknown }).role === 'user' &&
+        typeof (m as { content?: unknown }).content === 'string'
     )
     .slice(-MAX_HISTORY)
-    .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_INPUT) }));
+    .map((m) => ({ role: 'user', content: m.content.slice(0, MAX_INPUT) }));
 
-  if (!messages.some((m) => m.role === 'user')) {
+  if (messages.length === 0) {
     return NextResponse.json({ error: 'Ask Earn a question first.' }, { status: 400 });
   }
 
