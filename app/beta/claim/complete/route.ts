@@ -3,15 +3,12 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
- * Post-auth consumer for beta link claims.
- * Called after the user signs in via Google or email magic link.
- * 
- * Flow:
- * 1. User signs in → auth session is set in cookies
- * 2. Browser redirects to /beta/claim/complete?token=...
- * 3. Server calls claim_beta_link RPC with token + user_id + email
- * 4. If success: redirect to /onboarding
- * 5. If error: redirect back to /beta/claim?token=... with error reason
+ * Post-auth consumer for beta link claims. Reached after the user signs in via
+ * Google or the email magic link.
+ *
+ * 1. Session is set in cookies → 2. browser lands here with ?token=... →
+ * 3. record the claim atomically via claim_beta_link (service role) →
+ * 4. success → /onboarding; failure → back to /beta/claim with a safe reason.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -29,34 +26,32 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getSession();
 
   if (!session?.user) {
-    // User is not signed in; bounce back to claim page.
+    // Not signed in yet — bounce back to the claim page for this link.
     return NextResponse.redirect(`${origin}/beta/claim?token=${encodeURIComponent(token)}`);
   }
-
-  const userId = session.user.id;
-  const email = session.user.email || '';
 
   try {
     const admin = createAdminClient();
     const { data, error } = await admin.rpc('claim_beta_link', {
       _token: token,
-      _user_id: userId,
-      _email: email
+      _user_id: session.user.id,
+      _email: session.user.email ?? ''
     });
 
     if (error || !data || !data[0]?.ok) {
-      const reason = data?.[0]?.error_reason || error?.message || 'Could not claim link.';
+      // error_reason values are curated, user-safe strings from the RPC.
+      const reason = data?.[0]?.error_reason || 'Could not claim this link.';
       return NextResponse.redirect(
         `${origin}/beta/claim?token=${encodeURIComponent(token)}&error=${encodeURIComponent(reason)}`
       );
     }
 
-    // Success: redirect to onboarding.
     return NextResponse.redirect(`${origin}/onboarding`);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error.';
+    // Log details server-side; never leak raw exception text to the client.
+    console.error('beta claim completion failed', err);
     return NextResponse.redirect(
-      `${origin}/beta/claim?token=${encodeURIComponent(token)}&error=${encodeURIComponent(message)}`
+      `${origin}/beta/claim?token=${encodeURIComponent(token)}&error=${encodeURIComponent('An unexpected error occurred. Please try again.')}`
     );
   }
 }

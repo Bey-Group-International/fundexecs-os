@@ -9,28 +9,17 @@ import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   active: 'success',
+  full: 'warning',
   revoked: 'neutral',
   expired: 'neutral'
 };
 
 const STATUS_LABEL: Record<string, string> = {
   active: 'Active',
+  full: 'Full',
   revoked: 'Revoked',
   expired: 'Expired'
 };
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return '—';
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '—';
-  const diff = Math.max(0, Date.now() - then);
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 function relativeExpiry(iso: string): string {
   const then = new Date(iso).getTime();
@@ -104,32 +93,49 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError(null);
     setLink(null);
-    const result = await createBetaLink(label, 'member', parseInt(maxUses) || 25, parseInt(expiryDays) || 14);
-    setLoading(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await createBetaLink(
+        label,
+        'member',
+        parseInt(maxUses, 10) || 25,
+        parseInt(expiryDays, 10) || 14
+      );
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setLink(result.link);
+      setLabel('');
+      setMaxUses('25');
+      setExpiryDays('14');
+      router.refresh();
+    } catch {
+      setError('Could not create beta link. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLink(result.link);
-    setLabel('');
-    setMaxUses('25');
-    setExpiryDays('14');
-    router.refresh();
   }
 
   async function handleRevoke(id: string) {
+    if (busyId) return;
     setBusyId(id);
     setError(null);
-    const result = await revokeBetaLink(id);
-    setBusyId(null);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await revokeBetaLink(id);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not revoke beta link. Please try again.');
+    } finally {
+      setBusyId(null);
     }
-    router.refresh();
   }
 
   const active = links.filter((l) => l.status === 'active').length;
@@ -141,14 +147,11 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
           eyebrow="Shareable links"
           title="Create beta access links"
           className="mb-3"
-          action={
-            <span className="text-[11px] text-fg-5">
-              {active} active
-            </span>
-          }
+          action={<span className="text-[11px] text-fg-5">{active} active</span>}
         />
         <p className="mb-4 max-w-prose text-[12.5px] leading-relaxed text-fg-3">
-          Generate a reusable link that anyone can claim via email or Google sign-in. No email delivery needed — just copy and share.
+          Generate a reusable link that anyone can claim via email or Google sign-in. No email
+          delivery needed — just copy and share.
         </p>
 
         <form onSubmit={handleCreate} className="flex flex-col gap-3 sm:flex-row sm:items-end">

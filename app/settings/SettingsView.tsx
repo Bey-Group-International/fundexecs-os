@@ -37,6 +37,7 @@ import { AdminView } from '@/app/admin/AdminView';
 import type { AdminData } from '@/lib/queries/admin';
 import type { AdminMetrics } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
+import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import {
   updateAccountSettings,
   updateOrganizationSettings,
@@ -66,6 +67,7 @@ interface SettingsViewProps {
   isAdmin: boolean;
   adminData: AdminData | null;
   invites: BetaInvite[];
+  betaLinks: BetaLinkWithStatus[];
   /** Platform metrics for the Admin Knowledge / Chain-of-Trust panels. */
   adminMetrics: AdminMetrics | null;
   /** The viewing admin's own role — gates owner-only role changes. */
@@ -649,6 +651,7 @@ export function SettingsView({
   isAdmin,
   adminData,
   invites,
+  betaLinks,
   adminMetrics,
   viewerRole
 }: SettingsViewProps) {
@@ -787,6 +790,7 @@ export function SettingsView({
             <AdminView
               data={adminData}
               invites={invites}
+              betaLinks={betaLinks}
               metrics={adminMetrics}
               viewerRole={viewerRole}
             />

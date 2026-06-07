@@ -3,48 +3,52 @@
 import { useState } from 'react';
 import { Mail, ArrowRight } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
-import { getSiteURL } from '@/lib/site-url';
 import { claimBetaLinkWithEmail } from '@/lib/actions/beta-links';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Badge } from '@/components/ui';
 import { getCOO } from '@/lib/team';
 
-type ClaimState = 'initial' | 'email' | 'loading' | 'error' | 'success';
+type ClaimState = 'initial' | 'email';
 
 /**
- * ClaimView: client component for claiming a beta link via email.
- * Mirrors app/login/page.tsx visual language.
+ * ClaimView — claim a beta link via Google or email. Mirrors the login screen's
+ * visual language. Surfaces both local failures and reasons redirected back
+ * from /beta/claim/complete via the `?error=` query param.
  */
-export function ClaimView({ token, onComplete }: { token: string; onComplete: () => void }) {
+export function ClaimView({ token }: { token: string }) {
+  const searchParams = useSearchParams();
+  const redirectedError = searchParams.get('error');
+
   const [state, setState] = useState<ClaimState>('initial');
   const [email, setEmail] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(redirectedError);
   const [loading, setLoading] = useState(false);
   const earn = getCOO();
 
   async function handleClaimEmail(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError(null);
 
-    const result = await claimBetaLinkWithEmail(token, email);
-    setLoading(false);
-
-    if (!result.ok) {
-      setError(result.error);
-      setState('error');
-      return;
+    try {
+      const result = await claimBetaLinkWithEmail(token, email);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      // Redirect to the confirm URL to complete passwordless sign-in.
+      window.location.href = result.message;
+    } catch {
+      setError('Could not claim this link. Please try again.');
+    } finally {
+      setLoading(false);
     }
-
-    // Redirect to the confirm URL to start signup.
-    window.location.href = result.message;
   }
 
   function handleGoogleSignIn() {
     setLoading(true);
     setError(null);
-    // Initiate Google OAuth with the beta claim flow.
     window.location.assign(
       `/api/auth/google?next=${encodeURIComponent('/beta/claim/complete?token=' + token)}`
     );
@@ -52,7 +56,7 @@ export function ClaimView({ token, onComplete }: { token: string; onComplete: ()
 
   return (
     <main className="grid min-h-screen bg-bg-0 text-fg-1 lg:grid-cols-2">
-      {/* Value panel (left) — mirrors login page */}
+      {/* Value panel (left) — mirrors the login hero. */}
       <section
         className="relative hidden flex-col justify-between overflow-hidden border-r border-hairline px-12 py-10 lg:flex"
         style={{
@@ -72,8 +76,7 @@ export function ClaimView({ token, onComplete }: { token: string; onComplete: ()
             Led by Earn, your live AI guide
           </Badge>
           <h1 className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-fg-1">
-            Unified intelligence layer for the{' '}
-            <span className="text-gold-1">private markets.</span>
+            Unified intelligence layer for the <span className="text-gold-1">private markets.</span>
           </h1>
           <p className="mt-5 max-w-sm text-[14px] leading-7 text-fg-3">
             A fifteen-strong executive team — led by Earn — working as one to optimize your
@@ -106,24 +109,22 @@ export function ClaimView({ token, onComplete }: { token: string; onComplete: ()
         </div>
       </section>
 
-      {/* Claim form (right) */}
+      {/* Claim card (right) */}
       <section className="flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
           <div className="rounded-2xl border border-hairline bg-surface-1 p-7 shadow-[var(--shadow-lg)]">
-            <h2 className="text-[18px] font-semibold tracking-tight">
-              Claim your beta access
-            </h2>
+            <h2 className="text-[18px] font-semibold tracking-tight">Claim your beta access</h2>
             <p className="mt-1 text-[12.5px] text-fg-4">
-              Join FundExecs OS — invite-only beta.
+              You&rsquo;re invited to the FundExecs OS private beta.
             </p>
 
-            {state === 'error' && error && (
+            {error && (
               <p className="mt-4 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-danger">
                 {error}
               </p>
             )}
 
-            {state === 'initial' || state === 'error' ? (
+            {state === 'initial' ? (
               <>
                 <button
                   type="button"
@@ -160,13 +161,16 @@ export function ClaimView({ token, onComplete }: { token: string; onComplete: ()
 
                 <button
                   type="button"
-                  onClick={() => setState('email')}
+                  onClick={() => {
+                    setError(null);
+                    setState('email');
+                  }}
                   className="w-full text-center text-[12.5px] font-medium text-fg-3 transition hover:text-fg-1"
                 >
                   Claim with email
                 </button>
               </>
-            ) : state === 'email' ? (
+            ) : (
               <form onSubmit={handleClaimEmail} className="mt-5 space-y-4">
                 <div>
                   <label htmlFor="email" className="text-[12px] font-medium text-fg-3">
@@ -195,26 +199,29 @@ export function ClaimView({ token, onComplete }: { token: string; onComplete: ()
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-4 py-2.5 text-[13.5px] font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition hover:shadow-[0_4px_12px_rgba(59,116,240,0.4)] disabled:opacity-50"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-4 py-2.5 text-[13.5px] font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] transition hover:brightness-110 disabled:opacity-50"
                 >
-                  {loading ? 'Please wait…' : 'Claim with email'}
+                  {loading ? 'Please wait…' : 'Get my access link'}
                   {!loading && <ArrowRight size={15} strokeWidth={2} aria-hidden />}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setState('initial')}
+                  onClick={() => {
+                    setError(null);
+                    setState('initial');
+                  }}
                   className="w-full text-center text-[12.5px] text-fg-4 transition hover:text-fg-2"
                   disabled={loading}
                 >
                   Back
                 </button>
               </form>
-            ) : null}
+            )}
           </div>
 
           <p className="mt-5 text-center text-[11px] text-fg-5">
-            Secured by Supabase Auth · SOC 2 · Row-Level Security
+            One-time setup · no password required · Secured by Supabase Auth
           </p>
         </div>
       </section>

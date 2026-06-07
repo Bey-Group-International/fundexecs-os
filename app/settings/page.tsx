@@ -10,6 +10,7 @@ import { getDashboardData } from '@/lib/queries/dashboard';
 import { getAdminData, type AdminData } from '@/lib/queries/admin';
 import { getAdminMetrics, type AdminMetrics } from '@/lib/queries/admin-metrics';
 import { getBetaInvites, type BetaInvite } from '@/lib/queries/beta-invites';
+import { getBetaLinks, type BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import { FundProfileRailSummary } from '@/components/fund-profile';
 import type { Database } from '@/lib/supabase/database.types';
@@ -76,6 +77,7 @@ export default async function SettingsPage() {
   let isAdmin = false;
   let adminData: AdminData | null = null;
   let invites: BetaInvite[] = [];
+  let betaLinks: BetaLinkWithStatus[] = [];
   let adminMetrics: AdminMetrics | null = null;
   let viewerRole: OrgMemberRole | null = null;
   if (org && user) {
@@ -85,9 +87,10 @@ export default async function SettingsPage() {
     isAdmin = me?.role === 'owner' || me?.role === 'admin';
     if (isAdmin && ad) {
       adminData = ad;
-      [invites, adminMetrics] = await Promise.all([
+      [invites, adminMetrics, betaLinks] = await Promise.all([
         getBetaInvites(org.orgId).catch(() => []),
-        getAdminMetrics(org.orgId).catch(() => null)
+        getAdminMetrics(org.orgId).catch(() => null),
+        getBetaLinks(org.orgId).catch(() => [])
       ]);
     }
   }
@@ -127,6 +130,7 @@ export default async function SettingsPage() {
         isAdmin={isAdmin}
         adminData={adminData}
         invites={invites}
+        betaLinks={betaLinks}
         adminMetrics={adminMetrics}
         viewerRole={viewerRole}
       />
