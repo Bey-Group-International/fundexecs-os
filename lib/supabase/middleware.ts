@@ -141,6 +141,7 @@ export async function updateSession(request: NextRequest) {
     pathname === '/login' ||
     pathname === '/privacy' ||
     pathname === '/terms' ||
+    pathname.startsWith('/p/') ||
     pathname.startsWith('/auth/');
   const isAllowedApi =
     pathname === '/api/ask-earn' ||
