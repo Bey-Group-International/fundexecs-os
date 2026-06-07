@@ -6,10 +6,15 @@ import { revalidatePath } from 'next/cache';
 /* ============================================================================
  * lib/actions/matches.ts — Match Inbox server actions.
  *
- * `act_on_match` — accept or dismiss a match row. Claude's backend may
- * extend this with additional side-effects (notifications, synergy scoring,
- * etc.). The UI calls this optimistically; the placeholder below performs the
- * minimal DB write so the status column is updated immediately.
+ * `act_on_match` — accept or dismiss a match row. Thin wrapper over the live
+ * `act_on_match(_match_id, _action)` SECURITY DEFINER RPC (Wave 4), which:
+ *   - enforces the caller is an active member of the match's org (authz),
+ *   - guards the transition (only new → accepted/dismissed; double-action errors),
+ *   - stamps `acted_at` / `acted_by` atomically under a row lock, and
+ *   - seeds the downstream side-effect (a `capital_commitments` target row for
+ *     accepted LP matches; a deal↔provider `synergy_opportunities` row for
+ *     accepted deal matches).
+ * The UI calls this optimistically and reverts on `{ ok: false }`.
  * ========================================================================= */
 
 export type MatchAction = 'accepted' | 'dismissed';
@@ -20,11 +25,9 @@ export interface ActOnMatchResult {
 }
 
 /**
- * act_on_match — update a match row's status to `accepted` or `dismissed`.
- *
- * Placeholder implementation: writes directly to `matches.status` and
- * `matches.acted_at`. Claude's backend replaces or wraps this with richer
- * logic (e.g. triggering a synergy pipeline, sending a notification).
+ * act_on_match — transition a match to `accepted` or `dismissed` via the
+ * guarded RPC. Returns `{ ok: false, error }` when the RPC rejects (not a
+ * member, match not found, or already actioned) so the UI can revert.
  */
 export async function act_on_match(
   matchId: string,
@@ -33,10 +36,10 @@ export async function act_on_match(
   try {
     const supabase = await createClient();
 
-    const { error } = await supabase
-      .from('matches')
-      .update({ status: action, acted_at: new Date().toISOString() })
-      .eq('id', matchId);
+    const { error } = await supabase.rpc('act_on_match', {
+      _match_id: matchId,
+      _action: action
+    });
 
     if (error) {
       return { ok: false, error: error.message };
