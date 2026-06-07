@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Sparkles, ArrowUp } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { TeamAvatar, getCOO } from '@/lib/team';
@@ -13,17 +13,46 @@ type Msg = {
   degraded?: boolean;
 };
 
-export function EarnChat() {
+export interface EarnChatHandle {
+  /**
+   * Fill the input with `text` and focus it (caret at end). Does NOT auto-send,
+   * so the operator can edit before firing. Driven imperatively from the Earn
+   * dock's quick-action chips / specialist rows — runs in their click handler,
+   * not an effect.
+   */
+  seed: (text: string) => void;
+}
+
+export const EarnChat = forwardRef<EarnChatHandle>(function EarnChat(_props, ref) {
   const earn = getCOO();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      seed(text: string) {
+        if (!text) return;
+        setInput(text);
+        const el = inputRef.current;
+        if (el) {
+          el.focus();
+          const len = text.length;
+          // Defer caret move until React commits the new value.
+          requestAnimationFrame(() => el.setSelectionRange(len, len));
+        }
+      }
+    }),
+    []
+  );
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -114,6 +143,7 @@ export function EarnChat() {
       >
         <Sparkles size={15} strokeWidth={1.9} className="flex-none text-gold-1" aria-hidden />
         <input
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask Earn or run a command — “Build an LP list”, “Review my deck like an LP”…"
@@ -131,4 +161,4 @@ export function EarnChat() {
       </form>
     </div>
   );
-}
+});
