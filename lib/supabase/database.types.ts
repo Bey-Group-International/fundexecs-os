@@ -1374,6 +1374,51 @@ export type Database = {
           },
         ]
       }
+      market_signals: {
+        Row: {
+          captured_at: string
+          created_at: string
+          embedding: string | null
+          id: string
+          kind: string
+          normalized: Json | null
+          occurred_at: string | null
+          raw_payload: Json
+          routed_specialist: string | null
+          severity: string
+          source: string
+          source_external_id: string | null
+        }
+        Insert: {
+          captured_at?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          kind: string
+          normalized?: Json | null
+          occurred_at?: string | null
+          raw_payload?: Json
+          routed_specialist?: string | null
+          severity?: string
+          source: string
+          source_external_id?: string | null
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          kind?: string
+          normalized?: Json | null
+          occurred_at?: string | null
+          raw_payload?: Json
+          routed_specialist?: string | null
+          severity?: string
+          source?: string
+          source_external_id?: string | null
+        }
+        Relationships: []
+      }
       matches: {
         Row: {
           acted_at: string | null
@@ -2189,6 +2234,7 @@ export type Database = {
       }
       generate_deal_matches: { Args: { _org_id: string }; Returns: number }
       generate_lp_matches: { Args: { _org_id: string }; Returns: number }
+      generate_signal_matches: { Args: { _org_id: string }; Returns: number }
       get_audit_trail: {
         Args: { _limit?: number; _org_id: string }
         Returns: {
