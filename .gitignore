@@ -62,3 +62,7 @@ credentials.json
 
 # Generated human-setup deliverable (sent via download, not source)
 FundExecs-OS-Setup-Steps.docx
+.screenshots/
+
+# npm-only repo — no yarn lockfile
+yarn.lock

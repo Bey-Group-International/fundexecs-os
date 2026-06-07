@@ -6,20 +6,12 @@ import { MEMBER_TYPE_LABELS } from '@/lib/member-types';
 import { getShellIdentity } from '@/lib/queries/identity';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getMemberProfile } from '@/lib/queries/member-profile';
-import {
-  getDashboardCommon,
-  getDashboardContext,
-  getIndividualInvestorDashboardData,
-  getInvestmentFirmDashboardData,
-  getServiceProviderDashboardData,
-  getStartupDashboardData,
-  getStudentDashboardData
-} from '@/lib/queries/dashboard';
-import { InvestmentFirmLayout } from './layouts/InvestmentFirmLayout';
-import { ServiceProviderLayout } from './layouts/ServiceProviderLayout';
-import { StartupLayout } from './layouts/StartupLayout';
-import { StudentLayout } from './layouts/StudentLayout';
-import { IndividualInvestorLayout } from './layouts/IndividualInvestorLayout';
+import { getCreditWallet } from '@/lib/queries/credit-wallet';
+import { getDashboardData } from '@/lib/queries/dashboard';
+import { getFundProfile } from '@/lib/queries/fund-profile';
+import { LifecycleDashboard } from '@/components/dashboard/LifecycleDashboard';
+import { buildRailSignals } from '@/lib/dashboard-rail-signals';
+import { FundProfileRailSummary } from '@/components/fund-profile';
 
 export const metadata: Metadata = {
   title: 'Command Center'
@@ -28,23 +20,30 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 /**
- * Command Center — thin server router. Loads identity + active org + the
- * member's `profiles.member_type`, then dispatches to the matching layout
- * with its typed payload. Every layout handles its own loading / empty /
- * error states; this page only routes.
+ * Command Center — the single, lifecycle-aware Dashboard canvas.
  *
- * The middleware bidirectional gate guarantees `member_profiles.status` is
- * 'complete' before any user reaches this page; the `memberType === null`
- * fallback below is defensive only.
+ * Wave-1 replaces the five stacked per-member-type layouts with one
+ * `<LifecycleDashboard>` that consumes Claude's `getDashboardData(orgId)`
+ * loader. Member-type variants live INSIDE the dashboard (copy + section
+ * ordering); the underlying payload is the same for every operator.
+ *
+ * Bootstrap order (server):
+ *   1. identity + active org + member profile (cheap; gate the page)
+ *   2. dashboard + wallet in parallel (heavier; both needed by the chrome)
+ *   3. derive rail signals from the dashboard for live nav badges
+ *   4. render <AppShell> with the wallet + signals, mount <LifecycleDashboard>
+ *
+ * The legacy per-member layouts have moved to `app/command-center/layouts/_legacy/`
+ * — preserved as reference but un-routed.
  */
 export default async function CommandCenterPage() {
   const identity = await getShellIdentity();
   if (!identity) redirect('/login?redirectedFrom=%2Fcommand-center');
 
-  const org = await getActiveOrg();
-  const memberProfile = await getMemberProfile();
+  const [org, memberProfile] = await Promise.all([getActiveOrg(), getMemberProfile()]);
   const memberType = memberProfile?.memberType ?? null;
   const subtitle = memberType ? MEMBER_TYPE_LABELS[memberType] : 'Your workspace';
+  const displayName = memberProfile?.displayName ?? identity.name ?? 'Welcome';
 
   if (!org) {
     return (
@@ -61,81 +60,9 @@ export default async function CommandCenterPage() {
     );
   }
 
-  const { supabase, userId } = await getDashboardContext();
-  if (!userId) redirect('/login?redirectedFrom=%2Fcommand-center');
-
-  const common = await getDashboardCommon(
-    supabase,
-    org.orgId,
-    userId,
-    memberType,
-    memberProfile?.displayName ?? identity.name ?? 'Welcome'
-  );
-
-  let layout: React.ReactNode;
-  switch (memberType) {
-    case 'investment_firm': {
-      const load = await getInvestmentFirmDashboardData(supabase, org.orgId);
-      layout = (
-        <InvestmentFirmLayout
-          displayName={common.member.displayName}
-          position={common.member.position}
-          trust={common.trust}
-          load={load}
-        />
-      );
-      break;
-    }
-    case 'service_provider': {
-      const load = await getServiceProviderDashboardData(supabase, org.orgId);
-      layout = (
-        <ServiceProviderLayout
-          displayName={common.member.displayName}
-          position={common.member.position}
-          trust={common.trust}
-          load={load}
-        />
-      );
-      break;
-    }
-    case 'startup': {
-      const load = await getStartupDashboardData(supabase, org.orgId, userId);
-      layout = (
-        <StartupLayout
-          displayName={common.member.displayName}
-          position={common.member.position}
-          trust={common.trust}
-          load={load}
-        />
-      );
-      break;
-    }
-    case 'student': {
-      const load = await getStudentDashboardData(supabase, org.orgId, userId);
-      layout = (
-        <StudentLayout
-          displayName={common.member.displayName}
-          position={common.member.position}
-          trust={common.trust}
-          load={load}
-        />
-      );
-      break;
-    }
-    case 'individual_investor': {
-      const load = await getIndividualInvestorDashboardData(supabase, org.orgId);
-      layout = (
-        <IndividualInvestorLayout
-          displayName={common.member.displayName}
-          position={common.member.position}
-          trust={common.trust}
-          load={load}
-        />
-      );
-      break;
-    }
-    default: {
-      layout = (
+  if (!memberType) {
+    return (
+      <AppShell title="Command Center" subtitle={subtitle} identity={identity}>
         <Card className="p-8 text-center">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gold-1">
             One step to go
@@ -144,7 +71,7 @@ export default async function CommandCenterPage() {
             Complete your Proof of Truth so Earn can tune your desk.
           </p>
           <p className="mt-1 text-[11.5px] text-fg-4">
-            We&rsquo;ll pick the right dashboard once we know your member type.
+            We&rsquo;ll pick the right dashboard variant once we know your member type.
           </p>
           <a
             href="/onboarding"
@@ -153,13 +80,27 @@ export default async function CommandCenterPage() {
             Open onboarding →
           </a>
         </Card>
-      );
-    }
+      </AppShell>
+    );
   }
 
+  const [dashboard, wallet, fundProfile] = await Promise.all([
+    getDashboardData(org.orgId),
+    getCreditWallet(org.orgId),
+    getFundProfile(org.orgId)
+  ]);
+  const navSignals = buildRailSignals(dashboard);
+
   return (
-    <AppShell title="Command Center" subtitle={subtitle} identity={identity}>
-      {layout}
+    <AppShell
+      title="Command Center"
+      subtitle={subtitle}
+      identity={identity}
+      wallet={wallet}
+      navSignals={navSignals}
+      sourceOfTruthSummary={<FundProfileRailSummary profile={fundProfile} />}
+    >
+      <LifecycleDashboard displayName={displayName} memberType={memberType} data={dashboard} />
     </AppShell>
   );
 }

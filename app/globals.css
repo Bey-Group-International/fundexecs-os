@@ -270,13 +270,37 @@ body {
   animation-play-state: paused;
 }
 
+/* Earn orb context pulse — Wave-1 hint that the orb "knows" what surface the
+   operator is focused on. CSS-only: the orb carries a `data-context` attr;
+   when it's a high-attention surface (deal in focus, audit, trust gaps) we
+   layer a second, slower pulse ring. Transform-only; reduced-motion off. */
+@keyframes fx-earn-context-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 8px 24px -6px rgba(247, 201, 72, 0.55),
+      0 0 0 0 rgba(247, 201, 72, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 8px 24px -6px rgba(247, 201, 72, 0.55),
+      0 0 0 10px rgba(247, 201, 72, 0);
+  }
+}
+.earn-orb[data-context='deal'],
+.earn-orb[data-context='audit'],
+.earn-orb[data-context='trust'] {
+  animation: fx-earn-context-pulse 2.6s ease-in-out infinite;
+}
+
 /* Accessibility: honor reduced-motion by disabling our decorative motion and
    neutralizing long/looping transitions across the app. */
 @media (prefers-reduced-motion: reduce) {
   .fx-rise,
   .fx-glow-pulse,
   .fx-coin-float,
-  .fx-marquee-animate {
+  .fx-marquee-animate,
+  .earn-orb {
     animation: none !important;
   }
   *,
