@@ -1,20 +1,21 @@
 'use server';
 
+import Stripe from 'stripe';
+import { headers } from 'next/headers';
+import { getActiveOrg } from '@/lib/queries/org';
+
 /* ============================================================================
- * lib/actions/stripe-checkout.ts — Stripe credit top-up checkout action.
+ * lib/actions/stripe-checkout.ts — Stripe credit top-up checkout.
  *
- * PLACEHOLDER — Claude's backend replaces this with a real Stripe Checkout
- * Session creation (using `stripe.checkout.sessions.create`). The UI calls
- * this action and redirects to the returned `url` on success.
+ * Creates a real Stripe Checkout Session (mode: 'payment') for a credit tier
+ * and returns its URL for client-side redirect. The session carries the org id
+ * + credit/cents amounts in `metadata` so the webhook
+ * (`app/api/stripe/webhook/route.ts`) can credit the wallet idempotently via
+ * the `record_credit_topup` RPC on `checkout.session.completed`.
  *
- * The function signature is the stable contract the UI binds to:
- *   createTopUpCheckout(credits: number) → Promise<TopUpCheckoutResult>
- *
- * Claude's implementation:
- *   1. Validates the credit amount against the allowed tiers.
- *   2. Creates a Stripe Checkout Session with `mode: 'payment'`.
- *   3. Returns the session URL for client-side redirect.
- *   4. On webhook completion, calls `consume_credits` in reverse (top-up).
+ * Env-gated: when `STRIPE_SECRET_KEY` is absent the action returns a clean
+ * "not configured" result so the wallet popover renders its graceful state
+ * (beta deployments without billing keys still work).
  * ========================================================================= */
 
 export interface TopUpCheckoutResult {
@@ -26,34 +27,83 @@ export interface TopUpCheckoutResult {
 
 /** Credit top-up tiers available in the wallet popover. */
 export const TOPUP_TIERS = [
-  { credits: 500, label: '500 credits', priceLabel: '$5' },
-  { credits: 1_500, label: '1,500 credits', priceLabel: '$12' },
-  { credits: 5_000, label: '5,000 credits', priceLabel: '$35' }
+  { credits: 500, label: '500 credits', priceLabel: '$5', amountCents: 500 },
+  { credits: 1_500, label: '1,500 credits', priceLabel: '$12', amountCents: 1_200 },
+  { credits: 5_000, label: '5,000 credits', priceLabel: '$35', amountCents: 3_500 }
 ] as const;
 
 export type TopUpTier = (typeof TOPUP_TIERS)[number]['credits'];
 
+function resolveSiteOrigin(hdrs: Headers): string {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host');
+  const proto = hdrs.get('x-forwarded-proto') ?? 'https';
+  return host ? `${proto}://${host}` : 'http://localhost:3000';
+}
+
 /**
- * createTopUpCheckout — placeholder that returns a test-mode URL.
- *
- * Claude's backend replaces this body with a real Stripe Checkout Session.
- * The UI renders a "test mode" badge when `NEXT_PUBLIC_STRIPE_TEST_MODE`
- * is set, so the placeholder state is clearly communicated.
+ * createTopUpCheckout — create a Stripe Checkout Session for a credit tier and
+ * return its redirect URL. Validates the tier, scopes to the caller's active
+ * org, and stamps metadata the webhook reconciles against.
  */
 export async function createTopUpCheckout(credits: TopUpTier): Promise<TopUpCheckoutResult> {
-  // Validate tier
-  const validTier = TOPUP_TIERS.find((t) => t.credits === credits);
-  if (!validTier) {
+  const tier = TOPUP_TIERS.find((t) => t.credits === credits);
+  if (!tier) {
     return { ok: false, error: 'Invalid credit tier selected.' };
   }
 
-  // PLACEHOLDER: Return a stub result.
-  // Claude's backend replaces this with:
-  //   const session = await stripe.checkout.sessions.create({ ... });
-  //   return { ok: true, url: session.url };
-  return {
-    ok: false,
-    error:
-      "Stripe checkout is not yet configured. Claude's backend will wire this up with a real Checkout Session."
-  };
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    return {
+      ok: false,
+      error: 'Credit top-up is not yet enabled on this deployment. Check back soon.'
+    };
+  }
+
+  try {
+    const org = await getActiveOrg();
+    if (!org) {
+      return { ok: false, error: 'No active workspace — sign in and try again.' };
+    }
+
+    const hdrs = await headers();
+    const origin = resolveSiteOrigin(hdrs);
+    const stripe = new Stripe(secretKey);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      client_reference_id: org.orgId,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: tier.amountCents,
+            product_data: {
+              name: `${tier.credits.toLocaleString()} FundExecs credits`,
+              description: 'Credit top-up for your FundExecs OS workspace.'
+            }
+          }
+        }
+      ],
+      metadata: {
+        org_id: org.orgId,
+        amount_credits: String(tier.credits),
+        amount_cents: String(tier.amountCents)
+      },
+      success_url: `${origin}/settings?topup=success`,
+      cancel_url: `${origin}/settings?topup=cancel`
+    });
+
+    if (!session.url) {
+      return { ok: false, error: 'Stripe did not return a checkout URL. Please try again.' };
+    }
+    return { ok: true, url: session.url };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Could not start checkout. Please try again.'
+    };
+  }
 }
