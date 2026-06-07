@@ -1,18 +1,44 @@
+import type { Metadata } from 'next';
 import { AuthedShell } from '@/components/shell/AuthedShell';
-import { ComingSoonPage } from '@/components/shell/ComingSoonPage';
-import { STUB_ROUTES } from '@/components/shell/stub-routes';
-
-const ROUTE = '/partners';
-const stub = STUB_ROUTES[ROUTE];
+import { getActiveOrg } from '@/lib/queries/org';
+import { getPartnersData } from '@/lib/queries/partners';
+import { PartnersView } from '@/components/partners/PartnersView';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = { title: stub.title };
+export const metadata: Metadata = {
+  title: 'Partner Marketplace',
+  description:
+    "Your organization's service providers and capital providers — the full partner directory.",
+  openGraph: {
+    title: 'Partner Marketplace · FundExecs OS',
+    description: 'Service providers and capital providers — your full partner directory.'
+  }
+};
 
-export default function PartnersStubPage() {
+/**
+ * Partner Marketplace — full UI over service_providers + capital_providers.
+ *
+ * Renders a searchable, filterable directory of both provider types. Binds to
+ * the typed `getPartnersData` loader with a graceful empty state when no data
+ * is available. No migrations; UI-only per Lane 2 guardrails.
+ */
+export default async function PartnersPage() {
+  const org = await getActiveOrg().catch(() => null);
+
+  const data = org
+    ? await getPartnersData(org.orgId).catch(() => ({
+        serviceProviders: [],
+        capitalProviders: [],
+        empty: true
+      }))
+    : { serviceProviders: [], capitalProviders: [], empty: true };
+
   return (
-    <AuthedShell title={stub.title} subtitle={stub.area} redirectFrom={ROUTE}>
-      <ComingSoonPage {...stub} />
+    <AuthedShell title="Partner Marketplace" subtitle="Partner Directory" redirectFrom="/partners">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+        <PartnersView data={data} />
+      </div>
     </AuthedShell>
   );
 }

@@ -1,38 +1,44 @@
+import type { Metadata } from 'next';
 import { AuthedShell } from '@/components/shell/AuthedShell';
-import { ComingSoonPage } from '@/components/shell/ComingSoonPage';
-import { STUB_ROUTES } from '@/components/shell/stub-routes';
-import { RaiseProgressBar } from '@/components/dashboard/RaiseProgressBar';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getDashboardData } from '@/lib/queries/dashboard';
-
-const ROUTE = '/capital-stack';
-const stub = STUB_ROUTES[ROUTE];
+import { getCapitalStackData } from '@/lib/queries/capital-stack';
+import { CapitalStackView } from '@/components/capital-stack/CapitalStackView';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = { title: stub.title };
+export const metadata: Metadata = {
+  title: 'Capital Stack',
+  description:
+    'The live capital structure of your raise — target vs. soft-circled vs. committed vs. closed, broken out by LP type and stage.',
+  openGraph: {
+    title: 'Capital Stack · FundExecs OS',
+    description: 'Live raise structure: target, soft-circled, committed, and gap-to-close.'
+  }
+};
 
 /**
- * Capital Stack is still being built out as a full surface, but the raise-
- * progress roll-up (target / soft-circled / committed via `capital_stack_summary`
- * with an allocations fallback) already exists in the dashboard loader. We show
- * that real preview here so the stub reflects live numbers instead of pure
- * placeholder copy — no fabricated data; it degrades gracefully when no org.
+ * Capital Stack — full UI over `capital_stack_summary` RPC + `capital_commitments`.
+ *
+ * Renders stage + LP-type breakdowns, gap-to-target, and a commitments table.
+ * Binds to the typed `getCapitalStackData` loader with a graceful empty state
+ * when no data is available. No migrations; UI-only per Lane 2 guardrails.
  */
 export default async function CapitalStackPage() {
   const org = await getActiveOrg().catch(() => null);
-  const raiseProgress = org
-    ? await getDashboardData(org.orgId)
-        .then((d) => d.raiseProgress)
-        .catch(() => null)
-    : null;
+
+  const data = org
+    ? await getCapitalStackData(org.orgId).catch(() => ({
+        summary: null,
+        commitments: [],
+        empty: true
+      }))
+    : { summary: null, commitments: [], empty: true };
 
   return (
-    <AuthedShell title={stub.title} subtitle={stub.area} redirectFrom={ROUTE}>
-      <ComingSoonPage
-        {...stub}
-        preview={raiseProgress ? <RaiseProgressBar progress={raiseProgress} /> : undefined}
-      />
+    <AuthedShell title="Capital Stack" subtitle="Capital Formation" redirectFrom="/capital-stack">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+        <CapitalStackView data={data} />
+      </div>
     </AuthedShell>
   );
 }
