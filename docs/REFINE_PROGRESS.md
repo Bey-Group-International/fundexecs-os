@@ -45,7 +45,7 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 
 ## Entries (OLD → NEW)
 
-### [A2] Onboarding — 2026-06-07 — PR #128 (post-campaign)
+### [A2] Onboarding — 2026-06-07 — PR #129 (post-campaign)
 
 **OLD:** First-run onboarding (identity step → Proof-of-Truth flow) had no
 cross-stage orientation, used the old flat **"F"** brand mark, and the finish
