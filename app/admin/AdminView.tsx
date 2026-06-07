@@ -22,6 +22,7 @@ import {
   Bell,
   CircleCheck,
   CircleDot,
+  Mail,
   type LucideIcon
 } from 'lucide-react';
 import {
@@ -38,6 +39,8 @@ import {
 import { TONE_HEX } from '@/components/screens/tone';
 import { TEAM_ROSTER, TeamAvatar } from '@/lib/team';
 import type { AdminData, AdminMember } from '@/lib/queries/admin';
+import type { BetaInvite } from '@/lib/queries/beta-invites';
+import { BetaInvitesPanel } from './BetaInvitesPanel';
 
 type MemberStatus = AdminMember['status'] | 'Archived';
 
@@ -132,7 +135,7 @@ const NOTIFICATIONS: Array<{ title: string; detail: string; tone: BadgeTone }> =
   }
 ];
 
-type Tab = 'users' | 'activity' | 'trust' | 'knowledge';
+type Tab = 'users' | 'invites' | 'activity' | 'trust' | 'knowledge';
 
 function StatTile({ stat }: { stat: Stat }) {
   const Icon = stat.icon;
@@ -454,7 +457,7 @@ function KnowledgePanel() {
   );
 }
 
-export function AdminView({ data }: { data: AdminData }) {
+export function AdminView({ data, invites }: { data: AdminData; invites: BetaInvite[] }) {
   const [tab, setTab] = useState<Tab>('users');
   const router = useRouter();
   // Member rows share the card lifecycle: approving an applicant "completes"
@@ -543,6 +546,7 @@ export function AdminView({ data }: { data: AdminData }) {
         onChange={(id) => setTab(id as Tab)}
         tabs={[
           { id: 'users', label: 'Users & roles', icon: Users },
+          { id: 'invites', label: 'Beta invites', icon: Mail },
           { id: 'activity', label: 'Activity', icon: Activity },
           { id: 'trust', label: 'Chain of trust', icon: ShieldCheck },
           { id: 'knowledge', label: 'Knowledge base', icon: BrainCircuit }
@@ -552,6 +556,7 @@ export function AdminView({ data }: { data: AdminData }) {
       {tab === 'users' && (
         <UsersPanel members={data.members} statuses={statuses} onSetStatus={setStatus} />
       )}
+      {tab === 'invites' && <BetaInvitesPanel invites={invites} />}
       {tab === 'activity' && <ActivityPanel actions={data.actions} />}
       {tab === 'trust' && <TrustPanel />}
       {tab === 'knowledge' && <KnowledgePanel />}
