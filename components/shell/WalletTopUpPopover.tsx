@@ -3,7 +3,8 @@
 import { useRef, useState, useEffect, useTransition } from 'react';
 import { Zap, Plus, X, ExternalLink, TestTube2, Fuel, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createTopUpCheckout, TOPUP_TIERS, type TopUpTier } from '@/lib/actions/stripe-checkout';
+import { createTopUpCheckout } from '@/lib/actions/stripe-checkout';
+import { TOPUP_TIERS, type TopUpTier } from '@/lib/billing/topup-tiers';
 import type { CreditWallet } from '@/lib/queries/credit-wallet';
 
 /* ============================================================================
