@@ -14,9 +14,25 @@
 - Rail: 6-area logic groups; 11 stubs await UI; `EarnContextKind: 'intelligence'` already wired
 - Existing XP: `profiles.xp` + `trust_xp_award()` RPC; streak is a declared seam
 
-## Decisions the user already made (see Q&A below)
+## Decisions the user already made
 
-[Q1-Q7 ANSWERS WILL BE PASTED HERE — DO NOT ASSUME — wait for user]
+| Q | Decision | Implication for build |
+|---|---|---|
+| Q1 | **(b) EDGAR Form D + Form ADV** at launch | Two adapters: `lib/ingestion/edgar/form-d.ts` and `lib/ingestion/edgar/form-adv.ts`. Both free. Firecrawl/Finnhub deferred to a later sprint, not in scope. |
+| Q2 | **(c+) firm + individual_investor + service_provider** | 3 persona-aware copy lanes from launch. Startup + Student get the layer in a follow-up. `signal_matches.match_reason` should encode persona-relevant scoring (e.g. SP gets demand-side fit signals, firm/individual get raise + thesis-fit signals). |
+| Q3 | **(a) Full gamification stack** | All migrations land: `xp_events`, `achievements`, `achievements_earned`, `quests`, `quests_progress`. 5 launch badges + 3 launch quests seeded. Streak derivation wired. |
+| Q4 | **(a) Vercel Cron, 15-min poll on EDGAR RSS** | `app/api/cron/edgar-poll/route.ts` with Vercel cron config. No paid webhook dependency. |
+| Q5 | **(a) Full Wave-2 sprint — all 4 phases** | Execute Phases 1→2→3→4 sequentially. Draft PR per phase, STOP for review between phases. ~13–19 hours of work, 4 PRs. |
+| Q6 | **(a) Signals contribute to Chain-of-Trust Concept layer** | Acting on a signal writes to `trust_events` AND increments Concept-layer completion on the related `chain_of_trust_records` row. Compounds the moat. |
+| Q7 | **(a) Strict anti-patterns** | NO leaderboards. NO pressure streaks (1-day grace minimum). NO hidden rewards (rule_json must be human-readable). NO volume-based badges (every badge tied to a verified outcome). All XP grants server-side under RLS with `source_table`+`source_id` audit. |
+
+## Three implementation notes flagged during scoping (Claude's call to resolve)
+
+1. **Add `org_id` to `xp_events`** — every other XP/audit row in the schema carries `org_id` for direct RLS. Without it, RLS would need to JOIN through `org_members`. Recommendation: add `org_id uuid references organizations on delete cascade` to `xp_events` in the Phase 2 migration. Same for `achievements_earned` if it doesn't already carry it transitively.
+
+2. **`achievements.id text` / `quests.id text` (slug pattern)** — works for seeded items; would block user-defined achievements later. Consistent with `lib/team/roster.ts` slug style. Keep as-is unless user-defined achievements become a near-term feature.
+
+3. **Streak storage strategy** — proposal derives streak from `xp_events.awarded_at` via SQL window function on every dashboard load. Recommended optimization: denormalize onto `profiles.{current_streak integer, streak_updated_at timestamptz}` updated by a trigger or the `award_xp` server action. Saves a window query on every `getDashboardData` call.
 
 ## What to build
 
