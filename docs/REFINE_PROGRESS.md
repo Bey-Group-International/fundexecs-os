@@ -37,13 +37,32 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 | 4   | Capital Formation | `/pipeline`, `/capital-stack`, `/objections`                   | ✅ merged  | #104 |
 | 5   | Deal Execution    | `/deal-desk`, `/ic-memos`, `/governance`                       | ✅ merged  | #103 |
 | 6   | Intelligence      | `/inbox-intelligence`, `/knowledge`, `/materials`, `/partners` | ✅ merged  | #105 |
-| 7   | Audit             | `/trust`, `/audit`                                             | ⏳ PR #111 | #111 |
-| 8   | Profile account   | account menu + `/settings`                                     | ⬜ pending | —    |
+| 7   | Audit             | `/trust`, `/audit`                                             | ✅ merged  | #111 |
+| 8   | Profile account   | account menu + `/settings`                                     | ⏳ PR #112 | #112 |
 | 9   | Dashboard         | `/command-center` `LifecycleDashboard`                         | ⬜ pending | —    |
 
 ---
 
 ## Entries (OLD → NEW)
+
+### [5] Profile account — 2026-06-07 — PR #112
+
+**OLD:** The account menu shipped in #101, so the surface here is `/settings`.
+Its gamification header showed **hardcoded** `LEVEL = 7` / `XP = 4820` and a
+static list of "earned" trust statuses — fake progress on a real account page,
+and inconsistent with the dashboard's real gamification.
+**NEW (functionality / honesty):** the header now uses the operator's **real**
+`level` + `xp` (from `profiles.xp` via `getShellIdentity`, already loaded by the
+page) — the level badge, XP figure, and progress bar reflect actual standing,
+and the bar uses the same level curve `getShellIdentity` derives `level` from so
+badge and bar always agree. Trust-status chips derive from the real
+Proof-of-Truth completion (`proofStatus`/`proofPct`); the two milestones with no
+signal yet ("Capital Matched", "Institutional Grade") render as honest not-yet
+aspirations instead of hardcoded.
+**Scope:** additive reads only (reuses `identity` + `memberProfile`, no new
+loaders); tokens-only; no auth/migration changes.
+**Files:** `app/settings/SettingsView.tsx`, `app/settings/page.tsx`.
+**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
 
 ### [4] Audit — 2026-06-07 — PR #111
 
@@ -59,7 +78,7 @@ and an active inset ring. Overview and filter in one control.
 the full dataset so the strip always reflects everything. Timeline rows, day
 grouping, search, and expand behavior unchanged; tone surfaces render via #109.
 **Files:** `components/audit/AuditView.tsx`.
-**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+**Checks:** tsc/lint/format/build ✓ · CodeRabbit ✓ (no actionable comments).
 
 ### [3] Daily Execution — 2026-06-07 — PR #110
 

@@ -57,6 +57,9 @@ interface SettingsViewProps {
   proofStatus: 'in_progress' | 'complete';
   proofPct: number;
   proofMemberType: MemberType | null;
+  /** Real Earn level + accumulated XP (from `profiles.xp` via getShellIdentity). */
+  level: number;
+  xp: number;
   /** Owner/admin only — surfaces the Admin section (members, roles, beta invites). */
   isAdmin: boolean;
   adminData: AdminData | null;
@@ -73,17 +76,24 @@ interface TrustStatus {
   earned: boolean;
 }
 
-const STATUSES: TrustStatus[] = [
-  { label: 'Verified Operator', icon: BadgeCheck, earned: true },
-  { label: 'Execution Ready', icon: Zap, earned: true },
-  { label: 'Trust Layer Complete', icon: ShieldCheck, earned: true },
-  { label: 'Capital Matched', icon: Sparkles, earned: false },
-  { label: 'Institutional Grade', icon: BadgeCheck, earned: false }
-];
+/**
+ * Derive the trust-status chips from the operator's REAL Proof-of-Truth state
+ * rather than hardcoded `earned` flags. The first three milestones map to proof
+ * completion (a real, server-sourced measure); "Capital Matched" and
+ * "Institutional Grade" have no signal on this surface yet, so they render as
+ * honest not-yet-earned aspirations.
+ */
+function deriveStatuses(proofStatus: 'in_progress' | 'complete', proofPct: number): TrustStatus[] {
+  const complete = proofStatus === 'complete' || proofPct >= 100;
+  return [
+    { label: 'Verified Operator', icon: BadgeCheck, earned: proofPct >= 25 },
+    { label: 'Execution Ready', icon: Zap, earned: proofPct >= 60 },
+    { label: 'Trust Layer Complete', icon: ShieldCheck, earned: complete },
+    { label: 'Capital Matched', icon: Sparkles, earned: false },
+    { label: 'Institutional Grade', icon: BadgeCheck, earned: false }
+  ];
+}
 
-const LEVEL = 7;
-const XP = 4820;
-const XP_NEXT = 6000;
 const ACTION_INITIAL_STATE: SettingsActionState = { status: 'idle', message: '' };
 
 const ORG_OPTIONS: Array<{ value: OrgType; label: string }> = [
@@ -117,9 +127,31 @@ function ActionNotice({ state }: { state: SettingsActionState }) {
   );
 }
 
-function GamificationHeader({ name }: { name: string }) {
-  const earned = STATUSES.filter((s) => s.earned).length;
-  const pct = Math.round((XP / XP_NEXT) * 100);
+function GamificationHeader({
+  name,
+  level,
+  xp,
+  proofStatus,
+  proofPct
+}: {
+  name: string;
+  level: number;
+  xp: number;
+  proofStatus: 'in_progress' | 'complete';
+  proofPct: number;
+}) {
+  const statuses = deriveStatuses(proofStatus, proofPct);
+  const earned = statuses.filter((s) => s.earned).length;
+  // Within-level progress on the same curve `getShellIdentity` uses to derive
+  // `level` (level N spans [(N-1)²·100, N²·100) XP), so the bar and the badge
+  // always agree.
+  const floor = (level - 1) ** 2 * 100;
+  const ceil = level ** 2 * 100;
+  const xpNext = ceil;
+  const pct = Math.max(
+    0,
+    Math.min(100, Math.round(((xp - floor) / Math.max(1, ceil - floor)) * 100))
+  );
   return (
     <Card className="overflow-hidden p-0" data-testid="settings-gamification">
       <div className="flex flex-col gap-5 bg-[linear-gradient(105deg,rgba(247,201,72,0.12),rgba(247,201,72,0.02)_46%,transparent_72%)] px-5 py-[18px]">
@@ -131,17 +163,17 @@ function GamificationHeader({ name }: { name: string }) {
                 {name}
               </span>
               <Badge tone="gold" className="px-2 py-px text-[10.5px] tabular-nums">
-                Level {LEVEL}
+                Level {level}
               </Badge>
             </div>
             <p className="mt-1 text-[12.5px] text-fg-3">
-              {earned} of {STATUSES.length} trust statuses earned · keep closing layers to reach
+              {earned} of {statuses.length} trust statuses earned · keep closing layers to reach
               Institutional Grade.
             </p>
           </div>
           <div className="hidden flex-none flex-col items-end sm:flex">
             <span className="text-[22px] font-semibold tabular-nums tracking-[-0.02em] text-gold-1">
-              {XP.toLocaleString()}
+              {xp.toLocaleString()}
             </span>
             <span className="text-[10.5px] uppercase tracking-[0.11em] text-fg-4">XP</span>
           </div>
@@ -149,16 +181,16 @@ function GamificationHeader({ name }: { name: string }) {
 
         <div>
           <div className="mb-1.5 flex items-center justify-between text-[11.5px] text-fg-4">
-            <span>Progress to level {LEVEL + 1}</span>
+            <span>Progress to level {level + 1}</span>
             <span className="tabular-nums">
-              {XP.toLocaleString()} / {XP_NEXT.toLocaleString()} XP
+              {xp.toLocaleString()} / {xpNext.toLocaleString()} XP
             </span>
           </div>
           <ProgressBar value={pct} height={8} gradient="linear-gradient(90deg,#F7C948,#E5A823)" />
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {STATUSES.map((s) => {
+          {statuses.map((s) => {
             const Icon = s.icon;
             return (
               <span
@@ -606,6 +638,8 @@ export function SettingsView({
   proofStatus,
   proofPct,
   proofMemberType,
+  level,
+  xp,
   isAdmin,
   adminData,
   invites
@@ -647,7 +681,13 @@ export function SettingsView({
 
   return (
     <div className="flex flex-col gap-[22px]" data-testid="settings-rail-view">
-      <GamificationHeader name={displayName} />
+      <GamificationHeader
+        name={displayName}
+        level={level}
+        xp={xp}
+        proofStatus={proofStatus}
+        proofPct={proofPct}
+      />
 
       <div className="grid gap-[18px] lg:grid-cols-[240px_minmax(0,1fr)]">
         {/* Sticky left rail — section list with capability copy */}
