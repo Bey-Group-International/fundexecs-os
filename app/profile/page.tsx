@@ -6,46 +6,45 @@ import { getShellIdentity } from '@/lib/queries/identity';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getDashboardData } from '@/lib/queries/dashboard';
-import { getFundProfile } from '@/lib/queries/fund-profile';
+import { getProfile } from '@/lib/queries/fund-profile';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import {
-  FundProfileHero,
-  FundProfileSections,
-  FundProfileGapsCard,
-  FundProfileRailSummary
-} from '@/components/fund-profile';
+  ProfileHero,
+  ProfileSections,
+  ProfileGapsCard,
+  ProfileRailSummary
+} from '@/components/profile';
 
 export const metadata: Metadata = {
-  title: 'Fund Profile'
+  title: 'Profile'
 };
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Fund Profile — the Source-of-Truth surface.
+ * Profile — the Source-of-Truth surface.
  *
- * Reads the canonical `FundProfile` payload from `getFundProfile(orgId)` and
- * composes four sub-components:
- *   - FundProfileHero        — fund name · manager · completeness ring
- *   - FundProfileGapsCard    — LP-probe list (Earn closes each)
- *   - FundProfileSections    — six LP-probed fields rendered read-mostly
+ * Reads the member-type-aware `Profile` payload from `getProfile(orgId)` and
+ * composes:
+ *   - ProfileHero        — entity name · owner · completeness ring
+ *   - ProfileGapsCard    — fields a counterparty would press on (Earn closes each)
+ *   - ProfileSections    — the member's schema-driven fields, read-mostly
  *
- * Edits flow through the existing onboarding/quiz route (`/onboarding`) —
- * Wave-1 is read-mostly here; the actions surface lands later.
+ * Sections, completeness, and gaps are derived from the same per-member-type
+ * question set onboarding uses, so the surface adapts to who the member is and
+ * every gap is closeable in onboarding. Edits flow through `/onboarding`.
  *
- * Rail signals + wallet are resolved alongside the profile fetch so the
- * shell stays lifecycle-aware even on this surface. All loaders here are
- * cached per-request by Next, so the parallel `getDashboardData` call
- * shares its result with the side rail's signal builder.
+ * Rail signals + wallet are resolved alongside the profile fetch so the shell
+ * stays lifecycle-aware. All loaders here are cached per-request by Next.
  */
-export default async function FundProfilePage() {
+export default async function ProfilePage() {
   const identity = await getShellIdentity();
   if (!identity) redirect('/login?redirectedFrom=%2Fprofile');
 
   const org = await getActiveOrg();
   if (!org) {
     return (
-      <AppShell title="Fund Profile" subtitle="Source of Truth" identity={identity}>
+      <AppShell title="Profile" subtitle="Source of Truth" identity={identity}>
         <Card className="p-8 text-center">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
             No workspace yet
@@ -59,7 +58,7 @@ export default async function FundProfilePage() {
   }
 
   const [profile, wallet, dashboard] = await Promise.all([
-    getFundProfile(org.orgId),
+    getProfile(org.orgId),
     getCreditWallet(org.orgId).catch(() => null),
     getDashboardData(org.orgId).catch(() => null)
   ]);
@@ -67,17 +66,17 @@ export default async function FundProfilePage() {
 
   return (
     <AppShell
-      title="Fund Profile"
+      title="Profile"
       subtitle="Source of Truth · on the record"
       identity={identity}
       wallet={wallet}
       navSignals={navSignals}
-      sourceOfTruthSummary={<FundProfileRailSummary profile={profile} />}
+      sourceOfTruthSummary={<ProfileRailSummary profile={profile} />}
     >
-      <div className="flex flex-col gap-[18px]" data-testid="fund-profile-page">
-        <FundProfileHero profile={profile} />
-        <FundProfileGapsCard profile={profile} />
-        <FundProfileSections profile={profile} />
+      <div className="flex flex-col gap-[18px]" data-testid="profile-page">
+        <ProfileHero profile={profile} />
+        <ProfileGapsCard profile={profile} />
+        <ProfileSections profile={profile} />
       </div>
     </AppShell>
   );

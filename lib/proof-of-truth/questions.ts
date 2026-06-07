@@ -5,6 +5,11 @@ import type { MemberType } from '@/lib/member-types';
  * maps each answer to a profile field. `target` decides where the value lands:
  * a top-level `member_profiles` column, or a key inside the `details` JSON
  * (used for the member-type-specific fields).
+ *
+ * The same question set is the single source of truth for the Profile surface
+ * (`/profile`): each question becomes a Profile section, and every unanswered
+ * required question becomes a closeable gap. That keeps onboarding and the
+ * Profile in lockstep — you can never see a gap you can't fill in onboarding.
  */
 export interface ProfileQuestion {
   /** Stable id, unique within a member type's set. */
@@ -23,6 +28,11 @@ export interface ProfileQuestion {
   options?: string[];
   /** When true, the member may skip this question without approving an answer. */
   optional?: boolean;
+  /**
+   * Why this field matters to a counterparty. Shown as onboarding context and
+   * reused as the Profile gap reason, so the "why" is written once.
+   */
+  why?: string;
 }
 
 // Common questions every member answers (map to member_profiles columns).
@@ -34,7 +44,8 @@ const COMMON: ProfileQuestion[] = [
     label: 'Display name',
     prompt: 'What name should appear on your verified profile?',
     kind: 'text',
-    placeholder: 'e.g. Northwind Capital'
+    placeholder: 'e.g. Northwind Capital',
+    why: 'Your name is the first thing every counterparty sees — it anchors the record.'
   },
   {
     id: 'headline',
@@ -43,7 +54,8 @@ const COMMON: ProfileQuestion[] = [
     label: 'Headline',
     prompt: 'In one line, how would you describe what you do?',
     kind: 'text',
-    placeholder: 'A single, precise sentence'
+    placeholder: 'A single, precise sentence',
+    why: 'A sharp one-liner tells a counterparty whether to keep reading.'
   },
   {
     id: 'bio',
@@ -52,7 +64,8 @@ const COMMON: ProfileQuestion[] = [
     label: 'Overview',
     prompt: 'Give a short overview a counterparty should read first.',
     kind: 'textarea',
-    placeholder: 'Two or three sentences'
+    placeholder: 'Two or three sentences',
+    why: 'The overview is your elevator pitch on the record — it frames everything else.'
   },
   {
     id: 'focus_areas',
@@ -61,7 +74,8 @@ const COMMON: ProfileQuestion[] = [
     label: 'Focus areas',
     prompt: 'What are your core focus areas?',
     kind: 'tags',
-    placeholder: 'Add a few and press enter'
+    placeholder: 'Add a few and press enter',
+    why: 'Focus areas let the right counterparties find you and check fit at a glance.'
   },
   {
     id: 'linkedin',
@@ -71,7 +85,8 @@ const COMMON: ProfileQuestion[] = [
     prompt: 'What is your LinkedIn URL? (optional)',
     kind: 'url',
     placeholder: 'https://linkedin.com/in/…',
-    optional: true
+    optional: true,
+    why: 'A linked profile adds a verifiable identity signal.'
   },
   {
     id: 'website',
@@ -81,7 +96,8 @@ const COMMON: ProfileQuestion[] = [
     prompt: 'What is your website? (optional)',
     kind: 'url',
     placeholder: 'https://…',
-    optional: true
+    optional: true,
+    why: 'A website gives counterparties somewhere credible to dig deeper.'
   }
 ];
 
@@ -102,7 +118,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
         'Family office',
         'Fund of funds',
         'Other'
-      ]
+      ],
+      why: 'Firm type sets the lens an LP reads the rest of your profile through.'
     },
     {
       id: 'check_size',
@@ -111,7 +128,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Typical check size',
       prompt: 'What check size do you typically write?',
       kind: 'text',
-      placeholder: 'e.g. $250K–$2M'
+      placeholder: 'e.g. $250K–$2M',
+      why: 'Check size lets founders and co-investors judge fit before reaching out.'
     },
     {
       id: 'sectors',
@@ -119,7 +137,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Sectors',
       prompt: 'Which sectors do you invest in?',
-      kind: 'tags'
+      kind: 'tags',
+      why: 'Sectors are the first mandate-fit filter a counterparty applies.'
     },
     {
       id: 'stage_focus',
@@ -128,7 +147,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Stage focus',
       prompt: 'What stages do you focus on?',
       kind: 'tags',
-      placeholder: 'Pre-seed, Seed, Series A…'
+      placeholder: 'Pre-seed, Seed, Series A…',
+      why: 'Stage focus tells founders whether the timing is right to engage.'
     },
     {
       id: 'thesis',
@@ -136,7 +156,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Investment thesis',
       prompt: 'What is your investment thesis?',
-      kind: 'textarea'
+      kind: 'textarea',
+      why: 'LPs lead with "why now, why you" — a sharp thesis is table stakes.'
     }
   ],
   service_provider: [
@@ -156,7 +177,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
         'Recruiting',
         'Technology',
         'Other'
-      ]
+      ],
+      why: 'Category routes you to the counterparties actively looking for your service.'
     },
     {
       id: 'services_offered',
@@ -164,7 +186,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Services offered',
       prompt: 'Which specific services do you offer?',
-      kind: 'tags'
+      kind: 'tags',
+      why: 'Specific services let clients match a need to exactly what you do.'
     },
     {
       id: 'ideal_client',
@@ -172,7 +195,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Ideal client',
       prompt: 'Who is your ideal client?',
-      kind: 'textarea'
+      kind: 'textarea',
+      why: 'Naming your ideal client earns warmer, better-qualified introductions.'
     },
     {
       id: 'engagement_model',
@@ -181,7 +205,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Engagement model',
       prompt: 'How do you typically engage?',
       kind: 'select',
-      options: ['Retainer', 'Project-based', 'Success fee', 'Hourly', 'Other']
+      options: ['Retainer', 'Project-based', 'Success fee', 'Hourly', 'Other'],
+      why: 'How you engage sets expectations before the first conversation.'
     }
   ],
   startup: [
@@ -191,7 +216,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Sector',
       prompt: 'What sector is your company in?',
-      kind: 'tags'
+      kind: 'tags',
+      why: 'Sector is the first thing an investor checks against their mandate.'
     },
     {
       id: 'stage',
@@ -200,7 +226,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Stage',
       prompt: 'What stage are you at?',
       kind: 'select',
-      options: ['Idea', 'Pre-seed', 'Seed', 'Series A', 'Series B+', 'Growth']
+      options: ['Idea', 'Pre-seed', 'Seed', 'Series A', 'Series B+', 'Growth'],
+      why: 'Stage tells investors whether you fit their entry point.'
     },
     {
       id: 'raising',
@@ -209,7 +236,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Raising',
       prompt: 'Are you raising, and on what terms?',
       kind: 'text',
-      placeholder: 'e.g. $1.5M on a SAFE'
+      placeholder: 'e.g. $1.5M on a SAFE',
+      why: 'Round size and terms let investors size their check and move quickly.'
     },
     {
       id: 'traction',
@@ -217,7 +245,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Traction',
       prompt: 'What traction can you point to?',
-      kind: 'textarea'
+      kind: 'textarea',
+      why: 'Traction is the evidence that turns interest into a meeting.'
     }
   ],
   student: [
@@ -227,7 +256,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Institution',
       prompt: 'Where do you study?',
-      kind: 'text'
+      kind: 'text',
+      why: 'Your institution is a credibility and network signal for mentors.'
     },
     {
       id: 'field_of_study',
@@ -235,7 +265,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Field of study',
       prompt: 'What is your field of study?',
-      kind: 'text'
+      kind: 'text',
+      why: 'Field of study helps the right people place where you can contribute.'
     },
     {
       id: 'interest_area',
@@ -243,7 +274,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Interests',
       prompt: 'Which areas of private markets interest you most?',
-      kind: 'tags'
+      kind: 'tags',
+      why: 'Interests connect you to relevant opportunities and conversations.'
     },
     {
       id: 'career_goal',
@@ -251,7 +283,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Career goal',
       prompt: 'What are you working toward?',
-      kind: 'textarea'
+      kind: 'textarea',
+      why: 'A clear goal lets mentors and firms know how to help you.'
     }
   ],
   individual_investor: [
@@ -262,7 +295,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Investor profile',
       prompt: 'How would you describe yourself as an investor?',
       kind: 'select',
-      options: ['Angel', 'Limited partner', 'Syndicate lead', 'Operator-investor', 'Other']
+      options: ['Angel', 'Limited partner', 'Syndicate lead', 'Operator-investor', 'Other'],
+      why: 'Your investor profile sets how founders and leads should approach you.'
     },
     {
       id: 'check_size',
@@ -271,7 +305,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Typical check size',
       prompt: 'What check size do you typically write?',
       kind: 'text',
-      placeholder: 'e.g. $25K–$100K'
+      placeholder: 'e.g. $25K–$100K',
+      why: 'Check size lets founders and syndicate leads judge fit instantly.'
     },
     {
       id: 'sectors',
@@ -279,7 +314,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Sectors',
       prompt: 'Which sectors interest you?',
-      kind: 'tags'
+      kind: 'tags',
+      why: 'Sectors are the first filter for surfacing relevant deals to you.'
     },
     {
       id: 'value_add',
@@ -287,7 +323,8 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       target: 'details',
       label: 'Value-add',
       prompt: 'Beyond capital, what do you bring?',
-      kind: 'textarea'
+      kind: 'textarea',
+      why: 'Value-add is what wins you allocation in competitive rounds.'
     }
   ]
 };
@@ -295,6 +332,11 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
 /** The full ordered question set for a member type (common, then specific). */
 export function getQuestionSet(memberType: MemberType): ProfileQuestion[] {
   return [...COMMON, ...SPECIFIC[memberType]];
+}
+
+/** The common questions every member answers, regardless of type. */
+export function getCommonQuestions(): ProfileQuestion[] {
+  return [...COMMON];
 }
 
 /** Look up one question by id within a member type's set. */
