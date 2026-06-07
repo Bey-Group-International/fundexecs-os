@@ -46,32 +46,70 @@ const ZERO_COVERAGE: Record<TrustLayerKey, number> = {
   work: 0
 };
 
-/**
- * Resolve admin platform metrics for an org. Today: an honest placeholder with
- * the real brain count filled in where it's free; everything else zeroed and
- * `placeholder: true`. Never throws.
- */
-export async function getAdminMetrics(orgId: string): Promise<AdminMetrics> {
-  let brainsTotal = 0;
-  try {
-    const supabase = await createClient();
-    // Real + free: count the brains this org can see (global + org-scoped).
-    const { count } = await supabase
-      .from('ai_brains')
-      .select('id', { count: 'exact', head: true })
-      .or(`is_global.eq.true,org_id.eq.${orgId}`);
-    brainsTotal = count ?? 0;
-  } catch {
-    brainsTotal = 0;
-  }
-
+function fallbackMetrics(): AdminMetrics {
   return {
-    brains: { total: brainsTotal, embedded: 0 },
+    brains: { total: 0, embedded: 0 },
     vector: { status: 'unknown', chunks: 0 },
     intake: { queued: 0, processed: 0 },
     trust: { layerCoverage: { ...ZERO_COVERAGE } },
-    // Real metrics are a backend task (#115); until then the UI shows a clear
-    // "reference / coming soon" state rather than fabricated numbers.
     placeholder: true
   };
+}
+
+function numberOrZero(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function vectorStatus(value: unknown): VectorStatus {
+  return value === 'live' || value === 'degraded' || value === 'unknown' ? value : 'unknown';
+}
+
+function normalizeMetrics(value: unknown): AdminMetrics {
+  if (!value || typeof value !== 'object') return fallbackMetrics();
+  const root = value as Record<string, unknown>;
+  const brains = (root.brains ?? {}) as Record<string, unknown>;
+  const vector = (root.vector ?? {}) as Record<string, unknown>;
+  const intake = (root.intake ?? {}) as Record<string, unknown>;
+  const trust = (root.trust ?? {}) as Record<string, unknown>;
+  const layerCoverage = (trust.layerCoverage ?? {}) as Record<string, unknown>;
+
+  return {
+    brains: {
+      total: numberOrZero(brains.total),
+      embedded: numberOrZero(brains.embedded)
+    },
+    vector: {
+      status: vectorStatus(vector.status),
+      chunks: numberOrZero(vector.chunks)
+    },
+    intake: {
+      queued: numberOrZero(intake.queued),
+      processed: numberOrZero(intake.processed)
+    },
+    trust: {
+      layerCoverage: {
+        truth: numberOrZero(layerCoverage.truth),
+        concept: numberOrZero(layerCoverage.concept),
+        execution: numberOrZero(layerCoverage.execution),
+        work: numberOrZero(layerCoverage.work)
+      }
+    },
+    placeholder: root.placeholder === false ? false : true
+  };
+}
+
+/**
+ * Resolve admin platform metrics for an org. Real values come from the
+ * RLS/member-gated `get_admin_metrics` RPC. Never throws; any DB/RPC issue
+ * degrades to zeroed placeholders so the Admin page still renders honestly.
+ */
+export async function getAdminMetrics(orgId: string): Promise<AdminMetrics> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc('get_admin_metrics', { _org_id: orgId });
+    if (error) return fallbackMetrics();
+    return normalizeMetrics(data);
+  } catch {
+    return fallbackMetrics();
+  }
 }

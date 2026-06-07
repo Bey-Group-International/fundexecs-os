@@ -4,17 +4,34 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getSiteURL } from '@/lib/site-url';
-import type { Json } from '@/lib/supabase/database.types';
+import type { Database, Json } from '@/lib/supabase/database.types';
 
 export type InviteResult = { ok: true; link: string; email: string } | { ok: false; error: string };
 
 export type InviteActionResult = { ok: true } | { ok: false; error: string };
+type InviteRole = Database['public']['Enums']['org_member_role'];
 
 /** New beta users land in onboarding after the link verifies. */
 const INVITE_NEXT_PATH = '/onboarding';
 
 /** Conservative email shape check — the Supabase API is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function parseInviteRole(note?: string): { role: InviteRole; note: string | null } {
+  const trimmed = note?.trim() ?? '';
+  if (!trimmed) return { role: 'member', note: null };
+
+  const match = /^role:\s*(owner|admin|member)\b/i.exec(trimmed);
+  if (!match) return { role: 'member', note: trimmed };
+
+  const role = match[1].toLowerCase() as InviteRole;
+  const humanNote = trimmed
+    .slice(match[0].length)
+    .replace(/^[^A-Za-z0-9]+/, '')
+    .trim();
+
+  return { role, note: humanNote || null };
+}
 
 async function isOrgAdmin(orgId: string, userId: string): Promise<boolean> {
   const supabase = await createClient();
@@ -64,7 +81,10 @@ async function writeAudit(
  * fall back to `magiclink` so re-invites / resends still produce a working
  * sign-in link.
  */
-async function mintInviteLink(email: string): Promise<{ link: string } | { error: string }> {
+async function mintInviteLink(
+  email: string,
+  inviteId: string
+): Promise<{ link: string } | { error: string }> {
   const admin = createAdminClient();
   const redirectTo = `${getSiteURL()}/auth/confirm`;
 
@@ -72,6 +92,7 @@ async function mintInviteLink(email: string): Promise<{ link: string } | { error
     const url = new URL(`${getSiteURL()}/auth/confirm`);
     url.searchParams.set('token_hash', hashedToken);
     url.searchParams.set('type', verificationType);
+    url.searchParams.set('invite_id', inviteId);
     url.searchParams.set('next', INVITE_NEXT_PATH);
     return url.toString();
   };
@@ -120,11 +141,9 @@ export async function inviteBetaUser(emailInput: string, note?: string): Promise
     return { ok: false, error: 'Only owners or admins can invite beta users.' };
   }
 
-  const minted = await mintInviteLink(email);
-  if ('error' in minted) return { ok: false, error: minted.error };
-
   const supabase = await createClient();
   const now = new Date().toISOString();
+  const invite = parseInviteRole(note);
   // Upsert on (org_id, lower(email)): a re-invite refreshes the row and
   // re-arms it to pending without losing the original invited_at.
   const { data, error } = await supabase
@@ -133,7 +152,8 @@ export async function inviteBetaUser(emailInput: string, note?: string): Promise
       {
         org_id: org.orgId,
         email,
-        note: note?.trim() || null,
+        role: invite.role,
+        note: invite.note,
         invited_by: org.userId,
         status: 'pending',
         last_sent_at: now,
@@ -148,7 +168,13 @@ export async function inviteBetaUser(emailInput: string, note?: string): Promise
     return { ok: false, error: error?.message ?? 'Could not record the invite.' };
   }
 
-  await writeAudit(org.orgId, org.userId, 'invite_beta_user', data.id, { email });
+  const minted = await mintInviteLink(email, data.id);
+  if ('error' in minted) return { ok: false, error: minted.error };
+
+  await writeAudit(org.orgId, org.userId, 'invite_beta_user', data.id, {
+    email,
+    role: invite.role
+  });
   return { ok: true, link: minted.link, email };
 }
 
@@ -175,7 +201,7 @@ export async function resendBetaInvite(inviteId: string): Promise<InviteResult> 
   if (readErr) return { ok: false, error: readErr.message };
   if (!invite) return { ok: false, error: 'Invite not found.' };
 
-  const minted = await mintInviteLink(invite.email);
+  const minted = await mintInviteLink(invite.email, inviteId);
   if ('error' in minted) return { ok: false, error: minted.error };
 
   const { error } = await supabase
