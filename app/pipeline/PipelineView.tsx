@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -44,7 +44,11 @@ function formatCurrency(amount: number): string {
   if (amount >= 1_000_000_000) return `$${(amount / 1_000_000_000).toFixed(1)}B`;
   if (amount >= 1_000_000) return `$${Math.round(amount / 1_000_000)}M`;
   if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
-  return `$${amount}`;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0
+  }).format(amount);
 }
 
 /** Pick a card accent tone from a deal's status. */
@@ -181,7 +185,7 @@ function relationshipTier(stage: string): { label: string; tone: BadgeTone } {
 }
 
 function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
-  const ranked = useMemo(() => [...deals].sort((a, b) => b.fit - a.fit), [deals]);
+  const ranked = [...deals].sort((a, b) => b.fit - a.fit);
   return (
     <Card>
       <SectionTitle
@@ -367,20 +371,18 @@ export function PipelineView({ data }: { data: PipelineData }) {
   const [moveError, setMoveError] = useState<string | null>(null);
   const [, startMove] = useTransition();
 
-  const origKeyOf = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const s of data.stages) for (const d of s.deals) m.set(d.id, s.key);
-    return m;
-  }, [data.stages]);
+  // Derived (React Compiler memoizes) — no manual useMemo needed.
+  const origKeyOf = new Map<string, string>();
+  for (const s of data.stages) for (const d of s.deals) origKeyOf.set(d.id, s.key);
 
-  const displayStages = useMemo(() => {
-    if (Object.keys(moves).length === 0) return data.stages;
-    const all = data.stages.flatMap((s) => s.deals);
-    return data.stages.map((s) => ({
-      ...s,
-      deals: all.filter((d) => (moves[d.id] ?? origKeyOf.get(d.id)) === s.key)
-    }));
-  }, [data.stages, moves, origKeyOf]);
+  const hasMoves = Object.keys(moves).length > 0;
+  const allStageDeals = data.stages.flatMap((s) => s.deals);
+  const displayStages = hasMoves
+    ? data.stages.map((s) => ({
+        ...s,
+        deals: allStageDeals.filter((d) => (moves[d.id] ?? origKeyOf.get(d.id)) === s.key)
+      }))
+    : data.stages;
 
   function moveDeal(dealId: string, toKey: string) {
     const currentKey = moves[dealId] ?? origKeyOf.get(dealId);
@@ -426,34 +428,29 @@ export function PipelineView({ data }: { data: PipelineData }) {
     }
   }
 
-  const summary = useMemo<
-    Array<{ label: string; value: string; icon: LucideIcon; tone: BadgeTone }>
-  >(
-    () => [
-      {
-        label: 'Pipeline value',
-        value: formatCurrency(data.pipelineValue),
-        icon: TrendingUp,
-        tone: 'azure'
-      },
-      {
-        label: 'Soft-circled',
-        value: formatCurrency(data.softCircled),
-        icon: CircleDot,
-        tone: 'warning'
-      },
-      {
-        label: 'Committed',
-        value: formatCurrency(data.committed),
-        icon: CheckCircle2,
-        tone: 'success'
-      },
-      { label: 'Visitor → committed', value: `${data.conversionPct}%`, icon: Percent, tone: 'gold' }
-    ],
-    [data.pipelineValue, data.softCircled, data.committed, data.conversionPct]
-  );
+  const summary: Array<{ label: string; value: string; icon: LucideIcon; tone: BadgeTone }> = [
+    {
+      label: 'Pipeline value',
+      value: formatCurrency(data.pipelineValue),
+      icon: TrendingUp,
+      tone: 'azure'
+    },
+    {
+      label: 'Soft-circled',
+      value: formatCurrency(data.softCircled),
+      icon: CircleDot,
+      tone: 'warning'
+    },
+    {
+      label: 'Committed',
+      value: formatCurrency(data.committed),
+      icon: CheckCircle2,
+      tone: 'success'
+    },
+    { label: 'Visitor → committed', value: `${data.conversionPct}%`, icon: Percent, tone: 'gold' }
+  ];
 
-  const allDeals = useMemo(() => data.stages.flatMap((s) => s.deals), [data.stages]);
+  const allDeals = allStageDeals;
 
   return (
     <div className="flex flex-col gap-[18px]">
