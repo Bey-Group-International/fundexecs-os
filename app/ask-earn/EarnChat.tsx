@@ -11,6 +11,24 @@ import { EarnActionCard, type EarnAction } from '@/components/shell/earn/EarnAct
 
 type Source = { brainId: string | null; snippet: string };
 
+/** Exact in-app routes Earn may auto-navigate to. Model-supplied destinations
+ *  are validated against this allowlist so a bad payload can't push an
+ *  arbitrary route. Mirrors EARN_NAV_DESTINATIONS in lib/ai/earn.ts. */
+const AUTO_NAV_DESTINATIONS = new Set([
+  '/command-center',
+  '/pipeline',
+  '/capital-stack',
+  '/profile',
+  '/trust',
+  '/materials',
+  '/partners',
+  '/match-inbox',
+  '/diligence',
+  '/audit',
+  '/integrations',
+  '/settings'
+]);
+
 type Msg = {
   role: 'user' | 'assistant';
   content: string;
@@ -132,8 +150,9 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
             evt.action?.mode === 'auto' &&
             evt.action.name === 'navigate'
           ) {
-            const dest = String(evt.action.input?.destination ?? '');
-            if (dest.startsWith('/')) router.push(dest);
+            const dest =
+              typeof evt.action.input?.destination === 'string' ? evt.action.input.destination : '';
+            if (AUTO_NAV_DESTINATIONS.has(dest)) router.push(dest);
           }
           setMessages((m) => {
             const copy = [...m];

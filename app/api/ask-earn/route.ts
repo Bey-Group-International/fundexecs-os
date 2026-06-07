@@ -1,21 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getAuthUser } from '@/lib/queries/auth';
 import { streamEarn, type EarnMessage, type EarnSource } from '@/lib/ai/earn';
-import { earnReviewDeal } from '@/lib/diligence';
-
-/**
- * Detect an EXPLICIT "run diligence" instruction. Deliberately conservative:
- * generic verbs like review/assess/evaluate do NOT trigger it, so ordinary Earn
- * chat is never hijacked — those fall through to the normal streaming path.
- */
-function isDiligenceIntent(message: string): boolean {
-  const m = message.toLowerCase();
-  const explicitDiligence = /\b(due\s+diligence|run\s+(a\s+)?diligence|diligence)\b/.test(m);
-  const vetLikeLp = /\bvet\b[\s\S]{0,40}\blike\s+an?\s+(institutional\s+)?lp\b/.test(m);
-  return explicitDiligence || vetLikeLp;
-}
 
 interface EarnContextHintBody {
   kind?: string;
@@ -82,7 +68,6 @@ export async function POST(req: NextRequest) {
   }
 
   const context = body.context;
-  const dealId = body.dealId ?? (context?.kind === 'deal' ? context.entityId : undefined);
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
 
   // Persist the latest user turn immediately (best-effort — never blocks chat).
@@ -113,14 +98,6 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const emitText = async (text: string, sources: EarnSource[] = []) => {
-        if (sources.length) controller.enqueue(line({ type: 'sources', sources }));
-        controller.enqueue(line({ type: 'delta', text }));
-        controller.enqueue(line({ type: 'done' }));
-        await saveAssistant(text, sources);
-        controller.close();
-      };
-
       // Never-block: no API key → calm degraded message.
       if (!process.env.ANTHROPIC_API_KEY) {
         controller.enqueue(line({ type: 'degraded', message: FALLBACK.missing_key }));
@@ -129,39 +106,9 @@ export async function POST(req: NextRequest) {
         return;
       }
 
-      // Explicit diligence intent with a resolvable deal → run the committee.
-      if (lastUser && isDiligenceIntent(lastUser.content) && dealId) {
-        try {
-          const authed = await getAuthUser();
-          if (authed) {
-            const result = await earnReviewDeal({
-              orgId: org.orgId,
-              createdBy: authed.id,
-              dealId
-            });
-            const conviction =
-              result.status === 'complete' && result.conviction != null
-                ? `Conviction ${result.conviction}/100. `
-                : '';
-            const text =
-              result.status === 'complete'
-                ? `I ran the full committee on this deal. ${conviction}See the breakdown and my memo here: /diligence/${result.runId}`
-                : `I started a diligence run but it didn't complete cleanly. You can review what came back here: /diligence/${result.runId}`;
-            await emitText(text);
-            return;
-          }
-        } catch {
-          // Fall through to the streaming chat path below.
-        }
-      }
-      if (lastUser && isDiligenceIntent(lastUser.content) && !dealId) {
-        await emitText(
-          'I can run a full institutional-grade diligence review, but I need to know which deal. ' +
-            'Open the deal in your Pipeline and hit "Run diligence" in the deal drawer — ' +
-            "I'll have the committee weigh in and post a memo to /diligence."
-        );
-        return;
-      }
+      // Diligence is a write: it is NOT auto-run here. Earn proposes the
+      // `run_diligence` tool, which surfaces a confirm card (confirm-on-write)
+      // in the normal streaming path below.
 
       // Normal streaming chat path.
       try {
@@ -177,8 +124,14 @@ export async function POST(req: NextRequest) {
           controller.enqueue(line({ type: 'delta', text: chunk }));
         }
         // Reactive actions Earn proposed (navigate auto-runs client-side;
-        // mutating tools render a confirm card).
-        const actions = await tools();
+        // mutating tools render a confirm card). Isolated so a tool-extraction
+        // failure can't clobber the already-streamed reply with a degraded msg.
+        let actions: Awaited<ReturnType<typeof tools>> = [];
+        try {
+          actions = await tools();
+        } catch {
+          actions = [];
+        }
         for (const action of actions) {
           controller.enqueue(line({ type: 'action', action }));
         }
