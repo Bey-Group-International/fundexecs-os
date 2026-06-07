@@ -23,7 +23,7 @@ function LinkButton({
     'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition';
   const tone =
     variant === 'primary'
-      ? 'bg-[linear-gradient(135deg,#3B74F0,#2152D8)] text-white border border-transparent shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] hover:brightness-110'
+      ? 'bg-[var(--cta-gradient)] text-white border border-transparent shadow-[var(--shadow-cta)] hover:brightness-110'
       : 'bg-surface-2 text-fg-1 border border-hairline hover:bg-surface-3';
   return (
     <Link href={href} className={`${base} ${tone}`}>

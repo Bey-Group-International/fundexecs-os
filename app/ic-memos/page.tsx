@@ -42,8 +42,7 @@ function NoOrg({ identity }: { identity: Awaited<ReturnType<typeof getShellIdent
 }
 
 export default async function IcMemosPage() {
-  const org = await getActiveOrg();
-  const identity = await getShellIdentity();
+  const [org, identity] = await Promise.all([getActiveOrg(), getShellIdentity()]);
   if (!org) return <NoOrg identity={identity} />;
 
   const runs = await getDiligenceRuns(org.orgId);

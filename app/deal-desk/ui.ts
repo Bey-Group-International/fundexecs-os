@@ -10,7 +10,11 @@ export function formatCompactUsd(amount: number): string {
   const abs = Math.abs(amount);
   if (abs >= 1_000_000_000) return `$${(amount / 1_000_000_000).toFixed(1)}B`;
   if (abs >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `$${Math.round(amount / 1_000)}K`;
+  if (abs >= 1_000) {
+    const roundedK = Math.round(amount / 1_000);
+    if (Math.abs(roundedK) >= 1_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
+    return `$${roundedK}K`;
+  }
   return `$${Math.round(amount)}`;
 }
 

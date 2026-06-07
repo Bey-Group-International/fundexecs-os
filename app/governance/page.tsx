@@ -131,7 +131,7 @@ export default async function GovernancePage() {
             </p>
             <Link
               href="/strategy"
-              className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl border border-transparent bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-4 py-2.5 text-sm font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] transition hover:brightness-110"
+              className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl border border-transparent bg-[var(--cta-gradient)] px-4 py-2.5 text-sm font-medium text-white shadow-[var(--shadow-cta)] transition hover:brightness-110"
             >
               Build the plan
               <ArrowUpRight size={16} strokeWidth={1.9} aria-hidden />
