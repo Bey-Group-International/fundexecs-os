@@ -45,6 +45,26 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 
 ## Entries (OLD → NEW)
 
+### [A2] Onboarding — 2026-06-07 — PR #129 (post-campaign)
+
+**OLD:** First-run onboarding (identity step → Proof-of-Truth flow) had no
+cross-stage orientation, used the old flat **"F"** brand mark, and the finish
+line just flashed a "verified" card then **auto-redirected after ~1.1s** — no
+reward, no recap, no momentum into the product.
+**NEW (functional):** a shared **`OnboardingStepper`** (Identity → Profile →
+Review → Done) renders across both the identity step and the flow with a live %
+and `aria-current`; a visible **"Saved · finish later"** link surfaces the
+already-persistent draft resume. The finish line now **rewards** completion via
+`awardTrustXp({ layer: 'truth' })` + a `CelebrationToast`, shows a **"What Earn
+set up"** recap (fields + completeness + XP), and ends on a **member-type
+first-action nudge** (e.g. fund → "Add your first LP" → /pipeline) with a
+secondary "Go to your command center". The surprise auto-redirect is gone.
+**NEW (visual):** Earn coin replaces the flat "F" in both the identity header and
+the flow `Shell`; bold gold stepper (Earn-led surface); tokens-only.
+**Files:** `components/onboarding/OnboardingStepper.tsx` (new),
+`app/onboarding/OnboardingView.tsx`, `components/proof-of-truth/ProofOfTruthFlow.tsx`.
+**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+
 ### [A1] Admin portal — 2026-06-07 — PR #116 (post-campaign)
 
 **Scope:** Admin lives in Settings → Admin (owner/admin-gated). Functional +

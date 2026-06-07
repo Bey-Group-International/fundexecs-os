@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, Building2, Mail, User } from 'lucide-react';
 import { Badge, Button, Card, Input, Select } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
+import { OnboardingStepper } from '@/components/onboarding/OnboardingStepper';
 import { createClient } from '@/lib/supabase/client';
 import type { MemberProfile } from '@/lib/queries/member-profile';
 import { ProofOfTruthFlow } from '@/components/proof-of-truth/ProofOfTruthFlow';
@@ -95,10 +96,8 @@ export function OnboardingView({ email, fullName, hasOrg, profile }: OnboardingV
   return (
     <main className="flex min-h-screen items-center justify-center bg-bg-0 px-4 py-10">
       <div className="w-full max-w-lg">
-        <div className="mb-6 flex items-center gap-2.5">
-          <span className="inline-flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg bg-gradient-to-br from-gold-1 to-gold-2 text-[15px] font-bold text-[#070b14]">
-            F
-          </span>
+        <div className="mb-5 flex items-center gap-2.5">
+          <EarnCoin size={30} className="flex-none" />
           <div className="text-base font-semibold tracking-[-0.02em]">
             FundExecs <span className="font-medium text-fg-4">OS</span>
           </div>
@@ -106,6 +105,8 @@ export function OnboardingView({ email, fullName, hasOrg, profile }: OnboardingV
             Proof of Truth
           </Badge>
         </div>
+
+        <OnboardingStepper current="identity" className="mb-5" />
 
         <Card className="overflow-hidden p-0">
           <div className="flex items-center gap-3 bg-[linear-gradient(105deg,rgba(247,201,72,0.12),rgba(247,201,72,0.02)_46%,transparent_72%)] px-5 py-4">
