@@ -7,16 +7,22 @@ import { createAdminClient } from '@/lib/supabase/admin';
  * welcome experience.
  *
  * Anonymous, so it is gated three ways: a valid (active, unexpired, not-full)
- * beta link token; a short input + history cap; and a coarse in-memory rate
- * limit per token. Earn answers ONLY about FundExecs OS, the program, and the
- * team — it makes no commitments and has no org/RAG context. Streams
- * newline-delimited JSON, matching the app's Earn stream shape:
+ * beta link token; a short input + history cap; and a durable, Supabase-backed
+ * rate limit (per token AND per IP) that holds across serverless instances.
+ * Earn answers ONLY about FundExecs OS, the program, and the team — it makes no
+ * commitments and has no org/RAG context. Streams newline-delimited JSON,
+ * matching the app's Earn stream shape:
  *   { type: 'delta', text } … { type: 'done' } | { type: 'degraded', message }
  */
 
 const MODEL = process.env.EARN_MODEL || 'claude-sonnet-4-6';
 const MAX_INPUT = 600;
 const MAX_HISTORY = 6;
+
+// Durable rate-limit budgets (see migration 20260607170000_beta_ask_rate_limit).
+const RATE_WINDOW_SECONDS = 600; // 10-minute fixed window
+const RATE_MAX_TOKEN = 15; // per invite link
+const RATE_MAX_IP = 30; // tighter per-IP cap to blunt token-sharing
 
 const SYSTEM_PROMPT = `You are Earn — "Earnest Fundmaker, Chief Operating Officer" of a fifteen-strong AI executive team inside FundExecs OS, an AI-native private-market command center for funds, LPs, operators, capital providers, and ecosystem partners.
 
@@ -28,21 +34,33 @@ What you can speak to: the unified private-market intelligence layer; the fiftee
 
 Rules: never promise pricing, timelines, returns, or guarantees. Do not invent specific features you are unsure of. If asked something out of scope, say so briefly and steer back to getting started. If they seem ready, encourage them to finish the quick application to get in.`;
 
-// Coarse in-memory limiter. Per serverless instance only, but combined with the
-// token gate it's an adequate soft guard for a private beta.
-const HITS = new Map<string, number[]>();
-const WINDOW_MS = 10 * 60 * 1000;
-const MAX_PER_WINDOW = 15;
+type Turn = { role: 'user' | 'assistant'; content: string };
 
-function rateLimited(key: string): boolean {
-  const now = Date.now();
-  const recent = (HITS.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
-  recent.push(now);
-  HITS.set(key, recent);
-  return recent.length > MAX_PER_WINDOW;
+/** One durable rate-limit bucket via the SECURITY DEFINER RPC. Fails OPEN on
+ *  any error so a DB hiccup never blocks a genuine invitee. */
+async function checkBucket(key: string, windowSeconds: number, max: number): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin.rpc('beta_ask_rate_check', {
+      _key: key,
+      _window_seconds: windowSeconds,
+      _max: max
+    });
+    if (error) return true;
+    return data === true;
+  } catch {
+    return true;
+  }
 }
 
-type Turn = { role: 'user' | 'assistant'; content: string };
+/** Allowed only when both the per-token and per-IP buckets are under budget. */
+async function isAllowed(token: string, ip: string): Promise<boolean> {
+  const [tokenOk, ipOk] = await Promise.all([
+    checkBucket(`token:${token}`, RATE_WINDOW_SECONDS, RATE_MAX_TOKEN),
+    checkBucket(`ip:${ip}`, RATE_WINDOW_SECONDS, RATE_MAX_IP)
+  ]);
+  return tokenOk && ipOk;
+}
 
 async function tokenIsClaimable(token: string): Promise<boolean> {
   const admin = createAdminClient();
@@ -75,7 +93,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'This invite link is not active.' }, { status: 403 });
   }
 
-  if (rateLimited(token)) {
+  const forwarded = req.headers.get('x-forwarded-for');
+  const ip = forwarded ? forwarded.split(',')[0].trim() : 'unknown';
+  if (!(await isAllowed(token, ip))) {
     return NextResponse.json(
       { error: 'You’ve asked a lot — give Earn a short breather and try again in a few minutes.' },
       { status: 429 }

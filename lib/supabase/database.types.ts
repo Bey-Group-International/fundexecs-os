@@ -161,6 +161,24 @@ export type Database = {
           },
         ]
       }
+      beta_ask_rate_limits: {
+        Row: {
+          bucket_key: string
+          count: number
+          window_start: string
+        }
+        Insert: {
+          bucket_key: string
+          count?: number
+          window_start: string
+        }
+        Update: {
+          bucket_key?: string
+          count?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       beta_invites: {
         Row: {
           accepted_at: string | null
@@ -2399,6 +2417,10 @@ export type Database = {
           _org: string
         }
         Returns: number
+      }
+      beta_ask_rate_check: {
+        Args: { _key: string; _max: number; _window_seconds: number }
+        Returns: boolean
       }
       capital_stack_summary: {
         Args: { _org_id: string }
