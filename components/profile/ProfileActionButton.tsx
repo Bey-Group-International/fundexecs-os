@@ -4,11 +4,14 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+  AlertCircle,
   ArrowRight,
+  Check,
   ChevronDown,
   ExternalLink,
   Link2,
   PenLine,
+  Share2,
   ShieldCheck,
   type LucideIcon
 } from 'lucide-react';
@@ -16,6 +19,7 @@ import { Badge } from '@/components/ui';
 import { Drawer } from '@/components/drawers/Drawer';
 import { cn } from '@/lib/utils';
 import { MEMBER_TYPE_LABELS } from '@/lib/member-types';
+import { createProfileShareLink } from '@/lib/actions/profile-share';
 import type { FundProfile, ProfileSection } from '@/lib/queries/fund-profile';
 
 const ONBOARDING = '/onboarding';
@@ -54,7 +58,7 @@ export interface ProfileActionButtonProps {
  * read-only review Drawer; below 100% it routes into the onboarding editor to
  * keep building. A split caret opens a menu of context-aware quick actions:
  * review on the record, jump to the top open gaps (deep-linked into onboarding),
- * and edit in onboarding.
+ * edit in onboarding, and copy a revocable public share link (/p/&lt;token&gt;).
  *
  * a11y mirrors AccountMenu/Drawer: the caret carries aria-haspopup/expanded; the
  * popover is a labeled menu with click-outside, Esc, and arrow-key navigation;
@@ -68,6 +72,7 @@ export function ProfileActionButton({
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [shareState, setShareState] = useState<'idle' | 'pending' | 'copied' | 'error'>('idle');
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const caretRef = useRef<HTMLButtonElement | null>(null);
@@ -90,6 +95,35 @@ export function ProfileActionButton({
     if (isReview) openReview();
     else router.push(ONBOARDING);
   }, [isReview, openReview, router]);
+
+  // Mint (or reuse) the public share link and copy it. Reactive state feeds the
+  // menu label so the click resolves to a clear "Link copied" / error inline.
+  const onShare = useCallback(() => {
+    setShareState('pending');
+    const reset = () => window.setTimeout(() => setShareState('idle'), 2200);
+    createProfileShareLink()
+      .then((res) => {
+        if (!res.ok) {
+          setShareState('error');
+          reset();
+          return;
+        }
+        void navigator.clipboard?.writeText(res.url).then(
+          () => {
+            setShareState('copied');
+            reset();
+          },
+          () => {
+            setShareState('error');
+            reset();
+          }
+        );
+      })
+      .catch(() => {
+        setShareState('error');
+        reset();
+      });
+  }, []);
 
   // Click-outside + Esc close the menu (mirrors AccountMenu).
   useEffect(() => {
@@ -209,7 +243,9 @@ export function ProfileActionButton({
             'motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-100'
           )}
         >
-          <MenuRow icon={ShieldCheck} label="Review on the record" onClick={openReview} />
+          <MenuGroup>
+            <MenuRow icon={ShieldCheck} label="Review on the record" onClick={openReview} />
+          </MenuGroup>
 
           {topGaps.length > 0 ? (
             <MenuGroup heading="Close a gap">
@@ -241,6 +277,23 @@ export function ProfileActionButton({
               onNavigate={() => setMenuOpen(false)}
             />
           )}
+
+          <MenuGroup heading="Share">
+            <MenuRow
+              icon={shareState === 'copied' ? Check : shareState === 'error' ? AlertCircle : Share2}
+              label={
+                shareState === 'pending'
+                  ? 'Creating link…'
+                  : shareState === 'copied'
+                    ? 'Public link copied'
+                    : shareState === 'error'
+                      ? 'Couldn’t create link'
+                      : 'Copy public link'
+              }
+              onClick={onShare}
+              tone={shareState === 'copied' ? 'success' : 'neutral'}
+            />
+          </MenuGroup>
         </div>
       ) : null}
 
@@ -326,18 +379,15 @@ function MenuRow({
   icon: Icon,
   label,
   onClick,
-  tone = 'neutral',
-  keepOpen
+  tone = 'neutral'
 }: {
   icon: LucideIcon;
   label: string;
   onClick: () => void;
   tone?: 'neutral' | 'success';
-  keepOpen?: boolean;
 }) {
-  const solo = !keepOpen;
   return (
-    <div className={cn(solo && 'px-2 py-1.5')}>
+    <li>
       <button
         type="button"
         role="menuitem"
@@ -358,7 +408,7 @@ function MenuRow({
         />
         <span className="flex-1 text-left">{label}</span>
       </button>
-    </div>
+    </li>
   );
 }
 
