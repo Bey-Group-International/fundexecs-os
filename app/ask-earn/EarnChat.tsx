@@ -152,7 +152,13 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
           ) {
             const dest =
               typeof evt.action.input?.destination === 'string' ? evt.action.input.destination : '';
-            if (AUTO_NAV_DESTINATIONS.has(dest)) router.push(dest);
+            if (AUTO_NAV_DESTINATIONS.has(dest)) {
+              router.push(dest);
+            } else {
+              // Blocked destination — don't render an "Opened X" chip for a
+              // navigation that never happened.
+              return;
+            }
           }
           setMessages((m) => {
             const copy = [...m];
