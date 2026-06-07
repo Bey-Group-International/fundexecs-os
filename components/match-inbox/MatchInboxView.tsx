@@ -20,11 +20,16 @@ import type { MatchInboxData, MatchItem } from '@/lib/queries/match-inbox';
 
 /* ---- Helpers ------------------------------------------------------------ */
 
-function scoreTone(score: number): BadgeTone {
-  if (score >= 80) return 'success';
-  if (score >= 60) return 'azure';
-  if (score >= 40) return 'warning';
-  return 'neutral';
+/**
+ * Single source of truth for how a match score reads: its badge tone, the
+ * accent CSS var that drives the card's left rail + score disc, and a plain-
+ * language quality word so the number means something at a glance.
+ */
+function scoreMeta(score: number): { tone: BadgeTone; accent: string; label: string } {
+  if (score >= 80) return { tone: 'success', accent: 'var(--success)', label: 'Strong fit' };
+  if (score >= 60) return { tone: 'azure', accent: 'var(--azure-1)', label: 'Solid fit' };
+  if (score >= 40) return { tone: 'warning', accent: 'var(--warning)', label: 'Worth a look' };
+  return { tone: 'neutral', accent: 'var(--fg-4)', label: 'Long shot' };
 }
 
 function humanize(s: string): string {
@@ -72,6 +77,7 @@ function MatchCard({
 
   const { summary, reasons } = getRationale(match.rationale);
   const hasDetail = Boolean(summary) || reasons.length > 0;
+  const meta = scoreMeta(match.score);
 
   function handleAct(action: MatchAction) {
     setOptimisticStatus(action);
@@ -88,20 +94,19 @@ function MatchCard({
   const isActioned = optimisticStatus !== null;
 
   return (
-    <Card className={cn('transition-opacity', isActioned && 'opacity-50')}>
+    <Card className={cn('relative overflow-hidden transition-opacity', isActioned && 'opacity-50')}>
+      {/* Score-tone left accent rail — keeps the card from reading flat. */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: meta.accent }}
+      />
       <div className="flex items-start gap-3">
-        {/* Score badge */}
+        {/* Score disc + quality word */}
         <div className="flex flex-none flex-col items-center gap-1">
           <span
-            className={cn(
-              'flex h-9 w-9 items-center justify-center rounded-xl text-[13px] font-bold tabular-nums',
-              match.score >= 80 &&
-                'border border-[var(--success-line)] bg-[var(--success-soft)] text-success',
-              match.score >= 60 &&
-                match.score < 80 &&
-                'border border-[var(--azure-line)] bg-[var(--azure-soft)] text-azure-1',
-              match.score < 60 && 'border border-hairline bg-surface-1 text-fg-3'
-            )}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border bg-bg-1 text-[13px] font-bold tabular-nums"
+            style={{ color: meta.accent, borderColor: meta.accent }}
           >
             {match.score}
           </span>
@@ -110,15 +115,23 @@ function MatchCard({
         {/* Content */}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={scoreTone(match.score)} className="text-[10px]">
+            <Badge tone={meta.tone} className="text-[10px]">
               {humanize(match.kind)}
             </Badge>
+            <span
+              className="text-[10px] font-semibold uppercase tracking-[0.08em]"
+              style={{ color: meta.accent }}
+            >
+              {meta.label}
+            </span>
             <span className="text-[11px] text-fg-5">
               <Clock size={11} strokeWidth={1.9} className="mr-0.5 inline" aria-hidden />
               {formatTs(match.createdAt)}
             </span>
           </div>
-          <p className="mt-1 text-[12.5px] text-fg-3 font-mono">{match.subjectId.slice(0, 8)}…</p>
+          <p className="mt-1 font-mono text-[11.5px] text-fg-4">
+            Ref {match.subjectId.slice(0, 8)}
+          </p>
           {summary ? <p className="mt-1 text-[13px] text-fg-2">{summary}</p> : null}
 
           {error ? <p className="mt-1 text-[12px] text-danger">{error}</p> : null}

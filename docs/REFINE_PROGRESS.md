@@ -32,8 +32,8 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 | #   | Area              | Routes / components                                            | Status     | PR   |
 | --- | ----------------- | -------------------------------------------------------------- | ---------- | ---- |
 | 1   | Earn modal        | `components/shell/earn/*`                                      | ✅ merged  | #107 |
-| 2   | Source of Truth   | `/profile`, `/trust`, `components/fund-profile/*`              | ⏳ PR #108 | #108 |
-| 3   | Daily Execution   | `/command-center`, `/action-queue`, `/match-inbox`             | ⬜ pending | —    |
+| 2   | Source of Truth   | `/profile`, `/trust`, `components/fund-profile/*`              | ✅ merged  | #108 |
+| 3   | Daily Execution   | `/command-center`, `/action-queue`, `/match-inbox`             | ⏳ PR #110 | #110 |
 | 4   | Capital Formation | `/pipeline`, `/capital-stack`, `/objections`                   | ✅ merged  | #104 |
 | 5   | Deal Execution    | `/deal-desk`, `/ic-memos`, `/governance`                       | ✅ merged  | #103 |
 | 6   | Intelligence      | `/inbox-intelligence`, `/knowledge`, `/materials`, `/partners` | ✅ merged  | #105 |
@@ -44,6 +44,35 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 ---
 
 ## Entries (OLD → NEW)
+
+### [3] Daily Execution — 2026-06-07 — PR #110
+
+**OLD:** `/command-center` is the Dashboard area and `/action-queue` redirects to
+`/notifications`, so the live Daily-Execution surface is the **Match Inbox**. Its
+triage cards read flat: the 0–100 score sat in a small disc with no plain meaning,
+the card had no tonal hierarchy, and the subject showed as a bare truncated UUID
+with a trailing ellipsis.
+**NEW (visual, bold not flat):** every triage card gains a **score-tone left
+accent rail** (green / azure / amber / muted) so the inbox scans by fit at a
+glance; the score disc wears the same tone.
+**NEW (functionality / clarity):** a single `scoreMeta()` drives the accent, the
+kind-badge tone, the disc, and a new plain-language quality word ("Strong fit",
+"Solid fit", "Worth a look", "Long shot") — the number finally means something.
+The subject reads as a labeled **"Ref &lt;id&gt;"** instead of a bare mono string.
+**NEW (correctness):** folded the redundant `scoreTone` helper into `scoreMeta`;
+optimistic accept/dismiss + `act_on_match` wiring unchanged.
+**Files:** `components/match-inbox/MatchInboxView.tsx`.
+**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+
+### Spec sweep: semantic tokens — 2026-06-07 — PR #109 ✅ merged
+
+**OLD:** `--success/-warning/-danger/-info` **soft/line** tokens were referenced
+~100× (badges, action buttons, status chips) but **never defined** in
+`globals.css` — only gold/azure/accent had them — so those surfaces rendered with
+transparent fills/borders (the recurring "flat" defect).
+**NEW:** defined all eight at the source (soft 0.12, line 0.30 off each base
+tone). Purely additive CSS vars; every existing usage now shows its intended tint.
+**Files:** `app/globals.css`.
 
 ### [2] Source of Truth — 2026-06-07 — PR #108
 
@@ -65,7 +94,7 @@ empty icon disc uses the defined `--warning` token like the Gaps card. Fixed a
 stale "Eleanor" voice reference in the Hero doc comment.
 **Files:** `components/fund-profile/FundProfileSections.tsx`,
 `components/fund-profile/FundProfileHero.tsx`.
-**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+**Checks:** tsc/lint/format/build ✓ · CodeRabbit ✓ (no actionable comments).
 
 ### [1] Earn modal — 2026-06-07 — PR #107
 
