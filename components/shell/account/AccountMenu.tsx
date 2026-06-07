@@ -33,6 +33,7 @@ import {
 import { Avatar, Badge } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { ShellIdentity } from '@/lib/queries/identity';
+import { isPlatformAdmin } from '@/lib/access';
 import { setActiveWorkspace } from '@/lib/actions/workspace';
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
 
@@ -72,7 +73,8 @@ export function AccountMenu({ identity, onSignOut, onNavigate }: AccountMenuProp
 
   const activeRole =
     identity.memberships.find((m) => m.orgId === identity.activeOrgId)?.role ?? identity.role;
-  const isAdmin = activeRole === 'owner' || activeRole === 'admin';
+  // Admin is reserved for the Bey Group team (@beygroupintl.com), not org role.
+  const isAdmin = isPlatformAdmin(identity.email);
 
   // Click-outside closes the popover.
   useEffect(() => {

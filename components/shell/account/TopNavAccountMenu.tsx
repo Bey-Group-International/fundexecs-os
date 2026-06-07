@@ -5,6 +5,7 @@ import { Avatar } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import type { ShellIdentity } from '@/lib/queries/identity';
+import { isPlatformAdmin } from '@/lib/access';
 import { MenuBody } from './AccountMenu';
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
 
@@ -32,7 +33,8 @@ export function TopNavAccountMenu({ identity }: TopNavAccountMenuProps) {
 
   const activeRole =
     identity.memberships.find((m) => m.orgId === identity.activeOrgId)?.role ?? identity.role;
-  const isAdmin = activeRole === 'owner' || activeRole === 'admin';
+  // Admin is reserved for the Bey Group team (@beygroupintl.com), not org role.
+  const isAdmin = isPlatformAdmin(identity.email);
 
   // Click-outside closes the popover.
   useEffect(() => {

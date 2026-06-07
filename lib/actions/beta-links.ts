@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
+import { getAuthUser } from '@/lib/queries/auth';
+import { isPlatformAdmin } from '@/lib/access';
 import { getSiteURL } from '@/lib/site-url';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
@@ -24,6 +26,9 @@ function normalizeRole(input?: string): OrgMemberRole {
 }
 
 async function isOrgAdmin(orgId: string, userId: string): Promise<boolean> {
+  // Admin is reserved for the Bey Group team (@beygroupintl.com), not org role.
+  const user = await getAuthUser();
+  if (!isPlatformAdmin(user?.email)) return false;
   const supabase = await createClient();
   const { data } = await supabase
     .from('org_members')

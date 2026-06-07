@@ -12,6 +12,7 @@ import { getAdminMetrics, type AdminMetrics } from '@/lib/queries/admin-metrics'
 import { getBetaInvites, type BetaInvite } from '@/lib/queries/beta-invites';
 import { getBetaLinks, type BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
+import { isPlatformAdmin } from '@/lib/access';
 import { ProfileRailSummary } from '@/components/profile';
 import type { Database } from '@/lib/supabase/database.types';
 import { SettingsView } from './SettingsView';
@@ -71,21 +72,20 @@ export default async function SettingsPage() {
         getDashboardData(org.orgId).catch(() => null)
       ])
     : [null, null, null];
-  // Admin section data — owner/admin only. Derive the viewer's role from the
-  // members list, then load invites only when authorized (beta_invites RLS is
-  // admin-scoped, so a non-admin would get an empty list anyway).
+  // Admin section — reserved for the Bey Group team (@beygroupintl.com), not
+  // org role. A normal operator who owns their own workspace is not an admin.
   let isAdmin = false;
   let adminData: AdminData | null = null;
   let invites: BetaInvite[] = [];
   let betaLinks: BetaLinkWithStatus[] = [];
   let adminMetrics: AdminMetrics | null = null;
   let viewerRole: OrgMemberRole | null = null;
-  if (org && user) {
+  if (org && user && isPlatformAdmin(user.email)) {
     const ad = await getAdminData(org.orgId).catch(() => null);
     const me = ad?.members.find((m) => m.userId === user.id);
     viewerRole = me?.role ?? null;
-    isAdmin = me?.role === 'owner' || me?.role === 'admin';
-    if (isAdmin && ad) {
+    isAdmin = true;
+    if (ad) {
       adminData = ad;
       [invites, adminMetrics, betaLinks] = await Promise.all([
         getBetaInvites(org.orgId).catch(() => []),
@@ -95,7 +95,9 @@ export default async function SettingsPage() {
     }
   }
 
-  const navSignals = dashboard ? buildRailSignals(dashboard) : undefined;
+  const navSignals = dashboard
+    ? buildRailSignals(dashboard, memberProfile?.memberType ?? null)
+    : undefined;
   const sourceOfTruthSummary = fundProfile ? (
     <ProfileRailSummary profile={fundProfile} />
   ) : undefined;

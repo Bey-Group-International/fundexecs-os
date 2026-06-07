@@ -1,5 +1,26 @@
 import type { DashboardData } from '@/lib/queries/dashboard';
 import type { NavSignals } from '@/components/shell/Wave1SideRail';
+import type { MemberType } from '@/lib/member-types';
+
+/**
+ * The capital metric reads differently by operator type: GPs *raise* capital,
+ * LPs *allocate* it, and service providers *aggregate* it across the clients
+ * they serve. Everyone else (startups raising, student-led funds) reads as a
+ * raise. Drives the side-rail coverage badge's label.
+ */
+function capitalNounFor(memberType: MemberType | null | undefined): string {
+  switch (memberType) {
+    case 'individual_investor':
+      return 'allocated';
+    case 'service_provider':
+      return 'aggregated';
+    case 'investment_firm':
+    case 'startup':
+    case 'student':
+    default:
+      return 'raised';
+  }
+}
 
 /**
  * Derive the side-rail's live-signal payload from `getDashboardData`'s output.
@@ -12,8 +33,9 @@ import type { NavSignals } from '@/components/shell/Wave1SideRail';
  * for clean state, azure for informational counts, gold for the lifecycle
  * end-state (`/audit`).
  */
-export function buildRailSignals(data: DashboardData): NavSignals {
+export function buildRailSignals(data: DashboardData, memberType?: MemberType | null): NavSignals {
   const badges: NonNullable<NavSignals['badges']> = {};
+  const capitalNoun = capitalNounFor(memberType);
 
   // Source of Truth · Fund Profile — completeness %
   badges['/profile'] = {
@@ -40,13 +62,14 @@ export function buildRailSignals(data: DashboardData): NavSignals {
     };
   }
 
-  // Capital Formation · LP Pipeline — coverage % if a target exists,
-  // otherwise the soft-circled+committed dollar coverage isn't meaningful.
+  // Capital Formation · Pipeline — coverage % if a target exists. The label is
+  // operator-aware: capital raised (GPs) / allocated (LPs) / aggregated
+  // (service providers).
   if (data.raiseProgress.target > 0) {
     badges['/pipeline'] = {
       value: `${data.raiseProgress.coveragePct}%`,
       tone: data.raiseProgress.coveragePct >= 100 ? 'success' : 'azure',
-      hint: 'Coverage toward the raise target'
+      hint: `Coverage toward capital ${capitalNoun}`
     };
   }
 

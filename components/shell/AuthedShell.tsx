@@ -53,13 +53,15 @@ export async function AuthedShell({
     );
   }
 
-  const [wallet, navSignals, fundProfile] = await Promise.all([
+  const [wallet, dashboard, fundProfile] = await Promise.all([
     getCreditWallet(org.orgId).catch(() => null),
-    getDashboardData(org.orgId)
-      .then((d) => buildRailSignals(d))
-      .catch(() => undefined),
+    getDashboardData(org.orgId).catch(() => null),
     getFundProfile(org.orgId).catch(() => null)
   ]);
+  // Rail capital label is operator-aware (raised / allocated / aggregated).
+  const navSignals = dashboard
+    ? buildRailSignals(dashboard, fundProfile?.memberType ?? null)
+    : undefined;
 
   const sourceOfTruthSummary = fundProfile ? (
     <ProfileRailSummary profile={fundProfile} />
