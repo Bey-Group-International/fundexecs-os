@@ -27,7 +27,7 @@ Strict UI-only lane:
 
 Plus 2 platform auto-commits: `ca2f53b`, `58864d8`, `bf09f1f`.
 
-**HEAD:** `8142251` · **Base:** `b8b80ce` (`main` at PR #81 merge) · **Branch diff:** 62 files / +8,405 / -740.
+**HEAD:** `aa2754d` (auto-commit on top of `8142251` carrying the memory/PRD updates) · **Base:** `b8b80ce` (`main` at PR #81 merge) · **Branch diff:** 64 files / +8,782 / -745.
 
 ## CI gate
 
