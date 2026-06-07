@@ -59,11 +59,22 @@
   --accent-line: rgba(37, 99, 235, 0.4);
   --cyan: #22d3ee;
 
-  /* semantic */
+  /* semantic — each tone carries a `soft` fill + `line` border, mirroring the
+     gold/azure/accent pattern above. These were referenced ~100× across badges,
+     buttons, and status chips but never defined, so those surfaces rendered with
+     transparent fills/borders (reading flat). Defined here once. */
   --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.12);
+  --success-line: rgba(52, 211, 153, 0.3);
   --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.12);
+  --warning-line: rgba(251, 191, 36, 0.3);
   --danger: #fb7185;
+  --danger-soft: rgba(251, 113, 133, 0.12);
+  --danger-line: rgba(251, 113, 133, 0.3);
   --info: #38bdf8;
+  --info-soft: rgba(56, 189, 248, 0.12);
+  --info-line: rgba(56, 189, 248, 0.3);
 
   /* Chain of Trust proof layers */
   --proof-truth: #38bdf8; /* sky */

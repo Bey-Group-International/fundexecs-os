@@ -31,8 +31,8 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 
 | #   | Area              | Routes / components                                            | Status     | PR   |
 | --- | ----------------- | -------------------------------------------------------------- | ---------- | ---- |
-| 1   | Earn modal        | `components/shell/earn/*`                                      | ⏳ PR #107 | #107 |
-| 2   | Source of Truth   | `/profile`, `/trust`, `components/fund-profile/*`              | ⬜ pending | —    |
+| 1   | Earn modal        | `components/shell/earn/*`                                      | ✅ merged  | #107 |
+| 2   | Source of Truth   | `/profile`, `/trust`, `components/fund-profile/*`              | ⏳ PR #108 | #108 |
 | 3   | Daily Execution   | `/command-center`, `/action-queue`, `/match-inbox`             | ⬜ pending | —    |
 | 4   | Capital Formation | `/pipeline`, `/capital-stack`, `/objections`                   | ✅ merged  | #104 |
 | 5   | Deal Execution    | `/deal-desk`, `/ic-memos`, `/governance`                       | ✅ merged  | #103 |
@@ -44,6 +44,28 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 ---
 
 ## Entries (OLD → NEW)
+
+### [2] Source of Truth — 2026-06-07 — PR #108
+
+**OLD:** `/trust` redirects into the dashboard hero (owned by the Dashboard
+area), so the real surface here is the **Fund Profile**. Its six LP-probed
+section cards rendered empty fields as **dead text** — an operator looking at the
+canonical record couldn't act on a missing thesis / terms / team from the page
+itself; only the separate Gaps card linked anywhere. No per-section status, so
+the record wasn't scannable.
+**NEW (functionality):** every **empty** section card — and the empty team
+state — is now a link into the profile builder (`/onboarding`) with a hover
+lift, matching the Gaps card. Present sections stay read-mostly.
+**NEW (visual, bold not flat):** each section carries an **"On record" / "Add"**
+status chip (shared `Badge`) so the Source of Truth is scannable at a glance;
+empty cards get a warning-tinted icon disc + an "Add the team" affordance.
+**NEW (correctness):** chips use the shared `Badge` instead of the undefined
+`--*-soft` CSS vars (those live only in the un-imported design-reference sheet);
+empty icon disc uses the defined `--warning` token like the Gaps card. Fixed a
+stale "Eleanor" voice reference in the Hero doc comment.
+**Files:** `components/fund-profile/FundProfileSections.tsx`,
+`components/fund-profile/FundProfileHero.tsx`.
+**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
 
 ### [1] Earn modal — 2026-06-07 — PR #107
 
@@ -64,7 +86,7 @@ specialist CTA is gold.
 **NEW (perf/correctness):** no `setState`-in-effect (React-Compiler lint clean);
 seeding runs in the click handler. Standalone `/ask-earn` usage unaffected.
 **Files:** `components/shell/earn/EarnDock.tsx`, `app/ask-earn/EarnChat.tsx`.
-**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+**Checks:** tsc/lint/format/build ✓ · CodeRabbit ✓ (no actionable comments).
 
 ### [0] Rail brand: F → Earn avatar (+ live flags) — 2026-06-07 — PR #106 ✅ merged
 
