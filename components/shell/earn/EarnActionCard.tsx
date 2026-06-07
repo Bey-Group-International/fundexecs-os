@@ -28,6 +28,7 @@ const NAV_LABELS: Record<string, string> = {
   '/settings': 'Settings'
 };
 
+/** Human-readable label for an in-app destination path (falls back to the raw path). */
 function navLabel(dest: string): string {
   return NAV_LABELS[dest] ?? dest;
 }

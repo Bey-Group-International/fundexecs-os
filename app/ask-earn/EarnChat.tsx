@@ -62,6 +62,13 @@ export interface EarnChatProps {
   onBusyChange?: (busy: boolean) => void;
 }
 
+/**
+ * EarnChat — the streaming chat surface inside the Earn dock. Restores the
+ * persisted thread on mount, streams NDJSON deltas/sources/actions from
+ * `/api/ask-earn`, renders markdown replies + interactive action cards,
+ * auto-navigates allow-listed destinations, and reports thread/busy state up to
+ * the dock. Exposes `seed` / `seedAndSend` via ref for the quick-action chips.
+ */
 export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnChat(
   { context, onThreadChange, onBusyChange },
   ref

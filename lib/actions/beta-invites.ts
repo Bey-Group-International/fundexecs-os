@@ -3,8 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getAuthUser } from '@/lib/queries/auth';
-import { isPlatformAdmin } from '@/lib/access';
+import { requirePlatformAdmin } from '@/lib/access.server';
 import { getSiteURL } from '@/lib/site-url';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
@@ -19,6 +18,11 @@ const INVITE_NEXT_PATH = '/onboarding';
 /** Conservative email shape check — the Supabase API is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Parse an optional admin note into a role + human note. A leading
+ * `role: owner|admin|member` token sets the invited member's role (defaulting
+ * to `member`); the remaining text becomes the free-form note.
+ */
 function parseInviteRole(note?: string): { role: InviteRole; note: string | null } {
   const trimmed = note?.trim() ?? '';
   if (!trimmed) return { role: 'member', note: null };
@@ -35,21 +39,7 @@ function parseInviteRole(note?: string): { role: InviteRole; note: string | null
   return { role, note: humanNote || null };
 }
 
-async function isOrgAdmin(orgId: string, userId: string): Promise<boolean> {
-  // Admin is reserved for the Bey Group team (@beygroupintl.com), not org role.
-  const user = await getAuthUser();
-  if (!isPlatformAdmin(user?.email)) return false;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('org_members')
-    .select('role, status')
-    .eq('org_id', orgId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (!data) return false;
-  return (data.role === 'owner' || data.role === 'admin') && data.status === 'active';
-}
-
+/** Append a row to `admin_actions` recording a beta-invite action (best-effort; never blocks). */
 async function writeAudit(
   orgId: string,
   actorId: string,
@@ -142,8 +132,8 @@ export async function inviteBetaUser(emailInput: string, note?: string): Promise
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await isOrgAdmin(org.orgId, org.userId))) {
-    return { ok: false, error: 'Only owners or admins can invite beta users.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
   }
 
   const supabase = await createClient();
@@ -192,8 +182,8 @@ export async function resendBetaInvite(inviteId: string): Promise<InviteResult> 
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await isOrgAdmin(org.orgId, org.userId))) {
-    return { ok: false, error: 'Only owners or admins can resend invites.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
   }
 
   const supabase = await createClient();
@@ -226,8 +216,8 @@ export async function revokeBetaInvite(inviteId: string): Promise<InviteActionRe
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await isOrgAdmin(org.orgId, org.userId))) {
-    return { ok: false, error: 'Only owners or admins can revoke invites.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
   }
 
   const supabase = await createClient();
