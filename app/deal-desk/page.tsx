@@ -1,18 +1,10 @@
-import { AuthedShell } from '@/components/shell/AuthedShell';
-import { ComingSoonPage } from '@/components/shell/ComingSoonPage';
-import { STUB_ROUTES } from '@/components/shell/stub-routes';
+import { redirect } from 'next/navigation';
 
-const ROUTE = '/deal-desk';
-const stub = STUB_ROUTES[ROUTE];
-
-export const dynamic = 'force-dynamic';
-
-export const metadata = { title: stub.title };
-
-export default function DealDeskStubPage() {
-  return (
-    <AuthedShell title={stub.title} subtitle={stub.area} redirectFrom={ROUTE}>
-      <ComingSoonPage {...stub} />
-    </AuthedShell>
-  );
+/**
+ * Deal Desk is the investment-opportunity pipeline, which already lives at
+ * `/pipeline` (sourcing → screen → diligence → IC → deploy). Route the rail's
+ * "Deal Desk" entry to the real pipeline surface.
+ */
+export default function DealDeskPage() {
+  redirect('/pipeline');
 }

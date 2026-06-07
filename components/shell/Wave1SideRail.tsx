@@ -107,7 +107,7 @@ export const RAIL_GROUPS: RailNavGroup[] = [
     description: 'The canonical record everything reads from.',
     items: [
       { href: '/profile', label: 'Fund Profile', icon: IdCard, live: true },
-      { href: '/trust', label: 'Trust Center', icon: ShieldCheck }
+      { href: '/trust', label: 'Trust Center', icon: ShieldCheck, live: true }
     ]
   },
   {
@@ -116,7 +116,7 @@ export const RAIL_GROUPS: RailNavGroup[] = [
     description: "Today's loop — where you are, what's next.",
     items: [
       { href: '/command-center', label: 'Dashboard', icon: LayoutDashboard, live: true },
-      { href: '/action-queue', label: 'Action Queue', icon: ListChecks },
+      { href: '/action-queue', label: 'Action Queue', icon: ListChecks, live: true },
       { href: '/match-inbox', label: 'Match Inbox', icon: Inbox }
     ]
   },
@@ -135,9 +135,9 @@ export const RAIL_GROUPS: RailNavGroup[] = [
     label: 'Deal Execution',
     description: 'Source, diligence, decide, deploy.',
     items: [
-      { href: '/deal-desk', label: 'Deal Desk', icon: Briefcase },
-      { href: '/ic-memos', label: 'IC Memos', icon: FileSignature },
-      { href: '/governance', label: 'Governance', icon: Scale }
+      { href: '/deal-desk', label: 'Deal Desk', icon: Briefcase, live: true },
+      { href: '/ic-memos', label: 'IC Memos', icon: FileSignature, live: true },
+      { href: '/governance', label: 'Governance', icon: Scale, live: true }
     ]
   },
   {
@@ -146,7 +146,7 @@ export const RAIL_GROUPS: RailNavGroup[] = [
     description: 'Signal in. Knowledge out. Materials ready.',
     items: [
       { href: '/inbox-intelligence', label: 'Inbox Intelligence', icon: Mail },
-      { href: '/knowledge', label: 'Knowledge Base', icon: BookOpenText },
+      { href: '/knowledge', label: 'Knowledge Base', icon: BookOpenText, live: true },
       { href: '/materials', label: 'Capital Materials', icon: FilePlus },
       { href: '/partners', label: 'Partner Marketplace', icon: Handshake }
     ]
@@ -156,7 +156,7 @@ export const RAIL_GROUPS: RailNavGroup[] = [
     label: 'Audit',
     description: 'Every action provable. Every decision reusable.',
     items: [
-      { href: '/trust', label: 'Trust Center', icon: ShieldCheck },
+      { href: '/trust', label: 'Trust Center', icon: ShieldCheck, live: true },
       { href: '/audit', label: 'Memory Audit Trail', icon: History }
     ]
   }

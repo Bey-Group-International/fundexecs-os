@@ -1,18 +1,10 @@
-import { AuthedShell } from '@/components/shell/AuthedShell';
-import { ComingSoonPage } from '@/components/shell/ComingSoonPage';
-import { STUB_ROUTES } from '@/components/shell/stub-routes';
+import { redirect } from 'next/navigation';
 
-const ROUTE = '/ic-memos';
-const stub = STUB_ROUTES[ROUTE];
-
-export const dynamic = 'force-dynamic';
-
-export const metadata = { title: stub.title };
-
-export default function IcMemosStubPage() {
-  return (
-    <AuthedShell title={stub.title} subtitle={stub.area} redirectFrom={ROUTE}>
-      <ComingSoonPage {...stub} />
-    </AuthedShell>
-  );
+/**
+ * IC Memos are the diligence Synthesis already shipped under `/diligence`
+ * (the 7-agent committee + memo library). The rail's "IC Memos" entry routes
+ * here so it lands on the real surface instead of a placeholder.
+ */
+export default function IcMemosPage() {
+  redirect('/diligence');
 }

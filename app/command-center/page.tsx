@@ -33,8 +33,8 @@ export const dynamic = 'force-dynamic';
  *   3. derive rail signals from the dashboard for live nav badges
  *   4. render <AppShell> with the wallet + signals, mount <LifecycleDashboard>
  *
- * The legacy per-member layouts have moved to `app/command-center/layouts/_legacy/`
- * — preserved as reference but un-routed.
+ * The five legacy per-member layouts were retired with the single-canvas
+ * migration; their member-type variation now lives inside <LifecycleDashboard>.
  */
 export default async function CommandCenterPage() {
   const identity = await getShellIdentity();

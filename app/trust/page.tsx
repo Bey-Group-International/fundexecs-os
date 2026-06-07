@@ -1,18 +1,11 @@
-import { AuthedShell } from '@/components/shell/AuthedShell';
-import { ComingSoonPage } from '@/components/shell/ComingSoonPage';
-import { STUB_ROUTES } from '@/components/shell/stub-routes';
+import { redirect } from 'next/navigation';
 
-const ROUTE = '/trust';
-const stub = STUB_ROUTES[ROUTE];
-
-export const dynamic = 'force-dynamic';
-
-export const metadata = { title: stub.title };
-
-export default function TrustCenterStubPage() {
-  return (
-    <AuthedShell title={stub.title} subtitle={stub.area} redirectFrom={ROUTE}>
-      <ComingSoonPage {...stub} />
-    </AuthedShell>
-  );
+/**
+ * The Chain-of-Trust / Trust Center surface lives on the Command Center: the
+ * four-layer proof strip and the Trust drawer (proof layers, evidence,
+ * approvals) are mounted in the dashboard hero. Route the rail's "Trust Center"
+ * entry there so it opens the real surface instead of a placeholder.
+ */
+export default function TrustPage() {
+  redirect('/command-center');
 }

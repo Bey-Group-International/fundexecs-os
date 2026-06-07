@@ -1,18 +1,10 @@
-import { AuthedShell } from '@/components/shell/AuthedShell';
-import { ComingSoonPage } from '@/components/shell/ComingSoonPage';
-import { STUB_ROUTES } from '@/components/shell/stub-routes';
+import { redirect } from 'next/navigation';
 
-const ROUTE = '/governance';
-const stub = STUB_ROUTES[ROUTE];
-
-export const dynamic = 'force-dynamic';
-
-export const metadata = { title: stub.title };
-
-export default function GovernanceStubPage() {
-  return (
-    <AuthedShell title={stub.title} subtitle={stub.area} redirectFrom={ROUTE}>
-      <ComingSoonPage {...stub} />
-    </AuthedShell>
-  );
+/**
+ * The Governance Plan / 100·30·10 objective framework is the existing Strategy
+ * surface (`governance_plans` / `objectives`). Route the rail's "Governance"
+ * entry to `/strategy` so it lands on the real plan instead of a placeholder.
+ */
+export default function GovernancePage() {
+  redirect('/strategy');
 }
