@@ -1,5 +1,11 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getAuthUser } from '@/lib/queries/auth';
+
+export const metadata: Metadata = {
+  title: { absolute: 'FundExecs OS — Dashboard' },
+  description: 'Your fund command center — the lifecycle-aware home for every operator.'
+};
 
 /**
  * Legacy route. The authenticated home is the Command Center — redirect there
