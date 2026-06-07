@@ -300,6 +300,55 @@ body {
   animation: fx-earn-context-pulse 2.6s ease-in-out infinite;
 }
 
+/* Celebration moment — a single, refined entrance for level-up / streak-high /
+   badge-earned toasts. Transform + opacity only; one shot, then it settles. */
+@keyframes fx-celebrate {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.fx-celebrate {
+  animation: fx-celebrate 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* The reward glyph gets a brief gold halo pulse to mark the moment, then rests. */
+@keyframes fx-celebrate-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(247, 201, 72, 0);
+  }
+  40% {
+    box-shadow: 0 0 0 8px rgba(247, 201, 72, 0.18);
+  }
+}
+.fx-celebrate-glow {
+  animation: fx-celebrate-glow 1.6s ease-out 1;
+}
+
+/* Living-team on-point pulse — a soft expanding ring on the active avatar.
+   Box-shadow only (no layout cost); silenced under reduced-motion below. */
+@keyframes fx-onpoint-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(91, 141, 239, 0.5);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 7px rgba(91, 141, 239, 0);
+  }
+}
+.fx-onpoint-pulse {
+  animation: fx-onpoint-pulse 2.2s ease-out infinite;
+}
+
 /* Accessibility: honor reduced-motion by disabling our decorative motion and
    neutralizing long/looping transitions across the app. */
 @media (prefers-reduced-motion: reduce) {
@@ -307,6 +356,9 @@ body {
   .fx-glow-pulse,
   .fx-coin-float,
   .fx-marquee-animate,
+  .fx-celebrate,
+  .fx-celebrate-glow,
+  .fx-onpoint-pulse,
   .earn-orb {
     animation: none !important;
   }
