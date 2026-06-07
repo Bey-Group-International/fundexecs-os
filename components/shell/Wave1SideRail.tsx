@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from '
 import Link from 'next/link';
 import { ChevronDown, X } from 'lucide-react';
 import { Badge, type BadgeTone } from '@/components/ui';
+import { EarnCoin } from '@/components/screens/EarnCoin';
 import { createClient } from '@/lib/supabase/client';
 import type { ShellIdentity } from '@/lib/queries/identity';
 import { AccountMenu } from './account/AccountMenu';
@@ -198,14 +199,9 @@ export function Wave1SideRail({
         open ? 'translate-x-0' : '-translate-x-full'
       )}
     >
-      {/* Brand */}
+      {/* Brand — the Earn coin is the OS mark (gold reserved for Earn). */}
       <div className="flex items-center gap-2.5 px-[18px] pb-3 pt-[18px]">
-        <span
-          aria-hidden
-          className="inline-flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg bg-gradient-to-br from-gold-1 to-gold-2 text-[15px] font-bold text-[#070b14]"
-        >
-          F
-        </span>
+        <EarnCoin size={30} className="flex-none" />
         <div className="flex-1 text-[15px] font-semibold tracking-[-0.02em]">
           FundExecs <span className="font-medium text-fg-4">OS</span>
         </div>
