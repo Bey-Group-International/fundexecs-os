@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   Shield,
   ShieldCheck,
@@ -9,37 +9,39 @@ import {
   Microscope,
   ChevronDown,
   ChevronUp,
-  Clock
+  Clock,
+  type LucideIcon
 } from 'lucide-react';
-import {
-  Badge,
-  Card,
-  Input,
-  SegTabs,
-  SectionTitle,
-  type BadgeTone,
-  type TabItem
-} from '@/components/ui';
+import { Badge, Card, Input, SectionTitle, type BadgeTone } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
 import type { AuditData, AuditEvent, AuditEventKind } from '@/lib/queries/audit';
 
 /* ---- Display helpers ---------------------------------------------------- */
 
-const KIND_META: Record<
-  AuditEventKind,
-  { label: string; tone: BadgeTone; Icon: React.ElementType }
-> = {
+const KIND_META: Record<AuditEventKind, { label: string; tone: BadgeTone; Icon: LucideIcon }> = {
   trust: { label: 'Chain of Trust', tone: 'success', Icon: ShieldCheck },
   admin: { label: 'Admin Action', tone: 'danger', Icon: Settings },
   diligence: { label: 'Diligence', tone: 'azure', Icon: Microscope }
 };
 
-const FILTER_TABS: TabItem[] = [
-  { id: 'all', label: 'All' },
-  { id: 'trust', label: 'Chain of Trust' },
-  { id: 'admin', label: 'Admin' },
-  { id: 'diligence', label: 'Diligence' }
+/** CSS accent var per tone — drives the filter-card rail + active ring. */
+const TONE_ACCENT: Record<BadgeTone, string> = {
+  neutral: 'var(--fg-4)',
+  info: 'var(--info)',
+  azure: 'var(--azure-1)',
+  success: 'var(--success)',
+  gold: 'var(--gold-1)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)'
+};
+
+/** The audit filter strip: an "All" overview card + one per event kind. */
+const FILTER_CARDS: { id: string; label: string; tone: BadgeTone; Icon: LucideIcon }[] = [
+  { id: 'all', label: 'All events', tone: 'neutral', Icon: Shield },
+  { id: 'trust', label: 'Chain of Trust', tone: 'success', Icon: ShieldCheck },
+  { id: 'admin', label: 'Admin', tone: 'danger', Icon: Settings },
+  { id: 'diligence', label: 'Diligence', tone: 'azure', Icon: Microscope }
 ];
 
 function formatTs(iso: string): string {
@@ -159,6 +161,58 @@ function EventRow({ event }: { event: AuditEvent }) {
   );
 }
 
+/* ---- Filter card (overview + filter in one) ----------------------------- */
+
+function FilterCard({
+  label,
+  count,
+  tone,
+  Icon,
+  active,
+  onClick
+}: {
+  label: string;
+  count: number;
+  tone: BadgeTone;
+  Icon: LucideIcon;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const accent = TONE_ACCENT[tone];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'group relative overflow-hidden rounded-2xl border bg-bg-1 p-3 text-left transition-[transform,box-shadow,background]',
+        'hover:-translate-y-0.5 hover:bg-surface-1 hover:shadow-[var(--shadow-sm)]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-0',
+        active ? 'border-transparent bg-surface-1' : 'border-hairline'
+      )}
+      style={active ? { boxShadow: `inset 0 0 0 1.5px ${accent}` } : undefined}
+    >
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: active ? accent : 'transparent' }}
+      />
+      <div className="flex items-center gap-2">
+        <span
+          className="flex h-7 w-7 flex-none items-center justify-center rounded-lg border bg-bg-1"
+          style={{ color: accent, borderColor: accent }}
+        >
+          <Icon size={13} strokeWidth={1.9} aria-hidden />
+        </span>
+        <span className="text-[20px] font-semibold tabular-nums leading-none text-fg-1">
+          {count}
+        </span>
+      </div>
+      <p className="mt-1.5 text-[11px] font-medium text-fg-3">{label}</p>
+    </button>
+  );
+}
+
 /* ---- Main view ---------------------------------------------------------- */
 
 export interface AuditViewProps {
@@ -169,21 +223,23 @@ export function AuditView({ data }: AuditViewProps) {
   const [filter, setFilter] = useState<string>('all');
   const [query, setQuery] = useState('');
 
-  const filtered = useMemo(() => {
-    let list = data.events;
-    if (filter !== 'all') list = list.filter((e) => e.kind === filter);
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      list = list.filter(
-        (e) =>
-          e.action.toLowerCase().includes(q) ||
-          (e.summary?.toLowerCase().includes(q) ?? false) ||
-          (e.entityType?.toLowerCase().includes(q) ?? false) ||
-          (e.agent?.toLowerCase().includes(q) ?? false)
-      );
-    }
-    return list;
-  }, [data.events, filter, query]);
+  // Per-kind totals for the filter strip (full dataset, independent of the
+  // active filter so the overview always reflects everything).
+  const counts: Record<string, number> = { all: data.events.length };
+  for (const e of data.events) counts[e.kind] = (counts[e.kind] ?? 0) + 1;
+
+  // Derived filtering — React Compiler memoizes; no manual useMemo needed.
+  const q = query.trim().toLowerCase();
+  const filtered = data.events.filter((e) => {
+    if (filter !== 'all' && e.kind !== filter) return false;
+    if (!q) return true;
+    return (
+      e.action.toLowerCase().includes(q) ||
+      (e.summary?.toLowerCase().includes(q) ?? false) ||
+      (e.entityType?.toLowerCase().includes(q) ?? false) ||
+      (e.agent?.toLowerCase().includes(q) ?? false)
+    );
+  });
 
   if (data.empty) {
     return (
@@ -209,17 +265,29 @@ export function AuditView({ data }: AuditViewProps) {
 
   return (
     <div className="space-y-6">
-      {/* Controls */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <SegTabs tabs={FILTER_TABS} active={filter} onChange={setFilter} />
-        <div className="w-full sm:w-64">
-          <Input
-            icon={Search}
-            placeholder="Search events…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+      {/* Filter strip — per-kind overview that doubles as the filter. */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {FILTER_CARDS.map((c) => (
+          <FilterCard
+            key={c.id}
+            label={c.label}
+            count={counts[c.id] ?? 0}
+            tone={c.tone}
+            Icon={c.Icon}
+            active={filter === c.id}
+            onClick={() => setFilter(c.id)}
           />
-        </div>
+        ))}
+      </div>
+
+      {/* Search */}
+      <div className="w-full sm:max-w-xs">
+        <Input
+          icon={Search}
+          placeholder="Search events…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
       </div>
 
       {/* Timeline */}
