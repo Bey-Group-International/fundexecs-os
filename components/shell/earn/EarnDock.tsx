@@ -7,6 +7,7 @@ import { TeamAvatar, getCOO, getSpecialists, type TeamMember } from '@/lib/team'
 import { cn } from '@/lib/utils';
 import { useEarnContext } from './EarnContext';
 import { copyFor } from './EarnContextCopy';
+import { EarnAgentActivity } from './EarnAgentActivity';
 
 function PresenceHeader({
   onClose,
@@ -195,6 +196,8 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
   // actions + team recede into a collapsible panel (re-openable).
   const [hasThread, setHasThread] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  // Live agent-activity: escalates the desk strip to "working" while a turn runs.
+  const [busy, setBusy] = useState(false);
   const chatRef = useRef<EarnChatHandle>(null);
   const earnCtx = useEarnContext();
   const copy = copyFor(earnCtx.kind);
@@ -242,6 +245,10 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
       />
       <PresenceHeader onClose={onClose} subtitle={subtitle} activity={copy.activity} />
 
+      {/* Live desk strip — who's on point for this surface, reacting to context
+          and escalating while Earn is working. */}
+      <EarnAgentActivity kind={earnCtx.kind} busy={busy} className="mx-4 mt-3 flex-none" />
+
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-4">
         {hasThread ? (
           <div className="flex-none">
@@ -276,6 +283,7 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
             entityLabel: earnCtx.entityLabel
           }}
           onThreadChange={setHasThread}
+          onBusyChange={setBusy}
         />
       </div>
     </aside>
