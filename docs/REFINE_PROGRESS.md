@@ -33,17 +33,33 @@ changes. Tokens-only; 15 brain slugs stable; Admin in Settings; no lockfiles.
 | --- | ----------------- | -------------------------------------------------------------- | ---------- | ---- |
 | 1   | Earn modal        | `components/shell/earn/*`                                      | ✅ merged  | #107 |
 | 2   | Source of Truth   | `/profile`, `/trust`, `components/fund-profile/*`              | ✅ merged  | #108 |
-| 3   | Daily Execution   | `/command-center`, `/action-queue`, `/match-inbox`             | ⏳ PR #110 | #110 |
+| 3   | Daily Execution   | `/command-center`, `/action-queue`, `/match-inbox`             | ✅ merged  | #110 |
 | 4   | Capital Formation | `/pipeline`, `/capital-stack`, `/objections`                   | ✅ merged  | #104 |
 | 5   | Deal Execution    | `/deal-desk`, `/ic-memos`, `/governance`                       | ✅ merged  | #103 |
 | 6   | Intelligence      | `/inbox-intelligence`, `/knowledge`, `/materials`, `/partners` | ✅ merged  | #105 |
-| 7   | Audit             | `/trust`, `/audit`                                             | ⬜ pending | —    |
+| 7   | Audit             | `/trust`, `/audit`                                             | ⏳ PR #111 | #111 |
 | 8   | Profile account   | account menu + `/settings`                                     | ⬜ pending | —    |
 | 9   | Dashboard         | `/command-center` `LifecycleDashboard`                         | ⬜ pending | —    |
 
 ---
 
 ## Entries (OLD → NEW)
+
+### [4] Audit — 2026-06-07 — PR #111
+
+**OLD:** `/trust` redirects into the dashboard, so the live Audit surface is
+`/audit` (the Memory Audit Trail). Filtering used flat segmented text tabs with
+no sense of volume, and the list filtered through a manual `useMemo`.
+**NEW (visual, bold not flat):** the flat tabs become a **KPI filter strip** — an
+"All events" overview card plus one per kind (Chain of Trust / Admin /
+Diligence), each showing its **live count**, a tone icon disc + left accent rail,
+and an active inset ring. Overview and filter in one control.
+**NEW (perf/correctness):** manual `useMemo` filtering → plain derived state
+(React-Compiler preference, matching the swarm PRs); per-kind counts derive from
+the full dataset so the strip always reflects everything. Timeline rows, day
+grouping, search, and expand behavior unchanged; tone surfaces render via #109.
+**Files:** `components/audit/AuditView.tsx`.
+**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
 
 ### [3] Daily Execution — 2026-06-07 — PR #110
 
@@ -62,7 +78,7 @@ The subject reads as a labeled **"Ref &lt;id&gt;"** instead of a bare mono strin
 **NEW (correctness):** folded the redundant `scoreTone` helper into `scoreMeta`;
 optimistic accept/dismiss + `act_on_match` wiring unchanged.
 **Files:** `components/match-inbox/MatchInboxView.tsx`.
-**Checks:** tsc/lint/format ✓ · build via CI · CodeRabbit pending.
+**Checks:** tsc/lint/format/build ✓ · CodeRabbit ✓ (no actionable comments).
 
 ### Spec sweep: semantic tokens — 2026-06-07 — PR #109 ✅ merged
 
