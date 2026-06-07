@@ -1,4 +1,5 @@
-import { Briefcase, Coins, Target, type LucideIcon } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowUpRight, Briefcase, Coins, Target, type LucideIcon } from 'lucide-react';
 import { Card, SectionTitle } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { LifecycleStage } from '@/lib/lifecycle';
@@ -54,6 +55,29 @@ function iconFor(kpi: StageKpi): LucideIcon {
   return ICON_BY_KEY_PREFIX[prefix] ?? Target;
 }
 
+/** Where each KPI tile drills into, keyed by its `key` prefix. */
+const HREF_BY_KEY_PREFIX: Record<string, string> = {
+  pipeline: '/pipeline',
+  active: '/pipeline',
+  in: '/pipeline',
+  sourcing: '/pipeline',
+  open: '/pipeline',
+  warm: '/pipeline',
+  hot: '/pipeline',
+  contacted: '/pipeline',
+  committed: '/capital-stack',
+  capital: '/capital-stack',
+  soft: '/capital-stack',
+  coverage: '/capital-stack',
+  completed: '/capital-stack',
+  profile: '/profile'
+};
+
+function hrefFor(kpi: StageKpi): string {
+  const prefix = kpi.key.split('-')[0];
+  return HREF_BY_KEY_PREFIX[prefix] ?? '/pipeline';
+}
+
 export interface StageKpiGridProps {
   stage: LifecycleStage;
   kpis: StageKpi[];
@@ -81,33 +105,42 @@ export function StageKpiGrid({ stage, kpis, className }: StageKpiGridProps) {
           const tone = TONE_BY_FORMAT[kpi.format];
           const trend = TREND_CURVES[idx % TREND_CURVES.length];
           return (
-            <li
-              key={kpi.key}
-              data-testid={`stage-kpi-${kpi.key}`}
-              className="rounded-xl border border-hairline bg-bg-1 p-3.5"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
-                  {kpi.label}
-                </span>
-                <span className="flex h-6 w-6 items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-3">
-                  <Icon size={12} strokeWidth={2} aria-hidden />
-                </span>
-              </div>
-              <p className="mt-2 text-[22px] font-semibold tabular-nums tracking-[-0.018em] text-fg-1">
-                {formatValue(kpi.value, kpi.format)}
-              </p>
-              {kpi.hint ? (
-                <p className="mt-0.5 truncate text-[10.5px] text-fg-4">{kpi.hint}</p>
-              ) : null}
-              <div className="mt-2 opacity-90">
-                <Sparkline
-                  points={trend}
-                  tone={tone}
-                  height={22}
-                  ariaLabel={`${kpi.label} trend`}
-                />
-              </div>
+            <li key={kpi.key}>
+              <Link
+                href={hrefFor(kpi)}
+                data-testid={`stage-kpi-${kpi.key}`}
+                aria-label={`${kpi.label}: ${formatValue(kpi.value, kpi.format)} — open`}
+                className="group block rounded-xl border border-hairline bg-bg-1 p-3.5 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-azure-1"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+                    {kpi.label}
+                  </span>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-3 transition group-hover:border-[var(--azure-line)] group-hover:text-azure-1">
+                    <Icon size={12} strokeWidth={2} className="group-hover:hidden" aria-hidden />
+                    <ArrowUpRight
+                      size={12}
+                      strokeWidth={2}
+                      className="hidden group-hover:block"
+                      aria-hidden
+                    />
+                  </span>
+                </div>
+                <p className="mt-2 text-[22px] font-semibold tabular-nums tracking-[-0.018em] text-fg-1">
+                  {formatValue(kpi.value, kpi.format)}
+                </p>
+                {kpi.hint ? (
+                  <p className="mt-0.5 truncate text-[10.5px] text-fg-4">{kpi.hint}</p>
+                ) : null}
+                <div className="mt-2 opacity-90">
+                  <Sparkline
+                    points={trend}
+                    tone={tone}
+                    height={22}
+                    ariaLabel={`${kpi.label} trend`}
+                  />
+                </div>
+              </Link>
             </li>
           );
         })}
