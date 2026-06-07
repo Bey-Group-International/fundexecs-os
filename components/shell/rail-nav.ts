@@ -70,8 +70,9 @@ export interface RailNavGroup {
  * The six logic-area compartments.
  *
  * `live` flags reflect shipped UI as of #93/#95/#98:
- *  - LIVE: match-inbox, capital-stack, partners, audit (and previously-live items)
- *  - SOON: objections, materials (UI not shipped), inbox-intelligence (UI not shipped)
+ *  - LIVE: match-inbox, capital-stack, objections, inbox-intelligence, partners,
+ *    audit (and prior live items)
+ *  - SOON: materials (preview only — full UI not shipped)
  *
  * Trust Center is de-duped: it lives in Source of Truth only. Audit keeps just
  * the Memory Audit Trail (`/audit`).
@@ -106,7 +107,7 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
     items: [
       { href: '/pipeline', label: 'LP Pipeline', icon: TrendingUp, live: true },
       { href: '/capital-stack', label: 'Capital Stack', icon: Layers, live: true },
-      { href: '/objections', label: 'Objections', icon: MessagesSquare }
+      { href: '/objections', label: 'Objections', icon: MessagesSquare, live: true }
     ]
   },
   {
@@ -126,7 +127,7 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
     icon: Mail,
     description: 'Signal in. Knowledge out. Materials ready.',
     items: [
-      { href: '/inbox-intelligence', label: 'Inbox Intelligence', icon: Mail },
+      { href: '/inbox-intelligence', label: 'Inbox Intelligence', icon: Mail, live: true },
       { href: '/knowledge', label: 'Knowledge Base', icon: BookOpenText, live: true },
       { href: '/materials', label: 'Capital Materials', icon: FilePlus },
       { href: '/partners', label: 'Partner Marketplace', icon: Handshake, live: true }
