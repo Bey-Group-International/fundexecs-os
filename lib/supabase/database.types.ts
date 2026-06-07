@@ -263,6 +263,45 @@ export type Database = {
           },
         ]
       }
+      capital_commitment_sources: {
+        Row: {
+          commitment_id: string
+          created_at: string
+          org_id: string
+          source_id: string
+          source_table: string
+        }
+        Insert: {
+          commitment_id: string
+          created_at?: string
+          org_id: string
+          source_id: string
+          source_table: string
+        }
+        Update: {
+          commitment_id?: string
+          created_at?: string
+          org_id?: string
+          source_id?: string
+          source_table?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_commitment_sources_commitment_id_fkey"
+            columns: ["commitment_id"]
+            isOneToOne: true
+            referencedRelation: "capital_commitments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_commitment_sources_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       capital_commitments: {
         Row: {
           amount: number
@@ -496,6 +535,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "contacts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_purchases: {
+        Row: {
+          amount_cents: number
+          amount_credits: number
+          created_at: string
+          currency: string
+          id: string
+          metadata: Json
+          org_id: string
+          status: string
+          stripe_session_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          amount_credits: number
+          created_at?: string
+          currency?: string
+          id?: string
+          metadata?: Json
+          org_id: string
+          status?: string
+          stripe_session_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          amount_credits?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          metadata?: Json
+          org_id?: string
+          status?: string
+          stripe_session_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_purchases_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -1448,6 +1534,60 @@ export type Database = {
           },
         ]
       }
+      objections: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          lp_id: string | null
+          objection: string
+          org_id: string
+          rebuttal: string | null
+          resolved_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          lp_id?: string | null
+          objection: string
+          org_id: string
+          rebuttal?: string | null
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          lp_id?: string | null
+          objection?: string
+          org_id?: string
+          rebuttal?: string | null
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "objections_lp_id_fkey"
+            columns: ["lp_id"]
+            isOneToOne: false
+            referencedRelation: "capital_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "objections_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_members: {
         Row: {
           created_at: string
@@ -2036,6 +2176,7 @@ export type Database = {
         Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
         Returns: string
       }
+      generate_lp_matches: { Args: { _org_id: string }; Returns: number }
       get_integration_secret: {
         Args: { _connection_id: string }
         Returns: {
@@ -2080,6 +2221,17 @@ export type Database = {
           id: string
           similarity: number
         }[]
+      }
+      record_credit_topup: {
+        Args: {
+          _amount_cents: number
+          _amount_credits: number
+          _metadata?: Json
+          _org_id: string
+          _status?: string
+          _stripe_session_id: string
+        }
+        Returns: Json
       }
       relationship_strength: {
         Args: { _count: number; _last: string }
