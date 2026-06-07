@@ -172,6 +172,7 @@ export type Database = {
           last_sent_at: string
           note: string | null
           org_id: string
+          role: Database["public"]["Enums"]["org_member_role"]
           status: string
           updated_at: string
         }
@@ -185,6 +186,7 @@ export type Database = {
           last_sent_at?: string
           note?: string | null
           org_id: string
+          role?: Database["public"]["Enums"]["org_member_role"]
           status?: string
           updated_at?: string
         }
@@ -198,6 +200,7 @@ export type Database = {
           last_sent_at?: string
           note?: string | null
           org_id?: string
+          role?: Database["public"]["Enums"]["org_member_role"]
           status?: string
           updated_at?: string
         }
@@ -2189,6 +2192,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_beta_invite: {
+        Args: { _email: string; _invite_id?: string; _user_id: string }
+        Returns: Json
+      }
       act_on_match: {
         Args: { _action: string; _match_id: string }
         Returns: Json
@@ -2235,6 +2242,7 @@ export type Database = {
       generate_deal_matches: { Args: { _org_id: string }; Returns: number }
       generate_lp_matches: { Args: { _org_id: string }; Returns: number }
       generate_signal_matches: { Args: { _org_id: string }; Returns: number }
+      get_admin_metrics: { Args: { _org_id: string }; Returns: Json }
       get_audit_trail: {
         Args: { _limit?: number; _org_id: string }
         Returns: {

@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const tokenHash = searchParams.get('token_hash');
   const type = searchParams.get('type') as EmailOtpType | null;
+  const inviteId = searchParams.get('invite_id');
   // Only allow same-origin relative paths to avoid open-redirects.
   const requestedNext = searchParams.get('next');
   const next =
@@ -37,14 +38,15 @@ export async function GET(request: NextRequest) {
   }
 
   const email = data.user?.email;
-  if (email) {
+  const userId = data.user?.id;
+  if (email && userId) {
     try {
       const admin = createAdminClient();
-      await admin
-        .from('beta_invites')
-        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-        .eq('email', email.toLowerCase())
-        .eq('status', 'pending');
+      await admin.rpc('accept_beta_invite', {
+        _email: email.toLowerCase(),
+        _user_id: userId,
+        ...(inviteId ? { _invite_id: inviteId } : {})
+      });
     } catch {
       // Acceptance tracking is best-effort — never block the sign-in.
     }
