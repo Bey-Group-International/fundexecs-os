@@ -1,9 +1,8 @@
-import { ArrowRight } from 'lucide-react';
-import Link from 'next/link';
 import { Badge, Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { MEMBER_TYPE_LABELS } from '@/lib/member-types';
 import type { FundProfile } from '@/lib/queries/fund-profile';
+import { ProfileActionButton } from './ProfileActionButton';
 
 function toneForScore(score: number): { color: string; bg: string; label: string } {
   if (score >= 75) return { color: 'var(--success)', bg: 'var(--success-soft)', label: 'Strong' };
@@ -93,18 +92,7 @@ export function ProfileHero({ profile, className }: ProfileHeroProps) {
 
           <p className="mt-3 max-w-[60ch] text-[12px] text-fg-3">{blurb}</p>
 
-          <Link
-            href="/onboarding"
-            data-testid="profile-edit-cta"
-            className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-[var(--cta-gradient)] px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-[var(--shadow-cta)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            {profile.completenessScore >= 100
-              ? 'Review profile'
-              : profile.completenessScore > 0
-                ? 'Resume profile'
-                : 'Start profile'}
-            <ArrowRight size={13} strokeWidth={2} aria-hidden />
-          </Link>
+          <ProfileActionButton variant="hero" profile={profile} className="mt-4" />
         </div>
 
         {/* Completeness ring */}

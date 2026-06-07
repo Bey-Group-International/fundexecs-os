@@ -1,9 +1,10 @@
-import { ScrollText } from 'lucide-react';
 import { Card, SectionTitle } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
+import { ProfileActionButton } from '@/components/profile';
 import type { MemberType } from '@/lib/member-types';
 import type { LifecycleStage } from '@/lib/lifecycle';
 import type { DashboardData } from '@/lib/queries/dashboard';
+import type { FundProfile } from '@/lib/queries/fund-profile';
 import { cn } from '@/lib/utils';
 import { LifecycleStageRail } from './LifecycleStageRail';
 import { ReadinessGauge } from './ReadinessGauge';
@@ -109,9 +110,16 @@ export interface LifecycleDashboardProps {
   memberType: MemberType | null;
   /** Lifecycle-aware payload from `getDashboardData(orgId)`. */
   data: DashboardData;
+  /** Full Source-of-Truth record — powers the reactive profile button. */
+  fundProfile: FundProfile;
 }
 
-export function LifecycleDashboard({ displayName, memberType, data }: LifecycleDashboardProps) {
+export function LifecycleDashboard({
+  displayName,
+  memberType,
+  data,
+  fundProfile
+}: LifecycleDashboardProps) {
   const variant = MEMBER_TYPE_VARIANTS[memberType ?? 'default'];
   const firstName = displayName.split(' ')[0] || displayName || 'there';
   const currentStage: LifecycleStage = data.stage;
@@ -149,10 +157,9 @@ export function LifecycleDashboard({ displayName, memberType, data }: LifecycleD
               {variant.greeting(firstName)}
             </h1>
             <p className="mt-0.5 max-w-[64ch] text-[12.5px] text-fg-3">{variant.summary}</p>
-            <p className="mt-2 inline-flex items-center gap-2 rounded-full border border-[var(--azure-line)] bg-[var(--azure-soft)] px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-azure-1">
-              <ScrollText size={11} strokeWidth={2} aria-hidden />
-              {data.fundProfile.fundName} · {data.fundProfile.completenessScore}% on the record
-            </p>
+            <div className="mt-2.5">
+              <ProfileActionButton variant="compact" profile={fundProfile} />
+            </div>
           </div>
 
           {/* Earn presence — anchors the hero with the COO's face (gold = Earn)

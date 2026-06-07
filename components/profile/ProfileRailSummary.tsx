@@ -3,6 +3,7 @@ import { ArrowUpRight, IdCard } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { FundProfile } from '@/lib/queries/fund-profile';
+import { ProfileActionButton } from './ProfileActionButton';
 
 export interface ProfileRailSummaryProps {
   profile: FundProfile;
@@ -13,8 +14,9 @@ export interface ProfileRailSummaryProps {
 
 /**
  * ProfileRailSummary — a compact summary card for the side-rail's Source-of-Truth
- * area (or any narrow surface). Entity name, completeness bar, and the top gap
- * label. Click-through opens the full Profile.
+ * area (or any narrow surface). A glance row (entity name, completeness bar, top
+ * gap) links through to the full Profile, with the reactive ProfileActionButton
+ * beneath for review / gap-jump / edit without leaving the current surface.
  */
 export function ProfileRailSummary({
   profile,
@@ -23,41 +25,47 @@ export function ProfileRailSummary({
 }: ProfileRailSummaryProps) {
   const topGap = profile.gaps[0];
   return (
-    <Link
-      href={href}
+    <div
       data-testid="profile-rail-summary"
       className={cn(
-        'group flex items-start gap-3 rounded-xl border border-hairline bg-bg-1 px-3 py-2.5 transition-[background,transform,box-shadow] hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-[var(--shadow-sm)]',
+        'flex flex-col gap-2 rounded-xl border border-hairline bg-bg-1 px-3 py-2.5',
         className
       )}
     >
-      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-surface-1 text-gold-1">
-        <IdCard size={14} strokeWidth={1.9} aria-hidden />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-[12px] font-semibold text-fg-1">{profile.fundName}</p>
-          <span className="text-[10px] font-semibold tabular-nums text-gold-1">
-            {profile.completenessScore}%
-          </span>
+      <Link
+        href={href}
+        className="group flex items-start gap-3 rounded-lg transition-[background] hover:bg-surface-2/40"
+      >
+        <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-surface-1 text-gold-1">
+          <IdCard size={14} strokeWidth={1.9} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[12px] font-semibold text-fg-1">{profile.fundName}</p>
+            <span className="text-[10px] font-semibold tabular-nums text-gold-1">
+              {profile.completenessScore}%
+            </span>
+          </div>
+          <p className="mt-0.5 truncate text-[10.5px] text-fg-4">
+            {topGap ? `Gap · ${topGap.label}` : 'On the record · audit-ready'}
+          </p>
+          <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-surface-2">
+            <div
+              className="h-full rounded-full bg-gold-1"
+              style={{ width: `${profile.completenessScore}%` }}
+            />
+          </div>
         </div>
-        <p className="mt-0.5 truncate text-[10.5px] text-fg-4">
-          {topGap ? `Gap · ${topGap.label}` : 'On the record · audit-ready'}
-        </p>
-        <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-surface-2">
-          <div
-            className="h-full rounded-full bg-gold-1"
-            style={{ width: `${profile.completenessScore}%` }}
-          />
-        </div>
-      </div>
-      <ArrowUpRight
-        size={12}
-        strokeWidth={2}
-        className="mt-1 flex-none text-fg-5 transition-transform group-hover:translate-x-0.5 group-hover:text-azure-1"
-        aria-hidden
-      />
-    </Link>
+        <ArrowUpRight
+          size={12}
+          strokeWidth={2}
+          className="mt-1 flex-none text-fg-5 transition-transform group-hover:translate-x-0.5 group-hover:text-azure-1"
+          aria-hidden
+        />
+      </Link>
+
+      <ProfileActionButton variant="compact" profile={profile} />
+    </div>
   );
 }
 

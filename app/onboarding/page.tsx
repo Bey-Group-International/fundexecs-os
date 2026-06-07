@@ -26,9 +26,19 @@ const EMPTY_PROFILE: MemberProfile = {
  * conversational Proof of Truth flow where Earn builds the member's verified,
  * member-type-specific profile. Pre-fills the signed-in identity and seeds the
  * flow from any saved `draft` so it resumes.
+ *
+ * A `?focus=<questionId>` param (used by the Profile's "close gap" deep-links)
+ * jumps the Q&A straight to that field. In Next 16 `searchParams` is async.
  */
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams
+}: {
+  searchParams: Promise<{ focus?: string | string[] }>;
+}) {
   const supabase = await createClient();
+
+  const { focus: rawFocus } = await searchParams;
+  const focusField = Array.isArray(rawFocus) ? rawFocus[0] : rawFocus;
 
   const {
     data: { user }
@@ -52,6 +62,7 @@ export default async function OnboardingPage() {
       fullName={fullName ?? ''}
       hasOrg={org != null}
       profile={profile ?? EMPTY_PROFILE}
+      focusField={focusField}
     />
   );
 }
