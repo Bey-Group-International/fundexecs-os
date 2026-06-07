@@ -3,6 +3,7 @@
 import Stripe from 'stripe';
 import { headers } from 'next/headers';
 import { getActiveOrg } from '@/lib/queries/org';
+import { TOPUP_TIERS, type TopUpTier } from '@/lib/billing/topup-tiers';
 
 /* ============================================================================
  * lib/actions/stripe-checkout.ts — Stripe credit top-up checkout.
@@ -24,15 +25,6 @@ export interface TopUpCheckoutResult {
   url?: string;
   error?: string;
 }
-
-/** Credit top-up tiers available in the wallet popover. */
-export const TOPUP_TIERS = [
-  { credits: 500, label: '500 credits', priceLabel: '$5', amountCents: 500 },
-  { credits: 1_500, label: '1,500 credits', priceLabel: '$12', amountCents: 1_200 },
-  { credits: 5_000, label: '5,000 credits', priceLabel: '$35', amountCents: 3_500 }
-] as const;
-
-export type TopUpTier = (typeof TOPUP_TIERS)[number]['credits'];
 
 function resolveSiteOrigin(hdrs: Headers): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL;

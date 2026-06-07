@@ -2,15 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getAuthUser } from '@/lib/queries/auth';
-import { askEarn, type EarnMessage } from '@/lib/ai/earn';
+import { streamEarn, type EarnMessage, type EarnSource } from '@/lib/ai/earn';
 import { earnReviewDeal } from '@/lib/diligence';
 
 /**
  * Detect an EXPLICIT "run diligence" instruction. Deliberately conservative:
- * it requires a literal diligence ask (e.g. "due diligence", "run diligence")
- * or "vet … like an LP". Generic verbs like review/assess/evaluate do NOT
- * trigger it, so ordinary Earn chat ("help me review my deck", "evaluate this
- * investment") is never hijacked — those fall through to the normal chat path.
+ * generic verbs like review/assess/evaluate do NOT trigger it, so ordinary Earn
+ * chat is never hijacked — those fall through to the normal streaming path.
  */
 function isDiligenceIntent(message: string): boolean {
   const m = message.toLowerCase();
@@ -19,30 +17,10 @@ function isDiligenceIntent(message: string): boolean {
   return explicitDiligence || vetLikeLp;
 }
 
-/**
- * POST /api/ask-earn — chat with Earn (RAG over the 15 brains + Claude).
- * Body: { messages: { role: 'user'|'assistant', content: string }[] }.
- *
- * Response shape (always HTTP 200 once auth + org are valid):
- *   - success:   { reply: string, ... }                 (from askEarn)
- *   - degraded:  { ok: false, degraded: true,
- *                  fallback_message: string,
- *                  reason: 'missing_key' | 'claude_error' | 'rag_error' }
- *
- * "Never block" rule: a missing ANTHROPIC_API_KEY or a downstream Claude
- * failure must NEVER produce a 5xx — Earn is a guide, not a hard dependency.
- * Auth + org errors still return their respective 4xx codes.
- */
-
-type DegradeReason = 'missing_key' | 'claude_error' | 'rag_error';
-
-function degraded(reason: DegradeReason, message: string) {
-  return NextResponse.json({
-    ok: false,
-    degraded: true,
-    fallback_message: message,
-    reason
-  });
+interface EarnContextHintBody {
+  kind?: string;
+  entityId?: string;
+  entityLabel?: string;
 }
 
 const FALLBACK = {
@@ -52,8 +30,22 @@ const FALLBACK = {
     "I'm having trouble thinking that through right now. Give me a second and try again — or jump to one of the recommended actions below.",
   rag_error:
     "I couldn't reach the team's knowledge for that one. Try again, or open a workflow from the recommended actions."
-} as const satisfies Record<DegradeReason, string>;
+} as const;
 
+/**
+ * POST /api/ask-earn — chat with Earn, streamed as newline-delimited JSON.
+ *
+ * Body: { messages: EarnMessage[], context?: { kind, entityId, entityLabel } }.
+ * Auth/org/payload failures return their 4xx JSON as before. Once validated, the
+ * response is an `application/x-ndjson` stream of events, one JSON object/line:
+ *   { type: 'sources', sources }   — brain citations (once, before deltas)
+ *   { type: 'delta', text }        — a chunk of the reply
+ *   { type: 'degraded', message }  — calm fallback (never a 5xx)
+ *   { type: 'done' }               — end of turn
+ *
+ * The latest user turn is persisted up front and the assistant turn on
+ * completion, so the dock can restore the thread on next open.
+ */
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -68,7 +60,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No organization yet' }, { status: 400 });
   }
 
-  let body: { messages?: EarnMessage[]; dealId?: string };
+  let body: { messages?: EarnMessage[]; dealId?: string; context?: EarnContextHintBody };
   try {
     body = await req.json();
   } catch {
@@ -89,70 +81,120 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No messages provided' }, { status: 400 });
   }
 
-  // Never-block: missing API key returns the degraded shape (HTTP 200) so the
-  // Copilot dock surfaces a calm system message instead of an error toast.
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return degraded('missing_key', FALLBACK.missing_key);
+  const context = body.context;
+  const dealId = body.dealId ?? (context?.kind === 'deal' ? context.entityId : undefined);
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+
+  // Persist the latest user turn immediately (best-effort — never blocks chat).
+  if (lastUser) {
+    await supabase
+      .from('earn_messages')
+      .insert({ user_id: user.id, org_id: org.orgId, role: 'user', content: lastUser.content })
+      .then(undefined, () => {});
   }
 
-  // --- Additive diligence intent (safe pre-pass) ---------------------------
-  // ONLY when the latest user message clearly asks for a diligence-style review.
-  // On any non-match we fall straight through to the unchanged askEarn flow.
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-  if (lastUser && isDiligenceIntent(lastUser.content)) {
-    if (body.dealId) {
-      // A deal is resolvable from context — run the real 7-agent review.
-      try {
-        const user = await getAuthUser();
-        if (user) {
-          const result = await earnReviewDeal({
-            orgId: org.orgId,
-            createdBy: user.id,
-            dealId: body.dealId
-          });
-          if (result.status === 'complete') {
-            const conviction =
-              result.conviction != null ? `Conviction ${result.conviction}/100. ` : '';
-            return NextResponse.json({
-              text:
-                `I ran the full committee on this deal. ${conviction}` +
-                `See the breakdown and my memo here: /diligence/${result.runId}`,
-              sources: []
+  const encoder = new TextEncoder();
+  const line = (obj: unknown) => encoder.encode(JSON.stringify(obj) + '\n');
+
+  /** Save an assistant turn (best-effort). */
+  const saveAssistant = async (content: string, sources: EarnSource[]) => {
+    if (!content.trim()) return;
+    await supabase
+      .from('earn_messages')
+      .insert({
+        user_id: user.id,
+        org_id: org.orgId,
+        role: 'assistant',
+        content,
+        sources: sources as unknown as never
+      })
+      .then(undefined, () => {});
+  };
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emitText = async (text: string, sources: EarnSource[] = []) => {
+        if (sources.length) controller.enqueue(line({ type: 'sources', sources }));
+        controller.enqueue(line({ type: 'delta', text }));
+        controller.enqueue(line({ type: 'done' }));
+        await saveAssistant(text, sources);
+        controller.close();
+      };
+
+      // Never-block: no API key → calm degraded message.
+      if (!process.env.ANTHROPIC_API_KEY) {
+        controller.enqueue(line({ type: 'degraded', message: FALLBACK.missing_key }));
+        controller.enqueue(line({ type: 'done' }));
+        controller.close();
+        return;
+      }
+
+      // Explicit diligence intent with a resolvable deal → run the committee.
+      if (lastUser && isDiligenceIntent(lastUser.content) && dealId) {
+        try {
+          const authed = await getAuthUser();
+          if (authed) {
+            const result = await earnReviewDeal({
+              orgId: org.orgId,
+              createdBy: authed.id,
+              dealId
             });
+            const conviction =
+              result.status === 'complete' && result.conviction != null
+                ? `Conviction ${result.conviction}/100. `
+                : '';
+            const text =
+              result.status === 'complete'
+                ? `I ran the full committee on this deal. ${conviction}See the breakdown and my memo here: /diligence/${result.runId}`
+                : `I started a diligence run but it didn't complete cleanly. You can review what came back here: /diligence/${result.runId}`;
+            await emitText(text);
+            return;
           }
-          return NextResponse.json({
-            text:
-              `I started a diligence run but it didn't complete cleanly. ` +
-              `You can review what came back here: /diligence/${result.runId}`,
-            sources: []
-          });
+        } catch {
+          // Fall through to the streaming chat path below.
         }
-      } catch {
-        // Fall through to the guidance reply below if the run can't be started.
+      }
+      if (lastUser && isDiligenceIntent(lastUser.content) && !dealId) {
+        await emitText(
+          'I can run a full institutional-grade diligence review, but I need to know which deal. ' +
+            'Open the deal in your Pipeline and hit "Run diligence" in the deal drawer — ' +
+            "I'll have the committee weigh in and post a memo to /diligence."
+        );
+        return;
+      }
+
+      // Normal streaming chat path.
+      try {
+        const { sources, deltas } = await streamEarn(supabase, org.orgId, messages, {
+          kind: context?.kind,
+          entityLabel: context?.entityLabel
+        });
+        if (sources.length) controller.enqueue(line({ type: 'sources', sources }));
+        let full = '';
+        for await (const chunk of deltas) {
+          full += chunk;
+          controller.enqueue(line({ type: 'delta', text: chunk }));
+        }
+        controller.enqueue(line({ type: 'done' }));
+        await saveAssistant(full, sources);
+        controller.close();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '';
+        const isRag = /knowledge|chunks|vector|embedding|retriev|voyage/i.test(message);
+        controller.enqueue(
+          line({ type: 'degraded', message: isRag ? FALLBACK.rag_error : FALLBACK.claude_error })
+        );
+        controller.enqueue(line({ type: 'done' }));
+        controller.close();
       }
     }
-    // No deal context (or run couldn't start) — guide the user, don't guess.
-    return NextResponse.json({
-      text:
-        'I can run a full institutional-grade diligence review, but I need to know which deal. ' +
-        'Open the deal in your Pipeline and hit "Run diligence" in the deal drawer — ' +
-        "I'll have the committee weigh in and post a memo to /diligence.",
-      sources: []
-    });
-  }
-  // --- End diligence intent pre-pass ---------------------------------------
+  });
 
-  try {
-    const reply = await askEarn(supabase, org.orgId, messages);
-    return NextResponse.json(reply);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : '';
-    // Distinguish a retrieval failure from a Claude failure when we can.
-    const isRag =
-      /knowledge|chunks|vector|embedding|retriev/i.test(message) || /voyage/i.test(message);
-    return degraded(
-      isRag ? 'rag_error' : 'claude_error',
-      isRag ? FALLBACK.rag_error : FALLBACK.claude_error
-    );
-  }
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Accel-Buffering': 'no'
+    }
+  });
 }
