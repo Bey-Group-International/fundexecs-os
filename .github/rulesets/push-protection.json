@@ -1,0 +1,21 @@
+{
+  "name": "push-protection",
+  "target": "push",
+  "enforcement": "active",
+  "conditions": {},
+  "rules": [
+    {
+      "type": "file_path_restriction",
+      "parameters": {
+        "restricted_file_paths": ["**/yarn.lock", "**/pnpm-lock.yaml", "**/bun.lockb"]
+      }
+    },
+    {
+      "type": "max_file_size",
+      "parameters": {
+        "max_file_size": 50
+      }
+    }
+  ],
+  "bypass_actors": []
+}
