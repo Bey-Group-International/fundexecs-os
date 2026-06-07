@@ -9,6 +9,13 @@ import type { Database } from './database.types';
  * NOTE: Do not run code between creating the client and calling
  * `supabase.auth.getUser()` — it can make sessions hard to debug.
  */
+/** True when the request carries a Supabase auth-token cookie (possibly chunked
+ *  as `…-auth-token.0`/`.1`). Used to distinguish a transient `getUser()` null
+ *  on a real session from a genuinely signed-out request. */
+function hasSupabaseAuthCookie(request: NextRequest): boolean {
+  return request.cookies.getAll().some((c) => /^sb-.*-auth-token(\.\d+)?$/.test(c.name));
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -42,9 +49,22 @@ export async function updateSession(request: NextRequest) {
     }
   });
 
-  const {
+  let {
     data: { user }
   } = await supabase.auth.getUser();
+
+  // The edge/serverless Auth call can transiently return a null user on a
+  // perfectly valid session (a momentary failure to reach the Auth server).
+  // When we still hold a Supabase auth cookie, that "null" is almost certainly
+  // a blip — not a signed-out user — so retry once before treating the request
+  // as unauthenticated. Without this, a single blip on a protected navigation
+  // (e.g. clicking the top-nav bell) bounces a signed-in member to /login.
+  if (!user && hasSupabaseAuthCookie(request)) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    ({
+      data: { user }
+    } = await supabase.auth.getUser());
+  }
 
   // Pass the edge-validated user to the (serverless) page via a TRUSTED request
   // header. The serverless runtime's `getUser()` can fail to reach the Auth

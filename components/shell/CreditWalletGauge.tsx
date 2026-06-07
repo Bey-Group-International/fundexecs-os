@@ -112,7 +112,9 @@ export function CreditWalletGauge({ wallet: walletProp, className }: CreditWalle
         type="button"
         onClick={() => setPopoverOpen((v) => !v)}
         title={tooltip}
-        aria-label={configured ? `Earn coins wallet, ${state.balanceLabel} coins` : 'Earn coins wallet'}
+        aria-label={
+          configured ? `Earn coins wallet, ${state.balanceLabel} coins` : 'Earn coins wallet'
+        }
         aria-expanded={popoverOpen}
         aria-haspopup="dialog"
         data-testid="credit-wallet-gauge"

@@ -45,7 +45,15 @@ function initialsOf(name: string): string {
  * `next.config` allowlisting, and `referrerPolicy="no-referrer"` keeps Google
  * photos from 403-ing on referrer checks.
  */
-export function Avatar({ name, src, size = 32, tone = 'azure', className, style, ...props }: AvatarProps) {
+export function Avatar({
+  name,
+  src,
+  size = 32,
+  tone = 'azure',
+  className,
+  style,
+  ...props
+}: AvatarProps) {
   const radius = size * 0.32;
   return (
     <span

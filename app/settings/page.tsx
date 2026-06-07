@@ -122,6 +122,7 @@ export default async function SettingsPage() {
             ? memberProfile.details.contact_phone
             : null
         }
+        avatarUrl={identity?.avatarUrl ?? null}
         proofStatus={memberProfile?.status ?? 'in_progress'}
         proofPct={memberProfile?.completionPct ?? 0}
         proofMemberType={memberProfile?.memberType ?? null}
