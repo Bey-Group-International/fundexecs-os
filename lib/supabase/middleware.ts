@@ -158,12 +158,31 @@ export async function updateSession(request: NextRequest) {
   // gating — static assets, public pages, and the two allow-listed APIs skip
   // it so the middleware stays fast on hot paths.
   if (user && !isStaticAsset && !isPublic && !isAllowedApi) {
-    const { data: mp } = await supabase
-      .from('member_profiles')
-      .select('status')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    const isComplete = mp?.status === 'complete';
+    // Perf: once a profile is `complete` we cache that in a lightweight cookie
+    // keyed to the user id, so the hot path skips the per-request
+    // `member_profiles` lookup. The cookie value is the user's own id — a
+    // different user (e.g. shared browser) won't match, so they still get a
+    // fresh check. This governs ONLY the onboarding redirect (a UX gate); it
+    // never affects data access, which RLS enforces independently, so a stale
+    // or forged value is harmless.
+    let isComplete = request.cookies.get('fx-onb')?.value === user.id;
+
+    if (!isComplete) {
+      const { data: mp } = await supabase
+        .from('member_profiles')
+        .select('status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      isComplete = mp?.status === 'complete';
+      if (isComplete) {
+        supabaseResponse.cookies.set('fx-onb', user.id, {
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 60 * 60 * 24
+        });
+      }
+    }
 
     if (!isComplete && !isOnboarding) {
       const onboarding = request.nextUrl.clone();
