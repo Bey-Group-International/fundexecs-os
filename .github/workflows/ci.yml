@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Run inside the merge queue so required checks resolve on the queued
+  # (post-merge) state. Required for the "Require merge queue" ruleset rule.
+  merge_group:
+
+# Least-privilege default token: jobs only read the repo. Artifact upload uses
+# the Actions artifact API (not `contents`), so read is sufficient.
+permissions:
+  contents: read
 
 # Cancel in-progress runs for the same ref to save CI minutes.
 concurrency:
