@@ -2,10 +2,11 @@
 
 import { useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronDown, X, ChevronsUpDown, LogOut } from 'lucide-react';
-import { Avatar, Badge, type BadgeTone } from '@/components/ui';
+import { ChevronDown, X } from 'lucide-react';
+import { Badge, type BadgeTone } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
 import type { ShellIdentity } from '@/lib/queries/identity';
+import { AccountMenu } from './account/AccountMenu';
 import type { LifecycleStage } from '@/lib/lifecycle';
 import { cn } from '@/lib/utils';
 import {
@@ -219,23 +220,9 @@ export function Wave1SideRail({
         </button>
       </div>
 
-      {/* Org switcher */}
-      <div className="px-3 pb-2">
-        <button
-          type="button"
-          data-testid="side-rail-org-switcher"
-          className="flex w-full items-center gap-2.5 rounded-[10px] border border-hairline bg-surface-1 px-2.5 py-2 transition-[background,box-shadow] hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-        >
-          <Avatar name={identity.orgName} size={26} tone="gold" />
-          <div className="flex-1 overflow-hidden text-left">
-            <div className="truncate text-[12.5px] font-semibold text-fg-1">{identity.orgName}</div>
-            <div className="truncate text-[10.5px] text-fg-4">{identity.orgTier}</div>
-          </div>
-          <ChevronsUpDown size={14} strokeWidth={1.9} className="text-fg-4" aria-hidden />
-        </button>
-      </div>
-
-      {/* Nav — six collapsible logic-area compartments */}
+      {/* Nav — six collapsible logic-area compartments.
+          The former top-of-rail org switcher is consolidated into the account
+          menu in the footer (single identity hub). */}
       <nav
         className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-2"
         data-testid="side-rail-nav"
@@ -259,29 +246,11 @@ export function Wave1SideRail({
         })}
       </nav>
 
-      {/* User footer */}
-      <div
-        className="m-3 flex items-center gap-2.5 rounded-[10px] border border-hairline px-2.5 py-2.5"
-        data-testid="side-rail-user-footer"
-      >
-        <Avatar name={identity.name} size={30} />
-        <div className="flex-1 overflow-hidden">
-          <div className="truncate text-[12.5px] font-semibold text-fg-1">{identity.name}</div>
-          <div className="truncate text-[10.5px] text-fg-4">{identity.role}</div>
-        </div>
-        <Badge tone="gold" className="px-1.5 py-0.5 text-[10px]">
-          L{identity.level}
-        </Badge>
-        <button
-          type="button"
-          onClick={handleSignOut}
-          aria-label="Sign out"
-          title="Sign out"
-          data-testid="side-rail-signout-btn"
-          className="flex h-7 w-7 flex-none items-center justify-center rounded-lg text-fg-4 transition-[background,box-shadow] hover:bg-surface-1 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-        >
-          <LogOut size={15} strokeWidth={1.9} aria-hidden />
-        </button>
+      {/* User footer — the popping account menu (identity, workspace/role
+          switch, settings/admin/integrations/plans/gift/help/learn-more, and
+          log out). Replaces the old static footer + sign-out icon. */}
+      <div data-testid="side-rail-user-footer">
+        <AccountMenu identity={identity} onSignOut={handleSignOut} onNavigate={onClose} />
       </div>
     </aside>
   );
