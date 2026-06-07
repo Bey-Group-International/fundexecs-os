@@ -1582,6 +1582,36 @@ export type Database = {
           },
         ]
       }
+      earn_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          org_id: string | null
+          role: string
+          sources: Json
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          org_id?: string | null
+          role: string
+          sources?: Json
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          org_id?: string | null
+          role?: string
+          sources?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       member_profiles: {
         Row: {
           bio: string | null

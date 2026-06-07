@@ -28,6 +28,64 @@ export interface EarnReply {
   sources: EarnSource[];
 }
 
+/** A hint about what the operator is currently looking at, so Earn can tailor
+ *  its guidance (passed from the dock's EarnContext). */
+export interface EarnContextHint {
+  kind?: string;
+  entityLabel?: string;
+}
+
+/**
+ * Retrieve the org-scoped brain knowledge for the latest user turn. Factored out
+ * of `askEarn` so the streaming path can reuse the exact same RAG step. Never
+ * throws for a missing key / empty knowledge — returns empty context instead.
+ */
+async function retrieveContext(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  messages: EarnMessage[]
+): Promise<{ sources: EarnSource[]; contextBlock: string }> {
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (!lastUser) return { sources: [], contextBlock: '' };
+  try {
+    const vector = await embedQuery(lastUser.content);
+    const { data } = await supabase.rpc('match_knowledge_chunks', {
+      query_embedding: toVectorLiteral(vector),
+      match_count: 6,
+      _org_id: orgId
+    });
+    if (data && data.length) {
+      return {
+        sources: data.map((d) => ({ brainId: d.brain_id, snippet: d.content.slice(0, 200) })),
+        contextBlock: data.map((d, i) => `[${i + 1}] ${d.content}`).join('\n\n')
+      };
+    }
+  } catch {
+    // RAG unavailable (no VOYAGE_API_KEY or no embedded knowledge yet).
+  }
+  return { sources: [], contextBlock: '' };
+}
+
+/** Build the system blocks shared by the streaming + non-streaming paths. */
+function buildSystem(contextBlock: string, hint?: EarnContextHint): Anthropic.TextBlockParam[] {
+  const system: Anthropic.TextBlockParam[] = [
+    { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }
+  ];
+  if (hint?.entityLabel) {
+    system.push({
+      type: 'text',
+      text: `The operator is currently focused on: ${hint.entityLabel}${hint.kind ? ` (${hint.kind})` : ''}. When relevant, tailor your guidance to this specific context.`
+    });
+  }
+  if (contextBlock) {
+    system.push({
+      type: 'text',
+      text: `Knowledge-base context (the 15 BGI brains):\n\n${contextBlock}`
+    });
+  }
+  return system;
+}
+
 /**
  * Answer as Earn: retrieve relevant brain knowledge (Voyage embedding +
  * pgvector match, org-scoped + global), then call Claude with the retrieved
@@ -86,4 +144,38 @@ export async function askEarn(
     .trim();
 
   return { text: text || 'I could not generate a response. Please try again.', sources };
+}
+
+/**
+ * Streaming variant of {@link askEarn}: runs the same RAG step, then returns the
+ * retrieved `sources` up front plus an async iterable of text deltas from
+ * Claude. The caller streams the deltas to the client and can accumulate the
+ * full text for persistence. Mirrors `askEarn`'s grounding + voice exactly.
+ */
+export async function streamEarn(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  messages: EarnMessage[],
+  hint?: EarnContextHint
+): Promise<{ sources: EarnSource[]; deltas: AsyncIterable<string> }> {
+  const { sources, contextBlock } = await retrieveContext(supabase, orgId, messages);
+  const anthropic = new Anthropic();
+  const system = buildSystem(contextBlock, hint);
+
+  const stream = anthropic.messages.stream({
+    model: MODEL,
+    max_tokens: 1024,
+    system,
+    messages: messages.map((m) => ({ role: m.role, content: m.content }))
+  });
+
+  async function* deltas(): AsyncIterable<string> {
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        yield event.delta.text;
+      }
+    }
+  }
+
+  return { sources, deltas: deltas() };
 }

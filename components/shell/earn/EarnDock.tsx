@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { X, ArrowUpRight } from 'lucide-react';
+import { X, ArrowUpRight, ChevronDown } from 'lucide-react';
 import { EarnChat, type EarnChatHandle } from '@/app/ask-earn/EarnChat';
 import { TeamAvatar, getCOO, getSpecialists, type TeamMember } from '@/lib/team';
 import { cn } from '@/lib/utils';
@@ -106,7 +106,7 @@ function TeamStrip({
                     type="button"
                     onClick={() =>
                       onSeed(
-                        `Bring in ${m.name} (${m.position}) to help me with this — here's what I need: `
+                        `Bring in ${m.name} (${m.position}). Given what I'm working on right now, what should we tackle first, and how can they help?`
                       )
                     }
                     className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-gold-1 transition hover:text-gold-2 focus-visible:underline focus-visible:outline-none"
@@ -191,20 +191,31 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
   const specialists = getSpecialists();
   const initialSpecialist: TeamMember = specialists[0]!;
   const [activeSpecialist, setActiveSpecialist] = useState<string>(initialSpecialist.slug);
-  // Imperative seed into the chat from a quick-action chip or specialist row —
-  // fills + focuses the input in the click handler (no effect, no setState sync).
+  // Chat-first layout: once a thread exists the chat fills the dock and the
+  // actions + team recede into a collapsible panel (re-openable).
+  const [hasThread, setHasThread] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const chatRef = useRef<EarnChatHandle>(null);
   const earnCtx = useEarnContext();
   const copy = copyFor(earnCtx.kind);
 
-  function seedChat(text: string) {
-    chatRef.current?.seed(text);
+  // Quick actions + "ask a specialist to step in" auto-send and let Earn act.
+  function runChat(text: string) {
+    chatRef.current?.seedAndSend(text);
+    setPanelOpen(false);
   }
 
   // Entity-specific subtitle when a drawer override gives us a label.
   const subtitle = earnCtx.entityLabel
     ? `${copy.subtitle} · ${earnCtx.entityLabel}`
     : copy.subtitle;
+
+  const starterPanel = (
+    <>
+      <RecommendedActions kind={earnCtx.kind} onSeed={runChat} />
+      <TeamStrip active={activeSpecialist} onSelect={setActiveSpecialist} onSeed={runChat} />
+    </>
+  );
 
   return (
     <aside
@@ -231,10 +242,41 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
       />
       <PresenceHeader onClose={onClose} subtitle={subtitle} activity={copy.activity} />
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-        <EarnChat ref={chatRef} />
-        <RecommendedActions kind={earnCtx.kind} onSeed={seedChat} />
-        <TeamStrip active={activeSpecialist} onSelect={setActiveSpecialist} onSeed={seedChat} />
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-4">
+        {hasThread ? (
+          <div className="flex-none">
+            <button
+              type="button"
+              onClick={() => setPanelOpen((v) => !v)}
+              aria-expanded={panelOpen}
+              data-testid="earn-dock-panel-toggle"
+              className="flex w-full items-center justify-between rounded-lg border border-hairline bg-surface-1 px-2.5 py-1.5 text-[11px] font-semibold text-fg-3 transition hover:bg-surface-2"
+            >
+              Actions &amp; specialist team
+              <ChevronDown
+                size={14}
+                strokeWidth={2}
+                className={cn('transition-transform', panelOpen && 'rotate-180')}
+                aria-hidden
+              />
+            </button>
+            {panelOpen ? (
+              <div className="mt-3 max-h-[42vh] space-y-4 overflow-y-auto">{starterPanel}</div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">{starterPanel}</div>
+        )}
+
+        <EarnChat
+          ref={chatRef}
+          context={{
+            kind: earnCtx.kind,
+            entityId: earnCtx.entityId,
+            entityLabel: earnCtx.entityLabel
+          }}
+          onThreadChange={setHasThread}
+        />
       </div>
     </aside>
   );
