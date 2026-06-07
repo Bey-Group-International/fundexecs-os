@@ -59,42 +59,42 @@ export interface MemberTypeVariant {
 
 export const MEMBER_TYPE_VARIANTS: Record<MemberType | 'default', MemberTypeVariant> = {
   investment_firm: {
-    eyebrow: 'Chief Operating Officer',
+    eyebrow: 'Chief Operating Officer · your live AI guide',
     greeting: (n) => `Today's plan, ${n}.`,
     summary:
       'Run the desk like a far larger institution — every move on the record, audit-ready, documented as it forms.',
     operateOrder: ['stage', 'raise', 'alerts', 'daily']
   },
   individual_investor: {
-    eyebrow: 'Chief Operating Officer',
+    eyebrow: 'Chief Operating Officer · your live AI guide',
     greeting: (n) => `Good to see you, ${n}.`,
     summary:
       'Your private allocator desk — Earn keeps the watchlist warm, the diligence clean, and the conviction sharp.',
     operateOrder: ['stage', 'alerts', 'daily', 'raise']
   },
   service_provider: {
-    eyebrow: 'Chief Operating Officer',
+    eyebrow: 'Chief Operating Officer · your live AI guide',
     greeting: (n) => `Welcome back, ${n}.`,
     summary:
       'Inbound, ideal-client matches, and demand signal — Earn keeps the practice on the record.',
     operateOrder: ['daily', 'stage', 'alerts', 'raise']
   },
   startup: {
-    eyebrow: 'Chief Operating Officer',
+    eyebrow: 'Chief Operating Officer · your live AI guide',
     greeting: (n) => `Hey ${n} — let's get the raise closed.`,
     summary:
       'Raise materials, warm intros, investor targets — Earn keeps every conversation audit-ready.',
     operateOrder: ['raise', 'daily', 'stage', 'alerts']
   },
   student: {
-    eyebrow: 'Chief Operating Officer',
+    eyebrow: 'Chief Operating Officer · your live AI guide',
     greeting: (n) => `Welcome, ${n}.`,
     summary:
       "Your student-led-fund desk — Earn shapes the loop while you build the institution's instincts.",
     operateOrder: ['daily', 'stage', 'alerts', 'raise']
   },
   default: {
-    eyebrow: 'Chief Operating Officer',
+    eyebrow: 'Chief Operating Officer · your live AI guide',
     greeting: (n) => `Good to see you, ${n}.`,
     summary:
       'Your private-markets command center — Earn coordinates the team and your Chain of Trust holds the proof.',
