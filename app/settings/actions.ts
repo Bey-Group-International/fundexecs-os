@@ -93,6 +93,62 @@ export async function updateAccountSettings(
   return result('success', 'Account settings saved.');
 }
 
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * Upload a profile photo to the `avatars` storage bucket and persist its public
+ * URL to `profiles.avatar_url` (also mirrored into auth metadata). The file is
+ * stored under the user's own `{user_id}/…` prefix, which the bucket RLS
+ * requires. Initials remain the fallback whenever `avatar_url` is null.
+ */
+export async function updateAvatar(
+  _prevState: SettingsActionState,
+  formData: FormData
+): Promise<SettingsActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return result('error', 'Sign in again before updating your photo.');
+
+  const file = formData.get('avatar');
+  if (!(file instanceof File) || file.size === 0) {
+    return result('error', 'Choose an image to upload.');
+  }
+  if (!file.type.startsWith('image/')) {
+    return result('error', 'That file is not an image.');
+  }
+  if (file.size > MAX_AVATAR_BYTES) {
+    return result('error', 'Image must be 5 MB or smaller.');
+  }
+
+  const ext =
+    (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+  const path = `${user.id}/avatar-${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('avatars')
+    .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '3600' });
+  if (uploadError) return result('error', uploadError.message);
+
+  const {
+    data: { publicUrl }
+  } = supabase.storage.from('avatars').getPublicUrl(path);
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({ avatar_url: publicUrl })
+    .eq('id', user.id);
+  if (profileError) return result('error', profileError.message);
+
+  // Mirror into auth metadata so any flow that reads it stays consistent.
+  await supabase.auth.updateUser({ data: { avatar_url: publicUrl } }).catch(() => {});
+
+  revalidatePath('/settings');
+  revalidatePath('/', 'layout');
+  return result('success', 'Profile photo updated.');
+}
+
 export async function updateOrganizationSettings(
   _prevState: SettingsActionState,
   formData: FormData

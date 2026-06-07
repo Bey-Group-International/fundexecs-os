@@ -3,11 +3,10 @@
 import { useEffect, useRef } from 'react';
 import { Bell, Search, Sun, Moon, Menu } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Avatar, AnimatedNumber } from '@/components/ui';
-import { EarnCoin } from '@/components/screens/EarnCoin';
 import type { ShellIdentity } from '@/lib/queries/identity';
 import type { CreditWallet } from '@/lib/queries/credit-wallet';
 import { CreditWalletGauge } from './CreditWalletGauge';
+import { TopNavAccountMenu } from './account/TopNavAccountMenu';
 
 /** Topbar theme toggle — flips `data-theme`, persists to localStorage('fx-theme').
  *  Icon is driven by `data-theme` via CSS (no React state) so there's no
@@ -46,33 +45,22 @@ export interface Wave1TopNavProps {
   identity: ShellIdentity;
   /** Mobile menu trigger handler (opens the side-rail drawer). */
   onMenu: () => void;
-  /** Earn dock toggle handler (gold coin pill in the nav). */
-  onAskEarn: () => void;
-  /** Credit-wallet payload — when omitted or `configured:false`, gauge stubs. */
+  /** Earn-coins wallet payload — when omitted the gauge self-fetches; when
+   *  `configured:false` it renders the clean stub. */
   wallet?: CreditWallet | null;
 }
 
 /**
- * Wave1TopNav — the global control bar per spec §6: org context (title /
- * subtitle relayed by the page), **⌘K command/search**, theme toggle, the
- * gold gamification coin (XP — opens Earn dock), the **Credit Wallet
- * fuel-gauge**, alerts bell, and the user avatar.
+ * Wave1TopNav — the global control bar: org context (title / subtitle relayed
+ * by the page), **⌘K command/search**, theme toggle, the **Earn-coins wallet**
+ * (the platform's AI credits, one proprietary module with inline top-up), the
+ * alerts bell, and the profile avatar (→ account menu).
  *
- * Two distinct "fuel" surfaces sit side by side:
- *  - The gold **Earn coin** (XP / level / streak) — opens the Earn dock.
- *  - The **Credit Wallet** (AI-agent credits + plan + top-up) — opens billing.
- *
- * They are deliberately separate per the spec: gamification fuel vs. agent
- * fuel. Color discipline: gold stays on the Earn coin only.
+ * Earn coins ARE the credits — there is a single wallet here, not a separate
+ * gamification coin. XP / level / streak live on the dashboard and the
+ * side-rail account footer. Color discipline: gold stays on the Earn wallet.
  */
-export function Wave1TopNav({
-  title,
-  subtitle,
-  identity,
-  onMenu,
-  onAskEarn,
-  wallet
-}: Wave1TopNavProps) {
+export function Wave1TopNav({ title, subtitle, identity, onMenu, wallet }: Wave1TopNavProps) {
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -110,8 +98,9 @@ export function Wave1TopNav({
         {subtitle ? <div className="truncate text-xs text-fg-4">{subtitle}</div> : null}
       </div>
 
-      {/* ⌘K command / search */}
-      <div className="relative hidden max-w-[320px] flex-[0_1_320px] md:block">
+      {/* ⌘K command / search — hidden until lg so the title/subtitle keep room
+          on mid-width screens (it was squashing "Command Center" next to it). */}
+      <div className="relative hidden min-w-0 max-w-[300px] flex-[0_1_300px] lg:block">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-5">
           <Search size={15} strokeWidth={1.9} aria-hidden />
         </span>
@@ -133,30 +122,9 @@ export function Wave1TopNav({
 
       <ThemeToggle />
 
-      {/* Earn coin (gamification fuel) — opens Earn dock */}
-      <button
-        type="button"
-        onClick={onAskEarn}
-        aria-label="Ask Earn"
-        data-testid="topnav-earn-wallet"
-        className="hidden items-center gap-2 rounded-[10px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-1 transition-[background,box-shadow] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1 sm:flex"
-      >
-        <EarnCoin size={22} />
-        <div className="leading-none">
-          <AnimatedNumber
-            value={identity.xp}
-            className="block text-[12.5px] font-semibold text-gold-1"
-          />
-          <div
-            aria-hidden
-            className="text-[8px] font-semibold uppercase tracking-[0.11em] text-fg-5"
-          >
-            Earn coins
-          </div>
-        </div>
-      </button>
-
-      {/* Credit wallet fuel-gauge */}
+      {/* Earn-coins wallet — the single proprietary credits module (Earn coins
+          are the platform's AI credits). XP/level lives in the dashboard +
+          side-rail, so there's no separate gamification pill here anymore. */}
       <CreditWalletGauge wallet={wallet} />
 
       {/* Alerts bell */}
@@ -182,7 +150,8 @@ export function Wave1TopNav({
         ) : null}
       </button>
 
-      <Avatar name={identity.name} size={32} />
+      {/* Profile avatar → account menu (Settings, workspace switch, log out) */}
+      <TopNavAccountMenu identity={identity} />
     </header>
   );
 }

@@ -30,8 +30,8 @@ const DIMENSION_HINT: Record<Dimension, string> = {
 /** The specific next move that raises each dimension toward 100 (UI-side map). */
 const DIMENSION_NEXT_ACTION: Record<Dimension, { action: string; cta: string; href: string }> = {
   profile: {
-    action: 'Fill the remaining Fund Profile fields an LP would probe.',
-    cta: 'Open Fund Profile',
+    action: 'Fill the remaining Profile fields a counterparty would probe.',
+    cta: 'Open Profile',
     href: '/profile'
   },
   proof: {

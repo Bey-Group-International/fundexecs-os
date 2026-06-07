@@ -38,6 +38,9 @@ export interface ShellIdentity {
   /** The active workspace's org id (matches one of `memberships[].orgId` when
    *  the user has any membership). `null` when there is no active org. */
   activeOrgId: string | null;
+  /** Profile photo URL — the Google sign-in photo (captured at signup) or an
+   *  uploaded avatar. `null` falls back to initials in the UI. */
+  avatarUrl: string | null;
 }
 
 /**
@@ -104,6 +107,23 @@ export async function getShellIdentity(): Promise<ShellIdentity | null> {
   const emailHandle = user.email ? user.email.split('@')[0] : null;
   const xp = profile?.xp ?? 0;
 
+  // Profile photo. Read defensively from `profiles.avatar_url` so a deployment
+  // where the column migration hasn't run yet can't break the whole identity
+  // (a failed/absent column simply yields no photo → initials fallback). The
+  // column is populated from the Google sign-in photo at signup and by the
+  // Settings avatar uploader.
+  let avatarUrl: string | null = null;
+  try {
+    const { data: avatarRow } = await supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('id', user.id)
+      .maybeSingle<{ avatar_url: string | null }>();
+    avatarUrl = avatarRow?.avatar_url ?? null;
+  } catch {
+    avatarUrl = null;
+  }
+
   // Unread, non-archived notifications drive the topbar bell + sidebar
   // nav badge. Computed in the same identity round so every authed page
   // gets the count fresh on each render — paired with revalidatePath in
@@ -127,6 +147,7 @@ export async function getShellIdentity(): Promise<ShellIdentity | null> {
     xp,
     unreadCount,
     memberships,
-    activeOrgId
+    activeOrgId,
+    avatarUrl
   };
 }

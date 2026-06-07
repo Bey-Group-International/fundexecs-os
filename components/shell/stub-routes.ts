@@ -83,7 +83,7 @@ export const STUB_ROUTES: Record<string, StubRoute> = {
     area: 'Intelligence',
     title: 'Capital Materials Studio',
     blurb:
-      'Generate decks, memos, and one-pagers directly from your Fund Profile — version-controlled, on-brand, and always tied to your latest numbers.',
+      'Generate decks, memos, and one-pagers directly from your Profile — version-controlled, on-brand, and always tied to your latest numbers.',
     capabilities: [
       'Decks and one-pagers built from Source-of-Truth fields.',
       'Earn rewrites for any audience (LP, co-investor, internal IC).',

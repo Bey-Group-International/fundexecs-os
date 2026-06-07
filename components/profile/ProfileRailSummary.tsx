@@ -4,7 +4,7 @@ import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { FundProfile } from '@/lib/queries/fund-profile';
 
-export interface FundProfileRailSummaryProps {
+export interface ProfileRailSummaryProps {
   profile: FundProfile;
   /** Where the compact summary navigates to on click — defaults to /profile. */
   href?: string;
@@ -12,21 +12,20 @@ export interface FundProfileRailSummaryProps {
 }
 
 /**
- * FundProfileRailSummary — a compact summary card meant for embedding in
- * the side-rail's Source-of-Truth area (or any narrow surface). Fund name,
- * tier, completeness bar, and the top gap label. Click-through opens the
- * full Fund Profile.
+ * ProfileRailSummary — a compact summary card for the side-rail's Source-of-Truth
+ * area (or any narrow surface). Entity name, completeness bar, and the top gap
+ * label. Click-through opens the full Profile.
  */
-export function FundProfileRailSummary({
+export function ProfileRailSummary({
   profile,
   href = '/profile',
   className
-}: FundProfileRailSummaryProps) {
+}: ProfileRailSummaryProps) {
   const topGap = profile.gaps[0];
   return (
     <Link
       href={href}
-      data-testid="fund-profile-rail-summary"
+      data-testid="profile-rail-summary"
       className={cn(
         'group flex items-start gap-3 rounded-xl border border-hairline bg-bg-1 px-3 py-2.5 transition-[background,transform,box-shadow] hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-[var(--shadow-sm)]',
         className
@@ -62,8 +61,8 @@ export function FundProfileRailSummary({
   );
 }
 
-/** Tiny renderer for when a fund profile isn't available yet. */
-export function FundProfileRailSummaryEmpty({
+/** Tiny renderer for when a profile isn't available yet. */
+export function ProfileRailSummaryEmpty({
   href = '/profile',
   className
 }: {
@@ -71,12 +70,12 @@ export function FundProfileRailSummaryEmpty({
   className?: string;
 }) {
   return (
-    <Card data-testid="fund-profile-rail-summary-empty" className={cn('p-3', className)}>
+    <Card data-testid="profile-rail-summary-empty" className={cn('p-3', className)}>
       <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
         Source of Truth
       </p>
       <p className="mt-1 text-[12px] text-fg-3">
-        Set up your Fund Profile to surface readiness everywhere.
+        Set up your Profile to surface readiness everywhere.
       </p>
       <Link
         href={href}
