@@ -9,7 +9,7 @@ import { SectionTitle } from '@/components/ui';
  * ========================================================================= */
 
 const FORMATS: { icon: LucideIcon; title: string; note: string }[] = [
-  { icon: Presentation, title: 'Pitch deck', note: 'Built from your Fund Profile' },
+  { icon: Presentation, title: 'Pitch deck', note: 'Built from your Profile' },
   { icon: FileText, title: 'LP one-pager', note: 'Audience-tuned by Earn' },
   { icon: ScrollText, title: 'IC memo', note: 'Source-of-Truth fields' },
   { icon: FolderTree, title: 'Data-room index', note: 'Versioned & traceable' }

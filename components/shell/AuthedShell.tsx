@@ -8,7 +8,7 @@ import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getDashboardData } from '@/lib/queries/dashboard';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
-import { FundProfileRailSummary, FundProfileRailSummaryEmpty } from '@/components/fund-profile';
+import { ProfileRailSummary, ProfileRailSummaryEmpty } from '@/components/profile';
 
 export interface AuthedShellProps {
   title: string;
@@ -62,9 +62,9 @@ export async function AuthedShell({
   ]);
 
   const sourceOfTruthSummary = fundProfile ? (
-    <FundProfileRailSummary profile={fundProfile} />
+    <ProfileRailSummary profile={fundProfile} />
   ) : (
-    <FundProfileRailSummaryEmpty />
+    <ProfileRailSummaryEmpty />
   );
 
   return (

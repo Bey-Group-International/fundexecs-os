@@ -189,7 +189,7 @@ export function AccountMenu({ identity, onSignOut, onNavigate }: AccountMenuProp
             open && 'bg-surface-1'
           )}
         >
-          <Avatar name={identity.name} size={30} />
+          <Avatar name={identity.name} src={identity.avatarUrl} size={30} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12.5px] font-semibold text-fg-1">{identity.name}</div>
             <div className="truncate text-[10.5px] text-fg-4">{identity.orgName}</div>
@@ -215,7 +215,7 @@ export function AccountMenu({ identity, onSignOut, onNavigate }: AccountMenuProp
  * Menu body
  * --------------------------------------------------------------------------*/
 
-interface MenuBodyProps {
+export interface MenuBodyProps {
   identity: ShellIdentity;
   activeRole: string;
   isAdmin: boolean;
@@ -224,7 +224,7 @@ interface MenuBodyProps {
   onOpenShortcuts: () => void;
 }
 
-function MenuBody({
+export function MenuBody({
   identity,
   activeRole,
   isAdmin,
@@ -236,7 +236,7 @@ function MenuBody({
     <div className="flex flex-col">
       {/* 1. Identity header */}
       <div className="flex items-start gap-3 border-b border-hairline px-3.5 py-3.5">
-        <Avatar name={identity.name} size={40} />
+        <Avatar name={identity.name} src={identity.avatarUrl} size={40} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13.5px] font-semibold text-fg-1">{identity.name}</div>
           {identity.email ? (

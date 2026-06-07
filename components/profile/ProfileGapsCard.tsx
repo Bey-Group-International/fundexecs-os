@@ -12,23 +12,23 @@ const SEVERITY_META: Record<
   weak: { tone: 'warning', color: 'var(--warning)', icon: AlertTriangle }
 };
 
-export interface FundProfileGapsCardProps {
+export interface ProfileGapsCardProps {
   profile: FundProfile;
   className?: string;
 }
 
 /**
- * FundProfileGapsCard — the LP-probe list. Each gap names the field, says why
- * an LP cares, and routes to the surface that closes it. Solid bg-bg-1 rows
- * with severity-tinted icon discs. The empty state is the win state.
+ * ProfileGapsCard — the list of fields a counterparty would press on. Each gap
+ * names the field, says why it matters, and routes to onboarding to close it.
+ * The empty state is the win state.
  */
-export function FundProfileGapsCard({ profile, className }: FundProfileGapsCardProps) {
+export function ProfileGapsCard({ profile, className }: ProfileGapsCardProps) {
   const { gaps } = profile;
 
   return (
-    <Card className={cn('p-5', className)} data-testid="fund-profile-gaps">
+    <Card className={cn('p-5', className)} data-testid="profile-gaps">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <SectionTitle eyebrow="LP probe · audit-ready" title="Gaps an LP would press on" />
+        <SectionTitle eyebrow="Credibility · audit-ready" title="Gaps to close" />
         {gaps.length === 0 ? (
           <Badge tone="success" dot className="text-[10px]">
             Clear
@@ -44,14 +44,14 @@ export function FundProfileGapsCard({ profile, className }: FundProfileGapsCardP
         <div className="rounded-xl border border-dashed border-hairline bg-surface-1 px-4 py-6 text-center">
           <ShieldCheck size={18} strokeWidth={1.9} className="mx-auto text-success" aria-hidden />
           <p className="mt-2 text-[12.5px] font-medium text-fg-2">
-            Every LP-probed field on the record.
+            Every required field on the record.
           </p>
           <p className="mt-0.5 text-[11px] text-fg-4">
             Earn keeps it current — audit-ready, documented as it forms.
           </p>
         </div>
       ) : (
-        <ul className="flex flex-col gap-1.5" data-testid="fund-profile-gaps-list">
+        <ul className="flex flex-col gap-1.5" data-testid="profile-gaps-list">
           {gaps.map((gap) => {
             const meta = SEVERITY_META[gap.severity];
             const Icon = meta.icon;
@@ -59,7 +59,7 @@ export function FundProfileGapsCard({ profile, className }: FundProfileGapsCardP
               <li key={`${gap.field}-${gap.severity}`}>
                 <Link
                   href="/onboarding"
-                  data-testid={`fund-profile-gap-${gap.field}`}
+                  data-testid={`profile-gap-${gap.field}`}
                   className="group flex items-start gap-3 rounded-xl border border-hairline bg-bg-1 px-3 py-2.5 transition-[background,transform,box-shadow] hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-[var(--shadow-sm)]"
                 >
                   <span

@@ -10,8 +10,9 @@ import { getDashboardData } from '@/lib/queries/dashboard';
 import { getAdminData, type AdminData } from '@/lib/queries/admin';
 import { getAdminMetrics, type AdminMetrics } from '@/lib/queries/admin-metrics';
 import { getBetaInvites, type BetaInvite } from '@/lib/queries/beta-invites';
+import { getBetaLinks, type BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
-import { FundProfileRailSummary } from '@/components/fund-profile';
+import { ProfileRailSummary } from '@/components/profile';
 import type { Database } from '@/lib/supabase/database.types';
 import { SettingsView } from './SettingsView';
 
@@ -76,6 +77,7 @@ export default async function SettingsPage() {
   let isAdmin = false;
   let adminData: AdminData | null = null;
   let invites: BetaInvite[] = [];
+  let betaLinks: BetaLinkWithStatus[] = [];
   let adminMetrics: AdminMetrics | null = null;
   let viewerRole: OrgMemberRole | null = null;
   if (org && user) {
@@ -85,16 +87,17 @@ export default async function SettingsPage() {
     isAdmin = me?.role === 'owner' || me?.role === 'admin';
     if (isAdmin && ad) {
       adminData = ad;
-      [invites, adminMetrics] = await Promise.all([
+      [invites, adminMetrics, betaLinks] = await Promise.all([
         getBetaInvites(org.orgId).catch(() => []),
-        getAdminMetrics(org.orgId).catch(() => null)
+        getAdminMetrics(org.orgId).catch(() => null),
+        getBetaLinks(org.orgId).catch(() => [])
       ]);
     }
   }
 
   const navSignals = dashboard ? buildRailSignals(dashboard) : undefined;
   const sourceOfTruthSummary = fundProfile ? (
-    <FundProfileRailSummary profile={fundProfile} />
+    <ProfileRailSummary profile={fundProfile} />
   ) : undefined;
 
   return (
@@ -119,6 +122,7 @@ export default async function SettingsPage() {
             ? memberProfile.details.contact_phone
             : null
         }
+        avatarUrl={identity?.avatarUrl ?? null}
         proofStatus={memberProfile?.status ?? 'in_progress'}
         proofPct={memberProfile?.completionPct ?? 0}
         proofMemberType={memberProfile?.memberType ?? null}
@@ -127,6 +131,7 @@ export default async function SettingsPage() {
         isAdmin={isAdmin}
         adminData={adminData}
         invites={invites}
+        betaLinks={betaLinks}
         adminMetrics={adminMetrics}
         viewerRole={viewerRole}
       />

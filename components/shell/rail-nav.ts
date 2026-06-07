@@ -84,7 +84,7 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
     icon: ShieldCheck,
     description: 'The canonical record everything reads from.',
     items: [
-      { href: '/profile', label: 'Fund Profile', icon: IdCard, live: true },
+      { href: '/profile', label: 'Profile', icon: IdCard, live: true },
       { href: '/trust', label: 'Trust Center', icon: ShieldCheck, live: true }
     ]
   },

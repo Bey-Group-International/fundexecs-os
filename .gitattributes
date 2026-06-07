@@ -1,0 +1,22 @@
+# Normalize line endings across platforms.
+#
+# Without this, Git's core.autocrlf on Windows rewrites LF -> CRLF on checkout,
+# which makes Prettier (configured with the default endOfLine: "lf") flag every
+# file in the repo. Forcing LF for text keeps local `format:check` in sync with
+# CI (which runs on Linux) regardless of the contributor's OS.
+* text=auto eol=lf
+
+# Binary files: never apply line-ending conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.svg text eol=lf
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
+*.zip binary
