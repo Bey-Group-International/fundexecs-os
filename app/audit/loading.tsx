@@ -1,0 +1,4 @@
+import { RouteLoading } from '@/components/shell/RouteLoading';
+export default function AuditLoading() {
+  return <RouteLoading />;
+}
