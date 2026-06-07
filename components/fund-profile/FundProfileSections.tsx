@@ -1,7 +1,26 @@
-import { Target, Compass, Coins, Scale, History, Users } from 'lucide-react';
-import { Card, SectionTitle } from '@/components/ui';
+import Link from 'next/link';
+import { Target, Compass, Coins, Scale, History, Users, Plus } from 'lucide-react';
+import { Badge, Card, SectionTitle } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { FundProfile } from '@/lib/queries/fund-profile';
+
+/**
+ * On-record / gap status chip shared by every section card. Makes the canonical
+ * record scannable at a glance (green dot = documented, warning = an LP would
+ * press on it). Uses the shared `Badge` so tone tokens stay consistent with the
+ * Gaps card. No gold (reserved for Earn).
+ */
+function StatusChip({ present }: { present: boolean }) {
+  return present ? (
+    <Badge tone="success" dot className="flex-none text-[9.5px] uppercase tracking-[0.1em]">
+      On record
+    </Badge>
+  ) : (
+    <Badge tone="warning" className="flex-none text-[9.5px] uppercase tracking-[0.1em]">
+      Add
+    </Badge>
+  );
+}
 
 function money(n: number | null): string {
   if (n == null || n <= 0) return '—';
@@ -73,14 +92,25 @@ export function FundProfileSections({ profile, className }: FundProfileSectionsP
         empty="Track record is the biggest LP diligence item — list prior deals, returns, and notable exits."
       />
       <Card data-testid="fund-profile-team" className="p-5">
-        <SectionTitle eyebrow="Team · LPs back people" title="Masthead" className="mb-3" />
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <SectionTitle eyebrow="Team · LPs back people" title="Masthead" />
+          <StatusChip present={profile.team.length > 0} />
+        </div>
         {profile.team.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-hairline bg-surface-1 p-4 text-center">
+          <Link
+            href="/onboarding"
+            data-testid="fund-profile-team-empty"
+            className="group block rounded-xl border border-dashed border-hairline bg-surface-1 p-4 text-center outline-none transition-[transform,box-shadow,background] hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-[var(--shadow-sm)] focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-0"
+          >
             <Users size={18} strokeWidth={1.9} className="mx-auto text-fg-4" aria-hidden />
             <p className="mt-2 text-[12px] text-fg-3">
               Name the GP and key team with their roles — Earn surfaces this to every LP.
             </p>
-          </div>
+            <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
+              Add the team
+              <Plus size={12} strokeWidth={2.2} aria-hidden />
+            </span>
+          </Link>
         ) : (
           <ul className="grid gap-1.5 sm:grid-cols-2">
             {profile.team.map((m) => (
@@ -124,11 +154,18 @@ function SectionCard({
   empty: string;
   testid: string;
 }) {
-  const present = body && body.trim().length > 0;
-  return (
-    <Card data-testid={testid} className="p-5">
+  const present = Boolean(body && body.trim().length > 0);
+
+  const inner = (
+    <>
       <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl border border-hairline bg-surface-1 text-azure-1">
+        <span
+          className={cn(
+            'flex h-9 w-9 flex-none items-center justify-center rounded-xl border bg-bg-1 transition-colors',
+            present ? 'border-hairline bg-surface-1 text-azure-1' : 'text-warning'
+          )}
+          style={present ? undefined : { borderColor: 'var(--warning)' }}
+        >
           <Icon size={15} strokeWidth={1.9} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
@@ -139,6 +176,7 @@ function SectionCard({
             {title}
           </h3>
         </div>
+        <StatusChip present={present} />
       </div>
       <p
         className={cn(
@@ -148,7 +186,29 @@ function SectionCard({
       >
         {present ? body : empty}
       </p>
-    </Card>
+    </>
+  );
+
+  // Present sections are read-mostly. A gap is a live invitation: make the whole
+  // card a link into the profile builder so the empty state is actionable, not
+  // a dead end (matching the Gaps card's behavior).
+  if (present) {
+    return (
+      <Card data-testid={testid} className="p-5">
+        {inner}
+      </Card>
+    );
+  }
+  return (
+    <Link
+      href="/onboarding"
+      data-testid={testid}
+      className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-0"
+    >
+      <Card className="p-5 transition-[transform,box-shadow] group-hover:-translate-y-0.5 group-hover:shadow-[var(--shadow-sm)]">
+        {inner}
+      </Card>
+    </Link>
   );
 }
 
