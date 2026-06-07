@@ -579,5 +579,9 @@ export {
   type DashboardAction,
   type ExecutionScore,
   type MajorAlert,
-  type ActivityItem
+  type ActivityItem,
+  type SinceLastVisit,
+  type Momentum,
+  type EarnBriefing,
+  type AgentStatus
 } from './lifecycle';
