@@ -11,6 +11,8 @@ import {
   type LifecycleStage,
   type ReadinessDimensionScore
 } from '@/lib/lifecycle';
+import { readDailyDone, readDismissedAlerts, readLastVisit } from '@/lib/dashboard/state';
+import { getSpecialists } from '@/lib/team/roster';
 
 /* ============================================================================
  * lib/queries/dashboard/lifecycle.ts — the lifecycle-aware Dashboard payload.
@@ -75,6 +77,8 @@ export interface DashboardAction {
   cta: string;
   href: string;
   tone: 'azure' | 'gold' | 'success' | 'warning';
+  /** Whether the operator checked this off today (daily-command list). */
+  done?: boolean;
 }
 
 /** Front-facing Execution Score = Chain of Trust + gamification. */
@@ -108,6 +112,45 @@ export interface ActivityItem {
   at: string;
   /** 'Earn', the AI committee, a teammate, or 'You'. */
   actor: string;
+}
+
+/**
+ * "Since you were away" — the compounding-continuity summary. Computed against
+ * the operator's last-visit cookie; `isFirstVisit` is true the first time only.
+ */
+export interface SinceLastVisit {
+  isFirstVisit: boolean;
+  lastVisitISO: string | null;
+  /** Count of new desk events (trust + diligence + matches) since last visit. */
+  newActivityCount: number;
+  /** Up to 3 human highlight lines for the banner. */
+  highlights: string[];
+}
+
+/** A momentum series for the raise/portfolio sparkline chart. */
+export interface Momentum {
+  /** Weekly buckets, oldest→newest (cumulative committed capital). */
+  points: number[];
+  label: string;
+  /** % change first→last non-zero bucket, or null when flat/empty. */
+  deltaPct: number | null;
+  tone: 'success' | 'azure' | 'neutral';
+}
+
+/** Earn's synthesized daily briefing (deterministic; AI-upgrade is a seam). */
+export interface EarnBriefing {
+  /** 2–4 short lines, voiced by Earn (COO). */
+  lines: string[];
+}
+
+/** One member of the executive desk as surfaced on the dashboard strip. */
+export interface AgentStatus {
+  /** Canonical brain slug — the UI resolves name/position/icon from the roster. */
+  slug: string;
+  /** Short status line for this stage ("Sequencing LP outreach"). */
+  status: string;
+  /** Whether this specialist is on point for the current lifecycle stage. */
+  onPoint: boolean;
 }
 
 /** The full lifecycle-aware Dashboard payload. */
@@ -156,6 +199,18 @@ export interface DashboardData {
     completenessScore: number;
     topGapLabels: string[];
   };
+
+  /** Compounding-continuity summary ("since you were away"). */
+  sinceLastVisit: SinceLastVisit;
+
+  /** Raise/portfolio momentum series for the sparkline chart. */
+  momentum: Momentum;
+
+  /** Earn's synthesized daily briefing. */
+  briefing: EarnBriefing;
+
+  /** The 15-strong executive desk with per-stage status. */
+  agentTeam: AgentStatus[];
 }
 
 /* ---------------------------------------------------------------------------
@@ -706,6 +761,181 @@ async function loadActivityFeed(orgId: string): Promise<ActivityItem[]> {
 }
 
 /* ---------------------------------------------------------------------------
+ * Compounding continuity — "since you were away", momentum, briefing, team.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Count new desk events since the operator's last visit. RLS-scoped; degrades
+ * to 0 on any read error so the banner never breaks the page.
+ */
+async function loadSinceCounts(orgId: string, lastVisitISO: string | null): Promise<number> {
+  if (!lastVisitISO) return 0;
+  const supabase = await createClient();
+  let total = 0;
+  const tables: Array<'trust_events' | 'diligence_runs' | 'matches'> = [
+    'trust_events',
+    'diligence_runs',
+    'matches'
+  ];
+  await Promise.all(
+    tables.map(async (table) => {
+      try {
+        const { count } = await supabase
+          .from(table)
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId)
+          .gte('created_at', lastVisitISO);
+        total += count ?? 0;
+      } catch {
+        /* table unreadable in this env — skip */
+      }
+    })
+  );
+  return total;
+}
+
+function buildSinceLastVisit(
+  lastVisitISO: string | null,
+  newActivityCount: number,
+  activityFeed: ActivityItem[]
+): SinceLastVisit {
+  const highlights = lastVisitISO
+    ? activityFeed
+        .filter((i) => i.at > lastVisitISO)
+        .slice(0, 3)
+        .map((i) => `${i.title} · ${i.actor}`)
+    : [];
+  return {
+    isFirstVisit: lastVisitISO === null,
+    lastVisitISO,
+    newActivityCount,
+    highlights
+  };
+}
+
+/**
+ * Cumulative committed-capital momentum over the last 8 ISO weeks. Resilient:
+ * returns an empty series (UI hides the chart) on any read failure.
+ */
+async function loadMomentum(orgId: string): Promise<Momentum> {
+  const WEEKS = 8;
+  const empty: Momentum = {
+    points: [],
+    label: 'Committed capital',
+    deltaPct: null,
+    tone: 'neutral'
+  };
+  try {
+    const supabase = await createClient();
+    const since = new Date(Date.now() - WEEKS * 7 * 86400_000).toISOString();
+    const { data } = await supabase
+      .from('allocations')
+      .select('amount, status, created_at')
+      .eq('org_id', orgId)
+      .gte('created_at', since);
+
+    const rows = (data ?? []) as Array<{
+      amount: number | null;
+      status: string | null;
+      created_at: string | null;
+    }>;
+    const weekly = new Array(WEEKS).fill(0);
+    const now = Date.now();
+    for (const r of rows) {
+      const status = (r.status ?? '').toLowerCase();
+      if (!COMMITTED_STATUSES.has(status)) continue;
+      if (!r.created_at) continue;
+      const ageWeeks = Math.floor((now - new Date(r.created_at).getTime()) / (7 * 86400_000));
+      const idx = WEEKS - 1 - Math.min(WEEKS - 1, Math.max(0, ageWeeks));
+      weekly[idx] += r.amount ?? 0;
+    }
+    // Cumulative running total → an always-rising momentum line.
+    const points: number[] = [];
+    let running = 0;
+    for (const w of weekly) {
+      running += w;
+      points.push(running);
+    }
+    const firstNonZero = points.find((p) => p > 0) ?? 0;
+    const last = points[points.length - 1] ?? 0;
+    const deltaPct =
+      firstNonZero > 0 ? Math.round(((last - firstNonZero) / firstNonZero) * 100) : null;
+    if (last === 0) return empty;
+    return { points, label: 'Committed capital · 8 wks', deltaPct, tone: 'success' };
+  } catch {
+    return empty;
+  }
+}
+
+/** Earn's deterministic daily briefing. SEAM: swap for an Opus synthesis pass. */
+function buildBriefing(
+  stageLabel: string,
+  stageBlurb: string,
+  nextBestAction: DashboardAction | null,
+  majorAlerts: MajorAlert[],
+  raiseProgress: RaiseProgress,
+  since: SinceLastVisit
+): EarnBriefing {
+  const lines: string[] = [];
+  lines.push(`You're in the ${stageLabel.toLowerCase()} stage — ${stageBlurb}`);
+  if (nextBestAction) {
+    lines.push(`Highest-leverage move: ${nextBestAction.title.toLowerCase()}.`);
+  }
+  const critical = majorAlerts.filter((a) => a.severity === 'critical').length;
+  if (critical > 0) {
+    lines.push(
+      `${critical} item${critical === 1 ? '' : 's'} need${critical === 1 ? 's' : ''} your attention before LP-facing work.`
+    );
+  } else if (raiseProgress.target > 0) {
+    lines.push(
+      `You're at ${raiseProgress.coveragePct}% of target coverage — keep the stack compounding.`
+    );
+  }
+  if (!since.isFirstVisit && since.newActivityCount > 0) {
+    lines.push(
+      `Since you were away, the desk logged ${since.newActivityCount} update${since.newActivityCount === 1 ? '' : 's'}.`
+    );
+  }
+  return { lines: lines.slice(0, 4) };
+}
+
+/** Per-stage specialists who are "on point" — drives the agent-team strip. */
+const STAGE_ON_POINT: Record<LifecycleStage, readonly string[]> = {
+  establish_truth: ['executive-advisor', 'automater', 'workflow-instructor'],
+  get_raise_ready: ['executive-advisor', 'pr-director', 'capital-raiser'],
+  source_lps: ['rainmaker', 'lead-generator', 'capital-connector', 'event-curator'],
+  convert_lps: ['capital-raiser', 'investor-relations', 'capital-connector'],
+  source_deals: ['deal-sourcer', 'capital-connector', 'legal-admin'],
+  operate: ['investor-relations', 'legal-admin', 'master-workflow'],
+  prove: ['investor-relations', 'executive-advisor', 'legal-admin']
+};
+
+const ON_POINT_STATUS: Record<string, string> = {
+  'executive-advisor': 'Pressure-testing the thesis',
+  automater: 'Structuring inbound data',
+  'workflow-instructor': 'Tuning your operating rhythm',
+  'pr-director': 'Sharpening the narrative',
+  'capital-raiser': 'Running the raise plan',
+  rainmaker: 'Building demand',
+  'lead-generator': 'Warming the funnel',
+  'capital-connector': 'Mapping capital to fit',
+  'event-curator': 'Curating the right rooms',
+  'investor-relations': 'Keeping LPs close',
+  'deal-sourcer': 'Sourcing on-thesis deals',
+  'legal-admin': 'Guarding the downside',
+  'master-workflow': 'Sequencing the desk'
+};
+
+function buildAgentTeam(stage: LifecycleStage): AgentStatus[] {
+  const onPoint = new Set(STAGE_ON_POINT[stage] ?? []);
+  return getSpecialists().map((m) => ({
+    slug: m.slug,
+    status: onPoint.has(m.slug) ? (ON_POINT_STATUS[m.slug] ?? 'On point') : 'Standing by',
+    onPoint: onPoint.has(m.slug)
+  }));
+}
+
+/* ---------------------------------------------------------------------------
  * Entry point
  * ------------------------------------------------------------------------- */
 
@@ -721,16 +951,34 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
   // need for the trust lookup, so it runs first; the rest run in parallel.
   const fundProfile = await getFundProfile(orgId);
 
-  const [cmd, trust, pipeline, materialsReadiness, raiseProgress, identity, activityFeed] =
-    await Promise.all([
-      getCommandCenterData(orgId),
-      loadTrustProgress(orgId, fundProfile.managerUserId),
-      loadPipelineSignals(orgId),
-      loadMaterialsReadiness(orgId),
-      loadRaiseProgress(orgId, fundProfile),
-      getShellIdentity(),
-      loadActivityFeed(orgId)
-    ]);
+  // Per-user UI state (cheap cookie reads) drives continuity + inline actions.
+  const [lastVisitISO, dismissedAlertIds, dailyDoneIds] = await Promise.all([
+    readLastVisit(),
+    readDismissedAlerts(),
+    readDailyDone()
+  ]);
+
+  const [
+    cmd,
+    trust,
+    pipeline,
+    materialsReadiness,
+    raiseProgress,
+    identity,
+    activityFeed,
+    momentum,
+    newActivityCount
+  ] = await Promise.all([
+    getCommandCenterData(orgId),
+    loadTrustProgress(orgId, fundProfile.managerUserId),
+    loadPipelineSignals(orgId),
+    loadMaterialsReadiness(orgId),
+    loadRaiseProgress(orgId, fundProfile),
+    getShellIdentity(),
+    loadActivityFeed(orgId),
+    loadMomentum(orgId),
+    loadSinceCounts(orgId, lastVisitISO)
+  ]);
 
   const inputs: LifecycleInputs = {
     profileCompleteness: fundProfile.completenessScore,
@@ -772,7 +1020,24 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     raiseProgress,
     { contacted: pipeline.contacted, total: pipeline.total },
     identity?.unreadCount ?? 0
+  ).filter((a) => !dismissedAlertIds.has(a.id));
+
+  // Daily command = top actions tagged with today's check-off state.
+  const dailyCommand: DashboardAction[] = topActions.map((a) => ({
+    ...a,
+    done: dailyDoneIds.has(a.id)
+  }));
+
+  const sinceLastVisit = buildSinceLastVisit(lastVisitISO, newActivityCount, activityFeed);
+  const briefing = buildBriefing(
+    stageResult.label,
+    stageResult.blurb,
+    topActions[0] ?? null,
+    majorAlerts,
+    raiseProgress,
+    sinceLastVisit
   );
+  const agentTeam = buildAgentTeam(stageResult.stage);
 
   return {
     stage: stageResult.stage,
@@ -787,12 +1052,16 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     executionScore,
     majorAlerts,
     nextBestAction: topActions[0] ?? null,
-    dailyCommand: topActions,
+    dailyCommand,
     activityFeed,
     fundProfile: {
       fundName: fundProfile.fundName,
       completenessScore: fundProfile.completenessScore,
       topGapLabels: fundProfile.gaps.slice(0, 3).map((g) => g.label)
-    }
+    },
+    sinceLastVisit,
+    momentum,
+    briefing,
+    agentTeam
   };
 }

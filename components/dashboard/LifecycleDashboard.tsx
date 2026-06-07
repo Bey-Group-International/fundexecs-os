@@ -13,6 +13,11 @@ import { DailyCommandList } from './DailyCommandList';
 import { ActivityFeedCard } from './ActivityFeedCard';
 import { StageKpiGrid } from './StageKpiGrid';
 import { RaiseProgressBar } from './RaiseProgressBar';
+import { SinceAwayBanner } from './SinceAwayBanner';
+import { EarnBriefingCard } from './EarnBriefingCard';
+import { AgentTeamStrip } from './AgentTeamStrip';
+import { MomentumCard } from './MomentumCard';
+import { MarkVisited } from './MarkVisited';
 
 /* ============================================================================
  * LifecycleDashboard — the single, lifecycle-aware Dashboard canvas.
@@ -22,14 +27,18 @@ import { RaiseProgressBar } from './RaiseProgressBar';
  * `MEMBER_TYPE_VARIANTS`; the underlying data shape is the same `DashboardData`
  * for every operator.
  *
- * Section ordering follows the prototype's flagship dashboard:
- *   1. Hero      — greeting · LifecycleStageRail (7-step + loopProgress)
- *   2. Spotlight — NextBestAction · ExecutionScore · ReadinessGauge
- *   3. Stage     — StageKpiGrid · RaiseProgressBar
- *   4. Operate   — MajorAlerts · DailyCommand
- *   5. Audit     — ActivityFeed
+ * Section ordering (compounding command center):
+ *   0. Continuity — SinceAwayBanner ("since you were away") + MarkVisited
+ *   1. Hero       — greeting · LifecycleStageRail (7-step + loopProgress)
+ *   2. Briefing   — Earn's synthesized daily briefing (COO voice)
+ *   3. Spotlight  — NextBestAction · ExecutionScore · ReadinessGauge
+ *   4. Momentum   — committed-capital sparkline (hidden until there's data)
+ *   5. Team       — AgentTeamStrip (15-strong desk, stage-aware)
+ *   6. Operate    — MajorAlerts · DailyCommand · StageKpiGrid · RaiseProgress
+ *   7. Audit      — ActivityFeed
  *
- * Solid `bg-bg-1` everywhere. No inline hex. Tokens-only.
+ * Solid `bg-bg-1` everywhere. No inline hex. Tokens-only. Cards rise in via the
+ * shared `.fx-rise` (reduced-motion-guarded in globals.css).
  * ========================================================================= */
 
 export interface MemberTypeVariant {
@@ -106,13 +115,17 @@ export function LifecycleDashboard({ displayName, memberType, data }: LifecycleD
 
   return (
     <div
-      className="flex flex-col gap-[18px]"
+      className="flex flex-col gap-[14px]"
       data-testid="lifecycle-dashboard"
       data-member-type={memberType ?? 'unknown'}
       data-stage={currentStage}
     >
+      {/* 0) Continuity — record this visit + summarize what changed */}
+      <MarkVisited />
+      <SinceAwayBanner since={data.sinceLastVisit} />
+
       {/* 1) Hero — greeting + lifecycle rail */}
-      <Card className="relative overflow-hidden p-5">
+      <Card className="fx-rise relative overflow-hidden p-5">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 -z-10"
@@ -147,15 +160,24 @@ export function LifecycleDashboard({ displayName, memberType, data }: LifecycleD
         loopProgress={data.loopProgress}
       />
 
-      {/* 2) Spotlight — Next Best · Execution · Readiness */}
-      <div className="grid gap-[18px] lg:grid-cols-[1.3fr_1fr_1fr]">
+      {/* 2) Briefing — Earn's synthesized daily read */}
+      <EarnBriefingCard briefing={data.briefing} />
+
+      {/* 3) Spotlight — Next Best · Execution · Readiness */}
+      <div className="grid gap-[14px] lg:grid-cols-[1.3fr_1fr_1fr]">
         <NextBestActionCard action={data.nextBestAction} />
         <ExecutionScoreCard execution={data.executionScore} />
         <ReadinessGauge score={data.readinessScore} breakdown={data.readinessBreakdown} />
       </div>
 
-      {/* 3+4) Operate — order per member-type variant */}
-      <div className={cn('grid gap-[18px]', operateGridClass(variant.operateOrder.length))}>
+      {/* 4) Momentum — committed-capital trend (self-hides until there's data) */}
+      <MomentumCard momentum={data.momentum} />
+
+      {/* 5) Team — the 15-strong desk, working the current stage */}
+      <AgentTeamStrip team={data.agentTeam} />
+
+      {/* 6) Operate — order per member-type variant */}
+      <div className={cn('grid gap-[14px]', operateGridClass(variant.operateOrder.length))}>
         {variant.operateOrder.map((slot) => {
           if (slot === 'alerts') return <MajorAlertsCard key="alerts" alerts={data.majorAlerts} />;
           if (slot === 'daily') return <DailyCommandList key="daily" actions={data.dailyCommand} />;
@@ -167,7 +189,7 @@ export function LifecycleDashboard({ displayName, memberType, data }: LifecycleD
         })}
       </div>
 
-      {/* 5) Audit feed — bottom */}
+      {/* 7) Audit feed — bottom */}
       <ActivityFeedCard items={data.activityFeed} />
     </div>
   );
