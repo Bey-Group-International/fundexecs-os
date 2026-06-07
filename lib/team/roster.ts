@@ -229,6 +229,15 @@ const BY_SLUG: ReadonlyMap<string, TeamMember> = new Map(
   TEAM_ROSTER.map((m) => [m.slug, m] as const)
 );
 
+/**
+ * Map from lowercased first name → member. Used by surfaces that receive a
+ * specialist's first name (e.g. the signal scorer's `routed_specialist` value
+ * "eleanor") rather than a canonical slug.
+ */
+const BY_FIRST_NAME: ReadonlyMap<string, TeamMember> = new Map(
+  TEAM_ROSTER.map((m) => [m.name.split(/\s+/)[0]!.toLowerCase(), m] as const)
+);
+
 /** Return the Chief Operating Officer (Earn). Throws if the roster is misconfigured. */
 export function getCOO(): TeamMember {
   const earn = BY_SLUG.get(COO_SLUG);
@@ -252,4 +261,15 @@ export function getMember(slug: string | null | undefined): TeamMember | null {
 /** Lookup, falling back to the COO so callers can always render something safe. */
 export function getMemberOrCOO(slug: string | null | undefined): TeamMember {
   return getMember(slug) ?? getCOO();
+}
+
+/**
+ * Resolve a member by their first name (case-insensitive), e.g. "eleanor" or
+ * "Adrian". Falls back to slug lookup, then returns `null`. Useful where a
+ * stored value holds a specialist's first name rather than a canonical slug.
+ */
+export function getMemberByFirstName(name: string | null | undefined): TeamMember | null {
+  if (!name) return null;
+  const key = name.trim().toLowerCase();
+  return BY_FIRST_NAME.get(key) ?? BY_SLUG.get(key) ?? null;
 }

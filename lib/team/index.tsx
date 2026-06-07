@@ -23,7 +23,14 @@ import { cn } from '@/lib/utils';
 import { getMemberOrCOO, type TeamMember } from './roster';
 import { discColorsFor, gradientForSlug, initialsForName } from './avatar';
 
-export { TEAM_ROSTER, getCOO, getSpecialists, getMember, getMemberOrCOO } from './roster';
+export {
+  TEAM_ROSTER,
+  getCOO,
+  getSpecialists,
+  getMember,
+  getMemberOrCOO,
+  getMemberByFirstName
+} from './roster';
 export type { TeamMember, TeamGroup, TeamDiscColor } from './roster';
 export {
   gradientForSlug,
