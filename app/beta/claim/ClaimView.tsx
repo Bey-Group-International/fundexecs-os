@@ -20,15 +20,45 @@ import { TEAM_ROSTER, TeamAvatar } from '@/lib/team';
 import { MEMBER_TYPES, MEMBER_TYPE_LABELS, MEMBER_TYPE_BLURBS } from '@/lib/member-types';
 import { claimBetaLinkWithEmail } from '@/lib/actions/beta-links';
 import { BETA_APPLICATION_COOKIE, type BetaApplication } from '@/lib/beta/welcome';
+import { track } from '@vercel/analytics';
 
 type Scene = 'welcome' | 'breakdown' | 'apply' | 'enter';
 type Topic = 'intro' | 'team' | 'value';
 
+const SCENE_ORDER: Scene[] = ['welcome', 'breakdown', 'apply', 'enter'];
+
+/** Best-effort analytics — never let a tracking failure break the flow. */
+function ev(name: string, props?: Record<string, string>): void {
+  try {
+    track(name, props);
+  } catch {
+    // ignore
+  }
+}
+
+/** Honor prefers-reduced-motion. SSR-safe: false until the client reads it. */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    queueMicrotask(() => setReduced(mq.matches));
+    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return reduced;
+}
+
 /* ── tiny char-by-char reveal for Earn's lines (queueMicrotask reset keeps the
-      react-hooks/set-state-in-effect rule happy) ───────────────────────────── */
-function useTypewriter(text: string, speed = 16): string {
+      react-hooks/set-state-in-effect rule happy). Reveals instantly when the
+      user prefers reduced motion. ──────────────────────────────────────────── */
+function useTypewriter(text: string, reducedMotion: boolean, speed = 16): string {
   const [count, setCount] = useState(0);
   useEffect(() => {
+    if (reducedMotion) {
+      queueMicrotask(() => setCount(text.length));
+      return;
+    }
     let i = 0;
     queueMicrotask(() => setCount(0));
     const id = setInterval(() => {
@@ -37,13 +67,21 @@ function useTypewriter(text: string, speed = 16): string {
       if (i >= text.length) clearInterval(id);
     }, speed);
     return () => clearInterval(id);
-  }, [text, speed]);
-  return text.slice(0, count);
+  }, [text, speed, reducedMotion]);
+  return reducedMotion ? text : text.slice(0, count);
 }
 
-/** Earn's speech bubble — coin + typed line. */
-function EarnSays({ line, size = 44 }: { line: string; size?: number }) {
-  const typed = useTypewriter(line);
+/** Earn's speech bubble — coin + typed line, announced to screen readers. */
+function EarnSays({
+  line,
+  size = 44,
+  reducedMotion
+}: {
+  line: string;
+  size?: number;
+  reducedMotion: boolean;
+}) {
+  const typed = useTypewriter(line, reducedMotion);
   return (
     <div className="flex items-start gap-3.5">
       <div className="relative flex-none">
@@ -59,9 +97,18 @@ function EarnSays({ line, size = 44 }: { line: string; size?: number }) {
       </div>
       <div className="min-w-0 flex-1 pt-0.5">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-1">Earn</p>
-        <p className="mt-1 min-h-[1.6em] text-[15px] leading-7 text-fg-1">
+        <p
+          className="mt-1 min-h-[1.6em] text-[15px] leading-7 text-fg-1"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {typed}
-          <span className="ml-0.5 inline-block h-[1.05em] w-px translate-y-[2px] animate-pulse bg-gold-1 align-middle" />
+          <span
+            aria-hidden
+            className={`ml-0.5 inline-block h-[1.05em] w-px translate-y-[2px] bg-gold-1 align-middle ${
+              reducedMotion ? '' : 'animate-pulse'
+            }`}
+          />
         </p>
       </div>
     </div>
@@ -248,9 +295,13 @@ export function ClaimView({ token }: { token: string }) {
   const searchParams = useSearchParams();
   const redirectedError = searchParams.get('error');
 
+  const reducedMotion = usePrefersReducedMotion();
   const [scene, setScene] = useState<Scene>('welcome');
   const [topic, setTopic] = useState<Topic>('intro');
   const [askOpen, setAskOpen] = useState(false);
+
+  // Move focus to the active scene on change so keyboard/SR users follow along.
+  const sceneRef = useRef<HTMLDivElement>(null);
 
   // application capture
   const [name, setName] = useState('');
@@ -263,6 +314,25 @@ export function ClaimView({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(redirectedError);
 
   const firstName = name.trim().split(/\s+/)[0] || '';
+
+  // Funnel: welcome view once on mount.
+  useEffect(() => {
+    ev('beta_welcome_view');
+  }, []);
+
+  // Focus the scene container on each scene change (not a focus trap).
+  useEffect(() => {
+    queueMicrotask(() => sceneRef.current?.focus());
+  }, [scene]);
+
+  /** Advance scenes and emit the meaningful funnel events. */
+  function goScene(next: Scene) {
+    if (next === 'apply') ev('beta_application_started');
+    if (next === 'enter' && scene === 'apply') {
+      ev('beta_application_complete', { memberType: memberType ?? 'unspecified' });
+    }
+    setScene(next);
+  }
 
   const breakdownLine: Record<Topic, string> = {
     intro:
@@ -277,6 +347,7 @@ export function ClaimView({ token }: { token: string }) {
     if (loading) return;
     setLoading(true);
     setError(null);
+    ev('beta_claim_started', { method: 'email' });
     persistApplication({
       name: name.trim(),
       memberType: memberType ?? undefined,
@@ -300,6 +371,7 @@ export function ClaimView({ token }: { token: string }) {
   function startGoogleClaim() {
     setLoading(true);
     setError(null);
+    ev('beta_claim_started', { method: 'google' });
     persistApplication({
       name: name.trim(),
       memberType: memberType ?? undefined,
@@ -326,10 +398,16 @@ export function ClaimView({ token }: { token: string }) {
             FundExecs <span className="font-medium text-fg-4">OS</span>
           </span>
         </div>
-        <div className="flex items-center gap-1.5" aria-hidden>
-          {(['welcome', 'breakdown', 'apply', 'enter'] as Scene[]).map((s, i) => {
-            const order = ['welcome', 'breakdown', 'apply', 'enter'];
-            const done = order.indexOf(scene) >= i;
+        <div
+          role="progressbar"
+          aria-valuemin={1}
+          aria-valuemax={SCENE_ORDER.length}
+          aria-valuenow={SCENE_ORDER.indexOf(scene) + 1}
+          aria-label={`Step ${SCENE_ORDER.indexOf(scene) + 1} of ${SCENE_ORDER.length}`}
+          className="flex items-center gap-1.5"
+        >
+          {SCENE_ORDER.map((s, i) => {
+            const done = SCENE_ORDER.indexOf(scene) >= i;
             return (
               <span
                 key={s}
@@ -340,7 +418,12 @@ export function ClaimView({ token }: { token: string }) {
         </div>
       </div>
 
-      <div key={scene} className="fx-rise w-full max-w-xl">
+      <div
+        key={scene}
+        ref={sceneRef}
+        tabIndex={-1}
+        className="fx-rise w-full max-w-xl outline-none"
+      >
         {error && (
           <p className="mb-5 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-danger">
             {error}
@@ -350,11 +433,12 @@ export function ClaimView({ token }: { token: string }) {
         {/* ── WELCOME ── */}
         {scene === 'welcome' && (
           <div className="flex flex-col gap-7">
-            <Badge tone="gold" dot pulse className="self-start">
+            <Badge tone="gold" dot pulse={!reducedMotion} className="self-start">
               Private beta · invitation
             </Badge>
             <EarnSays
               size={56}
+              reducedMotion={reducedMotion}
               line="Welcome. I'm Earn — Earnest Fundmaker, your private-market assistant. You've been invited into the FundExecs OS private beta."
             />
             <p className="max-w-md text-[13.5px] leading-7 text-fg-3">
@@ -362,29 +446,57 @@ export function ClaimView({ token }: { token: string }) {
               that means for you — then I&apos;ll get you in.
             </p>
             <div className="flex flex-wrap items-center gap-2.5">
-              <button type="button" onClick={() => setScene('breakdown')} className={PRIMARY_BTN}>
+              <button type="button" onClick={() => goScene('breakdown')} className={PRIMARY_BTN}>
                 Show me <ArrowRight size={15} strokeWidth={2} aria-hidden />
               </button>
               <Chip icon={MessageCircle} onClick={() => setAskOpen(true)}>
                 Ask Earn a question
               </Chip>
             </div>
+            <button
+              type="button"
+              onClick={() => goScene('enter')}
+              className="self-start text-[11.5px] text-fg-5 underline-offset-2 transition hover:text-fg-3 hover:underline"
+            >
+              Skip to sign-up
+            </button>
           </div>
         )}
 
         {/* ── BREAKDOWN ── */}
         {scene === 'breakdown' && (
           <div className="flex flex-col gap-6">
-            <EarnSays line={breakdownLine[topic]} />
+            <EarnSays line={breakdownLine[topic]} reducedMotion={reducedMotion} />
 
             <div className="flex flex-wrap gap-2">
-              <Chip icon={Compass} active={topic === 'intro'} onClick={() => setTopic('intro')}>
+              <Chip
+                icon={Compass}
+                active={topic === 'intro'}
+                onClick={() => {
+                  setTopic('intro');
+                  ev('beta_breakdown_topic', { topic: 'intro' });
+                }}
+              >
                 What it is
               </Chip>
-              <Chip icon={Users} active={topic === 'team'} onClick={() => setTopic('team')}>
+              <Chip
+                icon={Users}
+                active={topic === 'team'}
+                onClick={() => {
+                  setTopic('team');
+                  ev('beta_breakdown_topic', { topic: 'team' });
+                }}
+              >
                 Meet the team
               </Chip>
-              <Chip icon={ShieldCheck} active={topic === 'value'} onClick={() => setTopic('value')}>
+              <Chip
+                icon={ShieldCheck}
+                active={topic === 'value'}
+                onClick={() => {
+                  setTopic('value');
+                  ev('beta_breakdown_topic', { topic: 'value' });
+                }}
+              >
                 What I get
               </Chip>
             </div>
@@ -409,7 +521,7 @@ export function ClaimView({ token }: { token: string }) {
             )}
 
             <div className="flex items-center gap-2.5">
-              <button type="button" onClick={() => setScene('apply')} className={PRIMARY_BTN}>
+              <button type="button" onClick={() => goScene('apply')} className={PRIMARY_BTN}>
                 I&apos;m ready <ArrowRight size={15} strokeWidth={2} aria-hidden />
               </button>
               <button
@@ -419,6 +531,13 @@ export function ClaimView({ token }: { token: string }) {
               >
                 Back
               </button>
+              <button
+                type="button"
+                onClick={() => goScene('enter')}
+                className="ml-auto text-[11.5px] text-fg-5 underline-offset-2 transition hover:text-fg-3 hover:underline"
+              >
+                Skip to sign-up
+              </button>
             </div>
           </div>
         )}
@@ -427,6 +546,7 @@ export function ClaimView({ token }: { token: string }) {
         {scene === 'apply' && (
           <div className="flex flex-col gap-6">
             <EarnSays
+              reducedMotion={reducedMotion}
               line={
                 !name
                   ? "Let's make it yours. First — what should I call you?"
@@ -444,6 +564,13 @@ export function ClaimView({ token }: { token: string }) {
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && name.trim()) {
+                    e.preventDefault();
+                    document.getElementById('goal')?.focus();
+                  }
+                }}
+                enterKeyHint="next"
                 placeholder="Sam Rivera"
                 className="mt-1.5 w-full rounded-xl border border-hairline bg-surface-2 px-3 py-2.5 text-[13.5px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
               />
@@ -472,6 +599,13 @@ export function ClaimView({ token }: { token: string }) {
                   id="goal"
                   value={goal}
                   onChange={(e) => setGoal(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && name.trim() && memberType) {
+                      e.preventDefault();
+                      goScene('enter');
+                    }
+                  }}
+                  enterKeyHint="go"
                   placeholder="e.g. close my next raise faster"
                   className="mt-1.5 w-full rounded-xl border border-hairline bg-surface-2 px-3 py-2.5 text-[13.5px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
                 />
@@ -481,7 +615,7 @@ export function ClaimView({ token }: { token: string }) {
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
-                onClick={() => setScene('enter')}
+                onClick={() => goScene('enter')}
                 disabled={!name.trim() || !memberType}
                 className={PRIMARY_BTN}
               >
@@ -503,6 +637,7 @@ export function ClaimView({ token }: { token: string }) {
           <div className="flex flex-col gap-6">
             <EarnSays
               size={56}
+              reducedMotion={reducedMotion}
               line={`You're set${firstName ? `, ${firstName}` : ''}. One step — confirm it's you, and I'll have your desk ready and the right specialists on call.`}
             />
 
