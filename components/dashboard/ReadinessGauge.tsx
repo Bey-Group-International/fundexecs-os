@@ -95,7 +95,7 @@ export function ReadinessGauge({ score, breakdown, className }: ReadinessGaugePr
   }));
 
   return (
-    <Card className={cn('p-5', className)} data-testid="readiness-gauge">
+    <Card className={cn('@container p-5', className)} data-testid="readiness-gauge">
       <SectionTitle
         eyebrow="Institutional readiness"
         title="How investable, today"
@@ -108,11 +108,11 @@ export function ReadinessGauge({ score, breakdown, className }: ReadinessGaugePr
         data-testid="readiness-gauge-open"
         aria-haspopup="dialog"
         aria-label={`Institutional readiness ${score} of 100 — ${gap} points to institutional-ready. Open Drive to 100% detail.`}
-        className="group flex w-full items-center gap-4 rounded-xl border border-hairline bg-bg-1 p-3 text-left transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-azure-1"
+        className="group flex w-full flex-col items-center gap-3 rounded-xl border border-hairline bg-bg-1 p-3 text-left transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-azure-1 @[16rem]:flex-row @[16rem]:items-center @[16rem]:gap-4"
       >
         <RingGauge
           value={score}
-          size={104}
+          size={96}
           stroke={9}
           color={overall.color}
           glow
@@ -124,7 +124,7 @@ export function ReadinessGauge({ score, breakdown, className }: ReadinessGaugePr
           </span>
         </RingGauge>
 
-        <div className="min-w-0 flex-1">
+        <div className="w-full min-w-0 @[16rem]:flex-1">
           <p className="text-[12.5px] font-semibold text-fg-1">
             <span className="tabular-nums">{gap}</span> points to institutional-ready
           </p>

@@ -89,7 +89,7 @@ export default async function CommandCenterPage() {
     getCreditWallet(org.orgId),
     getFundProfile(org.orgId)
   ]);
-  const navSignals = buildRailSignals(dashboard);
+  const navSignals = buildRailSignals(dashboard, memberType);
 
   return (
     <AppShell

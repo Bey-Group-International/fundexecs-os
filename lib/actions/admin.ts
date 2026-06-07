@@ -2,6 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
+import { getAuthUser } from '@/lib/queries/auth';
+import { isPlatformAdmin } from '@/lib/access';
 import { awardTrustXp } from '@/lib/actions/xp';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
@@ -40,6 +42,9 @@ async function writeAudit(input: AuditInput): Promise<void> {
 }
 
 async function isOrgAdmin(orgId: string, userId: string): Promise<boolean> {
+  // Admin is reserved for the Bey Group team (@beygroupintl.com), not org role.
+  const user = await getAuthUser();
+  if (!isPlatformAdmin(user?.email)) return false;
   const supabase = await createClient();
   const { data } = await supabase
     .from('org_members')

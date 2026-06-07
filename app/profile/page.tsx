@@ -62,7 +62,9 @@ export default async function ProfilePage() {
     getCreditWallet(org.orgId).catch(() => null),
     getDashboardData(org.orgId).catch(() => null)
   ]);
-  const navSignals = dashboard ? buildRailSignals(dashboard) : undefined;
+  const navSignals = dashboard
+    ? buildRailSignals(dashboard, profile?.memberType ?? null)
+    : undefined;
 
   return (
     <AppShell
