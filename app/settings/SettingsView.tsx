@@ -20,6 +20,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import {
+  Avatar,
   Badge,
   Button,
   Card,
@@ -40,6 +41,7 @@ import type { BetaInvite } from '@/lib/queries/beta-invites';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import {
   updateAccountSettings,
+  updateAvatar,
   updateOrganizationSettings,
   type SettingsActionState
 } from './actions';
@@ -53,6 +55,8 @@ interface SettingsViewProps {
   role: string | null;
   bio: string | null;
   phone: string | null;
+  /** Current profile photo URL (Google or uploaded); null → initials. */
+  avatarUrl: string | null;
   orgName: string | null;
   orgTier: string | null;
   orgType: OrgType | null;
@@ -323,6 +327,47 @@ function ProofOfTruthCard({
           <ArrowRight size={14} strokeWidth={1.9} aria-hidden />
         </Link>
       </div>
+    </Card>
+  );
+}
+
+function AvatarSection({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
+  const [state, formAction] = useActionState(updateAvatar, ACTION_INITIAL_STATE);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  return (
+    <Card>
+      <form action={formAction} className="flex flex-col gap-4">
+        <SectionTitle eyebrow="Account" title="Profile photo" />
+        <div className="flex items-center gap-4">
+          <Avatar name={name} src={preview ?? avatarUrl} size={64} className="rounded-full" />
+          <div className="min-w-0 flex-1">
+            <label
+              htmlFor="avatar-upload"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-hairline bg-surface-1 px-3 py-1.5 text-[12.5px] font-medium text-fg-1 transition hover:bg-surface-2"
+            >
+              <User size={14} strokeWidth={1.9} aria-hidden />
+              Choose photo
+            </label>
+            <input
+              id="avatar-upload"
+              type="file"
+              name="avatar"
+              accept="image/*"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                setPreview(file ? URL.createObjectURL(file) : null);
+              }}
+            />
+            <p className="mt-1.5 text-[11px] text-fg-4">
+              PNG or JPG, up to 5&nbsp;MB. Falls back to your initials when unset.
+            </p>
+          </div>
+          <SaveButton pendingLabel="Uploading..." />
+        </div>
+        <ActionNotice state={state} />
+      </form>
     </Card>
   );
 }
@@ -640,6 +685,7 @@ export function SettingsView({
   role,
   bio,
   phone,
+  avatarUrl,
   orgName,
   orgTier,
   orgType,
@@ -775,7 +821,16 @@ export function SettingsView({
           </div>
 
           {activeSection.id === 'account' && (
-            <AccountSection email={email} fullName={fullName} role={role} bio={bio} phone={phone} />
+            <>
+              <AvatarSection name={displayName} avatarUrl={avatarUrl} />
+              <AccountSection
+                email={email}
+                fullName={fullName}
+                role={role}
+                bio={bio}
+                phone={phone}
+              />
+            </>
           )}
           {activeSection.id === 'trust' && (
             <ProofOfTruthCard status={proofStatus} pct={proofPct} memberType={proofMemberType} />

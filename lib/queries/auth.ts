@@ -31,8 +31,19 @@ export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
   if (id) return { id, email: h.get('x-fx-user-email') };
 
   const supabase = await createClient();
-  const {
+  let {
     data: { user }
   } = await supabase.auth.getUser();
+
+  // Same transient-null guard as the middleware: a valid session can briefly
+  // resolve to a null user when the Auth server is momentarily unreachable.
+  // Retry once before reporting "no user" so a blip doesn't bounce the member.
+  if (!user) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    ({
+      data: { user }
+    } = await supabase.auth.getUser());
+  }
+
   return user ? { id: user.id, email: user.email ?? null } : null;
 });
