@@ -49,7 +49,13 @@ create table if not exists public.beta_links (
   revoked boolean not null default false,
   created_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  -- Defense-in-depth: enforce cap/count invariants at the DB layer so no write
+  -- path (RPC or otherwise) can persist invalid values.
+  constraint beta_links_max_uses_positive check (max_uses is null or max_uses > 0),
+  constraint beta_links_used_count_nonnegative check (used_count >= 0),
+  constraint beta_links_used_count_within_cap
+    check (max_uses is null or used_count <= max_uses)
 );
 
 create index if not exists beta_links_org_idx on public.beta_links (org_id);
@@ -133,12 +139,13 @@ tables + the `claim_beta_link` RPC.
 - `createBetaLink({ label?, role?, maxUses?, expiresInDays? })` — admin-gated
   (`is_org_admin`); generate a url-safe token (`crypto.randomBytes(32).toString('base64url')`);
   insert `beta_links` (default `maxUses: 25`, `expiresInDays: 14`); audit
-  (`admin_actions`, `target_type: 'beta_link'`); return
-  `{ ok, link: ` + "`${getSiteURL()}/beta/claim?token=...`" + ` }`.
+  (`admin_actions`, `target_type: 'beta_link'`); return `{ ok, link }` where the
+  link is `${getSiteURL()}/beta/claim?token=...`.
 - `revokeBetaLink(id)` — admin-gated; set `revoked = true`; audit.
 - `claimBetaLinkWithEmail(token, email)` — **public** (no session yet):
   1. Validate the link is claimable (active, not revoked/expired/full) via a read.
-  2. `generateLink({ type: 'invite', email, options: { redirectTo: ` + "`${getSiteURL()}/auth/confirm`" + ` } })`.
+  2. Call `generateLink({ type: 'invite', email })` with `redirectTo` set to
+     `${getSiteURL()}/auth/confirm`.
      - If it errors because the **email already exists**, return
        `{ ok: false, error: 'You already have an account — use "Continue with Google" or sign in.' }`
        (prevents signing a claimer into someone else's existing account).
