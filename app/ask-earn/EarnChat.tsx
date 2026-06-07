@@ -1,18 +1,40 @@
 'use client';
 
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Sparkles, ArrowUp, BookOpen } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { TeamAvatar, getCOO } from '@/lib/team';
 import { cn } from '@/lib/utils';
 import { EarnMarkdown } from '@/components/shell/earn/EarnMarkdown';
+import { EarnActionCard, type EarnAction } from '@/components/shell/earn/EarnActionCard';
 
 type Source = { brainId: string | null; snippet: string };
+
+/** Exact in-app routes Earn may auto-navigate to. Model-supplied destinations
+ *  are validated against this allowlist so a bad payload can't push an
+ *  arbitrary route. Mirrors EARN_NAV_DESTINATIONS in lib/ai/earn.ts. */
+const AUTO_NAV_DESTINATIONS = new Set([
+  '/command-center',
+  '/pipeline',
+  '/capital-stack',
+  '/profile',
+  '/trust',
+  '/materials',
+  '/partners',
+  '/match-inbox',
+  '/diligence',
+  '/audit',
+  '/integrations',
+  '/settings'
+]);
 
 type Msg = {
   role: 'user' | 'assistant';
   content: string;
   sources?: Source[];
+  /** Reactive tool proposals streamed with this turn (navigate / create / run). */
+  actions?: EarnAction[];
   /** True when this assistant turn is a degraded fallback (different visual). */
   degraded?: boolean;
 };
@@ -43,6 +65,7 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
   ref
 ) {
   const earn = getCOO();
+  const router = useRouter();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
@@ -119,7 +142,24 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
           text?: string;
           sources?: Source[];
           message?: string;
+          action?: EarnAction;
         }) => {
+          // Safe navigation runs immediately (the dock persists across routes).
+          if (
+            evt.type === 'action' &&
+            evt.action?.mode === 'auto' &&
+            evt.action.name === 'navigate'
+          ) {
+            const dest =
+              typeof evt.action.input?.destination === 'string' ? evt.action.input.destination : '';
+            if (AUTO_NAV_DESTINATIONS.has(dest)) {
+              router.push(dest);
+            } else {
+              // Blocked destination — don't render an "Opened X" chip for a
+              // navigation that never happened.
+              return;
+            }
+          }
           setMessages((m) => {
             const copy = [...m];
             const last = copy[copy.length - 1];
@@ -130,6 +170,11 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
               copy[copy.length - 1] = { ...last, sources: evt.sources };
             } else if (evt.type === 'degraded' && evt.message) {
               copy[copy.length - 1] = { ...last, content: evt.message, degraded: true };
+            } else if (evt.type === 'action' && evt.action) {
+              copy[copy.length - 1] = {
+                ...last,
+                actions: [...(last.actions ?? []), evt.action]
+              };
             }
             return copy;
           });
@@ -166,7 +211,7 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
         setLoading(false);
       }
     },
-    [messages, loading, context]
+    [messages, loading, context, router]
   );
 
   useImperativeHandle(
@@ -233,6 +278,13 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
                         <BookOpen size={9} strokeWidth={2} aria-hidden />
                         {s.brainId ?? 'Brain'}
                       </span>
+                    ))}
+                  </div>
+                ) : null}
+                {m.role === 'assistant' && m.actions && m.actions.length > 0 ? (
+                  <div className="flex flex-col gap-1.5">
+                    {m.actions.map((a) => (
+                      <EarnActionCard key={a.id} action={a} />
                     ))}
                   </div>
                 ) : null}
