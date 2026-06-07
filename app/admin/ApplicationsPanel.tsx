@@ -193,10 +193,7 @@ export function ApplicationsPanel({ applications }: { applications: BetaApplicat
         <div className="flex flex-wrap gap-2">
           {FILTERS.map((f) => {
             const active = filter === f.id;
-            const n =
-              f.id === 'all'
-                ? applications.length
-                : counts[f.id as ApplicationReview];
+            const n = f.id === 'all' ? applications.length : counts[f.id as ApplicationReview];
             return (
               <button
                 key={f.id}
