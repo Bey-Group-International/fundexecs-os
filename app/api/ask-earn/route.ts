@@ -165,8 +165,9 @@ export async function POST(req: NextRequest) {
 
       // Normal streaming chat path.
       try {
-        const { sources, deltas } = await streamEarn(supabase, org.orgId, messages, {
+        const { sources, deltas, tools } = await streamEarn(supabase, org.orgId, messages, {
           kind: context?.kind,
+          entityId: context?.entityId,
           entityLabel: context?.entityLabel
         });
         if (sources.length) controller.enqueue(line({ type: 'sources', sources }));
@@ -174,6 +175,12 @@ export async function POST(req: NextRequest) {
         for await (const chunk of deltas) {
           full += chunk;
           controller.enqueue(line({ type: 'delta', text: chunk }));
+        }
+        // Reactive actions Earn proposed (navigate auto-runs client-side;
+        // mutating tools render a confirm card).
+        const actions = await tools();
+        for (const action of actions) {
+          controller.enqueue(line({ type: 'action', action }));
         }
         controller.enqueue(line({ type: 'done' }));
         await saveAssistant(full, sources);

@@ -32,7 +32,90 @@ export interface EarnReply {
  *  its guidance (passed from the dock's EarnContext). */
 export interface EarnContextHint {
   kind?: string;
+  entityId?: string;
   entityLabel?: string;
+}
+
+/* ----------------------------------------------------------------------------
+ * Earn tools — how Earn reactively acts on the app.
+ *
+ * `navigate` is a safe, read-only move (auto-runs client-side). The mutating
+ * tools (`create_deal`, `run_diligence`) are surfaced as confirm cards the
+ * operator approves before anything is written. Tool execution lives in
+ * `lib/actions/earn-actions.ts`; this module only declares the contract.
+ * --------------------------------------------------------------------------*/
+
+export const EARN_NAV_DESTINATIONS = [
+  '/command-center',
+  '/pipeline',
+  '/capital-stack',
+  '/profile',
+  '/trust',
+  '/materials',
+  '/partners',
+  '/match-inbox',
+  '/diligence',
+  '/audit',
+  '/integrations',
+  '/settings'
+] as const;
+
+export type EarnToolMode = 'auto' | 'confirm';
+
+export interface EarnToolUse {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  mode: EarnToolMode;
+}
+
+const EARN_TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'navigate',
+    description:
+      'Open an in-app destination for the operator when the best next step is to take them to a specific surface. Safe and reversible.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        destination: { type: 'string', enum: [...EARN_NAV_DESTINATIONS] },
+        reason: { type: 'string', description: 'Short reason shown to the operator.' }
+      },
+      required: ['destination']
+    }
+  },
+  {
+    name: 'create_deal',
+    description:
+      'Create a new deal in the pipeline. The operator must confirm before it is created.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        stage: { type: 'string' },
+        amount: { type: 'number' }
+      },
+      required: ['name']
+    }
+  },
+  {
+    name: 'run_diligence',
+    description:
+      'Run the AI diligence committee on a deal. The operator must confirm before it runs.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        dealId: { type: 'string' },
+        dealName: { type: 'string', description: 'Display name of the deal, for the confirm card.' }
+      }
+    }
+  }
+];
+
+const AUTO_TOOLS = new Set(['navigate']);
+
+/** Whether a tool runs immediately (read/navigate) or needs operator confirm. */
+export function earnToolMode(name: string): EarnToolMode {
+  return AUTO_TOOLS.has(name) ? 'auto' : 'confirm';
 }
 
 /**
@@ -71,10 +154,11 @@ function buildSystem(contextBlock: string, hint?: EarnContextHint): Anthropic.Te
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }
   ];
-  if (hint?.entityLabel) {
+  if (hint?.entityLabel || hint?.kind) {
+    const idNote = hint.entityId ? ` [id: ${hint.entityId}]` : '';
     system.push({
       type: 'text',
-      text: `The operator is currently focused on: ${hint.entityLabel}${hint.kind ? ` (${hint.kind})` : ''}. When relevant, tailor your guidance to this specific context.`
+      text: `The operator is currently focused on: ${hint.entityLabel ?? hint.kind}${hint.kind && hint.entityLabel ? ` (${hint.kind})` : ''}${idNote}. Tailor guidance to this context. When you propose taking them somewhere or acting for them, prefer the tools (navigate / create_deal / run_diligence) over describing the steps. If a deal id is in context, pass it to run_diligence.`
     });
   }
   if (contextBlock) {
@@ -157,7 +241,12 @@ export async function streamEarn(
   orgId: string,
   messages: EarnMessage[],
   hint?: EarnContextHint
-): Promise<{ sources: EarnSource[]; deltas: AsyncIterable<string> }> {
+): Promise<{
+  sources: EarnSource[];
+  deltas: AsyncIterable<string>;
+  /** Resolves after the stream completes with any tool calls Earn proposed. */
+  tools: () => Promise<EarnToolUse[]>;
+}> {
   const { sources, contextBlock } = await retrieveContext(supabase, orgId, messages);
   const anthropic = new Anthropic();
   const system = buildSystem(contextBlock, hint);
@@ -166,6 +255,7 @@ export async function streamEarn(
     model: MODEL,
     max_tokens: 1024,
     system,
+    tools: EARN_TOOLS,
     messages: messages.map((m) => ({ role: m.role, content: m.content }))
   });
 
@@ -177,5 +267,18 @@ export async function streamEarn(
     }
   }
 
-  return { sources, deltas: deltas() };
+  // Read tool_use blocks from the completed message (after deltas drain).
+  const tools = async (): Promise<EarnToolUse[]> => {
+    const final = await stream.finalMessage();
+    return final.content
+      .filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        input: (b.input ?? {}) as Record<string, unknown>,
+        mode: earnToolMode(b.name)
+      }));
+  };
+
+  return { sources, deltas: deltas(), tools };
 }
