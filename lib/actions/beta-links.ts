@@ -202,23 +202,28 @@ export async function setApplicationReview(
 
   const admin = createAdminClient();
 
-  // Resolve the claimant behind this claim (scoped to the org) so we can
-  // reconcile their account access to the review state.
+  // Resolve the claimant AND their prior review state (scoped to the org) so we
+  // change access only when it actually differs, and can roll back on failure.
   const { data: claim, error: claimErr } = await admin
     .from('beta_link_claims')
-    .select('user_id')
+    .select('user_id, review_status')
     .eq('id', claimId)
     .eq('org_id', org.orgId)
     .maybeSingle();
   if (claimErr) return { ok: false, error: claimErr.message };
   if (!claim) return { ok: false, error: 'Application not found.' };
 
-  // Reject suspends the claimant's sign-in (they own their own workspace, so
-  // this is the only real access control); any other state restores it. Do the
-  // access change FIRST so the stored review status never claims a suspension
-  // that didn't actually take.
-  const suspend = await setApplicantSuspended(admin, claim.user_id, review === 'rejected');
-  if (!suspend.ok) return suspend;
+  // Suspend ⇔ rejected. Only touch the auth account when that bit flips, so a
+  // reset from approved→pending never changes access (per the behavior matrix)
+  // and re-rejecting is idempotent. Do the access change FIRST so a stored
+  // review status never claims a suspension that didn't actually take.
+  const wasSuspended = claim.review_status === 'rejected';
+  const shouldSuspend = review === 'rejected';
+  const accessChanged = wasSuspended !== shouldSuspend;
+  if (accessChanged) {
+    const suspend = await setApplicantSuspended(admin, claim.user_id, shouldSuspend);
+    if (!suspend.ok) return suspend;
+  }
 
   const { data, error } = await admin
     .from('beta_link_claims')
@@ -232,8 +237,14 @@ export async function setApplicationReview(
     .eq('org_id', org.orgId)
     .select('id')
     .maybeSingle();
-  if (error) return { ok: false, error: error.message };
-  if (!data) return { ok: false, error: 'Application not found.' };
+  if (error || !data) {
+    // Status write failed after we changed the ban — compensate by restoring the
+    // prior suspension state so the account and the (unchanged) status agree.
+    if (accessChanged) {
+      await setApplicantSuspended(admin, claim.user_id, wasSuspended);
+    }
+    return { ok: false, error: error?.message ?? 'Application not found.' };
+  }
 
   await writeAudit(org.orgId, org.userId, `review_beta_application_${review}`, claimId, {
     suspended: review === 'rejected'
