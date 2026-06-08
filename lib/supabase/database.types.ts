@@ -837,6 +837,91 @@ export type Database = {
           },
         ]
       }
+      org_subscriptions: {
+        Row: {
+          billing_interval: string
+          cancel_at_period_end: boolean
+          created_at: string
+          credits_per_period: number
+          current_period_end: string | null
+          org_id: string
+          plan: string
+          seats: number
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          billing_interval?: string
+          cancel_at_period_end?: boolean
+          created_at?: string
+          credits_per_period?: number
+          current_period_end?: string | null
+          org_id: string
+          plan?: string
+          seats?: number
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billing_interval?: string
+          cancel_at_period_end?: boolean
+          created_at?: string
+          credits_per_period?: number
+          current_period_end?: string | null
+          org_id?: string
+          plan?: string
+          seats?: number
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_subscriptions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_invoices: {
+        Row: {
+          created_at: string
+          credits_granted: number
+          org_id: string
+          period_end: string | null
+          stripe_invoice_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits_granted?: number
+          org_id: string
+          period_end?: string | null
+          stripe_invoice_id: string
+        }
+        Update: {
+          created_at?: string
+          credits_granted?: number
+          org_id?: string
+          period_end?: string | null
+          stripe_invoice_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_invoices_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deals: {
         Row: {
           amount: number | null

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getMemberProfile } from '@/lib/queries/member-profile';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
+import { getOrgSubscription, type OrgSubscription } from '@/lib/queries/subscription';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { getDashboardData } from '@/lib/queries/dashboard';
 import { getAdminData, type AdminData } from '@/lib/queries/admin';
@@ -65,13 +66,26 @@ export default async function SettingsPage() {
     role = data?.role ?? null;
   }
 
-  const [wallet, fundProfile, dashboard] = org
+  const [wallet, fundProfile, dashboard, subscription] = org
     ? await Promise.all([
         getCreditWallet(org.orgId).catch(() => null),
         getFundProfile(org.orgId).catch(() => null),
-        getDashboardData(org.orgId).catch(() => null)
+        getDashboardData(org.orgId).catch(() => null),
+        getOrgSubscription(org.orgId).catch(() => null)
       ])
-    : [null, null, null];
+    : [null, null, null, null];
+
+  const subscriptionView: OrgSubscription = subscription ?? {
+    plan: 'free',
+    interval: 'month',
+    seats: 1,
+    status: 'active',
+    creditsPerPeriod: 0,
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: null,
+    stripeCustomerId: null,
+    configured: false
+  };
   // Admin section — reserved for the Bey Group team (@beygroupintl.com), not
   // org role. A normal operator who owns their own workspace is not an admin.
   let isAdmin = false;
@@ -136,6 +150,8 @@ export default async function SettingsPage() {
         betaLinks={betaLinks}
         adminMetrics={adminMetrics}
         viewerRole={viewerRole}
+        subscription={subscriptionView}
+        creditBalance={wallet?.balance ?? 0}
       />
     </AppShell>
   );

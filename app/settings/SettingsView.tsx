@@ -27,13 +27,14 @@ import {
   Input,
   ProgressBar,
   SectionTitle,
-  Select,
-  type BadgeTone
+  Select
 } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 import type { Database } from '@/lib/supabase/database.types';
+import type { OrgSubscription } from '@/lib/queries/subscription';
 import { cn } from '@/lib/utils';
+import { PlanCreditsSection } from './PlanCreditsSection';
 import { AdminView } from '@/app/admin/AdminView';
 import type { AdminData } from '@/lib/queries/admin';
 import type { AdminMetrics } from '@/lib/queries/admin-metrics';
@@ -76,6 +77,10 @@ interface SettingsViewProps {
   adminMetrics: AdminMetrics | null;
   /** The viewing admin's own role — gates owner-only role changes. */
   viewerRole: OrgMemberRole | null;
+  /** Current plan/seat/status for the Plan & credits section. */
+  subscription: OrgSubscription;
+  /** Live wallet balance for the Plan & credits section. */
+  creditBalance: number;
 }
 
 /* ----------------------------------------------------------------------------
@@ -535,80 +540,6 @@ function OrganizationSection({
   );
 }
 
-interface Plan {
-  name: string;
-  price: string;
-  detail: string;
-  tone: BadgeTone;
-  current: boolean;
-}
-
-const PLANS: Plan[] = [
-  {
-    name: 'Operator',
-    price: '$0',
-    detail: 'Single workspace, core Earn',
-    tone: 'neutral',
-    current: false
-  },
-  {
-    name: 'Fund',
-    price: '$490',
-    detail: '15 brains, Chain of Trust',
-    tone: 'azure',
-    current: true
-  },
-  {
-    name: 'Institutional',
-    price: 'Custom',
-    detail: 'SSO, audit, dedicated brains',
-    tone: 'gold',
-    current: false
-  }
-];
-
-function BillingSection() {
-  return (
-    <Card>
-      <SectionTitle
-        eyebrow="Billing"
-        title="Plan and invoices"
-        action={
-          <Button variant="primary" size="sm" icon={CreditCard}>
-            Manage billing
-          </Button>
-        }
-      />
-      <div className="grid gap-3 sm:grid-cols-3">
-        {PLANS.map((p) => (
-          <div
-            key={p.name}
-            className={
-              p.current
-                ? 'rounded-xl border border-[var(--accent-line)] bg-surface-2 p-4'
-                : 'rounded-xl border border-hairline bg-surface-1 p-4'
-            }
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-fg-1">{p.name}</span>
-              {p.current && (
-                <Badge tone="azure" className="px-2 py-0.5 text-[10px]">
-                  Current
-                </Badge>
-              )}
-            </div>
-            <div className="mt-2 text-[22px] font-semibold tabular-nums tracking-[-0.02em] text-fg-1">
-              {p.price}
-              <span className="ml-1 text-[11.5px] font-medium text-fg-5">/mo</span>
-            </div>
-            <p className="mt-1 text-[11.5px] text-fg-4">{p.detail}</p>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
 /* ----------------------------------------------------------------------------
  * Vertical detail rail — left = section list, right = active section detail
  *
@@ -660,7 +591,7 @@ const SECTIONS: SettingsSection[] = [
   },
   {
     id: 'billing',
-    label: 'Billing & credits',
+    label: 'Plan & credits',
     icon: CreditCard,
     unlocks: 'The plan + Credit Wallet that fuels every AI workload Earn coordinates.'
   },
@@ -699,7 +630,9 @@ export function SettingsView({
   invites,
   betaLinks,
   adminMetrics,
-  viewerRole
+  viewerRole,
+  subscription,
+  creditBalance
 }: SettingsViewProps) {
   // The Admin section is owner/admin-only; hide it from the rail otherwise.
   const visibleSections = SECTIONS.filter((s) => s.id !== 'admin' || isAdmin);
@@ -840,7 +773,18 @@ export function SettingsView({
           {activeSection.id === 'organization' && (
             <OrganizationSection orgName={orgName} orgTier={orgTier} orgType={orgType} />
           )}
-          {activeSection.id === 'billing' && <BillingSection />}
+          {activeSection.id === 'billing' && (
+            <PlanCreditsSection
+              currentPlan={subscription.plan}
+              currentInterval={subscription.interval}
+              seats={subscription.seats}
+              status={subscription.status}
+              cancelAtPeriodEnd={subscription.cancelAtPeriodEnd}
+              currentPeriodEnd={subscription.currentPeriodEnd}
+              hasSubscription={subscription.configured}
+              creditBalance={creditBalance}
+            />
+          )}
           {activeSection.id === 'admin' && isAdmin && adminData && (
             <AdminView
               data={adminData}
