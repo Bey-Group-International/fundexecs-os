@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getAuthUser } from '@/lib/queries/auth';
+import { recordLoopClose } from '@/lib/actions/loop';
 import {
   earnReviewDeal,
   createDiligenceDocumentUpload,
@@ -42,6 +43,21 @@ export async function runDiligenceForDeal(dealId: string): Promise<RunDiligenceA
       createdBy: user.id,
       dealId
     });
+
+    // Close the loop: a completed diligence run is proof of execution — feed it
+    // back into the member record so readiness rises. Idempotent + best-effort.
+    if (result.status === 'complete') {
+      try {
+        await recordLoopClose({
+          source: 'diligence_completed',
+          entityType: 'diligence_run',
+          entityId: result.runId,
+          metadata: { dealId, conviction: result.conviction }
+        });
+      } catch {
+        // Never block the diligence result on the flywheel write.
+      }
+    }
 
     revalidatePath('/diligence');
     revalidatePath(`/diligence/${result.runId}`);
