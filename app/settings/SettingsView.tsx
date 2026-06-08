@@ -19,16 +19,7 @@ import {
   Zap,
   type LucideIcon
 } from 'lucide-react';
-import {
-  Avatar,
-  Badge,
-  Button,
-  Card,
-  Input,
-  ProgressBar,
-  SectionTitle,
-  Select
-} from '@/components/ui';
+import { Avatar, Badge, Button, Card, Input, ProgressBar, SectionTitle } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 import type { Database } from '@/lib/supabase/database.types';
@@ -41,12 +32,9 @@ import type { AdminMetrics } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import type { BetaApplication } from '@/lib/queries/beta-applications';
-import {
-  updateAccountSettings,
-  updateAvatar,
-  updateOrganizationSettings,
-  type SettingsActionState
-} from './actions';
+import { updateAccountSettings, updateAvatar, type SettingsActionState } from './actions';
+import { OrganizationSection } from './OrganizationSection';
+import type { OrgTeam } from '@/lib/queries/org-members';
 
 type OrgType = Database['public']['Enums']['org_type'];
 type OrgMemberRole = Database['public']['Enums']['org_member_role'];
@@ -62,6 +50,13 @@ interface SettingsViewProps {
   orgName: string | null;
   orgTier: string | null;
   orgType: OrgType | null;
+  orgDescription: string | null;
+  orgWebsite: string | null;
+  orgLogoUrl: string | null;
+  /** The active org's team (members + pending invites + viewer role). */
+  orgTeam: OrgTeam;
+  /** Signed-in user id — gates self-actions in the Organization section. */
+  currentUserId: string;
   /** Proof of Truth profile status + completion, for the profile card. */
   proofStatus: 'in_progress' | 'complete';
   proofPct: number;
@@ -115,15 +110,6 @@ function deriveStatuses(proofStatus: 'in_progress' | 'complete', proofPct: numbe
 }
 
 const ACTION_INITIAL_STATE: SettingsActionState = { status: 'idle', message: '' };
-
-const ORG_OPTIONS: Array<{ value: OrgType; label: string }> = [
-  { value: 'fund', label: 'Fund' },
-  { value: 'lp', label: 'Limited partner' },
-  { value: 'operator', label: 'Operator' },
-  { value: 'capital_provider', label: 'Capital provider' },
-  { value: 'service_provider', label: 'Service provider' },
-  { value: 'partner', label: 'Partner' }
-];
 
 function SaveButton({ pendingLabel = 'Saving...' }: { pendingLabel?: string }) {
   const { pending } = useFormStatus();
@@ -496,53 +482,6 @@ function SecuritySection() {
   );
 }
 
-function OrganizationSection({
-  orgName,
-  orgTier,
-  orgType
-}: {
-  orgName: string | null;
-  orgTier: string | null;
-  orgType: OrgType | null;
-}) {
-  const [state, formAction] = useActionState(updateOrganizationSettings, ACTION_INITIAL_STATE);
-
-  return (
-    <Card>
-      <form action={formAction} className="flex flex-col gap-4">
-        <SectionTitle eyebrow="Organization" title="Workspace" action={<SaveButton />} />
-        <div className="flex flex-col gap-4">
-          <FieldRow>
-            <Input
-              label="Organization name"
-              name="orgName"
-              icon={Building2}
-              defaultValue={orgName ?? ''}
-              placeholder="Your organization"
-              required
-              maxLength={120}
-            />
-            <Select
-              label="Organization type"
-              name="orgType"
-              defaultValue={orgType ?? 'fund'}
-              options={ORG_OPTIONS}
-            />
-          </FieldRow>
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-hairline bg-surface-1 px-4 py-3">
-            <div>
-              <div className="text-[13px] font-semibold text-fg-1">Tier</div>
-              <div className="mt-0.5 text-[11.5px] text-fg-4">Current institutional standing</div>
-            </div>
-            <Badge tone="info">{orgTier ?? 'Emerging manager'}</Badge>
-          </div>
-          <ActionNotice state={state} />
-        </div>
-      </form>
-    </Card>
-  );
-}
-
 /* ----------------------------------------------------------------------------
  * Vertical detail rail — left = section list, right = active section detail
  *
@@ -623,6 +562,11 @@ export function SettingsView({
   orgName,
   orgTier,
   orgType,
+  orgDescription,
+  orgWebsite,
+  orgLogoUrl,
+  orgTeam,
+  currentUserId,
   proofStatus,
   proofPct,
   proofMemberType,
@@ -775,7 +719,17 @@ export function SettingsView({
           {activeSection.id === 'notifications' && <NotificationsSection />}
           {activeSection.id === 'security' && <SecuritySection />}
           {activeSection.id === 'organization' && (
-            <OrganizationSection orgName={orgName} orgTier={orgTier} orgType={orgType} />
+            <OrganizationSection
+              currentUserId={currentUserId}
+              orgName={orgName}
+              orgType={orgType}
+              orgTier={orgTier}
+              orgDescription={orgDescription}
+              orgWebsite={orgWebsite}
+              orgLogoUrl={orgLogoUrl}
+              team={orgTeam}
+              subscription={subscription}
+            />
           )}
           {activeSection.id === 'billing' && (
             <PlanCreditsSection

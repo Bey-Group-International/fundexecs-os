@@ -6,6 +6,7 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { getMemberProfile } from '@/lib/queries/member-profile';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getOrgSubscription, type OrgSubscription } from '@/lib/queries/subscription';
+import { getOrgTeam, type OrgTeam } from '@/lib/queries/org-members';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { getDashboardData } from '@/lib/queries/dashboard';
 import { getAdminData, type AdminData } from '@/lib/queries/admin';
@@ -23,6 +24,8 @@ export const metadata: Metadata = { title: 'Profile & settings' };
 
 type OrgType = Database['public']['Enums']['org_type'];
 type OrgMemberRole = Database['public']['Enums']['org_member_role'];
+
+const EMPTY_TEAM: OrgTeam = { members: [], invites: [], viewerRole: null };
 
 /**
  * Profile & settings — gamification header plus account / trust / notifications /
@@ -44,16 +47,25 @@ export default async function SettingsPage() {
   let orgName: string | null = null;
   let orgTier: string | null = null;
   let orgType: OrgType | null = null;
+  let orgDescription: string | null = null;
+  let orgWebsite: string | null = null;
+  let orgLogoUrl: string | null = null;
   if (org) {
     const { data } = await supabase
       .from('organizations')
-      .select('name, tier, type')
+      .select('name, tier, type, description, website, logo_url')
       .eq('id', org.orgId)
       .maybeSingle();
     orgName = data?.name ?? null;
     orgTier = data?.tier ?? null;
     orgType = data?.type ?? null;
+    orgDescription = data?.description ?? null;
+    orgWebsite = data?.website ?? null;
+    orgLogoUrl = data?.logo_url ?? null;
   }
+
+  const orgTeam =
+    org && user ? await getOrgTeam(org.orgId, user.id).catch(() => EMPTY_TEAM) : EMPTY_TEAM;
 
   let fullName: string | null = null;
   let role: string | null = null;
@@ -135,6 +147,11 @@ export default async function SettingsPage() {
         orgName={orgName}
         orgTier={orgTier}
         orgType={orgType}
+        orgDescription={orgDescription}
+        orgWebsite={orgWebsite}
+        orgLogoUrl={orgLogoUrl}
+        orgTeam={orgTeam}
+        currentUserId={user?.id ?? ''}
         bio={memberProfile?.bio ?? null}
         phone={
           typeof memberProfile?.details.contact_phone === 'string'
