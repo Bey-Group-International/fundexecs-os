@@ -10,6 +10,7 @@ import { EarnOrb } from './earn/EarnOrb';
 import { EarnDock } from './earn/EarnDock';
 import { EarnContextProvider } from './earn/EarnContext';
 import { TrustToaster } from './trust/TrustToaster';
+import { GuidedMode } from './guided/GuidedMode';
 import { HelpLauncher } from '@/components/help/HelpLauncher';
 
 /** Generic fallback when no signed-in identity is supplied (e.g. SSR before
@@ -120,6 +121,8 @@ export function AppShell({
         {/* Shell-level systems — present on every authenticated screen. */}
         <EarnOrb open={dockOpen} onToggle={() => setDockOpen((v) => !v)} />
         <EarnDock open={dockOpen} onClose={() => setDockOpen(false)} />
+        {/* Guided mode — the hand-on-the-wheel loop walkthrough (Phase 5). */}
+        <GuidedMode momentum={navSignals?.momentum} />
         <HelpLauncher />
         <TrustToaster />
       </div>

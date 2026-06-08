@@ -12,7 +12,7 @@ import {
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
-import { ArrowRight, ChevronDown, RefreshCw, Sparkles, X } from 'lucide-react';
+import { ArrowRight, ChevronDown, Compass, RefreshCw, Sparkles, X } from 'lucide-react';
 import { Badge, type BadgeTone } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { createClient } from '@/lib/supabase/client';
@@ -38,6 +38,12 @@ import {
   subscribeRailCollapse,
   writeRailCollapseState
 } from './rail-collapse-storage';
+import {
+  getGuidedServerSnapshot,
+  getGuidedSnapshot,
+  setGuidedOn,
+  subscribeGuided
+} from './guided/guided-storage';
 
 /* ----------------------------------------------------------------------------
  * Re-exports — keep the registry reachable from the historical module path so
@@ -849,7 +855,34 @@ function MomentumSpine({
         </Link>
       ) : null}
       {chain ? <LoopChainStrip chain={chain} /> : null}
+      {chain ? <GuidedLaunch /> : null}
     </div>
+  );
+}
+
+/**
+ * The guided-mode launch control under the chain — engages the hand-on-the-
+ * wheel walkthrough (Phase 5). Reflects the persisted on-state so the rail and
+ * the overlay stay in sync. Only rendered when a loop chain is live.
+ */
+function GuidedLaunch() {
+  const guided = useSyncExternalStore(subscribeGuided, getGuidedSnapshot, getGuidedServerSnapshot);
+  return (
+    <button
+      type="button"
+      onClick={() => setGuidedOn(!guided.on)}
+      aria-pressed={guided.on}
+      data-testid="rail-guided-launch"
+      className={cn(
+        'mt-2 flex w-full items-center justify-center gap-1.5 rounded-[9px] border px-2 py-1.5 text-[11px] font-semibold transition-[background,transform] hover:translate-x-0.5',
+        guided.on
+          ? 'border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1'
+          : 'border-hairline text-fg-3 hover:bg-surface-1'
+      )}
+    >
+      <Compass size={12} strokeWidth={2.2} aria-hidden className="flex-none" />
+      <span>{guided.on ? 'Guided on — walking the loop' : 'Guide me through the loop'}</span>
+    </button>
   );
 }
 
