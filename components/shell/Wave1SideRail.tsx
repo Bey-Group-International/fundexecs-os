@@ -1,16 +1,25 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode
+} from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
-import { ArrowRight, ChevronDown, Sparkles, X } from 'lucide-react';
+import { ArrowRight, ChevronDown, RefreshCw, Sparkles, X } from 'lucide-react';
 import { Badge, type BadgeTone } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { createClient } from '@/lib/supabase/client';
 import type { ShellIdentity } from '@/lib/queries/identity';
 import { AccountMenu } from './account/AccountMenu';
 import type { LifecycleStage } from '@/lib/lifecycle';
+import { LINK_STATE_LABEL, type LinkState, type LoopChain, type LoopLink } from '@/lib/loop-chain';
 import { cn } from '@/lib/utils';
 import { compactMoney } from '@/lib/format';
 import { FX_EASE, FX_SPRING } from '@/components/dashboard/command/motion';
@@ -80,6 +89,12 @@ export interface RailMomentum {
     cta: string;
     href: string;
   };
+  /**
+   * Phase 4: the loop as a chain — Build → Source → Run → Drive rendered as a
+   * connected sequence where the active link charges the next. When present,
+   * the spine shows the chain strip and clusters pick up their link state.
+   */
+  chain?: LoopChain;
 }
 
 export interface NavSignals {
@@ -335,6 +350,12 @@ export function Wave1SideRail({
 
           {RAIL_GROUPS.map((group) => {
             const extraTop = group.key === 'build' ? sourceOfTruthSummary : undefined;
+            // The chain verbs share the cluster keys, so a link maps 1:1 to a
+            // group. When closing (Drive active), Build is the wrap target.
+            const chain = signals?.momentum?.chain;
+            const link = chain?.links.find((l) => l.verb === group.key);
+            const chainState: LinkState | undefined =
+              link && chain?.closing && group.key === 'build' ? 'on_deck' : link?.state;
             return (
               <NavGroup
                 key={group.key}
@@ -345,6 +366,7 @@ export function Wave1SideRail({
                 onToggle={() => toggleGroup(group)}
                 rollup={computeGroupRollup(group, signals?.badges)}
                 badges={signals?.badges}
+                chainState={chainState}
                 onLinkClick={onClose}
                 extraTop={extraTop}
               />
@@ -420,6 +442,8 @@ interface NavGroupProps {
   onToggle: () => void;
   rollup: GroupRollup | null;
   badges?: Record<string, RailSignal>;
+  /** This cluster's position in the loop chain (Phase 4), if a chain is live. */
+  chainState?: LinkState;
   onLinkClick: () => void;
   extraTop?: ReactNode;
 }
@@ -432,6 +456,7 @@ function NavGroup({
   onToggle,
   rollup,
   badges,
+  chainState,
   onLinkClick,
   extraTop
 }: NavGroupProps) {
@@ -471,6 +496,7 @@ function NavGroup({
         <span className="flex-1 text-[10.5px] font-semibold uppercase tracking-[0.12em]">
           {group.label}
         </span>
+        {chainState ? <ChainPip state={chainState} /> : null}
         {rollup ? (
           <Badge
             tone={rollup.tone}
@@ -767,8 +793,15 @@ function MomentumSpine({
   momentum: RailMomentum;
   onLinkClick: () => void;
 }) {
-  const { loopProgress, readinessScore, stageLabel, stageIndex, stageCount, nextBestAction } =
-    momentum;
+  const {
+    loopProgress,
+    readinessScore,
+    stageLabel,
+    stageIndex,
+    stageCount,
+    nextBestAction,
+    chain
+  } = momentum;
   return (
     <div
       data-testid="rail-momentum"
@@ -815,8 +848,151 @@ function MomentumSpine({
           <ArrowRight size={12} strokeWidth={2.4} aria-hidden className="flex-none" />
         </Link>
       ) : null}
+      {chain ? <LoopChainStrip chain={chain} /> : null}
     </div>
   );
+}
+
+/* ----------------------------------------------------------------------------
+ * Loop chain (Phase 4) — the four verbs as a charging sequence.
+ * --------------------------------------------------------------------------*/
+
+/**
+ * The chain strip pinned under the next-best-action: Build → Source → Run →
+ * Drive as connected nodes. The active link is lit, the link it's about to
+ * unlock reads "on deck", cleared links read charged, and the connector after
+ * the active link fills with today's action-completion charge. A handoff line
+ * names the move ("Clear diligence → arms Drive"); when the loop has compounded
+ * at least once, a capstone line names what the close fed forward.
+ */
+function LoopChainStrip({ chain }: { chain: LoopChain }) {
+  return (
+    <div className="mt-2.5 border-t border-hairline pt-2" data-testid="rail-loop-chain">
+      <div className="flex items-start">
+        {chain.links.map((link, i) => {
+          // When the loop is closing (Drive active), Build is the wrap target —
+          // render it "on deck" so the chain visibly points back to the start.
+          const effState: LinkState =
+            chain.closing && link.verb === 'build' ? 'on_deck' : link.state;
+          return (
+            <Fragment key={link.verb}>
+              <ChainNode label={link.label} state={effState} />
+              {i < chain.links.length - 1 ? (
+                <ChainConnector fill={connectorFill(link, chain.charge)} />
+              ) : null}
+            </Fragment>
+          );
+        })}
+      </div>
+      <p className="mt-2 flex items-start gap-1 text-[10px] leading-snug text-fg-3">
+        <ArrowRight
+          size={11}
+          strokeWidth={2.4}
+          aria-hidden
+          className="mt-[1px] flex-none text-azure-1"
+        />
+        <span className="min-w-0 flex-1">{chain.handoff}</span>
+      </p>
+      {chain.capstone ? (
+        <p
+          data-testid="rail-loop-capstone"
+          className={cn(
+            'mt-1.5 flex items-start gap-1 text-[10px] leading-snug',
+            chain.closing ? 'text-gold-1' : 'text-fg-4'
+          )}
+        >
+          <RefreshCw
+            size={11}
+            strokeWidth={2.2}
+            aria-hidden
+            className={cn('mt-[1px] flex-none', chain.closing ? 'text-gold-1' : 'text-fg-4')}
+          />
+          <span className="min-w-0 flex-1">{chain.capstone}</span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Fill for the connector trailing a link: cleared links flow full; the active
+ *  link fills with its charge; downstream links are empty. */
+function connectorFill(link: LoopLink, activeCharge: number): number {
+  if (link.state === 'cleared') return 1;
+  if (link.state === 'active') return activeCharge;
+  return 0;
+}
+
+const CHAIN_DOT: Record<LinkState, string> = {
+  cleared: 'bg-success',
+  active: 'bg-azure-1 ring-2 ring-azure-1/30',
+  on_deck: 'border border-azure-1 bg-transparent motion-safe:animate-pulse',
+  waiting: 'bg-fg-5/40'
+};
+
+const CHAIN_TEXT: Record<LinkState, string> = {
+  cleared: 'text-success/80',
+  active: 'font-semibold text-azure-1',
+  on_deck: 'text-azure-1/70',
+  waiting: 'text-fg-5'
+};
+
+/** One verb node in the chain strip: a state-toned dot with a label beneath. */
+function ChainNode({ label, state }: { label: string; state: LinkState }) {
+  return (
+    <div
+      className="flex flex-none flex-col items-center gap-1"
+      title={`${label} · ${LINK_STATE_LABEL[state]}`}
+      data-testid={`rail-chain-node-${label.toLowerCase()}`}
+      data-state={state}
+    >
+      <span className={cn('h-2 w-2 rounded-full', CHAIN_DOT[state])} aria-hidden />
+      <span
+        className={cn('text-[8px] font-semibold uppercase tracking-[0.08em]', CHAIN_TEXT[state])}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/** The track between two nodes; `fill` (0–1) is the charge that has flowed. */
+function ChainConnector({ fill }: { fill: number }) {
+  const pct = Math.round(Math.max(0, Math.min(1, fill)) * 100);
+  return (
+    <div className="mx-1 mt-[3px] h-px flex-1 overflow-hidden rounded-full bg-hairline" aria-hidden>
+      <div className="h-full rounded-full bg-azure-1" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+/**
+ * The cluster-header chain pip — an ambient state cue so the whole rail reads as
+ * a charging loop. Active needs no pip (the gold heading already carries it);
+ * cleared shows a quiet success dot, on-deck a pulsing azure dot ("next to
+ * unlock"), and waiting stays silent to keep the rail calm.
+ */
+function ChainPip({ state }: { state: LinkState }) {
+  if (state === 'cleared') {
+    return (
+      <span
+        className="h-1.5 w-1.5 flex-none rounded-full bg-success"
+        title={LINK_STATE_LABEL.cleared}
+        data-testid="rail-chain-pip-cleared"
+        aria-hidden
+      />
+    );
+  }
+  if (state === 'on_deck') {
+    return (
+      <span
+        className="h-1.5 w-1.5 flex-none rounded-full bg-azure-1 motion-safe:animate-pulse"
+        title={LINK_STATE_LABEL.on_deck}
+        data-testid="rail-chain-pip-ondeck"
+        aria-hidden
+      />
+    );
+  }
+  return null;
 }
 
 /** Earn action launcher — gold (reserved for Earn), opens the dock scoped. */
