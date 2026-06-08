@@ -1,7 +1,7 @@
 'use client';
 
 import { Sparkles, Check } from 'lucide-react';
-import { FIRST_MOVES } from '@/lib/beta/value-preview';
+import { FIRST_MOVES } from '@/lib/proof-of-truth/first-moves';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 
 /**
@@ -33,11 +33,14 @@ export function ValuePreview({
       </p>
       <ul className="mt-3 flex flex-col gap-2">
         {preview.moves.map((move) => (
-          <li key={move} className="flex items-start gap-2.5 text-[12.5px] leading-snug text-fg-2">
+          <li
+            key={move.label}
+            className="flex items-start gap-2.5 text-[12.5px] leading-snug text-fg-2"
+          >
             <span className="mt-0.5 flex-none text-gold-1">
               <Check size={14} strokeWidth={2.4} aria-hidden />
             </span>
-            {move}
+            {move.label}
           </li>
         ))}
       </ul>
