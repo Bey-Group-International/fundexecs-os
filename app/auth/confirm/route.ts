@@ -47,6 +47,30 @@ export async function GET(request: NextRequest) {
         _user_id: userId,
         ...(inviteId ? { _invite_id: inviteId } : {})
       });
+
+      // Record the referral (best-effort, first-touch): the inviting admin earns
+      // a commission on this user's own-org purchases. record_referral resolves
+      // their own org, is idempotent, and no-ops for teammates (same org).
+      const inviteQuery = admin
+        .from('beta_invites')
+        .select('id, invited_by, org_id')
+        .eq('email', email.toLowerCase());
+      const { data: invite } = await (
+        inviteId
+          ? inviteQuery.eq('id', inviteId)
+          : inviteQuery.order('last_sent_at', { ascending: false })
+      )
+        .limit(1)
+        .maybeSingle();
+      if (invite?.invited_by) {
+        await admin.rpc('record_referral', {
+          _referred_user_id: userId,
+          _referrer_user_id: invite.invited_by,
+          _referrer_org_id: invite.org_id,
+          _source: 'beta_invite',
+          _source_id: invite.id
+        });
+      }
     } catch {
       // Acceptance tracking is best-effort — never block the sign-in.
     }

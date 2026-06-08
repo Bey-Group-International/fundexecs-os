@@ -127,6 +127,27 @@ async function reconcileReservation(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Best-effort: pay the referrer a commission on a referred org's purchase.
+ * Idempotent and a no-op when the org wasn't referred — so it never blocks (or
+ * double-grants on retry) the buyer's own credits. Failures are logged, not
+ * thrown, so a commission hiccup can't fail the whole webhook.
+ */
+async function payReferralCommission(
+  admin: AdminClient,
+  referredOrgId: string,
+  sourceRef: string,
+  credits: number
+): Promise<void> {
+  if (credits <= 0) return;
+  const { error } = await admin.rpc('grant_referral_commission', {
+    _referred_org_id: referredOrgId,
+    _source_ref: sourceRef,
+    _credits_purchased: credits
+  });
+  if (error) console.error('[stripe] referral commission failed:', error.message);
+}
+
 export async function POST(req: NextRequest) {
   const secretKey = resolveEnv('STRIPE_SECRET_KEY');
   const webhookSecret = resolveEnv('STRIPE_WEBHOOK_SECRET');
@@ -195,6 +216,7 @@ export async function POST(req: NextRequest) {
             }
           });
           if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+          await payReferralCommission(admin, orgId, session.id, amountCredits);
           break;
         }
 
@@ -245,6 +267,7 @@ export async function POST(req: NextRequest) {
         const credits = Number(sub.metadata?.credits_per_period ?? 0);
         if (orgId && credits > 0) {
           await grantInvoiceCredits(admin, invoice.id, orgId, credits, periodEndIso(sub));
+          await payReferralCommission(admin, orgId, invoice.id, credits);
         }
         break;
       }
