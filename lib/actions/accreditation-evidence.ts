@@ -22,12 +22,7 @@ import { createClient } from '@/lib/supabase/server';
  *   org owner/admin authorised to see that row can obtain the URL.
  * ========================================================================= */
 
-const ALLOWED_CONTENT_TYPES = [
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/webp'
-] as const;
+const ALLOWED_CONTENT_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'] as const;
 type AllowedContentType = (typeof ALLOWED_CONTENT_TYPES)[number];
 
 const MAX_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
@@ -35,12 +30,13 @@ const FILENAME_MAX = 120;
 
 /** Strip path separators and other unsafe characters; keep a safe basename. */
 function sanitizeFilename(raw: string): string {
-  return raw
-    .replace(/[/\\]/g, '_')
-    .replace(/[^a-zA-Z0-9._\-() ]/g, '_')
-    .trim()
-    .slice(0, FILENAME_MAX)
-    || 'document';
+  return (
+    raw
+      .replace(/[/\\]/g, '_')
+      .replace(/[^a-zA-Z0-9._\-() ]/g, '_')
+      .trim()
+      .slice(0, FILENAME_MAX) || 'document'
+  );
 }
 
 export type AccreditationUploadUrlResult =

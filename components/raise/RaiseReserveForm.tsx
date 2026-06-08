@@ -14,12 +14,7 @@ import { createAccreditationUploadUrl } from '@/lib/actions/accreditation-eviden
  *
  * The accredited-investor attestation is always required here (506(c)-only). */
 
-const ALLOWED_UPLOAD_TYPES = new Set([
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/webp'
-]);
+const ALLOWED_UPLOAD_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/webp']);
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 function formatBytes(n: number): string {
