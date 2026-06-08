@@ -13,6 +13,7 @@ import { getFundProfile } from '@/lib/queries/fund-profile';
 import { LifecycleDashboard } from '@/components/dashboard/LifecycleDashboard';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import { ProfileRailSummary } from '@/components/profile';
+import { readBriefSeen } from '@/lib/dashboard/state';
 
 export const metadata: Metadata = {
   title: 'Command Center'
@@ -85,7 +86,7 @@ export default async function CommandCenterPage() {
     );
   }
 
-  const [dashboard, wallet, fundProfile, metrics] = await Promise.all([
+  const [dashboard, wallet, fundProfile, metrics, briefSeen] = await Promise.all([
     getDashboardData(org.orgId),
     getCreditWallet(org.orgId),
     getFundProfile(org.orgId),
@@ -93,9 +94,15 @@ export default async function CommandCenterPage() {
       activeCommitments: 0,
       underReview: 0,
       tasksDueThisWeek: 0
-    }))
+    })),
+    readBriefSeen()
   ]);
   const navSignals = buildRailSignals(dashboard, memberType);
+
+  // First use after onboarding: show Earn's launch brief once. Gated on a
+  // completed profile + the `fx-brief-seen` cookie (set when dismissed), so a
+  // returning member never sees it again.
+  const showLaunchBrief = memberProfile?.status === 'complete' && !briefSeen;
 
   return (
     <AppShell
@@ -112,6 +119,7 @@ export default async function CommandCenterPage() {
         data={dashboard}
         metrics={metrics}
         fundProfile={fundProfile}
+        showLaunchBrief={showLaunchBrief}
       />
     </AppShell>
   );
