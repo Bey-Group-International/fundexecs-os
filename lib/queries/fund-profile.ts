@@ -4,7 +4,7 @@ import type { MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
 import {
   buildLadder,
-  isWeakText,
+  scoreDepth,
   tierForQuestion,
   type CollectingTierId,
   type LadderItem,
@@ -246,8 +246,7 @@ function buildFromSchema(
     const isTags = q.kind === 'tags';
     const tags = isTags && Array.isArray(answer) ? answer : [];
     const text = !isTags && typeof answer === 'string' ? answer : null;
-    const present = isTags ? tags.length > 0 : Boolean(text);
-    const weak = present && !isTags && isWeakText(q.kind, text ?? '');
+    const { present, weak } = scoreDepth(q, { text: text ?? '', tagCount: tags.length });
     const tier = tierForQuestion(q);
 
     sections.push({

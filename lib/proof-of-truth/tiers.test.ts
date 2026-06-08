@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { getQuestionSet, type ProfileQuestion } from './questions';
 import {
   buildLadder,
-  isWeakText,
+  scoreDepth,
   tierForQuestion,
   WEAK_TEXT_LEN,
   type LadderItem
@@ -25,12 +25,42 @@ test('tierForQuestion routes identity, mandate, and evidence fields', () => {
   assert.equal(tierForQuestion(q('investment_firm', 'thesis')), 'evidence'); // deep prose
 });
 
-test('isWeakText flags thin prose only', () => {
-  assert.equal(isWeakText('textarea', 'too short'), true);
-  assert.equal(isWeakText('textarea', 'x'.repeat(WEAK_TEXT_LEN)), false); // at threshold = strong
-  assert.equal(isWeakText('textarea', ''), false); // absent, not weak
-  assert.equal(isWeakText('text', 'short'), false); // structured never weak
-  assert.equal(isWeakText('tags', 'a'), false);
+test('scoreDepth weighs prose by length and specificity', () => {
+  const prose = { kind: 'textarea' as const };
+  // Long enough AND specific (two sentences) → strong.
+  assert.deepEqual(scoreDepth(prose, { text: 'We back seed founders. Why now matters most.', tagCount: 0 }), {
+    present: true,
+    weak: false
+  });
+  // Long enough AND specific (carries a number) → strong even as one sentence.
+  assert.deepEqual(
+    scoreDepth(prose, { text: 'We lead $1M pre-seed rounds in vertical AI tooling', tagCount: 0 }),
+    { present: true, weak: false }
+  );
+  // Past the length floor but a single vague sentence, no number → thin.
+  assert.equal(scoreDepth(prose, { text: 'x'.repeat(WEAK_TEXT_LEN), tagCount: 0 }).weak, true);
+  // Too short → thin.
+  assert.equal(scoreDepth(prose, { text: 'too short', tagCount: 0 }).weak, true);
+  // Absent → present false, not weak.
+  assert.deepEqual(scoreDepth(prose, { text: '', tagCount: 0 }), { present: false, weak: false });
+});
+
+test('scoreDepth requires a figure for numeric fields', () => {
+  const num = { kind: 'text' as const, expects: 'number' as const };
+  assert.deepEqual(scoreDepth(num, { text: '$250K–$2M', tagCount: 0 }), { present: true, weak: false });
+  assert.deepEqual(scoreDepth(num, { text: 'varies', tagCount: 0 }), { present: true, weak: true });
+});
+
+test('scoreDepth flags a lone tag as thin; plain text is never weak', () => {
+  const tags = { kind: 'tags' as const };
+  assert.deepEqual(scoreDepth(tags, { text: '', tagCount: 0 }), { present: false, weak: false });
+  assert.deepEqual(scoreDepth(tags, { text: '', tagCount: 1 }), { present: true, weak: true });
+  assert.deepEqual(scoreDepth(tags, { text: '', tagCount: 2 }), { present: true, weak: false });
+  // Short structured text (a name, a headline) is present-or-not, never thin.
+  assert.deepEqual(scoreDepth({ kind: 'text' as const }, { text: 'NW', tagCount: 0 }), {
+    present: true,
+    weak: false
+  });
 });
 
 test('buildLadder gates rungs and computes readiness in order', () => {

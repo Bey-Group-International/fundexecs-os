@@ -2,7 +2,7 @@ import type { MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
 import {
   buildLadder,
-  isWeakText,
+  scoreDepth,
   tierForQuestion,
   type LadderItem,
   type ProfileLadderState
@@ -37,11 +37,11 @@ export function completionPct(memberType: MemberType, answers: Answers): number 
 
 /** Whether a single question's current answer is present, and whether it's thin. */
 export function scoreAnswer(q: ProfileQuestion, answers: Answers): { present: boolean; weak: boolean } {
+  const raw = answers[q.id] ?? '';
   if (q.kind === 'tags') {
-    return { present: splitTags(answers[q.id]).length > 0, weak: false };
+    return scoreDepth(q, { text: '', tagCount: splitTags(raw).length });
   }
-  const text = (answers[q.id] ?? '').trim();
-  return { present: text.length > 0, weak: isWeakText(q.kind, text) };
+  return scoreDepth(q, { text: raw, tagCount: 0 });
 }
 
 /**

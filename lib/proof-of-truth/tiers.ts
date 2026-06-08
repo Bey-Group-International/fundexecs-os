@@ -23,13 +23,63 @@ import type { ProfileQuestion } from './questions';
  * both compute the identical ladder.
  * ========================================================================= */
 
-/** A string answer is "weak" (present but thin) below this length. */
+/** A prose answer is "weak" (present but thin) below this length. */
 export const WEAK_TEXT_LEN = 40;
 
-/** Only free-text prose can read "weak"; structured fields are present or not. */
-export function isWeakText(kind: ProfileQuestion['kind'], text: string): boolean {
-  const len = text.trim().length;
-  return kind === 'textarea' && len > 0 && len < WEAK_TEXT_LEN;
+/** Any digit — the proof that a numeric or prose answer carries a real figure. */
+const HAS_DIGIT = /\d/;
+
+/** Distinct sentences in prose, by terminal punctuation — a specificity signal. */
+function sentenceCount(text: string): number {
+  return text
+    .split(/[.!?]+/)
+    .map((s) => s.trim())
+    .filter(Boolean).length;
+}
+
+/** The depth-scored value of one answer, normalized across input shapes. */
+export interface DepthValue {
+  /** The trimmed free-text (empty for tag fields). */
+  text: string;
+  /** Number of distinct chips (0 for non-tag fields). */
+  tagCount: number;
+}
+
+/**
+ * Depth scoring: is an answer present, and does it read thin? Quality-weighted,
+ * not presence-only — the same rule the ladder, the gaps, and the wizard all
+ * use, so a counterparty never reads "done" where the record is actually vague.
+ *
+ *   - tags:          present at ≥1 chip; thin at exactly 1 (one sector is weak)
+ *   - numeric text:  thin unless it carries an actual figure ("varies" ≠ done)
+ *   - prose:         strong only past the length floor AND with specificity
+ *                    (a number or a second sentence) — a single vague line is thin
+ *   - short text / select / url: present is enough; these can't read thin
+ *
+ * Pure and deterministic — no AI call, so the ladder stays instant and free.
+ */
+export function scoreDepth(
+  q: Pick<ProfileQuestion, 'kind' | 'expects'>,
+  value: DepthValue
+): { present: boolean; weak: boolean } {
+  if (q.kind === 'tags') {
+    const present = value.tagCount > 0;
+    return { present, weak: present && value.tagCount < 2 };
+  }
+
+  const text = value.text.trim();
+  if (!text) return { present: false, weak: false };
+
+  if (q.expects === 'number') {
+    return { present: true, weak: !HAS_DIGIT.test(text) };
+  }
+
+  if (q.kind === 'textarea') {
+    const specific = HAS_DIGIT.test(text) || sentenceCount(text) >= 2;
+    return { present: true, weak: text.length < WEAK_TEXT_LEN || !specific };
+  }
+
+  return { present: true, weak: false };
 }
 
 export type ProfileTierId = 'identity' | 'mandate' | 'evidence' | 'institutional';
