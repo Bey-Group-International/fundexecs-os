@@ -169,6 +169,72 @@ export async function buildDealSnapshot(
   }
 }
 
+/** Bucket a recency into a coarse, name-free phrase ("today" / "3 days ago" /
+ *  "5 weeks ago"). Computed from a timestamp — the raw value is never echoed. */
+function lastTouch(iso: string | null): string | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  const days = Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+  if (days === 0) return 'last touch today';
+  if (days === 1) return 'last touch yesterday';
+  if (days < 14) return `last touch ${days} days ago`;
+  if (days < 60) return `last touch ${Math.round(days / 7)} weeks ago`;
+  return `last touch ${Math.round(days / 30)} months ago`;
+}
+
+/**
+ * When the operator is focused on an LP / relationship, distil that
+ * relationship's live state — temperature, strength, touch count, and recency —
+ * so Earn can speak to the person on screen rather than the book as a whole.
+ * Mirrors {@link buildDealSnapshot}. Structured fields only (status / strength /
+ * interaction_count / bucketed recency), never names or other free text, so it
+ * stays safe in the system prompt with no prompt-injection surface. The focus
+ * `entityId` is a `contacts.id` (see ContactDetailDrawer's lp EarnContext), and
+ * `relationships` is keyed by `contact_id` — so resolve on `contact_id` first,
+ * then fall back to `id`. Returns '' when nothing can be read (RLS / wrong id),
+ * so no block is emitted.
+ */
+export async function buildRelationshipSnapshot(
+  supabase: Db,
+  orgId: string,
+  entityId: string
+): Promise<string> {
+  try {
+    const cols = 'status, strength, interaction_count, last_interaction_at';
+    let { data } = await supabase
+      .from('relationships')
+      .select(cols)
+      .eq('org_id', orgId)
+      .eq('contact_id', entityId)
+      .maybeSingle();
+    // Fall back to the relationships row id in case focus ever carries that.
+    if (!data) {
+      ({ data } = await supabase
+        .from('relationships')
+        .select(cols)
+        .eq('org_id', orgId)
+        .eq('id', entityId)
+        .maybeSingle());
+    }
+    if (!data) return '';
+
+    const facts: string[] = [];
+    if (data.status) facts.push(`relationship ${data.status}`); // hot / warm / cold
+    if (data.strength != null) facts.push(`strength ${data.strength}/100`);
+    if (data.interaction_count != null) {
+      facts.push(`${data.interaction_count} interaction${data.interaction_count === 1 ? '' : 's'}`);
+    }
+    const touch = lastTouch(data.last_interaction_at);
+    if (touch) facts.push(touch);
+    if (facts.length === 0) return '';
+
+    return `Focused relationship (live state of the LP the operator is viewing): ${facts.join(', ')}.`;
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Build a few-line snapshot of the operator's live workspace, or '' when there
  * is nothing material yet (a brand-new org). Sections run in parallel and each
