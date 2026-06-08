@@ -12,6 +12,7 @@ import { getAdminData, type AdminData } from '@/lib/queries/admin';
 import { getAdminMetrics, type AdminMetrics } from '@/lib/queries/admin-metrics';
 import { getBetaInvites, type BetaInvite } from '@/lib/queries/beta-invites';
 import { getBetaLinks, type BetaLinkWithStatus } from '@/lib/queries/beta-links';
+import { getBetaApplications, type BetaApplication } from '@/lib/queries/beta-applications';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import { isPlatformAdmin } from '@/lib/access';
 import { ProfileRailSummary } from '@/components/profile';
@@ -92,6 +93,7 @@ export default async function SettingsPage() {
   let adminData: AdminData | null = null;
   let invites: BetaInvite[] = [];
   let betaLinks: BetaLinkWithStatus[] = [];
+  let applications: BetaApplication[] = [];
   let adminMetrics: AdminMetrics | null = null;
   let viewerRole: OrgMemberRole | null = null;
   if (org && user && isPlatformAdmin(user.email)) {
@@ -101,10 +103,11 @@ export default async function SettingsPage() {
     isAdmin = true;
     if (ad) {
       adminData = ad;
-      [invites, adminMetrics, betaLinks] = await Promise.all([
+      [invites, adminMetrics, betaLinks, applications] = await Promise.all([
         getBetaInvites(org.orgId).catch(() => []),
         getAdminMetrics(org.orgId).catch(() => null),
-        getBetaLinks(org.orgId).catch(() => [])
+        getBetaLinks(org.orgId).catch(() => []),
+        getBetaApplications(org.orgId).catch(() => [])
       ]);
     }
   }
@@ -148,6 +151,7 @@ export default async function SettingsPage() {
         adminData={adminData}
         invites={invites}
         betaLinks={betaLinks}
+        applications={applications}
         adminMetrics={adminMetrics}
         viewerRole={viewerRole}
         subscription={subscriptionView}

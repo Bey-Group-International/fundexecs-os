@@ -354,6 +354,9 @@ export type Database = {
           email: string
           id: string
           org_id: string
+          review_status: string
+          reviewed_at: string | null
+          reviewed_by: string | null
           user_id: string
         }
         Insert: {
@@ -362,6 +365,9 @@ export type Database = {
           email: string
           id?: string
           org_id: string
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           user_id: string
         }
         Update: {
@@ -370,6 +376,9 @@ export type Database = {
           email?: string
           id?: string
           org_id?: string
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           user_id?: string
         }
         Relationships: [
@@ -390,6 +399,13 @@ export type Database = {
           {
             foreignKeyName: "beta_link_claims_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "beta_link_claims_reviewed_by_fkey"
+            columns: ["reviewed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

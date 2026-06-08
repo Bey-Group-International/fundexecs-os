@@ -40,6 +40,7 @@ import type { AdminData } from '@/lib/queries/admin';
 import type { AdminMetrics } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
+import type { BetaApplication } from '@/lib/queries/beta-applications';
 import {
   updateAccountSettings,
   updateAvatar,
@@ -73,6 +74,8 @@ interface SettingsViewProps {
   adminData: AdminData | null;
   invites: BetaInvite[];
   betaLinks: BetaLinkWithStatus[];
+  /** Beta-link applicants (welcome-flow claimants) for the Applications inbox. */
+  applications: BetaApplication[];
   /** Platform metrics for the Admin Knowledge / Chain-of-Trust panels. */
   adminMetrics: AdminMetrics | null;
   /** The viewing admin's own role — gates owner-only role changes. */
@@ -629,6 +632,7 @@ export function SettingsView({
   adminData,
   invites,
   betaLinks,
+  applications,
   adminMetrics,
   viewerRole,
   subscription,
@@ -790,6 +794,7 @@ export function SettingsView({
               data={adminData}
               invites={invites}
               betaLinks={betaLinks}
+              applications={applications}
               metrics={adminMetrics}
               viewerRole={viewerRole}
             />
