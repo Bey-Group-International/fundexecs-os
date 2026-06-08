@@ -34,10 +34,22 @@ jobs:
 
       # Uses `npm ci` when a committed package-lock.json is present
       # (reproducible), otherwise falls back to `npm install`. package.json
-      # is version-pinned either way.
+      # is version-pinned either way. Retries on transient registry/network
+      # resets (ECONNRESET) so CI doesn't red on infra flakes.
       - name: Install dependencies
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          install() { if [ -f package-lock.json ]; then npm ci; else npm install; fi; }
+          npm config set fetch-retries 5
+          npm config set fetch-retry-factor 2
+          npm config set fetch-retry-mintimeout 10000
+          npm config set fetch-retry-maxtimeout 120000
+          n=0
+          until install; do
+            n=$((n+1))
+            if [ "$n" -ge 4 ]; then echo "npm install failed after $n attempts" >&2; exit 1; fi
+            echo "npm install attempt $n failed; retrying in $((n*10))s..." >&2
+            sleep $((n*10))
+          done
 
       - name: Prettier check
         run: npm run format:check
@@ -86,12 +98,32 @@ jobs:
         with:
           node-version: 22
 
+      # Retries on transient registry/network resets (ECONNRESET) — this job
+      # has been the one most often tripped by npm-registry flakes.
       - name: Install dependencies
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          install() { if [ -f package-lock.json ]; then npm ci; else npm install; fi; }
+          npm config set fetch-retries 5
+          npm config set fetch-retry-factor 2
+          npm config set fetch-retry-mintimeout 10000
+          npm config set fetch-retry-maxtimeout 120000
+          n=0
+          until install; do
+            n=$((n+1))
+            if [ "$n" -ge 4 ]; then echo "npm install failed after $n attempts" >&2; exit 1; fi
+            echo "npm install attempt $n failed; retrying in $((n*10))s..." >&2
+            sleep $((n*10))
+          done
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: |
+          n=0
+          until npx playwright install --with-deps chromium; do
+            n=$((n+1))
+            if [ "$n" -ge 3 ]; then echo "playwright install failed after $n attempts" >&2; exit 1; fi
+            echo "playwright install attempt $n failed; retrying in $((n*10))s..." >&2
+            sleep $((n*10))
+          done
 
       # playwright.config.ts builds & starts the production server via its
       # `webServer`, so this single step covers build + serve + test.
