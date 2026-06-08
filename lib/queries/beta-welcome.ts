@@ -31,7 +31,9 @@ export async function getBetaLinkWelcome(token: string): Promise<BetaInviteConte
     }
 
     return { label: link.label?.trim() || null, inviterName };
-  } catch {
+  } catch (error) {
+    // Degrade to a generic welcome, but keep visibility into DB/query failures.
+    console.error('[beta-welcome] failed to resolve invite context', error);
     return null;
   }
 }

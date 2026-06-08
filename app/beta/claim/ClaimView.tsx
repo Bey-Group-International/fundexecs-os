@@ -367,8 +367,39 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
     ev('beta_welcome_view');
   }, []);
 
-  // Keep the newest turn in view as the conversation grows.
+  // Rehydrate answers if auth bounced us back (or a returning visit within the
+  // cookie window) so a retry never overwrites the carried application with
+  // blanks. On an error bounce, drop them at the sign-in step.
   useEffect(() => {
+    const raw = document.cookie
+      .split('; ')
+      .find((part) => part.startsWith(`${BETA_APPLICATION_COOKIE}=`))
+      ?.slice(BETA_APPLICATION_COOKIE.length + 1);
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(decodeURIComponent(raw)) as BetaApplication;
+      queueMicrotask(() => {
+        if (saved.name) {
+          setName(saved.name);
+          setNameInput(saved.name);
+        }
+        if (saved.memberType) setMemberType(saved.memberType);
+        if (saved.goal) {
+          setGoal(saved.goal);
+          setGoalInput(saved.goal);
+        }
+        if (redirectedError) setStep('enter');
+      });
+    } catch {
+      // Malformed cookie — ignore and start fresh.
+    }
+  }, [redirectedError]);
+
+  // Keep the newest turn in view as the conversation grows. Skipped until the
+  // transcript has settled entries, so the personalized welcome is never
+  // scrolled past on first paint.
+  useEffect(() => {
+    if (thread.length === 0) return;
     queueMicrotask(() =>
       bottomRef.current?.scrollIntoView({
         behavior: reducedMotion ? 'auto' : 'smooth',
