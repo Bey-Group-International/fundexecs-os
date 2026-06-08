@@ -12,6 +12,7 @@ import {
   Lock,
   Mail,
   Phone,
+  Plug,
   ShieldCheck,
   Sparkles,
   User,
@@ -24,7 +25,9 @@ import { EarnCoin } from '@/components/screens/EarnCoin';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 import type { Database } from '@/lib/supabase/database.types';
 import type { OrgSubscription } from '@/lib/queries/subscription';
+import type { IntegrationView } from '@/lib/integrations/catalog';
 import { cn } from '@/lib/utils';
+import { IntegrationsPanel } from '@/components/integrations/IntegrationsPanel';
 import { PlanCreditsSection } from './PlanCreditsSection';
 import { AdminView } from '@/app/admin/AdminView';
 import type { AdminData } from '@/lib/queries/admin';
@@ -79,6 +82,8 @@ interface SettingsViewProps {
   subscription: OrgSubscription;
   /** Live wallet balance for the Plan & credits section. */
   creditBalance: number;
+  /** Provider connections (merged with the catalog) for the Integrations section. */
+  integrations: IntegrationView[];
 }
 
 /* ----------------------------------------------------------------------------
@@ -493,7 +498,15 @@ function SecuritySection() {
  * --------------------------------------------------------------------------*/
 
 interface SettingsSection {
-  id: 'account' | 'notifications' | 'security' | 'organization' | 'billing' | 'trust' | 'admin';
+  id:
+    | 'account'
+    | 'notifications'
+    | 'security'
+    | 'organization'
+    | 'integrations'
+    | 'billing'
+    | 'trust'
+    | 'admin';
   label: string;
   icon: LucideIcon;
   /** What completing this section unlocks across the app. */
@@ -530,6 +543,12 @@ const SECTIONS: SettingsSection[] = [
     label: 'Organization',
     icon: Building2,
     unlocks: 'Workspace identity + the institutional tier shown on LP-facing surfaces.'
+  },
+  {
+    id: 'integrations',
+    label: 'Integrations',
+    icon: Plug,
+    unlocks: 'The tools Earn syncs from — Gmail, Calendar, Drive, Slack, Zoom and more.'
   },
   {
     id: 'billing',
@@ -580,7 +599,8 @@ export function SettingsView({
   adminMetrics,
   viewerRole,
   subscription,
-  creditBalance
+  creditBalance,
+  integrations
 }: SettingsViewProps) {
   // The Admin section is owner/admin-only; hide it from the rail otherwise.
   const visibleSections = SECTIONS.filter((s) => s.id !== 'admin' || isAdmin);
@@ -730,6 +750,9 @@ export function SettingsView({
               team={orgTeam}
               subscription={subscription}
             />
+          )}
+          {activeSection.id === 'integrations' && (
+            <IntegrationsPanel connections={integrations} variant="settings" />
           )}
           {activeSection.id === 'billing' && (
             <PlanCreditsSection

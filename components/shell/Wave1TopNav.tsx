@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Bell, Search, Sun, Moon, Menu } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Search, Sun, Moon, Menu } from 'lucide-react';
 import type { ShellIdentity } from '@/lib/queries/identity';
 import type { CreditWallet } from '@/lib/queries/credit-wallet';
 import { CreditWalletGauge } from './CreditWalletGauge';
+import { NotificationsBell } from './NotificationsBell';
 import { TopNavAccountMenu } from './account/TopNavAccountMenu';
 
 /** Topbar theme toggle — flips `data-theme`, persists to localStorage('fx-theme').
@@ -61,7 +61,6 @@ export interface Wave1TopNavProps {
  * side-rail account footer. Color discipline: gold stays on the Earn wallet.
  */
 export function Wave1TopNav({ title, subtitle, identity, onMenu, wallet }: Wave1TopNavProps) {
-  const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
 
   // ⌘K / Ctrl-K focuses the search box (placeholder command-palette entry).
@@ -127,28 +126,8 @@ export function Wave1TopNav({ title, subtitle, identity, onMenu, wallet }: Wave1
           side-rail, so there's no separate gamification pill here anymore. */}
       <CreditWalletGauge wallet={wallet} />
 
-      {/* Alerts bell */}
-      <button
-        type="button"
-        onClick={() => router.push('/notifications')}
-        aria-label={
-          identity.unreadCount > 0
-            ? `Notifications, ${identity.unreadCount} unread`
-            : 'Notifications'
-        }
-        data-testid="topnav-notifications-bell"
-        className="relative flex h-[38px] w-[38px] flex-none items-center justify-center rounded-[10px] border border-hairline bg-surface-1 text-fg-3 transition-[background,box-shadow] hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-      >
-        <Bell size={17} strokeWidth={1.9} aria-hidden />
-        {identity.unreadCount > 0 ? (
-          <span
-            data-testid="topnav-unread-badge"
-            className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-bg-0 bg-azure-1 px-1 text-[10px] font-bold text-white"
-          >
-            {identity.unreadCount}
-          </span>
-        ) : null}
-      </button>
+      {/* Alerts bell — opens a dropdown of recent notifications (not a page jump) */}
+      <NotificationsBell initialUnread={identity.unreadCount} />
 
       {/* Profile avatar → account menu (Settings, workspace switch, log out) */}
       <TopNavAccountMenu identity={identity} />
