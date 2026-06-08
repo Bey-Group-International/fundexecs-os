@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Clock,
   SendHorizonal,
+  UserCog,
   X
 } from 'lucide-react';
 import {
@@ -26,6 +27,7 @@ import {
   type TabItem
 } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
+import { ProviderDiscovery } from '@/components/partners/ProviderDiscovery';
 import { requestPartnerIntro } from '@/lib/actions/partners';
 import type {
   PartnersData,
@@ -155,7 +157,11 @@ function ServiceCard({
   provider: ServiceProvider;
   introStatus: IntroStatusMap;
 }) {
-  const caps = Object.keys(provider.capabilities);
+  const meta = (provider.capabilities._meta ?? null) as {
+    description?: string | null;
+    assignedSpecialist?: string | null;
+  } | null;
+  const caps = Object.keys(provider.capabilities).filter((k) => !k.startsWith('_'));
   const { accent } = partnerMeta('service');
 
   return (
@@ -182,6 +188,10 @@ function ServiceCard({
         </div>
       </div>
 
+      {meta?.description ? (
+        <p className="pl-3 text-[12px] leading-5 text-fg-3">{meta.description}</p>
+      ) : null}
+
       {caps.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 border-t border-hairline pl-3 pt-3">
           {caps.slice(0, 5).map((cap) => (
@@ -200,13 +210,19 @@ function ServiceCard({
         </div>
       ) : null}
 
-      <div className="border-t border-hairline pl-3 pt-3">
+      <div className="flex items-end justify-between gap-2 border-t border-hairline pl-3 pt-3">
         <ApplyButton
           partnerId={provider.id}
           partnerName={provider.name}
           partnerType="service_provider"
           initialStatus={introStatus[provider.id]}
         />
+        {meta?.assignedSpecialist ? (
+          <span className="inline-flex items-center gap-1 text-[10.5px] text-fg-5">
+            <UserCog size={11} strokeWidth={1.9} className="text-azure-1" aria-hidden />
+            {meta.assignedSpecialist}
+          </span>
+        ) : null}
       </div>
     </Card>
   );
@@ -222,6 +238,10 @@ function CapitalCard({
   introStatus: IntroStatusMap;
 }) {
   const hasCheck = provider.checkSizeMin != null || provider.checkSizeMax != null;
+  const meta = provider.criteria as {
+    description?: string | null;
+    assignedSpecialist?: string | null;
+  };
   const { accent } = partnerMeta('capital');
 
   return (
@@ -251,6 +271,10 @@ function CapitalCard({
         </div>
       </div>
 
+      {meta?.description ? (
+        <p className="pl-3 text-[12px] leading-5 text-fg-3">{meta.description}</p>
+      ) : null}
+
       {hasCheck ? (
         <div className="flex items-center gap-1.5 rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-1.5 pl-5 text-[12px] text-gold-1">
           <CircleDollarSign size={13} strokeWidth={2} aria-hidden />
@@ -276,13 +300,19 @@ function CapitalCard({
         </div>
       ) : null}
 
-      <div className="border-t border-hairline pl-3 pt-3">
+      <div className="flex items-end justify-between gap-2 border-t border-hairline pl-3 pt-3">
         <ApplyButton
           partnerId={provider.id}
           partnerName={provider.name}
           partnerType="capital_provider"
           initialStatus={introStatus[provider.id]}
         />
+        {meta?.assignedSpecialist ? (
+          <span className="inline-flex items-center gap-1 text-[10.5px] text-fg-5">
+            <UserCog size={11} strokeWidth={1.9} className="text-gold-1" aria-hidden />
+            {meta.assignedSpecialist}
+          </span>
+        ) : null}
       </div>
     </Card>
   );
@@ -361,6 +391,7 @@ export function PartnersView({ data }: PartnersViewProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_VALUE);
   const [capitalTypeFilter, setCapitalTypeFilter] = useState<string>(ALL_VALUE);
   const [query, setQuery] = useState('');
+  const [discoverOpen, setDiscoverOpen] = useState(false);
 
   if (data.empty) {
     return (
@@ -377,10 +408,16 @@ export function PartnersView({ data }: PartnersViewProps) {
           />
           <EmptyState
             icon={Users}
-            title="Your directory is ready"
-            body="Service providers (legal, compliance, fund admin) and capital providers (LPs, family offices, fund-of-funds) appear here the moment they're added to your organization."
+            title="Build your partner bench"
+            body="Find service providers (legal, compliance, fund admin) and capital providers (LPs, family offices, fund-of-funds) with AI, then bring the best matches into your ops in one click."
+            action={
+              <Button variant="primary" icon={Sparkles} onClick={() => setDiscoverOpen(true)}>
+                Discover with AI
+              </Button>
+            }
           />
         </Card>
+        <ProviderDiscovery open={discoverOpen} onClose={() => setDiscoverOpen(false)} />
       </div>
     );
   }
@@ -440,13 +477,24 @@ export function PartnersView({ data }: PartnersViewProps) {
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <SegTabs tabs={TYPE_TABS} active={typeFilter} onChange={setTypeFilter} />
-          <div className="w-full sm:w-64">
-            <Input
-              icon={Search}
-              placeholder="Search partners…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <div className="w-full sm:w-64">
+              <Input
+                icon={Search}
+                placeholder="Search partners…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <Button
+              variant="primary"
+              icon={Sparkles}
+              className="flex-none"
+              onClick={() => setDiscoverOpen(true)}
+            >
+              <span className="hidden sm:inline">Discover with AI</span>
+              <span className="sm:hidden">Discover</span>
+            </Button>
           </div>
         </div>
 
@@ -533,6 +581,8 @@ export function PartnersView({ data }: PartnersViewProps) {
       <p className="text-center text-[11.5px] text-fg-5">
         {totalVisible} partner{totalVisible !== 1 ? 's' : ''} shown
       </p>
+
+      <ProviderDiscovery open={discoverOpen} onClose={() => setDiscoverOpen(false)} />
     </div>
   );
 }
