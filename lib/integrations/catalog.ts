@@ -144,7 +144,9 @@ export function mergeConnections(rows: ProviderConnection[]): IntegrationView[] 
 /** Relative "synced Xm ago" label (or "Never synced"). */
 export function syncedLabel(iso: string | null): string {
   if (!iso) return 'Never synced';
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return 'Never synced';
+  const mins = Math.max(0, Math.round((Date.now() - ts) / 60_000));
   if (mins < 60) return `Synced ${mins}m ago`;
   const hrs = Math.round(mins / 60);
   if (hrs < 24) return `Synced ${hrs}h ago`;
