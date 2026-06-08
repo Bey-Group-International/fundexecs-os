@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { ArrowRight, Compass, Minus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { FX_EASE, FX_SPRING } from '@/components/dashboard/command/motion';
+import { FX_SPRING } from '@/components/dashboard/command/motion';
 import type { RailMomentum } from '@/components/shell/Wave1SideRail';
 import { LINK_STATE_LABEL, type LinkState, type LoopLink } from '@/lib/loop-chain';
 import {
@@ -19,16 +19,19 @@ import {
 /* ----------------------------------------------------------------------------
  * GuidedMode (Phase 5) — the hand-on-the-wheel walkthrough.
  *
- * A shell-level focus overlay that drives the operating loop turn by turn. It
+ * A shell-level companion that drives the operating loop turn by turn. It
  * reuses the Phase-4 loop chain + the lifecycle gates as its step engine: the
  * current stage *is* the step, advancement is gate clearance (so the walkthrough
  * moves forward automatically as real fund state changes — no scripted tour).
  *
- * Two presentations, both persisted (UX-only, localStorage):
- *  - FOCUS CARD: dims the workspace and spotlights the active verb, the single
- *    next move, and what completing it unlocks. Taking the action minimizes to…
- *  - DOCKED PILL: a calm bottom-center companion so the operator can actually
- *    work the surface, with the loop position always in view. Tap to re-expand.
+ * Non-blocking by design — it never dims the workspace or covers the rail, so
+ * every nav button stays visible and clickable while guided is engaged. Two
+ * presentations, both docked bottom-center of the content area and persisted
+ * (UX-only, localStorage):
+ *  - FOCUS CARD: spotlights the active verb, the single next move, and what
+ *    completing it unlocks. Taking the action minimizes to…
+ *  - DOCKED PILL: a calm pill so the operator can work the surface, with the
+ *    loop position always in view. Tap to re-expand.
  *
  * Pure presentation over `momentum` (already on every authed shell via
  * AuthedShell → buildRailSignals). Renders nothing when disengaged or when a
@@ -105,136 +108,122 @@ function FocusCard({ momentum }: { momentum: RailMomentum }) {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-5"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18, ease: FX_EASE }}
+      role="dialog"
+      aria-label="Guided mode"
+      data-testid="guided-focus-card"
+      initial={{ opacity: 0, y: 14, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 14, scale: 0.98 }}
+      transition={FX_SPRING}
+      className="fixed bottom-5 left-1/2 z-40 flex max-h-[80vh] w-[min(92vw,360px)] -translate-x-1/2 flex-col overflow-hidden rounded-[18px] border border-hairline bg-bg-1 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.55)] lg:left-[calc(50%+126px)]"
     >
-      {/* Backdrop — clicking it minimizes (keeps guided engaged). */}
-      <button
-        type="button"
-        aria-label="Minimize guided mode"
-        onClick={() => setGuidedCollapsed(true)}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-[2px]"
-      />
-      <motion.div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Guided mode"
-        data-testid="guided-focus-card"
-        initial={{ opacity: 0, y: 10, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 8, scale: 0.98 }}
-        transition={FX_SPRING}
-        className="relative w-full max-w-md overflow-hidden rounded-[18px] border border-hairline bg-bg-1 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.55)]"
-      >
-        {/* Header */}
-        <div className="flex items-center gap-2 border-b border-hairline px-4 py-3">
-          <Compass size={15} strokeWidth={2} aria-hidden className="flex-none text-gold-1" />
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gold-1">
-            Guided
-          </span>
-          <span className="flex-1 text-[11px] text-fg-4">
-            Step {Math.min(stageIndex + 1, stageCount)} of {stageCount}
-          </span>
-          <button
-            type="button"
-            onClick={() => setGuidedCollapsed(true)}
-            aria-label="Minimize"
-            className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 hover:bg-surface-1 hover:text-fg-1"
-          >
-            <Minus size={14} strokeWidth={2} aria-hidden />
-          </button>
-          <button
-            type="button"
-            onClick={() => setGuidedOn(false)}
-            aria-label="Exit guided mode"
-            data-testid="guided-exit"
-            className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 hover:bg-surface-1 hover:text-fg-1"
-          >
-            <X size={14} strokeWidth={2} aria-hidden />
-          </button>
+      {/* Non-blocking docked card — no backdrop, never covers the rail or
+          intercepts clicks outside itself, so the whole sidebar stays visible
+          and every button stays clickable while guided is engaged. */}
+      <div className="flex flex-none items-center gap-2 border-b border-hairline px-4 py-3">
+        <Compass size={15} strokeWidth={2} aria-hidden className="flex-none text-gold-1" />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gold-1">
+          Guided
+        </span>
+        <span className="flex-1 text-[11px] text-fg-4">
+          Step {Math.min(stageIndex + 1, stageCount)} of {stageCount}
+        </span>
+        <button
+          type="button"
+          onClick={() => setGuidedCollapsed(true)}
+          aria-label="Minimize"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 hover:bg-surface-1 hover:text-fg-1"
+        >
+          <Minus size={14} strokeWidth={2} aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() => setGuidedOn(false)}
+          aria-label="Exit guided mode"
+          data-testid="guided-exit"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 hover:bg-surface-1 hover:text-fg-1"
+        >
+          <X size={14} strokeWidth={2} aria-hidden />
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {/* Where you are */}
+        <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-azure-1">
+          You&apos;re here
+        </p>
+        <h2 className="mt-0.5 text-[18px] font-semibold tracking-[-0.01em] text-fg-1">
+          {stageLabel}
+        </h2>
+
+        {/* The loop stepper */}
+        <div className="mt-3.5">
+          <LoopStepper links={chain.links} closing={chain.closing} />
         </div>
 
-        <div className="px-4 py-4">
-          {/* Where you are */}
-          <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-azure-1">
-            You&apos;re here
+        {/* The one move now */}
+        <div className="mt-4 rounded-[12px] border border-[var(--azure-line)] bg-[var(--azure-soft)] p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-azure-1/80">
+            Do this now
           </p>
-          <h2 className="mt-0.5 text-[18px] font-semibold tracking-[-0.01em] text-fg-1">
-            {stageLabel}
-          </h2>
-
-          {/* The loop stepper */}
-          <div className="mt-3.5">
-            <LoopStepper links={chain.links} closing={chain.closing} />
-          </div>
-
-          {/* The one move now */}
-          <div className="mt-4 rounded-[12px] border border-[var(--azure-line)] bg-[var(--azure-soft)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-azure-1/80">
-              Do this now
-            </p>
-            <p className="mt-1 text-[13px] font-medium text-fg-1">
-              {nextBestAction ? nextBestAction.title : chain.handoff}
-            </p>
-            {nextBestAction ? (
-              <Link
-                href={nextBestAction.href}
-                onClick={() => setGuidedCollapsed(true)}
-                data-testid="guided-cta"
-                className="mt-2.5 inline-flex items-center gap-1.5 rounded-[9px] bg-azure-1 px-3 py-1.5 text-[12px] font-semibold text-white transition-transform hover:translate-x-0.5"
-              >
-                {nextBestAction.cta}
-                <ArrowRight size={13} strokeWidth={2.4} aria-hidden />
-              </Link>
-            ) : null}
-          </div>
-
-          {/* What it unlocks */}
-          <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-snug text-fg-3">
-            <ArrowRight
-              size={12}
-              strokeWidth={2.4}
-              aria-hidden
-              className="mt-[1px] flex-none text-azure-1"
-            />
-            <span className="min-w-0 flex-1">{chain.handoff}</span>
+          <p className="mt-1 text-[13px] font-medium text-fg-1">
+            {nextBestAction ? nextBestAction.title : chain.handoff}
           </p>
-
-          {/* Loop telemetry */}
-          <div className="mt-4 flex items-center gap-3 border-t border-hairline pt-3 text-[10px] text-fg-4">
-            <span className="tabular-nums">
-              Readiness <span className="font-semibold text-fg-2">{readinessScore}</span>/100
-            </span>
-            <span aria-hidden>·</span>
-            <span className="tabular-nums">
-              Loop <span className="font-semibold text-fg-2">{loopProgress}%</span>
-            </span>
-            <span className="ml-auto flex items-center gap-1.5">
-              <span className="text-[9px] uppercase tracking-[0.08em]">Today</span>
-              <span className="h-1 w-12 overflow-hidden rounded-full bg-hairline">
-                <span
-                  className="block h-full rounded-full bg-azure-1"
-                  style={{ width: `${chargePct}%` }}
-                />
-              </span>
-            </span>
-          </div>
-
-          {chain.capstone ? (
-            <p
-              className={cn(
-                'mt-3 text-[10px] leading-snug',
-                chain.closing ? 'text-gold-1' : 'text-fg-4'
-              )}
+          {nextBestAction ? (
+            <Link
+              href={nextBestAction.href}
+              onClick={() => setGuidedCollapsed(true)}
+              data-testid="guided-cta"
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-[9px] bg-azure-1 px-3 py-1.5 text-[12px] font-semibold text-white transition-transform hover:translate-x-0.5"
             >
-              {chain.capstone}
-            </p>
+              {nextBestAction.cta}
+              <ArrowRight size={13} strokeWidth={2.4} aria-hidden />
+            </Link>
           ) : null}
         </div>
-      </motion.div>
+
+        {/* What it unlocks */}
+        <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-snug text-fg-3">
+          <ArrowRight
+            size={12}
+            strokeWidth={2.4}
+            aria-hidden
+            className="mt-[1px] flex-none text-azure-1"
+          />
+          <span className="min-w-0 flex-1">{chain.handoff}</span>
+        </p>
+
+        {/* Loop telemetry */}
+        <div className="mt-4 flex items-center gap-3 border-t border-hairline pt-3 text-[10px] text-fg-4">
+          <span className="tabular-nums">
+            Readiness <span className="font-semibold text-fg-2">{readinessScore}</span>/100
+          </span>
+          <span aria-hidden>·</span>
+          <span className="tabular-nums">
+            Loop <span className="font-semibold text-fg-2">{loopProgress}%</span>
+          </span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <span className="text-[9px] uppercase tracking-[0.08em]">Today</span>
+            <span className="h-1 w-12 overflow-hidden rounded-full bg-hairline">
+              <span
+                className="block h-full rounded-full bg-azure-1"
+                style={{ width: `${chargePct}%` }}
+              />
+            </span>
+          </span>
+        </div>
+
+        {chain.capstone ? (
+          <p
+            className={cn(
+              'mt-3 text-[10px] leading-snug',
+              chain.closing ? 'text-gold-1' : 'text-fg-4'
+            )}
+          >
+            {chain.capstone}
+          </p>
+        ) : null}
+      </div>
     </motion.div>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getInviteWelcome } from '@/lib/queries/invite-welcome';
+import { getBetaMomentum } from '@/lib/queries/beta-momentum';
 import { WelcomeView } from './WelcomeView';
 
 export const metadata: Metadata = { title: 'Welcome to the private beta' };
@@ -26,12 +27,13 @@ export default async function BetaWelcomePage() {
     .eq('id', user.id)
     .maybeSingle();
 
-  const invite = await getInviteWelcome(user.email);
+  const [invite, momentum] = await Promise.all([getInviteWelcome(user.email), getBetaMomentum()]);
 
   return (
     <WelcomeView
       name={profile?.full_name?.trim() || null}
       inviterName={invite?.inviterName ?? null}
+      momentum={momentum}
     />
   );
 }

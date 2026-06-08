@@ -11,6 +11,7 @@ import { ExecutionScoreCard } from './ExecutionScoreCard';
 import { NextBestActionCard } from './NextBestActionCard';
 import { DailyCommandList } from './DailyCommandList';
 import { ActivityFeedCard } from './ActivityFeedCard';
+import { LaunchBriefCard } from './LaunchBriefCard';
 import { MarkVisited } from './MarkVisited';
 import { DashboardShell, RevealGroup, RevealItem } from './command';
 import { CommandMetrics } from './command/CommandMetrics';
@@ -92,6 +93,8 @@ export interface LifecycleDashboardProps {
   data: DashboardData;
   metrics: CommandMetricsData;
   fundProfile: FundProfile;
+  /** First use after onboarding: show Earn's dismissible launch brief on top. */
+  showLaunchBrief?: boolean;
 }
 
 export function LifecycleDashboard({
@@ -99,7 +102,8 @@ export function LifecycleDashboard({
   memberType,
   data,
   metrics,
-  fundProfile
+  fundProfile,
+  showLaunchBrief = false
 }: LifecycleDashboardProps) {
   const copy = HERO_COPY[memberType ?? 'default'];
   const firstName = displayName.split(' ')[0] || displayName || 'there';
@@ -120,6 +124,13 @@ export function LifecycleDashboard({
       }}
     >
       <MarkVisited />
+
+      {/* First-use welcome — Earn's launch brief, once (gated upstream). */}
+      {showLaunchBrief ? (
+        <div className="mb-[14px]">
+          <LaunchBriefCard />
+        </div>
+      ) : null}
 
       <RevealGroup
         className="flex flex-col gap-[14px]"

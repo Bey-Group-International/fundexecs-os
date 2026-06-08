@@ -32,6 +32,11 @@ import {
   type BetaInviteContext
 } from '@/lib/beta/welcome';
 import { track } from '@vercel/analytics';
+import type { BetaMomentum } from '@/lib/queries/beta-momentum';
+import { ArrivalProof } from '@/components/beta/ArrivalProof';
+import { ValuePreview } from '@/components/beta/ValuePreview';
+import { BrandSplash } from '@/components/beta/BrandSplash';
+import { isMemberType } from '@/lib/member-types';
 
 /** The conversation advances through these turns; each is one thing Earn asks. */
 type Step = 'intro' | 'name' | 'type' | 'goal' | 'enter';
@@ -328,7 +333,15 @@ function QuietAction({
 }
 
 /* ── the experience — a guided conversation with Earn ───────────────────────── */
-export function ClaimView({ token, invite }: { token: string; invite: BetaInviteContext | null }) {
+export function ClaimView({
+  token,
+  invite,
+  momentum = null
+}: {
+  token: string;
+  invite: BetaInviteContext | null;
+  momentum?: BetaMomentum | null;
+}) {
   const searchParams = useSearchParams();
   const redirectedError = searchParams.get('error');
 
@@ -340,6 +353,9 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
   const [askOpen, setAskOpen] = useState(false);
   // Drives the choreographed first-paint reveal of the cinematic intro.
   const [revealed, setRevealed] = useState(false);
+  // Brand boot-up splash plays once per session before the welcome (skipped on
+  // an auth-error bounce so a returning, errored visitor goes straight to fix it).
+  const [booting, setBooting] = useState(!redirectedError);
 
   // captured application — committed as each conversational turn settles
   const [name, setName] = useState('');
@@ -369,6 +385,20 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
   useEffect(() => {
     queueMicrotask(() => setRevealed(true));
   }, []);
+
+  // Boot splash once per browser session — a refresh mid-flow shouldn't replay it.
+  useEffect(() => {
+    if (!booting) return;
+    try {
+      if (sessionStorage.getItem('fx-booted')) {
+        queueMicrotask(() => setBooting(false));
+        return;
+      }
+      sessionStorage.setItem('fx-booted', '1');
+    } catch {
+      // sessionStorage unavailable — just let the splash play.
+    }
+  }, [booting]);
 
   // Rehydrate answers if auth bounced us back (or a returning visit within the
   // cookie window) so a retry never overwrites the carried application with
@@ -540,6 +570,9 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
 
   const stepNumber = STEP_ORDER.indexOf(step) + 1;
 
+  // Brand boot-up plays first, then hands off to the welcome below.
+  if (booting) return <BrandSplash onDone={() => setBooting(false)} />;
+
   return (
     <main
       className="relative flex min-h-screen flex-col items-center overflow-hidden bg-bg-0 px-6 py-10 text-fg-1"
@@ -630,6 +663,13 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
                   Private beta · {label ?? 'invitation'}
                 </Badge>
               </div>
+
+              {/* proof + momentum — the seat reserved for them, who's already in */}
+              {momentum && (
+                <div style={reveal(300)}>
+                  <ArrivalProof momentum={momentum} />
+                </div>
+              )}
 
               {/* personalized headline — the welcome lands first, typed out */}
               <h1
@@ -842,6 +882,10 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
           {step === 'enter' && (
             <div className="flex flex-col gap-6">
               <EarnSays size={56} reducedMotion={reducedMotion} line={prompts.enter} />
+
+              {/* Live value preview — the concrete first moves Earn lines up for
+                  their member type, so the payoff is visible as they sign in. */}
+              {isMemberType(memberType) && <ValuePreview memberType={memberType} />}
 
               <div className="rounded-2xl border border-hairline bg-surface-1 p-6 shadow-[var(--shadow-lg)]">
                 <button

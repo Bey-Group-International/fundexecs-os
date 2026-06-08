@@ -1,5 +1,6 @@
 import { ClaimView } from './ClaimView';
 import { getBetaLinkWelcome } from '@/lib/queries/beta-welcome';
+import { getBetaMomentum } from '@/lib/queries/beta-momentum';
 
 /**
  * Beta claim page — public route where recipients claim links via email or
@@ -27,7 +28,7 @@ export default async function ClaimPage({
     );
   }
 
-  const invite = await getBetaLinkWelcome(token);
+  const [invite, momentum] = await Promise.all([getBetaLinkWelcome(token), getBetaMomentum()]);
 
-  return <ClaimView token={token} invite={invite} />;
+  return <ClaimView token={token} invite={invite} momentum={momentum} />;
 }

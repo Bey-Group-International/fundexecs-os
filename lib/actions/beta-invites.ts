@@ -3,10 +3,11 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
-import { requirePlatformAdmin } from '@/lib/access.server';
+import { requireOrgManager, requireOrgOwner } from '@/lib/access.server';
 import { getSiteURL } from '@/lib/site-url';
 import { sendInviteEmail } from '@/lib/email/send';
-import type { Database, Json } from '@/lib/supabase/database.types';
+import { parseInviteRole } from '@/lib/invites';
+import type { Json } from '@/lib/supabase/database.types';
 
 /** How the invite link reached the user. 'resend' = our Resend email, 'supabase'
  *  = Supabase's built-in magic-link email, 'none' = neither (admin copies the
@@ -19,7 +20,6 @@ export type InviteResult =
 
 export type InviteActionResult = { ok: true } | { ok: false; error: string };
 export type DeleteInviteResult = { ok: true } | { ok: false; error: string };
-type InviteRole = Database['public']['Enums']['org_member_role'];
 
 /** New beta users land on the post-auth welcome (then onboarding) after the
  *  invite link verifies — a warm, personalized intro before the profile setup. */
@@ -31,27 +31,6 @@ const RETURNING_NEXT_PATH = '/command-center';
 
 /** Conservative email shape check — the Supabase API is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/**
- * Parse an optional admin note into a role + human note. A leading
- * `role: owner|admin|member` token sets the invited member's role (defaulting
- * to `member`); the remaining text becomes the free-form note.
- */
-function parseInviteRole(note?: string): { role: InviteRole; note: string | null } {
-  const trimmed = note?.trim() ?? '';
-  if (!trimmed) return { role: 'member', note: null };
-
-  const match = /^role:\s*(owner|admin|member)\b/i.exec(trimmed);
-  if (!match) return { role: 'member', note: trimmed };
-
-  const role = match[1].toLowerCase() as InviteRole;
-  const humanNote = trimmed
-    .slice(match[0].length)
-    .replace(/^[^A-Za-z0-9]+/, '')
-    .trim();
-
-  return { role, note: humanNote || null };
-}
 
 /** Append a row to `admin_actions` recording a beta-invite action (best-effort; never blocks). */
 async function writeAudit(
@@ -205,13 +184,19 @@ export async function inviteBetaUser(emailInput: string, note?: string): Promise
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await requirePlatformAdmin())) {
-    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
+  if (!(await requireOrgManager(org.orgId))) {
+    return { ok: false, error: 'Only org owners and admins can invite people.' };
   }
 
   const supabase = await createClient();
   const now = new Date().toISOString();
   const invite = parseInviteRole(note);
+  // Privilege-escalation guard: only an org owner (or platform admin) may invite
+  // a new OWNER. Mirrors the owner-only promotion rule in setMemberRole, so an
+  // org admin can't escalate by minting an owner invite.
+  if (invite.role === 'owner' && !(await requireOrgOwner(org.orgId))) {
+    return { ok: false, error: 'Only an org owner can invite a new owner.' };
+  }
   // Upsert on (org_id, lower(email)): a re-invite refreshes the row and
   // re-arms it to pending without losing the original invited_at.
   const { data, error } = await supabase
@@ -268,8 +253,8 @@ export async function resendBetaInvite(inviteId: string): Promise<InviteResult> 
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await requirePlatformAdmin())) {
-    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
+  if (!(await requireOrgManager(org.orgId))) {
+    return { ok: false, error: 'Only org owners and admins can manage invites.' };
   }
 
   const supabase = await createClient();
@@ -324,8 +309,8 @@ export async function revokeBetaInvite(inviteId: string): Promise<InviteActionRe
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await requirePlatformAdmin())) {
-    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
+  if (!(await requireOrgManager(org.orgId))) {
+    return { ok: false, error: 'Only org owners and admins can manage invites.' };
   }
 
   const supabase = await createClient();
@@ -351,8 +336,8 @@ export async function deleteBetaInvite(inviteId: string): Promise<DeleteInviteRe
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await requirePlatformAdmin())) {
-    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
+  if (!(await requireOrgManager(org.orgId))) {
+    return { ok: false, error: 'Only org owners and admins can manage invites.' };
   }
 
   const admin = createAdminClient();

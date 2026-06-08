@@ -105,6 +105,7 @@ export function OnboardingView({
         focusField={focusField}
         offerPassword
         email={email}
+        showReferralNudge
       />
     );
   }

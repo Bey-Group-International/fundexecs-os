@@ -255,7 +255,14 @@ function RoleMenu({
 
 /* ---- Invite member panel (reuses the magic-link plumbing) --------------- */
 
-function InviteMemberPanel({ onClose }: { onClose: () => void }) {
+function InviteMemberPanel({
+  onClose,
+  canGrantOwner = true
+}: {
+  onClose: () => void;
+  /** Only owners (or platform admins) may invite a new owner. */
+  canGrantOwner?: boolean;
+}) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<OrgMemberRole>('member');
   const [note, setNote] = useState('');
@@ -348,7 +355,7 @@ function InviteMemberPanel({ onClose }: { onClose: () => void }) {
               options={[
                 { value: 'member', label: 'Member' },
                 { value: 'admin', label: 'Admin' },
-                { value: 'owner', label: 'Owner' }
+                ...(canGrantOwner ? [{ value: 'owner', label: 'Owner' }] : [])
               ]}
             />
           </div>
@@ -380,6 +387,9 @@ function UsersPanel({
   viewerRole,
   rowErrors,
   pendingId,
+  canInvite = true,
+  canManageMembers = true,
+  canGrantOwner = true,
   onApprove,
   onArchive,
   onRole
@@ -391,6 +401,12 @@ function UsersPanel({
   viewerRole: OrgMemberRole | null;
   rowErrors: Record<string, string>;
   pendingId: string | null;
+  /** Show the invite control (email invites — owners/admins of the org). */
+  canInvite?: boolean;
+  /** Show member controls: role menu + approve/archive (owners/admins of the org). */
+  canManageMembers?: boolean;
+  /** Whether the viewer may invite/grant the owner role (owners + platform). */
+  canGrantOwner?: boolean;
   onApprove: (id: string) => void;
   onArchive: (id: string) => void;
   onRole: (id: string, role: OrgMemberRole) => void;
@@ -446,18 +462,22 @@ function UsersPanel({
               aria-label="Search members"
             />
           </div>
-          <Button
-            variant="primary"
-            size="sm"
-            icon={UserPlus}
-            onClick={() => setInviteOpen((v) => !v)}
-          >
-            Invite
-          </Button>
+          {canInvite && (
+            <Button
+              variant="primary"
+              size="sm"
+              icon={UserPlus}
+              onClick={() => setInviteOpen((v) => !v)}
+            >
+              Invite
+            </Button>
+          )}
         </div>
       </div>
 
-      {inviteOpen ? <InviteMemberPanel onClose={() => setInviteOpen(false)} /> : null}
+      {canInvite && inviteOpen ? (
+        <InviteMemberPanel onClose={() => setInviteOpen(false)} canGrantOwner={canGrantOwner} />
+      ) : null}
 
       {filtered.length === 0 ? (
         <Card className="p-10 text-center text-[13px] text-fg-5">
@@ -465,11 +485,18 @@ function UsersPanel({
         </Card>
       ) : (
         <Card className="p-2">
-          <div className="grid grid-cols-[1.8fr_1.1fr_0.9fr_1fr] gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+          <div
+            className={cn(
+              'grid gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4',
+              canManageMembers
+                ? 'grid-cols-[1.8fr_1.1fr_0.9fr_1fr]'
+                : 'grid-cols-[1.8fr_1.1fr_0.9fr]'
+            )}
+          >
             <span>Member</span>
             <span>Role</span>
             <span>Status</span>
-            <span>Actions</span>
+            {canManageMembers && <span>Actions</span>}
           </div>
           <div className="h-px bg-hairline" />
           {filtered.map((m) => {
@@ -481,7 +508,12 @@ function UsersPanel({
             return (
               <div
                 key={m.id}
-                className="grid grid-cols-[1.8fr_1.1fr_0.9fr_1fr] items-center gap-2 border-b border-hairline-faint px-3 py-2.5 last:border-b-0"
+                className={cn(
+                  'grid items-center gap-2 border-b border-hairline-faint px-3 py-2.5 last:border-b-0',
+                  canManageMembers
+                    ? 'grid-cols-[1.8fr_1.1fr_0.9fr_1fr]'
+                    : 'grid-cols-[1.8fr_1.1fr_0.9fr]'
+                )}
               >
                 <div className="flex min-w-0 items-center gap-2.5">
                   <Avatar name={m.name} size={30} tone={tone} />
@@ -491,42 +523,50 @@ function UsersPanel({
                   </div>
                 </div>
                 <div>
-                  <RoleMenu
-                    role={role}
-                    canGrantOwner={viewerRole === 'owner'}
-                    isLastOwner={isLastOwner}
-                    pending={pendingId === m.id}
-                    onChange={(next) => onRole(m.id, next)}
-                  />
+                  {canManageMembers ? (
+                    <RoleMenu
+                      role={role}
+                      canGrantOwner={viewerRole === 'owner'}
+                      isLastOwner={isLastOwner}
+                      pending={pendingId === m.id}
+                      onChange={(next) => onRole(m.id, next)}
+                    />
+                  ) : (
+                    <Badge tone={role === 'owner' ? 'gold' : 'azure'} className="text-[10px]">
+                      {ROLE_LABEL[role]}
+                    </Badge>
+                  )}
                 </div>
                 <div>
                   <Badge tone={STATUS_TONE[status]} className="text-[10px]">
                     {status}
                   </Badge>
                 </div>
-                <div className="flex gap-1.5">
-                  {status === 'Pending' && (
+                {canManageMembers && (
+                  <div className="flex gap-1.5">
+                    {status === 'Pending' && (
+                      <button
+                        type="button"
+                        title="Approve"
+                        aria-label="Approve"
+                        onClick={() => onApprove(m.id)}
+                        className="flex h-[27px] w-[27px] items-center justify-center rounded-md border border-[var(--success-line)] bg-[var(--success-soft)] text-success transition hover:brightness-110"
+                      >
+                        <Check size={13} strokeWidth={1.9} aria-hidden />
+                      </button>
+                    )}
                     <button
                       type="button"
-                      title="Approve"
-                      aria-label="Approve"
-                      onClick={() => onApprove(m.id)}
-                      className="flex h-[27px] w-[27px] items-center justify-center rounded-md border border-[var(--success-line)] bg-[var(--success-soft)] text-success transition hover:brightness-110"
+                      title={isLastOwner ? 'The last owner cannot be archived' : 'Archive'}
+                      aria-label="Archive"
+                      disabled={isLastOwner || status === 'Archived'}
+                      onClick={() => onArchive(m.id)}
+                      className="flex h-[27px] w-[27px] items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <Check size={13} strokeWidth={1.9} aria-hidden />
+                      <Archive size={13} strokeWidth={1.9} aria-hidden />
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    title={isLastOwner ? 'The last owner cannot be archived' : 'Archive'}
-                    aria-label="Archive"
-                    disabled={isLastOwner || status === 'Archived'}
-                    onClick={() => onArchive(m.id)}
-                    className="flex h-[27px] w-[27px] items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Archive size={13} strokeWidth={1.9} aria-hidden />
-                  </button>
-                </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -770,6 +810,7 @@ function KnowledgePanel({ metrics }: { metrics: AdminMetrics | null }) {
 /* ---- Main view ---------------------------------------------------------- */
 
 export function AdminView({
+  scope = 'platform',
   data,
   invites,
   betaLinks,
@@ -778,6 +819,9 @@ export function AdminView({
   referralOverview,
   viewerRole
 }: {
+  /** 'platform' = Bey Group team (full portal + actions); 'org' = org
+   *  owner/admin on their own workspace (read-only, org-scoped subset). */
+  scope?: 'platform' | 'org';
   data: AdminData;
   invites: BetaInvite[];
   betaLinks: BetaLinkWithStatus[];
@@ -786,6 +830,13 @@ export function AdminView({
   referralOverview: ReferralOverview | null;
   viewerRole: OrgMemberRole | null;
 }) {
+  // Org owners/admins manage their OWN team — roles, approve/archive, and email
+  // invites. Only an org owner (or platform admin) may grant the owner role; the
+  // mass beta-link / referral distribution stays platform-only.
+  const isOrg = scope === 'org';
+  const canInvite = true;
+  const canManageMembers = true;
+  const canGrantOwner = !isOrg || viewerRole === 'owner';
   const [tab, setTab] = useState<Tab>('overview');
   const router = useRouter();
   // Member rows share the card lifecycle: approving an applicant "completes"
@@ -925,14 +976,47 @@ export function AdminView({
     });
   }
 
+  // Org owners/admins get a read-only, org-scoped subset of tabs — their team,
+  // launch readiness, and workspace activity. Platform-only surfaces
+  // (applications, beta invites, referrals, the platform knowledge base / trust
+  // metrics) stay reserved for the Bey Group team.
+  const allTabs = [
+    { id: 'overview' as const, label: 'Overview', icon: LayoutDashboard },
+    { id: 'users' as const, label: isOrg ? 'Team' : 'Users & roles', icon: Users },
+    {
+      id: 'applications' as const,
+      label: 'Applications',
+      icon: Inbox,
+      // Surface the count of applications awaiting review across tabs, so an
+      // admin on another tab still sees there's a queue. Hidden at zero.
+      count: pendingApplications || undefined
+    },
+    { id: 'invites' as const, label: isOrg ? 'Invites' : 'Beta invites', icon: Mail },
+    { id: 'referrals' as const, label: 'Referrals', icon: Coins },
+    { id: 'activity' as const, label: 'Activity', icon: Activity },
+    { id: 'trust' as const, label: 'Chain of trust', icon: ShieldCheck },
+    { id: 'knowledge' as const, label: 'Knowledge base', icon: BrainCircuit }
+  ];
+  const ORG_VISIBLE: Tab[] = ['overview', 'users', 'invites', 'activity'];
+  const tabs = isOrg ? allTabs.filter((t) => ORG_VISIBLE.includes(t.id)) : allTabs;
+  // Jump targets the Overview panel may deep-link to (everything except the
+  // overview tab itself), bounded to the tabs actually visible in this scope.
+  const launchVisibleTabs = tabs
+    .map((t) => t.id)
+    .filter((id): id is LaunchTab => id !== 'overview');
+
   return (
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-end justify-between">
-        <SectionTitle eyebrow="Platform administration" title="Admin portal" className="mb-0" />
-        <Badge tone="gold" dot>
+        <SectionTitle
+          eyebrow={isOrg ? 'Workspace administration' : 'Platform administration'}
+          title={isOrg ? 'Workspace admin' : 'Admin portal'}
+          className="mb-0"
+        />
+        <Badge tone={isOrg ? 'azure' : 'gold'} dot>
           <span className="inline-flex items-center gap-1.5">
             <Shield size={11} strokeWidth={1.9} aria-hidden />
-            Admin access
+            {isOrg ? 'Org admin' : 'Admin access'}
           </span>
         </Badge>
       </div>
@@ -945,30 +1029,14 @@ export function AdminView({
         </div>
       )}
 
-      <SegTabs
-        active={tab}
-        onChange={(id) => setTab(id as Tab)}
-        tabs={[
-          { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-          { id: 'users', label: 'Users & roles', icon: Users },
-          {
-            id: 'applications',
-            label: 'Applications',
-            icon: Inbox,
-            // Surface the count of applications awaiting review across tabs, so an
-            // admin on another tab still sees there's a queue. Hidden at zero.
-            count: pendingApplications || undefined
-          },
-          { id: 'invites', label: 'Beta invites', icon: Mail },
-          { id: 'referrals', label: 'Referrals', icon: Coins },
-          { id: 'activity', label: 'Activity', icon: Activity },
-          { id: 'trust', label: 'Chain of trust', icon: ShieldCheck },
-          { id: 'knowledge', label: 'Knowledge base', icon: BrainCircuit }
-        ]}
-      />
+      <SegTabs active={tab} onChange={(id) => setTab(id as Tab)} tabs={tabs} />
 
       {tab === 'overview' && (
-        <LaunchCommandPanel snapshot={launchSnapshot} onJump={(t: LaunchTab) => setTab(t)} />
+        <LaunchCommandPanel
+          snapshot={launchSnapshot}
+          visibleTabs={launchVisibleTabs}
+          onJump={(t: LaunchTab) => setTab(t)}
+        />
       )}
       {tab === 'users' && (
         <UsersPanel
@@ -979,6 +1047,9 @@ export function AdminView({
           viewerRole={viewerRole}
           rowErrors={rowErrors}
           pendingId={pendingId}
+          canInvite={canInvite}
+          canManageMembers={canManageMembers}
+          canGrantOwner={canGrantOwner}
           onApprove={approve}
           onArchive={archive}
           onRole={changeRole}
@@ -988,7 +1059,10 @@ export function AdminView({
       {tab === 'invites' && (
         <div className="flex flex-col gap-[18px]">
           <BetaInvitesPanel invites={invites} earnings={referralOverview?.earningsBySource ?? {}} />
-          <BetaLinksPanel links={betaLinks} earnings={referralOverview?.earningsBySource ?? {}} />
+          {/* Mass shareable links + referral mechanics stay platform-only. */}
+          {!isOrg && (
+            <BetaLinksPanel links={betaLinks} earnings={referralOverview?.earningsBySource ?? {}} />
+          )}
         </div>
       )}
       {tab === 'referrals' && <ReferralsPanel overview={referralOverview} />}

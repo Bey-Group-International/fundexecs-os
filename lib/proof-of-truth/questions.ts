@@ -101,6 +101,46 @@ const COMMON: ProfileQuestion[] = [
   }
 ];
 
+/**
+ * Universal high-signal questions appended to the END of every member type's
+ * set. They capture intent — what the member wants, what they're working on,
+ * and how soon — so Earn can open with a personalized launch brief on first
+ * use. All map to `details.<field>` (no migration). Kept to three, the last a
+ * single tap, so onboarding still feels short.
+ */
+const UNIVERSAL: ProfileQuestion[] = [
+  {
+    id: 'objective',
+    field: 'objective',
+    target: 'details',
+    label: '90-day objective',
+    prompt: "What's the one outcome you want from FundExecs OS in the next 90 days?",
+    kind: 'textarea',
+    placeholder: 'e.g. Close my seed round, find 3 LPs, sign 2 clients',
+    why: 'Your objective lets Earn point every move on your desk at the outcome you actually want.'
+  },
+  {
+    id: 'active_work',
+    field: 'active_work',
+    target: 'details',
+    label: 'Active work',
+    prompt: 'What are you actively working on right now?',
+    kind: 'text',
+    placeholder: 'e.g. a raise, a deal, a search, a mandate',
+    why: 'What you have live tells Earn where to focus first instead of starting cold.'
+  },
+  {
+    id: 'urgency',
+    field: 'urgency',
+    target: 'details',
+    label: 'Timeline',
+    prompt: 'How soon are you moving on this?',
+    kind: 'select',
+    options: ['This week', 'This month', 'This quarter', 'Exploring'],
+    why: 'Timeline lets Earn pace the desk — urgent moves first, exploratory ones later.'
+  }
+];
+
 // Member-type-specific questions (map to details.<field>).
 const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
   investment_firm: [
@@ -329,9 +369,18 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
   ]
 };
 
-/** The full ordered question set for a member type (common, then specific). */
+/**
+ * The full ordered question set for a member type: the common identity fields,
+ * the member-type-specific fields, then the universal intent questions last —
+ * so onboarding ends by capturing what the member actually wants.
+ */
 export function getQuestionSet(memberType: MemberType): ProfileQuestion[] {
-  return [...COMMON, ...SPECIFIC[memberType]];
+  return [...COMMON, ...SPECIFIC[memberType], ...UNIVERSAL];
+}
+
+/** The universal intent questions every member answers near the end. */
+export function getUniversalQuestions(): ProfileQuestion[] {
+  return [...UNIVERSAL];
 }
 
 /** The common questions every member answers, regardless of type. */
