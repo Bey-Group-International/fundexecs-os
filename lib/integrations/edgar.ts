@@ -46,6 +46,8 @@ function decodeEntities(s: string): string {
 }
 
 function tag(block: string, name: string): string | null {
+  // Only allow simple tag names so the dynamic RegExp can't be abused (ReDoS).
+  if (!/^[a-z_][a-z0-9_-]*$/i.test(name)) return null;
   const m = block.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'i'));
   return m ? decodeEntities(m[1]) : null;
 }

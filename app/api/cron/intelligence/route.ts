@@ -6,8 +6,10 @@ import { runIntelligenceCycle } from '@/lib/ai/intelligence-pipeline';
  *
  * Triggered by Vercel Cron (see vercel.json). Vercel sends the request with
  * `Authorization: Bearer <CRON_SECRET>`; we require that to match so the
- * endpoint can't be invoked by anyone else. Manual runs can pass the same
- * secret as `?secret=`. Runs the full ingest → embed → score → judge → brief
+ * endpoint can't be invoked by anyone else. Auth is header-only — never a
+ * query param — so the secret can't leak through logs, history, or referrers.
+ * Manual runs pass `-H "Authorization: Bearer <CRON_SECRET>"`. Runs the full
+ * ingest → embed → score → judge → brief
  * cycle and returns a JSON summary. Every phase inside the cycle is
  * never-block, so this route returns 200 with a summary even on partial
  * failure (the summary carries the errors).
@@ -22,11 +24,9 @@ function authorized(request: Request): boolean {
   // No secret configured → refuse rather than run an unauthenticated job.
   if (!secret) return false;
 
-  const auth = request.headers.get('authorization');
-  if (auth === `Bearer ${secret}`) return true;
-
-  const url = new URL(request.url);
-  return url.searchParams.get('secret') === secret;
+  // Header-only: never accept the secret as a query param (avoids leaking it
+  // through logs, browser history, or referrers).
+  return request.headers.get('authorization') === `Bearer ${secret}`;
 }
 
 export async function GET(request: Request) {

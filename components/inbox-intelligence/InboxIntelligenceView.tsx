@@ -156,6 +156,11 @@ function BriefingCard({ briefing }: { briefing: IntelligenceBriefing }) {
             <Sparkles size={11} strokeWidth={2} aria-hidden />
             Daily briefing
           </p>
+          {briefing.matchCount > 0 ? (
+            <Badge tone="gold" className="text-[10px]">
+              {briefing.matchCount} {briefing.matchCount === 1 ? 'match' : 'matches'}
+            </Badge>
+          ) : null}
           {briefing.generatedAt ? (
             <span className="text-[10.5px] text-fg-5">{relativeTime(briefing.generatedAt)}</span>
           ) : null}
