@@ -17,6 +17,9 @@ export interface SparklineProps {
   width?: number;
   height?: number;
   area?: boolean;
+  /** Stretch to fill the container width (keeps `height`), instead of the
+   *  fixed `width`. Useful inside flexible cards/tiles on wide viewports. */
+  fluid?: boolean;
   className?: string;
   ariaLabel?: string;
 }
@@ -29,6 +32,7 @@ export function Sparkline({
   width = 96,
   height = 28,
   area = true,
+  fluid = false,
   className,
   ariaLabel
 }: SparklineProps) {
@@ -52,10 +56,11 @@ export function Sparkline({
 
   return (
     <svg
-      className={cn('block', className)}
-      width={width}
+      className={cn('block', fluid && 'w-full', className)}
+      width={fluid ? undefined : width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio={fluid ? 'none' : undefined}
       role={ariaLabel ? 'img' : undefined}
       aria-label={ariaLabel}
       aria-hidden={ariaLabel ? undefined : true}

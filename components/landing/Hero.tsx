@@ -108,7 +108,7 @@ export function Hero() {
             transition={{ duration: 0.6, ease: [0.22, 0.61, 0.36, 1], delay: 0.06 }}
             className="text-[42px] font-semibold leading-[1.04] tracking-[-0.025em] text-fg-1 sm:text-6xl lg:text-[68px]"
           >
-            Unified intelligence layer for the
+            Unified intelligence layer for
             <br className="hidden sm:block" />{' '}
             <span className={reduce ? 'text-gold-1' : 'fx-text-gradient'}>
               private market operators
