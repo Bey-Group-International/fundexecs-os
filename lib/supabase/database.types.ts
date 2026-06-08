@@ -1282,6 +1282,74 @@ export type Database = {
           },
         ]
       }
+      referrals: {
+        Row: {
+          created_at: string
+          id: string
+          referred_org_id: string
+          referred_user_id: string
+          referrer_org_id: string
+          referrer_user_id: string
+          source: string
+          source_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          referred_org_id: string
+          referred_user_id: string
+          referrer_org_id: string
+          referrer_user_id: string
+          source: string
+          source_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          referred_org_id?: string
+          referred_user_id?: string
+          referrer_org_id?: string
+          referrer_user_id?: string
+          source?: string
+          source_id?: string | null
+        }
+        Relationships: []
+      }
+      referral_rewards: {
+        Row: {
+          commission_credits: number
+          created_at: string
+          credits_purchased: number
+          id: string
+          referral_id: string
+          source_ref: string
+        }
+        Insert: {
+          commission_credits: number
+          created_at?: string
+          credits_purchased: number
+          id?: string
+          referral_id: string
+          source_ref: string
+        }
+        Update: {
+          commission_credits?: number
+          created_at?: string
+          credits_purchased?: number
+          id?: string
+          referral_id?: string
+          source_ref?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_rewards_referral_id_fkey"
+            columns: ["referral_id"]
+            isOneToOne: false
+            referencedRelation: "referrals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deals: {
         Row: {
           amount: number | null
@@ -3021,6 +3089,24 @@ export type Database = {
           _ref_id?: string
         }
         Returns: number
+      }
+      grant_referral_commission: {
+        Args: {
+          _credits_purchased: number
+          _referred_org_id: string
+          _source_ref: string
+        }
+        Returns: undefined
+      }
+      record_referral: {
+        Args: {
+          _referred_user_id: string
+          _referrer_org_id: string
+          _referrer_user_id: string
+          _source: string
+          _source_id?: string
+        }
+        Returns: undefined
       }
       get_gift_by_code: {
         Args: { _code: string }
