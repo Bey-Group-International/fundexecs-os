@@ -77,7 +77,7 @@ export async function getBetaApplications(orgId: string): Promise<BetaApplicatio
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
   const draftByUser = new Map((memberProfiles ?? []).map((m) => [m.user_id, m.draft]));
 
-  return claims.map((c) => {
+  const enriched = claims.map((c) => {
     const profile = profileById.get(c.user_id);
     const draft = draftByUser.get(c.user_id);
     const name = profile?.full_name?.trim() || draftString(draft, 'name');
@@ -95,4 +95,10 @@ export async function getBetaApplications(orgId: string): Promise<BetaApplicatio
       reviewedAt: c.reviewed_at
     };
   });
+
+  // Surface the worklist: pending first (what needs action), then approved, then
+  // rejected. Within each group the DB's newest-first order is preserved (the
+  // sort is stable), so the inbox reads as a triage queue, not a flat log.
+  const rank: Record<ApplicationReview, number> = { pending: 0, approved: 1, rejected: 2 };
+  return enriched.sort((a, b) => rank[a.review] - rank[b.review]);
 }
