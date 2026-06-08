@@ -12,6 +12,7 @@ import {
   Clock,
   ChevronRight,
   Sparkles,
+  Newspaper,
   type LucideIcon
 } from 'lucide-react';
 import { Badge, Card, SectionTitle, SegTabs, type BadgeTone, type TabItem } from '@/components/ui';
@@ -30,6 +31,7 @@ import {
 import { cn } from '@/lib/utils';
 import type {
   InboxIntelligenceData,
+  IntelligenceBriefing,
   MarketSignal,
   SignalMatch,
   SignalSeverity
@@ -136,6 +138,37 @@ function RoutedSpecialist({ name }: { name: string | null }) {
         Routed to <span className="text-fg-2">{member.name}</span>
       </span>
     </span>
+  );
+}
+
+/* ---- Daily briefing card ------------------------------------------------ */
+
+function BriefingCard({ briefing }: { briefing: IntelligenceBriefing }) {
+  const eleanor = getMemberByFirstName('Eleanor');
+  return (
+    <Card className="flex items-start gap-3 p-4">
+      <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
+        <Newspaper size={16} strokeWidth={2} aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-1">
+            <Sparkles size={11} strokeWidth={2} aria-hidden />
+            Daily briefing
+          </p>
+          {briefing.generatedAt ? (
+            <span className="text-[10.5px] text-fg-5">{relativeTime(briefing.generatedAt)}</span>
+          ) : null}
+          {eleanor ? (
+            <span className="ml-auto inline-flex items-center gap-1.5">
+              <TeamAvatar member={eleanor} size={16} />
+              <span className="text-[10.5px] text-fg-4">{eleanor.name}</span>
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-fg-2">{briefing.body}</p>
+      </div>
+    </Card>
   );
 }
 
@@ -418,6 +451,8 @@ export function InboxIntelligenceView({ data }: InboxIntelligenceViewProps) {
       />
 
       <LearningIndicator calibration={data.calibration} />
+
+      {data.briefing ? <BriefingCard briefing={data.briefing} /> : null}
 
       <SegTabs tabs={TABS} active={tab} onChange={setTab} />
 

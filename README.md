@@ -91,9 +91,14 @@ Enablement steps:
    validated on the Supabase preview branch).
 2. The **feedback loop** is live immediately — each accept/dismiss re-weights
    the org's factors.
-3. To light up **semantic fit**, set `VOYAGE_API_KEY` and call
-   `refresh_mandate_embedding()` so each org gets a mandate embedding.
+3. To light up **semantic fit**, set `VOYAGE_API_KEY`. Mandate embeddings are
+   then refreshed automatically on profile save and backfilled by the cron.
 4. To light up the **LLM-judge**, set `ANTHROPIC_API_KEY`.
+5. To make the loop **self-running**, set `CRON_SECRET` + `EDGAR_USER_AGENT`.
+   Vercel Cron hits `/api/cron/intelligence` (every 6h, see `vercel.json`),
+   which ingests EDGAR Form D filings, embeds + scores them per org, pre-judges
+   the top matches, and writes each org a daily Earn briefing. The route runs
+   the whole cycle never-block and returns a JSON summary.
 
 The calibration read model (confidence bands, "tuned to your last N decisions",
 factor breakdown bars, specialist routing) is computed in TypeScript from the

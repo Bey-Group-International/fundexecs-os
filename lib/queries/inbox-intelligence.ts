@@ -62,6 +62,13 @@ export interface SignalMatch {
   signal: MarketSignal | null;
 }
 
+export interface IntelligenceBriefing {
+  body: string;
+  matchCount: number;
+  topScore: number | null;
+  generatedAt: string;
+}
+
 export interface InboxIntelligenceData {
   /** Org-scored signal matches (highest score first). */
   matches: SignalMatch[];
@@ -71,6 +78,8 @@ export interface InboxIntelligenceData {
   signalCount: number;
   /** Self-aware read model: what the scorer has learned from past decisions. */
   calibration: IntelligenceCalibration;
+  /** Latest Earn briefing for this org, when one has been generated. */
+  briefing: IntelligenceBriefing | null;
   empty: boolean;
 }
 
@@ -187,11 +196,51 @@ export async function getInboxIntelligenceData(orgId: string): Promise<InboxInte
     }))
   );
 
+  const briefing = await loadBriefing(supabase, orgId);
+
   return {
     matches,
     unroutedSignals,
     signalCount: signals.length,
     calibration,
+    briefing,
     empty: matches.length === 0 && signals.length === 0
   };
+}
+
+/**
+ * Read the org's current Earn briefing. `intelligence_briefings` is additive
+ * and not yet in the generated types, so read through a narrow typed escape.
+ */
+async function loadBriefing(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string
+): Promise<IntelligenceBriefing | null> {
+  const reader = supabase as unknown as {
+    from: (table: string) => {
+      select: (cols: string) => {
+        eq: (
+          col: string,
+          val: string
+        ) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null }> };
+      };
+    };
+  };
+
+  try {
+    const { data } = await reader
+      .from('intelligence_briefings')
+      .select('body, match_count, top_score, generated_at')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (!data || typeof data.body !== 'string') return null;
+    return {
+      body: data.body,
+      matchCount: typeof data.match_count === 'number' ? data.match_count : 0,
+      topScore: typeof data.top_score === 'number' ? data.top_score : null,
+      generatedAt: typeof data.generated_at === 'string' ? data.generated_at : ''
+    };
+  } catch {
+    return null;
+  }
 }
