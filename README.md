@@ -73,6 +73,35 @@ Schema (additive, idempotent migrations under `supabase/migrations/`):
 
 ---
 
+## Adaptive match intelligence
+
+The signal scorer (`generate_signal_matches`) is **self-tuning**. On top of the
+deterministic keyword factors it layers two optional, never-block capabilities
+that degrade cleanly to the base behaviour when their inputs are absent:
+
+| Capability        | What it adds                                                                                                                                                     | Powered by          | How to enable in prod                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Feedback loop** | Per-org, per-factor multipliers learned from accept/dismiss history (`match_scoring_weights`). Fires after every decision via `recompute_match_scoring_weights`. | SQL only            | Nothing — on by default once the migration is applied. Stays neutral under 3 decisions.                                        |
+| **Semantic fit**  | A meaning-level factor via pgvector cosine against each org's mandate vector (`org_profile_embeddings`).                                                         | `VOYAGE_API_KEY`    | Set the key, then run the `refresh_mandate_embedding` server action (e.g. after a profile edit) to populate each org's vector. |
+| **LLM-judge**     | The routed specialist's calibrated second opinion, written onto the match rationale.                                                                             | `ANTHROPIC_API_KEY` | Set the key. Triggered per-match by the `judge_match` action ("Get a read").                                                   |
+
+Enablement steps:
+
+1. Apply the migration: `npx supabase db push` (additive + idempotent; already
+   validated on the Supabase preview branch).
+2. The **feedback loop** is live immediately — each accept/dismiss re-weights
+   the org's factors.
+3. To light up **semantic fit**, set `VOYAGE_API_KEY` and call
+   `refresh_mandate_embedding()` so each org gets a mandate embedding.
+4. To light up the **LLM-judge**, set `ANTHROPIC_API_KEY`.
+
+The calibration read model (confidence bands, "tuned to your last N decisions",
+factor breakdown bars, specialist routing) is computed in TypeScript from the
+`matches` rows both inboxes already load — no extra round-trip, no schema
+dependency — and surfaces on `/inbox-intelligence` and `/match-inbox`.
+
+---
+
 ## Integrations (Phase 6 — owned by Codex on a separate PR)
 
 Real OAuth for **Slack** and **Calendly** is in flight; **Gmail**,

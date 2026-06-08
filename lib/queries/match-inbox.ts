@@ -1,5 +1,10 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import {
+  computeCalibration,
+  type CalibrationFactor,
+  type IntelligenceCalibration
+} from '@/lib/queries/intelligence-calibration';
 
 /* ============================================================================
  * lib/queries/match-inbox.ts — Match Inbox surface loader.
@@ -27,7 +32,22 @@ export interface MatchItem {
 export interface MatchInboxData {
   pending: MatchItem[];
   actioned: MatchItem[];
+  /** Self-aware read model: what triage has taught the scorer so far. */
+  calibration: IntelligenceCalibration;
   empty: boolean;
+}
+
+/** Best-effort extraction of factor weights from a rationale blob. */
+function rationaleFactors(rationale: unknown): CalibrationFactor[] {
+  if (!Array.isArray(rationale)) return [];
+  const out: CalibrationFactor[] = [];
+  for (const entry of rationale) {
+    if (!entry || typeof entry !== 'object') continue;
+    const r = entry as Record<string, unknown>;
+    if (typeof r.factor !== 'string') continue;
+    out.push({ factor: r.factor, weight: typeof r.weight === 'number' ? r.weight : 0 });
+  }
+  return out;
 }
 
 export async function getMatchInboxData(orgId: string): Promise<MatchInboxData> {
@@ -40,7 +60,9 @@ export async function getMatchInboxData(orgId: string): Promise<MatchInboxData> 
     .order('score', { ascending: false })
     .limit(100);
 
-  const items: MatchItem[] = (data ?? []).map((r) => ({
+  const rows = data ?? [];
+
+  const items: MatchItem[] = rows.map((r) => ({
     id: r.id,
     kind: r.kind,
     subjectId: r.subject_id,
@@ -54,5 +76,13 @@ export async function getMatchInboxData(orgId: string): Promise<MatchInboxData> 
   const pending = items.filter((m) => m.status === 'pending');
   const actioned = items.filter((m) => m.status !== 'pending');
 
-  return { pending, actioned, empty: items.length === 0 };
+  const calibration = computeCalibration(
+    rows.map((r) => ({
+      score: r.score,
+      status: r.status,
+      factors: rationaleFactors(r.rationale)
+    }))
+  );
+
+  return { pending, actioned, calibration, empty: items.length === 0 };
 }

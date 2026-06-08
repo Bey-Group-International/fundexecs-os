@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
-import { requirePlatformAdmin } from '@/lib/access.server';
+import { requireOrgManager } from '@/lib/access.server';
 import { awardTrustXp } from '@/lib/actions/xp';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
@@ -50,8 +50,8 @@ export async function approveMember(memberId: string): Promise<AdminResult> {
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await requirePlatformAdmin())) {
-    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
+  if (!(await requireOrgManager(org.orgId))) {
+    return { ok: false, error: 'Only org owners and admins can approve members.' };
   }
 
   const supabase = await createClient();
@@ -90,8 +90,8 @@ export async function archiveMember(memberId: string): Promise<AdminResult> {
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
-  if (!(await requirePlatformAdmin())) {
-    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
+  if (!(await requireOrgManager(org.orgId))) {
+    return { ok: false, error: 'Only org owners and admins can archive members.' };
   }
 
   const supabase = await createClient();
