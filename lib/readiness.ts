@@ -218,13 +218,13 @@ export function projectValue(target: number, compoundScore: number): number {
  * value it adds when its gap closes — i.e. its compound `lift` translated
  * through the target. This is what lets actions rank by value, not gap size.
  */
-export function computeReadinessValue(
-  compound: CompoundReadiness,
-  target: number
-): ReadinessValue {
+export function computeReadinessValue(compound: CompoundReadiness, target: number): ReadinessValue {
   const projected = projectValue(target, compound.compoundScore);
   const unlockByDimension = Object.fromEntries(
-    compound.dimensions.map((d) => [d.dimension, target > 0 ? Math.round((target * d.lift) / 100) : 0])
+    compound.dimensions.map((d) => [
+      d.dimension,
+      target > 0 ? Math.round((target * d.lift) / 100) : 0
+    ])
   ) as Record<ReadinessDimension, number>;
 
   return {
@@ -258,10 +258,7 @@ export interface RankedDimension {
  * set) fall back to raw compound lift, then to the size of the gap — so the
  * list is always meaningfully ordered even pre-revenue.
  */
-export function rankByValue(
-  compound: CompoundReadiness,
-  value: ReadinessValue
-): RankedDimension[] {
+export function rankByValue(compound: CompoundReadiness, value: ReadinessValue): RankedDimension[] {
   return compound.dimensions
     .map((d) => {
       const gap = Math.max(0, 100 - d.score);
@@ -277,8 +274,5 @@ export function rankByValue(
         kind: d.kind
       };
     })
-    .sort(
-      (a, b) =>
-        b.valuePerPoint - a.valuePerPoint || b.lift - a.lift || b.gap - a.gap
-    );
+    .sort((a, b) => b.valuePerPoint - a.valuePerPoint || b.lift - a.lift || b.gap - a.gap);
 }

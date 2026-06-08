@@ -132,9 +132,7 @@ export function ReadinessView({
 
   // When the sliders are untouched, show the server model verbatim; otherwise
   // show the simulated one. Keeps the "live" view authoritative.
-  const view = dirty
-    ? sim
-    : { compound, value, ranked };
+  const view = dirty ? sim : { compound, value, ranked };
 
   const overall = toneForScore(view.compound.compoundScore);
   const gap = Math.max(0, 100 - view.compound.compoundScore);
@@ -200,7 +198,9 @@ export function ReadinessView({
             <ValueTile
               label="Projected closeable"
               amount={view.value.projected}
-              hint={target > 0 ? `at ${view.compound.compoundScore}% readiness` : 'set a target raise'}
+              hint={
+                target > 0 ? `at ${view.compound.compoundScore}% readiness` : 'set a target raise'
+              }
               tone="success"
             />
             <ValueTile
@@ -234,7 +234,9 @@ export function ReadinessView({
               ariaLabel={`Readiness trend over ${mom.samples} snapshots`}
             />
           ) : (
-            <p className="text-[11px] text-fg-4">Trend builds as you return — check back tomorrow.</p>
+            <p className="text-[11px] text-fg-4">
+              Trend builds as you return — check back tomorrow.
+            </p>
           )}
         </div>
       </Card>
@@ -269,9 +271,8 @@ export function ReadinessView({
               const dim = d.dimension;
               const tone = toneForScore(draft[dim]);
               const delta = draft[dim] - d.score;
-              const isFoundation = view.compound.dimensions.find(
-                (x) => x.dimension === dim
-              )?.kind === 'foundation';
+              const isFoundation =
+                view.compound.dimensions.find((x) => x.dimension === dim)?.kind === 'foundation';
               return (
                 <li key={dim}>
                   <div className="mb-1 flex items-center justify-between gap-2">
@@ -317,11 +318,7 @@ export function ReadinessView({
 
           <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-hairline bg-bg-1 p-3 text-center">
             <SimStat label="Compound" value={view.compound.compoundScore} suffix="/100" />
-            <SimStat
-              label="Synergy"
-              value={Math.round(view.compound.synergy * 100)}
-              suffix="%"
-            />
+            <SimStat label="Synergy" value={Math.round(view.compound.synergy * 100)} suffix="%" />
             <SimStat
               label="Balance bonus"
               value={Math.round(view.compound.balanceBonus)}
@@ -329,10 +326,10 @@ export function ReadinessView({
             />
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-fg-4">
-            Foundation (Profile · Proof) sets <span className="font-semibold text-fg-2">synergy</span>{' '}
-            — execution counts for more once you&apos;re credible. Clear every link past{' '}
-            {/* balance floor */}40 and the loop earns a{' '}
-            <span className="font-semibold text-fg-2">balance bonus</span>.
+            Foundation (Profile · Proof) sets{' '}
+            <span className="font-semibold text-fg-2">synergy</span> — execution counts for more
+            once you&apos;re credible. Clear every link past {/* balance floor */}40 and the loop
+            earns a <span className="font-semibold text-fg-2">balance bonus</span>.
           </p>
         </Card>
 
@@ -350,8 +347,7 @@ export function ReadinessView({
               .join(', ')}.`}
           />
           <p className="mt-2 text-center text-[11px] text-fg-4">
-            A round shape compounds; a spiky one leaks value through its weakest link
-            {' '}
+            A round shape compounds; a spiky one leaks value through its weakest link{' '}
             <span className="font-semibold text-fg-2">
               ({DIMENSION_LABEL[view.compound.weakestLink]})
             </span>
@@ -405,9 +401,7 @@ export function ReadinessView({
                     <span className="text-fg-5"> / 100</span>
                   </span>
                 </div>
-                <p className="mt-0.5 pl-7 text-[11px] text-fg-4">
-                  {DIMENSION_HINT[r.dimension]}
-                </p>
+                <p className="mt-0.5 pl-7 text-[11px] text-fg-4">{DIMENSION_HINT[r.dimension]}</p>
 
                 {maxed ? (
                   <p className="mt-2 pl-7 text-[11.5px] font-semibold text-success">
@@ -543,12 +537,7 @@ function SimStat({ label, value, suffix }: { label: string; value: number; suffi
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <span className="inline-flex items-baseline gap-1">
-      <span
-        className={cn(
-          'font-semibold tabular-nums',
-          accent ? 'text-success' : 'text-fg-1'
-        )}
-      >
+      <span className={cn('font-semibold tabular-nums', accent ? 'text-success' : 'text-fg-1')}>
         {value}
       </span>
       <span className="text-[10px] uppercase tracking-[0.08em] text-fg-4">{label}</span>

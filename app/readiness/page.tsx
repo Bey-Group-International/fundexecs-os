@@ -15,11 +15,7 @@ import {
   loadReadinessHistory,
   captureReadinessSnapshot
 } from '@/lib/queries/dashboard/readiness-history';
-import {
-  computeCompoundReadiness,
-  computeReadinessValue,
-  rankByValue
-} from '@/lib/readiness';
+import { computeCompoundReadiness, computeReadinessValue, rankByValue } from '@/lib/readiness';
 import { ReadinessView } from '@/components/readiness/ReadinessView';
 
 export const metadata: Metadata = {

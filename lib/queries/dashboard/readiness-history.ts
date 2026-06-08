@@ -70,9 +70,7 @@ function momentumFrom(series: ReadinessTrendPoint[]): ReadinessMomentum {
   // Span in days between the two ends; guard against same-day clusters.
   const spanDays = Math.max(
     1,
-    Math.round(
-      (new Date(last.date).getTime() - new Date(first.date).getTime()) / 86_400_000
-    )
+    Math.round((new Date(last.date).getTime() - new Date(first.date).getTime()) / 86_400_000)
   );
   const velocity = Math.round((delta / spanDays) * 10) / 10;
   return {
@@ -90,9 +88,7 @@ function momentumFrom(series: ReadinessTrendPoint[]): ReadinessMomentum {
 export async function loadReadinessHistory(orgId: string): Promise<ReadinessHistory> {
   try {
     const supabase = await createClient();
-    const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
+    const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
     const { data, error } = await supabase
       // The table is newer than the generated types; cast keeps this typed-safe
       // without a regenerated Database type in the diff.
