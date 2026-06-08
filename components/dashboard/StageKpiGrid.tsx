@@ -110,13 +110,13 @@ export function StageKpiGrid({ stage, kpis, className }: StageKpiGridProps) {
                 href={hrefFor(kpi)}
                 data-testid={`stage-kpi-${kpi.key}`}
                 aria-label={`${kpi.label}: ${formatValue(kpi.value, kpi.format)} — open`}
-                className="group block rounded-xl border border-hairline bg-bg-1 p-3.5 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-azure-1"
+                className="group block overflow-hidden rounded-xl border border-hairline bg-bg-1 p-3.5 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-azure-1"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="min-w-0 break-words text-[10.5px] font-semibold uppercase leading-tight tracking-[0.1em] text-fg-4">
                     {kpi.label}
                   </span>
-                  <span className="flex h-6 w-6 items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-3 transition group-hover:border-[var(--azure-line)] group-hover:text-azure-1">
+                  <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-3 transition group-hover:border-[var(--azure-line)] group-hover:text-azure-1">
                     <Icon size={12} strokeWidth={2} className="group-hover:hidden" aria-hidden />
                     <ArrowUpRight
                       size={12}
