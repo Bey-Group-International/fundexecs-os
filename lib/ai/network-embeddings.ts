@@ -114,17 +114,32 @@ export async function embedNetworkRecords(
         .is('embedding', null)
         .limit(maxPerKind);
 
-      if (error || !data || data.length === 0) continue;
+      if (error) {
+        failed++;
+        console.warn('[embedNetworkRecords] select failed:', kind.table, error.message);
+        continue;
+      }
+      if (!data || data.length === 0) continue;
 
       const texts = data.map((row) => kind.describe(row));
       let vectors: number[][] = [];
       try {
         vectors = await embedTexts(texts, 'document');
-      } catch {
-        // Whole-batch embedding failure for this kind — skip, try next cycle.
+      } catch (err) {
+        // Whole-batch embedding failure for this kind — count, log, try next cycle.
+        failed += data.length;
+        console.warn('[embedNetworkRecords] embed batch failed:', kind.table, err);
         continue;
       }
-      if (vectors.length !== data.length) continue;
+      if (vectors.length !== data.length) {
+        failed += data.length;
+        console.warn(
+          '[embedNetworkRecords] vector count mismatch:',
+          kind.table,
+          `${vectors.length} != ${data.length}`
+        );
+        continue;
+      }
 
       for (let i = 0; i < data.length; i++) {
         const id = str(data[i].id);

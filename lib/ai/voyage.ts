@@ -6,6 +6,10 @@ const VOYAGE_URL = 'https://api.voyageai.com/v1/embeddings';
 const MODEL = 'voyage-3.5';
 export const EMBEDDING_DIM = 1024;
 
+// Abort a stalled provider call so callers (e.g. the intelligence cron) fail
+// fast instead of hanging and delaying later phases.
+const VOYAGE_TIMEOUT_MS = 20_000;
+
 type VoyageResponse = { data: { embedding: number[] }[] };
 
 /** Embed a batch of texts. `inputType` tunes the embedding for storage vs. search. */
@@ -17,19 +21,28 @@ export async function embedTexts(
   if (!apiKey) throw new Error('Missing VOYAGE_API_KEY');
   if (texts.length === 0) return [];
 
-  const res = await fetch(VOYAGE_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      input: texts,
-      input_type: inputType,
-      output_dimension: EMBEDDING_DIM
-    })
-  });
+  let res: Response;
+  try {
+    res = await fetch(VOYAGE_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        input: texts,
+        input_type: inputType,
+        output_dimension: EMBEDDING_DIM
+      }),
+      signal: AbortSignal.timeout(VOYAGE_TIMEOUT_MS)
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new Error(`Voyage API timed out after ${VOYAGE_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  }
   if (!res.ok) {
     throw new Error(`Voyage API error ${res.status}: ${await res.text()}`);
   }
