@@ -3,9 +3,12 @@
 import { useRef, useState, useEffect, useTransition } from 'react';
 import { Zap, Plus, X, ExternalLink, TestTube2, Fuel, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createTopUpCheckout } from '@/lib/actions/stripe-checkout';
-import { TOPUP_TIERS, type TopUpTier } from '@/lib/billing/topup-tiers';
+import { createCustomTopUpCheckout } from '@/lib/actions/stripe-checkout';
+import { creditsForDollars, type CreditPackDollars } from '@/lib/billing/credit-packs';
 import type { CreditWallet } from '@/lib/queries/credit-wallet';
+
+/** Quick top-up amounts (USD) shown in the popover; full picker lives in Settings. */
+const QUICK_PACKS: CreditPackDollars[] = [20, 40, 100];
 
 /* ============================================================================
  * WalletTopUpPopover — Stripe credit top-up control in the wallet popover.
@@ -40,7 +43,7 @@ export interface WalletTopUpPopoverProps {
 
 export function WalletTopUpPopover({ wallet, anchorRef, open, onClose }: WalletTopUpPopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [selectedTier, setSelectedTier] = useState<TopUpTier | null>(null);
+  const [selectedDollars, setSelectedDollars] = useState<CreditPackDollars | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -76,16 +79,21 @@ export function WalletTopUpPopover({ wallet, anchorRef, open, onClose }: WalletT
   const configured = wallet?.configured ?? false;
   const balance = wallet?.balance ?? 0;
 
-  function handleTopUp(credits: TopUpTier) {
-    setSelectedTier(credits);
+  function handleTopUp(dollars: CreditPackDollars) {
+    setSelectedDollars(dollars);
     setError(null);
     startTransition(async () => {
-      const result = await createTopUpCheckout(credits);
-      if (result.ok && result.url) {
-        window.location.assign(result.url);
-      } else {
+      try {
+        const result = await createCustomTopUpCheckout(dollars);
+        if (result.ok && result.url) {
+          window.location.assign(result.url);
+          return;
+        }
         setError(result.error ?? 'Top-up failed. Please try again.');
-        setSelectedTier(null);
+      } catch {
+        setError('Top-up failed. Please try again.');
+      } finally {
+        setSelectedDollars(null);
       }
     });
   }
@@ -179,14 +187,14 @@ export function WalletTopUpPopover({ wallet, anchorRef, open, onClose }: WalletT
           Top Up
         </p>
         <div className="space-y-1.5">
-          {TOPUP_TIERS.map((tier) => {
-            const isSelected = selectedTier === tier.credits;
+          {QUICK_PACKS.map((dollars) => {
+            const isSelected = selectedDollars === dollars;
             return (
               <button
-                key={tier.credits}
+                key={dollars}
                 type="button"
                 disabled={pending}
-                onClick={() => handleTopUp(tier.credits as TopUpTier)}
+                onClick={() => handleTopUp(dollars)}
                 className={cn(
                   'flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition',
                   isSelected
@@ -196,8 +204,10 @@ export function WalletTopUpPopover({ wallet, anchorRef, open, onClose }: WalletT
                 )}
               >
                 <div>
-                  <span className="text-[13px] font-medium text-fg-1">{tier.label}</span>
-                  <span className="ml-2 text-[11.5px] text-fg-4">{tier.priceLabel}</span>
+                  <span className="text-[13px] font-medium text-fg-1">
+                    {creditsForDollars(dollars).toLocaleString()} credits
+                  </span>
+                  <span className="ml-2 text-[11.5px] text-fg-4">${dollars}</span>
                 </div>
                 {isSelected && pending ? (
                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-azure-1 border-t-transparent" />

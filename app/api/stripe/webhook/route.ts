@@ -1,14 +1,19 @@
 import Stripe from 'stripe';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getPlan } from '@/lib/billing/plans';
 
 /* ============================================================================
- * app/api/stripe/webhook/route.ts — Stripe → wallet credit reconciliation.
+ * app/api/stripe/webhook/route.ts — Stripe → wallet + subscription reconciliation.
  *
- * On `checkout.session.completed`, credits the org's wallet by calling the
- * `record_credit_topup` RPC (service role) with the session's metadata. The RPC
- * is idempotent on `stripe_session_id`, so Stripe's at-least-once delivery
- * never double-grants.
+ * Handles two billing flows, both idempotent against Stripe's at-least-once
+ * delivery:
+ *   - One-off credit packs (`checkout.session.completed`, mode 'payment') →
+ *     `record_credit_topup` RPC (idempotent on stripe_session_id).
+ *   - Recurring plans (`checkout.session.completed` mode 'subscription',
+ *     `customer.subscription.*`, `invoice.paid`) → upserts `org_subscriptions`
+ *     and grants the plan's per-period credits once per invoice (idempotent via
+ *     the `subscription_invoices` ledger).
  *
  * Env-gated: returns 503 (not an error page) when billing keys are absent, so
  * the route is build-safe on deployments without Stripe configured.
@@ -17,6 +22,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+type AdminClient = ReturnType<typeof createAdminClient>;
+
 function resolveEnv(suffix: string): string | undefined {
   const exact = process.env[suffix];
   if (exact) return exact;
@@ -24,6 +31,78 @@ function resolveEnv(suffix: string): string | undefined {
     if (value && key.endsWith(`_${suffix}`)) return value;
   }
   return undefined;
+}
+
+/** Unix-seconds → ISO string, or null when absent. */
+function toIso(seconds: number | null | undefined): string | null {
+  return typeof seconds === 'number' ? new Date(seconds * 1000).toISOString() : null;
+}
+
+/** Current period end — lives on the subscription item in recent Stripe API versions. */
+function periodEndIso(sub: Stripe.Subscription): string | null {
+  return toIso(sub.items?.data?.[0]?.current_period_end);
+}
+
+/**
+ * Mirror a Stripe Subscription into `org_subscriptions` and reflect the plan on
+ * the credit wallet. Driven by metadata stamped at checkout (org/plan/credits).
+ */
+async function upsertSubscription(admin: AdminClient, sub: Stripe.Subscription): Promise<void> {
+  const md = sub.metadata ?? {};
+  const orgId = md.org_id;
+  if (!orgId) return;
+
+  const planId = getPlan(md.plan)?.id ?? 'free';
+  const interval = md.billing_interval === 'year' ? 'year' : 'month';
+  const item = sub.items?.data?.[0];
+  const seats = Number(md.seats ?? item?.quantity ?? 1);
+  const creditsPerPeriod = Number(md.credits_per_period ?? 0);
+  const periodEnd = periodEndIso(sub);
+
+  await admin.from('org_subscriptions').upsert(
+    {
+      org_id: orgId,
+      plan: planId,
+      billing_interval: interval,
+      seats: Number.isFinite(seats) && seats > 0 ? seats : 1,
+      status: sub.status,
+      credits_per_period: Number.isFinite(creditsPerPeriod) ? creditsPerPeriod : 0,
+      cancel_at_period_end: sub.cancel_at_period_end ?? false,
+      current_period_end: periodEnd,
+      stripe_customer_id: typeof sub.customer === 'string' ? sub.customer : sub.customer?.id,
+      stripe_subscription_id: sub.id,
+      updated_at: new Date().toISOString()
+    },
+    { onConflict: 'org_id' }
+  );
+
+  // Reflect the plan on the wallet so the top-nav gauge shows it.
+  await admin.from('credit_wallets').update({ plan: planId }).eq('org_id', orgId);
+}
+
+/**
+ * Grant a subscription invoice's credits exactly once. Delegates to the
+ * `claim_invoice_and_grant` RPC, which claims the invoice (idempotency ledger)
+ * and grants the credits inside a single transaction — so a failed grant rolls
+ * back the claim and Stripe's retry re-attempts cleanly.
+ */
+async function grantInvoiceCredits(
+  admin: AdminClient,
+  invoiceId: string,
+  orgId: string,
+  credits: number,
+  periodEnd: string | null
+): Promise<void> {
+  if (credits <= 0) return;
+
+  const { error } = await admin.rpc('claim_invoice_and_grant', {
+    _stripe_invoice_id: invoiceId,
+    _org_id: orgId,
+    _amount: credits,
+    _period_end: periodEnd ?? undefined,
+    _reason: 'subscription_credit'
+  });
+  if (error) throw new Error(error.message);
 }
 
 export async function POST(req: NextRequest) {
@@ -49,39 +128,95 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Webhook verification failed: ${message}` }, { status: 400 });
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const orgId = session.metadata?.org_id ?? session.client_reference_id ?? null;
-    const amountCredits = Number(session.metadata?.amount_credits ?? 0);
-    const amountCents = Number(session.metadata?.amount_cents ?? session.amount_total ?? 0);
+  try {
+    const admin = createAdminClient();
 
-    if (!orgId || amountCredits <= 0) {
-      // Nothing actionable — ack so Stripe stops retrying.
-      return NextResponse.json({ received: true, skipped: 'missing org_id or credits' });
-    }
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
 
-    try {
-      const admin = createAdminClient();
-      const { error } = await admin.rpc('record_credit_topup', {
-        _org_id: orgId,
-        _amount_credits: amountCredits,
-        _amount_cents: amountCents,
-        _stripe_session_id: session.id,
-        _status: 'succeeded',
-        _metadata: {
-          payment_intent:
-            typeof session.payment_intent === 'string' ? session.payment_intent : null,
-          customer_email: session.customer_details?.email ?? null
+        // One-off credit pack → credit the wallet.
+        if (session.mode === 'payment') {
+          const orgId = session.metadata?.org_id ?? session.client_reference_id ?? null;
+          const amountCredits = Number(session.metadata?.amount_credits ?? 0);
+          const amountCents = Number(session.metadata?.amount_cents ?? session.amount_total ?? 0);
+          if (!orgId || amountCredits <= 0) {
+            return NextResponse.json({ received: true, skipped: 'missing org_id or credits' });
+          }
+          const { error } = await admin.rpc('record_credit_topup', {
+            _org_id: orgId,
+            _amount_credits: amountCredits,
+            _amount_cents: amountCents,
+            _stripe_session_id: session.id,
+            _status: 'succeeded',
+            _metadata: {
+              payment_intent:
+                typeof session.payment_intent === 'string' ? session.payment_intent : null,
+              customer_email: session.customer_details?.email ?? null
+            }
+          });
+          if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+          break;
         }
-      });
-      if (error) {
-        // 500 → Stripe retries; the RPC is idempotent so retries are safe.
-        return NextResponse.json({ error: error.message }, { status: 500 });
+
+        // New subscription → record its state (credits land on invoice.paid).
+        if (session.mode === 'subscription' && session.subscription) {
+          const subId =
+            typeof session.subscription === 'string'
+              ? session.subscription
+              : session.subscription.id;
+          const sub = await stripe.subscriptions.retrieve(subId);
+          await upsertSubscription(admin, sub);
+        }
+        break;
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to record top-up.';
-      return NextResponse.json({ error: message }, { status: 500 });
+
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const sub = event.data.object as Stripe.Subscription;
+        await upsertSubscription(admin, sub);
+        break;
+      }
+
+      case 'customer.subscription.deleted': {
+        // Subscription ended — remove the row so getOrgSubscription treats the
+        // org as unsubscribed (configured:false), letting them start a fresh
+        // checkout instead of being routed to the billing portal.
+        const sub = event.data.object as Stripe.Subscription;
+        const orgId = sub.metadata?.org_id;
+        if (orgId) {
+          await admin.from('org_subscriptions').delete().eq('org_id', orgId);
+          await admin.from('credit_wallets').update({ plan: 'free' }).eq('org_id', orgId);
+        }
+        break;
+      }
+
+      case 'invoice.paid':
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subRef = (invoice as unknown as { subscription?: string | { id: string } })
+          .subscription;
+        const subId = typeof subRef === 'string' ? subRef : subRef?.id;
+        if (!subId || !invoice.id) break;
+
+        const sub = await stripe.subscriptions.retrieve(subId);
+        await upsertSubscription(admin, sub);
+
+        const orgId = sub.metadata?.org_id;
+        const credits = Number(sub.metadata?.credits_per_period ?? 0);
+        if (orgId && credits > 0) {
+          await grantInvoiceCredits(admin, invoice.id, orgId, credits, periodEndIso(sub));
+        }
+        break;
+      }
+
+      default:
+        break;
     }
+  } catch (err) {
+    // 500 → Stripe retries; every handler above is idempotent so retries are safe.
+    const message = err instanceof Error ? err.message : 'Failed to process webhook.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
