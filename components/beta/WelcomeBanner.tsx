@@ -32,18 +32,22 @@ export function WelcomeBanner() {
     <div className="mx-auto w-full max-w-[1180px] px-5 pt-24 sm:px-8">
       <div className="flex items-start gap-3 rounded-2xl border border-[var(--gold-line,var(--border))] bg-[var(--gold-soft,var(--surface-2))] p-4">
         <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-semibold text-fg-1">Welcome to FundExecs OS 👋</p>
+          <p className="text-[13.5px] font-semibold text-fg-1">
+            You&rsquo;re in. Welcome to the inner circle ✨
+          </p>
           <p className="mt-1 text-[12.5px] leading-6 text-fg-3">
-            You&rsquo;re part of our private beta. Start with your{' '}
+            Private beta means you&rsquo;re early — and early is exactly where outsized advantage
+            lives. Take 90 seconds for your{' '}
             <a href="/onboarding" className="font-medium text-azure-1 hover:underline">
               Proof of Truth
             </a>{' '}
-            — Earn will ask a few quick questions to set up your desk and route work to the right
-            specialist. Connect your tools anytime from{' '}
+            and Earn spins up your desk, then puts fifteen specialists to work on your mandate. Plug
+            in your stack from{' '}
             <a href="/integrations" className="font-medium text-azure-1 hover:underline">
               Integrations
-            </a>
-            . Spot something rough? Tell Earn — you&rsquo;re helping shape the product.
+            </a>{' '}
+            whenever you&rsquo;re ready. See something rough? Tell Earn — founders who shape the
+            product now run circles around everyone who shows up later.
           </p>
         </div>
         <button
