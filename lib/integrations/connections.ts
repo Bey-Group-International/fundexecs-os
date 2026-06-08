@@ -175,3 +175,57 @@ export function isSecretExpired(secret: IntegrationSecretRow, graceMs = 5 * 60 *
   if (!secret.expires_at) return false;
   return new Date(secret.expires_at).getTime() <= Date.now() + graceMs;
 }
+
+/**
+ * Disconnect a provider for a user/org: flip every matching connection row to
+ * 'disconnected' and blank its stored access token so it can no longer sync.
+ * Reconnecting re-runs the normal OAuth/API-key flow. Returns how many
+ * connection rows were affected (0 = nothing was connected).
+ */
+export async function disconnectIntegration({
+  admin,
+  orgId,
+  userId,
+  provider
+}: {
+  admin: Admin;
+  orgId: string;
+  userId: string;
+  provider: string;
+}): Promise<number> {
+  const { data: rows, error: selectError } = await admin
+    .from('integration_connections')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('user_id', userId)
+    .eq('provider', provider);
+
+  if (selectError) throw selectError;
+  if (!rows || rows.length === 0) return 0;
+
+  const { error: updateError } = await admin
+    .from('integration_connections')
+    .update({ status: 'disconnected' })
+    .eq('org_id', orgId)
+    .eq('user_id', userId)
+    .eq('provider', provider);
+
+  if (updateError) throw updateError;
+
+  // Blank the private token(s) so a stale secret can't be reused before the
+  // row is reconnected. The secret RPC upserts by connection id.
+  await Promise.all(
+    rows.map((row) =>
+      storeIntegrationSecret({
+        admin,
+        connectionId: row.id,
+        accessToken: '',
+        refreshToken: null,
+        tokenType: null,
+        expiresAt: null
+      }).catch(() => undefined)
+    )
+  );
+
+  return rows.length;
+}
