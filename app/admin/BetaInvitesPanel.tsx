@@ -8,7 +8,8 @@ import {
   inviteBetaUser,
   resendBetaInvite,
   revokeBetaInvite,
-  deleteBetaInvite
+  deleteBetaInvite,
+  type InviteDelivery
 } from '@/lib/actions/beta-invites';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 
@@ -37,8 +38,20 @@ function relativeTime(iso: string | null): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-/** A copyable magic-link box shown right after an invite link is minted. */
-function LinkBox({ link, onDone }: { link: string; onDone: () => void }) {
+interface Delivery {
+  link: string;
+  email: string;
+  emailed: boolean;
+  via: InviteDelivery;
+}
+
+/**
+ * Shown right after an invite is created/resent. When the link was emailed to
+ * the invitee we lead with a confirmation; the copyable link stays available as
+ * a fallback the admin can also send by hand.
+ */
+function LinkBox({ delivery, onDone }: { delivery: Delivery; onDone: () => void }) {
+  const { link, email, emailed, via } = delivery;
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -54,9 +67,21 @@ function LinkBox({ link, onDone }: { link: string; onDone: () => void }) {
   return (
     <div className="mt-4 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] p-3.5">
       <div className="flex items-center gap-2 text-[12px] font-semibold text-success">
-        <Link2 size={14} strokeWidth={1.9} aria-hidden />
-        Magic invite link ready — copy and send it to your beta user
+        {emailed ? (
+          <Send size={14} strokeWidth={1.9} aria-hidden />
+        ) : (
+          <Link2 size={14} strokeWidth={1.9} aria-hidden />
+        )}
+        {emailed
+          ? `Invite emailed to ${email}`
+          : 'Magic invite link ready — copy and send it to your beta user'}
       </div>
+      {emailed && (
+        <p className="mt-1 text-[11px] text-fg-5">
+          Sent via {via === 'resend' ? 'Resend' : 'Supabase email'}. The link below is a copy you
+          can also send yourself.
+        </p>
+      )}
       <div className="mt-2.5 flex items-center gap-2">
         <input
           readOnly
@@ -70,8 +95,7 @@ function LinkBox({ link, onDone }: { link: string; onDone: () => void }) {
       </div>
       <div className="mt-2 flex items-center justify-between">
         <p className="text-[11px] text-fg-5">
-          One-time use. The link signs them in — new users start onboarding, returning users land
-          back in the app.
+          One-time use. The link signs them in and starts onboarding.
         </p>
         <button
           type="button"
@@ -91,21 +115,26 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [link, setLink] = useState<string | null>(null);
+  const [delivery, setDelivery] = useState<Delivery | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setLink(null);
+    setDelivery(null);
     const result = await inviteBetaUser(email, note);
     setLoading(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
-    setLink(result.link);
+    setDelivery({
+      link: result.link,
+      email: result.email,
+      emailed: result.emailed,
+      via: result.via
+    });
     setEmail('');
     setNote('');
     router.refresh();
@@ -114,14 +143,19 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
   async function handleResend(id: string) {
     setBusyId(id);
     setError(null);
-    setLink(null);
+    setDelivery(null);
     const result = await resendBetaInvite(id);
     setBusyId(null);
     if (!result.ok) {
       setError(result.error);
       return;
     }
-    setLink(result.link);
+    setDelivery({
+      link: result.link,
+      email: result.email,
+      emailed: result.emailed,
+      via: result.via
+    });
     router.refresh();
   }
 
@@ -173,9 +207,10 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
           }
         />
         <p className="mb-4 max-w-prose text-[12.5px] leading-relaxed text-fg-3">
-          Generate a one-time magic link for a prospective beta user, then copy it and send it
-          however you like. Clicking the link signs them in and drops them straight into onboarding
-          — no password required.
+          We’ll email a one-time magic link to your beta user — clicking it signs them in and drops
+          them straight into onboarding, no password required. You can also copy the link to send it
+          yourself. Use <span className="font-medium text-fg-2">Resend</span> below if someone never
+          received theirs.
         </p>
 
         <form onSubmit={handleInvite} className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -209,7 +244,7 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
           </p>
         )}
 
-        {link && <LinkBox link={link} onDone={() => setLink(null)} />}
+        {delivery && <LinkBox delivery={delivery} onDone={() => setDelivery(null)} />}
       </Card>
 
       <Card className="p-2">
@@ -245,24 +280,18 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
                 <span className="text-[11.5px] text-fg-4">{relativeTime(inv.invitedAt)}</span>
                 <span className="text-[11.5px] text-fg-4">{relativeTime(inv.acceptedAt)}</span>
                 <div className="flex justify-end gap-1.5">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={inv.status === 'accepted' ? Send : RefreshCw}
-                    disabled={isBusy}
-                    onClick={() => handleResend(inv.id)}
-                    aria-label={
-                      inv.status === 'accepted'
-                        ? `Send a fresh sign-in link to ${inv.email}`
-                        : `Resend invite to ${inv.email}`
-                    }
-                  >
-                    {inv.status === 'accepted'
-                      ? 'Send sign-in link'
-                      : inv.status === 'revoked'
-                        ? 'Re-invite'
-                        : 'Resend'}
-                  </Button>
+                  {inv.status !== 'accepted' && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={RefreshCw}
+                      disabled={isBusy}
+                      onClick={() => handleResend(inv.id)}
+                      aria-label={`Resend invite to ${inv.email}`}
+                    >
+                      {inv.status === 'revoked' ? 'Re-invite' : 'Resend'}
+                    </Button>
+                  )}
                   {inv.status === 'pending' && (
                     <Button
                       variant="ghost"
