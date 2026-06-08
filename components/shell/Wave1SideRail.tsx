@@ -511,7 +511,7 @@ function NavGroup({
         )}
       >
         <GroupIcon size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
-        <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+        <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.06em]">
           {group.label}
         </span>
         {chainState ? <ChainPip state={chainState} /> : null}
@@ -541,13 +541,9 @@ function NavGroup({
             transition={{ duration: 0.24, ease: FX_EASE }}
             className="overflow-hidden"
           >
-            {extraTop ? <div className="px-2.5 pb-1.5 pt-0.5">{extraTop}</div> : null}
-            {group.launcher ? (
-              <div className="px-1.5 pt-1.5">
-                <LauncherButton launcher={group.launcher} onTrigger={onLinkClick} />
-              </div>
-            ) : null}
-            <ul className="flex flex-col gap-0.5 px-1.5 pb-1.5 pt-1">
+            {/* Subsections first — the navigable links sit right under the
+                header so they're the easiest thing to reach on expand. */}
+            <ul className="flex flex-col gap-0.5 px-1.5 pb-1 pt-1.5">
               {group.items.map((item, i) => (
                 <NavItem
                   key={`${group.key}:${i}`}
@@ -560,6 +556,14 @@ function NavGroup({
                 />
               ))}
             </ul>
+            {/* The Earn launcher is the secondary "let Earn do it" affordance,
+                demoted below the links so it doesn't bury them. */}
+            {group.launcher ? (
+              <div className="px-1.5 pb-1.5">
+                <LauncherButton launcher={group.launcher} onTrigger={onLinkClick} />
+              </div>
+            ) : null}
+            {extraTop ? <div className="px-2.5 pb-2 pt-0.5">{extraTop}</div> : null}
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -847,7 +851,7 @@ function MomentumSpine({
         className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-fg-4 transition-[background] hover:bg-surface-1 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
       >
         <Gauge size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
-        <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+        <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.06em]">
           Operating loop
         </span>
         <Badge
