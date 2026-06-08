@@ -175,7 +175,7 @@ function lastTouch(iso: string | null): string | null {
   if (!iso) return null;
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return null;
-  const days = Math.max(0, Math.round((Date.now() - t) / 86_400_000));
+  const days = Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
   if (days === 0) return 'last touch today';
   if (days === 1) return 'last touch yesterday';
   if (days < 14) return `last touch ${days} days ago`;
