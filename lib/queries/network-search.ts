@@ -76,7 +76,8 @@ export async function searchNetwork(
     _limit: params.limit ?? 40
   });
 
-  if (error || !data) return [];
+  if (error) throw new Error(`search_network failed: ${error.message}`);
+  if (!data) return [];
 
   return data.map((r) => ({
     kind: (r.kind as NetworkKind) ?? 'contact',

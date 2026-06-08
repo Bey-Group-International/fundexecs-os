@@ -181,7 +181,7 @@ begin
   select r.kind, r.id, r.name, r.subtitle, r.similarity, r.already_connected, r.metadata
   from results r
   order by coalesce(r.similarity, 0) desc, r.name asc
-  limit greatest(1, least(_limit, 200));
+  limit greatest(1, least(coalesce(_limit, 40), 200));
 end;
 $$;
 

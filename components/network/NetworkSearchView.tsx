@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { Search, Users, Building2, CircleDollarSign, Sparkles, Link2, Loader2 } from 'lucide-react';
 import { Badge, Button, Card, Input, SectionTitle, SegTabs, type TabItem } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
@@ -80,18 +80,23 @@ export function NetworkSearchView() {
   const [semantic, setSemantic] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const requestIdRef = useRef(0);
 
   function search(nextTab?: string) {
     const kinds = kindsFor(nextTab ?? tab);
+    const requestId = ++requestIdRef.current;
     setError(null);
     startTransition(async () => {
       const res = await runNetworkSearch({ query, kinds });
+      // Ignore a stale response if a newer search has since been issued.
+      if (requestId !== requestIdRef.current) return;
       setSearched(true);
       if (res.ok) {
         setResults(res.results);
         setSemantic(res.semantic);
       } else {
         setResults([]);
+        setSemantic(false);
         setError('Search failed. Please try again.');
       }
     });
