@@ -6,6 +6,8 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { getMemberProfile } from '@/lib/queries/member-profile';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getOrgSubscription, type OrgSubscription } from '@/lib/queries/subscription';
+import { getIntegrationConnections } from '@/lib/queries/integrations';
+import { mergeConnections, type IntegrationView } from '@/lib/integrations/catalog';
 import { getOrgTeam, type OrgTeam } from '@/lib/queries/org-members';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { getDashboardData } from '@/lib/queries/dashboard';
@@ -66,6 +68,11 @@ export default async function SettingsPage() {
 
   const orgTeam =
     org && user ? await getOrgTeam(org.orgId, user.id).catch(() => EMPTY_TEAM) : EMPTY_TEAM;
+
+  const integrations: IntegrationView[] =
+    org && user
+      ? mergeConnections(await getIntegrationConnections(org.orgId, user.id).catch(() => []))
+      : mergeConnections([]);
 
   let fullName: string | null = null;
   let role: string | null = null;
@@ -173,6 +180,7 @@ export default async function SettingsPage() {
         viewerRole={viewerRole}
         subscription={subscriptionView}
         creditBalance={wallet?.balance ?? 0}
+        integrations={integrations}
       />
     </AppShell>
   );
