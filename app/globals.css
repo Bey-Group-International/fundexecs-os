@@ -366,6 +366,108 @@ body {
   animation: fx-onpoint-pulse 2.2s ease-out infinite;
 }
 
+/* ── Landing (cinematic) ──────────────────────────────────────────────────
+   Ambient, GPU-cheap effects for the public marketing page. All transform/
+   opacity/background-position only, and all silenced under reduced-motion. */
+
+/* Slow drifting aurora — animate background-position of a large gradient. */
+@keyframes fx-aurora {
+  0% {
+    background-position:
+      0% 50%,
+      100% 50%;
+  }
+  50% {
+    background-position:
+      100% 50%,
+      0% 50%;
+  }
+  100% {
+    background-position:
+      0% 50%,
+      100% 50%;
+  }
+}
+.fx-aurora {
+  background-size:
+    200% 200%,
+    200% 200%;
+  animation: fx-aurora 18s ease-in-out infinite;
+}
+
+/* Animated gradient text — sweeps a multi-stop gradient through the glyphs. */
+@keyframes fx-text-shimmer {
+  to {
+    background-position: 200% center;
+  }
+}
+.fx-text-gradient {
+  background-image: linear-gradient(
+    100deg,
+    var(--fg-1) 0%,
+    var(--fg-1) 30%,
+    var(--gold-1) 50%,
+    var(--fg-1) 70%,
+    var(--fg-1) 100%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: fx-text-shimmer 6s linear infinite;
+}
+
+/* Subtle grid pan for textured backdrops. */
+@keyframes fx-grid-pan {
+  to {
+    background-position:
+      40px 40px,
+      40px 40px;
+  }
+}
+.fx-grid-pan {
+  animation: fx-grid-pan 12s linear infinite;
+}
+
+/* Constellation orbit rings — rotate the ring; items counter-rotate to stay upright. */
+@keyframes fx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes fx-spin-rev {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+.fx-spin-slow {
+  animation: fx-spin 48s linear infinite;
+}
+.fx-spin-slow-rev {
+  animation: fx-spin-rev 60s linear infinite;
+}
+.fx-counter-spin {
+  animation: fx-spin-rev 48s linear infinite;
+}
+.fx-counter-spin-rev {
+  animation: fx-spin 60s linear infinite;
+}
+
+/* Shimmer sweep across a surface (e.g. product-preview gloss). */
+@keyframes fx-sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  60%,
+  100% {
+    transform: translateX(220%);
+  }
+}
+.fx-sweep {
+  animation: fx-sweep 4.5s ease-in-out infinite;
+}
+
 /* Accessibility: honor reduced-motion by disabling our decorative motion and
    neutralizing long/looping transitions across the app. */
 @media (prefers-reduced-motion: reduce) {
@@ -376,6 +478,14 @@ body {
   .fx-celebrate,
   .fx-celebrate-glow,
   .fx-onpoint-pulse,
+  .fx-aurora,
+  .fx-text-gradient,
+  .fx-grid-pan,
+  .fx-spin-slow,
+  .fx-spin-slow-rev,
+  .fx-counter-spin,
+  .fx-counter-spin-rev,
+  .fx-sweep,
   .earn-orb {
     animation: none !important;
   }

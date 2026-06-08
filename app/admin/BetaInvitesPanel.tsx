@@ -109,7 +109,14 @@ function LinkBox({ delivery, onDone }: { delivery: Delivery; onDone: () => void 
   );
 }
 
-export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
+export function BetaInvitesPanel({
+  invites,
+  earnings = {}
+}: {
+  invites: BetaInvite[];
+  /** invite id → referral credits earned, for the affiliate badge. */
+  earnings?: Record<string, number>;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [note, setNote] = useState('');
@@ -274,10 +281,15 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
                   <div className="truncate text-[12.5px] font-medium text-fg-1">{inv.email}</div>
                   {inv.note && <div className="truncate text-[11px] text-fg-5">{inv.note}</div>}
                 </div>
-                <div>
+                <div className="flex flex-col items-start gap-1">
                   <Badge tone={STATUS_TONE[inv.status]} className="text-[10px]">
                     {STATUS_LABEL[inv.status]}
                   </Badge>
+                  {(earnings[inv.id] ?? 0) > 0 && (
+                    <span className="text-[10px] font-semibold text-gold-1">
+                      +{earnings[inv.id].toLocaleString()} earned
+                    </span>
+                  )}
                 </div>
                 <span className="text-[11.5px] text-fg-4">{relativeTime(inv.invitedAt)}</span>
                 <span className="text-[11.5px] text-fg-4">{relativeTime(inv.acceptedAt)}</span>

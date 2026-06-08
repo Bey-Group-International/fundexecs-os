@@ -14,6 +14,7 @@ import {
   Archive,
   Shield,
   BrainCircuit,
+  Coins,
   Database,
   Layers,
   ShieldCheck,
@@ -46,9 +47,11 @@ import type { AdminMetrics, TrustLayerKey } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import type { BetaApplication } from '@/lib/queries/beta-applications';
+import type { ReferralOverview } from '@/lib/queries/referrals';
 import { BetaInvitesPanel } from './BetaInvitesPanel';
 import { BetaLinksPanel } from './BetaLinksPanel';
 import { ApplicationsPanel } from './ApplicationsPanel';
+import { ReferralsPanel } from './ReferralsPanel';
 
 type OrgMemberRole = 'owner' | 'admin' | 'member';
 type MemberStatus = AdminMember['status'] | 'Archived';
@@ -112,7 +115,7 @@ function coverageTone(pct: number): BadgeTone {
   return 'neutral';
 }
 
-type Tab = 'users' | 'applications' | 'invites' | 'activity' | 'trust' | 'knowledge';
+type Tab = 'users' | 'applications' | 'invites' | 'referrals' | 'activity' | 'trust' | 'knowledge';
 
 /* ---- Stat tile (bold: tone disc + accent rail) -------------------------- */
 
@@ -762,6 +765,7 @@ export function AdminView({
   betaLinks,
   applications,
   metrics,
+  referralOverview,
   viewerRole
 }: {
   data: AdminData;
@@ -769,6 +773,7 @@ export function AdminView({
   betaLinks: BetaLinkWithStatus[];
   applications: BetaApplication[];
   metrics: AdminMetrics | null;
+  referralOverview: ReferralOverview | null;
   viewerRole: OrgMemberRole | null;
 }) {
   const [tab, setTab] = useState<Tab>('users');
@@ -916,6 +921,7 @@ export function AdminView({
             count: pendingApplications || undefined
           },
           { id: 'invites', label: 'Beta invites', icon: Mail },
+          { id: 'referrals', label: 'Referrals', icon: Coins },
           { id: 'activity', label: 'Activity', icon: Activity },
           { id: 'trust', label: 'Chain of trust', icon: ShieldCheck },
           { id: 'knowledge', label: 'Knowledge base', icon: BrainCircuit }
@@ -939,10 +945,11 @@ export function AdminView({
       {tab === 'applications' && <ApplicationsPanel applications={applications} />}
       {tab === 'invites' && (
         <div className="flex flex-col gap-[18px]">
-          <BetaInvitesPanel invites={invites} />
-          <BetaLinksPanel links={betaLinks} />
+          <BetaInvitesPanel invites={invites} earnings={referralOverview?.earningsBySource ?? {}} />
+          <BetaLinksPanel links={betaLinks} earnings={referralOverview?.earningsBySource ?? {}} />
         </div>
       )}
+      {tab === 'referrals' && <ReferralsPanel overview={referralOverview} />}
       {tab === 'activity' && <ActivityPanel actions={data.actions} notifications={notifications} />}
       {tab === 'trust' && <TrustPanel metrics={metrics} />}
       {tab === 'knowledge' && <KnowledgePanel metrics={metrics} />}

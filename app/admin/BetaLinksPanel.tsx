@@ -118,7 +118,14 @@ function FreshLink({ link, onDone }: { link: string; onDone: () => void }) {
   );
 }
 
-export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
+export function BetaLinksPanel({
+  links,
+  earnings = {}
+}: {
+  links: BetaLinkWithStatus[];
+  /** beta-link id → referral credits earned, for the affiliate badge. */
+  earnings?: Record<string, number>;
+}) {
   const router = useRouter();
   const [label, setLabel] = useState('');
   const [maxUses, setMaxUses] = useState('25');
@@ -290,6 +297,11 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
                   <div className="truncate text-[12.5px] font-medium text-fg-1">
                     {l.label || '(no label)'}
                   </div>
+                  {(earnings[l.id] ?? 0) > 0 && (
+                    <div className="text-[10px] font-semibold text-gold-1">
+                      +{earnings[l.id].toLocaleString()} earned
+                    </div>
+                  )}
                 </div>
                 <div className="text-[11.5px] text-fg-4 capitalize">{l.role}</div>
                 <div className="text-[11.5px] text-fg-4">

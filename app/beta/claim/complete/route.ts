@@ -87,6 +87,28 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Record the referral (best-effort, first-touch): the link's creator earns a
+    // commission on this new founder's future purchases. record_referral
+    // resolves the founder's own org and is idempotent.
+    try {
+      const { data: link } = await admin
+        .from('beta_links')
+        .select('id, created_by, org_id')
+        .eq('token', token)
+        .maybeSingle();
+      if (link?.created_by) {
+        await admin.rpc('record_referral', {
+          _referred_user_id: session.user.id,
+          _referrer_user_id: link.created_by,
+          _referrer_org_id: link.org_id,
+          _source: 'beta_link',
+          _source_id: link.id
+        });
+      }
+    } catch (refErr) {
+      console.error('referral capture (beta_link) failed', refErr);
+    }
+
     // Carry the pre-auth welcome answers into the new profile (best-effort).
     const rawApp = request.cookies.get(BETA_APPLICATION_COOKIE)?.value;
     if (rawApp) {

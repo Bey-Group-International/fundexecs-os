@@ -106,6 +106,48 @@ async function grantInvoiceCredits(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Reconcile a raise reservation's payment status from its Checkout session.
+ * Idempotent against Stripe's at-least-once delivery: only flips a row that is
+ * still `pending`, so re-delivered events and already-terminal rows no-op.
+ */
+async function reconcileReservation(
+  admin: AdminClient,
+  sessionId: string,
+  status: 'paid' | 'cancelled'
+): Promise<void> {
+  // Throw on a real DB error so the handler returns non-200 and Stripe retries
+  // (matching grantInvoiceCredits). A 0-row update is the expected idempotent
+  // no-op for re-delivered/already-terminal events, so it is not an error.
+  const { error } = await admin
+    .from('raise_interests')
+    .update({ reservation_status: status })
+    .eq('stripe_session_id', sessionId)
+    .eq('reservation_status', 'pending');
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Best-effort: pay the referrer a commission on a referred org's purchase.
+ * Idempotent and a no-op when the org wasn't referred — so it never blocks (or
+ * double-grants on retry) the buyer's own credits. Failures are logged, not
+ * thrown, so a commission hiccup can't fail the whole webhook.
+ */
+async function payReferralCommission(
+  admin: AdminClient,
+  referredOrgId: string,
+  sourceRef: string,
+  credits: number
+): Promise<void> {
+  if (credits <= 0) return;
+  const { error } = await admin.rpc('grant_referral_commission', {
+    _referred_org_id: referredOrgId,
+    _source_ref: sourceRef,
+    _credits_purchased: credits
+  });
+  if (error) console.error('[stripe] referral commission failed:', error.message);
+}
+
 export async function POST(req: NextRequest) {
   const secretKey = resolveEnv('STRIPE_SECRET_KEY');
   const webhookSecret = resolveEnv('STRIPE_WEBHOOK_SECRET');
@@ -145,6 +187,16 @@ export async function POST(req: NextRequest) {
             break;
           }
 
+          // Raise reservation deposit → mark the reservation paid (idempotent).
+          // Only flip once the session is actually paid; delayed/async methods
+          // settle via checkout.session.async_payment_succeeded below.
+          if (session.metadata?.kind === 'raise_reservation') {
+            if (session.payment_status === 'paid') {
+              await reconcileReservation(admin, session.id, 'paid');
+            }
+            break;
+          }
+
           const orgId = session.metadata?.org_id ?? session.client_reference_id ?? null;
           const amountCredits = Number(session.metadata?.amount_credits ?? 0);
           const amountCents = Number(session.metadata?.amount_cents ?? session.amount_total ?? 0);
@@ -164,6 +216,7 @@ export async function POST(req: NextRequest) {
             }
           });
           if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+          await payReferralCommission(admin, orgId, session.id, amountCredits);
           break;
         }
 
@@ -214,6 +267,26 @@ export async function POST(req: NextRequest) {
         const credits = Number(sub.metadata?.credits_per_period ?? 0);
         if (orgId && credits > 0) {
           await grantInvoiceCredits(admin, invoice.id, orgId, credits, periodEndIso(sub));
+          await payReferralCommission(admin, orgId, invoice.id, credits);
+        }
+        break;
+      }
+
+      // Delayed payment methods settle later — mark the reservation paid then.
+      case 'checkout.session.async_payment_succeeded': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.kind === 'raise_reservation') {
+          await reconcileReservation(admin, session.id, 'paid');
+        }
+        break;
+      }
+
+      // Abandoned or failed reservation checkout → release it as cancelled.
+      case 'checkout.session.expired':
+      case 'checkout.session.async_payment_failed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.kind === 'raise_reservation') {
+          await reconcileReservation(admin, session.id, 'cancelled');
         }
         break;
       }
