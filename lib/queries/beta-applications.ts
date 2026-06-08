@@ -11,6 +11,9 @@ export interface BetaApplication {
   email: string;
   /** Captured in the welcome flow (or the member's profile name). */
   name: string | null;
+  /** The applicant's own organization — the company they entered at onboarding
+   *  (where they're an owner/member), not the Bey Group org that owns the link. */
+  company: string | null;
   memberType: MemberType | null;
   /** The one-line "what you want" answer, if they gave one. */
   goal: string | null;
@@ -35,7 +38,8 @@ function draftString(draft: unknown, key: string): string | null {
 /**
  * The Applications inbox: everyone who claimed a shareable beta link for this
  * org, enriched with what they told Earn in the welcome flow (name, member type,
- * goal) and the link they came through. Newest claim first.
+ * goal), their own company (the org they set up at onboarding), and the link
+ * they came through. Newest claim first.
  *
  * Reads with the service-role client because the captured goal lives in
  * `member_profiles.draft` (not readable cross-member under RLS) — so the
@@ -63,11 +67,13 @@ export async function getBetaApplications(orgId: string): Promise<BetaApplicatio
   const [
     { data: links, error: linksErr },
     { data: profiles, error: profilesErr },
-    { data: memberProfiles, error: memberProfilesErr }
+    { data: memberProfiles, error: memberProfilesErr },
+    { data: memberships }
   ] = await Promise.all([
     admin.from('beta_links').select('id, label').in('id', linkIds),
     admin.from('profiles').select('id, full_name, member_type').in('id', userIds),
-    admin.from('member_profiles').select('user_id, draft').in('user_id', userIds)
+    admin.from('member_profiles').select('user_id, draft').in('user_id', userIds),
+    admin.from('org_members').select('user_id, org_id, role').in('user_id', userIds)
   ]);
   // Fail closed: a partial enrichment would render misleading cards (missing
   // names/goals), so drop the whole list rather than show half-built ones.
@@ -77,16 +83,37 @@ export async function getBetaApplications(orgId: string): Promise<BetaApplicatio
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
   const draftByUser = new Map((memberProfiles ?? []).map((m) => [m.user_id, m.draft]));
 
+  // Resolve each applicant's own company: the org they joined at onboarding,
+  // preferring the one they own. Skip the link-owning org (the Bey Group
+  // workspace) — that's never the applicant's company. Best-effort: a failed
+  // membership read just leaves company null, it never blanks the inbox.
+  const membershipByUser = new Map<string, { orgId: string; role: string | null }>();
+  for (const m of memberships ?? []) {
+    if (m.org_id === orgId) continue;
+    const existing = membershipByUser.get(m.user_id);
+    if (!existing || m.role === 'owner') {
+      membershipByUser.set(m.user_id, { orgId: m.org_id, role: m.role });
+    }
+  }
+  const orgIds = [...new Set([...membershipByUser.values()].map((v) => v.orgId))];
+  const { data: orgs } = orgIds.length
+    ? await admin.from('organizations').select('id, name').in('id', orgIds)
+    : { data: [] };
+  const orgNameById = new Map((orgs ?? []).map((o) => [o.id, o.name]));
+
   const enriched = claims.map((c) => {
     const profile = profileById.get(c.user_id);
     const draft = draftByUser.get(c.user_id);
     const name = profile?.full_name?.trim() || draftString(draft, 'name');
     const memberType = isMemberType(profile?.member_type) ? profile.member_type : null;
+    const membership = membershipByUser.get(c.user_id);
+    const company = membership ? orgNameById.get(membership.orgId)?.trim() || null : null;
     return {
       claimId: c.id,
       userId: c.user_id,
       email: c.email,
       name: name || null,
+      company,
       memberType,
       goal: draftString(draft, 'goal'),
       linkLabel: labelById.get(c.beta_link_id) ?? null,
