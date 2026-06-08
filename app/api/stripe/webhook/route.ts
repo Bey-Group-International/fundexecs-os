@@ -116,11 +116,15 @@ async function reconcileReservation(
   sessionId: string,
   status: 'paid' | 'cancelled'
 ): Promise<void> {
-  await admin
+  // Throw on a real DB error so the handler returns non-200 and Stripe retries
+  // (matching grantInvoiceCredits). A 0-row update is the expected idempotent
+  // no-op for re-delivered/already-terminal events, so it is not an error.
+  const { error } = await admin
     .from('raise_interests')
     .update({ reservation_status: status })
     .eq('stripe_session_id', sessionId)
     .eq('reservation_status', 'pending');
+  if (error) throw new Error(error.message);
 }
 
 export async function POST(req: NextRequest) {
