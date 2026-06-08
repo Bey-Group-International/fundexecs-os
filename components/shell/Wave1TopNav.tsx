@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, Sun, Moon, Menu } from 'lucide-react';
 import type { ShellIdentity } from '@/lib/queries/identity';
 import type { CreditWallet } from '@/lib/queries/credit-wallet';
@@ -62,6 +63,7 @@ export interface Wave1TopNavProps {
  */
 export function Wave1TopNav({ title, subtitle, identity, onMenu, wallet }: Wave1TopNavProps) {
   const searchRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   // ⌘K / Ctrl-K focuses the search box (placeholder command-palette entry).
   useEffect(() => {
@@ -74,6 +76,22 @@ export function Wave1TopNav({ title, subtitle, identity, onMenu, wallet }: Wave1
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // Enter fires the search at /connections?q=… (ConnectionsView seeds its
+  // in-page filter from that query); Escape clears the box and blurs. Without
+  // this the box only focused on ⌘K and never went anywhere.
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      const q = e.currentTarget.value.trim();
+      if (!q) return;
+      e.preventDefault();
+      searchRef.current?.blur();
+      router.push(`/connections?q=${encodeURIComponent(q)}`);
+    } else if (e.key === 'Escape') {
+      e.currentTarget.value = '';
+      searchRef.current?.blur();
+    }
+  }
 
   return (
     <header
@@ -108,6 +126,7 @@ export function Wave1TopNav({ title, subtitle, identity, onMenu, wallet }: Wave1
           type="search"
           placeholder="Jump to deal, LP, or agent action…"
           aria-label="Command and search"
+          onKeyDown={onSearchKeyDown}
           data-testid="topnav-search-input"
           className="w-full rounded-[10px] border border-hairline bg-surface-1 py-2 pl-9 pr-12 text-[13px] text-fg-1 outline-none transition-[border-color] placeholder:text-fg-4 focus:border-[var(--accent-line)]"
         />
