@@ -265,8 +265,10 @@ function CommitmentsTable({ commitments }: { commitments: CapitalCommitment[] })
       // `finally` guarantees the row never gets stuck in its pending state, even
       // if the close throws.
       try {
-        await closeCommitment(id);
-        router.refresh();
+        const res = await closeCommitment(id);
+        // Only refresh on a successful close; a failed close leaves the row as
+        // it was. `finally` guarantees the pending state always clears.
+        if (res.ok) router.refresh();
       } finally {
         setPendingId(null);
       }
