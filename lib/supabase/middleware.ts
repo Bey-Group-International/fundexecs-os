@@ -143,10 +143,12 @@ export async function updateSession(request: NextRequest) {
     pathname === '/terms' ||
     pathname.startsWith('/p/') ||
     pathname.startsWith('/auth/');
-  const isAllowedApi =
-    pathname === '/api/ask-earn' ||
-    pathname === '/api/earn/profile-suggest' ||
-    pathname.startsWith('/auth/callback');
+  // API routes return JSON and enforce their own auth (RLS + 401/403); they must
+  // never receive the onboarding HTML redirect, which a `fetch()` would silently
+  // follow and then fail to parse as JSON. Exempt the whole `/api` surface — not
+  // a hand-kept few — so a newly-added route can't reintroduce that break.
+  // (`/auth/*` is already covered by `isPublic`.)
+  const isAllowedApi = pathname.startsWith('/api/');
 
   // Gate authenticated areas. Unauthenticated users hitting a protected route
   // are redirected to /login (preserving `redirectedFrom`). Every entry is an
@@ -193,8 +195,8 @@ export async function updateSession(request: NextRequest) {
   // `member_profiles.status`. Anything other than `'complete'` forces them
   // onto `/onboarding`; a completed profile is bounced away from `/onboarding`
   // back into the app. We only run the lookup for routes that actually need
-  // gating — static assets, public pages, and the two allow-listed APIs skip
-  // it so the middleware stays fast on hot paths.
+  // gating — static assets, public pages, and the whole `/api` surface skip it
+  // so the middleware stays fast on hot paths and never HTML-redirects a fetch.
   if (user && !isStaticAsset && !isPublic && !isAllowedApi) {
     // Perf: once a profile is `complete` we cache that in a lightweight cookie
     // keyed to the user id, so the hot path skips the per-request
