@@ -4,6 +4,7 @@ import type { MemberType } from '@/lib/member-types';
 import type { StakeSignal } from '@/lib/queries/dashboard/value-at-stake';
 import { lifecycleStageIndex, LIFECYCLE_STAGES } from '@/lib/lifecycle';
 import { compactMoney } from '@/lib/format';
+import { buildLoopChain } from '@/lib/loop-chain';
 
 /**
  * The capital metric reads differently by operator type: GPs *raise* capital,
@@ -160,7 +161,16 @@ export function buildRailSignals(data: DashboardData, memberType?: MemberType | 
             cta: data.nextBestAction.cta,
             href: data.nextBestAction.href
           }
-        : undefined
+        : undefined,
+      // Phase 4: the loop as a chain — each link charges the next. Gate
+      // clearance sets link state; today's check-offs fill the active charge.
+      chain: buildLoopChain({
+        stage: data.stage,
+        dailyDone: data.executionScore.dailyDone,
+        dailyTotal: data.executionScore.dailyTotal,
+        committed: data.raiseProgress.committed,
+        readinessScore: data.readinessScore
+      })
     }
   };
 }
