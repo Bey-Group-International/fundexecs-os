@@ -323,7 +323,24 @@ export async function transferOwnership(
     .update({ role: 'admin' })
     .eq('org_id', actor.orgId)
     .eq('user_id', actor.userId);
-  if (demoteErr) return err(demoteErr.message);
+  if (demoteErr) {
+    // Step-down failed — roll the promotion back so we don't leave two owners.
+    const { error: rollbackErr } = await supabase
+      .from('org_members')
+      .update({ role: 'admin' })
+      .eq('org_id', actor.orgId)
+      .eq('user_id', newOwnerUserId);
+    if (rollbackErr) {
+      console.error('transferOwnership: demote failed and rollback failed', {
+        demoteErr,
+        rollbackErr
+      });
+      return err(
+        'Transfer failed and could not be rolled back automatically — please review workspace roles.'
+      );
+    }
+    return err('Transfer failed and was rolled back. Please try again.');
+  }
 
   revalidatePath('/settings');
   return ok('Ownership transferred. You are now an admin.');

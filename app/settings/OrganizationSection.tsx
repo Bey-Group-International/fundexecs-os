@@ -101,6 +101,25 @@ function SubmitButton({ label, icon: Icon }: { label: string; icon?: typeof Chec
   );
 }
 
+/** Destructive submit button with its own pending state (double-submit guard). */
+function DeleteButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--danger-line)] bg-transparent px-3.5 py-2 text-[12.5px] font-semibold text-danger transition hover:bg-danger hover:text-white disabled:opacity-60"
+    >
+      {pending ? (
+        <Loader2 size={13} strokeWidth={2.2} className="animate-spin" aria-hidden />
+      ) : (
+        <Trash2 size={13} strokeWidth={2.2} aria-hidden />
+      )}
+      Delete
+    </button>
+  );
+}
+
 function Notice({ state }: { state: OrgActionState }) {
   if (state.status === 'idle' || !state.message) return null;
   return (
@@ -542,13 +561,7 @@ function DangerZone(props: OrganizationSectionProps) {
             <div className="flex-1">
               <Input name="confirm" placeholder="DELETE" autoComplete="off" />
             </div>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--danger-line)] bg-transparent px-3.5 py-2 text-[12.5px] font-semibold text-danger transition hover:bg-danger hover:text-white"
-            >
-              <Trash2 size={13} strokeWidth={2.2} aria-hidden />
-              Delete
-            </button>
+            <DeleteButton />
           </div>
           <Notice state={deleteState} />
         </form>
