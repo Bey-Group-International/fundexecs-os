@@ -8,9 +8,10 @@ import {
   type ProfileRecommendations,
   type SuggestInput
 } from '@/lib/proof-of-truth/earn-profile';
+import { AI_MODELS } from './models';
 
-// Sonnet 4.6 — fast, strong for an interactive assistant; env-overridable.
-const MODEL = process.env.EARN_MODEL || 'claude-sonnet-4-6';
+// Interactive chat tier (Sonnet by default) — fast, strong for inline suggestions.
+const MODEL = AI_MODELS.chat;
 
 function str(value: unknown, max: number): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';

@@ -19,6 +19,8 @@ export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck:
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [accredited, setAccredited] = useState(false);
+  const [verificationMethod, setVerificationMethod] = useState('');
+  const [verificationEvidence, setVerificationEvidence] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [intentOnly, setIntentOnly] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -47,7 +49,9 @@ export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck:
           email,
           amount: Number(amount.replace(/[^0-9.]/g, '')) || 0,
           note,
-          accredited
+          accredited,
+          verificationMethod: verificationMethod || null,
+          verificationEvidence: verificationEvidence || null
         });
         if (!res.ok) {
           setError(res.error);
@@ -123,6 +127,33 @@ export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck:
         />
       </Field>
 
+      {/* Accreditation verification method — 506(c) "reasonable steps" */}
+      <Field label="How will you verify accredited status?" required>
+        <select
+          value={verificationMethod}
+          onChange={(e) => setVerificationMethod(e.target.value)}
+          className={inputCls}
+          aria-required="true"
+        >
+          <option value="">Select a method…</option>
+          <option value="income">Income (tax returns / W-2)</option>
+          <option value="net_worth">Net worth (assets &amp; liabilities)</option>
+          <option value="professional_license">Licensed professional (Series 7/65/82)</option>
+          <option value="third_party_letter">Third-party letter (CPA / attorney / broker)</option>
+          <option value="other">Other</option>
+        </select>
+      </Field>
+
+      <Field label="Verification evidence" hint="Optional — a note or link">
+        <input
+          value={verificationEvidence}
+          onChange={(e) => setVerificationEvidence(e.target.value)}
+          maxLength={500}
+          className={inputCls}
+          placeholder="e.g. link to a verification letter; the team will follow up"
+        />
+      </Field>
+
       {/* Accreditation attestation — always required on the reserve path */}
       <label className="flex items-start gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
         <input
@@ -134,7 +165,8 @@ export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck:
         />
         <span className="text-[12.5px] text-fg-2">
           I am an accredited investor as defined under SEC Rule 501(a). I understand this raise is
-          limited to accredited investors under Reg D 506(c).
+          limited to accredited investors under Reg D 506(c), and that the issuer must take
+          reasonable steps to verify my status before closing.
         </span>
       </label>
 
@@ -154,7 +186,7 @@ export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck:
 
       <button
         type="submit"
-        disabled={pending || !accredited}
+        disabled={pending || !accredited || !verificationMethod}
         className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-[var(--shadow-md)] transition hover:bg-accent-2 disabled:opacity-60"
       >
         {pending ? 'Processing…' : 'Reserve my spot'}
