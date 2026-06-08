@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
+import { refreshOrgProfileEmbedding } from '@/lib/ai/profile-embedding';
 import { isMemberType, type MemberType } from '@/lib/member-types';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
@@ -163,5 +164,17 @@ export async function saveMemberProfile(input: MemberProfileInput): Promise<Acti
   if ('completionPct' in input) row.completion_pct = clampPct(input.completionPct);
 
   const { error } = await supabase.from('member_profiles').upsert(row, { onConflict: 'user_id' });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  if (error) return { ok: false, error: error.message };
+
+  // Keep the semantic mandate embedding fresh so signal matching reflects the
+  // latest thesis. Never-block: a missing key / embed failure never fails the
+  // save the user just made.
+  try {
+    const org = await getActiveOrg();
+    if (org) await refreshOrgProfileEmbedding(org.orgId);
+  } catch {
+    // best-effort
+  }
+
+  return { ok: true };
 }
