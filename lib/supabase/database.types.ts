@@ -347,6 +347,114 @@ export type Database = {
           },
         ]
       }
+      raise_pages: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          headline: string | null
+          id: string
+          min_check: number | null
+          org_id: string
+          revoked_at: string | null
+          show_amounts: boolean
+          title: string | null
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          headline?: string | null
+          id?: string
+          min_check?: number | null
+          org_id: string
+          revoked_at?: string | null
+          show_amounts?: boolean
+          title?: string | null
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          headline?: string | null
+          id?: string
+          min_check?: number | null
+          org_id?: string
+          revoked_at?: string | null
+          show_amounts?: boolean
+          title?: string | null
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raise_pages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "raise_pages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      raise_interests: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          indicative_amount: number | null
+          name: string
+          note: string | null
+          org_id: string
+          raise_page_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          indicative_amount?: number | null
+          name: string
+          note?: string | null
+          org_id: string
+          raise_page_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          indicative_amount?: number | null
+          name?: string
+          note?: string | null
+          org_id?: string
+          raise_page_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raise_interests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "raise_interests_raise_page_id_fkey"
+            columns: ["raise_page_id"]
+            isOneToOne: false
+            referencedRelation: "raise_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       beta_link_claims: {
         Row: {
           beta_link_id: string

@@ -90,8 +90,14 @@
   --topbar-bg: rgba(7, 11, 20, 0.72);
 }
 
-/* Light / day theme — set data-theme="light" on <html> (no toggle wired yet). */
-:root[data-theme='light'] {
+/* Light / day theme. Applied either globally via data-theme="light" on <html>,
+   or scoped to a subtree via the `.fx-theme-light` class — used by public,
+   unauthenticated marketing surfaces (e.g. the /r/<token> raise page) so they
+   read as a bright marketplace while the authenticated app stays dark, without
+   needing a second root <html> layout. Custom properties cascade, so wrapping a
+   page in `.fx-theme-light` re-themes every token-driven descendant. */
+:root[data-theme='light'],
+.fx-theme-light {
   --bg-0: #eef2f7;
   --bg-1: #ffffff;
   --bg-2: #ffffff;

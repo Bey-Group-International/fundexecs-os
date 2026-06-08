@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { AuthedShell } from '@/components/shell/AuthedShell';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getCapitalStackData } from '@/lib/queries/capital-stack';
+import { getActiveRaisePage } from '@/lib/queries/raise-page';
 import { CapitalStackView } from '@/components/capital-stack/CapitalStackView';
+import { RaisePageManager } from '@/components/capital-stack/RaisePageManager';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,10 +36,13 @@ export default async function CapitalStackPage() {
       }))
     : { summary: null, commitments: [], empty: true };
 
+  const raisePage = org ? await getActiveRaisePage().catch(() => null) : null;
+
   return (
     <AuthedShell title="Capital Stack" subtitle="Capital Formation" redirectFrom="/capital-stack">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <CapitalStackView data={data} />
+        <RaisePageManager key={raisePage?.token ?? 'none'} initial={raisePage} />
       </div>
     </AuthedShell>
   );
