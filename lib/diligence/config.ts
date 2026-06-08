@@ -1,5 +1,6 @@
 import 'server-only';
 import { getMemberOrCOO } from '@/lib/team/roster';
+import { AI_MODELS } from '@/lib/ai/models';
 
 /**
  * Earn Diligence Intelligence Layer — orchestration config.
@@ -32,13 +33,14 @@ export type DiligenceAgent = AnalystAgent | typeof SYNTHESIS_AGENT;
 
 /**
  * Model tiering — a single config object so models are trivially swappable.
- * The six analysts default to Haiku (fast, cheap, run in parallel); Synthesis
- * defaults to Opus (the judgment that justifies the work). Both are
- * env-overridable. Model IDs are the latest as of the Claude API skill.
+ * The six analysts run on the shared `fast` tier (Haiku — cheap, parallel);
+ * Synthesis runs on the `reasoning` tier (Opus — the judgment that justifies
+ * the work). Defaults flow from the central `AI_MODELS` registry so the whole
+ * desk re-tiers from one place; the `DILIGENCE_*` env vars still win when set.
  */
 export const DILIGENCE_MODELS = {
-  analyst: process.env.DILIGENCE_ANALYST_MODEL || 'claude-haiku-4-5-20251001',
-  synthesis: process.env.DILIGENCE_SYNTHESIS_MODEL || 'claude-opus-4-8'
+  analyst: process.env.DILIGENCE_ANALYST_MODEL || AI_MODELS.fast,
+  synthesis: process.env.DILIGENCE_SYNTHESIS_MODEL || AI_MODELS.reasoning
 } as const;
 
 /** Number of cited chunks to retrieve per analytical agent. */

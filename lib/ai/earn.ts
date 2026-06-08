@@ -3,9 +3,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import { embedQuery, toVectorLiteral } from './voyage';
+import { AI_MODELS } from './models';
 
-// Default model is Sonnet 4.6 (fast, strong for an interactive assistant); env-overridable.
-const MODEL = process.env.EARN_MODEL || 'claude-sonnet-4-6';
+// Interactive chat tier (Sonnet by default) — fast, strong for an assistant.
+const MODEL = AI_MODELS.chat;
 
 const SYSTEM_PROMPT = `You are Earn — introduce yourself once as "Earnest Fundmaker, your Private Market Assistant," then refer to yourself as Earn. You are the Chief Operating Officer of a fifteen-strong AI executive team inside FundExecs OS, an AI-native private-market command center for funds, LPs, operators, capital providers, and ecosystem partners.
 
@@ -118,6 +119,58 @@ export function earnToolMode(name: string): EarnToolMode {
   return AUTO_TOOLS.has(name) ? 'auto' : 'confirm';
 }
 
+/* ----------------------------------------------------------------------------
+ * Self-awareness — what Earn knows about itself, the moment, and the operator.
+ *
+ * Three grounding facets fold into the system prompt so Earn answers as a
+ * situated operator rather than a stateless model:
+ *   1. The moment   — today's date, so "this quarter" / "recently" land right.
+ *   2. Its own reach — an honest inventory of what Earn can and cannot do, so
+ *                      it proposes real tools and is candid about limits.
+ *   3. Continuity    — a recap of earlier threads with this operator (beyond
+ *                      the in-payload window), so Earn references its own prior
+ *                      guidance instead of starting cold.
+ * --------------------------------------------------------------------------*/
+
+/** Honest, fixed account of Earn's reach — keeps capability claims grounded. */
+const CAPABILITY_BLOCK = `Self-awareness — what you can and cannot do right now:
+- You CAN ground answers in the desk's knowledge base (the 15 BGI brains, via retrieval), take the operator to any in-app surface (navigate), and propose creating a deal or running the AI diligence committee — both surface as a card the operator confirms before anything is written.
+- You CANNOT send email, move money, sign documents, edit records directly, or act outside FundExecs OS. Mutations only happen through the confirm cards above.
+- Treat the conversation so far as shared memory: reference your own earlier guidance and any actions you already proposed instead of repeating yourself. If something falls outside your reach, say so plainly in one line and point to the closest action you can take.`;
+
+/**
+ * Build a compact continuity recap from the operator's persisted Earn threads
+ * that fall *before* the current in-payload window (the route only forwards the
+ * latest turns). Best-effort and never throws — no memory simply means no
+ * recap. Returns '' when there is nothing earlier to recall.
+ */
+async function retrieveMemory(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  currentTurnCount: number
+): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from('earn_messages')
+      .select('role, content')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(currentTurnCount + 16);
+    if (!data || data.length <= currentTurnCount) return '';
+    // Rows beyond the current thread window are earlier sessions (newest-first).
+    const older = data.slice(currentTurnCount);
+    const earlierAsks = older
+      .filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim())
+      .slice(0, 6)
+      .map((m) => `- ${m.content.trim().slice(0, 140)}`);
+    if (!earlierAsks.length) return '';
+    // Oldest-first reads as a natural timeline.
+    return earlierAsks.reverse().join('\n');
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Retrieve the org-scoped brain knowledge for the latest user turn. Factored out
  * of `askEarn` so the streaming path can reuse the exact same RAG step. Never
@@ -150,10 +203,28 @@ async function retrieveContext(
 }
 
 /** Build the system blocks shared by the streaming + non-streaming paths. */
-function buildSystem(contextBlock: string, hint?: EarnContextHint): Anthropic.TextBlockParam[] {
+function buildSystem(
+  contextBlock: string,
+  hint?: EarnContextHint,
+  recap?: string
+): Anthropic.TextBlockParam[] {
+  // Today's date (UTC) so "recently" / "this quarter" land correctly. Lives in
+  // the cached capability block — the 5-minute prompt cache TTL keeps it fresh.
+  const today = new Date().toISOString().slice(0, 10);
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }
+    { type: 'text', text: SYSTEM_PROMPT },
+    {
+      type: 'text',
+      text: `Today is ${today}.\n\n${CAPABILITY_BLOCK}`,
+      cache_control: { type: 'ephemeral' }
+    }
   ];
+  if (recap) {
+    system.push({
+      type: 'text',
+      text: `Continuity — earlier with this operator (for grounding; do not repeat verbatim):\n${recap}`
+    });
+  }
   if (hint?.entityLabel || hint?.kind) {
     const idNote = hint.entityId ? ` [id: ${hint.entityId}]` : '';
     system.push({
@@ -181,38 +252,10 @@ export async function askEarn(
   orgId: string,
   messages: EarnMessage[]
 ): Promise<EarnReply> {
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-
-  let contextBlock = '';
-  let sources: EarnSource[] = [];
-
-  if (lastUser) {
-    try {
-      const vector = await embedQuery(lastUser.content);
-      const { data } = await supabase.rpc('match_knowledge_chunks', {
-        query_embedding: toVectorLiteral(vector),
-        match_count: 6,
-        _org_id: orgId
-      });
-      if (data && data.length) {
-        sources = data.map((d) => ({ brainId: d.brain_id, snippet: d.content.slice(0, 200) }));
-        contextBlock = data.map((d, i) => `[${i + 1}] ${d.content}`).join('\n\n');
-      }
-    } catch {
-      // RAG unavailable (no VOYAGE_API_KEY or no embedded knowledge yet) — answer without it.
-    }
-  }
-
+  // Same grounding as the streaming path so voice + self-awareness stay in lockstep.
+  const { sources, contextBlock } = await retrieveContext(supabase, orgId, messages);
   const anthropic = new Anthropic();
-  const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }
-  ];
-  if (contextBlock) {
-    system.push({
-      type: 'text',
-      text: `Knowledge-base context (the 15 BGI brains):\n\n${contextBlock}`
-    });
-  }
+  const system = buildSystem(contextBlock);
 
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -240,16 +283,21 @@ export async function streamEarn(
   supabase: SupabaseClient<Database>,
   orgId: string,
   messages: EarnMessage[],
-  hint?: EarnContextHint
+  hint?: EarnContextHint,
+  userId?: string
 ): Promise<{
   sources: EarnSource[];
   deltas: AsyncIterable<string>;
   /** Resolves after the stream completes with any tool calls Earn proposed. */
   tools: () => Promise<EarnToolUse[]>;
 }> {
-  const { sources, contextBlock } = await retrieveContext(supabase, orgId, messages);
+  // RAG grounding and cross-session memory in parallel — neither blocks chat.
+  const [{ sources, contextBlock }, recap] = await Promise.all([
+    retrieveContext(supabase, orgId, messages),
+    userId ? retrieveMemory(supabase, userId, messages.length) : Promise.resolve('')
+  ]);
   const anthropic = new Anthropic();
-  const system = buildSystem(contextBlock, hint);
+  const system = buildSystem(contextBlock, hint, recap);
 
   const stream = anthropic.messages.stream({
     model: MODEL,

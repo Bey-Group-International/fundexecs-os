@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { AI_MODELS } from '@/lib/ai/models';
 
 /**
  * POST /api/beta/ask — the live "ask Earn anything" box in the pre-auth beta
@@ -15,7 +16,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
  *   { type: 'delta', text } … { type: 'done' } | { type: 'degraded', message }
  */
 
-const MODEL = process.env.EARN_MODEL || 'claude-sonnet-4-6';
+const MODEL = AI_MODELS.chat;
 const MAX_INPUT = 600;
 const MAX_HISTORY = 6;
 

@@ -259,7 +259,10 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
       {hasThread && (
         <Card className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           {messages.map((m, i) => (
-            <div key={i} className={cn('flex gap-2.5', m.role === 'user' && 'flex-row-reverse')}>
+            <div
+              key={i}
+              className={cn('fx-rise flex gap-2.5', m.role === 'user' && 'flex-row-reverse')}
+            >
               {m.role === 'assistant' && (
                 <TeamAvatar member={earn} size={24} className="mt-0.5 flex-none" />
               )}
@@ -305,9 +308,18 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
             </div>
           ))}
           {loading && messages[messages.length - 1]?.role !== 'assistant' && (
-            <div className="flex items-center gap-2 text-[12px] text-fg-4">
-              <TeamAvatar member={earn} size={24} className="flex-none" />
-              <span className="animate-pulse">Earn is thinking…</span>
+            <div className="fx-rise flex items-center gap-2.5 text-[12px] text-fg-4">
+              <TeamAvatar member={earn} size={24} online className="flex-none" />
+              <span className="text-fg-3">Earn is consulting the desk</span>
+              <span aria-hidden className="inline-flex items-center gap-1">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="fx-earn-think inline-block h-1 w-1 rounded-full bg-gold-1"
+                    style={{ animationDelay: `${i * 0.16}s` }}
+                  />
+                ))}
+              </span>
             </div>
           )}
           {error && <div className="text-[12px] text-danger">{error}</div>}
