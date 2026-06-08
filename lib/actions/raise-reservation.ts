@@ -58,6 +58,8 @@ export interface RaiseReservationInput {
   verificationMethod?: string | null;
   /** Optional evidence note or link (e.g. a third-party verification letter URL). */
   verificationEvidence?: string | null;
+  /** Storage object path of the uploaded accreditation document, if provided. */
+  verificationDocumentPath?: string | null;
 }
 
 function clean(value: string | null | undefined, max: number): string | null {
@@ -144,10 +146,24 @@ export async function submitRaiseReservation(
       : null;
   const verificationEvidence = clean(input.verificationEvidence, 500);
   const verificationStatus = verificationMethod ? 'pending' : 'unverified';
+
+  // Validate the document path if provided: the first segment must equal the
+  // raise page's org_id to prevent a forged path pointing at another org's bucket.
+  // On failure we silently drop the path rather than blocking the whole reservation.
+  let verificationDocumentPath: string | null = null;
+  if (typeof input.verificationDocumentPath === 'string' && input.verificationDocumentPath.trim()) {
+    const rawPath = input.verificationDocumentPath.trim();
+    const firstSegment = rawPath.split('/')[0];
+    if (firstSegment === page.org_id) {
+      verificationDocumentPath = rawPath;
+    }
+  }
+
   const verificationFields = {
     verification_method: verificationMethod,
     verification_evidence: verificationEvidence,
-    verification_status: verificationStatus
+    verification_status: verificationStatus,
+    verification_document_path: verificationDocumentPath
   };
 
   // Attempt Stripe checkout — degrade gracefully if unconfigured.

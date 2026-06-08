@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { recordPeerReferral, REFERRAL_COOKIE } from '@/lib/queries/referral-capture';
 
 /**
  * Verifies an email magic link minted by the beta-invite flow (and any other
@@ -76,5 +77,15 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(`${origin}${next}`);
+  // Capture a peer referral (best-effort) from the /r/<code> cookie. First-touch
+  // and idempotent, so a beta-invite user who also carries a peer cookie keeps
+  // their invite attribution (record_referral no-ops on a repeat).
+  const refCode = request.cookies.get(REFERRAL_COOKIE)?.value;
+  if (refCode && userId) {
+    await recordPeerReferral(userId, refCode);
+  }
+
+  const response = NextResponse.redirect(`${origin}${next}`);
+  response.cookies.delete(REFERRAL_COOKIE);
+  return response;
 }

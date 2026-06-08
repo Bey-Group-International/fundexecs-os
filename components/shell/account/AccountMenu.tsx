@@ -14,6 +14,7 @@ import {
   Building2,
   Check,
   ChevronsUpDown,
+  Coins,
   CreditCard,
   ExternalLink,
   FileText,
@@ -291,8 +292,9 @@ export function MenuBody({
         />
       </MenuSection>
 
-      {/* 7–8. Gift + help */}
+      {/* 7–8. Earn + gift + help */}
       <MenuSection>
+        <MenuLink href="/referrals" icon={Coins} label="Referrals" onNavigate={onNavigate} />
         <MenuLink href="/gift" icon={Gift} label="Gift FundExecs" onNavigate={onNavigate} />
         <MenuLink href="/help" icon={LifeBuoy} label="Get help" onNavigate={onNavigate} />
       </MenuSection>

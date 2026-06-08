@@ -589,8 +589,13 @@ export type Database = {
           reservation_status: string
           reviewer_note: string | null
           stripe_session_id: string | null
+          verification_document_path: string | null
           verification_evidence: string | null
           verification_method: string | null
+          verification_provider: string | null
+          verification_provider_ref: string | null
+          verification_provider_status: string | null
+          verification_provider_url: string | null
           verification_status: string
           verified_at: string | null
           verified_by: string | null
@@ -611,8 +616,13 @@ export type Database = {
           reservation_status?: string
           reviewer_note?: string | null
           stripe_session_id?: string | null
+          verification_document_path?: string | null
           verification_evidence?: string | null
           verification_method?: string | null
+          verification_provider?: string | null
+          verification_provider_ref?: string | null
+          verification_provider_status?: string | null
+          verification_provider_url?: string | null
           verification_status?: string
           verified_at?: string | null
           verified_by?: string | null
@@ -633,8 +643,13 @@ export type Database = {
           reservation_status?: string
           reviewer_note?: string | null
           stripe_session_id?: string | null
+          verification_document_path?: string | null
           verification_evidence?: string | null
           verification_method?: string | null
+          verification_provider?: string | null
+          verification_provider_ref?: string | null
+          verification_provider_status?: string | null
+          verification_provider_url?: string | null
           verification_status?: string
           verified_at?: string | null
           verified_by?: string | null
@@ -1300,6 +1315,42 @@ export type Database = {
           },
         ]
       }
+      user_referral_codes: {
+        Row: {
+          code: string
+          created_at: string
+          org_id: string
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          org_id: string
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          org_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_referral_codes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_referral_codes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       referrals: {
         Row: {
           created_at: string
@@ -1341,6 +1392,7 @@ export type Database = {
           id: string
           referral_id: string
           source_ref: string
+          tier: number
         }
         Insert: {
           commission_credits: number
@@ -1349,6 +1401,7 @@ export type Database = {
           id?: string
           referral_id: string
           source_ref: string
+          tier?: number
         }
         Update: {
           commission_credits?: number
@@ -1357,6 +1410,7 @@ export type Database = {
           id?: string
           referral_id?: string
           source_ref?: string
+          tier?: number
         }
         Relationships: [
           {
@@ -1367,6 +1421,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      referral_tiers: {
+        Row: {
+          rate_bps: number
+          tier: number
+        }
+        Insert: {
+          rate_bps: number
+          tier: number
+        }
+        Update: {
+          rate_bps?: number
+          tier?: number
+        }
+        Relationships: []
       }
       deals: {
         Row: {
