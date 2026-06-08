@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { AuthedShell } from '@/components/shell/AuthedShell';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getMatchInboxData } from '@/lib/queries/match-inbox';
+import { getMatchInboxData, type MatchInboxData } from '@/lib/queries/match-inbox';
+import { EMPTY_CALIBRATION } from '@/lib/queries/intelligence-calibration';
 import { MatchInboxView } from '@/components/match-inbox/MatchInboxView';
 
 export const dynamic = 'force-dynamic';
@@ -27,13 +28,14 @@ export const metadata: Metadata = {
 export default async function MatchInboxPage() {
   const org = await getActiveOrg().catch(() => null);
 
-  const data = org
-    ? await getMatchInboxData(org.orgId).catch(() => ({
-        pending: [],
-        actioned: [],
-        empty: true
-      }))
-    : { pending: [], actioned: [], empty: true };
+  const EMPTY: MatchInboxData = {
+    pending: [],
+    actioned: [],
+    calibration: EMPTY_CALIBRATION,
+    empty: true
+  };
+
+  const data = org ? await getMatchInboxData(org.orgId).catch(() => EMPTY) : EMPTY;
 
   return (
     <AuthedShell title="Match Inbox" subtitle="AI Matching" redirectFrom="/match-inbox">

@@ -16,7 +16,17 @@ import {
 } from 'lucide-react';
 import { Badge, Card, SectionTitle, SegTabs, type BadgeTone, type TabItem } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
+import {
+  ConfidenceMeter,
+  FactorBreakdown,
+  LearningIndicator,
+  SpecialistRoute
+} from '@/components/intelligence';
 import { TeamAvatar, getMemberByFirstName } from '@/lib/team';
+import {
+  matchConfidence,
+  type IntelligenceCalibration
+} from '@/lib/queries/intelligence-calibration';
 import { cn } from '@/lib/utils';
 import type {
   InboxIntelligenceData,
@@ -152,14 +162,29 @@ function SignalGlyph({ signal }: { signal: MarketSignal }) {
 
 /* ---- Scored match card --------------------------------------------------- */
 
-function MatchCard({ match }: { match: SignalMatch }) {
+function MatchCard({
+  match,
+  calibration
+}: {
+  match: SignalMatch;
+  calibration: IntelligenceCalibration;
+}) {
   const [open, setOpen] = useState(false);
   const signal = match.signal;
   const title = signal ? signalTitle(signal) : 'Routed signal';
   const subtitle = signal ? signalSubtitle(signal) : null;
   const amount = signal ? signalAmount(signal) : null;
   const sev = signal ? severityMeta(signal.severity) : null;
-  const factors = match.factors.filter((f) => f.factor !== 'match_reason');
+  const judge = match.factors.find((f) => f.factor === 'ai_judge');
+  const breakdown = match.factors
+    .filter((f) => f.factor !== 'match_reason' && f.factor !== 'ai_judge')
+    .map((f) => ({
+      factor: f.factor,
+      weight: f.weight,
+      multiplier: f.multiplier ?? undefined,
+      detail: f.detail
+    }));
+  const confidence = matchConfidence(judge?.confidence ?? match.score, calibration);
 
   return (
     <Card className="flex flex-col gap-3 p-4">
@@ -213,53 +238,76 @@ function MatchCard({ match }: { match: SignalMatch }) {
             {humanize(signal.source)}
           </span>
         ) : null}
-        <RoutedSpecialist name={match.routedSpecialist} />
+        <SpecialistRoute
+          name={match.routedSpecialist}
+          nextAction={{ label: 'Brief me', href: '/ask-earn' }}
+        />
       </div>
 
-      {factors.length > 0 ? (
-        <div className="border-t border-hairline pt-2.5">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-          >
-            <ChevronRight
-              size={13}
-              strokeWidth={2.2}
-              aria-hidden
-              className={cn('transition-transform', open && 'rotate-90')}
-            />
-            Why this scored {match.score}
-          </button>
-          {open ? (
-            <ul className="mt-2.5 grid gap-1.5">
-              {factors.map((f) => (
-                <li
-                  key={f.factor}
-                  className="flex items-start gap-2.5 rounded-lg border border-hairline bg-bg-1 px-2.5 py-2"
-                >
-                  <span className="mt-px inline-flex min-w-9 justify-center rounded-md border border-hairline bg-surface-1 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-fg-3">
-                    +{f.weight}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="text-[11px] font-semibold text-fg-2">
-                      {humanize(f.factor)}
-                    </span>
-                    {f.detail ? (
-                      <span className="mt-0.5 block text-[11.5px] leading-relaxed text-fg-4">
-                        {f.detail}
-                      </span>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+      <div className="grid gap-3 border-t border-hairline pt-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <FactorBreakdown factors={breakdown} />
+        <ConfidenceMeter
+          value={confidence.value}
+          band={confidence.band}
+          className="w-full sm:w-40"
+        />
+      </div>
+
+      {judge?.detail ? (
+        <div className="flex items-start gap-2 rounded-lg border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-2">
+          <Sparkles size={13} strokeWidth={2} className="mt-px flex-none text-gold-1" aria-hidden />
+          <span className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-fg-3">
+            <span className="font-semibold text-fg-2">{specialistVerdictLabel(match)}:</span>{' '}
+            {judge.detail}
+          </span>
         </div>
+      ) : breakdown.length > 0 ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
+        >
+          <ChevronRight
+            size={13}
+            strokeWidth={2.2}
+            aria-hidden
+            className={cn('transition-transform', open && 'rotate-90')}
+          />
+          {open ? 'Hide factor detail' : 'Factor detail'}
+        </button>
+      ) : null}
+
+      {open && !judge?.detail ? (
+        <ul className="grid gap-1.5">
+          {breakdown.map((f) => (
+            <li
+              key={f.factor}
+              className="flex items-start gap-2.5 rounded-lg border border-hairline bg-bg-1 px-2.5 py-2"
+            >
+              <span className="mt-px inline-flex min-w-9 justify-center rounded-md border border-hairline bg-surface-1 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-fg-3">
+                +{f.weight}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="text-[11px] font-semibold text-fg-2">{humanize(f.factor)}</span>
+                {f.detail ? (
+                  <span className="mt-0.5 block text-[11.5px] leading-relaxed text-fg-4">
+                    {f.detail}
+                  </span>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </Card>
   );
+}
+
+/** Roster name of the specialist who delivered the AI verdict, for the label. */
+function specialistVerdictLabel(match: SignalMatch): string {
+  const member = getMemberByFirstName(match.routedSpecialist);
+  return member ? `${member.name}'s read` : 'Specialist read';
 }
 
 /* ---- Raw signal card (unrouted) ----------------------------------------- */
@@ -369,6 +417,8 @@ export function InboxIntelligenceView({ data }: InboxIntelligenceViewProps) {
         topScore={topScore}
       />
 
+      <LearningIndicator calibration={data.calibration} />
+
       <SegTabs tabs={TABS} active={tab} onChange={setTab} />
 
       {showRouted ? (
@@ -385,7 +435,7 @@ export function InboxIntelligenceView({ data }: InboxIntelligenceViewProps) {
             />
             <div className="grid gap-3 lg:grid-cols-2">
               {data.matches.map((m) => (
-                <MatchCard key={m.id} match={m} />
+                <MatchCard key={m.id} match={m} calibration={data.calibration} />
               ))}
             </div>
           </section>

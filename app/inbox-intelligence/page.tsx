@@ -5,6 +5,7 @@ import {
   getInboxIntelligenceData,
   type InboxIntelligenceData
 } from '@/lib/queries/inbox-intelligence';
+import { EMPTY_CALIBRATION } from '@/lib/queries/intelligence-calibration';
 import { InboxIntelligenceView } from '@/components/inbox-intelligence/InboxIntelligenceView';
 
 const ROUTE = '/inbox-intelligence';
@@ -25,6 +26,7 @@ const EMPTY: InboxIntelligenceData = {
   matches: [],
   unroutedSignals: [],
   signalCount: 0,
+  calibration: EMPTY_CALIBRATION,
   empty: true
 };
 
