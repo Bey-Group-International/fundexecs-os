@@ -26,13 +26,15 @@ export const metadata: Metadata = {
 export default async function PartnersPage() {
   const org = await getActiveOrg().catch(() => null);
 
-  const data = org
-    ? await getPartnersData(org.orgId).catch(() => ({
-        serviceProviders: [],
-        capitalProviders: [],
-        empty: true
-      }))
-    : { serviceProviders: [], capitalProviders: [], empty: true };
+  const EMPTY_DATA = {
+    serviceProviders: [],
+    capitalProviders: [],
+    facets: { categories: [], capitalTypes: [] },
+    introStatus: {},
+    empty: true
+  };
+
+  const data = org ? await getPartnersData(org.orgId).catch(() => EMPTY_DATA) : EMPTY_DATA;
 
   return (
     <AuthedShell title="Partner Marketplace" subtitle="Partner Directory" redirectFrom="/partners">

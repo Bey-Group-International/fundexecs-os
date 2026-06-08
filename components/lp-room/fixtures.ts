@@ -9,7 +9,9 @@
  * typed contracts in `./types.ts` and removes the default.
  */
 import type {
+  CapitalAccountSummaryData,
   CommitmentSnapshot,
+  DistributionItem,
   FundOverview,
   LpDocument,
   LpQuestion,
@@ -292,10 +294,50 @@ export const FIXTURE_QUESTIONS: LpQuestion[] = [
   }
 ];
 
+export const FIXTURE_DISTRIBUTIONS: DistributionItem[] = [
+  {
+    id: 'dist-1',
+    distributionDate: 'Jan 15, 2026',
+    kind: 'return_of_capital',
+    amount: 6_000_000,
+    status: 'paid',
+    memo: 'Q4 2025 return of capital — Northwind Logistics partial exit'
+  },
+  {
+    id: 'dist-2',
+    distributionDate: 'Dec 01, 2025',
+    kind: 'profit',
+    amount: 3_200_000,
+    status: 'paid',
+    memo: 'Carry distribution — closing event'
+  },
+  {
+    id: 'dist-3',
+    distributionDate: 'Mar 01, 2026',
+    kind: 'return_of_capital',
+    amount: 2_800_000,
+    status: 'pending',
+    memo: 'Q1 2026 return of capital — processing'
+  }
+];
+
+export const FIXTURE_CAPITAL_ACCOUNT: CapitalAccountSummaryData = {
+  committed: 72_000_000,
+  called: 38_000_000,
+  distributed: 12_000_000,
+  navBalance: 44_800_000,
+  balanceSeries: [
+    38_000_000, 39_200_000, 40_100_000, 41_500_000, 43_000_000, 42_600_000, 44_800_000
+  ]
+};
+
 export const FIXTURE_LP_ROOM: LpRoomData = {
   fund: FIXTURE_FUND,
   documents: FIXTURE_DOCUMENTS,
   updates: FIXTURE_UPDATES,
   commitments: FIXTURE_COMMITMENTS,
-  questions: FIXTURE_QUESTIONS
+  questions: FIXTURE_QUESTIONS,
+  distributions: FIXTURE_DISTRIBUTIONS,
+  capitalAccount: FIXTURE_CAPITAL_ACCOUNT,
+  isCapitalDataSample: true
 };

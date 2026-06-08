@@ -347,6 +347,165 @@ export type Database = {
           },
         ]
       }
+      partner_intro_requests: {
+        Row: {
+          created_at: string
+          id: string
+          org_id: string
+          partner_id: string
+          partner_name: string
+          partner_type: string
+          rationale: string | null
+          requester_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_id: string
+          partner_id: string
+          partner_name: string
+          partner_type: string
+          rationale?: string | null
+          requester_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_id?: string
+          partner_id?: string
+          partner_name?: string
+          partner_type?: string
+          rationale?: string | null
+          requester_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_intro_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_intro_requests_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      distributions: {
+        Row: {
+          amount: number
+          created_at: string
+          distribution_date: string
+          id: string
+          kind: string
+          lp_id: string | null
+          memo: string | null
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          distribution_date?: string
+          id?: string
+          kind?: string
+          lp_id?: string | null
+          memo?: string | null
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          distribution_date?: string
+          id?: string
+          kind?: string
+          lp_id?: string | null
+          memo?: string | null
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "distributions_lp_id_fkey"
+            columns: ["lp_id"]
+            isOneToOne: false
+            referencedRelation: "capital_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distributions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      capital_account_entries: {
+        Row: {
+          amount: number
+          balance_after: number | null
+          created_at: string
+          entry_date: string
+          entry_type: string
+          id: string
+          lp_id: string | null
+          memo: string | null
+          org_id: string
+        }
+        Insert: {
+          amount: number
+          balance_after?: number | null
+          created_at?: string
+          entry_date?: string
+          entry_type: string
+          id?: string
+          lp_id?: string | null
+          memo?: string | null
+          org_id: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number | null
+          created_at?: string
+          entry_date?: string
+          entry_type?: string
+          id?: string
+          lp_id?: string | null
+          memo?: string | null
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_account_entries_lp_id_fkey"
+            columns: ["lp_id"]
+            isOneToOne: false
+            referencedRelation: "capital_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_account_entries_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       raise_pages: {
         Row: {
           created_at: string
