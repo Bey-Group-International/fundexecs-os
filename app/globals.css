@@ -366,6 +366,25 @@ body {
   animation: fx-onpoint-pulse 2.2s ease-out infinite;
 }
 
+/* Earn "thinking" dots — three gold dots that breathe in sequence while a
+   reply is in flight. Restrained (opacity + a 1px lift), staggered via
+   per-dot animation-delay set inline. Silenced under reduced-motion below. */
+@keyframes fx-earn-think {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+}
+.fx-earn-think {
+  animation: fx-earn-think 1.25s ease-in-out infinite;
+}
+
 /* ── Landing (cinematic) ──────────────────────────────────────────────────
    Ambient, GPU-cheap effects for the public marketing page. All transform/
    opacity/background-position only, and all silenced under reduced-motion. */
@@ -478,6 +497,7 @@ body {
   .fx-celebrate,
   .fx-celebrate-glow,
   .fx-onpoint-pulse,
+  .fx-earn-think,
   .fx-aurora,
   .fx-text-gradient,
   .fx-grid-pan,

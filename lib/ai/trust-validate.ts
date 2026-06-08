@@ -2,9 +2,10 @@ import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
+import { AI_MODELS } from './models';
 
 const TRUST_BUCKET = 'trust-evidence';
-const MODEL = process.env.EARN_MODEL || 'claude-sonnet-4-6';
+const MODEL = AI_MODELS.chat;
 const FALLBACK_NOTE = 'AI validation unavailable; proceed with manual review.';
 /** Hard ceiling on the Claude call so the parent server-action never
  * exceeds ~8s. AbortSignal.timeout is honoured by the @anthropic-ai/sdk

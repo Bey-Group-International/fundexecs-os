@@ -112,11 +112,17 @@ export async function POST(req: NextRequest) {
 
       // Normal streaming chat path.
       try {
-        const { sources, deltas, tools } = await streamEarn(supabase, org.orgId, messages, {
-          kind: context?.kind,
-          entityId: context?.entityId,
-          entityLabel: context?.entityLabel
-        });
+        const { sources, deltas, tools } = await streamEarn(
+          supabase,
+          org.orgId,
+          messages,
+          {
+            kind: context?.kind,
+            entityId: context?.entityId,
+            entityLabel: context?.entityLabel
+          },
+          user.id
+        );
         if (sources.length) controller.enqueue(line({ type: 'sources', sources }));
         let full = '';
         for await (const chunk of deltas) {
