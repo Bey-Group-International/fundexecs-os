@@ -171,6 +171,16 @@ export function ReadinessGauge({ score, breakdown, className }: ReadinessGaugePr
         })}
       </ul>
 
+      {/* Deep-link to the dedicated compound-readiness surface (trend · what-if · value). */}
+      <a
+        href="/readiness"
+        data-testid="readiness-gauge-fullview"
+        className="mt-3 inline-flex w-full items-center justify-center gap-1 rounded-lg border border-hairline bg-bg-1 px-3 py-1.5 text-[11px] font-semibold text-fg-2 transition-colors hover:bg-surface-2"
+      >
+        Open Readiness
+        <ArrowUpRight size={12} strokeWidth={2} aria-hidden />
+      </a>
+
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
