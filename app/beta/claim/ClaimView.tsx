@@ -195,6 +195,78 @@ function AskEarn({ token, onClose }: { token: string; onClose: () => void }) {
   );
 }
 
+/**
+ * Centered, accessible modal wrapper for Ask Earn on the splash. Mirrors the
+ * shared Drawer's a11y contract: dialog semantics, Escape to close, a focus
+ * trap, focus restore to the opener on close, and body-scroll lock.
+ */
+function AskEarnModal({ token, onClose }: { token: string; onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const prevActiveRef = useRef<Element | null>(null);
+
+  useEffect(() => {
+    prevActiveRef.current = document.activeElement;
+    const id = requestAnimationFrame(() => {
+      panelRef.current
+        ?.querySelector<HTMLElement>(
+          'input, textarea, select, button, [tabindex]:not([tabindex="-1"])'
+        )
+        ?.focus();
+    });
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      cancelAnimationFrame(id);
+      document.body.style.overflow = prevOverflow;
+      if (prevActiveRef.current instanceof HTMLElement) prevActiveRef.current.focus();
+    };
+  }, []);
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onClose();
+      return;
+    }
+    if (e.key !== 'Tab' || !panelRef.current) return;
+    const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+      'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ask Earn"
+      onKeyDown={onKeyDown}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        ref={panelRef}
+        className="relative motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150"
+      >
+        <AskEarn token={token} onClose={onClose} />
+      </div>
+    </div>
+  );
+}
+
 function withLastAssistant(turns: Turn[], content: string): Turn[] {
   const copy = [...turns];
   for (let i = copy.length - 1; i >= 0; i--) {
@@ -852,19 +924,11 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
         </button>
       )}
 
-      {/* On the splash, Ask Earn opens as an intentional centered modal; once the
-          guided conversation is underway it docks bottom-right out of the way. */}
+      {/* On the splash, Ask Earn opens as an intentional centered modal (focus-
+          trapped, Escape-closable); once the guided conversation is underway it
+          docks bottom-right out of the way. */}
       {askOpen && step === 'intro' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-            onClick={() => setAskOpen(false)}
-            aria-hidden
-          />
-          <div className="relative motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150">
-            <AskEarn token={token} onClose={() => setAskOpen(false)} />
-          </div>
-        </div>
+        <AskEarnModal token={token} onClose={() => setAskOpen(false)} />
       )}
       {askOpen && step !== 'intro' && (
         <div className="fixed bottom-5 right-5 z-40">
