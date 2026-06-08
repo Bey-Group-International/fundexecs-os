@@ -108,12 +108,12 @@ export default async function SettingsPage() {
     configured: false
   };
   // Admin section access has two tiers:
-  //  • 'platform' — the Bey Group team (@beygroupintl.com): the full portal with
-  //    member/role/invite actions across the workspace.
-  //  • 'org' — an org owner/admin on their OWN workspace: a READ-ONLY, org-scoped
-  //    view (their team, launch readiness, and workspace activity). RLS keeps
-  //    every read inside their org; no platform-only data (applications,
-  //    referrals) is loaded, and the UI exposes no mutating controls.
+  //  • 'platform' — the Bey Group team (@beygroupintl.com): the full portal,
+  //    including the invite/auth-minting flows and platform-wide surfaces.
+  //  • 'org' — an org owner/admin on their OWN workspace: an org-scoped view
+  //    (their team, launch readiness, activity) where they can manage their own
+  //    members' roles + archive, but NOT mint invites. RLS keeps every read
+  //    inside their org; platform-only data (applications, referrals) isn't loaded.
   //  • null — no admin surface (a normal member).
   let adminScope: 'platform' | 'org' | null = null;
   let adminData: AdminData | null = null;

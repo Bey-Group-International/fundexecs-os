@@ -380,7 +380,8 @@ function UsersPanel({
   viewerRole,
   rowErrors,
   pendingId,
-  readOnly = false,
+  canInvite = true,
+  canManageMembers = true,
   onApprove,
   onArchive,
   onRole
@@ -392,8 +393,10 @@ function UsersPanel({
   viewerRole: OrgMemberRole | null;
   rowErrors: Record<string, string>;
   pendingId: string | null;
-  /** Read-only (org-scoped) view: no invite / role / approve / archive controls. */
-  readOnly?: boolean;
+  /** Show the invite control (platform-only — invites mint auth users). */
+  canInvite?: boolean;
+  /** Show member controls: role menu + approve/archive (owners/admins of the org). */
+  canManageMembers?: boolean;
   onApprove: (id: string) => void;
   onArchive: (id: string) => void;
   onRole: (id: string, role: OrgMemberRole) => void;
@@ -449,7 +452,7 @@ function UsersPanel({
               aria-label="Search members"
             />
           </div>
-          {!readOnly && (
+          {canInvite && (
             <Button
               variant="primary"
               size="sm"
@@ -462,7 +465,7 @@ function UsersPanel({
         </div>
       </div>
 
-      {!readOnly && inviteOpen ? <InviteMemberPanel onClose={() => setInviteOpen(false)} /> : null}
+      {canInvite && inviteOpen ? <InviteMemberPanel onClose={() => setInviteOpen(false)} /> : null}
 
       {filtered.length === 0 ? (
         <Card className="p-10 text-center text-[13px] text-fg-5">
@@ -473,13 +476,15 @@ function UsersPanel({
           <div
             className={cn(
               'grid gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4',
-              readOnly ? 'grid-cols-[1.8fr_1.1fr_0.9fr]' : 'grid-cols-[1.8fr_1.1fr_0.9fr_1fr]'
+              canManageMembers
+                ? 'grid-cols-[1.8fr_1.1fr_0.9fr_1fr]'
+                : 'grid-cols-[1.8fr_1.1fr_0.9fr]'
             )}
           >
             <span>Member</span>
             <span>Role</span>
             <span>Status</span>
-            {!readOnly && <span>Actions</span>}
+            {canManageMembers && <span>Actions</span>}
           </div>
           <div className="h-px bg-hairline" />
           {filtered.map((m) => {
@@ -493,7 +498,9 @@ function UsersPanel({
                 key={m.id}
                 className={cn(
                   'grid items-center gap-2 border-b border-hairline-faint px-3 py-2.5 last:border-b-0',
-                  readOnly ? 'grid-cols-[1.8fr_1.1fr_0.9fr]' : 'grid-cols-[1.8fr_1.1fr_0.9fr_1fr]'
+                  canManageMembers
+                    ? 'grid-cols-[1.8fr_1.1fr_0.9fr_1fr]'
+                    : 'grid-cols-[1.8fr_1.1fr_0.9fr]'
                 )}
               >
                 <div className="flex min-w-0 items-center gap-2.5">
@@ -504,11 +511,7 @@ function UsersPanel({
                   </div>
                 </div>
                 <div>
-                  {readOnly ? (
-                    <Badge tone={role === 'owner' ? 'gold' : 'azure'} className="text-[10px]">
-                      {ROLE_LABEL[role]}
-                    </Badge>
-                  ) : (
+                  {canManageMembers ? (
                     <RoleMenu
                       role={role}
                       canGrantOwner={viewerRole === 'owner'}
@@ -516,6 +519,10 @@ function UsersPanel({
                       pending={pendingId === m.id}
                       onChange={(next) => onRole(m.id, next)}
                     />
+                  ) : (
+                    <Badge tone={role === 'owner' ? 'gold' : 'azure'} className="text-[10px]">
+                      {ROLE_LABEL[role]}
+                    </Badge>
                   )}
                 </div>
                 <div>
@@ -523,7 +530,7 @@ function UsersPanel({
                     {status}
                   </Badge>
                 </div>
-                {!readOnly && (
+                {canManageMembers && (
                   <div className="flex gap-1.5">
                     {status === 'Pending' && (
                       <button
@@ -811,7 +818,11 @@ export function AdminView({
   referralOverview: ReferralOverview | null;
   viewerRole: OrgMemberRole | null;
 }) {
-  const readOnly = scope === 'org';
+  // Org owners/admins manage their OWN team (roles, approve/archive) but the
+  // invite/auth-minting flows stay platform-only.
+  const isOrg = scope === 'org';
+  const canInvite = !isOrg;
+  const canManageMembers = true;
   const [tab, setTab] = useState<Tab>('overview');
   const router = useRouter();
   // Member rows share the card lifecycle: approving an applicant "completes"
@@ -957,7 +968,7 @@ export function AdminView({
   // metrics) stay reserved for the Bey Group team.
   const allTabs = [
     { id: 'overview' as const, label: 'Overview', icon: LayoutDashboard },
-    { id: 'users' as const, label: readOnly ? 'Team' : 'Users & roles', icon: Users },
+    { id: 'users' as const, label: isOrg ? 'Team' : 'Users & roles', icon: Users },
     {
       id: 'applications' as const,
       label: 'Applications',
@@ -973,7 +984,7 @@ export function AdminView({
     { id: 'knowledge' as const, label: 'Knowledge base', icon: BrainCircuit }
   ];
   const ORG_VISIBLE: Tab[] = ['overview', 'users', 'activity'];
-  const tabs = readOnly ? allTabs.filter((t) => ORG_VISIBLE.includes(t.id)) : allTabs;
+  const tabs = isOrg ? allTabs.filter((t) => ORG_VISIBLE.includes(t.id)) : allTabs;
   // Jump targets the Overview panel may deep-link to (everything except the
   // overview tab itself), bounded to the tabs actually visible in this scope.
   const launchVisibleTabs = tabs
@@ -984,14 +995,14 @@ export function AdminView({
     <div className="flex flex-col gap-[18px]">
       <div className="flex items-end justify-between">
         <SectionTitle
-          eyebrow={readOnly ? 'Workspace administration' : 'Platform administration'}
-          title={readOnly ? 'Workspace admin' : 'Admin portal'}
+          eyebrow={isOrg ? 'Workspace administration' : 'Platform administration'}
+          title={isOrg ? 'Workspace admin' : 'Admin portal'}
           className="mb-0"
         />
-        <Badge tone={readOnly ? 'azure' : 'gold'} dot>
+        <Badge tone={isOrg ? 'azure' : 'gold'} dot>
           <span className="inline-flex items-center gap-1.5">
             <Shield size={11} strokeWidth={1.9} aria-hidden />
-            {readOnly ? 'Org admin · read-only' : 'Admin access'}
+            {isOrg ? 'Org admin' : 'Admin access'}
           </span>
         </Badge>
       </div>
@@ -1022,7 +1033,8 @@ export function AdminView({
           viewerRole={viewerRole}
           rowErrors={rowErrors}
           pendingId={pendingId}
-          readOnly={readOnly}
+          canInvite={canInvite}
+          canManageMembers={canManageMembers}
           onApprove={approve}
           onArchive={archive}
           onRole={changeRole}

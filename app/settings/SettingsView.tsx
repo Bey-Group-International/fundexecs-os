@@ -648,7 +648,7 @@ export function SettingsView({
   // read-only, org-scoped view, so promise that rather than the owner controls.
   const adminUnlocks =
     adminScope === 'org'
-      ? 'Read-only — your team, launch readiness, and workspace activity.'
+      ? 'Your team & roles, launch readiness, and workspace activity.'
       : SECTIONS.find((s) => s.id === 'admin')!.unlocks;
   const unlocksFor = (s: SettingsSection) => (s.id === 'admin' ? adminUnlocks : s.unlocks);
 
