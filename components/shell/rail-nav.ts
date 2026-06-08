@@ -50,7 +50,8 @@ export type RailGroupKey = 'build' | 'source' | 'run' | 'drive';
 
 /** A nested third-tier row (e.g. Capital → Equity/Debt/Hybrid). */
 export interface RailSubItem {
-  href: string;
+  /** Route to navigate to. Omit for an unbuilt "soon" sub-row. */
+  href?: string;
   label: string;
   live?: boolean;
   hint?: string;
@@ -163,7 +164,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         'Source new deals and capital that fit my thesis, and match them against my record. Show the strongest fits and why.'
     },
     items: [
-      { href: '/deal-desk', label: 'Deals', icon: Briefcase, live: true, hint: 'Your deal flow' },
+      {
+        href: '/deal-desk?view=sourcing',
+        label: 'Deals',
+        icon: Briefcase,
+        live: true,
+        hint: 'Screen incoming deal flow'
+      },
       {
         href: '/pipeline',
         label: 'LPs',
@@ -263,9 +270,9 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         icon: Target,
         hint: 'Pre-acquisition → exit',
         children: [
-          { label: 'Pre-Acquisition', href: '', live: false },
-          { label: 'Post-Acquisition', href: '', live: false },
-          { label: 'Exit', href: '', live: false }
+          { label: 'Pre-Acquisition', live: false },
+          { label: 'Post-Acquisition', live: false },
+          { label: 'Exit', live: false }
         ]
       }
     ]
@@ -281,7 +288,10 @@ export const STAGE_TO_GROUP_KEYS: Record<LifecycleStage, readonly RailGroupKey[]
   get_raise_ready: ['build'],
   source_lps: ['source'],
   convert_lps: ['source'],
-  source_deals: ['source'],
+  // "Source & execute deals" spans sourcing (Deals) and diligence/decide (Run).
+  source_deals: ['source', 'run'],
   operate: ['run'],
-  prove: ['drive']
+  // "Prove & compound" — record proof in Chain of Trust (Build) and close out
+  // via Execute/Exit (Drive); the loop feeds back into Build.
+  prove: ['build', 'drive']
 };

@@ -663,7 +663,7 @@ function NavParent({
               const isSoon = !sub.href || sub.live === false;
               return (
                 <li key={subKey}>
-                  {isSoon ? (
+                  {isSoon || !sub.href ? (
                     <div
                       title={sub.hint}
                       className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[12px] text-fg-5"
