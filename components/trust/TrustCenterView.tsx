@@ -352,18 +352,24 @@ function ApprovalRow({
   function decide(decision: 'approved' | 'rejected') {
     setError(null);
     startTransition(async () => {
-      const r = await approveEvidence({
-        evidenceId: item.evidenceId,
-        decision,
-        rejectionReason: decision === 'rejected' ? reason : undefined
-      });
-      if (!r.ok) {
-        setError(r.error);
-        return;
+      try {
+        const r = await approveEvidence({
+          evidenceId: item.evidenceId,
+          decision,
+          rejectionReason: decision === 'rejected' ? reason : undefined
+        });
+        if (!r.ok) {
+          setError(r.error);
+          return;
+        }
+        setShowReject(false);
+        setReason('');
+        onDone();
+      } catch (err) {
+        // approveEvidence normally returns { ok: false }, but a thrown error
+        // (e.g. the Supabase client itself failing) must still reach the UI.
+        setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       }
-      setShowReject(false);
-      setReason('');
-      onDone();
     });
   }
 

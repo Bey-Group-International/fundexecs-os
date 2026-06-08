@@ -239,8 +239,12 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
   }[];
   const allocs = (allocRaw ?? []) as { amount: number | null; status: string }[];
 
-  if (records.length === 0) {
-    return { ...emptyData(viewerId, canApprove), empty: deals.length === 0 };
+  // Only short-circuit to the empty state when there's nothing at all. An org
+  // with active deals but no chains yet should still see its capital posture
+  // (exposed capital + a "start a Chain of Trust" action), so we fall through
+  // and merely skip the proof_layers / evidence lookups when records is empty.
+  if (records.length === 0 && deals.length === 0) {
+    return { ...emptyData(viewerId, canApprove), empty: true };
   }
 
   const recordIds = records.map((r) => r.id);
@@ -248,12 +252,17 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
 
   // Layers for every record. (Event history is owned by the Audit Trail at
   // /audit — the Trust Center deliberately does not re-render that log.)
-  const { data: layersRaw } = await supabase
-    .from('proof_layers')
-    .select(
-      'id, chain_record_id, layer_name, layer_order, human_approval_status, completion_percentage'
-    )
-    .in('chain_record_id', recordIds);
+  // Skip the lookup for a deals-only org (no records → nothing to fetch).
+  const layersRaw = recordIds.length
+    ? (
+        await supabase
+          .from('proof_layers')
+          .select(
+            'id, chain_record_id, layer_name, layer_order, human_approval_status, completion_percentage'
+          )
+          .in('chain_record_id', recordIds)
+      ).data
+    : [];
 
   const layers = (layersRaw ?? []) as {
     id: string;
@@ -323,7 +332,9 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
   }
   function capitalFor(rec: (typeof records)[number]): number {
     if (rec.entity_type === 'deal') {
-      return Math.max(dealById.get(rec.entity_id)?.amount ?? 0, CAPITAL_FLOOR);
+      // Use the deal's real amount — the floor is reserved for non-deal chains
+      // so a small deal isn't ranked/weighted as if it were CAPITAL_FLOOR.
+      return dealById.get(rec.entity_id)?.amount ?? 0;
     }
     return CAPITAL_FLOOR;
   }
@@ -538,7 +549,11 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
 
   // Clear the approval queue.
   if (approvals.length > 0) {
-    const gated = approvals.reduce((sum, a) => sum + a.capitalAtStake, 0);
+    // Capital-at-stake is per chain, so dedupe by record before summing —
+    // two pending files on the same chain must not double-count the capital.
+    const gated = Array.from(
+      new Map(approvals.map((a) => [a.recordId, a.capitalAtStake])).values()
+    ).reduce((sum, capital) => sum + capital, 0);
     nextActions.push({
       key: 'approve-queue',
       kind: 'approve',

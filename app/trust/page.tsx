@@ -24,8 +24,16 @@ export const metadata: Metadata = {
  * remains the home for the full event log — this page drives action, not history.
  */
 export default async function TrustPage() {
-  const org = await getActiveOrg().catch(() => null);
-  const data = org ? await getTrustCenterData(org.orgId).catch(() => null) : null;
+  const org = await getActiveOrg().catch((err) => {
+    console.error('[TrustPage] Failed to resolve active org:', err);
+    return null;
+  });
+  const data = org
+    ? await getTrustCenterData(org.orgId).catch((err) => {
+        console.error('[TrustPage] Failed to load trust center data:', err);
+        return null;
+      })
+    : null;
 
   return (
     <AuthedShell title="Trust Center" subtitle="Chain of Trust" redirectFrom="/trust">
