@@ -5,6 +5,8 @@ import { FundOverviewCard } from './FundOverviewCard';
 import { DocumentVaultList } from './DocumentVaultList';
 import { UpdateFeed } from './UpdateFeed';
 import { CommitmentTracker } from './CommitmentTracker';
+import { DistributionsFeed } from './DistributionsFeed';
+import { CapitalAccountCard } from './CapitalAccountCard';
 import { LpQAChat } from './LpQAChat';
 import type { LpQuestionDraft, LpRoomData } from './types';
 
@@ -42,11 +44,13 @@ export function LpRoom({ data, onOpenDocument, onSubmitQuestion }: LpRoomProps) 
   return (
     <div className="flex flex-col gap-[18px]" data-testid="lp-room">
       <FundOverviewCard fund={data.fund} />
+      <CapitalAccountCard summary={data.capitalAccount} isSample={data.isCapitalDataSample} />
       <CommitmentTracker snapshot={data.commitments} />
       <div className="grid gap-[18px] lg:grid-cols-[1.4fr_1fr]">
         <UpdateFeed updates={data.updates} />
         <DocumentVaultList documents={data.documents} onOpen={handleOpenDocument} />
       </div>
+      <DistributionsFeed distributions={data.distributions} isSample={data.isCapitalDataSample} />
       <LpQAChat questions={data.questions} onSubmit={handleSubmitQuestion} />
     </div>
   );

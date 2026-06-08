@@ -186,6 +186,48 @@ export interface LpQuestionDraft {
 }
 
 /* ----------------------------------------------------------------------------
+ * DistributionsFeed
+ * --------------------------------------------------------------------------*/
+
+export type DistributionKind =
+  | 'return_of_capital'
+  | 'profit'
+  | 'dividend'
+  | 'recallable'
+  | 'special'
+  | 'other';
+
+export type DistributionStatus = 'pending' | 'paid' | 'cancelled';
+
+export interface DistributionItem {
+  id: string;
+  /** ISO date string (YYYY-MM-DD) or short label ("Mar 15, 2026"). */
+  distributionDate: string;
+  kind: DistributionKind;
+  /** Amount in base currency (numeric). */
+  amount: number;
+  status: DistributionStatus;
+  memo: string | null;
+}
+
+/* ----------------------------------------------------------------------------
+ * CapitalAccountCard
+ * --------------------------------------------------------------------------*/
+
+export interface CapitalAccountSummaryData {
+  /** Total commitment entries (numeric, base currency). */
+  committed: number;
+  /** Total capital called (numeric). */
+  called: number;
+  /** Total distributions paid out (numeric). */
+  distributed: number;
+  /** Latest NAV balance from entries, or null when unavailable. */
+  navBalance: number | null;
+  /** Ordered balance_after series for the sparkline. */
+  balanceSeries: number[];
+}
+
+/* ----------------------------------------------------------------------------
  * Page-level composition prop
  * --------------------------------------------------------------------------*/
 
@@ -195,4 +237,10 @@ export interface LpRoomData {
   updates: LpUpdate[];
   commitments: CommitmentSnapshot;
   questions: LpQuestion[];
+  /** Distributions feed. Empty array when no DB data (honest empty state). */
+  distributions: DistributionItem[];
+  /** Capital account summary derived from ledger entries. */
+  capitalAccount: CapitalAccountSummaryData;
+  /** True when distributions + capital account entries are sample/fixture data. */
+  isCapitalDataSample?: boolean;
 }

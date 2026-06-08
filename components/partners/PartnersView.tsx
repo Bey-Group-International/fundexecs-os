@@ -1,19 +1,38 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Users, Building2, CircleDollarSign, Search, Handshake, Sparkles } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import {
+  Users,
+  Building2,
+  CircleDollarSign,
+  Search,
+  Handshake,
+  Sparkles,
+  CheckCircle2,
+  Clock,
+  SendHorizonal,
+  X
+} from 'lucide-react';
 import {
   Avatar,
   Badge,
+  Button,
   Card,
   Input,
+  Select,
   SegTabs,
   SectionTitle,
   type BadgeTone,
   type TabItem
 } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
-import type { PartnersData, ServiceProvider, CapitalProvider } from '@/lib/queries/partners';
+import { requestPartnerIntro } from '@/lib/actions/partners';
+import type {
+  PartnersData,
+  ServiceProvider,
+  CapitalProvider,
+  IntroStatusMap
+} from '@/lib/queries/partners';
 
 /* ---- Helpers ------------------------------------------------------------ */
 
@@ -36,20 +55,114 @@ function statusTone(status: string): BadgeTone {
   return 'neutral';
 }
 
-const FILTER_TABS: TabItem[] = [
+/**
+ * Tone rail metadata for a partner card — mirrors the scoreMeta pattern in
+ * MatchInboxView so directory cards scan the same way as match cards.
+ */
+function partnerMeta(type: 'service' | 'capital'): { accent: string; tone: BadgeTone } {
+  if (type === 'capital') return { accent: 'var(--gold-1)', tone: 'gold' };
+  return { accent: 'var(--azure-1)', tone: 'azure' };
+}
+
+const TYPE_TABS: TabItem[] = [
   { id: 'all', label: 'All' },
-  { id: 'service', label: 'Service Providers' },
-  { id: 'capital', label: 'Capital Providers' }
+  { id: 'service', label: 'Service' },
+  { id: 'capital', label: 'Capital' }
 ];
+
+const ALL_VALUE = '__all__';
+
+/* ---- Apply button -------------------------------------------------------- */
+
+interface ApplyButtonProps {
+  partnerId: string;
+  partnerName: string;
+  partnerType: 'service_provider' | 'capital_provider';
+  initialStatus: string | undefined;
+}
+
+function ApplyButton({ partnerId, partnerName, partnerType, initialStatus }: ApplyButtonProps) {
+  const [status, setStatus] = useState<string | undefined>(initialStatus);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  if (status === 'requested') {
+    return (
+      <div className="flex items-center gap-1.5 text-[12px] text-fg-4">
+        <Clock size={13} strokeWidth={1.9} aria-hidden />
+        <span>Request sent</span>
+      </div>
+    );
+  }
+
+  if (status === 'accepted' || status === 'introduced') {
+    return (
+      <div className="flex items-center gap-1.5 text-[12px] text-success">
+        <CheckCircle2 size={13} strokeWidth={1.9} aria-hidden />
+        <span>Intro accepted</span>
+      </div>
+    );
+  }
+
+  function handleApply() {
+    setError(null);
+    startTransition(async () => {
+      const result = await requestPartnerIntro({
+        partnerId,
+        partnerName,
+        partnerType,
+        rationale: undefined
+      });
+      if (result.ok) {
+        setStatus(result.status);
+      } else {
+        setError(result.error);
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Button
+        size="sm"
+        variant="primary"
+        icon={SendHorizonal}
+        disabled={pending}
+        onClick={handleApply}
+      >
+        {pending ? 'Requesting…' : 'Request intro'}
+      </Button>
+      {error ? (
+        <p className="flex items-center gap-1 text-[11px] text-danger">
+          <X size={11} strokeWidth={2} aria-hidden />
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 /* ---- Service provider card --------------------------------------------- */
 
-function ServiceCard({ provider }: { provider: ServiceProvider }) {
+function ServiceCard({
+  provider,
+  introStatus
+}: {
+  provider: ServiceProvider;
+  introStatus: IntroStatusMap;
+}) {
   const caps = Object.keys(provider.capabilities);
+  const { accent } = partnerMeta('service');
 
   return (
-    <Card clickable className="flex flex-col gap-3 p-4">
-      <div className="flex items-start gap-3">
+    <Card className="relative flex flex-col gap-3 overflow-hidden p-4">
+      {/* Tone accent rail */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: accent }}
+      />
+      <div className="flex items-start gap-3 pl-3">
         <Avatar name={provider.name} size={38} tone="azure" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -66,7 +179,7 @@ function ServiceCard({ provider }: { provider: ServiceProvider }) {
       </div>
 
       {caps.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 border-t border-hairline pt-3">
+        <div className="flex flex-wrap gap-1.5 border-t border-hairline pl-3 pt-3">
           {caps.slice(0, 5).map((cap) => (
             <span
               key={cap}
@@ -82,18 +195,40 @@ function ServiceCard({ provider }: { provider: ServiceProvider }) {
           ) : null}
         </div>
       ) : null}
+
+      <div className="border-t border-hairline pl-3 pt-3">
+        <ApplyButton
+          partnerId={provider.id}
+          partnerName={provider.name}
+          partnerType="service_provider"
+          initialStatus={introStatus[provider.id]}
+        />
+      </div>
     </Card>
   );
 }
 
 /* ---- Capital provider card --------------------------------------------- */
 
-function CapitalCard({ provider }: { provider: CapitalProvider }) {
+function CapitalCard({
+  provider,
+  introStatus
+}: {
+  provider: CapitalProvider;
+  introStatus: IntroStatusMap;
+}) {
   const hasCheck = provider.checkSizeMin != null || provider.checkSizeMax != null;
+  const { accent } = partnerMeta('capital');
 
   return (
-    <Card clickable className="flex flex-col gap-3 p-4">
-      <div className="flex items-start gap-3">
+    <Card className="relative flex flex-col gap-3 overflow-hidden p-4">
+      {/* Tone accent rail */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: accent }}
+      />
+      <div className="flex items-start gap-3 pl-3">
         <Avatar name={provider.name} size={38} tone="gold" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -113,7 +248,7 @@ function CapitalCard({ provider }: { provider: CapitalProvider }) {
       </div>
 
       {hasCheck ? (
-        <div className="flex items-center gap-1.5 rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-1.5 text-[12px] text-gold-1">
+        <div className="flex items-center gap-1.5 rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-1.5 pl-5 text-[12px] text-gold-1">
           <CircleDollarSign size={13} strokeWidth={2} aria-hidden />
           <span className="font-semibold tabular-nums">
             {provider.checkSizeMin != null ? money(provider.checkSizeMin) : '—'}
@@ -125,7 +260,7 @@ function CapitalCard({ provider }: { provider: CapitalProvider }) {
       ) : null}
 
       {provider.capitalTypes.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 border-t border-hairline pt-3">
+        <div className="flex flex-wrap gap-1.5 border-t border-hairline pl-3 pt-3">
           {provider.capitalTypes.map((t) => (
             <span
               key={t}
@@ -136,6 +271,15 @@ function CapitalCard({ provider }: { provider: CapitalProvider }) {
           ))}
         </div>
       ) : null}
+
+      <div className="border-t border-hairline pl-3 pt-3">
+        <ApplyButton
+          partnerId={provider.id}
+          partnerName={provider.name}
+          partnerType="capital_provider"
+          initialStatus={introStatus[provider.id]}
+        />
+      </div>
     </Card>
   );
 }
@@ -209,28 +353,10 @@ export interface PartnersViewProps {
 }
 
 export function PartnersView({ data }: PartnersViewProps) {
-  const [filter, setFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL_VALUE);
+  const [capitalTypeFilter, setCapitalTypeFilter] = useState<string>(ALL_VALUE);
   const [query, setQuery] = useState('');
-
-  const filteredSP = useMemo(() => {
-    if (!query.trim()) return data.serviceProviders;
-    const q = query.toLowerCase();
-    return data.serviceProviders.filter(
-      (p) => p.name.toLowerCase().includes(q) || (p.category?.toLowerCase().includes(q) ?? false)
-    );
-  }, [data.serviceProviders, query]);
-
-  const filteredCP = useMemo(() => {
-    if (!query.trim()) return data.capitalProviders;
-    const q = query.toLowerCase();
-    return data.capitalProviders.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) || p.capitalTypes.some((t) => t.toLowerCase().includes(q))
-    );
-  }, [data.capitalProviders, query]);
-
-  const showSP = filter === 'all' || filter === 'service';
-  const showCP = filter === 'all' || filter === 'capital';
 
   if (data.empty) {
     return (
@@ -255,7 +381,49 @@ export function PartnersView({ data }: PartnersViewProps) {
     );
   }
 
-  const totalVisible = (showSP ? filteredSP.length : 0) + (showCP ? filteredCP.length : 0);
+  // Plain derived state — no useMemo per repo lint rules.
+  const showSP = typeFilter === 'all' || typeFilter === 'service';
+  const showCP = typeFilter === 'all' || typeFilter === 'capital';
+  const q = query.trim().toLowerCase();
+
+  const filteredSP = showSP
+    ? data.serviceProviders.filter((p) => {
+        if (categoryFilter !== ALL_VALUE && p.category !== categoryFilter) return false;
+        if (
+          q &&
+          !p.name.toLowerCase().includes(q) &&
+          !(p.category?.toLowerCase().includes(q) ?? false)
+        )
+          return false;
+        return true;
+      })
+    : [];
+
+  const filteredCP = showCP
+    ? data.capitalProviders.filter((p) => {
+        if (capitalTypeFilter !== ALL_VALUE && !p.capitalTypes.includes(capitalTypeFilter))
+          return false;
+        if (
+          q &&
+          !p.name.toLowerCase().includes(q) &&
+          !p.capitalTypes.some((t) => t.toLowerCase().includes(q))
+        )
+          return false;
+        return true;
+      })
+    : [];
+
+  const totalVisible = filteredSP.length + filteredCP.length;
+
+  // Build dropdown options from facets — only shown when the relevant type tab is active.
+  const categoryOptions = data.facets.categories.map((c) => ({
+    value: c,
+    label: humanize(c)
+  }));
+  const capitalTypeOptions = data.facets.capitalTypes.map((t) => ({
+    value: t,
+    label: humanize(t)
+  }));
 
   return (
     <div className="space-y-6">
@@ -264,17 +432,48 @@ export function PartnersView({ data }: PartnersViewProps) {
         capitalCount={data.capitalProviders.length}
       />
 
-      {/* Controls */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <SegTabs tabs={FILTER_TABS} active={filter} onChange={setFilter} />
-        <div className="w-full sm:w-64">
-          <Input
-            icon={Search}
-            placeholder="Search partners…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+      {/* Filter rail */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <SegTabs tabs={TYPE_TABS} active={typeFilter} onChange={setTypeFilter} />
+          <div className="w-full sm:w-64">
+            <Input
+              icon={Search}
+              placeholder="Search partners…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
         </div>
+
+        {/* Secondary facet filters */}
+        {(showSP && categoryOptions.length > 0) || (showCP && capitalTypeOptions.length > 0) ? (
+          <div className="flex flex-wrap gap-3">
+            {showSP && categoryOptions.length > 0 ? (
+              <div className="w-52">
+                <Select
+                  options={[{ value: ALL_VALUE, label: 'All categories' }, ...categoryOptions]}
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  aria-label="Filter by category"
+                />
+              </div>
+            ) : null}
+            {showCP && capitalTypeOptions.length > 0 ? (
+              <div className="w-52">
+                <Select
+                  options={[
+                    { value: ALL_VALUE, label: 'All capital types' },
+                    ...capitalTypeOptions
+                  ]}
+                  value={capitalTypeFilter}
+                  onChange={(e) => setCapitalTypeFilter(e.target.value)}
+                  aria-label="Filter by capital type"
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {totalVisible === 0 ? (
@@ -286,7 +485,7 @@ export function PartnersView({ data }: PartnersViewProps) {
       ) : (
         <>
           {/* Service providers */}
-          {showSP && filteredSP.length > 0 ? (
+          {filteredSP.length > 0 ? (
             <section aria-label="Service providers">
               <SectionTitle
                 eyebrow="Execution partners"
@@ -299,14 +498,14 @@ export function PartnersView({ data }: PartnersViewProps) {
               />
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredSP.map((p) => (
-                  <ServiceCard key={p.id} provider={p} />
+                  <ServiceCard key={p.id} provider={p} introStatus={data.introStatus} />
                 ))}
               </div>
             </section>
           ) : null}
 
           {/* Capital providers */}
-          {showCP && filteredCP.length > 0 ? (
+          {filteredCP.length > 0 ? (
             <section aria-label="Capital providers">
               <SectionTitle
                 eyebrow="Capital relationships"
@@ -319,7 +518,7 @@ export function PartnersView({ data }: PartnersViewProps) {
               />
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredCP.map((p) => (
-                  <CapitalCard key={p.id} provider={p} />
+                  <CapitalCard key={p.id} provider={p} introStatus={data.introStatus} />
                 ))}
               </div>
             </section>

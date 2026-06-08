@@ -6,9 +6,8 @@ import { createClient } from '@/lib/supabase/server';
  *
  * Reads both `service_providers` (legal, compliance, admin, tech, etc.) and
  * `capital_providers` (LPs, family offices, fund-of-funds, etc.) for the
- * org and returns a unified directory. Claude's backend may extend the shape
- * with contact details or relationship metadata — the UI binds to these typed
- * contracts and falls back gracefully when tables are empty.
+ * org and returns a unified directory. Also surfaces any pending intro
+ * requests the viewer has submitted so the UI can show per-card status.
  * ========================================================================= */
 
 export interface ServiceProvider {
@@ -31,16 +30,30 @@ export interface CapitalProvider {
   createdAt: string;
 }
 
+/** Facets derived from real data for filter dropdowns. */
+export interface PartnerFacets {
+  /** Distinct non-null categories from service_providers. */
+  categories: string[];
+  /** Distinct capital_type values across all capital_providers. */
+  capitalTypes: string[];
+}
+
+/** Sparse map of partner_id → intro request status (only if a request exists). */
+export type IntroStatusMap = Record<string, string>;
+
 export interface PartnersData {
   serviceProviders: ServiceProvider[];
   capitalProviders: CapitalProvider[];
+  facets: PartnerFacets;
+  /** Intro request status keyed by partner id, for the current user/org. */
+  introStatus: IntroStatusMap;
   empty: boolean;
 }
 
 export async function getPartnersData(orgId: string): Promise<PartnersData> {
   const supabase = await createClient();
 
-  const [spResult, cpResult] = await Promise.all([
+  const [spResult, cpResult, introResult] = await Promise.all([
     supabase
       .from('service_providers')
       .select('id, name, category, status, capabilities, created_at')
@@ -53,7 +66,13 @@ export async function getPartnersData(orgId: string): Promise<PartnersData> {
         'id, name, status, capital_types, check_size_min, check_size_max, criteria, created_at'
       )
       .eq('org_id', orgId)
-      .order('name')
+      .order('name'),
+
+    supabase
+      .from('partner_intro_requests')
+      .select('partner_id, status')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
   ]);
 
   const serviceProviders: ServiceProvider[] = (spResult.data ?? []).map((r) => ({
@@ -76,6 +95,31 @@ export async function getPartnersData(orgId: string): Promise<PartnersData> {
     createdAt: r.created_at
   }));
 
+  // Derive real facets from loaded data.
+  const categories = Array.from(
+    new Set(serviceProviders.map((p) => p.category).filter((c): c is string => Boolean(c)))
+  ).sort();
+
+  const capitalTypesSet = new Set<string>();
+  for (const cp of capitalProviders) {
+    for (const t of cp.capitalTypes) capitalTypesSet.add(t);
+  }
+  const capitalTypes = Array.from(capitalTypesSet).sort();
+
+  // Build intro status map (most-recent request per partner).
+  const introStatus: IntroStatusMap = {};
+  for (const row of introResult.data ?? []) {
+    if (!introStatus[row.partner_id]) {
+      introStatus[row.partner_id] = row.status;
+    }
+  }
+
   const empty = serviceProviders.length === 0 && capitalProviders.length === 0;
-  return { serviceProviders, capitalProviders, empty };
+  return {
+    serviceProviders,
+    capitalProviders,
+    facets: { categories, capitalTypes },
+    introStatus,
+    empty
+  };
 }
