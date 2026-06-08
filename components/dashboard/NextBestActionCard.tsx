@@ -51,7 +51,7 @@ export function NextBestActionCard({ action, className }: NextBestActionCardProp
       }
     >
       <SectionTitle
-        eyebrow="Next best action · Earn"
+        eyebrow="The one move that compounds · Earn"
         title="Your highest-leverage move"
         className="mb-3"
       />

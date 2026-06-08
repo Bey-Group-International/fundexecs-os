@@ -119,8 +119,8 @@ export function ExecutionScoreCard({ execution, className }: ExecutionScoreCardP
         }}
       />
       <SectionTitle
-        eyebrow="Execution score · Chain of Trust"
-        title="Documented as it forms"
+        eyebrow="Execution Alpha · Chain of Trust"
+        title="Proof of work, compounding"
         className="mb-3"
       />
 
