@@ -59,7 +59,7 @@ export function templatedBrief(input: LaunchBriefInput): LaunchBrief {
     ? `Welcome, ${firstName}. You're here as ${aOrAn(role)} ${role}, and your next 90 days are about: ${trimEnd(objective)}.`
     : `Welcome, ${firstName}. You're set up as ${aOrAn(role)} ${role} — here's where to start.`;
 
-  const moves: BriefMove[] = FIRST_MOVES[input.memberType].map((m) => ({
+  const moves: BriefMove[] = FIRST_MOVES[input.memberType].moves.map((m) => ({
     label: m.label,
     detail: m.detail,
     href: m.href
@@ -127,7 +127,7 @@ export const LAUNCH_BRIEF_TOOL: Anthropic.Tool = {
 
 /** Build the per-request user turn from the member's context + allowed hrefs. */
 export function buildBriefPrompt(input: LaunchBriefInput): string {
-  const allowed = Array.from(new Set(FIRST_MOVES[input.memberType].map((m) => m.href)));
+  const allowed = Array.from(new Set(FIRST_MOVES[input.memberType].moves.map((m) => m.href)));
   const lines = [
     `Member type: ${MEMBER_TYPE_LABELS[input.memberType]}.`,
     input.displayName ? `Name: ${input.displayName}.` : null,
