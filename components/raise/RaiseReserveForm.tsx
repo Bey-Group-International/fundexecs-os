@@ -1,51 +1,36 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { ArrowRight, CheckCircle2 } from 'lucide-react';
-import { submitRaiseInterest } from '@/lib/actions/raise-interest';
+import { ArrowRight, CheckCircle2, Info } from 'lucide-react';
+import { submitRaiseReservation } from '@/lib/actions/raise-reservation';
 
-/* RaiseInterestForm — the "express interest" capture on the public raise page.
- * Lead-gen only (no payment). On success it swaps to a calm confirmation so the
- * prospect knows the owner will follow up. Token comes from the page route.
+/* RaiseReserveForm — opt-in reservation form on a 506(c) public raise page.
  *
- * For 506(c) raises (`requires506cAttestation=true`) an accredited-investor
- * self-attestation checkbox is required before submit. */
+ * When the owner has enabled accept_reservations=true the page renders this form
+ * alongside (or instead of) the "express interest" form. On success either:
+ *   - redirects the browser to the Stripe Checkout URL (Stripe configured), or
+ *   - swaps to a calm "intent recorded" confirmation (Stripe unconfigured / degraded).
+ *
+ * The accredited-investor attestation is always required here (506(c)-only). */
 
-export function RaiseInterestForm({
-  token,
-  minCheck,
-  gated = false,
-  requires506cAttestation = false
-}: {
-  token: string;
-  minCheck: number | null;
-  /** 506(b) private placement: frame the form as "request access". */
-  gated?: boolean;
-  /**
-   * When true (506(c) raise), show and require the "I am an accredited investor"
-   * checkbox before the form may be submitted.
-   */
-  requires506cAttestation?: boolean;
-}) {
+export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck: number | null }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [accredited, setAccredited] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [intentOnly, setIntentOnly] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  if (done) {
+  if (intentOnly) {
     return (
       <div className="rounded-2xl border border-success-line bg-success-soft p-6 text-center">
         <CheckCircle2 className="mx-auto mb-2 text-success" size={26} strokeWidth={2} aria-hidden />
-        <h3 className="text-[15px] font-semibold text-fg-1">
-          {gated ? 'Access requested' : 'Interest registered'}
-        </h3>
-        <p className="mx-auto mt-1 max-w-[42ch] text-[13px] text-fg-3">
-          Thanks — the team has been notified and will reach out to you directly. No commitment is
-          made by submitting this.
+        <h3 className="text-[15px] font-semibold text-fg-1">Reservation recorded</h3>
+        <p className="mx-auto mt-1 max-w-[46ch] text-[13px] text-fg-3">
+          Your reservation intent has been recorded and the team has been notified. They will follow
+          up with next steps directly. This is not a binding investment commitment.
         </p>
       </div>
     );
@@ -56,18 +41,27 @@ export function RaiseInterestForm({
     setError(null);
     startTransition(async () => {
       try {
-        const res = await submitRaiseInterest({
+        const res = await submitRaiseReservation({
           token,
           name,
           email,
-          amount: amount ? Number(amount.replace(/[^0-9.]/g, '')) : null,
+          amount: Number(amount.replace(/[^0-9.]/g, '')) || 0,
           note,
-          accredited: requires506cAttestation ? accredited : null
+          accredited
         });
-        if (res.ok) setDone(true);
-        else setError(res.error);
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        if (res.url) {
+          // Redirect to Stripe Checkout.
+          window.location.href = res.url;
+        } else {
+          // Stripe not configured — show intent confirmation.
+          setIntentOnly(true);
+        }
       } catch {
-        setError('Could not submit your interest. Please try again.');
+        setError('Could not submit your reservation. Please try again.');
       }
     });
   }
@@ -99,8 +93,9 @@ export function RaiseInterestForm({
       </div>
 
       <Field
-        label="Indicative amount"
-        hint={minCheck ? `Minimum check ${formatMoney(minCheck)}` : 'Optional'}
+        label="Reservation amount"
+        hint={minCheck ? `Min. ${formatMoney(minCheck)}` : 'Required'}
+        required
       >
         <div className="relative">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-fg-4">
@@ -112,7 +107,7 @@ export function RaiseInterestForm({
             inputMode="numeric"
             maxLength={16}
             className={`${inputCls} pl-7`}
-            placeholder="50,000"
+            placeholder="100,000"
           />
         </div>
       </Field>
@@ -121,28 +116,35 @@ export function RaiseInterestForm({
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          rows={3}
+          rows={2}
           maxLength={1000}
           className={`${inputCls} resize-none`}
-          placeholder="A line on why you're interested or how to reach you."
+          placeholder="Any questions or context for the team."
         />
       </Field>
 
-      {requires506cAttestation ? (
-        <label className="flex items-start gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
-          <input
-            type="checkbox"
-            checked={accredited}
-            onChange={(e) => setAccredited(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
-            aria-required="true"
-          />
-          <span className="text-[12.5px] text-fg-2">
-            I am an accredited investor as defined under SEC Rule 501(a). I understand this raise is
-            limited to accredited investors under Reg D 506(c).
-          </span>
-        </label>
-      ) : null}
+      {/* Accreditation attestation — always required on the reserve path */}
+      <label className="flex items-start gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
+        <input
+          type="checkbox"
+          checked={accredited}
+          onChange={(e) => setAccredited(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
+          aria-required="true"
+        />
+        <span className="text-[12.5px] text-fg-2">
+          I am an accredited investor as defined under SEC Rule 501(a). I understand this raise is
+          limited to accredited investors under Reg D 506(c).
+        </span>
+      </label>
+
+      <div className="flex items-start gap-1.5 rounded-xl border border-azure-line bg-azure-soft px-3 py-2.5">
+        <Info size={13} strokeWidth={2} className="mt-0.5 shrink-0 text-azure-1" aria-hidden />
+        <p className="text-[12px] text-fg-3">
+          Submitting a reservation is not a binding investment commitment. Payment will be collected
+          via Stripe Checkout; you may cancel any time before closing.
+        </p>
+      </div>
 
       {error ? (
         <p role="alert" className="text-[12.5px] text-danger">
@@ -152,16 +154,14 @@ export function RaiseInterestForm({
 
       <button
         type="submit"
-        disabled={pending || (requires506cAttestation && !accredited)}
+        disabled={pending || !accredited}
         className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-[var(--shadow-md)] transition hover:bg-accent-2 disabled:opacity-60"
       >
-        {pending ? 'Sending…' : gated ? 'Request access' : 'Express interest'}
+        {pending ? 'Processing…' : 'Reserve my spot'}
         {!pending ? <ArrowRight size={15} strokeWidth={2.2} aria-hidden /> : null}
       </button>
       <p className="text-center text-[11px] text-fg-4">
-        {gated
-          ? 'Requesting access is not a commitment to invest.'
-          : 'Expressing interest is not a commitment to invest.'}
+        Reserving is not a commitment to invest. You may withdraw at any time.
       </p>
     </form>
   );
