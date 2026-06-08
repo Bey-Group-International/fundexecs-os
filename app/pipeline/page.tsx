@@ -17,7 +17,7 @@ export default async function PipelinePage() {
       <AppShell
         identity={await getShellIdentity()}
         title="Pipeline"
-        subtitle="Capital formation, deals, LPs & partners"
+        subtitle="Where capital gets formed — deals, LPs, and the stack that closes them"
       >
         <Card className="p-10 text-center">
           <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
@@ -53,7 +53,7 @@ export default async function PipelinePage() {
     <AppShell
       identity={await getShellIdentity()}
       title="Pipeline"
-      subtitle="Capital formation, deals, LPs & partners"
+      subtitle="Where capital gets formed — deals, LPs, and the stack that closes them"
     >
       <PipelineView data={data} lpData={lp} />
     </AppShell>
