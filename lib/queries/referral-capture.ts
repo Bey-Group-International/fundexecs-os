@@ -1,6 +1,9 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 
+/** The cookie that carries a captured referral code through sign-up. */
+export const REFERRAL_COOKIE = 'fx_ref';
+
 /**
  * Best-effort: record a peer referral for a freshly signed-in user from a
  * captured `/r/<code>` cookie. Resolves the code to its owner (referrer) and

@@ -1,8 +1,16 @@
 'use client';
 
 import { Coins, Users, TrendingUp, type LucideIcon } from 'lucide-react';
-import { Badge, Card, SectionTitle } from '@/components/ui';
-import type { ReferralOverview } from '@/lib/queries/referrals';
+import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
+import type { ReferralOverview, ReferralRow } from '@/lib/queries/referrals';
+
+/** How each referral source reads in the table — link, per-email invite, or a
+ *  user's own peer referral. */
+const SOURCE_META: Record<ReferralRow['source'], { tone: BadgeTone; label: string }> = {
+  beta_link: { tone: 'neutral', label: 'Link' },
+  beta_invite: { tone: 'gold', label: 'Invite' },
+  peer: { tone: 'azure', label: 'Referral' }
+};
 
 function relativeTime(iso: string | null): string {
   if (!iso) return '—';
@@ -92,8 +100,8 @@ export function ReferralsPanel({ overview }: { overview: ReferralOverview | null
                 )}
               </div>
               <div>
-                <Badge tone={r.source === 'beta_link' ? 'neutral' : 'gold'} className="text-[10px]">
-                  {r.source === 'beta_link' ? 'Link' : 'Invite'}
+                <Badge tone={SOURCE_META[r.source].tone} className="text-[10px]">
+                  {SOURCE_META[r.source].label}
                 </Badge>
               </div>
               <span className="text-[11.5px] text-fg-4">{relativeTime(r.joinedAt)}</span>

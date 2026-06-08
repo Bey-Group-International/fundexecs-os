@@ -13,7 +13,7 @@ export type ReferralLinkResult =
 
 /** Build the public capture URL for a code. */
 function referralUrl(code: string): string {
-  return `${getSiteURL()}/r/${code}`;
+  return `${getSiteURL()}/ref/${code}`;
 }
 
 /** A short, url-safe code (~8 chars). Enough entropy to be unguessable in a share link. */

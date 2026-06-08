@@ -12,8 +12,7 @@ import {
   storeIntegrationSecret,
   upsertIntegrationConnection
 } from '@/lib/integrations/connections';
-import { recordPeerReferral } from '@/lib/queries/referral-capture';
-import { REFERRAL_COOKIE } from '@/app/r/[code]/route';
+import { recordPeerReferral, REFERRAL_COOKIE } from '@/lib/queries/referral-capture';
 
 type GooglePersistResult =
   | { attempted: false }

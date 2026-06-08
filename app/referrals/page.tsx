@@ -57,7 +57,7 @@ export default async function ReferralsPage() {
     getOrCreateReferralCode(admin, org.userId, org.orgId)
   ]);
 
-  const referralUrl = code ? `${getSiteURL()}/r/${code}` : null;
+  const referralUrl = code ? `${getSiteURL()}/ref/${code}` : null;
 
   return (
     <AppShell title="Referrals" subtitle="Earn credits" identity={identity} wallet={wallet}>

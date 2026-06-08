@@ -2,8 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { recordPeerReferral } from '@/lib/queries/referral-capture';
-import { REFERRAL_COOKIE } from '@/app/r/[code]/route';
+import { recordPeerReferral, REFERRAL_COOKIE } from '@/lib/queries/referral-capture';
 
 /**
  * Verifies an email magic link minted by the beta-invite flow (and any other
