@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
   TrendingUp,
   CircleDot,
@@ -39,6 +38,8 @@ import { updateDealStage } from '@/lib/actions/deals';
 import { NewDealDrawer } from '@/components/drawers/NewDealDrawer';
 import { NewPartnerDrawer } from '@/components/drawers/NewPartnerDrawer';
 import { DealDetailDrawer, type DealDetailData } from '@/components/drawers/DealDetailDrawer';
+import { LpPipelineBoard } from '@/components/pipeline/LpPipelineBoard';
+import type { LpPipelineData } from '@/lib/pipeline/lp-stages';
 
 const USD_NO_CENTS = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -177,97 +178,6 @@ function FormationBoard({
   );
 }
 
-/** Relationship tier label derived from a deal's formation stage. */
-function relationshipTier(stage: string): { label: string; tone: BadgeTone } {
-  const s = stage.toLowerCase();
-  if (s.includes('committed') || s.includes('closed')) return { label: 'Anchor', tone: 'success' };
-  if (s.includes('soft') || s.includes('diligence')) return { label: 'Priority', tone: 'gold' };
-  if (s.includes('meeting') || s.includes('qualified')) return { label: 'Engaged', tone: 'azure' };
-  return { label: 'Watch', tone: 'neutral' };
-}
-
-function LpCapitalMap({ deals }: { deals: PipelineDeal[] }) {
-  const ranked = [...deals].sort((a, b) => b.fit - a.fit);
-  return (
-    <Card>
-      <SectionTitle
-        eyebrow="Relationship tier · thesis-fit scoring"
-        title="LP Capital Map"
-        action={
-          <Link
-            href="/connections"
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-fg-3 transition hover:bg-surface-2 hover:text-fg-1"
-          >
-            <Sparkles size={14} strokeWidth={1.9} aria-hidden />
-            Find intros
-          </Link>
-        }
-      />
-      {ranked.length === 0 ? (
-        <p className="py-6 text-center text-[12.5px] text-fg-4">
-          No investors in the pipeline yet.
-        </p>
-      ) : (
-        <>
-          <div className="grid grid-cols-[1.6fr_0.9fr_0.7fr_1.3fr] gap-2 px-1 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-            <span>Investor</span>
-            <span>Tier</span>
-            <span>Ticket</span>
-            <span>Thesis fit</span>
-          </div>
-          <div className="mb-1 h-px bg-hairline" />
-          <div className="flex flex-col">
-            {ranked.map((d) => {
-              const tier = relationshipTier(d.stage);
-              const fit = d.fit;
-              const color =
-                fit > 75 ? 'var(--success)' : fit > 55 ? 'var(--gold-1)' : 'var(--fg-4)';
-              return (
-                <div
-                  key={d.id}
-                  className="grid grid-cols-[1.6fr_0.9fr_0.7fr_1.3fr] items-center gap-2 rounded-lg px-1 py-2.5 transition hover:bg-surface-1"
-                >
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <Avatar
-                      name={d.name}
-                      size={26}
-                      tone={tier.tone === 'neutral' ? 'azure' : tier.tone}
-                    />
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
-                      <div className="text-[10.5px] text-fg-4">{d.note}</div>
-                    </div>
-                  </div>
-                  <span>
-                    <Badge tone={tier.tone} className="text-[10px]">
-                      {tier.label}
-                    </Badge>
-                  </span>
-                  <span className="font-mono text-[11.5px] tabular-nums text-fg-3">
-                    {d.amount != null ? formatCurrency(d.amount) : '—'}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <ProgressBar
-                      value={fit}
-                      color={color}
-                      height={5}
-                      className="flex-1"
-                      ariaLabel={`Fit score for ${d.name}`}
-                    />
-                    <span className="w-7 text-right text-[11px] tabular-nums text-fg-3">
-                      {fit}%
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </Card>
-  );
-}
-
 function DealFlow({ data }: { data: PipelineData }) {
   const recent = data.stages
     .flatMap((s) => s.deals.map((d) => ({ deal: d, stageLabel: s.label, stageKey: s.key })))
@@ -358,7 +268,7 @@ function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd
   );
 }
 
-export function PipelineView({ data }: { data: PipelineData }) {
+export function PipelineView({ data, lpData }: { data: PipelineData; lpData: LpPipelineData }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('formation');
   const [newDealOpen, setNewDealOpen] = useState(false);
@@ -452,8 +362,6 @@ export function PipelineView({ data }: { data: PipelineData }) {
     { label: 'Visitor → committed', value: `${data.conversionPct}%`, icon: Percent, tone: 'gold' }
   ];
 
-  const allDeals = allStageDeals;
-
   return (
     <div className="flex flex-col gap-[18px]">
       <SectionTitle
@@ -507,7 +415,7 @@ export function PipelineView({ data }: { data: PipelineData }) {
         onChange={(id) => setTab(id as Tab)}
         tabs={[
           { id: 'formation', label: 'Capital formation', icon: Columns3 },
-          { id: 'lpmap', label: 'LP Capital Map', icon: Radar },
+          { id: 'lpmap', label: 'LP Pipeline', icon: Radar },
           { id: 'flow', label: 'Deal flow', icon: ArrowUpRight },
           { id: 'partners', label: 'Partners & services', icon: Briefcase }
         ]}
@@ -521,7 +429,7 @@ export function PipelineView({ data }: { data: PipelineData }) {
           pendingDealId={pendingDealId}
         />
       )}
-      {tab === 'lpmap' && <LpCapitalMap deals={allDeals} />}
+      {tab === 'lpmap' && <LpPipelineBoard data={lpData} />}
       {tab === 'flow' && <DealFlow data={data} />}
       {tab === 'partners' && (
         <PartnersStack partners={data.partners} onAdd={() => setNewPartnerOpen(true)} />
