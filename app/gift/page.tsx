@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import { Gift, Sparkles, Users } from 'lucide-react';
 import { AccountPageShell } from '@/components/account/AccountPageShell';
-import { GiftShareCard } from './GiftShareCard';
+import { GiftStudio } from './GiftStudio';
 
 export const metadata: Metadata = {
   title: 'Gift FundExecs',
-  description: 'Share FundExecs OS with another fund manager.'
+  description: 'Send Earn credits to another fund manager, or share your invite link.'
 };
 
 const PERKS = [
@@ -29,12 +29,12 @@ const PERKS = [
 export default function GiftPage() {
   return (
     <AccountPageShell
-      eyebrow="Refer a manager"
+      eyebrow="Give the desk"
       title="Gift FundExecs"
-      intro="Know another fund manager who's drowning in back-office work? Send them your invite link. Sharing the desk is the fastest way to help us build the right things next."
+      intro="Send another fund manager Earn credits — fuel for their AI Chief Operating Officer — with a personal note. Or share your invite link. Either way, you're handing them a real working desk."
     >
-      <div className="space-y-8">
-        <GiftShareCard />
+      <div className="space-y-10">
+        <GiftStudio />
 
         <section>
           <h2 className="text-[15px] font-semibold tracking-tight text-fg-1">

@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getPlan } from '@/lib/billing/plans';
+import { activateGiftBySession } from '@/lib/queries/gift';
 
 /* ============================================================================
  * app/api/stripe/webhook/route.ts — Stripe → wallet + subscription reconciliation.
@@ -137,6 +138,13 @@ export async function POST(req: NextRequest) {
 
         // One-off credit pack → credit the wallet.
         if (session.mode === 'payment') {
+          // Gift purchases don't credit the buyer — activate the gift + email
+          // the recipient (idempotent). They redeem the credits themselves.
+          if (session.metadata?.kind === 'gift') {
+            await activateGiftBySession(session.id);
+            break;
+          }
+
           const orgId = session.metadata?.org_id ?? session.client_reference_id ?? null;
           const amountCredits = Number(session.metadata?.amount_credits ?? 0);
           const amountCents = Number(session.metadata?.amount_cents ?? session.amount_total ?? 0);
