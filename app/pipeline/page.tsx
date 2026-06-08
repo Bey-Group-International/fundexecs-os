@@ -4,6 +4,7 @@ import { getShellIdentity } from '@/lib/queries/identity';
 import { Card } from '@/components/ui';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getPipelineData } from '@/lib/queries/pipeline';
+import { getLpPipeline } from '@/lib/queries/lp-pipeline';
 import { PipelineView } from './PipelineView';
 
 export const metadata: Metadata = { title: 'Pipeline' };
@@ -29,7 +30,24 @@ export default async function PipelinePage() {
     );
   }
 
-  const data = await getPipelineData(org.orgId);
+  const [data, lpData] = await Promise.all([
+    getPipelineData(org.orgId),
+    getLpPipeline(org.orgId).catch(() => null)
+  ]);
+
+  const lp = lpData ?? {
+    columns: [
+      { key: 'prospect' as const, label: 'Prospect', lps: [] },
+      { key: 'contacted' as const, label: 'Contacted', lps: [] },
+      { key: 'soft_circled' as const, label: 'Soft-circle', lps: [] },
+      { key: 'committed' as const, label: 'Committed', lps: [] }
+    ],
+    totalLps: 0,
+    committedValue: 0,
+    softCircledValue: 0,
+    passedCount: 0,
+    empty: true
+  };
 
   return (
     <AppShell
@@ -37,7 +55,7 @@ export default async function PipelinePage() {
       title="Pipeline"
       subtitle="Capital formation, deals, LPs & partners"
     >
-      <PipelineView data={data} />
+      <PipelineView data={data} lpData={lp} />
     </AppShell>
   );
 }
