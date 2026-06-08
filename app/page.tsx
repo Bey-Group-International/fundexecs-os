@@ -11,7 +11,7 @@ import { EarnCoin } from '@/components/screens/EarnCoin';
 import { WelcomeBanner } from '@/components/beta/WelcomeBanner';
 
 export const metadata: Metadata = {
-  title: 'Unified intelligence layer for the private market operators',
+  title: 'Unified intelligence layer for private market operators',
   description:
     'FundExecs is an AI executive team — fifteen specialists led by Earnest Fundmaker, the Chief Operating Officer — that sources deals, raises capital, runs diligence, and drives to signed close for fund managers and dealmakers.'
 };

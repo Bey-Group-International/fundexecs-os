@@ -91,7 +91,7 @@ export default function LoginPage() {
             Led by Earn, your live AI guide
           </Badge>
           <h1 className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-fg-1">
-            Unified intelligence layer for the{' '}
+            Unified intelligence layer for{' '}
             <span className="text-gold-1">private market operators</span>
           </h1>
           <p className="mt-5 max-w-sm text-[14px] leading-7 text-fg-3">

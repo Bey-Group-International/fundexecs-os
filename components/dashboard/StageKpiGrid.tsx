@@ -137,6 +137,7 @@ export function StageKpiGrid({ stage, kpis, className }: StageKpiGridProps) {
                     points={trend}
                     tone={tone}
                     height={22}
+                    fluid
                     ariaLabel={`${kpi.label} trend`}
                   />
                 </div>
