@@ -251,20 +251,20 @@ export function ExecutionScoreCard({ execution, className }: ExecutionScoreCardP
             <li
               key={layer}
               data-testid={`execution-layer-${layer}`}
-              className="flex items-center justify-between gap-2 rounded-lg border border-hairline bg-bg-1 px-2.5 py-1.5"
+              className="flex min-w-0 items-center justify-between gap-1.5 rounded-lg border border-hairline bg-bg-1 px-2.5 py-1.5"
             >
-              <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex min-w-0 items-center gap-1.5">
                 <span
                   aria-hidden
                   className="h-2 w-2 flex-none rounded-full"
                   style={{ backgroundColor: meta.color }}
                 />
-                <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-fg-3">
+                <span className="truncate text-[10.5px] font-semibold uppercase tracking-[0.04em] text-fg-3">
                   {meta.label}
                 </span>
               </span>
               <span
-                className="text-[12px] font-semibold tabular-nums"
+                className="flex-none text-[12px] font-semibold tabular-nums"
                 style={{ color: meta.color }}
               >
                 {pct}%
