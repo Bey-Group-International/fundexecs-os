@@ -385,6 +385,55 @@ body {
   animation: fx-earn-think 1.25s ease-in-out infinite;
 }
 
+/* Desk choreography — while Earn coordinates the desk, the "on point"
+   avatars activate in sequence (a gentle staggered fade/lift led by Earn).
+   Per-avatar stagger is set inline via animation-delay. Opacity + ≤2px
+   transform only; silenced under reduced-motion below. */
+@keyframes fx-onpoint-cascade {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.fx-onpoint-cascade {
+  animation: fx-onpoint-cascade 1.8s ease-in-out infinite;
+}
+
+/* Status-line handoff — a brief fade-in so the desk status reads as a smooth
+   handoff rather than a hard text swap. Opacity + 1px lift only. */
+@keyframes fx-status-fade {
+  from {
+    opacity: 0;
+    transform: translateY(1px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fx-status-fade {
+  animation: fx-status-fade 0.4s ease-out both;
+}
+
+/* Working hairline — a whisper-quiet sweep under the desk strip while Earn
+   works. Transform-only travel of a short gradient segment. */
+@keyframes fx-desk-shimmer {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+.fx-desk-shimmer {
+  animation: fx-desk-shimmer 2.4s ease-in-out infinite;
+}
+
 /* ── Landing (cinematic) ──────────────────────────────────────────────────
    Ambient, GPU-cheap effects for the public marketing page. All transform/
    opacity/background-position only, and all silenced under reduced-motion. */
@@ -498,6 +547,9 @@ body {
   .fx-celebrate-glow,
   .fx-onpoint-pulse,
   .fx-earn-think,
+  .fx-onpoint-cascade,
+  .fx-status-fade,
+  .fx-desk-shimmer,
   .fx-aurora,
   .fx-text-gradient,
   .fx-grid-pan,
