@@ -4,6 +4,7 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { getCapitalStackData } from '@/lib/queries/capital-stack';
 import { getActiveRaisePage } from '@/lib/queries/raise-page';
 import { CapitalStackView } from '@/components/capital-stack/CapitalStackView';
+import { CapitalSearch } from '@/components/capital-stack/CapitalSearch';
 import { RaisePageManager } from '@/components/capital-stack/RaisePageManager';
 
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,8 @@ export default async function CapitalStackPage() {
 
   return (
     <AuthedShell title="Capital Stack" subtitle="Capital Formation" redirectFrom="/capital-stack">
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6">
+        <CapitalSearch commitments={data.commitments} />
         <CapitalStackView data={data} />
         <RaisePageManager key={raisePage?.token ?? 'none'} initial={raisePage} />
       </div>
