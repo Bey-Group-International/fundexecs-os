@@ -1550,6 +1550,77 @@ export type Database = {
           },
         ]
       }
+      gift_codes: {
+        Row: {
+          amount_cents: number
+          code: string
+          created_at: string
+          credits: number
+          email_sent_at: string | null
+          id: string
+          message: string | null
+          occasion_date: string | null
+          purchaser_user_id: string | null
+          recipient_email: string | null
+          recipient_name: string | null
+          redeemed_at: string | null
+          redeemed_by_org_id: string | null
+          redeemed_by_user_id: string | null
+          sender_name: string | null
+          status: string
+          stripe_session_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          code: string
+          created_at?: string
+          credits: number
+          email_sent_at?: string | null
+          id?: string
+          message?: string | null
+          occasion_date?: string | null
+          purchaser_user_id?: string | null
+          recipient_email?: string | null
+          recipient_name?: string | null
+          redeemed_at?: string | null
+          redeemed_by_org_id?: string | null
+          redeemed_by_user_id?: string | null
+          sender_name?: string | null
+          status?: string
+          stripe_session_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          code?: string
+          created_at?: string
+          credits?: number
+          email_sent_at?: string | null
+          id?: string
+          message?: string | null
+          occasion_date?: string | null
+          purchaser_user_id?: string | null
+          recipient_email?: string | null
+          recipient_name?: string | null
+          redeemed_at?: string | null
+          redeemed_by_org_id?: string | null
+          redeemed_by_user_id?: string | null
+          sender_name?: string | null
+          status?: string
+          stripe_session_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gift_codes_redeemed_by_org_id_fkey"
+            columns: ["redeemed_by_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       governance_objectives: {
         Row: {
           ai_recommendation: string | null
@@ -2876,6 +2947,14 @@ export type Database = {
           _ref_id?: string
         }
         Returns: number
+      }
+      get_gift_by_code: {
+        Args: { _code: string }
+        Returns: Json
+      }
+      redeem_gift: {
+        Args: { _code: string; _org_id: string; _user_id: string }
+        Returns: Json
       }
       match_diligence_chunks: {
         Args: { match_count?: number; query_embedding: string; run_id: string }
