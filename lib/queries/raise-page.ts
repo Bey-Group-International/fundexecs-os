@@ -21,6 +21,8 @@ export interface ActiveRaisePage {
   showAmounts: boolean;
   /** Reg D exemption ('506b' | '506c'), or null when unset. */
   exemption: '506b' | '506c' | null;
+  /** Whether the owner has opted in to accepting reservations. */
+  acceptReservations: boolean;
   /** Inbound "express interest" leads captured so far. */
   interestCount: number;
 }
@@ -37,7 +39,9 @@ export async function getActiveRaisePage(): Promise<ActiveRaisePage | null> {
   const supabase = await createClient();
   const { data: page } = await supabase
     .from('raise_pages')
-    .select('id, token, title, headline, min_check, show_amounts, exemption, expires_at')
+    .select(
+      'id, token, title, headline, min_check, show_amounts, exemption, accept_reservations, expires_at'
+    )
     .eq('org_id', org.orgId)
     .is('revoked_at', null)
     .order('created_at', { ascending: false })
@@ -62,6 +66,7 @@ export async function getActiveRaisePage(): Promise<ActiveRaisePage | null> {
     minCheck: page.min_check != null ? Number(page.min_check) : null,
     showAmounts: Boolean(page.show_amounts),
     exemption,
+    acceptReservations: Boolean(page.accept_reservations),
     interestCount: count ?? 0
   };
 }
