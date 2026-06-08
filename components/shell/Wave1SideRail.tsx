@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNod
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
-import { ChevronDown, Sparkles, X } from 'lucide-react';
+import { ArrowRight, ChevronDown, Sparkles, X } from 'lucide-react';
 import { Badge, type BadgeTone } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { createClient } from '@/lib/supabase/client';
@@ -50,11 +50,38 @@ export interface RailSignal {
   hint?: string;
 }
 
+/**
+ * The condensed operating meter the rail pins under Command Center — the same
+ * engine output the Command Center hero shows (readiness + loop position) plus
+ * the single highest-leverage next move, so the rail itself tells the operator
+ * where they are in the loop and what to do next.
+ */
+export interface RailMomentum {
+  /** 0–100 progress through the seven-stage loop. */
+  loopProgress: number;
+  /** 0–100 institutional-readiness score. */
+  readinessScore: number;
+  /** Current stage label, e.g. "Convert LPs". */
+  stageLabel: string;
+  /** 0-based stage ordinal (0–6). */
+  stageIndex: number;
+  /** Total stages in the loop (7). */
+  stageCount: number;
+  /** The single highest-leverage move, when one exists. */
+  nextBestAction?: {
+    title: string;
+    cta: string;
+    href: string;
+  };
+}
+
 export interface NavSignals {
   /** Current lifecycle stage — drives stage-aware auto-expand + gold emphasis. */
   currentStage?: LifecycleStage;
   /** Per-href signal badges. */
   badges?: Record<string, RailSignal>;
+  /** Condensed readiness/loop meter + next-best-action for the rail spine. */
+  momentum?: RailMomentum;
 }
 
 export interface Wave1SideRailProps {
@@ -286,6 +313,11 @@ export function Wave1SideRail({
             signal={RAIL_PINNED.href ? signals?.badges?.[RAIL_PINNED.href] : undefined}
             onClick={onClose}
           />
+
+          {/* The operating spine — readiness/loop meter + next-best-action. */}
+          {signals?.momentum ? (
+            <MomentumSpine momentum={signals.momentum} onLinkClick={onClose} />
+          ) : null}
 
           {RAIL_GROUPS.map((group) => {
             const extraTop = group.key === 'build' ? sourceOfTruthSummary : undefined;
@@ -703,6 +735,73 @@ function NavParent({
         ) : null}
       </AnimatePresence>
     </li>
+  );
+}
+
+/**
+ * MomentumSpine — the condensed operating meter pinned under Command Center.
+ * The full `ReadinessGauge` + loop hero lives on Command Center; this is its
+ * always-in-view companion: a thin readiness bar, the operator's position in
+ * the loop, and the one highest-leverage move (azure, not gold — gold stays
+ * reserved for Earn). The next move deep-links to the same action the dashboard
+ * surfaces, so the rail nudges without the operator opening the dashboard.
+ */
+function MomentumSpine({
+  momentum,
+  onLinkClick
+}: {
+  momentum: RailMomentum;
+  onLinkClick: () => void;
+}) {
+  const { loopProgress, readinessScore, stageLabel, stageIndex, stageCount, nextBestAction } =
+    momentum;
+  return (
+    <div
+      data-testid="rail-momentum"
+      className="rounded-[12px] border border-hairline bg-surface-1 px-2.5 py-2.5"
+    >
+      <div className="flex items-baseline justify-between">
+        <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+          Readiness
+        </span>
+        <span className="text-[12px] font-semibold tabular-nums text-fg-1">
+          {readinessScore}
+          <span className="text-fg-4">/100</span>
+        </span>
+      </div>
+      <div
+        className="mt-1.5 h-1 overflow-hidden rounded-full bg-hairline"
+        role="progressbar"
+        aria-valuenow={readinessScore}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Institutional readiness"
+      >
+        <motion.div
+          className="h-full rounded-full bg-azure-1"
+          initial={{ width: 0 }}
+          animate={{ width: `${readinessScore}%` }}
+          transition={FX_SPRING}
+        />
+      </div>
+      <p className="mt-1.5 text-[10px] text-fg-4">
+        <span className="font-medium text-fg-2">{stageLabel}</span> · stage {stageIndex + 1}/
+        {stageCount} · loop {loopProgress}%
+      </p>
+      {nextBestAction ? (
+        <Link
+          href={nextBestAction.href}
+          onClick={onLinkClick}
+          data-testid="rail-next-action"
+          title={`${nextBestAction.cta}: ${nextBestAction.title}`}
+          className="mt-2 flex items-center gap-1.5 rounded-[9px] border border-[var(--azure-line)] bg-[var(--azure-soft)] px-2 py-1.5 text-[11px] font-semibold text-azure-1 transition-transform hover:translate-x-0.5"
+        >
+          <span className="text-[8.5px] uppercase tracking-[0.1em] text-azure-1/70">Next</span>
+          <span className="min-w-0 flex-1 truncate">{nextBestAction.title}</span>
+          <ArrowRight size={12} strokeWidth={2.4} aria-hidden className="flex-none" />
+        </Link>
+      ) : null}
+    </div>
   );
 }
 

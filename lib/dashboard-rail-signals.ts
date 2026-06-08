@@ -1,6 +1,7 @@
 import type { DashboardData } from '@/lib/queries/dashboard';
 import type { NavSignals } from '@/components/shell/Wave1SideRail';
 import type { MemberType } from '@/lib/member-types';
+import { lifecycleStageIndex, LIFECYCLE_STAGES } from '@/lib/lifecycle';
 
 /**
  * The capital metric reads differently by operator type: GPs *raise* capital,
@@ -91,6 +92,22 @@ export function buildRailSignals(data: DashboardData, memberType?: MemberType | 
 
   return {
     currentStage: data.stage,
-    badges
+    badges,
+    // The condensed operating spine — readiness/loop meter + next-best-action.
+    // Same engine output as the Command Center hero, surfaced on the rail.
+    momentum: {
+      loopProgress: data.loopProgress,
+      readinessScore: data.readinessScore,
+      stageLabel: data.stageLabel,
+      stageIndex: lifecycleStageIndex(data.stage),
+      stageCount: LIFECYCLE_STAGES.length,
+      nextBestAction: data.nextBestAction
+        ? {
+            title: data.nextBestAction.title,
+            cta: data.nextBestAction.cta,
+            href: data.nextBestAction.href
+          }
+        : undefined
+    }
   };
 }
