@@ -5,8 +5,13 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
 import { requirePlatformAdmin } from '@/lib/access.server';
+import { isPlatformAdmin } from '@/lib/access';
 import { getSiteURL } from '@/lib/site-url';
 import type { Database, Json } from '@/lib/supabase/database.types';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+/** ~100 years — effectively permanent, reversible by setting ban_duration 'none'. */
+const SUSPEND_DURATION = '876000h';
 
 type OrgMemberRole = Database['public']['Enums']['org_member_role'];
 
@@ -196,6 +201,30 @@ export async function setApplicationReview(
   }
 
   const admin = createAdminClient();
+
+  // Resolve the claimant AND their prior review state (scoped to the org) so we
+  // change access only when it actually differs, and can roll back on failure.
+  const { data: claim, error: claimErr } = await admin
+    .from('beta_link_claims')
+    .select('user_id, review_status')
+    .eq('id', claimId)
+    .eq('org_id', org.orgId)
+    .maybeSingle();
+  if (claimErr) return { ok: false, error: claimErr.message };
+  if (!claim) return { ok: false, error: 'Application not found.' };
+
+  // Suspend ⇔ rejected. Only touch the auth account when that bit flips, so a
+  // reset from approved→pending never changes access (per the behavior matrix)
+  // and re-rejecting is idempotent. Do the access change FIRST so a stored
+  // review status never claims a suspension that didn't actually take.
+  const wasSuspended = claim.review_status === 'rejected';
+  const shouldSuspend = review === 'rejected';
+  const accessChanged = wasSuspended !== shouldSuspend;
+  if (accessChanged) {
+    const suspend = await setApplicantSuspended(admin, claim.user_id, shouldSuspend);
+    if (!suspend.ok) return suspend;
+  }
+
   const { data, error } = await admin
     .from('beta_link_claims')
     .update({
@@ -208,10 +237,46 @@ export async function setApplicationReview(
     .eq('org_id', org.orgId)
     .select('id')
     .maybeSingle();
-  if (error) return { ok: false, error: error.message };
-  if (!data) return { ok: false, error: 'Application not found.' };
+  if (error || !data) {
+    // Status write failed after we changed the ban — compensate by restoring the
+    // prior suspension state so the account and the (unchanged) status agree.
+    if (accessChanged) {
+      await setApplicantSuspended(admin, claim.user_id, wasSuspended);
+    }
+    return { ok: false, error: error?.message ?? 'Application not found.' };
+  }
 
-  await writeAudit(org.orgId, org.userId, `review_beta_application_${review}`, claimId);
+  await writeAudit(org.orgId, org.userId, `review_beta_application_${review}`, claimId, {
+    suspended: review === 'rejected'
+  });
+  return { ok: true };
+}
+
+/**
+ * Suspend or restore a beta applicant's auth account by toggling the Supabase
+ * GoTrue ban. Suspended users cannot sign in anywhere. Safety rail: a Bey Group
+ * team member (platform admin) is never suspended, so an admin can't lock out a
+ * teammate (or themselves) through the inbox. Restoring a team member is a no-op.
+ */
+async function setApplicantSuspended(
+  admin: SupabaseClient<Database>,
+  userId: string,
+  suspend: boolean
+): Promise<ReviewResult> {
+  const { data: target, error: readErr } = await admin.auth.admin.getUserById(userId);
+  if (readErr || !target?.user) {
+    return { ok: false, error: 'Could not load the applicant account.' };
+  }
+  if (isPlatformAdmin(target.user.email)) {
+    return suspend
+      ? { ok: false, error: 'This is a Bey Group team member and can’t be suspended.' }
+      : { ok: true };
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(userId, {
+    ban_duration: suspend ? SUSPEND_DURATION : 'none'
+  });
+  if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
 

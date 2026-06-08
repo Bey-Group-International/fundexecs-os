@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, X, RotateCcw, Quote, Link2, Inbox, Clock } from 'lucide-react';
+import { Check, X, RotateCcw, Quote, Link2, Inbox, Clock, Ban } from 'lucide-react';
 import { Avatar, Badge, Button, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { setApplicationReview } from '@/lib/actions/beta-links';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
@@ -96,6 +96,12 @@ function ApplicationCard({
             <Clock size={12} strokeWidth={1.9} aria-hidden />
             Joined {relativeTime(app.claimedAt)}
           </span>
+          {app.review === 'rejected' && (
+            <span className="inline-flex items-center gap-1.5 text-danger">
+              <Ban size={12} strokeWidth={1.9} aria-hidden />
+              Sign-in suspended
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -106,7 +112,16 @@ function ApplicationCard({
                 size="sm"
                 icon={X}
                 disabled={busy}
-                onClick={() => onReview('rejected')}
+                onClick={() => {
+                  // Reject suspends their sign-in — make it a deliberate choice.
+                  if (
+                    window.confirm(
+                      `Reject ${app.name || app.email}? They’ll be blocked from signing in (any active session ends within the hour) until you restore them.`
+                    )
+                  ) {
+                    onReview('rejected');
+                  }
+                }}
                 aria-label={`Reject ${app.name || app.email}`}
               >
                 Reject
@@ -129,9 +144,13 @@ function ApplicationCard({
               icon={RotateCcw}
               disabled={busy}
               onClick={() => onReview('pending')}
-              aria-label={`Reset ${app.name || app.email} to pending`}
+              aria-label={
+                app.review === 'rejected'
+                  ? `Restore access for ${app.name || app.email}`
+                  : `Reset ${app.name || app.email} to pending`
+              }
             >
-              Reset
+              {app.review === 'rejected' ? 'Restore' : 'Reset'}
             </Button>
           )}
         </div>
@@ -185,9 +204,9 @@ export function ApplicationsPanel({ applications }: { applications: BetaApplicat
           }
         />
         <p className="mb-4 max-w-prose text-[12.5px] leading-relaxed text-fg-3">
-          Everyone who opened a shareable invite link and finished the welcome flow with Earn. They
-          already have access — approving or rejecting here is your own triage and doesn’t change
-          that.
+          Everyone who opened a shareable invite link and finished the welcome flow with Earn.
+          Approving keeps them in; rejecting suspends their sign-in until you restore them. Reset
+          returns an approved applicant to pending.
         </p>
 
         <div className="flex flex-wrap gap-2">
