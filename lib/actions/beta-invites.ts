@@ -17,6 +17,10 @@ type InviteRole = Database['public']['Enums']['org_member_role'];
  *  invite link verifies — a warm, personalized intro before the profile setup. */
 const INVITE_NEXT_PATH = '/beta/welcome';
 
+/** Someone who already joined doesn't need the welcome intro again — a re-sent
+ *  sign-in link drops them straight back into the app. */
+const RETURNING_NEXT_PATH = '/command-center';
+
 /** Conservative email shape check — the Supabase API is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -80,7 +84,8 @@ async function writeAudit(
  */
 async function mintInviteLink(
   email: string,
-  inviteId: string
+  inviteId: string,
+  next: string = INVITE_NEXT_PATH
 ): Promise<{ link: string } | { error: string }> {
   const admin = createAdminClient();
   const redirectTo = `${getSiteURL()}/auth/confirm`;
@@ -90,7 +95,7 @@ async function mintInviteLink(
     url.searchParams.set('token_hash', hashedToken);
     url.searchParams.set('type', verificationType);
     url.searchParams.set('invite_id', inviteId);
-    url.searchParams.set('next', INVITE_NEXT_PATH);
+    url.searchParams.set('next', next);
     return url.toString();
   };
 
@@ -176,8 +181,15 @@ export async function inviteBetaUser(emailInput: string, note?: string): Promise
 }
 
 /**
- * Regenerate a fresh magic link for an existing pending invite and bump its
+ * Regenerate a fresh magic link for an existing invite and bump its
  * `last_sent_at`. Returns the new link to copy.
+ *
+ * For a pending/revoked invite this re-arms it to pending (a fresh invitation).
+ * For an invite that was already accepted (the user joined) we preserve their
+ * accepted status — a re-sent link is just a passwordless sign-in link that
+ * drops them back into the app, not a re-invitation — so we only bump
+ * `last_sent_at` and route the link to the app home rather than the beta
+ * welcome intro.
  */
 export async function resendBetaInvite(inviteId: string): Promise<InviteResult> {
   if (!inviteId) return { ok: false, error: 'Missing invite id.' };
@@ -198,17 +210,30 @@ export async function resendBetaInvite(inviteId: string): Promise<InviteResult> 
   if (readErr) return { ok: false, error: readErr.message };
   if (!invite) return { ok: false, error: 'Invite not found.' };
 
-  const minted = await mintInviteLink(invite.email, inviteId);
+  const alreadyJoined = invite.status === 'accepted';
+  const minted = await mintInviteLink(
+    invite.email,
+    inviteId,
+    alreadyJoined ? RETURNING_NEXT_PATH : INVITE_NEXT_PATH
+  );
   if ('error' in minted) return { ok: false, error: minted.error };
 
+  // Joined users keep their accepted state — only bump last_sent_at. Pending /
+  // revoked invites are re-armed to pending as a fresh invitation.
+  const update = alreadyJoined
+    ? { last_sent_at: new Date().toISOString() }
+    : { status: 'pending' as const, last_sent_at: new Date().toISOString(), accepted_at: null };
   const { error } = await supabase
     .from('beta_invites')
-    .update({ status: 'pending', last_sent_at: new Date().toISOString(), accepted_at: null })
+    .update(update)
     .eq('id', inviteId)
     .eq('org_id', org.orgId);
   if (error) return { ok: false, error: error.message };
 
-  await writeAudit(org.orgId, org.userId, 'resend_beta_invite', inviteId, { email: invite.email });
+  await writeAudit(org.orgId, org.userId, 'resend_beta_invite', inviteId, {
+    email: invite.email,
+    alreadyJoined
+  });
   return { ok: true, link: minted.link, email: invite.email };
 }
 
