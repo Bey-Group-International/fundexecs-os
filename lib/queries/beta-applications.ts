@@ -73,7 +73,13 @@ export async function getBetaApplications(orgId: string): Promise<BetaApplicatio
     admin.from('beta_links').select('id, label').in('id', linkIds),
     admin.from('profiles').select('id, full_name, member_type').in('id', userIds),
     admin.from('member_profiles').select('user_id, draft').in('user_id', userIds),
-    admin.from('org_members').select('user_id, org_id, role').in('user_id', userIds)
+    admin
+      .from('org_members')
+      .select('user_id, org_id, role')
+      .in('user_id', userIds)
+      // Oldest first so "earliest membership" is deterministic — the org a
+      // founder created at onboarding is their first, i.e. their company.
+      .order('created_at', { ascending: true })
   ]);
   // Fail closed: a partial enrichment would render misleading cards (missing
   // names/goals), so drop the whole list rather than show half-built ones.
@@ -85,13 +91,18 @@ export async function getBetaApplications(orgId: string): Promise<BetaApplicatio
 
   // Resolve each applicant's own company: the org they joined at onboarding,
   // preferring the one they own. Skip the link-owning org (the Bey Group
-  // workspace) — that's never the applicant's company. Best-effort: a failed
-  // membership read just leaves company null, it never blanks the inbox.
+  // workspace) — that's never the applicant's company. Deterministic: rows are
+  // oldest-first, so we keep the earliest owned org, else the earliest org of
+  // any role (never a later row). Best-effort — a failed membership read just
+  // leaves company null, it never blanks the inbox.
   const membershipByUser = new Map<string, { orgId: string; role: string | null }>();
   for (const m of memberships ?? []) {
     if (m.org_id === orgId) continue;
     const existing = membershipByUser.get(m.user_id);
-    if (!existing || m.role === 'owner') {
+    if (!existing) {
+      membershipByUser.set(m.user_id, { orgId: m.org_id, role: m.role });
+    } else if (m.role === 'owner' && existing.role !== 'owner') {
+      // Upgrade to the first org they actually own; a second owner never wins.
       membershipByUser.set(m.user_id, { orgId: m.org_id, role: m.role });
     }
   }
