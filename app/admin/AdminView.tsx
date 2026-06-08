@@ -824,6 +824,7 @@ export function AdminView({
   }
 
   const openInvites = invites.filter((i) => i.status === 'pending');
+  const pendingApplications = applications.filter((a) => a.review === 'pending').length;
 
   const adminStats: Stat[] = [
     {
@@ -902,7 +903,14 @@ export function AdminView({
         onChange={(id) => setTab(id as Tab)}
         tabs={[
           { id: 'users', label: 'Users & roles', icon: Users },
-          { id: 'applications', label: 'Applications', icon: Inbox },
+          {
+            id: 'applications',
+            label: 'Applications',
+            icon: Inbox,
+            // Surface the count of applications awaiting review across tabs, so an
+            // admin on another tab still sees there's a queue. Hidden at zero.
+            count: pendingApplications || undefined
+          },
           { id: 'invites', label: 'Beta invites', icon: Mail },
           { id: 'activity', label: 'Activity', icon: Activity },
           { id: 'trust', label: 'Chain of trust', icon: ShieldCheck },
