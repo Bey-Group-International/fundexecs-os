@@ -159,13 +159,23 @@ export async function getLpRoomData(orgId: string): Promise<LpRoomDbData> {
       .eq('org_id', orgId)
       .order('distribution_date', { ascending: false })
       .limit(200),
+    // No row cap: capital-account totals (committed/called/distributed/NAV) are
+    // summed across the whole ledger, so a truncated window would skew them.
     supabase
       .from('capital_account_entries')
       .select('*')
       .eq('org_id', orgId)
       .order('entry_date', { ascending: true })
-      .limit(500)
   ]);
+
+  // Surface real query/auth/RLS failures instead of masking them as empty data
+  // (which would silently fall back to the sample fixtures).
+  if (distributionsResult.error) {
+    throw new Error(`Failed to load distributions: ${distributionsResult.error.message}`);
+  }
+  if (entriesResult.error) {
+    throw new Error(`Failed to load capital account entries: ${entriesResult.error.message}`);
+  }
 
   const distributions: Distribution[] = (distributionsResult.data ?? []).map(mapDistribution);
   const capitalAccountEntries: CapitalAccountEntry[] = (entriesResult.data ?? []).map(

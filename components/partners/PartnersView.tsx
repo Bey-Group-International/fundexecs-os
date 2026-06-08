@@ -107,16 +107,20 @@ function ApplyButton({ partnerId, partnerName, partnerType, initialStatus }: App
   function handleApply() {
     setError(null);
     startTransition(async () => {
-      const result = await requestPartnerIntro({
-        partnerId,
-        partnerName,
-        partnerType,
-        rationale: undefined
-      });
-      if (result.ok) {
-        setStatus(result.status);
-      } else {
-        setError(result.error);
+      try {
+        const result = await requestPartnerIntro({
+          partnerId,
+          partnerName,
+          partnerType,
+          rationale: undefined
+        });
+        if (result.ok) {
+          setStatus(result.status);
+        } else {
+          setError(result.error);
+        }
+      } catch {
+        setError('Could not submit request.');
       }
     });
   }

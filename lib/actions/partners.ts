@@ -42,11 +42,13 @@ export async function addServiceProvider(
   return { ok: true, id: data.id };
 }
 
+export type PartnerType = 'service_provider' | 'capital_provider';
+const PARTNER_TYPES: readonly PartnerType[] = ['service_provider', 'capital_provider'];
+
 export interface RequestPartnerIntroInput {
   partnerId: string;
   partnerName: string;
-  /** 'service_provider' | 'capital_provider' */
-  partnerType: string;
+  partnerType: PartnerType;
   rationale?: string;
 }
 
@@ -65,24 +67,31 @@ export async function requestPartnerIntro(
 ): Promise<RequestPartnerIntroResult> {
   if (!input.partnerId) return { ok: false, error: 'Missing partner.' };
   if (!input.partnerName?.trim()) return { ok: false, error: 'Missing partner name.' };
-  if (!input.partnerType) return { ok: false, error: 'Missing partner type.' };
+  if (!PARTNER_TYPES.includes(input.partnerType)) {
+    return { ok: false, error: 'Invalid partner type.' };
+  }
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
 
   const supabase = await createClient();
 
-  // Check for an existing open request (unique index covers this, but a
-  // pre-check gives a friendlier error message).
-  const { data: existing } = await supabase
-    .from('partner_intro_requests')
-    .select('id, status')
-    .eq('org_id', org.orgId)
-    .eq('requester_id', org.userId)
-    .eq('partner_id', input.partnerId)
-    .eq('status', 'requested')
-    .maybeSingle();
+  // Re-usable filter for the open request that uniquely identifies this
+  // (org, requester, partner_type, partner) — mirrors the partial unique index.
+  const openRequestMatch = (q: ReturnType<typeof openSelect>) =>
+    q
+      .eq('org_id', org.orgId)
+      .eq('requester_id', org.userId)
+      .eq('partner_type', input.partnerType)
+      .eq('partner_id', input.partnerId)
+      .eq('status', 'requested');
 
+  function openSelect() {
+    return supabase.from('partner_intro_requests').select('id, status');
+  }
+
+  // Pre-check for a friendlier path when a request already exists.
+  const { data: existing } = await openRequestMatch(openSelect()).maybeSingle();
   if (existing) {
     return { ok: true, id: existing.id, status: existing.status };
   }
@@ -102,6 +111,13 @@ export async function requestPartnerIntro(
     .insert(insert)
     .select('id, status')
     .single();
+
+  // Concurrency: the read-then-insert can race, so a unique-violation (23505)
+  // means a sibling request won — return that existing row instead of erroring.
+  if (error?.code === '23505') {
+    const { data: raced } = await openRequestMatch(openSelect()).maybeSingle();
+    if (raced) return { ok: true, id: raced.id, status: raced.status };
+  }
 
   if (error || !data) {
     return { ok: false, error: error?.message ?? 'Could not submit request.' };

@@ -22,9 +22,12 @@ create table if not exists public.partner_intro_requests (
   updated_at  timestamptz not null default now()
 );
 
--- One open request per (org, requester, partner) at a time.
+-- One open request per (org, requester, partner) at a time. The table is
+-- polymorphic (service_provider / capital_provider), so partner_type is part of
+-- the identity to avoid cross-table id collisions in the dedupe key.
+drop index if exists public.partner_intro_requests_open_uniq;
 create unique index if not exists partner_intro_requests_open_uniq
-  on public.partner_intro_requests (org_id, requester_id, partner_id)
+  on public.partner_intro_requests (org_id, requester_id, partner_type, partner_id)
   where status = 'requested';
 
 create index if not exists partner_intro_requests_org_idx
@@ -57,7 +60,10 @@ drop policy if exists "members read own partner_intro_requests" on public.partne
 create policy "members read own partner_intro_requests"
   on public.partner_intro_requests
   for select to authenticated
-  using (private.is_org_member(org_id));
+  using (
+    private.is_org_member(org_id)
+    and requester_id = auth.uid()
+  );
 
 drop policy if exists "members insert partner_intro_requests" on public.partner_intro_requests;
 create policy "members insert partner_intro_requests"
