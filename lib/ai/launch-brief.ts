@@ -26,7 +26,7 @@ function str(value: unknown, max: number): string {
  */
 function normalize(input: unknown, ctx: LaunchBriefInput): LaunchBrief {
   const o = (input ?? {}) as Record<string, unknown>;
-  const fallbackMoves = FIRST_MOVES[ctx.memberType];
+  const fallbackMoves = FIRST_MOVES[ctx.memberType].moves;
   const allowed = new Set(fallbackMoves.map((m) => m.href));
 
   const rawMoves = Array.isArray(o.moves) ? o.moves : [];

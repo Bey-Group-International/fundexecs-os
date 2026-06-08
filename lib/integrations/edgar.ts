@@ -46,6 +46,8 @@ function decodeEntities(s: string): string {
 }
 
 function tag(block: string, name: string): string | null {
+  // Only allow simple tag names so the dynamic RegExp can't be abused (ReDoS).
+  if (!/^[a-z_][a-z0-9_-]*$/i.test(name)) return null;
   const m = block.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'i'));
   return m ? decodeEntities(m[1]) : null;
 }
@@ -79,7 +81,13 @@ function parseEntry(block: string): FormDFiling | null {
   const filingHref = hrefMatch ? decodeEntities(hrefMatch[1]) : null;
 
   const updated = tag(block, 'updated');
-  const occurredAt = updated ? new Date(updated).toISOString() : null;
+  let occurredAt: string | null = null;
+  if (updated) {
+    const d = new Date(updated);
+    // Guard against a malformed feed date so one bad entry can't throw and
+    // drop the whole batch.
+    occurredAt = Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
 
   return { accession, formType, issuerName, filingHref, occurredAt };
 }

@@ -28,7 +28,7 @@ const BRIEF_TIMEOUT_MS = 12_000;
 export interface CycleSummary {
   ingest: { fetched: number; inserted: number };
   embed: { refreshed: number };
-  score: { orgs: number; matchesCreated: number };
+  score: { orgs: number; matchesCreated: number; failed: number };
   judge: { judged: number };
   brief: { written: number };
   errors: string[];
@@ -135,28 +135,41 @@ export async function refreshStaleMandateEmbeddings(maxOrgs = 25): Promise<{ ref
 }
 
 /** 3. Score every active org against the current signal pool. */
-export async function scoreActiveOrgs(): Promise<{ orgs: number; matchesCreated: number }> {
+export async function scoreActiveOrgs(): Promise<{
+  orgs: number;
+  matchesCreated: number;
+  failed: number;
+}> {
   const admin = createAdminClient();
   const ids = await activeOrgIds(admin);
-  const rpc = admin.rpc as unknown as (
-    fn: string,
-    args: Record<string, unknown>
-  ) => Promise<{ data: number | null; error: { message: string } | null }>;
+  // Call `.rpc` AS A METHOD on the client — do not detach it into a const, or
+  // it loses its `this` binding and throws before issuing the request.
+  const db = admin as unknown as {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: number | null; error: { message: string } | null }>;
+  };
 
   let orgs = 0;
   let matchesCreated = 0;
+  let failed = 0;
   for (const id of ids) {
     try {
-      const { data, error } = await rpc('generate_signal_matches', { _org_id: id });
-      if (!error) {
+      const { data, error } = await db.rpc('generate_signal_matches', { _org_id: id });
+      if (error) {
+        failed++;
+        console.warn('[scoreActiveOrgs] generate_signal_matches failed:', id, error.message);
+      } else {
         orgs++;
         if (typeof data === 'number') matchesCreated += data;
       }
-    } catch {
-      // never-block per org
+    } catch (err) {
+      failed++;
+      console.warn('[scoreActiveOrgs] generate_signal_matches threw:', id, err);
     }
   }
-  return { orgs, matchesCreated };
+  return { orgs, matchesCreated, failed };
 }
 
 function hasJudge(rationale: unknown): boolean {
@@ -292,7 +305,7 @@ export async function runIntelligenceCycle(): Promise<CycleSummary> {
 
   const ingest = await safe('ingest', ingestFormD, { fetched: 0, inserted: 0 });
   const embed = await safe('embed', () => refreshStaleMandateEmbeddings(), { refreshed: 0 });
-  const score = await safe('score', scoreActiveOrgs, { orgs: 0, matchesCreated: 0 });
+  const score = await safe('score', scoreActiveOrgs, { orgs: 0, matchesCreated: 0, failed: 0 });
   const judge = await safe('judge', () => proactiveJudge(), { judged: 0 });
   const brief = await safe('brief', () => generateBriefings(), { written: 0 });
 
