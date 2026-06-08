@@ -5,7 +5,7 @@ export interface ReferralRow {
   referredOrgId: string;
   referredUserId: string;
   referredName: string | null;
-  source: 'beta_link' | 'beta_invite';
+  source: 'beta_link' | 'beta_invite' | 'peer';
   sourceId: string | null;
   joinedAt: string;
   creditsEarned: number;
@@ -78,7 +78,7 @@ export async function getReferralOverview(orgId: string): Promise<ReferralOvervi
       referredOrgId: r.referred_org_id,
       referredUserId: r.referred_user_id,
       referredName: nameById.get(r.referred_user_id) ?? null,
-      source: r.source === 'beta_link' ? 'beta_link' : 'beta_invite',
+      source: r.source === 'beta_link' || r.source === 'peer' ? r.source : 'beta_invite',
       sourceId: r.source_id,
       joinedAt: r.created_at,
       creditsEarned: earnedByRef.get(r.id) ?? 0,

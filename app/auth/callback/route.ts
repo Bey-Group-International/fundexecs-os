@@ -12,6 +12,8 @@ import {
   storeIntegrationSecret,
   upsertIntegrationConnection
 } from '@/lib/integrations/connections';
+import { recordPeerReferral } from '@/lib/queries/referral-capture';
+import { REFERRAL_COOKIE } from '@/app/r/[code]/route';
 
 type GooglePersistResult =
   | { attempted: false }
@@ -94,6 +96,17 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Capture a peer referral (best-effort, first-touch) from the /r/<code>
+      // cookie now that the session exists. record_referral resolves the new
+      // user's own org, is idempotent, and skips self / same-org.
+      const refCode = request.cookies.get(REFERRAL_COOKIE)?.value;
+      if (refCode) {
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+        if (user) await recordPeerReferral(user.id, refCode);
+      }
+
       const integrationResult = await persistGoogleIntegration(request).catch((err) => ({
         attempted: true as const,
         ok: false as const,
@@ -105,6 +118,7 @@ export async function GET(request: NextRequest) {
       }
       const response = NextResponse.redirect(integrationRedirect(origin, integrationResult, next));
       response.cookies.delete(INTEGRATION_GOOGLE_INTENT_COOKIE);
+      response.cookies.delete(REFERRAL_COOKIE);
       return response;
     }
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
