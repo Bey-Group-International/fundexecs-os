@@ -255,7 +255,14 @@ function RoleMenu({
 
 /* ---- Invite member panel (reuses the magic-link plumbing) --------------- */
 
-function InviteMemberPanel({ onClose }: { onClose: () => void }) {
+function InviteMemberPanel({
+  onClose,
+  canGrantOwner = true
+}: {
+  onClose: () => void;
+  /** Only owners (or platform admins) may invite a new owner. */
+  canGrantOwner?: boolean;
+}) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<OrgMemberRole>('member');
   const [note, setNote] = useState('');
@@ -348,7 +355,7 @@ function InviteMemberPanel({ onClose }: { onClose: () => void }) {
               options={[
                 { value: 'member', label: 'Member' },
                 { value: 'admin', label: 'Admin' },
-                { value: 'owner', label: 'Owner' }
+                ...(canGrantOwner ? [{ value: 'owner', label: 'Owner' }] : [])
               ]}
             />
           </div>
@@ -382,6 +389,7 @@ function UsersPanel({
   pendingId,
   canInvite = true,
   canManageMembers = true,
+  canGrantOwner = true,
   onApprove,
   onArchive,
   onRole
@@ -393,10 +401,12 @@ function UsersPanel({
   viewerRole: OrgMemberRole | null;
   rowErrors: Record<string, string>;
   pendingId: string | null;
-  /** Show the invite control (platform-only — invites mint auth users). */
+  /** Show the invite control (email invites — owners/admins of the org). */
   canInvite?: boolean;
   /** Show member controls: role menu + approve/archive (owners/admins of the org). */
   canManageMembers?: boolean;
+  /** Whether the viewer may invite/grant the owner role (owners + platform). */
+  canGrantOwner?: boolean;
   onApprove: (id: string) => void;
   onArchive: (id: string) => void;
   onRole: (id: string, role: OrgMemberRole) => void;
@@ -465,7 +475,9 @@ function UsersPanel({
         </div>
       </div>
 
-      {canInvite && inviteOpen ? <InviteMemberPanel onClose={() => setInviteOpen(false)} /> : null}
+      {canInvite && inviteOpen ? (
+        <InviteMemberPanel onClose={() => setInviteOpen(false)} canGrantOwner={canGrantOwner} />
+      ) : null}
 
       {filtered.length === 0 ? (
         <Card className="p-10 text-center text-[13px] text-fg-5">
@@ -818,11 +830,13 @@ export function AdminView({
   referralOverview: ReferralOverview | null;
   viewerRole: OrgMemberRole | null;
 }) {
-  // Org owners/admins manage their OWN team (roles, approve/archive) but the
-  // invite/auth-minting flows stay platform-only.
+  // Org owners/admins manage their OWN team — roles, approve/archive, and email
+  // invites. Only an org owner (or platform admin) may grant the owner role; the
+  // mass beta-link / referral distribution stays platform-only.
   const isOrg = scope === 'org';
-  const canInvite = !isOrg;
+  const canInvite = true;
   const canManageMembers = true;
+  const canGrantOwner = !isOrg || viewerRole === 'owner';
   const [tab, setTab] = useState<Tab>('overview');
   const router = useRouter();
   // Member rows share the card lifecycle: approving an applicant "completes"
@@ -977,13 +991,13 @@ export function AdminView({
       // admin on another tab still sees there's a queue. Hidden at zero.
       count: pendingApplications || undefined
     },
-    { id: 'invites' as const, label: 'Beta invites', icon: Mail },
+    { id: 'invites' as const, label: isOrg ? 'Invites' : 'Beta invites', icon: Mail },
     { id: 'referrals' as const, label: 'Referrals', icon: Coins },
     { id: 'activity' as const, label: 'Activity', icon: Activity },
     { id: 'trust' as const, label: 'Chain of trust', icon: ShieldCheck },
     { id: 'knowledge' as const, label: 'Knowledge base', icon: BrainCircuit }
   ];
-  const ORG_VISIBLE: Tab[] = ['overview', 'users', 'activity'];
+  const ORG_VISIBLE: Tab[] = ['overview', 'users', 'invites', 'activity'];
   const tabs = isOrg ? allTabs.filter((t) => ORG_VISIBLE.includes(t.id)) : allTabs;
   // Jump targets the Overview panel may deep-link to (everything except the
   // overview tab itself), bounded to the tabs actually visible in this scope.
@@ -1035,6 +1049,7 @@ export function AdminView({
           pendingId={pendingId}
           canInvite={canInvite}
           canManageMembers={canManageMembers}
+          canGrantOwner={canGrantOwner}
           onApprove={approve}
           onArchive={archive}
           onRole={changeRole}
@@ -1044,7 +1059,10 @@ export function AdminView({
       {tab === 'invites' && (
         <div className="flex flex-col gap-[18px]">
           <BetaInvitesPanel invites={invites} earnings={referralOverview?.earningsBySource ?? {}} />
-          <BetaLinksPanel links={betaLinks} earnings={referralOverview?.earningsBySource ?? {}} />
+          {/* Mass shareable links + referral mechanics stay platform-only. */}
+          {!isOrg && (
+            <BetaLinksPanel links={betaLinks} earnings={referralOverview?.earningsBySource ?? {}} />
+          )}
         </div>
       )}
       {tab === 'referrals' && <ReferralsPanel overview={referralOverview} />}

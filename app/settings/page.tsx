@@ -111,9 +111,10 @@ export default async function SettingsPage() {
   //  • 'platform' — the Bey Group team (@beygroupintl.com): the full portal,
   //    including the invite/auth-minting flows and platform-wide surfaces.
   //  • 'org' — an org owner/admin on their OWN workspace: an org-scoped view
-  //    (their team, launch readiness, activity) where they can manage their own
-  //    members' roles + archive, but NOT mint invites. RLS keeps every read
-  //    inside their org; platform-only data (applications, referrals) isn't loaded.
+  //    (team, launch readiness, invites, activity) where they manage their own
+  //    members (roles + approve/archive) and send email invites. Mass beta-link
+  //    distribution + platform-only data (applications, referrals) stay reserved
+  //    for the platform tier. RLS keeps every read inside their org.
   //  • null — no admin surface (a normal member).
   let adminScope: 'platform' | 'org' | null = null;
   let adminData: AdminData | null = null;

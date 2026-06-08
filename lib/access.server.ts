@@ -41,3 +41,25 @@ export async function requireOrgManager(orgId: string): Promise<boolean> {
     .maybeSingle();
   return data?.status === 'active' && (data.role === 'owner' || data.role === 'admin');
 }
+
+/**
+ * Owner-grant gate: true when the signed-in user may create a new OWNER of
+ * `orgId` — a platform admin OR an ACTIVE owner of that org. Used to stop an
+ * org *admin* from escalating privilege by inviting someone in as owner
+ * (mirrors the owner-only promotion rule in `setMemberRole`).
+ */
+export async function requireOrgOwner(orgId: string): Promise<boolean> {
+  if (!orgId) return false;
+  const user = await getAuthUser();
+  if (!user) return false;
+  if (isPlatformAdmin(user.email)) return true;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('org_members')
+    .select('role, status')
+    .eq('org_id', orgId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  return data?.status === 'active' && data.role === 'owner';
+}
