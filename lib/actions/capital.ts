@@ -29,14 +29,21 @@ export async function closeCommitment(commitmentId: string): Promise<CloseCommit
   if (!org) return { ok: false, error: 'No active organization.' };
 
   const supabase = await createClient();
+  // Enforce closeable-stage on the server, not just the UI: a terminal
+  // commitment (already closed/funded/withdrawn) must not be re-opened to
+  // 'closed'. The `.not(... in ...)` makes the guard atomic — no row matches
+  // when the stage is terminal, so `.single()` returns no row.
   const { data, error } = await supabase
     .from('capital_commitments')
     .update({ stage: 'closed' })
     .eq('id', commitmentId)
     .eq('org_id', org.orgId)
+    .not('stage', 'in', '("closed","funded","withdrawn")')
     .select('id, amount')
     .single();
-  if (error || !data) return { ok: false, error: error?.message ?? 'Close failed.' };
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? 'Commitment is not closeable.' };
+  }
 
   try {
     await recordLoopClose({

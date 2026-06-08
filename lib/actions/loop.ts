@@ -55,7 +55,10 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
 
   const supabase = await createClient();
 
-  // Idempotency: one loop credit per entity. The ledger is the source of truth.
+  // Fast-path dedupe: skip the work when this entity was already credited.
+  // The real guarantee is the partial unique index on trust_events
+  // (org_id, entity_id) WHERE action = 'loop_closed' — see the migration — which
+  // makes the marker insert below the atomic gate against concurrent closes.
   const { data: existing } = await supabase
     .from('trust_events')
     .select('id')
@@ -68,11 +71,38 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
 
   const layerKey = LOOP_SOURCE_LAYER[input.source];
   const layerLabel = PROOF_LAYER_LABEL[layerKey];
+
+  // Claim the credit FIRST by inserting the idempotency marker. A unique
+  // violation means a concurrent/prior close already won — bail without
+  // crediting. Any other error means nothing was written, so it's safe to
+  // surface and retry (no partial credit).
+  const { error: markerErr } = await supabase.from('trust_events').insert({
+    org_id: org.orgId,
+    actor_id: org.userId,
+    entity_type: input.entityType,
+    entity_id: input.entityId,
+    action: LOOP_ACTION,
+    metadata: {
+      source: input.source,
+      layer: layerKey,
+      ...(input.metadata ?? {})
+    }
+  });
+  if (markerErr) {
+    if ((markerErr as { code?: string }).code === '23505') {
+      return { ok: true, credited: false };
+    }
+    return { ok: false, error: markerErr.message };
+  }
+
+  // Marker won — now apply the proof credit. Ordering this after the marker
+  // means a failure here can only ever *under*-credit (the close didn't
+  // strengthen the record), never double-credit; that's the safe direction and
+  // is recoverable. Idempotency is already locked in by the marker above.
   let credited = false;
 
   // Resolve (and ensure) the member-profile chain record — the one readiness
-  // reads. Without a manager user id we can still ledger the event, but there's
-  // no record to strengthen.
+  // reads. Without a manager user id there's no record to strengthen.
   const profile = await getFundProfile(org.orgId).catch(() => null);
   const managerUserId = profile?.managerUserId ?? null;
 
@@ -146,26 +176,6 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
         }
       }
     }
-  }
-
-  // Ledger the event regardless — it's the idempotency marker and the
-  // activity-feed signal ("loop closed → record strengthened").
-  try {
-    await supabase.from('trust_events').insert({
-      org_id: org.orgId,
-      actor_id: org.userId,
-      entity_type: input.entityType,
-      entity_id: input.entityId,
-      action: LOOP_ACTION,
-      metadata: {
-        source: input.source,
-        layer: layerKey,
-        credited,
-        ...(input.metadata ?? {})
-      }
-    });
-  } catch {
-    // Best-effort: the proof bump (if any) already landed.
   }
 
   revalidatePath('/', 'layout');

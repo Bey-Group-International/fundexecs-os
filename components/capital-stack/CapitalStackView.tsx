@@ -262,9 +262,14 @@ function CommitmentsTable({ commitments }: { commitments: CapitalCommitment[] })
     startClose(async () => {
       // Closing a commitment closes the loop — proof of work flows back into the
       // record (see lib/actions/capital.ts). Refresh to pick up the new state.
-      await closeCommitment(id);
-      router.refresh();
-      setPendingId(null);
+      // `finally` guarantees the row never gets stuck in its pending state, even
+      // if the close throws.
+      try {
+        await closeCommitment(id);
+        router.refresh();
+      } finally {
+        setPendingId(null);
+      }
     });
   };
 

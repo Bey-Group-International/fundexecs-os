@@ -58,7 +58,9 @@ export const LOOP_SOURCE_WEIGHT: Record<LoopCloseSource, number> = {
  * the append-only `trust_events` ledger), so this is a straight additive bump.
  */
 export function applyLoopContribution(current: number, source: LoopCloseSource): number {
-  const base = Number.isFinite(current) ? current : 0;
+  // Normalize non-finite *and* negative inputs to 0 so a malformed stored value
+  // can't subtract from the contribution.
+  const base = Number.isFinite(current) && current > 0 ? current : 0;
   return Math.max(0, Math.min(100, Math.round(base + LOOP_SOURCE_WEIGHT[source])));
 }
 
