@@ -106,6 +106,23 @@ async function grantInvoiceCredits(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Reconcile a raise reservation's payment status from its Checkout session.
+ * Idempotent against Stripe's at-least-once delivery: only flips a row that is
+ * still `pending`, so re-delivered events and already-terminal rows no-op.
+ */
+async function reconcileReservation(
+  admin: AdminClient,
+  sessionId: string,
+  status: 'paid' | 'cancelled'
+): Promise<void> {
+  await admin
+    .from('raise_interests')
+    .update({ reservation_status: status })
+    .eq('stripe_session_id', sessionId)
+    .eq('reservation_status', 'pending');
+}
+
 export async function POST(req: NextRequest) {
   const secretKey = resolveEnv('STRIPE_SECRET_KEY');
   const webhookSecret = resolveEnv('STRIPE_WEBHOOK_SECRET');
@@ -142,6 +159,16 @@ export async function POST(req: NextRequest) {
           // the recipient (idempotent). They redeem the credits themselves.
           if (session.metadata?.kind === 'gift') {
             await activateGiftBySession(session.id);
+            break;
+          }
+
+          // Raise reservation deposit → mark the reservation paid (idempotent).
+          // Only flip once the session is actually paid; delayed/async methods
+          // settle via checkout.session.async_payment_succeeded below.
+          if (session.metadata?.kind === 'raise_reservation') {
+            if (session.payment_status === 'paid') {
+              await reconcileReservation(admin, session.id, 'paid');
+            }
             break;
           }
 
@@ -214,6 +241,25 @@ export async function POST(req: NextRequest) {
         const credits = Number(sub.metadata?.credits_per_period ?? 0);
         if (orgId && credits > 0) {
           await grantInvoiceCredits(admin, invoice.id, orgId, credits, periodEndIso(sub));
+        }
+        break;
+      }
+
+      // Delayed payment methods settle later — mark the reservation paid then.
+      case 'checkout.session.async_payment_succeeded': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.kind === 'raise_reservation') {
+          await reconcileReservation(admin, session.id, 'paid');
+        }
+        break;
+      }
+
+      // Abandoned or failed reservation checkout → release it as cancelled.
+      case 'checkout.session.expired':
+      case 'checkout.session.async_payment_failed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.kind === 'raise_reservation') {
+          await reconcileReservation(admin, session.id, 'cancelled');
         }
         break;
       }
