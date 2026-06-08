@@ -19,12 +19,22 @@ export type { UpdateFeedProps } from './UpdateFeed';
 export { CommitmentTracker } from './CommitmentTracker';
 export type { CommitmentTrackerProps } from './CommitmentTracker';
 
+export { DistributionsFeed } from './DistributionsFeed';
+export type { DistributionsFeedProps } from './DistributionsFeed';
+
+export { CapitalAccountCard } from './CapitalAccountCard';
+export type { CapitalAccountCardProps } from './CapitalAccountCard';
+
 export { LpQAChat } from './LpQAChat';
 export type { LpQAChatProps } from './LpQAChat';
 
 export type {
+  CapitalAccountSummaryData,
   CommitmentScheduleRow,
   CommitmentSnapshot,
+  DistributionItem,
+  DistributionKind,
+  DistributionStatus,
   FundOverview,
   FundStatus,
   LpAnswer,
@@ -41,7 +51,9 @@ export type {
 } from './types';
 
 export {
+  FIXTURE_CAPITAL_ACCOUNT,
   FIXTURE_COMMITMENTS,
+  FIXTURE_DISTRIBUTIONS,
   FIXTURE_DOCUMENTS,
   FIXTURE_FUND,
   FIXTURE_LP_ROOM,
