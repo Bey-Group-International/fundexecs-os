@@ -18,15 +18,16 @@
 
 ## 1. Competitive teardown (what each does best)
 
-| Platform | What it's great at | The transferable idea |
-| --- | --- | --- |
-| **OpenVC** | Searchable investor directory with hard filters (stage, geo, check size, thesis); a structured "apply / one-click reach-out"; free founder tools (deck reviews, templates) used as top-of-funnel | A **filterable directory + structured apply** beats an unstructured contact list. Free utility tools drive acquisition. |
-| **Raises.com** | Done-for-you raise as a **guided journey** — SPV/fund formation, investor outreach, data room, 506(b)/(c) compliance walked step by step | A **raise-setup wizard** with explicit compliance gating turns a blank page into a checklist. |
-| **StartEngine** | Public **campaign pages**: live progress bar, amount raised, # investors, min check, "Invest now", reservations, social proof, KYC onboarding, secondary trading | A **public, shareable raise page** with live momentum + a commit CTA is the single highest-impact visual borrow. |
-| **AngelList** | Syndicates/SPVs, **cap table**, GP↔LP deal-sharing, fund admin, clean **LP dashboards** with allocations and docs | **Syndicate deal-sharing** + a real **cap-table** view + crisp LP allocation dashboards. |
-| **Avestor** | Custom-fund **LP portal**: distributions, statements, K-1/tax docs, periodic investor reporting, doc vault | **LP-portal depth** — distributions feed, statements, structured reporting beyond a generic update feed. |
+| Platform        | What it's great at                                                                                                                                                                               | The transferable idea                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| **OpenVC**      | Searchable investor directory with hard filters (stage, geo, check size, thesis); a structured "apply / one-click reach-out"; free founder tools (deck reviews, templates) used as top-of-funnel | A **filterable directory + structured apply** beats an unstructured contact list. Free utility tools drive acquisition. |
+| **Raises.com**  | Done-for-you raise as a **guided journey** — SPV/fund formation, investor outreach, data room, 506(b)/(c) compliance walked step by step                                                         | A **raise-setup wizard** with explicit compliance gating turns a blank page into a checklist.                           |
+| **StartEngine** | Public **campaign pages**: live progress bar, amount raised, # investors, min check, "Invest now", reservations, social proof, KYC onboarding, secondary trading                                 | A **public, shareable raise page** with live momentum + a commit CTA is the single highest-impact visual borrow.        |
+| **AngelList**   | Syndicates/SPVs, **cap table**, GP↔LP deal-sharing, fund admin, clean **LP dashboards** with allocations and docs                                                                                | **Syndicate deal-sharing** + a real **cap-table** view + crisp LP allocation dashboards.                                |
+| **Avestor**     | Custom-fund **LP portal**: distributions, statements, K-1/tax docs, periodic investor reporting, doc vault                                                                                       | **LP-portal depth** — distributions feed, statements, structured reporting beyond a generic update feed.                |
 
 Common threads worth internalizing:
+
 - **Momentum is the hero.** Every winner foregrounds a live progress/coverage
   number with social proof (investors, commitments). FundExecs has the data
   (`RaiseProgressBar`, allocations) but only inside the dark app.
@@ -39,18 +40,18 @@ Common threads worth internalizing:
 
 ## 2. Where FundExecs already is (so we extend, not rebuild)
 
-| Capability | Existing code | State |
-| --- | --- | --- |
-| Raise progress (committed / soft / target) | `components/dashboard/RaiseProgressBar.tsx`, `lib/queries/dashboard` | ✅ in-app, dark only |
-| Shareable public profile (token-gated, safe subset) | `app/p/[token]/page.tsx`, `lib/queries/public-profile.ts`, `lib/actions/profile-share.ts` | ✅ read-only, **no raise/commit, dark** |
-| Capital stack / coverage | `app/capital-stack`, `components/capital-stack/CapitalStackView.tsx`, `lib/queries/capital-stack.ts` | ✅ in-app |
-| Allocations | `lib/actions/allocations.ts`, `lib/queries/pipeline.ts` | ✅ |
-| Match inbox (fit-scored triage) | `app/match-inbox`, `components/match-inbox/MatchInboxView.tsx`, `lib/queries/match-inbox.ts` | ✅ |
-| Connections / warm intros | `app/connections`, `lib/actions/connections.ts`, `lib/queries/connections.ts` | ✅ |
-| Partners / ecosystem directory | `app/partners`, `components/partners/PartnersView.tsx`, `lib/queries/partners.ts` | ✅ list, **no hard filters/apply** |
-| LP room (overview, commitments, doc vault, updates, Q&A) | `components/lp-room/*` (`CommitmentTracker`, `DocumentVaultList`, `UpdateFeed`, `LpQAChat`, `FundOverviewCard`) | ✅ **no distributions/statements** |
-| Payments | `lib/actions/stripe-checkout.ts` | ✅ checkout exists |
-| Chain of Trust | `app/trust`, `components/shell/trust/*` | ✅ — our differentiator vs all five |
+| Capability                                               | Existing code                                                                                                   | State                                   |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Raise progress (committed / soft / target)               | `components/dashboard/RaiseProgressBar.tsx`, `lib/queries/dashboard`                                            | ✅ in-app, dark only                    |
+| Shareable public profile (token-gated, safe subset)      | `app/p/[token]/page.tsx`, `lib/queries/public-profile.ts`, `lib/actions/profile-share.ts`                       | ✅ read-only, **no raise/commit, dark** |
+| Capital stack / coverage                                 | `app/capital-stack`, `components/capital-stack/CapitalStackView.tsx`, `lib/queries/capital-stack.ts`            | ✅ in-app                               |
+| Allocations                                              | `lib/actions/allocations.ts`, `lib/queries/pipeline.ts`                                                         | ✅                                      |
+| Match inbox (fit-scored triage)                          | `app/match-inbox`, `components/match-inbox/MatchInboxView.tsx`, `lib/queries/match-inbox.ts`                    | ✅                                      |
+| Connections / warm intros                                | `app/connections`, `lib/actions/connections.ts`, `lib/queries/connections.ts`                                   | ✅                                      |
+| Partners / ecosystem directory                           | `app/partners`, `components/partners/PartnersView.tsx`, `lib/queries/partners.ts`                               | ✅ list, **no hard filters/apply**      |
+| LP room (overview, commitments, doc vault, updates, Q&A) | `components/lp-room/*` (`CommitmentTracker`, `DocumentVaultList`, `UpdateFeed`, `LpQAChat`, `FundOverviewCard`) | ✅ **no distributions/statements**      |
+| Payments                                                 | `lib/actions/stripe-checkout.ts`                                                                                | ✅ checkout exists                      |
+| Chain of Trust                                           | `app/trust`, `components/shell/trust/*`                                                                         | ✅ — our differentiator vs all five     |
 
 **Takeaway:** none of the four workstreams is greenfield. Each is an extension
 of shipped surfaces, which keeps effort and risk low.
@@ -59,7 +60,7 @@ of shipped surfaces, which keeps effort and risk low.
 
 ## 3. The four workstreams
 
-### W1 — Public raise / campaign page (StartEngine)  · highest impact
+### W1 — Public raise / campaign page (StartEngine) · highest impact
 
 **Adopt:** a public, token-gated **raise page** that shows the live progress
 bar, amount committed, # of committed parties, min check, and a **"Express
@@ -149,12 +150,12 @@ is highest-impact and self-contained, and W4's gating is additive on top.
 
 ## 4. Adoption matrix (one-look summary)
 
-| # | Borrow | From | Extends | New surface/table | Effort | Impact |
-| --- | --- | --- | --- | --- | --- | --- |
-| W1 | Public raise page + commit | StartEngine | `app/p/[token]`, `RaiseProgressBar` | `app/r/[token]`, `raise_interests` | M | ★★★ |
-| W2 | Directory filters + apply | OpenVC/AngelList | `partners`, `connections` | filter params, apply action | M | ★★ |
-| W3 | Distributions + statements | Avestor/AngelList | `lp-room` | `distributions`, `capital_account_entries` | M–L | ★★ |
-| W4 | Raise-setup wizard + 506 gating | Raises.com | `OnboardingStepper`, `capital-stack` | `raise-setup` action, compliance fields | M | ★★ |
+| #   | Borrow                          | From              | Extends                              | New surface/table                          | Effort | Impact |
+| --- | ------------------------------- | ----------------- | ------------------------------------ | ------------------------------------------ | ------ | ------ |
+| W1  | Public raise page + commit      | StartEngine       | `app/p/[token]`, `RaiseProgressBar`  | `app/r/[token]`, `raise_interests`         | M      | ★★★    |
+| W2  | Directory filters + apply       | OpenVC/AngelList  | `partners`, `connections`            | filter params, apply action                | M      | ★★     |
+| W3  | Distributions + statements      | Avestor/AngelList | `lp-room`                            | `distributions`, `capital_account_entries` | M–L    | ★★     |
+| W4  | Raise-setup wizard + 506 gating | Raises.com        | `OnboardingStepper`, `capital-stack` | `raise-setup` action, compliance fields    | M      | ★★     |
 
 ---
 
@@ -187,13 +188,13 @@ where it helps acquisition, without destabilizing the institutional product.
 
 ## 6. Per-member-type touchpoints (all five, evenly)
 
-| `member_type` | W1 raise page | W2 directory | W3 LP portal | W4 wizard |
-| --- | --- | --- | --- | --- |
-| `investment_firm` (GP) | Publish a deal/raise | Find LPs / co-investors | Issue distributions/statements | Set up SPV/raise |
-| `individual_investor` (LP) | Commit / express interest | Browse deals & syndicates | **Primary**: account, distributions | — |
-| `startup` | **Primary**: public raise | Find capital | — | **Primary**: raise setup |
-| `service_provider` | Appears on deal pages | Find clients (apply) | — | — |
-| `student` | View live opportunities | **Primary**: opportunities | — | — |
+| `member_type`              | W1 raise page             | W2 directory               | W3 LP portal                        | W4 wizard                |
+| -------------------------- | ------------------------- | -------------------------- | ----------------------------------- | ------------------------ |
+| `investment_firm` (GP)     | Publish a deal/raise      | Find LPs / co-investors    | Issue distributions/statements      | Set up SPV/raise         |
+| `individual_investor` (LP) | Commit / express interest | Browse deals & syndicates  | **Primary**: account, distributions | —                        |
+| `startup`                  | **Primary**: public raise | Find capital               | —                                   | **Primary**: raise setup |
+| `service_provider`         | Appears on deal pages     | Find clients (apply)       | —                                   | —                        |
+| `student`                  | View live opportunities   | **Primary**: opportunities | —                                   | —                        |
 
 Every type gains at least two touchpoints, satisfying the "all five evenly"
 decision.
