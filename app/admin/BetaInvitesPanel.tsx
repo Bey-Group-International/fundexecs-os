@@ -70,7 +70,8 @@ function LinkBox({ link, onDone }: { link: string; onDone: () => void }) {
       </div>
       <div className="mt-2 flex items-center justify-between">
         <p className="text-[11px] text-fg-5">
-          One-time use. The link signs them in and starts onboarding.
+          One-time use. The link signs them in — new users start onboarding, returning users land
+          back in the app.
         </p>
         <button
           type="button"
@@ -244,17 +245,24 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
                 <span className="text-[11.5px] text-fg-4">{relativeTime(inv.invitedAt)}</span>
                 <span className="text-[11.5px] text-fg-4">{relativeTime(inv.acceptedAt)}</span>
                 <div className="flex justify-end gap-1.5">
-                  {inv.status !== 'accepted' && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={RefreshCw}
-                      disabled={isBusy}
-                      onClick={() => handleResend(inv.id)}
-                    >
-                      {inv.status === 'revoked' ? 'Re-invite' : 'Resend'}
-                    </Button>
-                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={inv.status === 'accepted' ? Send : RefreshCw}
+                    disabled={isBusy}
+                    onClick={() => handleResend(inv.id)}
+                    aria-label={
+                      inv.status === 'accepted'
+                        ? `Send a fresh sign-in link to ${inv.email}`
+                        : `Resend invite to ${inv.email}`
+                    }
+                  >
+                    {inv.status === 'accepted'
+                      ? 'Send sign-in link'
+                      : inv.status === 'revoked'
+                        ? 'Re-invite'
+                        : 'Resend'}
+                  </Button>
                   {inv.status === 'pending' && (
                     <Button
                       variant="ghost"
