@@ -79,7 +79,9 @@ function fresh(): Accumulator {
 }
 
 function add(acc: Accumulator, amount: number, ageDays: number): void {
-  if (amount <= 0) return;
+  // Reject NaN/Infinity too — `amount <= 0` alone wouldn't, and a NaN would
+  // poison the surface total.
+  if (!Number.isFinite(amount) || amount <= 0) return;
   acc.amount += amount;
   acc.count += 1;
   if (ageDays >= VERY_STALE_DAYS) acc.veryStaleCount += 1;

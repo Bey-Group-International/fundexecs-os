@@ -120,7 +120,7 @@ const TONE_SEVERITY: Record<BadgeTone, number> = {
 };
 
 interface GroupRollup {
-  /** Pre-formatted headline — a compact $ total ("$4.2M") or a plain count. */
+  /** Pre-formatted headline — a compact $ total, e.g. "$4.2M". */
   label: string;
   tone: BadgeTone;
 }
@@ -158,8 +158,12 @@ function computeGroupRollup(
     if (!key || seen.has(key)) continue;
     seen.add(key);
     const signal = badges[key];
-    if (typeof signal.amount !== 'number' || signal.amount <= 0) continue;
-    dollars += signal.amount;
+    const amount = signal.amount;
+    // Require a positive, finite amount — `amount <= 0` alone wouldn't reject
+    // NaN/Infinity (every NaN comparison is false), and one NaN would poison the
+    // whole sum into a misleading "$0".
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) continue;
+    dollars += amount;
     hasDollars = true;
     const childTone = signal.tone ?? 'azure';
     if (tone === null || TONE_SEVERITY[childTone] > TONE_SEVERITY[tone]) tone = childTone;
