@@ -438,7 +438,12 @@ export async function streamEarn(
         escalated: model === AI_MODELS.reasoning,
         rag: sources.length > 0,
         ragCount: sources.length,
-        grounding: { snapshot: !!snapshot, entity: !!entitySnapshot, recap: !!recap },
+        grounding: {
+          snapshot: !!snapshot,
+          entity: !!entitySnapshot,
+          recap: !!recap,
+          intelligence: !!intelligence
+        },
         inputTokens: u?.input_tokens ?? null,
         outputTokens: u?.output_tokens ?? null,
         cacheReadTokens: u?.cache_read_input_tokens ?? null,
