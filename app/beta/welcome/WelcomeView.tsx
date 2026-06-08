@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui';
 import { usePrefersReducedMotion, EarnSays, Chip, PRIMARY_BTN } from '@/components/beta/earn-chat';
 import { TEAM_ROSTER, TeamAvatar } from '@/lib/team';
 import { ArrivalProof } from '@/components/beta/ArrivalProof';
+import { BrandSplash } from '@/components/beta/BrandSplash';
 import type { BetaMomentum } from '@/lib/queries/beta-momentum';
 
 type Topic = 'intro' | 'team' | 'value';
@@ -49,10 +50,25 @@ export function WelcomeView({
   const [showTour, setShowTour] = useState(false);
   const [topic, setTopic] = useState<Topic>('intro');
   const [entering, setEntering] = useState(false);
+  // Brand boot-up splash plays once per session before the welcome.
+  const [booting, setBooting] = useState(true);
 
   useEffect(() => {
     ev('beta_invite_welcome_view');
   }, []);
+
+  useEffect(() => {
+    if (!booting) return;
+    try {
+      if (sessionStorage.getItem('fx-booted')) {
+        queueMicrotask(() => setBooting(false));
+        return;
+      }
+      sessionStorage.setItem('fx-booted', '1');
+    } catch {
+      // sessionStorage unavailable — let the splash play.
+    }
+  }, [booting]);
 
   const firstName = name?.trim().split(/\s+/)[0] || '';
   const greeting = `Welcome${firstName ? `, ${firstName}` : ''}. ${
@@ -65,6 +81,8 @@ export function WelcomeView({
     ev('beta_invite_welcome_enter');
     router.push('/onboarding');
   }
+
+  if (booting) return <BrandSplash onDone={() => setBooting(false)} />;
 
   return (
     <main

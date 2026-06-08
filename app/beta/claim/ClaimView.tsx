@@ -35,6 +35,7 @@ import { track } from '@vercel/analytics';
 import type { BetaMomentum } from '@/lib/queries/beta-momentum';
 import { ArrivalProof } from '@/components/beta/ArrivalProof';
 import { ValuePreview } from '@/components/beta/ValuePreview';
+import { BrandSplash } from '@/components/beta/BrandSplash';
 import { isMemberType } from '@/lib/member-types';
 
 /** The conversation advances through these turns; each is one thing Earn asks. */
@@ -352,6 +353,9 @@ export function ClaimView({
   const [askOpen, setAskOpen] = useState(false);
   // Drives the choreographed first-paint reveal of the cinematic intro.
   const [revealed, setRevealed] = useState(false);
+  // Brand boot-up splash plays once per session before the welcome (skipped on
+  // an auth-error bounce so a returning, errored visitor goes straight to fix it).
+  const [booting, setBooting] = useState(!redirectedError);
 
   // captured application — committed as each conversational turn settles
   const [name, setName] = useState('');
@@ -381,6 +385,20 @@ export function ClaimView({
   useEffect(() => {
     queueMicrotask(() => setRevealed(true));
   }, []);
+
+  // Boot splash once per browser session — a refresh mid-flow shouldn't replay it.
+  useEffect(() => {
+    if (!booting) return;
+    try {
+      if (sessionStorage.getItem('fx-booted')) {
+        queueMicrotask(() => setBooting(false));
+        return;
+      }
+      sessionStorage.setItem('fx-booted', '1');
+    } catch {
+      // sessionStorage unavailable — just let the splash play.
+    }
+  }, [booting]);
 
   // Rehydrate answers if auth bounced us back (or a returning visit within the
   // cookie window) so a retry never overwrites the carried application with
@@ -551,6 +569,9 @@ export function ClaimView({
   }
 
   const stepNumber = STEP_ORDER.indexOf(step) + 1;
+
+  // Brand boot-up plays first, then hands off to the welcome below.
+  if (booting) return <BrandSplash onDone={() => setBooting(false)} />;
 
   return (
     <main
