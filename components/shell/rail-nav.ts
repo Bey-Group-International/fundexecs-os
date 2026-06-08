@@ -1,32 +1,32 @@
 import {
   // Pinned
   LayoutDashboard,
-  // The Record
-  ShieldCheck,
+  // Build
+  Hammer,
   IdCard,
+  Compass,
   Gauge,
+  ShieldCheck,
+  Building2,
+  // Source
   Radar,
-  // The Network
-  Network,
   Briefcase,
   TrendingUp,
   Layers,
-  Handshake,
-  Wrench,
-  // The Workshop
-  Wand2,
-  Sparkles,
-  FileSignature,
-  FileText,
-  MessagesSquare,
-  Megaphone,
-  // Desk tools
-  ListChecks,
-  Inbox,
-  MessageSquareWarning,
-  PieChart,
+  // Run
+  Play,
+  FileSearch,
+  Activity,
   Scale,
-  History,
+  Workflow,
+  // Drive
+  Rocket,
+  Palette,
+  ClipboardCheck,
+  PieChart,
+  Target,
+  // Shared
+  Sparkles,
   type LucideIcon
 } from 'lucide-react';
 import type { LifecycleStage } from '@/lib/lifecycle';
@@ -34,29 +34,45 @@ import type { LifecycleStage } from '@/lib/lifecycle';
 /* ----------------------------------------------------------------------------
  * Rail navigation registry — the single source of truth for the side rail.
  *
- * The rail is a BlackRock-grade command-center spine: a pinned Command Center,
- * three intentional clusters (record → network → produce), and a collapsed
- * "Desk Tools" drawer for lower-frequency surfaces. Each AI cluster carries one
- * Earn action launcher (a verb you trigger, not a page you hunt for).
- *
- * The component (`Wave1SideRail.tsx`) renders entirely from this module. Keeping
- * it declarative means IA/flag changes happen in one place.
+ * The rail is the operating LOOP, not a menu: Build → Source → Run → Drive.
+ * Each verb is a stage you move through; each carries one Earn action launcher
+ * (the verb, made one-tap). Existing surfaces are folded in only where they
+ * drive that stage — no buttons for the sake of buttons. Net-new AI concepts
+ * (Stress Test, Aggregation Strategy) are click-to-Earn actions; surfaces not
+ * yet built (Formation, Execute) are flagged "soon".
  *
  * Scope guardrail: UI metadata only. Must not import from `lib/queries/*`,
  * `lib/supabase/*`, or any loader.
  * --------------------------------------------------------------------------*/
 
-/** Stable group keys — used to look up stage emphasis + persisted collapse. */
-export type RailGroupKey = 'the-record' | 'the-network' | 'the-workshop' | 'desk-tools';
+/** Stable cluster keys — used for stage emphasis + persisted collapse. */
+export type RailGroupKey = 'build' | 'source' | 'run' | 'drive';
 
-/** One rail entry inside a cluster. */
-export interface RailNavItem {
+/** A nested third-tier row (e.g. Capital → Equity/Debt/Hybrid). */
+export interface RailSubItem {
   href: string;
   label: string;
-  icon: LucideIcon;
-  /** True for routes that ship UI; stubs are routed but flagged "soon". */
   live?: boolean;
-  /** Optional one-line value hint shown on hover (title attr). */
+  hint?: string;
+}
+
+/**
+ * One rail entry. Exactly one of `href` (a route), `earnPrompt` (opens the Earn
+ * dock), or `children` (an expandable sub-group) defines its behavior. With
+ * none of those and `live: false`, it renders as a muted "soon" row.
+ */
+export interface RailNavItem {
+  label: string;
+  icon: LucideIcon;
+  /** Route to navigate to. */
+  href?: string;
+  /** Clicking opens the Earn dock seeded with this prompt (AI action). */
+  earnPrompt?: string;
+  /** Expandable third tier. */
+  children?: RailSubItem[];
+  /** False (or absent + no href) renders a "soon" affordance. */
+  live?: boolean;
+  /** One-line value hint (title attr). */
   hint?: string;
 }
 
@@ -64,30 +80,21 @@ export interface RailNavItem {
 export interface RailLauncher {
   label: string;
   icon: LucideIcon;
-  /** The capability verbs, shown small beneath the label. */
-  verbs?: string;
   /** Prompt seeded into the Earn dock when triggered. */
   prompt: string;
 }
 
-/** One cluster — the rail's top-level compartments. */
+/** One verb-cluster of the loop. */
 export interface RailNavGroup {
   key: RailGroupKey;
   label: string;
-  /** Cluster header icon — gives each compartment a scannable identity. */
   icon: LucideIcon;
-  /** One-line description shown under the cluster label. */
   description?: string;
-  /** Earn action launcher for this cluster (optional). */
   launcher?: RailLauncher;
-  /** Lower-frequency clusters start collapsed regardless of active state. */
-  secondary?: boolean;
   items: RailNavItem[];
 }
 
-/**
- * Command Center — pinned above the clusters. The dashboard / home overview.
- */
+/** Command Center — pinned above the loop. The live operating picture. */
 export const RAIL_PINNED: RailNavItem = {
   href: '/command-center',
   label: 'Command Center',
@@ -97,23 +104,20 @@ export const RAIL_PINNED: RailNavItem = {
 };
 
 /**
- * The clusters. Existing routes are folded in and renamed in the FundExecs OS
- * house voice. Where two labels share a base route (Capital Partners / Service
- * Providers → /partners), the href carries a `lens` query so the link is
- * distinct and the destination can filter later.
+ * The loop. Items reuse existing routes where one drives the stage; net-new AI
+ * concepts are click-to-Earn; unbuilt surfaces are "soon".
  */
 export const RAIL_GROUPS: readonly RailNavGroup[] = [
   {
-    key: 'the-record',
-    label: 'The Record',
-    icon: ShieldCheck,
-    description: 'The source of truth every counterparty reads from.',
+    key: 'build',
+    label: 'Build',
+    icon: Hammer,
+    description: 'Build the record counterparties read from.',
     launcher: {
-      label: 'Source & Match',
-      icon: Radar,
-      verbs: 'Earn finds & matches counterparties to your record',
+      label: 'Build my record',
+      icon: Sparkles,
       prompt:
-        'Source new LPs and deals that fit my thesis, and match them against my record. Show me the strongest fits and why.'
+        'Help me build my record — tighten the profile, sharpen the approach (structure, story, narrative), and close the readiness gaps. What moves the needle most?'
     },
     items: [
       {
@@ -124,8 +128,15 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         hint: 'Your canonical record'
       },
       {
+        href: '/strategy',
+        label: 'Approach',
+        icon: Compass,
+        live: true,
+        hint: 'Structure · story · narrative'
+      },
+      {
         href: '/profile?view=readiness',
-        label: 'Capital Readiness',
+        label: 'Readiness',
         icon: Gauge,
         live: true,
         hint: 'How investable you are, today'
@@ -136,123 +147,141 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         icon: ShieldCheck,
         live: true,
         hint: 'Proof, layer by layer'
-      }
+      },
+      { label: 'Formation', icon: Building2, live: false, hint: 'Entity & fund formation' }
     ]
   },
   {
-    key: 'the-network',
-    label: 'The Network',
-    icon: Network,
-    description: 'Every relationship that funds you.',
+    key: 'source',
+    label: 'Source',
+    icon: Radar,
+    description: 'Source the deals and capital that fit.',
+    launcher: {
+      label: 'Source deals & capital',
+      icon: Sparkles,
+      prompt:
+        'Source new deals and capital that fit my thesis, and match them against my record. Show the strongest fits and why.'
+    },
     items: [
-      {
-        href: '/deal-desk',
-        label: 'Deals',
-        icon: Briefcase,
-        live: true,
-        hint: 'Source, diligence, decide'
-      },
+      { href: '/deal-desk', label: 'Deals', icon: Briefcase, live: true, hint: 'Your deal flow' },
       {
         href: '/pipeline',
         label: 'LPs',
         icon: TrendingUp,
         live: true,
-        hint: 'Your LP universe + pipeline'
+        hint: 'LP universe + pipeline'
       },
       {
-        href: '/capital-stack',
-        label: 'Capital Stack',
+        label: 'Capital',
         icon: Layers,
-        live: true,
-        hint: 'The raise, by the dollar'
-      },
-      {
-        href: '/partners?lens=capital',
-        label: 'Capital Partners',
-        icon: Handshake,
-        live: true,
-        hint: 'Co-investors & capital relationships'
-      },
-      {
-        href: '/partners?lens=service',
-        label: 'Service Providers',
-        icon: Wrench,
-        live: true,
-        hint: 'Legal, audit, fund admin & more'
+        hint: 'The raise, by instrument',
+        children: [
+          { href: '/capital-stack?type=equity', label: 'Equity', live: true },
+          { href: '/capital-stack?type=debt', label: 'Debt', live: true },
+          { href: '/capital-stack?type=hybrid', label: 'Hybrid', live: true }
+        ]
       }
     ]
   },
   {
-    key: 'the-workshop',
-    label: 'The Workshop',
-    icon: Wand2,
-    description: 'Turn raw inputs into closing-ready output.',
+    key: 'run',
+    label: 'Run',
+    icon: Play,
+    description: 'Run the analysis that decides.',
     launcher: {
-      label: 'Run the Workshop',
+      label: 'Run diligence & stress tests',
       icon: Sparkles,
-      verbs: 'Analyze · Plan · Organize · Produce',
       prompt:
-        'Analyze what I have, plan the next deliverable, organize the inputs, and produce a first draft. What should we build first?'
+        'Run diligence and a stress test on my active deals — pressure-test the thesis, surface the risks, and draft an action plan.'
     },
     items: [
       {
         href: '/ic-memos',
-        label: 'Diligence & IC',
-        icon: FileSignature,
+        label: 'Diligence',
+        icon: FileSearch,
         live: true,
         hint: 'Memos & decisions'
       },
       {
-        href: '/knowledge',
-        label: 'Documents',
-        icon: FileText,
-        live: true,
-        hint: 'Your knowledge base'
+        label: 'Stress Test',
+        icon: Activity,
+        earnPrompt:
+          'Run a stress test on my current deals and raise — model downside scenarios and tell me where it breaks.',
+        hint: 'Scenario & downside analysis (Earn)'
       },
       {
-        href: '/inbox-intelligence',
-        label: 'Communications',
-        icon: MessagesSquare,
+        href: '/governance',
+        label: 'Action Plan',
+        icon: Scale,
         live: true,
-        hint: 'Inbound signal, triaged'
+        hint: 'Governance logic & next moves'
       },
       {
-        href: '/materials',
-        label: 'Capital Materials',
-        icon: Megaphone,
-        live: true,
-        hint: 'Decks, memos, one-pagers'
+        label: 'Aggregation Strategy',
+        icon: Workflow,
+        earnPrompt:
+          'Propose an aggregation strategy across my deals — where are the synergies, and how do they compound?',
+        hint: 'Synergistic roll-up logic (Earn)'
       }
     ]
   },
   {
-    key: 'desk-tools',
-    label: 'Desk Tools',
-    icon: Wrench,
-    description: 'Everything else, one click away.',
-    secondary: true,
+    key: 'drive',
+    label: 'Drive',
+    icon: Rocket,
+    description: 'Drive the deal to close.',
+    launcher: {
+      label: 'Drive to close',
+      icon: Sparkles,
+      prompt:
+        'Help me drive to close — what materials, signatures, and steps stand between here and a closed deal?'
+    },
     items: [
-      { href: '/action-queue', label: 'Action Queue', icon: ListChecks, live: true },
-      { href: '/match-inbox', label: 'Match Inbox', icon: Inbox, live: true },
-      { href: '/objections', label: 'Objections', icon: MessageSquareWarning, live: true },
-      { href: '/cap-table', label: 'Cap Table', icon: PieChart, live: true },
-      { href: '/governance', label: 'Governance', icon: Scale, live: true },
-      { href: '/audit', label: 'Audit Trail', icon: History, live: true }
+      {
+        href: '/materials',
+        label: 'Materials Studio',
+        icon: Palette,
+        live: true,
+        hint: 'Decks, memos, one-pagers'
+      },
+      {
+        href: '/deal-desk',
+        label: 'Deal Desk',
+        icon: ClipboardCheck,
+        live: true,
+        hint: 'Work the live deal'
+      },
+      {
+        href: '/cap-table',
+        label: 'Cap Table',
+        icon: PieChart,
+        live: true,
+        hint: 'Ownership & dilution'
+      },
+      {
+        label: 'Execute',
+        icon: Target,
+        hint: 'Pre-acquisition → exit',
+        children: [
+          { label: 'Pre-Acquisition', href: '', live: false },
+          { label: 'Post-Acquisition', href: '', live: false },
+          { label: 'Exit', href: '', live: false }
+        ]
+      }
     ]
   }
 ];
 
 /**
- * Map each lifecycle stage to the cluster(s) it primarily emphasizes. Drives
- * stage-aware auto-expand + the subtle gold emphasis on the cluster heading
- * when `signals.currentStage` is set. A hint, never a hard requirement.
+ * Map each lifecycle stage to the loop verb(s) it primarily emphasizes. Drives
+ * stage-aware auto-expand + the subtle gold emphasis on the cluster heading.
  */
 export const STAGE_TO_GROUP_KEYS: Record<LifecycleStage, readonly RailGroupKey[]> = {
-  establish_truth: ['the-record'],
-  get_raise_ready: ['the-record', 'the-workshop'],
-  source_lps: ['the-network'],
-  convert_lps: ['the-network'],
-  source_deals: ['the-network'],
-  operate: ['the-workshop'],
-  prove: ['desk-tools']
+  establish_truth: ['build'],
+  get_raise_ready: ['build'],
+  source_lps: ['source'],
+  convert_lps: ['source'],
+  source_deals: ['source'],
+  operate: ['run'],
+  prove: ['drive']
 };

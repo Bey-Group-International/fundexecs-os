@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
@@ -107,15 +107,16 @@ function computeGroupRollup(
   let count = 0;
   let tone: BadgeTone | null = null;
   let any = false;
-  // Dedupe by resolved badge key so a single badge shared by alias items (e.g.
-  // /profile for Profile + Capital Readiness) is counted at most once.
-  const seen = new Set<string>();
+  // Gather every routable href in the cluster (items + nested children), then
+  // dedupe by resolved badge key so a badge shared by alias routes counts once.
+  const hrefs: string[] = [];
   for (const item of group.items) {
-    const key = badges[item.href]
-      ? item.href
-      : badges[baseHref(item.href)]
-        ? baseHref(item.href)
-        : null;
+    if (item.href) hrefs.push(item.href);
+    for (const sub of item.children ?? []) if (sub.href) hrefs.push(sub.href);
+  }
+  const seen = new Set<string>();
+  for (const href of hrefs) {
+    const key = badges[href] ? href : badges[baseHref(href)] ? baseHref(href) : null;
     if (!key || seen.has(key)) continue;
     seen.add(key);
     const signal = badges[key];
@@ -136,10 +137,16 @@ function computeGroupRollup(
  * first item scanned (pinned first, then cluster order).
  */
 function resolveActiveKey(pathname: string, fullPath: string): string | null {
-  const flat: Array<{ key: string; href: string }> = [
-    { key: 'pinned', href: RAIL_PINNED.href },
-    ...RAIL_GROUPS.flatMap((g) => g.items.map((it, i) => ({ key: `${g.key}:${i}`, href: it.href })))
-  ];
+  const flat: Array<{ key: string; href: string }> = [];
+  if (RAIL_PINNED.href) flat.push({ key: 'pinned', href: RAIL_PINNED.href });
+  RAIL_GROUPS.forEach((g) =>
+    g.items.forEach((it, i) => {
+      if (it.href) flat.push({ key: `${g.key}:${i}`, href: it.href });
+      (it.children ?? []).forEach((sub, j) => {
+        if (sub.href) flat.push({ key: `${g.key}:${i}:${j}`, href: sub.href });
+      });
+    })
+  );
   let bestKey: string | null = null;
   let bestScore = -1;
   for (const f of flat) {
@@ -214,7 +221,6 @@ export function Wave1SideRail({
   function isExpanded(group: RailNavGroup): boolean {
     const manual = overrides[group.key];
     if (typeof manual === 'boolean') return manual;
-    if (group.secondary) return autoExpanded.has(group.key); // collapsed unless active/emphasized
     return autoExpanded.has(group.key);
   }
 
@@ -277,12 +283,12 @@ export function Wave1SideRail({
           <PinnedLink
             item={RAIL_PINNED}
             active={pinnedActive}
-            signal={signals?.badges?.[RAIL_PINNED.href]}
+            signal={RAIL_PINNED.href ? signals?.badges?.[RAIL_PINNED.href] : undefined}
             onClick={onClose}
           />
 
           {RAIL_GROUPS.map((group) => {
-            const extraTop = group.key === 'the-record' ? sourceOfTruthSummary : undefined;
+            const extraTop = group.key === 'build' ? sourceOfTruthSummary : undefined;
             return (
               <NavGroup
                 key={group.key}
@@ -326,7 +332,7 @@ function PinnedLink({
   const Icon = item.icon;
   return (
     <Link
-      href={item.href}
+      href={item.href ?? '/command-center'}
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       data-testid="rail-link-pinned"
@@ -452,63 +458,251 @@ function NavGroup({
               </div>
             ) : null}
             <ul className="flex flex-col gap-0.5 px-1.5 pb-1.5 pt-1">
-              {group.items.map((item, i) => {
-                const itemKey = `${group.key}:${i}`;
-                const active = activeKey === itemKey;
-                const signal = badges?.[item.href] ?? badges?.[baseHref(item.href)];
-                const Icon = item.icon;
-                return (
-                  <li key={itemKey}>
-                    <Link
-                      href={item.href}
-                      onClick={onLinkClick}
-                      aria-current={active ? 'page' : undefined}
-                      title={item.hint}
-                      data-testid={`rail-link-${baseHref(item.href).replace(/^\//, '') || 'root'}${
-                        item.href.includes('?')
-                          ? `-${item.href.split('?')[1].replace(/[^a-z0-9]/gi, '')}`
-                          : ''
-                      }`}
-                      className={cn(
-                        'relative flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[13px] font-medium transition-[background,box-shadow,transform] will-change-transform motion-reduce:transition-none motion-reduce:hover:translate-x-0',
-                        active
-                          ? 'bg-gradient-to-r from-[var(--azure-soft)] to-surface-1 text-fg-1'
-                          : 'text-fg-3 hover:translate-x-0.5 hover:bg-surface-1'
-                      )}
-                    >
-                      {active ? (
-                        <span
-                          className="absolute -left-1.5 bottom-1.5 top-1.5 w-[3px] rounded-full bg-azure-1"
-                          aria-hidden
-                        />
-                      ) : null}
-                      <Icon size={16} strokeWidth={1.9} aria-hidden />
-                      <span className="flex-1">
-                        {item.label}
-                        {!item.live ? (
-                          <span className="ml-1.5 text-[9.5px] font-semibold uppercase tracking-[0.11em] text-fg-5">
-                            soon
-                          </span>
-                        ) : null}
-                      </span>
-                      {signal ? (
-                        <Badge
-                          tone={signal.tone ?? 'azure'}
-                          className="px-1.5 py-0.5 text-[10px] tabular-nums"
-                          title={signal.hint}
-                        >
-                          {signal.value}
-                        </Badge>
-                      ) : null}
-                    </Link>
-                  </li>
-                );
-              })}
+              {group.items.map((item, i) => (
+                <NavItem
+                  key={`${group.key}:${i}`}
+                  item={item}
+                  groupKey={group.key}
+                  index={i}
+                  activeKey={activeKey}
+                  badges={badges}
+                  onLinkClick={onLinkClick}
+                />
+              ))}
             </ul>
           </motion.div>
         ) : null}
       </AnimatePresence>
     </motion.section>
+  );
+}
+
+/** Slugify a label for stable test ids. */
+function slug(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+/**
+ * NavItem — one loop entry. Renders one of: a route Link, an Earn-action button
+ * (`earnPrompt`), a muted "soon" row (no href), or an expandable parent
+ * (`children`, e.g. Capital → Equity/Debt/Hybrid).
+ */
+function NavItem({
+  item,
+  groupKey,
+  index,
+  activeKey,
+  badges,
+  onLinkClick
+}: {
+  item: RailNavItem;
+  groupKey: RailGroupKey;
+  index: number;
+  activeKey: string | null;
+  badges?: Record<string, RailSignal>;
+  onLinkClick: () => void;
+}) {
+  const Icon = item.icon;
+
+  if (item.children && item.children.length > 0) {
+    return (
+      <NavParent
+        item={item}
+        groupKey={groupKey}
+        index={index}
+        activeKey={activeKey}
+        onLinkClick={onLinkClick}
+      />
+    );
+  }
+
+  // Earn-action item (AI verb — opens the dock, no route).
+  if (item.earnPrompt) {
+    return (
+      <li>
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.98 }}
+          transition={FX_SPRING}
+          onClick={() => {
+            openEarn(item.earnPrompt as string);
+            onLinkClick();
+          }}
+          title={item.hint}
+          data-testid={`rail-action-${slug(item.label)}`}
+          className="relative flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left text-[13px] font-medium text-fg-3 transition-[background,transform] will-change-transform hover:translate-x-0.5 hover:bg-surface-1 motion-reduce:transition-none"
+        >
+          <Icon size={16} strokeWidth={1.9} aria-hidden className="text-gold-1" />
+          <span className="flex-1">{item.label}</span>
+          <Sparkles size={12} strokeWidth={2} aria-hidden className="text-gold-1/70" />
+        </motion.button>
+      </li>
+    );
+  }
+
+  // "Soon" — routed surface not built yet; muted + non-interactive.
+  if (!item.href) {
+    return (
+      <li>
+        <div
+          title={item.hint}
+          data-testid={`rail-soon-${slug(item.label)}`}
+          className="flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[13px] font-medium text-fg-5"
+        >
+          <Icon size={16} strokeWidth={1.9} aria-hidden />
+          <span className="flex-1">
+            {item.label}
+            <span className="ml-1.5 text-[9.5px] font-semibold uppercase tracking-[0.11em] text-fg-5">
+              soon
+            </span>
+          </span>
+        </div>
+      </li>
+    );
+  }
+
+  // Normal route link.
+  const itemKey = `${groupKey}:${index}`;
+  const active = activeKey === itemKey;
+  const signal = badges?.[item.href] ?? badges?.[baseHref(item.href)];
+  return (
+    <li>
+      <Link
+        href={item.href}
+        onClick={onLinkClick}
+        aria-current={active ? 'page' : undefined}
+        title={item.hint}
+        data-testid={`rail-link-${baseHref(item.href).replace(/^\//, '') || 'root'}${
+          item.href.includes('?') ? `-${item.href.split('?')[1].replace(/[^a-z0-9]/gi, '')}` : ''
+        }`}
+        className={cn(
+          'relative flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[13px] font-medium transition-[background,box-shadow,transform] will-change-transform motion-reduce:transition-none motion-reduce:hover:translate-x-0',
+          active
+            ? 'bg-gradient-to-r from-[var(--azure-soft)] to-surface-1 text-fg-1'
+            : 'text-fg-3 hover:translate-x-0.5 hover:bg-surface-1'
+        )}
+      >
+        {active ? (
+          <span
+            className="absolute -left-1.5 bottom-1.5 top-1.5 w-[3px] rounded-full bg-azure-1"
+            aria-hidden
+          />
+        ) : null}
+        <Icon size={16} strokeWidth={1.9} aria-hidden />
+        <span className="flex-1">{item.label}</span>
+        {signal ? (
+          <Badge
+            tone={signal.tone ?? 'azure'}
+            className="px-1.5 py-0.5 text-[10px] tabular-nums"
+            title={signal.hint}
+          >
+            {signal.value}
+          </Badge>
+        ) : null}
+      </Link>
+    </li>
+  );
+}
+
+/** NavParent — an item with an expandable third tier of sub-rows. */
+function NavParent({
+  item,
+  groupKey,
+  index,
+  activeKey,
+  onLinkClick
+}: {
+  item: RailNavItem;
+  groupKey: RailGroupKey;
+  index: number;
+  activeKey: string | null;
+  onLinkClick: () => void;
+}) {
+  const panelId = useId();
+  const Icon = item.icon;
+  const children = item.children ?? [];
+  const childActive = children.some((_, j) => activeKey === `${groupKey}:${index}:${j}`);
+  // Auto-open when a child is active; manual toggle overrides afterward.
+  const [override, setOverride] = useState<boolean | null>(null);
+  const open = override ?? childActive;
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => setOverride(!open)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        title={item.hint}
+        data-testid={`rail-parent-${slug(item.label)}`}
+        className="flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left text-[13px] font-medium text-fg-3 transition-[background] hover:bg-surface-1"
+      >
+        <Icon size={16} strokeWidth={1.9} aria-hidden />
+        <span className="flex-1">{item.label}</span>
+        <motion.span animate={{ rotate: open ? 0 : -90 }} transition={FX_SPRING}>
+          <ChevronDown size={13} strokeWidth={2} aria-hidden className="text-fg-5" />
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.ul
+            id={panelId}
+            key="sub"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: FX_EASE }}
+            className="ml-[18px] flex flex-col gap-0.5 overflow-hidden border-l border-hairline pl-1.5 pt-0.5"
+          >
+            {children.map((sub, j) => {
+              const subKey = `${groupKey}:${index}:${j}`;
+              const active = activeKey === subKey;
+              const isSoon = !sub.href || sub.live === false;
+              return (
+                <li key={subKey}>
+                  {isSoon ? (
+                    <div
+                      title={sub.hint}
+                      className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[12px] text-fg-5"
+                    >
+                      <span className="h-1 w-1 flex-none rounded-full bg-fg-5/60" aria-hidden />
+                      {sub.label}
+                      <span className="ml-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-fg-5">
+                        soon
+                      </span>
+                    </div>
+                  ) : (
+                    <Link
+                      href={sub.href}
+                      onClick={onLinkClick}
+                      aria-current={active ? 'page' : undefined}
+                      title={sub.hint}
+                      data-testid={`rail-sublink-${slug(item.label)}-${slug(sub.label)}`}
+                      className={cn(
+                        'flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[12px] transition-[background] hover:bg-surface-1',
+                        active ? 'bg-[var(--azure-soft)] font-medium text-fg-1' : 'text-fg-3'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'h-1.5 w-1.5 flex-none rounded-full',
+                          active ? 'bg-azure-1' : 'bg-fg-5/60'
+                        )}
+                        aria-hidden
+                      />
+                      {sub.label}
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
+          </motion.ul>
+        ) : null}
+      </AnimatePresence>
+    </li>
   );
 }
 
@@ -535,15 +729,8 @@ function LauncherButton({
       className="flex w-full items-center gap-2 rounded-[10px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-2 text-left transition-[background] hover:brightness-[1.05] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
     >
       <Icon size={15} strokeWidth={2} aria-hidden className="flex-none text-gold-1" />
-      <span className="min-w-0 flex-1">
-        <span className="block text-[12px] font-semibold leading-tight text-gold-1">
-          {launcher.label}
-        </span>
-        {launcher.verbs ? (
-          <span className="mt-0.5 block truncate text-[10px] leading-tight text-gold-1/70">
-            {launcher.verbs}
-          </span>
-        ) : null}
+      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-gold-1">
+        {launcher.label}
       </span>
       <Sparkles size={12} strokeWidth={2} aria-hidden className="flex-none text-gold-1/70" />
     </motion.button>
