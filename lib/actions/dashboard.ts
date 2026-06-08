@@ -3,6 +3,7 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
+  BRIEF_SEEN_COOKIE,
   DAILY_DONE_COOKIE,
   DISMISSED_ALERTS_COOKIE,
   LAST_VISIT_COOKIE,
@@ -39,6 +40,16 @@ export async function markVisited(): Promise<void> {
     ...baseCookie,
     maxAge: ONE_YEAR
   });
+}
+
+/**
+ * Mark Earn's first-use launch brief as seen, so the welcome card never shows
+ * again for this member. Best-effort UX state (httpOnly cookie); no data access.
+ * No revalidate — the card hides itself client-side on dismiss.
+ */
+export async function dismissLaunchBrief(): Promise<{ ok: true }> {
+  (await cookies()).set(BRIEF_SEEN_COOKIE, '1', { ...baseCookie, maxAge: ONE_YEAR });
+  return { ok: true };
 }
 
 /** Dismiss a Major Alert. Idempotent; capped so the cookie stays small. */
