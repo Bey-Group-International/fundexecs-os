@@ -8,6 +8,7 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { getMemberProfile } from '@/lib/queries/member-profile';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getDashboardData } from '@/lib/queries/dashboard';
+import { getCommandMetrics } from '@/lib/queries/dashboard/command-metrics';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { LifecycleDashboard } from '@/components/dashboard/LifecycleDashboard';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
@@ -84,10 +85,15 @@ export default async function CommandCenterPage() {
     );
   }
 
-  const [dashboard, wallet, fundProfile] = await Promise.all([
+  const [dashboard, wallet, fundProfile, metrics] = await Promise.all([
     getDashboardData(org.orgId),
     getCreditWallet(org.orgId),
-    getFundProfile(org.orgId)
+    getFundProfile(org.orgId),
+    getCommandMetrics(org.orgId).catch(() => ({
+      activeCommitments: 0,
+      underReview: 0,
+      tasksDueThisWeek: 0
+    }))
   ]);
   const navSignals = buildRailSignals(dashboard, memberType);
 
@@ -104,6 +110,7 @@ export default async function CommandCenterPage() {
         displayName={displayName}
         memberType={memberType}
         data={dashboard}
+        metrics={metrics}
         fundProfile={fundProfile}
       />
     </AppShell>
