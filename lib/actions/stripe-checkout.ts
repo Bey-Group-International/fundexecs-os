@@ -46,6 +46,7 @@ function resolveSiteOrigin(hdrs: Headers): string {
   return host ? `${proto}://${host}` : 'http://localhost:3000';
 }
 
+/** The signed-in user's email, used to pre-fill Stripe Checkout. */
 async function currentUserEmail(): Promise<string | null> {
   try {
     const supabase = await createClient();
@@ -93,6 +94,17 @@ export async function createSubscriptionCheckout(
       currentUserEmail(),
       headers()
     ]);
+
+    // Guard against creating a second subscription for the same workspace.
+    // Once one exists, plan changes must go through the billing portal.
+    if (existing.configured && existing.status !== 'canceled') {
+      return {
+        ok: false,
+        error:
+          'Billing is already set up for this workspace — use “Manage billing” to change your plan.'
+      };
+    }
+
     const origin = resolveSiteOrigin(hdrs);
     const stripe = new Stripe(secretKey);
 

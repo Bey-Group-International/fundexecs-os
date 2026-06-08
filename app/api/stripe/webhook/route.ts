@@ -81,9 +81,10 @@ async function upsertSubscription(admin: AdminClient, sub: Stripe.Subscription):
 }
 
 /**
- * Grant a subscription invoice's credits exactly once. The `subscription_invoices`
- * ledger (PK = stripe_invoice_id) is the idempotency guard: only a freshly
- * inserted row triggers the `grant_credits` RPC.
+ * Grant a subscription invoice's credits exactly once. Delegates to the
+ * `claim_invoice_and_grant` RPC, which claims the invoice (idempotency ledger)
+ * and grants the credits inside a single transaction — so a failed grant rolls
+ * back the claim and Stripe's retry re-attempts cleanly.
  */
 async function grantInvoiceCredits(
   admin: AdminClient,
@@ -94,29 +95,14 @@ async function grantInvoiceCredits(
 ): Promise<void> {
   if (credits <= 0) return;
 
-  const { data: inserted, error } = await admin
-    .from('subscription_invoices')
-    .upsert(
-      {
-        stripe_invoice_id: invoiceId,
-        org_id: orgId,
-        credits_granted: credits,
-        period_end: periodEnd
-      },
-      { onConflict: 'stripe_invoice_id', ignoreDuplicates: true }
-    )
-    .select('stripe_invoice_id');
-
-  if (error) throw new Error(error.message);
-  if (!inserted || inserted.length === 0) return; // already granted
-
-  const { error: grantErr } = await admin.rpc('grant_credits', {
+  const { error } = await admin.rpc('claim_invoice_and_grant', {
+    _stripe_invoice_id: invoiceId,
     _org_id: orgId,
     _amount: credits,
-    _reason: 'subscription_credit',
-    _ref_id: undefined
+    _period_end: periodEnd ?? undefined,
+    _reason: 'subscription_credit'
   });
-  if (grantErr) throw new Error(grantErr.message);
+  if (error) throw new Error(error.message);
 }
 
 export async function POST(req: NextRequest) {
@@ -193,21 +179,13 @@ export async function POST(req: NextRequest) {
       }
 
       case 'customer.subscription.deleted': {
-        // Subscription ended — drop the org back to the free plan. (The event's
-        // metadata still names the cancelled plan, so we set 'free' explicitly.)
+        // Subscription ended — remove the row so getOrgSubscription treats the
+        // org as unsubscribed (configured:false), letting them start a fresh
+        // checkout instead of being routed to the billing portal.
         const sub = event.data.object as Stripe.Subscription;
         const orgId = sub.metadata?.org_id;
         if (orgId) {
-          await admin
-            .from('org_subscriptions')
-            .update({
-              plan: 'free',
-              status: 'canceled',
-              credits_per_period: 0,
-              cancel_at_period_end: false,
-              updated_at: new Date().toISOString()
-            })
-            .eq('org_id', orgId);
+          await admin.from('org_subscriptions').delete().eq('org_id', orgId);
           await admin.from('credit_wallets').update({ plan: 'free' }).eq('org_id', orgId);
         }
         break;

@@ -2579,6 +2579,16 @@ export type Database = {
           updated_at: string
         }[]
       }
+      claim_invoice_and_grant: {
+        Args: {
+          _amount: number
+          _org_id: string
+          _period_end?: string
+          _reason?: string
+          _stripe_invoice_id: string
+        }
+        Returns: number
+      }
       grant_credits: {
         Args: {
           _amount: number

@@ -83,11 +83,16 @@ export function WalletTopUpPopover({ wallet, anchorRef, open, onClose }: WalletT
     setSelectedDollars(dollars);
     setError(null);
     startTransition(async () => {
-      const result = await createCustomTopUpCheckout(dollars);
-      if (result.ok && result.url) {
-        window.location.assign(result.url);
-      } else {
+      try {
+        const result = await createCustomTopUpCheckout(dollars);
+        if (result.ok && result.url) {
+          window.location.assign(result.url);
+          return;
+        }
         setError(result.error ?? 'Top-up failed. Please try again.');
+      } catch {
+        setError('Top-up failed. Please try again.');
+      } finally {
         setSelectedDollars(null);
       }
     });

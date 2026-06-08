@@ -58,6 +58,7 @@ export interface PlanCreditsSectionProps {
   creditBalance: number;
 }
 
+/** Navigate the browser to a Stripe-hosted URL (checkout / portal). */
 function redirect(url: string) {
   window.location.assign(url);
 }
@@ -158,7 +159,8 @@ function PlanCard({
   seats,
   onSeats,
   onSelect,
-  pending
+  pending,
+  busy
 }: {
   plan: PlanDef;
   interval: BillingInterval;
@@ -168,6 +170,8 @@ function PlanCard({
   onSeats: (n: number) => void;
   onSelect: () => void;
   pending: boolean;
+  /** True when any checkout/portal action is in flight (disables all cards). */
+  busy: boolean;
 }) {
   const { big, sub } = priceLabel(plan, interval);
   const accent =
@@ -189,7 +193,7 @@ function PlanCard({
           ? 'Change plan'
           : 'Upgrade';
 
-  const ctaDisabled = isCurrent || (plan.kind === 'free' && !hasSubscription) || pending;
+  const ctaDisabled = isCurrent || (plan.kind === 'free' && !hasSubscription) || pending || busy;
   const showSeats = plan.seatBased && plan.kind === 'paid' && !hasSubscription && !isCurrent;
 
   return (
@@ -270,6 +274,11 @@ function PlanCard({
   );
 }
 
+/**
+ * PlanCreditsSection — the Settings "Plan & credits" surface. Renders the
+ * billing summary, the monthly/annual plan picker, and the custom credit-pack
+ * grid, and drives Stripe checkout / billing-portal flows.
+ */
 export function PlanCreditsSection({
   currentPlan,
   currentInterval,
@@ -317,8 +326,13 @@ export function PlanCreditsSection({
   }, []);
 
   const current = PLANS.find((p) => p.id === currentPlan);
+  // Single in-flight guard so rapid clicks across cards/packs can't open
+  // multiple Stripe sessions at once.
+  const checkoutInFlight = pendingPlan !== null || pendingDollars !== null || portalPending;
 
+  /** Route a plan choice: contact-sales (mailto), portal (existing sub), or checkout. */
   function selectPlan(plan: PlanDef) {
+    if (checkoutInFlight) return;
     setError(null);
     if (plan.id === currentPlan) return;
 
@@ -349,7 +363,9 @@ export function PlanCreditsSection({
     });
   }
 
+  /** Open the Stripe Customer Portal to manage an existing subscription. */
   function openPortal() {
+    if (checkoutInFlight) return;
     setError(null);
     startPortal(async () => {
       const res = await createBillingPortalSession();
@@ -358,7 +374,9 @@ export function PlanCreditsSection({
     });
   }
 
+  /** Start a one-off Stripe checkout for a custom credit pack ($ amount). */
   function buyCredits(dollars: number) {
+    if (checkoutInFlight) return;
     setError(null);
     setPendingDollars(dollars);
     startAction(async () => {
@@ -395,7 +413,7 @@ export function PlanCreditsSection({
                 size="sm"
                 icon={CreditCard}
                 onClick={openPortal}
-                disabled={portalPending}
+                disabled={checkoutInFlight}
               >
                 {portalPending ? 'Opening…' : 'Manage billing'}
               </Button>
@@ -482,6 +500,7 @@ export function PlanCreditsSection({
               onSeats={setSeats}
               onSelect={() => selectPlan(plan)}
               pending={pendingPlan === plan.id}
+              busy={checkoutInFlight}
             />
           ))}
         </div>
@@ -502,6 +521,7 @@ export function PlanCreditsSection({
               onSeats={setSeats}
               onSelect={() => selectPlan(plan)}
               pending={pendingPlan === plan.id}
+              busy={checkoutInFlight}
             />
           ))}
         </div>
@@ -530,7 +550,7 @@ export function PlanCreditsSection({
                 key={dollars}
                 type="button"
                 onClick={() => buyCredits(dollars)}
-                disabled={pendingDollars !== null}
+                disabled={checkoutInFlight}
                 className={cn(
                   'flex flex-col items-start rounded-xl border border-hairline bg-surface-1 px-3 py-2.5 text-left transition hover:border-[var(--azure-line)] hover:bg-surface-2 disabled:opacity-60',
                   isPending && 'border-[var(--azure-line)] bg-[var(--azure-soft)]'
