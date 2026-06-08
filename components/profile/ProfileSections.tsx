@@ -1,7 +1,10 @@
+'use client';
+
 import Link from 'next/link';
 import { ExternalLink, Plus } from 'lucide-react';
 import { Badge, Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { RevealGroup, RevealItem } from '@/components/dashboard/command';
 import type { FundProfile, ProfileSection } from '@/lib/queries/fund-profile';
 
 /**
@@ -29,19 +32,24 @@ export interface ProfileSectionsProps {
  * ProfileSections — the member's Profile rendered as compact, data-driven cards,
  * one per question in their member-type schema. Required-but-empty sections are
  * live invitations (the whole card links into onboarding); optional empties are
- * hidden to keep the surface calm. Read-mostly in Wave 1 — the edit path is the
- * onboarding/quiz surface the Hero CTA opens.
+ * hidden to keep the surface calm. Cards rise in on load (staggered) and lift on
+ * hover; reduced-motion is honored by the shared MotionConfig at the app root.
  */
 export function ProfileSections({ profile, className }: ProfileSectionsProps) {
   // Show every required section; show optional sections only once filled.
   const visible = profile.sections.filter((s) => !s.optional || s.present);
 
   return (
-    <div className={cn('grid gap-[18px] lg:grid-cols-2', className)} data-testid="profile-sections">
+    <RevealGroup
+      className={cn('grid gap-[18px] lg:grid-cols-2', className)}
+      data-testid="profile-sections"
+    >
       {visible.map((section) => (
-        <SectionCard key={section.id} section={section} />
+        <RevealItem key={section.id}>
+          <SectionCard section={section} />
+        </RevealItem>
       ))}
-    </div>
+    </RevealGroup>
   );
 }
 
@@ -49,7 +57,7 @@ function SectionBody({ section }: { section: ProfileSection }) {
   if (!section.present) {
     return (
       <p className="mt-3 max-w-[60ch] text-[12.5px] leading-relaxed text-fg-4">
-        {section.why ?? 'Add this so the record is complete.'}
+        {section.why ?? "Put this on the record so a counterparty can't press on it."}
       </p>
     );
   }
@@ -109,7 +117,10 @@ function SectionCard({ section }: { section: ProfileSection }) {
 
   if (section.present) {
     return (
-      <Card data-testid={`profile-section-${section.id}`} className="p-5">
+      <Card
+        data-testid={`profile-section-${section.id}`}
+        className="h-full p-5 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)]"
+      >
         {inner}
       </Card>
     );
@@ -119,9 +130,9 @@ function SectionCard({ section }: { section: ProfileSection }) {
     <Link
       href="/onboarding"
       data-testid={`profile-section-${section.id}`}
-      className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-0"
+      className="group block h-full rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-0"
     >
-      <Card className="p-5 transition-[transform,box-shadow] group-hover:-translate-y-0.5 group-hover:shadow-[var(--shadow-sm)]">
+      <Card className="h-full p-5 transition-[transform,box-shadow] group-hover:-translate-y-0.5 group-hover:shadow-[var(--shadow-sm)]">
         {inner}
       </Card>
     </Link>
