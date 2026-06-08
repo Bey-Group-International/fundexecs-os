@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { motion } from 'motion/react';
+import { FX_SPRING, FX_EASE } from '@/components/dashboard/command/motion';
 import { TRUST_LAYERS, trustLayerMeta, type TrustLayerMeta } from './trust-layers';
 import {
   loadTrustRecord,
@@ -87,9 +89,13 @@ function LayerCard({
   const { Icon: StateIcon, spin } = layerStateIcon(layer.completionPct, layer.status);
   const LayerIcon = meta.icon;
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3 }}
+      transition={FX_SPRING}
       className={cn(
-        'relative flex min-w-[150px] flex-1 flex-col gap-2 rounded-2xl border bg-surface-1 p-3.5 transition',
+        'relative flex min-w-[150px] flex-1 flex-col gap-2 rounded-2xl border bg-surface-1 p-3.5',
         isCurrent && 'ring-1'
       )}
       style={{
@@ -125,7 +131,7 @@ function LayerCard({
           aria-hidden
         />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -549,9 +555,12 @@ function DbRecordView({
                 key={meta.layer}
                 className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.08]"
               >
-                <div
+                <motion.div
                   className="h-full rounded-full"
-                  style={{ width: `${pct}%`, background: meta.color }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.6, ease: FX_EASE }}
+                  style={{ background: meta.color }}
                 />
               </div>
             );
@@ -593,7 +602,7 @@ function DbRecordView({
         <section className="rounded-2xl border border-hairline bg-surface-1 p-4">
           <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-fg-1">
             <UserCheck size={16} strokeWidth={1.9} className="text-fg-3" aria-hidden />
-            Activity
+            The record · audit trail
           </div>
           <ActivityList events={record.events} />
         </section>
@@ -663,11 +672,12 @@ function StarterView({
           className="rounded-2xl border p-4"
           style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent-line)' }}
         >
-          <p className="text-[13px] font-semibold text-fg-1">Start a 4-layer Chain of Trust</p>
+          <p className="text-[13px] font-semibold text-fg-1">Put your work on the record</p>
           <p className="mt-1 text-[11.5px] leading-relaxed text-fg-3">
-            Truth · Concept · Execution · Work. Upload evidence to each layer, get AI validation,
-            and require human approval before the chain advances. Members in your org can read it;
-            owners and admins approve.
+            Truth · Concept · Execution · Work. Stack evidence on each layer, let Earn pre-validate
+            it, and require human sign-off before the chain advances — so every claim compounds into
+            proof a counterparty can&rsquo;t argue with. Members in your org can read it; owners and
+            admins approve.
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5">
