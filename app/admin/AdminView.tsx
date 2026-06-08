@@ -249,6 +249,7 @@ function InviteMemberPanel({ onClose }: { onClose: () => void }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  const [emailed, setEmailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const router = useRouter();
 
@@ -267,6 +268,7 @@ function InviteMemberPanel({ onClose }: { onClose: () => void }) {
       return;
     }
     setLink(res.link);
+    setEmailed(res.emailed);
     router.refresh();
   }
 
@@ -298,8 +300,10 @@ function InviteMemberPanel({ onClose }: { onClose: () => void }) {
       {link ? (
         <div className="flex flex-col gap-2">
           <p className="text-[12px] text-fg-2">
-            Magic link minted for <span className="font-semibold">{email}</span>. Share it — the
-            member joins as <span className="font-semibold">{ROLE_LABEL[role]}</span> on acceptance.
+            {emailed ? 'Invite emailed to ' : 'Magic link minted for '}
+            <span className="font-semibold">{email}</span>. {emailed ? 'They' : 'Share it — they'}{' '}
+            join as <span className="font-semibold">{ROLE_LABEL[role]}</span> on acceptance
+            {emailed ? '; the link below is a copy you can also send.' : '.'}
           </p>
           <div className="flex items-center gap-2">
             <input

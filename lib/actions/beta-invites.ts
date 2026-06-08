@@ -5,9 +5,17 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
 import { requirePlatformAdmin } from '@/lib/access.server';
 import { getSiteURL } from '@/lib/site-url';
+import { sendInviteEmail } from '@/lib/email/send';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
-export type InviteResult = { ok: true; link: string; email: string } | { ok: false; error: string };
+/** How the invite link reached the user. 'resend' = our Resend email, 'supabase'
+ *  = Supabase's built-in magic-link email, 'none' = neither (admin copies the
+ *  link and sends it by hand). */
+export type InviteDelivery = 'resend' | 'supabase' | 'none';
+
+export type InviteResult =
+  | { ok: true; link: string; email: string; emailed: boolean; via: InviteDelivery }
+  | { ok: false; error: string };
 
 export type InviteActionResult = { ok: true } | { ok: false; error: string };
 export type DeleteInviteResult = { ok: true } | { ok: false; error: string };
@@ -16,10 +24,6 @@ type InviteRole = Database['public']['Enums']['org_member_role'];
 /** New beta users land on the post-auth welcome (then onboarding) after the
  *  invite link verifies — a warm, personalized intro before the profile setup. */
 const INVITE_NEXT_PATH = '/beta/welcome';
-
-/** Someone who already joined doesn't need the welcome intro again — a re-sent
- *  sign-in link drops them straight back into the app. */
-const RETURNING_NEXT_PATH = '/command-center';
 
 /** Conservative email shape check — the Supabase API is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -84,8 +88,7 @@ async function writeAudit(
  */
 async function mintInviteLink(
   email: string,
-  inviteId: string,
-  next: string = INVITE_NEXT_PATH
+  inviteId: string
 ): Promise<{ link: string } | { error: string }> {
   const admin = createAdminClient();
   const redirectTo = `${getSiteURL()}/auth/confirm`;
@@ -95,7 +98,7 @@ async function mintInviteLink(
     url.searchParams.set('token_hash', hashedToken);
     url.searchParams.set('type', verificationType);
     url.searchParams.set('invite_id', inviteId);
-    url.searchParams.set('next', next);
+    url.searchParams.set('next', INVITE_NEXT_PATH);
     return url.toString();
   };
 
@@ -128,9 +131,67 @@ async function mintInviteLink(
   };
 }
 
+/** Best-effort display name of the inviting admin, for personalizing the email. */
+async function getInviterName(userId: string): Promise<string | null> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from('profiles')
+      .select('full_name')
+      .eq('id', userId)
+      .maybeSingle();
+    return data?.full_name?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Deliver the minted invite link to the invitee by email. Tries channels in
+ * order and returns the one that succeeded (or 'none'):
+ *
+ *   1. Resend (via lib/email/send) — emails OUR token-hash link, which verifies
+ *      through /auth/confirm and works even when opened cold (no PKCE
+ *      code-verifier needed). Reliable + branded; requires RESEND_API_KEY.
+ *   2. Supabase built-in — a best-effort fallback that asks Supabase to send its
+ *      own magic-link email (`signInWithOtp`). Only sends if the project has
+ *      email/SMTP configured, and uses Supabase's template + verify route. The
+ *      user already exists here (we just minted a link), so
+ *      `shouldCreateUser: false` is correct.
+ *
+ * Never throws — on total failure the admin still has the copyable link.
+ */
+async function deliverInviteEmail(opts: {
+  email: string;
+  link: string;
+  inviterName: string | null;
+  kind: 'invite' | 'resend';
+}): Promise<InviteDelivery> {
+  const viaResend = await sendInviteEmail({
+    to: opts.email,
+    link: opts.link,
+    inviterName: opts.inviterName,
+    kind: opts.kind
+  });
+  if (viaResend.sent) return 'resend';
+
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithOtp({
+      email: opts.email,
+      options: { shouldCreateUser: false, emailRedirectTo: `${getSiteURL()}${INVITE_NEXT_PATH}` }
+    });
+    if (!error) return 'supabase';
+  } catch {
+    // Fall through to the copyable-link fallback.
+  }
+  return 'none';
+}
+
 /**
  * Invite a beta user by email. Mints a magic link, records (or refreshes) the
- * tracked invite row, and returns the link for the admin to copy and share.
+ * tracked invite row, emails the link to the invitee, and returns the link as a
+ * copyable fallback.
  */
 export async function inviteBetaUser(emailInput: string, note?: string): Promise<InviteResult> {
   const email = emailInput.trim().toLowerCase();
@@ -173,23 +234,22 @@ export async function inviteBetaUser(emailInput: string, note?: string): Promise
   const minted = await mintInviteLink(email, data.id);
   if ('error' in minted) return { ok: false, error: minted.error };
 
+  const inviterName = await getInviterName(org.userId);
+  const via = await deliverInviteEmail({ email, link: minted.link, inviterName, kind: 'invite' });
+
   await writeAudit(org.orgId, org.userId, 'invite_beta_user', data.id, {
     email,
-    role: invite.role
+    role: invite.role,
+    emailDelivery: via
   });
-  return { ok: true, link: minted.link, email };
+  return { ok: true, link: minted.link, email, emailed: via !== 'none', via };
 }
 
 /**
- * Regenerate a fresh magic link for an existing invite and bump its
- * `last_sent_at`. Returns the new link to copy.
- *
- * For a pending/revoked invite this re-arms it to pending (a fresh invitation).
- * For an invite that was already accepted (the user joined) we preserve their
- * accepted status — a re-sent link is just a passwordless sign-in link that
- * drops them back into the app, not a re-invitation — so we only bump
- * `last_sent_at` and route the link to the app home rather than the beta
- * welcome intro.
+ * Re-send an invite to someone who never received (or never used) their link.
+ * Regenerates a fresh magic link, re-arms the invite to `pending`, re-emails it
+ * to the invitee, and bumps `last_sent_at`. Returns the new link as a fallback
+ * the admin can copy if email delivery isn't configured.
  */
 export async function resendBetaInvite(inviteId: string): Promise<InviteResult> {
   if (!inviteId) return { ok: false, error: 'Missing invite id.' };
@@ -210,31 +270,29 @@ export async function resendBetaInvite(inviteId: string): Promise<InviteResult> 
   if (readErr) return { ok: false, error: readErr.message };
   if (!invite) return { ok: false, error: 'Invite not found.' };
 
-  const alreadyJoined = invite.status === 'accepted';
-  const minted = await mintInviteLink(
-    invite.email,
-    inviteId,
-    alreadyJoined ? RETURNING_NEXT_PATH : INVITE_NEXT_PATH
-  );
+  const minted = await mintInviteLink(invite.email, inviteId);
   if ('error' in minted) return { ok: false, error: minted.error };
 
-  // Joined users keep their accepted state — only bump last_sent_at. Pending /
-  // revoked invites are re-armed to pending as a fresh invitation.
-  const update = alreadyJoined
-    ? { last_sent_at: new Date().toISOString() }
-    : { status: 'pending' as const, last_sent_at: new Date().toISOString(), accepted_at: null };
   const { error } = await supabase
     .from('beta_invites')
-    .update(update)
+    .update({ status: 'pending', last_sent_at: new Date().toISOString(), accepted_at: null })
     .eq('id', inviteId)
     .eq('org_id', org.orgId);
   if (error) return { ok: false, error: error.message };
 
+  const inviterName = await getInviterName(org.userId);
+  const via = await deliverInviteEmail({
+    email: invite.email,
+    link: minted.link,
+    inviterName,
+    kind: 'resend'
+  });
+
   await writeAudit(org.orgId, org.userId, 'resend_beta_invite', inviteId, {
     email: invite.email,
-    alreadyJoined
+    emailDelivery: via
   });
-  return { ok: true, link: minted.link, email: invite.email };
+  return { ok: true, link: minted.link, email: invite.email, emailed: via !== 'none', via };
 }
 
 /** Revoke an invite. The magic link can no longer be re-minted from the UI. */

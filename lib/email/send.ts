@@ -106,6 +106,61 @@ export async function sendGiftEmail(opts: {
   });
 }
 
+/** Render + send the beta-invite magic-link email to the invitee. */
+export async function sendInviteEmail(opts: {
+  to: string;
+  /** The one-time magic link (our /auth/confirm token-hash URL). */
+  link: string;
+  /** Display name of the admin who invited them, if known. */
+  inviterName?: string | null;
+  /** 'invite' = first send; 'resend' = they never received the first. */
+  kind: 'invite' | 'resend';
+}): Promise<SendEmailResult> {
+  const safeLink = escapeHtml(opts.link);
+  const inviter = opts.inviterName?.trim();
+  const opener =
+    opts.kind === 'resend'
+      ? 'Here’s your private beta access link again — the previous one may not have reached you.'
+      : inviter
+        ? `<strong>${escapeHtml(inviter)}</strong> has invited you to the FundExecs OS private beta.`
+        : 'You’ve been invited to the FundExecs OS private beta.';
+  const openerText =
+    opts.kind === 'resend'
+      ? 'Here is your private beta access link again — the previous one may not have reached you.'
+      : inviter
+        ? `${inviter} has invited you to the FundExecs OS private beta.`
+        : 'You have been invited to the FundExecs OS private beta.';
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
+    <p style="font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#b78a00;font-weight:600;margin:0 0 6px">FundExecs OS · Private beta</p>
+    <h1 style="font-size:20px;margin:0 0 8px">You're in. 🎉</h1>
+    <p style="font-size:14px;line-height:1.6;color:#334155;margin:0 0 20px">${opener}</p>
+    <p style="margin:0 0 22px">
+      <a href="${safeLink}" style="display:inline-block;background:#2152d8;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:10px">
+        Accept your invite
+      </a>
+    </p>
+    <p style="font-size:12px;color:#94a3b8;margin:0 0 4px">One-time link · signs you in · no password required.</p>
+    <p style="font-size:12px;color:#94a3b8;margin:0">
+      Or paste this link into your browser:<br/>
+      <span style="word-break:break-all">${safeLink}</span>
+    </p>
+  </div>`;
+
+  const text = `${openerText}\n\nOpen this one-time link to sign in — no password required:\n${opts.link}\n\nIf you weren’t expecting this, you can ignore this email.\n— The FundExecs OS team`;
+
+  return sendEmail({
+    to: opts.to,
+    subject:
+      opts.kind === 'resend'
+        ? 'Your FundExecs OS private beta invite'
+        : "You're invited to the FundExecs OS private beta",
+    html,
+    text
+  });
+}
+
 /** Escape the small set of characters that matter inside our HTML email body. */
 function escapeHtml(value: string): string {
   return value
