@@ -48,9 +48,18 @@ export interface AccountMenuProps {
 /** External system-status surface — honest placeholder until a real one exists. */
 const STATUS_URL = 'https://status.fundexecs.com';
 
+/**
+ * Per-account role label for the account bar. Every workspace has an Owner, so
+ * whoever owns/administers their own workspace surfaces as "Owner" here —
+ * "Admin" is reserved for the Bey Group platform team (the gated Admin menu
+ * link), never a personal role. Members read "Member"; any legacy/custom value
+ * (e.g. "Operator") is title-cased as a fallback.
+ */
 function roleLabel(role: string): string {
-  if (!role) return 'Member';
-  return role.charAt(0).toUpperCase() + role.slice(1);
+  const r = role?.toLowerCase();
+  if (r === 'owner' || r === 'admin') return 'Owner';
+  if (r === 'member') return 'Member';
+  return role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Member';
 }
 
 /**

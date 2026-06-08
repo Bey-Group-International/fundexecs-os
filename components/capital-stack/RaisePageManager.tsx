@@ -29,6 +29,9 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
   const [minCheck, setMinCheck] = useState(initial?.minCheck ? String(initial.minCheck) : '');
   const [showAmounts, setShowAmounts] = useState(initial?.showAmounts ?? false);
   const [exemption, setExemption] = useState<'' | RaiseExemption>(initial?.exemption ?? '');
+  const [acceptReservations, setAcceptReservations] = useState(
+    initial?.acceptReservations ?? false
+  );
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
   // NOTE: these useState seeds run only on mount. To resync the editable copy
@@ -54,7 +57,8 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
         headline,
         minCheck: minCheck ? Number(minCheck.replace(/[^0-9.]/g, '')) : null,
         showAmounts,
-        exemption: exemption || null
+        exemption: exemption || null,
+        acceptReservations
       });
       if (res.ok) {
         setSavedAt(Date.now());
@@ -210,6 +214,18 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
                 className="h-4 w-4 accent-[var(--accent)]"
               />
               <span className="text-[12.5px] text-fg-2">Show dollar amounts publicly</span>
+            </label>
+            <label className="flex items-center gap-2.5 self-end rounded-xl border border-hairline bg-surface-1 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={acceptReservations}
+                onChange={(e) => setAcceptReservations(e.target.checked)}
+                className="h-4 w-4 accent-[var(--accent)]"
+                disabled={exemption !== '506c'}
+              />
+              <span className={`text-[12.5px] ${exemption !== '506c' ? 'text-fg-4' : 'text-fg-2'}`}>
+                Accept reservations (506(c) only)
+              </span>
             </label>
             <label className="flex flex-col gap-1.5 sm:col-span-2">
               <span className="text-[11.5px] font-medium text-fg-2">Reg D exemption</span>

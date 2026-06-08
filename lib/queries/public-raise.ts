@@ -51,6 +51,11 @@ export interface PublicRaise {
    * "express interest" CTA.
    */
   exemption: '506b' | '506c' | null;
+  /**
+   * Whether the owner has opted in to accepting reservations. Only meaningful
+   * when exemption === '506c'. False by default.
+   */
+  acceptReservations: boolean;
 }
 
 function pctOf(n: number, total: number): number {
@@ -69,7 +74,7 @@ export async function getPublicRaise(token: string): Promise<PublicRaise | null>
   const { data: page } = await admin
     .from('raise_pages')
     .select(
-      'id, org_id, title, headline, min_check, show_amounts, exemption, revoked_at, expires_at'
+      'id, org_id, title, headline, min_check, show_amounts, exemption, accept_reservations, revoked_at, expires_at'
     )
     .eq('token', token)
     .maybeSingle();
@@ -159,6 +164,7 @@ export async function getPublicRaise(token: string): Promise<PublicRaise | null>
     minCheck: page.min_check != null ? Number(page.min_check) : null,
     interestCount: interestCount ?? 0,
     trustPct,
-    exemption
+    exemption,
+    acceptReservations: exemption === '506c' && Boolean(page.accept_reservations)
   };
 }

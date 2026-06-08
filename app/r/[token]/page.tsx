@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ShieldCheck, TrendingUp, Users, Target } from 'lucide-react';
 import { getPublicRaise } from '@/lib/queries/public-raise';
 import { RaiseInterestForm } from '@/components/raise/RaiseInterestForm';
+import { RaiseReserveForm } from '@/components/raise/RaiseReserveForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +75,10 @@ export default async function PublicRaisePage({ params }: { params: Promise<{ to
   const softPct = Math.max(0, coveragePct - committedPct);
   // 506(b) = private placement (no general solicitation): gate the CTA.
   const gated = raise.exemption === '506b';
+  // 506(c) = general solicitation permitted; attestation required.
+  const is506c = raise.exemption === '506c';
+  // Show the reserve CTA only when the owner enabled it and it's a 506(c) raise.
+  const showReserve = is506c && raise.acceptReservations;
 
   return (
     <main className="fx-theme-light min-h-screen bg-bg-0 px-4 py-10 sm:py-14">
@@ -186,8 +191,31 @@ export default async function PublicRaisePage({ params }: { params: Promise<{ to
                 ? 'This is a private placement (Reg D 506(b)). Request access and the team will follow up directly if you qualify. This is not a commitment to invest.'
                 : 'Share your details and the team will follow up directly. This is not a commitment to invest.'}
             </p>
-            <RaiseInterestForm token={token} minCheck={raise.minCheck} gated={gated} />
+            <RaiseInterestForm
+              token={token}
+              minCheck={raise.minCheck}
+              gated={gated}
+              requires506cAttestation={is506c}
+            />
           </section>
+
+          {/* Reservation section — only shown when the owner enabled it (506(c)) */}
+          {showReserve ? (
+            <section className="border-t border-hairline bg-surface-1/50 px-6 py-6">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-fg-1">
+                    Reserve your allocation
+                  </h2>
+                  <p className="mt-1 max-w-[56ch] text-[13px] text-fg-3">
+                    Secure your spot with a reservation deposit via Stripe. Accredited investors
+                    only (Reg D 506(c)). This is not a final investment commitment.
+                  </p>
+                </div>
+              </div>
+              <RaiseReserveForm token={token} minCheck={raise.minCheck} />
+            </section>
+          ) : null}
 
           {/* Footer */}
           <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-hairline px-6 py-4">

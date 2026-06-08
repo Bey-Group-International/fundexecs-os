@@ -34,6 +34,11 @@ export interface RaiseInterestInput {
   /** Indicative amount in whole dollars; optional. */
   amount?: number | null;
   note?: string | null;
+  /**
+   * True when the prospect checked the accredited-investor self-attestation
+   * checkbox on a 506(c) raise. Null = not applicable (506(b) / unset).
+   */
+  accredited?: boolean | null;
 }
 
 /** Trimmed, length-bounded string (empty → null). */
@@ -68,13 +73,22 @@ export async function submitRaiseInterest(input: RaiseInterestInput): Promise<Ra
   // Validate the token resolves to a LIVE raise page.
   const { data: page } = await admin
     .from('raise_pages')
-    .select('id, org_id, title, revoked_at, expires_at')
+    .select('id, org_id, title, exemption, revoked_at, expires_at')
     .eq('token', token)
     .maybeSingle();
 
   if (!page || page.revoked_at) return { ok: false, error: 'This raise link is no longer active.' };
   if (page.expires_at && new Date(page.expires_at).getTime() <= Date.now()) {
     return { ok: false, error: 'This raise link has expired.' };
+  }
+
+  // 506(c) raises require the accredited-investor attestation.
+  const is506c = page.exemption === '506c';
+  if (is506c && !input.accredited) {
+    return {
+      ok: false,
+      error: 'Please confirm you are an accredited investor before submitting.'
+    };
   }
 
   // Throttle this public, unauthenticated write so a bot can't spam leads and
@@ -94,13 +108,19 @@ export async function submitRaiseInterest(input: RaiseInterestInput): Promise<Ra
     /* fail-open: never block a legitimate submission on a limiter error */
   }
 
+  const accredited = is506c && input.accredited === true ? true : null;
+  const attested_at = accredited ? new Date().toISOString() : null;
+
   const { error: insertErr } = await admin.from('raise_interests').insert({
     org_id: page.org_id,
     raise_page_id: page.id,
     name,
     email,
     indicative_amount: amount,
-    note
+    note,
+    kind: 'interest',
+    accredited,
+    attested_at
   });
 
   if (insertErr) return { ok: false, error: 'Could not record your interest. Please try again.' };
