@@ -15,7 +15,13 @@ import {
 } from 'lucide-react';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Badge } from '@/components/ui';
-import { usePrefersReducedMotion, EarnSays, Chip, PRIMARY_BTN } from '@/components/beta/earn-chat';
+import {
+  usePrefersReducedMotion,
+  useTypewriter,
+  EarnSays,
+  Chip,
+  PRIMARY_BTN
+} from '@/components/beta/earn-chat';
 import { TEAM_ROSTER, TeamAvatar } from '@/lib/team';
 import { MEMBER_TYPES, MEMBER_TYPE_LABELS, MEMBER_TYPE_BLURBS } from '@/lib/member-types';
 import { claimBetaLinkWithEmail } from '@/lib/actions/beta-links';
@@ -233,6 +239,8 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
   const [showTour, setShowTour] = useState(false);
   const [topic, setTopic] = useState<Topic>('intro');
   const [askOpen, setAskOpen] = useState(false);
+  // Drives the choreographed first-paint reveal of the cinematic intro.
+  const [revealed, setRevealed] = useState(false);
 
   // captured application — committed as each conversational turn settles
   const [name, setName] = useState('');
@@ -256,6 +264,11 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
   // Funnel: welcome view once on mount.
   useEffect(() => {
     ev('beta_welcome_view');
+  }, []);
+
+  // Kick off the cinematic intro's staggered reveal on first paint.
+  useEffect(() => {
+    queueMicrotask(() => setRevealed(true));
   }, []);
 
   // Rehydrate answers if auth bounced us back (or a returning visit within the
@@ -319,6 +332,33 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
     value:
       'In the beta you get early access, a direct line to the team, and a real say in what we build. Command Center, Pipeline, and a Chain of Trust on every decision.'
   };
+
+  // Typed personalized headline for the cinematic intro — rendered as one big
+  // line (not a chat bubble) so the splash lands before the conversation begins.
+  const introTyped = useTypewriter(prompts.intro, reducedMotion);
+
+  /** Staggered first-paint reveal via pure CSS transitions (instant when the
+   *  visitor prefers reduced motion). */
+  const reveal = (delayMs: number): React.CSSProperties =>
+    reducedMotion
+      ? {}
+      : {
+          opacity: revealed ? 1 : 0,
+          transform: revealed ? 'none' : 'translateY(12px)',
+          transition:
+            'opacity 600ms cubic-bezier(0.22,1,0.36,1), transform 600ms cubic-bezier(0.22,1,0.36,1)',
+          transitionDelay: `${delayMs}ms`
+        };
+  /** Same, with a scale-in for the assembling team coins. */
+  const coinReveal = (delayMs: number): React.CSSProperties =>
+    reducedMotion
+      ? {}
+      : {
+          opacity: revealed ? 1 : 0,
+          transform: revealed ? 'none' : 'translateY(10px) scale(0.7)',
+          transition: 'opacity 500ms ease, transform 500ms cubic-bezier(0.22,1,0.36,1)',
+          transitionDelay: `${delayMs}ms`
+        };
 
   /** Settle the current turn into the transcript, then move to the next. */
   function advance(to: Step, earnText: string, youText: string | null) {
@@ -458,18 +498,70 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
 
         {/* active turn */}
         <div key={step} className="fx-rise flex flex-col gap-6">
-          {/* ── INTRO ── */}
+          {/* ── INTRO — full-screen cinematic welcome ── */}
           {step === 'intro' && (
-            <div className="flex flex-col gap-7">
-              <Badge tone="gold" dot pulse={!reducedMotion} className="self-start">
-                Private beta · {label ?? 'invitation'}
-              </Badge>
-              <EarnSays size={56} reducedMotion={reducedMotion} line={prompts.intro} />
-              <p className="max-w-md text-[13.5px] leading-7 text-fg-3">
-                I lead a fifteen-strong AI executive team. Give me ninety seconds to show you what
-                that means for you — then I&apos;ll get you in.
+            <div className="flex min-h-[58vh] flex-col items-center justify-center gap-6 text-center">
+              {/* hero: Earn, then the fifteen-strong team assembling around it */}
+              <div className="flex flex-col items-center gap-4">
+                <div className="relative" style={coinReveal(0)}>
+                  <div
+                    className="pointer-events-none absolute inset-0 -z-10"
+                    style={{
+                      background: 'radial-gradient(circle, rgba(247,201,72,0.45), transparent 65%)',
+                      filter: 'blur(26px)'
+                    }}
+                    aria-hidden
+                  />
+                  <EarnCoin size={76} glow online />
+                </div>
+                <div
+                  className="flex max-w-xs flex-wrap items-center justify-center gap-1.5 sm:max-w-sm"
+                  aria-label="Your fifteen-strong AI executive team"
+                >
+                  {TEAM_ROSTER.map((m, i) => (
+                    <div key={m.slug} style={coinReveal(220 + i * 45)} aria-hidden>
+                      <TeamAvatar member={m} size={30} className="ring-2 ring-[var(--bg-0)]" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={reveal(160)}>
+                <Badge tone="gold" dot pulse={!reducedMotion}>
+                  Private beta · {label ?? 'invitation'}
+                </Badge>
+              </div>
+
+              {/* personalized headline — the welcome lands first, typed out */}
+              <h1
+                className="max-w-lg text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-1"
+                style={reveal(560)}
+              >
+                Earn · Earnest Fundmaker
+              </h1>
+              <p
+                className="-mt-3 max-w-lg text-[20px] font-semibold leading-8 tracking-[-0.01em] text-fg-1 sm:text-[24px] sm:leading-9"
+                style={reveal(620)}
+                aria-live="polite"
+              >
+                {introTyped}
+                <span
+                  aria-hidden
+                  className={`ml-0.5 inline-block h-[0.95em] w-px translate-y-[2px] bg-gold-1 align-middle ${
+                    reducedMotion ? '' : 'animate-pulse'
+                  }`}
+                />
               </p>
-              <div className="flex flex-wrap items-center gap-2.5">
+
+              <p className="max-w-md text-[13.5px] leading-7 text-fg-3" style={reveal(1000)}>
+                I lead a fifteen-strong AI executive team. Ninety seconds to show you what that
+                means for you — then I&apos;ll get you in.
+              </p>
+
+              <div
+                className="flex flex-wrap items-center justify-center gap-2.5"
+                style={reveal(1140)}
+              >
                 <button type="button" onClick={startCapture} className={PRIMARY_BTN}>
                   Let&apos;s get me set up <ArrowRight size={15} strokeWidth={2} aria-hidden />
                 </button>
@@ -489,7 +581,7 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
               </div>
 
               {showTour && (
-                <div className="fx-rise flex flex-col gap-4 rounded-2xl border border-hairline bg-surface-1/70 p-4">
+                <div className="fx-rise flex w-full flex-col gap-4 rounded-2xl border border-hairline bg-surface-1/70 p-4 text-left">
                   <EarnSays line={breakdownLine[topic]} reducedMotion={reducedMotion} />
                   <div className="flex flex-wrap gap-2">
                     <Chip
@@ -549,7 +641,8 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
               <button
                 type="button"
                 onClick={skipToEnter}
-                className="self-start text-[11.5px] text-fg-5 underline-offset-2 transition hover:text-fg-3 hover:underline"
+                style={reveal(1220)}
+                className="text-[11.5px] text-fg-5 underline-offset-2 transition hover:text-fg-3 hover:underline"
               >
                 Skip the intro — just sign me in
               </button>
