@@ -30,8 +30,8 @@ const STAGE_LABELS: Record<string, string> = {
 };
 const STAGE_RANK = Object.keys(STAGE_LABELS);
 
-/** Compact money: $4.2M, $850K, $0. */
-function money(n: number): string {
+/** Compact money: $4.2M, $850K, $0. Exported for unit tests. */
+export function money(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '$0';
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
   if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
@@ -170,8 +170,9 @@ export async function buildDealSnapshot(
 }
 
 /** Bucket a recency into a coarse, name-free phrase ("today" / "3 days ago" /
- *  "5 weeks ago"). Computed from a timestamp — the raw value is never echoed. */
-function lastTouch(iso: string | null): string | null {
+ *  "5 weeks ago"). Computed from a timestamp — the raw value is never echoed.
+ *  Exported for unit tests. */
+export function lastTouch(iso: string | null): string | null {
   if (!iso) return null;
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return null;
