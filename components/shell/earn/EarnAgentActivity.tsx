@@ -38,19 +38,27 @@ export function EarnAgentActivity({ kind, busy = false, className }: EarnAgentAc
   return (
     <div
       className={cn(
-        'flex items-center gap-2.5 rounded-xl border border-hairline bg-bg-1 px-3 py-2',
+        'relative flex items-center gap-2.5 overflow-hidden rounded-xl border border-hairline bg-bg-1 px-3 py-2',
         className
       )}
       data-testid="earn-agent-activity"
       data-busy={busy ? 'true' : 'false'}
     >
-      {/* Overlapping avatars of who's on point. */}
+      {/* Overlapping avatars of who's on point. While Earn coordinates the
+          desk they activate in sequence — a gentle staggered lift led by
+          Earn (index 0) — via per-avatar animation-delay. Idle: calm pulse. */}
       <div className="flex flex-none -space-x-1.5">
         {onPoint.map((m, i) => (
           <span
             key={m.slug}
-            className="relative inline-flex rounded-full ring-2 ring-bg-1"
-            style={{ zIndex: onPoint.length - i }}
+            className={cn(
+              'relative inline-flex rounded-full ring-2 ring-bg-1',
+              busy && 'fx-onpoint-cascade'
+            )}
+            style={{
+              zIndex: onPoint.length - i,
+              ...(busy ? { animationDelay: `${i * 0.16}s` } : null)
+            }}
             title={`${m.name} · ${m.position}`}
           >
             <TeamAvatar member={m} size={22} className="flex-none" />
@@ -71,10 +79,29 @@ export function EarnAgentActivity({ kind, busy = false, className }: EarnAgentAc
             {busy ? 'Working' : 'On the desk'}
           </span>
         </div>
-        <p className={cn('mt-0.5 truncate text-[11px] text-fg-3', busy && 'animate-pulse')}>
+        {/* Keyed on status so a context/busy change re-mounts the line and
+            replays the fade — reads as a smooth handoff, not a hard swap. */}
+        <p
+          key={status}
+          className={cn(
+            'fx-status-fade mt-0.5 truncate text-[11px] text-fg-3',
+            busy && 'animate-pulse'
+          )}
+        >
           {status}
         </p>
       </div>
+
+      {/* Whisper-quiet working hairline — a transform-only sweep under the
+          strip while Earn works. Gold stays reserved for Earn. */}
+      {busy ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-px overflow-hidden"
+        >
+          <span className="fx-desk-shimmer block h-px w-1/3 bg-gradient-to-r from-transparent via-gold-1 to-transparent opacity-60" />
+        </span>
+      ) : null}
     </div>
   );
 }
