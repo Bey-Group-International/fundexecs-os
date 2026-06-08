@@ -209,8 +209,10 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
         <p className="mb-4 max-w-prose text-[12.5px] leading-relaxed text-fg-3">
           We’ll email a one-time magic link to your beta user — clicking it signs them in and drops
           them straight into onboarding, no password required. You can also copy the link to send it
-          yourself. Use <span className="font-medium text-fg-2">Resend</span> below if someone never
-          received theirs.
+          yourself. Every row below has a re-send action:{' '}
+          <span className="font-medium text-fg-2">Resend</span> a fresh invite if someone never
+          received theirs, or <span className="font-medium text-fg-2">Send sign-in link</span> to
+          anyone who already joined.
         </p>
 
         <form onSubmit={handleInvite} className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -280,18 +282,24 @@ export function BetaInvitesPanel({ invites }: { invites: BetaInvite[] }) {
                 <span className="text-[11.5px] text-fg-4">{relativeTime(inv.invitedAt)}</span>
                 <span className="text-[11.5px] text-fg-4">{relativeTime(inv.acceptedAt)}</span>
                 <div className="flex justify-end gap-1.5">
-                  {inv.status !== 'accepted' && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={RefreshCw}
-                      disabled={isBusy}
-                      onClick={() => handleResend(inv.id)}
-                      aria-label={`Resend invite to ${inv.email}`}
-                    >
-                      {inv.status === 'revoked' ? 'Re-invite' : 'Resend'}
-                    </Button>
-                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={inv.status === 'accepted' ? Send : RefreshCw}
+                    disabled={isBusy}
+                    onClick={() => handleResend(inv.id)}
+                    aria-label={
+                      inv.status === 'accepted'
+                        ? `Send a fresh sign-in link to ${inv.email}`
+                        : `Resend invite to ${inv.email}`
+                    }
+                  >
+                    {inv.status === 'accepted'
+                      ? 'Send sign-in link'
+                      : inv.status === 'revoked'
+                        ? 'Re-invite'
+                        : 'Resend'}
+                  </Button>
                   {inv.status === 'pending' && (
                     <Button
                       variant="ghost"
