@@ -34,15 +34,19 @@ export function RaiseInterestForm({ token, minCheck }: { token: string; minCheck
     e.preventDefault();
     setError(null);
     startTransition(async () => {
-      const res = await submitRaiseInterest({
-        token,
-        name,
-        email,
-        amount: amount ? Number(amount.replace(/[^0-9.]/g, '')) : null,
-        note
-      });
-      if (res.ok) setDone(true);
-      else setError(res.error);
+      try {
+        const res = await submitRaiseInterest({
+          token,
+          name,
+          email,
+          amount: amount ? Number(amount.replace(/[^0-9.]/g, '')) : null,
+          note
+        });
+        if (res.ok) setDone(true);
+        else setError(res.error);
+      } catch {
+        setError('Could not submit your interest. Please try again.');
+      }
     });
   }
 

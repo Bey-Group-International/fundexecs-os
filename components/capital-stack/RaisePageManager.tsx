@@ -28,6 +28,12 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
   const [showAmounts, setShowAmounts] = useState(initial?.showAmounts ?? false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
+  // NOTE: these useState seeds run only on mount. To resync the editable copy
+  // when the persisted page identity changes (publish → page appears, unpublish
+  // → page gone), the parent remounts this component via `key={token}` rather
+  // than a setState-in-effect (which the React-Compiler lint rule forbids). On
+  // a same-page save the local state already matches what was persisted.
+
   function publish() {
     setError(null);
     startTransition(async () => {

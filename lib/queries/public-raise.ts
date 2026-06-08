@@ -115,7 +115,11 @@ export async function getPublicRaise(token: string): Promise<PublicRaise | null>
         .eq('user_id', owner.user_id)
         .maybeSingle()
     ]);
-    memberType = (profile?.member_type ?? null) as MemberType | null;
+    // Guard the raw DB text against the known member types so a stray value can
+    // never yield an undefined label downstream (MEMBER_TYPE_LABELS[memberType]).
+    const rawMemberType = (profile?.member_type ?? '').trim();
+    memberType =
+      rawMemberType && rawMemberType in MEMBER_TYPE_LABELS ? (rawMemberType as MemberType) : null;
     ownerName = (mp?.display_name ?? '').trim() || profile?.full_name || null;
   }
 

@@ -77,6 +77,23 @@ export async function submitRaiseInterest(input: RaiseInterestInput): Promise<Ra
     return { ok: false, error: 'This raise link has expired.' };
   }
 
+  // Throttle this public, unauthenticated write so a bot can't spam leads and
+  // flood owners with notifications. Keyed by token + email; reuses the generic
+  // service-role rate-limiter. Fail-open on infra error so a limiter blip never
+  // blocks a legitimate prospect.
+  try {
+    const { data: allowed } = await admin.rpc('beta_ask_rate_check', {
+      _key: `raise_interest:${token}:${email.toLowerCase()}`,
+      _window_seconds: 3600,
+      _max: 5
+    });
+    if (allowed === false) {
+      return { ok: false, error: 'Too many submissions. Please try again later.' };
+    }
+  } catch {
+    /* fail-open: never block a legitimate submission on a limiter error */
+  }
+
   const { error: insertErr } = await admin.from('raise_interests').insert({
     org_id: page.org_id,
     raise_page_id: page.id,

@@ -42,7 +42,7 @@ export default async function CapitalStackPage() {
     <AuthedShell title="Capital Stack" subtitle="Capital Formation" redirectFrom="/capital-stack">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <CapitalStackView data={data} />
-        <RaisePageManager initial={raisePage} />
+        <RaisePageManager key={raisePage?.token ?? 'none'} initial={raisePage} />
       </div>
     </AuthedShell>
   );

@@ -64,6 +64,18 @@ export async function createRaiseShareLink(): Promise<RaiseLinkResult> {
     return { ok: true, url: raiseShareUrl(existing.token), token: existing.token };
   }
 
+  // An expired-but-unrevoked page still holds the one-active-per-org slot (the
+  // unique index can't reference now()), so it would block the insert below.
+  // Release it by revoking before minting a fresh token.
+  const nowIso = new Date().toISOString();
+  await supabase
+    .from('raise_pages')
+    .update({ revoked_at: nowIso })
+    .eq('org_id', org.orgId)
+    .is('revoked_at', null)
+    .not('expires_at', 'is', null)
+    .lte('expires_at', nowIso);
+
   const token = crypto.randomBytes(32).toString('base64url');
   const user = await getAuthUser();
   const { error } = await supabase
@@ -71,17 +83,23 @@ export async function createRaiseShareLink(): Promise<RaiseLinkResult> {
     .insert({ org_id: org.orgId, token, created_by: user?.id ?? null });
 
   if (error) {
-    // A concurrent mint may have won the one-active-per-org unique index race —
-    // return the link that now exists rather than surfacing a false error.
+    // Only a unique-violation (23505) means a concurrent mint won the
+    // one-active-per-org race — recover by returning the live link that now
+    // exists. Any other error is a real failure and must surface.
+    if (error.code !== '23505') {
+      return { ok: false, error: 'Could not publish the raise page.' };
+    }
     const { data: raced } = await supabase
       .from('raise_pages')
-      .select('token')
+      .select('token, expires_at')
       .eq('org_id', org.orgId)
       .is('revoked_at', null)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (raced?.token) return { ok: true, url: raiseShareUrl(raced.token), token: raced.token };
+    if (raced?.token && (!raced.expires_at || new Date(raced.expires_at).getTime() > Date.now())) {
+      return { ok: true, url: raiseShareUrl(raced.token), token: raced.token };
+    }
     return { ok: false, error: 'Only a workspace owner or admin can publish a raise page.' };
   }
 

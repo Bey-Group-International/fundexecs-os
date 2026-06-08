@@ -37,7 +37,10 @@ create table if not exists public.raise_pages (
   revoked_at timestamptz,
   created_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  -- Composite unique so child rows can FK (id, org_id) together — this prevents
+  -- a lead from ever being filed under an org that doesn't own the page.
+  constraint raise_pages_id_org_id_key unique (id, org_id)
 );
 
 create index if not exists raise_pages_org_id_idx on public.raise_pages (org_id);
@@ -66,13 +69,20 @@ create policy "owners manage raise pages" on public.raise_pages
 create table if not exists public.raise_interests (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations (id) on delete cascade,
-  raise_page_id uuid not null references public.raise_pages (id) on delete cascade,
+  raise_page_id uuid not null,
   name text not null,
   email text not null,
   -- Indicative amount the prospect signalled. Null = "didn't say".
   indicative_amount numeric,
   note text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Composite FK ties the lead to a page AND guarantees org_id matches the page's
+  -- owning org. Without this, a bad service-role insert could file a lead under a
+  -- different org_id than the page's, and that org's admins (RLS reads on org_id)
+  -- could see another org's leads.
+  constraint raise_interests_page_org_fkey
+    foreign key (raise_page_id, org_id)
+    references public.raise_pages (id, org_id) on delete cascade
 );
 
 create index if not exists raise_interests_org_id_idx on public.raise_interests (org_id);
