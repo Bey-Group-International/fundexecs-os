@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { awardTrustXp } from '@/lib/actions/xp';
+import { recordLoopClose } from '@/lib/actions/loop';
 import type { Database } from '@/lib/supabase/database.types';
 
 type DealRow = Database['public']['Tables']['deals']['Row'];
@@ -138,6 +139,21 @@ export async function updateDealStage(
     }
   } catch {
     // XP rewards are best-effort; never block the parent action.
+  }
+
+  // Close the loop: a closed deal is proof of work — feed it back into the
+  // member record so readiness rises. Idempotent + best-effort.
+  if (stage === 'closed') {
+    try {
+      await recordLoopClose({
+        source: 'deal_closed',
+        entityType: 'deal',
+        entityId: dealId,
+        metadata: { name: (data as DealRow).name }
+      });
+    } catch {
+      // Never block the stage change on the flywheel write.
+    }
   }
 
   return { ok: true, deal: data as DealRow };

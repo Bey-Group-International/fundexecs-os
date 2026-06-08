@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Layers,
   TrendingUp,
@@ -10,11 +11,13 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
   type LucideIcon
 } from 'lucide-react';
 import { Badge, Card, ProgressBar, SectionTitle, type BadgeTone } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
+import { closeCommitment } from '@/lib/actions/capital';
 import type { CapitalStackData, CapitalCommitment } from '@/lib/queries/capital-stack';
 
 /* ---- Formatting helpers ------------------------------------------------- */
@@ -239,11 +242,38 @@ function LpTypeDonut({
   );
 }
 
+/** A commitment can still be closed unless it's already closed/funded/withdrawn. */
+function isCloseable(stage: string): boolean {
+  const s = stage.toLowerCase();
+  return !s.includes('closed') && !s.includes('funded') && !s.includes('withdrawn');
+}
+
 function CommitmentsTable({ commitments }: { commitments: CapitalCommitment[] }) {
   const [expanded, setExpanded] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [isClosing, startClose] = useTransition();
+  const router = useRouter();
   const visible = expanded ? commitments : commitments.slice(0, 8);
 
   if (commitments.length === 0) return null;
+
+  const onClose = (id: string) => {
+    setPendingId(id);
+    startClose(async () => {
+      // Closing a commitment closes the loop — proof of work flows back into the
+      // record (see lib/actions/capital.ts). Refresh to pick up the new state.
+      // `finally` guarantees the row never gets stuck in its pending state, even
+      // if the close throws.
+      try {
+        const res = await closeCommitment(id);
+        // Only refresh on a successful close; a failed close leaves the row as
+        // it was. `finally` guarantees the pending state always clears.
+        if (res.ok) router.refresh();
+      } finally {
+        setPendingId(null);
+      }
+    });
+  };
 
   return (
     <div>
@@ -275,6 +305,9 @@ function CommitmentsTable({ commitments }: { commitments: CapitalCommitment[] })
                 </th>
                 <th className="hidden px-4 py-2.5 text-left font-semibold uppercase tracking-[0.09em] text-fg-4 md:table-cell">
                   Expected Close
+                </th>
+                <th className="px-4 py-2.5 text-right font-semibold uppercase tracking-[0.09em] text-fg-4">
+                  <span className="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
@@ -311,6 +344,20 @@ function CommitmentsTable({ commitments }: { commitments: CapitalCommitment[] })
                     ) : (
                       <span className="text-fg-5">—</span>
                     )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    {isCloseable(c.stage) ? (
+                      <button
+                        type="button"
+                        onClick={() => onClose(c.id)}
+                        disabled={isClosing && pendingId === c.id}
+                        data-testid={`capital-close-${c.id}`}
+                        className="inline-flex items-center gap-1 rounded-[8px] border border-hairline px-2 py-1 text-[11px] font-medium text-fg-3 transition hover:border-[var(--azure-line)] hover:bg-[var(--azure-soft)] hover:text-azure-1 disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={12} strokeWidth={2} aria-hidden />
+                        {isClosing && pendingId === c.id ? 'Closing…' : 'Mark closed'}
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
