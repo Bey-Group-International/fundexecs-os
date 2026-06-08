@@ -4,7 +4,10 @@ import { getShellIdentity } from '@/lib/queries/identity';
 import { Card } from '@/components/ui';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getStrategyData } from '@/lib/queries/strategy';
+import { getDashboardData } from '@/lib/queries/dashboard/lifecycle';
+import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, LIFECYCLE_STAGE_BLURBS } from '@/lib/lifecycle';
 import { StrategyView } from './StrategyView';
+import { StrategyHero } from './StrategyHero';
 
 export const metadata: Metadata = { title: 'Strategy' };
 
@@ -29,7 +32,17 @@ export default async function StrategyPage() {
     );
   }
 
-  const { objectives } = await getStrategyData(org.orgId);
+  // Strategy objectives + the lifecycle/posture context the hero binds to. The
+  // dashboard loader already derives the stage, loop progress, and readiness
+  // from the tested engine — reuse it rather than recomputing here.
+  const [{ objectives }, dashboard] = await Promise.all([
+    getStrategyData(org.orgId),
+    getDashboardData(org.orgId)
+  ]);
+
+  // The stage the current one unlocks (compounding): next in the ordered loop.
+  const stageIndex = LIFECYCLE_STAGES.indexOf(dashboard.stage);
+  const nextStage = stageIndex >= 0 ? (LIFECYCLE_STAGES[stageIndex + 1] ?? null) : null;
 
   return (
     <AppShell
@@ -37,7 +50,20 @@ export default async function StrategyPage() {
       title="Strategy"
       subtitle="100 / 30 / 10 operating plan"
     >
-      <StrategyView initialObjectives={objectives} />
+      <div className="flex flex-col gap-[18px]">
+        <StrategyHero
+          stageLabel={dashboard.stageLabel}
+          stageBlurb={dashboard.stageBlurb}
+          stageIndex={stageIndex >= 0 ? stageIndex : 0}
+          stageCount={LIFECYCLE_STAGES.length}
+          loopProgress={dashboard.loopProgress}
+          readinessScore={dashboard.readinessScore}
+          readinessBreakdown={dashboard.readinessBreakdown}
+          nextStageLabel={nextStage ? LIFECYCLE_STAGE_LABELS[nextStage] : null}
+          nextStageBlurb={nextStage ? LIFECYCLE_STAGE_BLURBS[nextStage] : null}
+        />
+        <StrategyView initialObjectives={objectives} />
+      </div>
     </AppShell>
   );
 }

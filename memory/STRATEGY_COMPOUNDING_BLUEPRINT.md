@@ -65,9 +65,22 @@ Low 1`) and roll up a **weighted completion** per horizon + one overall
 - Files: `app/strategy/StrategyView.tsx` only.
 - No peer percentile yet (would require a cohort table — Phase 3). No fake Δ.
 
-### Phase 2 — Real signals in, gate-unlock out (data layer)
+### Phase 2a — Lifecycle/posture hero (UI-only, no new tables) ✅ shipped
 
-Implements **#1 (Earn drafts)** + the gate-unlock + cascade parts of **#2**.
+The read-only, verifiable half of the gate-unlock mechanic, reusing the tested
+lifecycle engine via `getDashboardData` — no migration.
+
+- `app/strategy/StrategyHero.tsx`: current lifecycle stage + loop progress, the
+  **Institutional Readiness** composite (the "how investable am I" number) with
+  its per-dimension breakdown, and the compounding line — **which stage this one
+  unlocks** ("Clear this stage to unlock → Source LPs").
+- `app/strategy/page.tsx` composes `getStrategyData` + `getDashboardData` and
+  derives the next stage from `LIFECYCLE_STAGES`.
+
+### Phase 2b — Real signals in, gate-unlock writeback (data layer)
+
+Implements **#1 (Earn drafts)** + the cascade + completion-writeback parts of
+**#2** (the migration-dependent half of Phase 2).
 
 - Extend `governance_objectives` (additive migration): `category text`
   (`'capital' | 'governance' | 'compliance' | 'execution'`), `capital_weight
