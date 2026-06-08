@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { RevealGroup, RevealItem } from '@/components/dashboard/command';
+import { FX_SPRING } from '@/components/dashboard/command/motion';
 import {
   TrendingUp,
   CircleDot,
@@ -71,12 +73,12 @@ function EarnBand({ data }: { data: PipelineData }) {
     <Card className="flex items-center gap-4 bg-[linear-gradient(100deg,rgba(247,201,72,0.08),transparent_58%)] px-[18px] py-3.5">
       <EarnCoin size={36} glow />
       <div className="min-w-0 flex-1 text-[13px] text-fg-2">
-        <span className="font-semibold text-fg-1">Earnest Fundmaker</span>, your private market
-        assistant, is tracking{' '}
+        <span className="font-semibold text-fg-1">Earn</span> is working the book —{' '}
         <span className="font-semibold text-gold-1">
-          {data.totalDeals} {data.totalDeals === 1 ? 'investor' : 'investors'}
+          {data.totalDeals} {data.totalDeals === 1 ? 'relationship' : 'relationships'}
         </span>{' '}
-        across {activeStages} formation {activeStages === 1 ? 'stage' : 'stages'}.
+        live across {activeStages} formation {activeStages === 1 ? 'stage' : 'stages'}, every move
+        on the record.
       </div>
       <Badge tone="azure" dot pulse className="flex-none">
         Live pipeline
@@ -146,7 +148,7 @@ function FormationBoard({
                       e.dataTransfer.effectAllowed = 'move';
                     }}
                     onClick={() => onSelectDeal(d)}
-                    className={`rounded-xl border border-hairline bg-surface-3 p-2.5 text-left transition hover:border-[var(--accent-line)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-line)] ${
+                    className={`rounded-xl border border-hairline bg-surface-3 p-2.5 text-left transition hover:-translate-y-0.5 hover:border-[var(--accent-line)] hover:shadow-[var(--shadow-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-line)] ${
                       pending ? 'opacity-50' : 'cursor-grab active:cursor-grabbing'
                     }`}
                     data-testid={`pipeline-deal-${d.id}`}
@@ -365,7 +367,7 @@ export function PipelineView({ data, lpData }: { data: PipelineData; lpData: LpP
   return (
     <div className="flex flex-col gap-[18px]">
       <SectionTitle
-        eyebrow="Capital formation command center"
+        eyebrow="The book · capital formation"
         title="Pipeline"
         className="mb-0"
         action={
@@ -391,24 +393,26 @@ export function PipelineView({ data, lpData }: { data: PipelineData; lpData: LpP
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      <RevealGroup className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {summary.map((s) => {
           const Icon = s.icon;
           return (
-            <Card key={s.label} className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[11.5px] font-medium text-fg-3">{s.label}</span>
-                <span style={{ color: TONE_HEX[s.tone] }}>
-                  <Icon size={15} strokeWidth={1.9} aria-hidden />
-                </span>
-              </div>
-              <div className="mt-2 text-[23px] font-semibold tabular-nums tracking-[-0.02em] text-fg-1">
-                {s.value}
-              </div>
-            </Card>
+            <RevealItem key={s.label} whileHover={{ y: -3, transition: FX_SPRING }}>
+              <Card className="h-full p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11.5px] font-medium text-fg-3">{s.label}</span>
+                  <span style={{ color: TONE_HEX[s.tone] }}>
+                    <Icon size={15} strokeWidth={1.9} aria-hidden />
+                  </span>
+                </div>
+                <div className="mt-2 text-[23px] font-semibold tabular-nums tracking-[-0.02em] text-fg-1">
+                  {s.value}
+                </div>
+              </Card>
+            </RevealItem>
           );
         })}
-      </div>
+      </RevealGroup>
 
       <SegTabs
         active={tab}
