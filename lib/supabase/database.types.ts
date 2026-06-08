@@ -587,7 +587,13 @@ export type Database = {
           raise_page_id: string
           reservation_amount: number | null
           reservation_status: string
+          reviewer_note: string | null
           stripe_session_id: string | null
+          verification_evidence: string | null
+          verification_method: string | null
+          verification_status: string
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           accredited?: boolean | null
@@ -603,7 +609,13 @@ export type Database = {
           raise_page_id: string
           reservation_amount?: number | null
           reservation_status?: string
+          reviewer_note?: string | null
           stripe_session_id?: string | null
+          verification_evidence?: string | null
+          verification_method?: string | null
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           accredited?: boolean | null
@@ -619,7 +631,13 @@ export type Database = {
           raise_page_id?: string
           reservation_amount?: number | null
           reservation_status?: string
+          reviewer_note?: string | null
           stripe_session_id?: string | null
+          verification_evidence?: string | null
+          verification_method?: string | null
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: [
           {
