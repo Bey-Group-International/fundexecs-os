@@ -218,21 +218,35 @@ export function CapitalSearch({ commitments }: CapitalSearchProps) {
 
   function searchSources() {
     const q = query.trim();
+    // Always advance the request id — even on clear — so any in-flight response
+    // from a prior search loses the stale-check and can't repopulate results.
+    const requestId = ++requestIdRef.current;
     if (!q) {
       setSources([]);
       setSearched(false);
+      setSemantic(false);
+      setError(null);
       return;
     }
-    const requestId = ++requestIdRef.current;
     setError(null);
     startTransition(async () => {
-      const res = await runNetworkSearch({ query: q, kinds: ['capital_provider'] });
-      if (requestId !== requestIdRef.current) return; // drop stale response
-      setSearched(true);
-      if (res.ok) {
-        setSources(res.results);
-        setSemantic(res.semantic);
-      } else {
+      try {
+        const res = await runNetworkSearch({ query: q, kinds: ['capital_provider'] });
+        if (requestId !== requestIdRef.current) return; // drop stale response
+        setSearched(true);
+        if (res.ok) {
+          setSources(res.results);
+          setSemantic(res.semantic);
+        } else {
+          setSources([]);
+          setSemantic(false);
+          setError('Capital-source search failed. Your stack results are still shown.');
+        }
+      } catch {
+        // The action returns {ok:false} rather than throwing, but guard anyway
+        // so an unexpected throw still degrades to the fallback error UX.
+        if (requestId !== requestIdRef.current) return;
+        setSearched(true);
         setSources([]);
         setSemantic(false);
         setError('Capital-source search failed. Your stack results are still shown.');
