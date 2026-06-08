@@ -1,5 +1,12 @@
 import type { MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
+import {
+  buildLadder,
+  isWeakText,
+  tierForQuestion,
+  type LadderItem,
+  type ProfileLadderState
+} from '@/lib/proof-of-truth/tiers';
 import type { MemberProfileInput } from '@/lib/actions/member-profile';
 import type { MemberProfile } from '@/lib/queries/member-profile';
 
@@ -26,6 +33,48 @@ export function completionPct(memberType: MemberType, answers: Answers): number 
   if (!set.length) return 0;
   const answered = set.filter((q) => (answers[q.id] ?? '').trim().length > 0).length;
   return Math.round((answered / set.length) * 100);
+}
+
+/** Whether a single question's current answer is present, and whether it's thin. */
+export function scoreAnswer(q: ProfileQuestion, answers: Answers): { present: boolean; weak: boolean } {
+  if (q.kind === 'tags') {
+    return { present: splitTags(answers[q.id]).length > 0, weak: false };
+  }
+  const text = (answers[q.id] ?? '').trim();
+  return { present: text.length > 0, weak: isWeakText(q.kind, text) };
+}
+
+/**
+ * Compute the readiness ladder from the in-progress answers, using the SAME
+ * tier model and weak-text rule the server Profile surface uses — so the
+ * wizard and `/profile` always agree on where the member stands.
+ */
+export function computeLadder(memberType: MemberType, answers: Answers): ProfileLadderState {
+  const items: LadderItem[] = getQuestionSet(memberType).map((q) => {
+    const { present, weak } = scoreAnswer(q, answers);
+    return { tier: tierForQuestion(q), optional: Boolean(q.optional), present, weak };
+  });
+  return buildLadder(items);
+}
+
+/**
+ * The index of the next required question that still needs work (missing or
+ * thin), searched forward from `after` and wrapping once. This is the wizard's
+ * "next best question" — it always points at the highest rung still open, in
+ * climb order, so approving answers drives straight to 100%. Returns -1 when
+ * every required field is strong.
+ */
+export function nextGapIndex(memberType: MemberType, answers: Answers, after: number): number {
+  const set = getQuestionSet(memberType);
+  const n = set.length;
+  for (let step = 1; step <= n; step += 1) {
+    const i = (after + step) % n;
+    const q = set[i];
+    if (q.optional) continue;
+    const { present, weak } = scoreAnswer(q, answers);
+    if (!present || weak) return i;
+  }
+  return -1;
 }
 
 /**
