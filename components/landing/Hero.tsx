@@ -1,0 +1,192 @@
+'use client';
+
+import Link from 'next/link';
+import { ArrowRight, Sparkles } from 'lucide-react';
+import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react';
+import { Badge } from '@/components/ui';
+import { EarnCoin } from '@/components/screens/EarnCoin';
+import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
+import { HeroStats } from '@/components/landing/HeroStats';
+import { Magnetic } from '@/components/landing/Motion';
+import { getCOO } from '@/lib/team';
+
+const PRIMARY_CTA =
+  'inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_12px_30px_-10px_rgba(37,99,235,0.7)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+
+const SECONDARY_CTA =
+  'inline-flex items-center justify-center gap-2 rounded-xl border border-hairline bg-surface-1 px-6 py-3.5 text-[15px] font-medium text-fg-2 backdrop-blur-sm transition hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1';
+
+/**
+ * Hero — the cinematic, pointer-reactive opener. A drifting aurora + grid
+ * backdrop, a cursor-following spotlight, a parallax/tilting Earn coin, an
+ * animated gradient headline, and magnetic CTAs. Fully static under
+ * reduced-motion (the spotlight/tilt simply don't track).
+ */
+export function Hero() {
+  const earn = getCOO();
+  const reduce = useReducedMotion();
+
+  // Normalized pointer position (-0.5..0.5) across the hero, spring-smoothed.
+  const px = useMotionValue(0);
+  const py = useMotionValue(0);
+  const sx = useSpring(px, { stiffness: 120, damping: 20, mass: 0.5 });
+  const sy = useSpring(py, { stiffness: 120, damping: 20, mass: 0.5 });
+
+  // Coin tilt + drift from pointer.
+  const rotateY = useTransform(sx, [-0.5, 0.5], [14, -14]);
+  const rotateX = useTransform(sy, [-0.5, 0.5], [-14, 14]);
+  const driftX = useTransform(sx, [-0.5, 0.5], [-18, 18]);
+  const driftY = useTransform(sy, [-0.5, 0.5], [-14, 14]);
+
+  // Spotlight position in %.
+  const spotX = useTransform(sx, [-0.5, 0.5], ['30%', '70%']);
+  const spotY = useTransform(sy, [-0.5, 0.5], ['25%', '75%']);
+  const spotlightBg = useTransform(
+    [spotX, spotY],
+    ([x, y]) => `radial-gradient(420px circle at ${x} ${y}, rgba(247,201,72,0.12), transparent 60%)`
+  );
+
+  function onMove(e: React.MouseEvent<HTMLElement>) {
+    if (reduce) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    px.set((e.clientX - r.left) / r.width - 0.5);
+    py.set((e.clientY - r.top) / r.height - 0.5);
+  }
+
+  return (
+    <section
+      onMouseMove={onMove}
+      className="relative overflow-hidden pb-20 pt-28 sm:pb-24 sm:pt-36"
+      aria-labelledby="hero-heading"
+    >
+      {/* Aurora + base gradient */}
+      <div
+        className="fx-aurora absolute inset-0 -z-20"
+        style={{
+          background:
+            'radial-gradient(55% 50% at 70% 18%, rgba(247,201,72,0.18), transparent 70%), radial-gradient(50% 55% at 18% 78%, rgba(37,99,235,0.18), transparent 72%), linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%)'
+        }}
+        aria-hidden
+      />
+      {/* Faint grid texture */}
+      <div
+        className="fx-grid-pan absolute inset-0 -z-20 opacity-[0.5]"
+        style={{
+          backgroundImage:
+            'linear-gradient(var(--hairline) 1px, transparent 1px), linear-gradient(90deg, var(--hairline) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+          maskImage: 'radial-gradient(80% 60% at 50% 35%, #000 0%, transparent 80%)',
+          WebkitMaskImage: 'radial-gradient(80% 60% at 50% 35%, #000 0%, transparent 80%)'
+        }}
+        aria-hidden
+      />
+      {/* Cursor spotlight */}
+      {!reduce ? (
+        <motion.div
+          className="pointer-events-none absolute inset-0 -z-10"
+          style={{ background: spotlightBg }}
+          aria-hidden
+        />
+      ) : null}
+
+      <div className="mx-auto grid max-w-[1180px] items-center gap-10 px-5 sm:px-8 lg:grid-cols-12">
+        <div className="lg:col-span-7">
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 16 }}
+            animate={reduce ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
+          >
+            <Badge tone="gold" dot pulse className="mb-6">
+              Led by Earn · your live AI executive team
+            </Badge>
+          </motion.div>
+
+          <motion.h1
+            id="hero-heading"
+            initial={reduce ? false : { opacity: 0, y: 20 }}
+            animate={reduce ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 0.61, 0.36, 1], delay: 0.06 }}
+            className="text-[42px] font-semibold leading-[1.04] tracking-[-0.025em] text-fg-1 sm:text-6xl lg:text-[68px]"
+          >
+            Run your fund like an
+            <br className="hidden sm:block" />{' '}
+            <span className={reduce ? 'text-gold-1' : 'fx-text-gradient'}>institution of one.</span>
+          </motion.h1>
+
+          <motion.p
+            initial={reduce ? false : { opacity: 0, y: 18 }}
+            animate={reduce ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 0.61, 0.36, 1], delay: 0.14 }}
+            className="mt-6 max-w-xl text-[17px] leading-7 text-fg-3 sm:text-[18px]"
+          >
+            Fifteen AI specialists — led by Earn — source deals, raise capital, run diligence, and
+            drive to signed close. The firepower of a full investment bank, on your desk, working
+            around the clock. Your competitors are still doing it by hand.
+          </motion.p>
+
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 16 }}
+            animate={reduce ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 0.61, 0.36, 1], delay: 0.22 }}
+            className="mt-9 flex flex-wrap items-center gap-4"
+          >
+            <Magnetic>
+              <Link href="/login" className={PRIMARY_CTA}>
+                Claim your desk
+                <ArrowRight size={17} strokeWidth={2} aria-hidden />
+              </Link>
+            </Magnetic>
+            <SmoothScrollLink targetId="preview" className={SECONDARY_CTA}>
+              <Sparkles size={16} strokeWidth={2} aria-hidden />
+              See it in motion
+            </SmoothScrollLink>
+          </motion.div>
+
+          <p className="mt-4 text-[12.5px] text-fg-5">
+            Invite-only private beta · <span className="text-fg-3">no card, no setup, no risk</span>
+          </p>
+
+          <HeroStats />
+        </div>
+
+        {/* Hero mascot — parallax + tilt to pointer */}
+        <div className="flex flex-col items-center lg:col-span-5 lg:items-end">
+          <motion.div
+            className="relative"
+            style={
+              reduce
+                ? undefined
+                : { rotateX, rotateY, x: driftX, y: driftY, transformPerspective: 900 }
+            }
+          >
+            <div
+              className="fx-glow-pulse pointer-events-none absolute inset-0 -z-10"
+              style={{
+                background: 'radial-gradient(circle, rgba(247,201,72,0.45), transparent 65%)',
+                filter: 'blur(46px)'
+              }}
+              aria-hidden
+            />
+            <EarnCoin
+              size={300}
+              glow
+              online
+              className="fx-coin-float h-48 w-48 sm:h-60 sm:w-60 lg:h-72 lg:w-72"
+            />
+          </motion.div>
+          <div className="mt-7 text-center lg:text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-1">
+              Meet Earn
+            </p>
+            <p className="mt-1.5 text-[15px] font-semibold text-fg-1">
+              {earn.name} &ldquo;Earn&rdquo;
+            </p>
+            <p className="mt-0.5 text-[12px] text-fg-4">{earn.position} · your live AI guide</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default Hero;
