@@ -1,20 +1,20 @@
-import type { RailGroupKey } from './rail-nav';
-
 /**
  * Lightweight client persistence for the side rail's manual expand/collapse
- * state, per group. UX-only — this never gates data or auth. Backed by
+ * state, per section. UX-only — this never gates data or auth. Backed by
  * `localStorage` and exposed as a tiny external store so the rail can consume
  * it via `useSyncExternalStore` (SSR-safe, no hydration mismatch, no
  * setState-in-effect).
  *
- * Shape: a partial map of group key → user's explicit open/closed choice. A
- * group absent from the map has no manual override and falls back to the
- * stage/route auto-expand logic.
+ * Shape: a partial map of section key → user's explicit open/closed choice. A
+ * section absent from the map has no manual override and falls back to that
+ * section's default (cluster auto-expand logic, or a section's own default).
+ * Keys are the rail-group keys (`build`/`source`/…) plus rail pseudo-sections
+ * like `momentum` (the operating spine).
  */
 
 const STORAGE_KEY = 'fx.rail.collapse.v1';
 
-export type RailCollapseState = Partial<Record<RailGroupKey, boolean>>;
+export type RailCollapseState = Record<string, boolean>;
 
 /** Stable empty snapshot — same identity every read so SSR/initial render is stable. */
 const EMPTY: RailCollapseState = {};
@@ -30,7 +30,7 @@ function parse(raw: string | null): RailCollapseState {
     if (!parsed || typeof parsed !== 'object') return {};
     const out: RailCollapseState = {};
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value === 'boolean') out[key as RailGroupKey] = value;
+      if (typeof value === 'boolean') out[key] = value;
     }
     return out;
   } catch {
@@ -79,8 +79,8 @@ export function getRailCollapseServerSnapshot(): RailCollapseState {
   return EMPTY;
 }
 
-/** Persist a single group's manual override and notify subscribers. */
-export function writeRailCollapseState(key: RailGroupKey, expanded: boolean): void {
+/** Persist a single section's manual override and notify subscribers. */
+export function writeRailCollapseState(key: string, expanded: boolean): void {
   cache = { ...getRailCollapseSnapshot(), [key]: expanded };
   if (typeof window !== 'undefined') {
     try {

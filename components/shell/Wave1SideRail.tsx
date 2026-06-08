@@ -12,7 +12,7 @@ import {
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
-import { ArrowRight, ChevronDown, Compass, RefreshCw, Sparkles, X } from 'lucide-react';
+import { ArrowRight, ChevronDown, Compass, Gauge, RefreshCw, Sparkles, X } from 'lucide-react';
 import { Badge, type BadgeTone } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { createClient } from '@/lib/supabase/client';
@@ -290,6 +290,13 @@ export function Wave1SideRail({
     writeRailCollapseState(group.key, !isExpanded(group));
   }
 
+  // The operating spine is a collapsible section too (default open). Persisted
+  // under the `momentum` pseudo-key so operators can reclaim its vertical space.
+  const spineExpanded = typeof overrides.momentum === 'boolean' ? overrides.momentum : true;
+  function toggleSpine() {
+    writeRailCollapseState('momentum', !spineExpanded);
+  }
+
   async function defaultSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -321,8 +328,8 @@ export function Wave1SideRail({
             data-testid="side-rail-brand-home"
             className="flex flex-1 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-gold-1 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-1"
           >
-            <EarnCoin size={30} className="flex-none" />
-            <span className="text-[15px] font-semibold tracking-[-0.02em]">
+            <EarnCoin size={26} className="flex-none" />
+            <span className="text-[12px] font-semibold tracking-[-0.02em]">
               FundExecs <span className="font-medium text-fg-4">OS</span>
             </span>
           </Link>
@@ -338,7 +345,7 @@ export function Wave1SideRail({
         </div>
 
         <nav
-          className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-2"
+          className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-2"
           data-testid="side-rail-nav"
         >
           {/* Pinned Command Center */}
@@ -351,7 +358,12 @@ export function Wave1SideRail({
 
           {/* The operating spine — readiness/loop meter + next-best-action. */}
           {signals?.momentum ? (
-            <MomentumSpine momentum={signals.momentum} onLinkClick={onClose} />
+            <MomentumSpine
+              momentum={signals.momentum}
+              expanded={spineExpanded}
+              onToggle={toggleSpine}
+              onLinkClick={onClose}
+            />
           ) : null}
 
           {RAIL_GROUPS.map((group) => {
@@ -412,7 +424,7 @@ function PinnedLink({
       data-testid="rail-link-pinned"
       title={item.hint}
       className={cn(
-        'relative flex items-center gap-3 rounded-[12px] border px-2.5 py-2.5 text-[13px] font-semibold transition-[background,box-shadow,transform] will-change-transform motion-reduce:transition-none',
+        'relative flex items-center gap-3 rounded-[12px] border px-2.5 py-2.5 text-[12px] font-semibold transition-[background,box-shadow,transform] will-change-transform motion-reduce:transition-none',
         active
           ? 'border-[var(--azure-line)] bg-gradient-to-r from-[var(--azure-soft)] to-surface-1 text-fg-1'
           : 'border-hairline text-fg-2 hover:translate-x-0.5 hover:bg-surface-1'
@@ -499,7 +511,7 @@ function NavGroup({
         )}
       >
         <GroupIcon size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
-        <span className="flex-1 text-[10.5px] font-semibold uppercase tracking-[0.12em]">
+        <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
           {group.label}
         </span>
         {chainState ? <ChainPip state={chainState} /> : null}
@@ -611,7 +623,7 @@ function NavItem({
           }}
           title={item.hint}
           data-testid={`rail-action-${slug(item.label)}`}
-          className="relative flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left text-[13px] font-medium text-fg-3 transition-[background,transform] will-change-transform hover:translate-x-0.5 hover:bg-surface-1 motion-reduce:transition-none"
+          className="relative flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left text-[12px] font-medium text-fg-3 transition-[background,transform] will-change-transform hover:translate-x-0.5 hover:bg-surface-1 motion-reduce:transition-none"
         >
           <Icon size={16} strokeWidth={1.9} aria-hidden className="text-gold-1" />
           <span className="flex-1">{item.label}</span>
@@ -628,7 +640,7 @@ function NavItem({
         <div
           title={item.hint}
           data-testid={`rail-soon-${slug(item.label)}`}
-          className="flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[13px] font-medium text-fg-5"
+          className="flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[12px] font-medium text-fg-5"
         >
           <Icon size={16} strokeWidth={1.9} aria-hidden />
           <span className="flex-1">
@@ -657,7 +669,7 @@ function NavItem({
           item.href.includes('?') ? `-${item.href.split('?')[1].replace(/[^a-z0-9]/gi, '')}` : ''
         }`}
         className={cn(
-          'relative flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[13px] font-medium transition-[background,box-shadow,transform] will-change-transform motion-reduce:transition-none motion-reduce:hover:translate-x-0',
+          'relative flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[12px] font-medium transition-[background,box-shadow,transform] will-change-transform motion-reduce:transition-none motion-reduce:hover:translate-x-0',
           active
             ? 'bg-gradient-to-r from-[var(--azure-soft)] to-surface-1 text-fg-1'
             : 'text-fg-3 hover:translate-x-0.5 hover:bg-surface-1'
@@ -716,7 +728,7 @@ function NavParent({
         aria-controls={panelId}
         title={item.hint}
         data-testid={`rail-parent-${slug(item.label)}`}
-        className="flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left text-[13px] font-medium text-fg-3 transition-[background] hover:bg-surface-1"
+        className="flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left text-[12px] font-medium text-fg-3 transition-[background] hover:bg-surface-1"
       >
         <Icon size={16} strokeWidth={1.9} aria-hidden />
         <span className="flex-1">{item.label}</span>
@@ -744,7 +756,7 @@ function NavParent({
                   {isSoon || !sub.href ? (
                     <div
                       title={sub.hint}
-                      className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[12px] text-fg-5"
+                      className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[11px] text-fg-5"
                     >
                       <span className="h-1 w-1 flex-none rounded-full bg-fg-5/60" aria-hidden />
                       {sub.label}
@@ -760,7 +772,7 @@ function NavParent({
                       title={sub.hint}
                       data-testid={`rail-sublink-${slug(item.label)}-${slug(sub.label)}`}
                       className={cn(
-                        'flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[12px] transition-[background] hover:bg-surface-1',
+                        'flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[11px] transition-[background] hover:bg-surface-1',
                         active ? 'bg-[var(--azure-soft)] font-medium text-fg-1' : 'text-fg-3'
                       )}
                     >
@@ -791,14 +803,24 @@ function NavParent({
  * the loop, and the one highest-leverage move (azure, not gold — gold stays
  * reserved for Earn). The next move deep-links to the same action the dashboard
  * surfaces, so the rail nudges without the operator opening the dashboard.
+ *
+ * Collapsible (default open): the readiness headline always shows in the header;
+ * collapsing tucks the bar, loop position, next move, chain, and guided launch
+ * away so operators can reclaim the vertical space. State persists per the
+ * `momentum` pseudo-key.
  */
 function MomentumSpine({
   momentum,
+  expanded,
+  onToggle,
   onLinkClick
 }: {
   momentum: RailMomentum;
+  expanded: boolean;
+  onToggle: () => void;
   onLinkClick: () => void;
 }) {
+  const panelId = useId();
   const {
     loopProgress,
     readinessScore,
@@ -809,54 +831,95 @@ function MomentumSpine({
     chain
   } = momentum;
   return (
-    <div
+    <motion.div
+      layout
       data-testid="rail-momentum"
-      className="rounded-[12px] border border-hairline bg-surface-1 px-2.5 py-2.5"
+      data-state={expanded ? 'open' : 'collapsed'}
+      className="overflow-hidden rounded-[12px] border border-hairline bg-bg-1"
     >
-      <div className="flex items-baseline justify-between">
-        <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
-          Readiness
-        </span>
-        <span className="text-[12px] font-semibold tabular-nums text-fg-1">
-          {readinessScore}
-          <span className="text-fg-4">/100</span>
-        </span>
-      </div>
-      <div
-        className="mt-1.5 h-1 overflow-hidden rounded-full bg-hairline"
-        role="progressbar"
-        aria-valuenow={readinessScore}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label="Institutional readiness"
+      {/* Header — same chrome as the loop clusters: icon · label · chip · chevron. */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        data-testid="rail-momentum-toggle"
+        className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-fg-4 transition-[background] hover:bg-surface-1 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
       >
-        <motion.div
-          className="h-full rounded-full bg-azure-1"
-          initial={{ width: 0 }}
-          animate={{ width: `${readinessScore}%` }}
-          transition={FX_SPRING}
-        />
-      </div>
-      <p className="mt-1.5 text-[10px] text-fg-4">
-        <span className="font-medium text-fg-2">{stageLabel}</span> · stage {stageIndex + 1}/
-        {stageCount} · loop {loopProgress}%
-      </p>
-      {nextBestAction ? (
-        <Link
-          href={nextBestAction.href}
-          onClick={onLinkClick}
-          data-testid="rail-next-action"
-          title={`${nextBestAction.cta}: ${nextBestAction.title}`}
-          className="mt-2 flex items-center gap-1.5 rounded-[9px] border border-[var(--azure-line)] bg-[var(--azure-soft)] px-2 py-1.5 text-[11px] font-semibold text-azure-1 transition-transform hover:translate-x-0.5"
+        <Gauge size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
+        <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+          Operating loop
+        </span>
+        <Badge
+          tone="azure"
+          className="px-1.5 py-0.5 text-[10px] tabular-nums"
+          title={`Readiness ${readinessScore}/100`}
         >
-          <span className="text-[8.5px] uppercase tracking-[0.1em] text-azure-1/70">Next</span>
-          <span className="min-w-0 flex-1 truncate">{nextBestAction.title}</span>
-          <ArrowRight size={12} strokeWidth={2.4} aria-hidden className="flex-none" />
-        </Link>
-      ) : null}
-      {chain ? <LoopChainStrip chain={chain} /> : null}
-      {chain ? <GuidedLaunch /> : null}
-    </div>
+          {readinessScore}
+        </Badge>
+        <motion.span animate={{ rotate: expanded ? 0 : -90 }} transition={FX_SPRING}>
+          <ChevronDown size={14} strokeWidth={2} aria-hidden className="flex-none text-fg-5" />
+        </motion.span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            id={panelId}
+            key="spine-body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: FX_EASE }}
+            className="overflow-hidden"
+          >
+            <div className="px-2.5 pb-2.5">
+              <div
+                className="h-1 overflow-hidden rounded-full bg-hairline"
+                role="progressbar"
+                aria-valuenow={readinessScore}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Institutional readiness"
+              >
+                <motion.div
+                  className="h-full rounded-full bg-azure-1"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${readinessScore}%` }}
+                  transition={FX_SPRING}
+                />
+              </div>
+              <p className="mt-1.5 text-[10px] text-fg-4">
+                <span className="font-medium text-fg-2">{stageLabel}</span> · stage {stageIndex + 1}
+                /{stageCount} · loop {loopProgress}%
+              </p>
+              {nextBestAction ? (
+                <Link
+                  href={nextBestAction.href}
+                  onClick={onLinkClick}
+                  data-testid="rail-next-action"
+                  title={`${nextBestAction.cta}: ${nextBestAction.title}`}
+                  className="mt-2 flex items-center gap-1.5 rounded-[9px] border border-[var(--azure-line)] bg-[var(--azure-soft)] px-2 py-1.5 text-[11px] font-semibold text-azure-1 transition-transform hover:translate-x-0.5"
+                >
+                  <span className="text-[8.5px] uppercase tracking-[0.1em] text-azure-1/70">
+                    Next
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{nextBestAction.title}</span>
+                  <ArrowRight size={12} strokeWidth={2.4} aria-hidden className="flex-none" />
+                </Link>
+              ) : null}
+              {chain ? <LoopChainStrip chain={chain} /> : null}
+              {chain ? <GuidedLaunch /> : null}
+            </div>
+          </motion.div>
+        ) : (
+          // Collapsed: keep the operator's loop position visible at a glance.
+          <p className="px-2.5 pb-2 text-[10px] text-fg-4">
+            <span className="font-medium text-fg-2">{stageLabel}</span> · loop {loopProgress}%
+          </p>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
