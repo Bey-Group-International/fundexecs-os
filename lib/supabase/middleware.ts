@@ -149,19 +149,36 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/auth/callback');
 
   // Gate authenticated areas. Unauthenticated users hitting a protected route
-  // are redirected to /login. Adjust the matcher list as modules land.
+  // are redirected to /login (preserving `redirectedFrom`). Every entry is an
+  // auth-only surface whose page already self-redirects when there's no session;
+  // listing it here does that earlier (before the server render) and uniformly.
+  // Routes that intentionally render a graceful no-org or public-preview state
+  // for signed-out visitors — /deal-desk, /governance, /ic-memos, /lp-room — are
+  // deliberately NOT listed; they handle that case themselves.
   const protectedPrefixes = [
-    '/dashboard',
-    '/pipeline',
-    '/strategy',
-    '/ask-earn',
     '/admin',
-    '/notifications',
-    '/settings',
+    '/ask-earn',
+    '/audit',
+    '/cap-table',
+    '/capital-stack',
     '/command-center',
     '/connections',
+    '/dashboard',
+    '/diligence',
+    '/inbox-intelligence',
     '/integrations',
-    '/onboarding'
+    '/knowledge',
+    '/match-inbox',
+    '/materials',
+    '/notifications',
+    '/objections',
+    '/onboarding',
+    '/partners',
+    '/pipeline',
+    '/profile',
+    '/referrals',
+    '/settings',
+    '/strategy'
   ];
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p));
 
