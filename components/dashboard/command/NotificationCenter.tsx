@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -50,12 +51,16 @@ const TONE: Record<Tone, { line: string; soft: string; fg: string }> = {
 
 const ALERT_META: Record<
   MajorAlert['severity'],
-  { tone: Tone; icon: typeof Bell; eyebrow: string }
+  { tone: Tone; icon: typeof Bell; eyebrow: string; rank: number }
 > = {
-  critical: { tone: 'danger', icon: AlertTriangle, eyebrow: 'Risk Desk · critical' },
-  warning: { tone: 'warning', icon: AlertCircle, eyebrow: 'Risk Desk · watch' },
-  info: { tone: 'azure', icon: Info, eyebrow: 'Risk Desk · note' }
+  critical: { tone: 'danger', icon: AlertTriangle, eyebrow: 'Risk Desk · critical', rank: 0 },
+  warning: { tone: 'warning', icon: AlertCircle, eyebrow: 'Risk Desk · watch', rank: 1 },
+  info: { tone: 'azure', icon: Info, eyebrow: 'Risk Desk · note', rank: 2 }
 };
+
+/** Opening burst stays calm: at most this many alerts auto-pop (severity-first);
+ *  the rest wait behind the Risk Desk pill. */
+const BURST_ALERT_LIMIT = 3;
 
 export interface NotificationCenterProps {
   since: SinceLastVisit;
@@ -79,6 +84,7 @@ function alertToast(a: MajorAlert): Toast {
 
 export function NotificationCenter({ since, alerts, activity }: NotificationCenterProps) {
   const [queue, setQueue] = useState<Toast[]>([]);
+  const [mounted, setMounted] = useState(false);
 
   // The opening burst — built once from the server payload.
   const seed = useMemo<Toast[]>(() => {
@@ -106,14 +112,18 @@ export function NotificationCenter({ since, alerts, activity }: NotificationCent
         ttl: 10000
       });
     }
-    for (const a of alerts) out.push(alertToast(a));
-    for (const item of activity.slice(0, 2)) {
+    const ordered = [...alerts].sort(
+      (a, b) => ALERT_META[a.severity].rank - ALERT_META[b.severity].rank
+    );
+    for (const a of ordered.slice(0, BURST_ALERT_LIMIT)) out.push(alertToast(a));
+    const [topTape] = activity;
+    if (topTape) {
       out.push({
-        id: `tape-${item.id}`,
+        id: `tape-${topTape.id}`,
         tone: 'azure',
         icon: Radio,
-        eyebrow: `The tape · ${item.actor}`,
-        title: item.title,
+        eyebrow: `The tape · ${topTape.actor}`,
+        title: topTape.title,
         ttl: 8000
       });
     }
@@ -122,8 +132,13 @@ export function NotificationCenter({ since, alerts, activity }: NotificationCent
   }, []);
 
   // Print the opening burst on mount (deferred so it never blocks first paint).
+  // Also flips `mounted` so the body portal only renders client-side — both
+  // setStates run inside the rAF, never synchronously in the effect body.
   useEffect(() => {
-    const raf = requestAnimationFrame(() => setQueue(seed));
+    const raf = requestAnimationFrame(() => {
+      setMounted(true);
+      setQueue(seed);
+    });
     return () => cancelAnimationFrame(raf);
   }, [seed]);
 
@@ -137,22 +152,20 @@ export function NotificationCenter({ since, alerts, activity }: NotificationCent
       return [...add, ...q];
     });
 
-  return (
-    <>
-      {/* Pop-up stack — top-right, under the shell header. */}
-      <div
-        className="pointer-events-none fixed right-3 top-[72px] z-[55] flex w-[320px] max-w-[calc(100vw-1.5rem)] flex-col gap-2 sm:right-5"
-        role="region"
-        aria-label="Desk notifications"
-      >
-        <AnimatePresence initial={false}>
-          {queue.slice(0, 4).map((t) => (
-            <ToastCard key={t.id} toast={t} onClose={() => close(t.id)} />
-          ))}
-        </AnimatePresence>
-      </div>
+  // Portal to <body>: the dashboard renders inside an animated `transform`
+  // ancestor (.fx-rise), which would otherwise capture `fixed` positioning and
+  // make these scroll with content. The body portal keeps them viewport-fixed.
+  if (!mounted) return null;
 
-      {/* Persistent Risk Desk pill — re-opens active alerts on demand. */}
+  // One top-right signal column (under the shell header), clear of the
+  // bottom-right EarnOrb + TrustToaster cluster. The Risk Desk pill docks at the
+  // top of the column; toasts stack beneath it.
+  return createPortal(
+    <div
+      className="pointer-events-none fixed right-3 top-[72px] z-[55] flex w-[320px] max-w-[calc(100vw-1.5rem)] flex-col items-end gap-2 sm:right-5"
+      role="region"
+      aria-label="Desk notifications"
+    >
       {activeAlerts > 0 && (
         <motion.button
           type="button"
@@ -163,7 +176,7 @@ export function NotificationCenter({ since, alerts, activity }: NotificationCent
           transition={FX_SPRING}
           onClick={reopenAlerts}
           data-testid="risk-desk-pill"
-          className="fixed bottom-[88px] right-3 z-[54] inline-flex items-center gap-1.5 rounded-full border border-[var(--danger-line)] bg-bg-2 px-3 py-2 text-[11px] font-semibold text-fg-1 shadow-[var(--shadow-lg)] sm:right-5"
+          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-[var(--danger-line)] bg-bg-2 px-3 py-1.5 text-[11px] font-semibold text-fg-1 shadow-[var(--shadow-lg)]"
           aria-label={`Re-open ${activeAlerts} Risk Desk alert${activeAlerts === 1 ? '' : 's'}`}
         >
           <span className="relative flex h-2 w-2">
@@ -176,7 +189,16 @@ export function NotificationCenter({ since, alerts, activity }: NotificationCent
           </span>
         </motion.button>
       )}
-    </>
+
+      <div className="flex w-full flex-col gap-2">
+        <AnimatePresence initial={false}>
+          {queue.slice(0, 4).map((t) => (
+            <ToastCard key={t.id} toast={t} onClose={() => close(t.id)} />
+          ))}
+        </AnimatePresence>
+      </div>
+    </div>,
+    document.body
   );
 }
 
