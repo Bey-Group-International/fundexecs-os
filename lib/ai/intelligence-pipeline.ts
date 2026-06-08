@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { embedTexts, toVectorLiteral } from './voyage';
 import { judgeMatch } from './match-judge';
 import { refreshOrgProfileEmbedding } from './profile-embedding';
+import { embedNetworkRecords } from './network-embeddings';
 import { AI_MODELS } from './models';
 import { fetchRecentFormD } from '@/lib/integrations/edgar';
 
@@ -13,9 +14,10 @@ import { fetchRecentFormD } from '@/lib/integrations/edgar';
  * One cycle, run on a schedule by /api/cron/intelligence:
  *   1. ingest    — pull EDGAR Form D filings, embed them, insert new signals
  *   2. embed     — backfill mandate embeddings for orgs that lack one
- *   3. score     — run generate_signal_matches for every active org
- *   4. judge     — Claude pre-judges the top few new high-score matches
- *   5. brief     — Earn writes each org a short daily briefing
+ *   3. network   — backfill embeddings for un-embedded LP/partner/contact rows
+ *   4. score     — run generate_signal_matches for every active org
+ *   5. judge     — Claude pre-judges the top few new high-score matches
+ *   6. brief     — Earn writes each org a short daily briefing
  *
  * Every step is never-block and independently wrapped: a failure in one (a
  * missing key, an EDGAR hiccup, a Claude timeout) is captured into the summary
@@ -28,6 +30,7 @@ const BRIEF_TIMEOUT_MS = 12_000;
 export interface CycleSummary {
   ingest: { fetched: number; inserted: number };
   embed: { refreshed: number };
+  network: { embedded: number; failed: number };
   score: { orgs: number; matchesCreated: number; failed: number };
   judge: { judged: number };
   brief: { written: number };
@@ -305,9 +308,10 @@ export async function runIntelligenceCycle(): Promise<CycleSummary> {
 
   const ingest = await safe('ingest', ingestFormD, { fetched: 0, inserted: 0 });
   const embed = await safe('embed', () => refreshStaleMandateEmbeddings(), { refreshed: 0 });
+  const network = await safe('network', () => embedNetworkRecords(), { embedded: 0, failed: 0 });
   const score = await safe('score', scoreActiveOrgs, { orgs: 0, matchesCreated: 0, failed: 0 });
   const judge = await safe('judge', () => proactiveJudge(), { judged: 0 });
   const brief = await safe('brief', () => generateBriefings(), { written: 0 });
 
-  return { ingest, embed, score, judge, brief, errors };
+  return { ingest, embed, network, score, judge, brief, errors };
 }
