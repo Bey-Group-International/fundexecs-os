@@ -1,6 +1,7 @@
 'use client';
 
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -91,9 +92,16 @@ export function Drawer({
     [onClose]
   );
 
-  if (!open) return null;
+  // Portal to <body>. The panel is `position: fixed`, but a fixed descendant is
+  // anchored to (and clipped by) the nearest ancestor that has a transform,
+  // filter, backdrop-filter, perspective, or `contain` — e.g. a dashboard card
+  // carrying `.fx-rise` (which keeps `transform: translateY(0)` via fill-mode
+  // `both`) plus `overflow-hidden`. Mounted inline there, the drawer renders
+  // squashed inside the card. Portaling to <body> escapes any such ancestor so
+  // the overlay always fills the viewport, wherever the trigger lives.
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -138,7 +146,8 @@ export function Drawer({
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
