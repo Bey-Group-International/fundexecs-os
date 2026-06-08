@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Check,
+  Copy,
   ShieldCheck,
   SkipForward,
   Sparkles,
@@ -28,6 +29,7 @@ import {
   setMemberType as setMemberTypeAction
 } from '@/lib/actions/member-profile';
 import { SetPasswordForm } from '@/components/account/SetPasswordForm';
+import { getMyReferralLink } from '@/lib/actions/referral-code';
 
 /** Where each member type goes first after onboarding — carries momentum into
  *  one concrete action instead of dropping them on a cold dashboard. */
@@ -62,6 +64,9 @@ interface ProofOfTruthFlowProps {
   offerPassword?: boolean;
   /** The member's email, shown on the secure-account card. */
   email?: string;
+  /** Onboarding only: surface the member's referral link on the completion
+   *  screen, so the compounding loop starts the moment they finish. */
+  showReferralNudge?: boolean;
 }
 
 type Stage = 'picker' | 'qa' | 'review' | 'done';
@@ -89,7 +94,8 @@ export function ProofOfTruthFlow({
   redirectTo = '/command-center',
   focusField,
   offerPassword = false,
-  email
+  email,
+  showReferralNudge = false
 }: ProofOfTruthFlowProps) {
   const router = useRouter();
 
@@ -110,6 +116,9 @@ export function ProofOfTruthFlow({
   // Completion reward — XP total returned by awardTrustXp + the celebration toast.
   const [awardedXp, setAwardedXp] = useState<number | null>(null);
   const [celebration, setCelebration] = useState<Celebration | null>(null);
+  // Referral nudge (onboarding finish): the member's personal link + a copied flag.
+  const [referralUrl, setReferralUrl] = useState<string | null>(null);
+  const [refCopied, setRefCopied] = useState(false);
 
   // Per-question Earn recommendation state, keyed by question id.
   const [recByQuestion, setRecByQuestion] = useState<Record<string, RecState>>({});
@@ -127,6 +136,50 @@ export function ProofOfTruthFlow({
   useEffect(() => {
     answersRef.current = answers;
   }, [answers]);
+  // Mirror of typed-but-unapproved drafts, so the autosave + commit can merge
+  // them without re-creating callbacks on every keystroke.
+  const typedRef = useRef(typedByQuestion);
+  useEffect(() => {
+    typedRef.current = typedByQuestion;
+  }, [typedByQuestion]);
+
+  // Keystroke-level autosave: debounce-persist typed-but-unapproved text into the
+  // resumable draft, so a crash / logout / accidental close mid-sentence never
+  // costs the member their words. Approved answers take precedence over a typed
+  // draft for the same question. No-op until they've actually typed something.
+  useEffect(() => {
+    if (Object.keys(typedByQuestion).length === 0) return;
+    const id = window.setTimeout(() => {
+      void saveMemberDraft({ ...typedRef.current, ...answersRef.current });
+    }, 800);
+    return () => window.clearTimeout(id);
+  }, [typedByQuestion]);
+
+  // Fetch the member's referral link once they reach the finish screen, so the
+  // compounding loop can start immediately. Best-effort; the card is hidden on miss.
+  useEffect(() => {
+    if (stage !== 'done' || !showReferralNudge) return;
+    let active = true;
+    getMyReferralLink()
+      .then((res) => {
+        if (active && res.ok) setReferralUrl(res.url);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [stage, showReferralNudge]);
+
+  async function copyReferral() {
+    if (!referralUrl) return;
+    try {
+      await navigator.clipboard.writeText(referralUrl);
+      setRefCopied(true);
+      window.setTimeout(() => setRefCopied(false), 2000);
+    } catch {
+      // Clipboard blocked (insecure context) — the field is selectable.
+    }
+  }
 
   const questions = memberType ? getQuestionSet(memberType) : [];
   const question: ProfileQuestion | undefined = questions[index];
@@ -150,8 +203,10 @@ export function ProofOfTruthFlow({
   const commitAnswer = useCallback((id: string, value: string) => {
     setAnswers((prev) => {
       const next = { ...prev, [id]: value };
-      // Fire-and-forget draft save so the flow is resumable.
-      void saveMemberDraft(next);
+      // Fire-and-forget draft save so the flow is resumable. Merge in the typed
+      // drafts of OTHER questions so approving one never drops another's
+      // in-progress text (approved values win for their own question).
+      void saveMemberDraft({ ...typedRef.current, ...next });
       return next;
     });
   }, []);
@@ -414,6 +469,38 @@ export function ProofOfTruthFlow({
                     logged out. Optional; you can also do this later in Settings.
                   </p>
                   <SetPasswordForm submitLabel="Set password" />
+                </div>
+              )}
+
+              {/* Referral nudge — start the compounding loop the moment they
+                  finish: their link earns 10% of referred purchases (5% a level
+                  deeper). Onboarding-only; hidden until the link resolves. */}
+              {showReferralNudge && referralUrl && (
+                <div className="mt-3 rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] p-4">
+                  <div className="flex items-center gap-2 text-[12.5px] font-semibold text-fg-1">
+                    <Sparkles size={15} strokeWidth={2} aria-hidden className="text-gold-1" />
+                    Start earning — share your link
+                  </div>
+                  <p className="mt-1 mb-3 text-[11.5px] leading-relaxed text-fg-4">
+                    Invite a peer and earn <span className="font-medium text-fg-2">10%</span> of the
+                    Earn credits they buy — plus 5% from the people they bring. It compounds.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={referralUrl}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="w-full truncate rounded-lg border border-hairline bg-surface-1 px-3 py-2 font-mono text-[11.5px] text-fg-2 outline-none"
+                    />
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={refCopied ? Check : Copy}
+                      onClick={copyReferral}
+                    >
+                      {refCopied ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
                 </div>
               )}
 
