@@ -24,10 +24,12 @@ const MODEL = AI_MODELS.chat;
 
 // Long asks tend to carry multi-part, analytical intent worth Opus depth.
 const REASONING_LENGTH_THRESHOLD = 280;
-// Case-insensitive analytical-intent markers. \b-bounded so "whyever" etc. don't
-// false-trigger; the two-word phrases match as substrings.
+// Case-insensitive analytical-intent markers, all \b-bounded so "whyever",
+// "modeled", etc. don't false-trigger. Deliberately omits bare "why": short
+// "why is X?" turns are routine, and a genuinely analytical "why" still trips
+// the length threshold or another marker.
 const REASONING_WORDS =
-  /\b(analy[sz]e|compare|evaluate|assess|diligence|recommend|forecast|why|scenario|valuation|downside|trade-?off)\b|stress test|model out/i;
+  /\b(analy[sz]e|compare|evaluate|assess|diligence|recommend|forecast|scenario|valuation|downside|trade-?off)\b|\bstress test\b|\bmodel out\b/i;
 
 /** Pick the model for a chat turn: reasoning (Opus) when the latest user turn
  *  is clearly analytical, else chat (Sonnet). Cheap, deterministic, fail-safe —
