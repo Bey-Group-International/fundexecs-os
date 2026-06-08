@@ -27,6 +27,7 @@ const EMPTY: InboxIntelligenceData = {
   unroutedSignals: [],
   signalCount: 0,
   calibration: EMPTY_CALIBRATION,
+  briefing: null,
   empty: true
 };
 

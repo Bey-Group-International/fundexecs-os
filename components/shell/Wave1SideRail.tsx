@@ -497,24 +497,28 @@ function NavGroup({
         emphasized ? 'border-[var(--azure-line)]' : 'border-hairline'
       )}
     >
-      {/* Collapsible header */}
-      <button
-        type="button"
-        ref={headerRef}
-        onClick={onToggle}
-        aria-expanded={expanded}
-        aria-controls={panelId}
-        data-testid={`rail-group-toggle-${group.key}`}
+      {/* Collapsible header — toggle + a small pop-out Earn launcher beside it. */}
+      <div
         className={cn(
-          'flex w-full items-center gap-2 px-2.5 py-2 text-left transition-[background] hover:bg-surface-1 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1',
+          'flex w-full items-center gap-2 px-2.5 py-2 transition-[background] hover:bg-surface-1',
           emphasized ? 'text-gold-1' : 'text-fg-4'
         )}
       >
-        <GroupIcon size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
-        <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.06em]">
-          {group.label}
-        </span>
-        {chainState ? <ChainPip state={chainState} /> : null}
+        <button
+          type="button"
+          ref={headerRef}
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          data-testid={`rail-group-toggle-${group.key}`}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
+        >
+          <GroupIcon size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
+          <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.06em]">
+            {group.label}
+          </span>
+          {chainState ? <ChainPip state={chainState} /> : null}
+        </button>
         {rollup ? (
           <Badge
             tone={rollup.tone}
@@ -524,10 +528,24 @@ function NavGroup({
             {rollup.label}
           </Badge>
         ) : null}
-        <motion.span animate={{ rotate: expanded ? 0 : -90 }} transition={FX_SPRING}>
-          <ChevronDown size={14} strokeWidth={2} aria-hidden className="flex-none text-fg-5" />
-        </motion.span>
-      </button>
+        {group.launcher ? (
+          <ClusterLauncher launcher={group.launcher} onTrigger={onLinkClick} />
+        ) : null}
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={`${expanded ? 'Collapse' : 'Expand'} ${group.label}`}
+          className="flex-none rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
+        >
+          <motion.span
+            className="block"
+            animate={{ rotate: expanded ? 0 : -90 }}
+            transition={FX_SPRING}
+          >
+            <ChevronDown size={14} strokeWidth={2} aria-hidden className="flex-none text-fg-5" />
+          </motion.span>
+        </button>
+      </div>
 
       {/* Panel */}
       <AnimatePresence initial={false}>
@@ -556,13 +574,6 @@ function NavGroup({
                 />
               ))}
             </ul>
-            {/* The Earn launcher is the secondary "let Earn do it" affordance,
-                demoted below the links so it doesn't bury them. */}
-            {group.launcher ? (
-              <div className="px-1.5 pb-1.5">
-                <LauncherButton launcher={group.launcher} onTrigger={onLinkClick} />
-              </div>
-            ) : null}
             {extraTop ? <div className="px-2.5 pb-2 pt-0.5">{extraTop}</div> : null}
           </motion.div>
         ) : null}
@@ -1095,34 +1106,105 @@ function ChainPip({ state }: { state: LinkState }) {
   return null;
 }
 
-/** Earn action launcher — gold (reserved for Earn), opens the dock scoped. */
-function LauncherButton({
+/**
+ * ClusterLauncher — a small gold Earn affordance in the cluster header that
+ * pops out a menu (instead of a full-width button that buries the links).
+ * The icon stays compact; clicking it opens a fixed-positioned popover beside
+ * the rail (so the rail's overflow never clips it) with the Earn action.
+ */
+function ClusterLauncher({
   launcher,
   onTrigger
 }: {
   launcher: RailLauncher;
   onTrigger: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const Icon = launcher.icon;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!btnRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    const onScroll = () => setOpen(false);
+    window.addEventListener('mousedown', onDocClick);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('mousedown', onDocClick);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open]);
+
+  function toggle() {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.top, left: r.right + 8 });
+    setOpen((v) => !v);
+  }
+
   return (
-    <motion.button
-      type="button"
-      whileHover={{ y: -1 }}
-      whileTap={{ scale: 0.98 }}
-      transition={FX_SPRING}
-      onClick={() => {
-        openEarn(launcher.prompt);
-        onTrigger();
-      }}
-      data-testid={`rail-launcher-${launcher.label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
-      className="flex w-full items-center gap-2 rounded-[10px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-2 text-left transition-[background] hover:brightness-[1.05] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
-    >
-      <Icon size={15} strokeWidth={2} aria-hidden className="flex-none text-gold-1" />
-      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-gold-1">
-        {launcher.label}
-      </span>
-      <Sparkles size={12} strokeWidth={2} aria-hidden className="flex-none text-gold-1/70" />
-    </motion.button>
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={launcher.label}
+        aria-label={launcher.label}
+        data-testid={`rail-launcher-${launcher.label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
+        className={cn(
+          'flex h-5 w-5 flex-none items-center justify-center rounded-md text-gold-1 transition-[background] hover:bg-[var(--gold-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1',
+          open && 'bg-[var(--gold-soft)]'
+        )}
+      >
+        <Icon size={13} strokeWidth={2} aria-hidden />
+      </button>
+      <AnimatePresence>
+        {open && pos ? (
+          <motion.div
+            role="menu"
+            data-testid="rail-launcher-popover"
+            style={{ top: pos.top, left: pos.left }}
+            initial={{ opacity: 0, x: -4, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -4, scale: 0.98 }}
+            transition={FX_SPRING}
+            className="fixed z-50 w-60 rounded-[12px] border border-[var(--gold-line)] bg-bg-1 p-1.5 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)]"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                openEarn(launcher.prompt);
+                setOpen(false);
+                onTrigger();
+              }}
+              className="flex w-full items-start gap-2 rounded-[9px] px-2.5 py-2 text-left transition-[background] hover:bg-[var(--gold-soft)]"
+            >
+              <Sparkles
+                size={13}
+                strokeWidth={2}
+                aria-hidden
+                className="mt-0.5 flex-none text-gold-1"
+              />
+              <span className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-fg-2">
+                {launcher.label}
+              </span>
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </>
   );
 }
 
