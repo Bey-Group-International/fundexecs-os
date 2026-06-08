@@ -6,7 +6,8 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { requireOrgManager, requireOrgOwner } from '@/lib/access.server';
 import { getSiteURL } from '@/lib/site-url';
 import { sendInviteEmail } from '@/lib/email/send';
-import type { Database, Json } from '@/lib/supabase/database.types';
+import { parseInviteRole } from '@/lib/invites';
+import type { Json } from '@/lib/supabase/database.types';
 
 /** How the invite link reached the user. 'resend' = our Resend email, 'supabase'
  *  = Supabase's built-in magic-link email, 'none' = neither (admin copies the
@@ -19,7 +20,6 @@ export type InviteResult =
 
 export type InviteActionResult = { ok: true } | { ok: false; error: string };
 export type DeleteInviteResult = { ok: true } | { ok: false; error: string };
-type InviteRole = Database['public']['Enums']['org_member_role'];
 
 /** New beta users land on the post-auth welcome (then onboarding) after the
  *  invite link verifies — a warm, personalized intro before the profile setup. */
@@ -31,27 +31,6 @@ const RETURNING_NEXT_PATH = '/command-center';
 
 /** Conservative email shape check — the Supabase API is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/**
- * Parse an optional admin note into a role + human note. A leading
- * `role: owner|admin|member` token sets the invited member's role (defaulting
- * to `member`); the remaining text becomes the free-form note.
- */
-function parseInviteRole(note?: string): { role: InviteRole; note: string | null } {
-  const trimmed = note?.trim() ?? '';
-  if (!trimmed) return { role: 'member', note: null };
-
-  const match = /^role:\s*(owner|admin|member)\b/i.exec(trimmed);
-  if (!match) return { role: 'member', note: trimmed };
-
-  const role = match[1].toLowerCase() as InviteRole;
-  const humanNote = trimmed
-    .slice(match[0].length)
-    .replace(/^[^A-Za-z0-9]+/, '')
-    .trim();
-
-  return { role, note: humanNote || null };
-}
 
 /** Append a row to `admin_actions` recording a beta-invite action (best-effort; never blocks). */
 async function writeAudit(

@@ -32,6 +32,10 @@ import {
   type BetaInviteContext
 } from '@/lib/beta/welcome';
 import { track } from '@vercel/analytics';
+import type { BetaMomentum } from '@/lib/queries/beta-momentum';
+import { ArrivalProof } from '@/components/beta/ArrivalProof';
+import { ValuePreview } from '@/components/beta/ValuePreview';
+import { isMemberType } from '@/lib/member-types';
 
 /** The conversation advances through these turns; each is one thing Earn asks. */
 type Step = 'intro' | 'name' | 'type' | 'goal' | 'enter';
@@ -328,7 +332,15 @@ function QuietAction({
 }
 
 /* ── the experience — a guided conversation with Earn ───────────────────────── */
-export function ClaimView({ token, invite }: { token: string; invite: BetaInviteContext | null }) {
+export function ClaimView({
+  token,
+  invite,
+  momentum = null
+}: {
+  token: string;
+  invite: BetaInviteContext | null;
+  momentum?: BetaMomentum | null;
+}) {
   const searchParams = useSearchParams();
   const redirectedError = searchParams.get('error');
 
@@ -631,6 +643,13 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
                 </Badge>
               </div>
 
+              {/* proof + momentum — the seat reserved for them, who's already in */}
+              {momentum && (
+                <div style={reveal(300)}>
+                  <ArrivalProof momentum={momentum} />
+                </div>
+              )}
+
               {/* personalized headline — the welcome lands first, typed out */}
               <h1
                 className="max-w-lg text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-1"
@@ -842,6 +861,10 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
           {step === 'enter' && (
             <div className="flex flex-col gap-6">
               <EarnSays size={56} reducedMotion={reducedMotion} line={prompts.enter} />
+
+              {/* Live value preview — the concrete first moves Earn lines up for
+                  their member type, so the payoff is visible as they sign in. */}
+              {isMemberType(memberType) && <ValuePreview memberType={memberType} />}
 
               <div className="rounded-2xl border border-hairline bg-surface-1 p-6 shadow-[var(--shadow-lg)]">
                 <button

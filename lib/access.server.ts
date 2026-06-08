@@ -1,6 +1,6 @@
 import 'server-only';
 import { getAuthUser } from '@/lib/queries/auth';
-import { isPlatformAdmin } from '@/lib/access';
+import { isPlatformAdmin, canManageOrg, canGrantOwnerRole } from '@/lib/access';
 import { createClient } from '@/lib/supabase/server';
 
 /**
@@ -39,7 +39,9 @@ export async function requireOrgManager(orgId: string): Promise<boolean> {
     .eq('org_id', orgId)
     .eq('user_id', user.id)
     .maybeSingle();
-  return data?.status === 'active' && (data.role === 'owner' || data.role === 'admin');
+  // Platform admins are handled above; here the decision is purely the
+  // caller's membership in this org (unit-tested via canManageOrg).
+  return canManageOrg(data, false);
 }
 
 /**
@@ -61,5 +63,5 @@ export async function requireOrgOwner(orgId: string): Promise<boolean> {
     .eq('org_id', orgId)
     .eq('user_id', user.id)
     .maybeSingle();
-  return data?.status === 'active' && data.role === 'owner';
+  return canGrantOwnerRole(data, false);
 }
