@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
@@ -142,7 +142,9 @@ export function NotificationCenter({ since, alerts, activity }: NotificationCent
     return () => cancelAnimationFrame(raf);
   }, [seed]);
 
-  const close = (id: string) => setQueue((q) => q.filter((t) => t.id !== id));
+  // Stable identity so ToastCard's auto-dismiss timer isn't reset on every
+  // queue change (setQueue's updater form needs no deps).
+  const close = useCallback((id: string) => setQueue((q) => q.filter((t) => t.id !== id)), []);
 
   const activeAlerts = alerts.length;
   const reopenAlerts = () =>
@@ -193,7 +195,7 @@ export function NotificationCenter({ since, alerts, activity }: NotificationCent
       <div className="flex w-full flex-col gap-2">
         <AnimatePresence initial={false}>
           {queue.slice(0, 4).map((t) => (
-            <ToastCard key={t.id} toast={t} onClose={() => close(t.id)} />
+            <ToastCard key={t.id} toast={t} toastId={t.id} close={close} />
           ))}
         </AnimatePresence>
       </div>
@@ -202,14 +204,22 @@ export function NotificationCenter({ since, alerts, activity }: NotificationCent
   );
 }
 
-function ToastCard({ toast, onClose }: { toast: Toast; onClose: () => void }) {
+function ToastCard({
+  toast,
+  toastId,
+  close
+}: {
+  toast: Toast;
+  toastId: string;
+  close: (id: string) => void;
+}) {
   const tone = TONE[toast.tone];
   const Icon = toast.icon;
 
   useEffect(() => {
-    const id = setTimeout(onClose, toast.ttl);
+    const id = setTimeout(() => close(toastId), toast.ttl);
     return () => clearTimeout(id);
-  }, [toast.ttl, onClose]);
+  }, [toast.ttl, close, toastId]);
 
   const body = (
     <>
@@ -273,7 +283,7 @@ function ToastCard({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         )}
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => close(toastId)}
           aria-label="Dismiss notification"
           className={cn(
             'absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-lg text-fg-5',
