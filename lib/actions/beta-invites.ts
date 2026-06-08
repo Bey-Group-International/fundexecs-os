@@ -10,6 +10,7 @@ import type { Database, Json } from '@/lib/supabase/database.types';
 export type InviteResult = { ok: true; link: string; email: string } | { ok: false; error: string };
 
 export type InviteActionResult = { ok: true } | { ok: false; error: string };
+export type DeleteInviteResult = { ok: true } | { ok: false; error: string };
 type InviteRole = Database['public']['Enums']['org_member_role'];
 
 /** New beta users land in onboarding after the link verifies. */
@@ -229,5 +230,53 @@ export async function revokeBetaInvite(inviteId: string): Promise<InviteActionRe
   if (error) return { ok: false, error: error.message };
 
   await writeAudit(org.orgId, org.userId, 'revoke_beta_invite', inviteId);
+  return { ok: true };
+}
+
+/**
+ * Permanently delete a beta invite. Admin-gated. Guardrail: an invite that was
+ * already accepted (the user joined) is NOT deletable — deleting it would erase
+ * the record that they came in this way. Revoke a pending invite or just leave
+ * an accepted one; delete is for cleaning up pending/revoked typos.
+ */
+export async function deleteBetaInvite(inviteId: string): Promise<DeleteInviteResult> {
+  if (!inviteId) return { ok: false, error: 'Missing invite id.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+  if (!(await requirePlatformAdmin())) {
+    return { ok: false, error: 'This action is reserved for the Bey Group team.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: invite, error: readErr } = await admin
+    .from('beta_invites')
+    .select('status')
+    .eq('id', inviteId)
+    .eq('org_id', org.orgId)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+  if (!invite) return { ok: false, error: 'Invite not found.' };
+  if (invite.status === 'accepted') {
+    return { ok: false, error: 'This person already joined — their invite can’t be deleted.' };
+  }
+
+  // Guard the accepted check atomically: `.neq('status','accepted')` means a
+  // status that flips to accepted between the read above and here deletes 0 rows
+  // rather than erasing the record that they joined.
+  const { data: deleted, error } = await admin
+    .from('beta_invites')
+    .delete()
+    .eq('id', inviteId)
+    .eq('org_id', org.orgId)
+    .neq('status', 'accepted')
+    .select('id')
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!deleted) {
+    return { ok: false, error: 'This person already joined — their invite can’t be deleted.' };
+  }
+
+  await writeAudit(org.orgId, org.userId, 'delete_beta_invite', inviteId);
   return { ok: true };
 }

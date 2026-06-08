@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
-import { Link2, Copy, Check, Ban, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { Link2, Copy, Check, Ban, Sparkles, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { Badge, Button, Card, Input, SectionTitle, type BadgeTone } from '@/components/ui';
-import { createBetaLink, revokeBetaLink } from '@/lib/actions/beta-links';
+import { createBetaLink, revokeBetaLink, deleteBetaLink } from '@/lib/actions/beta-links';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
@@ -172,6 +172,25 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
     }
   }
 
+  async function handleDelete(id: string) {
+    if (busyId) return;
+    if (!window.confirm('Delete this invite link? This can’t be undone.')) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      const result = await deleteBetaLink(id);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError('Could not delete invite link. Please try again.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const active = links.filter((l) => l.status === 'active').length;
 
   return (
@@ -293,6 +312,18 @@ export function BetaLinksPanel({ links }: { links: BetaLinkWithStatus[] }) {
                       aria-label={`Revoke link ${l.label || ''}`}
                     >
                       Revoke
+                    </Button>
+                  )}
+                  {l.claimsCount === 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={Trash2}
+                      disabled={isBusy}
+                      onClick={() => handleDelete(l.id)}
+                      aria-label={`Delete link ${l.label || ''}`}
+                    >
+                      Delete
                     </Button>
                   )}
                 </div>
