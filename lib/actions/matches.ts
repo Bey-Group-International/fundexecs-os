@@ -47,8 +47,9 @@ type ServiceRpc = (
 async function relearnWeights(orgId: string): Promise<void> {
   try {
     const admin = createAdminClient();
-    const rpc = admin.rpc as unknown as ServiceRpc;
-    await rpc('recompute_match_scoring_weights', { _org_id: orgId });
+    // Call `.rpc` as a method (don't detach it, or it loses its `this` binding).
+    const db = admin as unknown as { rpc: ServiceRpc };
+    await db.rpc('recompute_match_scoring_weights', { _org_id: orgId });
   } catch {
     // never-block
   }
