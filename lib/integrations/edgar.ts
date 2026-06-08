@@ -29,15 +29,19 @@ export interface FormDFiling {
   occurredAt: string | null;
 }
 
-/** Decode the handful of XML entities the feed uses. */
+/**
+ * Decode the handful of XML entities the feed uses. `&amp;` is unescaped LAST
+ * so a doubly-encoded entity like `&amp;lt;` decodes to the literal `&lt;`
+ * rather than being double-unescaped into `<`.
+ */
 function decodeEntities(s: string): string {
   return s
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
     .trim();
 }
 
