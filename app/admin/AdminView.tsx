@@ -17,6 +17,7 @@ import {
   Coins,
   Database,
   Layers,
+  LayoutDashboard,
   ShieldCheck,
   Bell,
   CircleDot,
@@ -52,6 +53,7 @@ import { BetaInvitesPanel } from './BetaInvitesPanel';
 import { BetaLinksPanel } from './BetaLinksPanel';
 import { ApplicationsPanel } from './ApplicationsPanel';
 import { ReferralsPanel } from './ReferralsPanel';
+import { LaunchCommandPanel, type LaunchSnapshot, type LaunchTab } from './LaunchCommandPanel';
 
 type OrgMemberRole = 'owner' | 'admin' | 'member';
 type MemberStatus = AdminMember['status'] | 'Archived';
@@ -115,7 +117,15 @@ function coverageTone(pct: number): BadgeTone {
   return 'neutral';
 }
 
-type Tab = 'users' | 'applications' | 'invites' | 'referrals' | 'activity' | 'trust' | 'knowledge';
+type Tab =
+  | 'overview'
+  | 'users'
+  | 'applications'
+  | 'invites'
+  | 'referrals'
+  | 'activity'
+  | 'trust'
+  | 'knowledge';
 
 /* ---- Stat tile (bold: tone disc + accent rail) -------------------------- */
 
@@ -776,7 +786,7 @@ export function AdminView({
   referralOverview: ReferralOverview | null;
   viewerRole: OrgMemberRole | null;
 }) {
-  const [tab, setTab] = useState<Tab>('users');
+  const [tab, setTab] = useState<Tab>('overview');
   const router = useRouter();
   // Member rows share the card lifecycle: approving an applicant "completes"
   // the row (closed); archiving sets the archived flag.
@@ -834,6 +844,34 @@ export function AdminView({
 
   const openInvites = invites.filter((i) => i.status === 'pending');
   const pendingApplications = applications.filter((a) => a.review === 'pending').length;
+
+  // Launch-readiness snapshot for the Overview tab — composed entirely from the
+  // live props this view already renders, so it can never drift from the tabs.
+  const trustCoverageMean = metrics
+    ? Math.round(
+        Object.values(metrics.trust.layerCoverage).reduce((a, b) => a + b, 0) /
+          Math.max(1, Object.values(metrics.trust.layerCoverage).length)
+      )
+    : 0;
+  const launchSnapshot: LaunchSnapshot = {
+    members: data.members.length,
+    owners: ownerCount,
+    admins: data.members.filter((m) => roles[m.id] === 'admin').length,
+    invitesSent: invites.length,
+    openInvites: openInvites.length,
+    acceptedInvites: invites.filter((i) => i.status === 'accepted').length,
+    applications: applications.length,
+    pendingApplications,
+    approvedApplications: applications.filter((a) => a.review === 'approved').length,
+    activeLinks: betaLinks.filter((l) => l.status === 'active').length,
+    referredCount: referralOverview?.referredCount ?? 0,
+    creditsEarned: referralOverview?.totalEarned ?? 0,
+    recentActions: data.actions.length,
+    metricsPlaceholder: metrics?.placeholder ?? true,
+    trustCoverage: trustCoverageMean,
+    brainsTotal: metrics?.brains.total || TEAM_ROSTER.length,
+    brainsEmbedded: metrics?.brains.embedded ?? 0
+  };
 
   const adminStats: Stat[] = [
     {
@@ -911,6 +949,7 @@ export function AdminView({
         active={tab}
         onChange={(id) => setTab(id as Tab)}
         tabs={[
+          { id: 'overview', label: 'Overview', icon: LayoutDashboard },
           { id: 'users', label: 'Users & roles', icon: Users },
           {
             id: 'applications',
@@ -928,6 +967,9 @@ export function AdminView({
         ]}
       />
 
+      {tab === 'overview' && (
+        <LaunchCommandPanel snapshot={launchSnapshot} onJump={(t: LaunchTab) => setTab(t)} />
+      )}
       {tab === 'users' && (
         <UsersPanel
           members={data.members}
