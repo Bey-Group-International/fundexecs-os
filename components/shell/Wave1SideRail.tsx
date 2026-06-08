@@ -12,7 +12,16 @@ import {
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
-import { ArrowRight, ChevronDown, Compass, Gauge, RefreshCw, Sparkles, X } from 'lucide-react';
+import {
+  ArrowRight,
+  ChevronDown,
+  Compass,
+  Gauge,
+  MoreHorizontal,
+  RefreshCw,
+  Sparkles,
+  X
+} from 'lucide-react';
 import { Badge, type BadgeTone } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { createClient } from '@/lib/supabase/client';
@@ -528,9 +537,7 @@ function NavGroup({
             {rollup.label}
           </Badge>
         ) : null}
-        {group.launcher ? (
-          <ClusterLauncher launcher={group.launcher} onTrigger={onLinkClick} />
-        ) : null}
+        <ClusterMenu group={group} onLinkClick={onLinkClick} />
         <button
           type="button"
           onClick={onToggle}
@@ -1107,22 +1114,16 @@ function ChainPip({ state }: { state: LinkState }) {
 }
 
 /**
- * ClusterLauncher — a small gold Earn affordance in the cluster header that
- * pops out a menu (instead of a full-width button that buries the links).
- * The icon stays compact; clicking it opens a fixed-positioned popover beside
- * the rail (so the rail's overflow never clips it) with the Earn action.
+ * ClusterMenu — a small "more" affordance in the cluster header that pops out
+ * the cluster's *full* option set: every nav link (flattening nested groups
+ * like Capital → Equity/Debt/Hybrid so nothing is buried), plus the Earn
+ * launcher action at the foot. Fixed-positioned beside the rail so the rail's
+ * overflow never clips it; closes on outside-click / Escape / scroll.
  */
-function ClusterLauncher({
-  launcher,
-  onTrigger
-}: {
-  launcher: RailLauncher;
-  onTrigger: () => void;
-}) {
+function ClusterMenu({ group, onLinkClick }: { group: RailNavGroup; onLinkClick: () => void }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const Icon = launcher.icon;
 
   useEffect(() => {
     if (!open) return;
@@ -1151,6 +1152,10 @@ function ClusterLauncher({
     setOpen((v) => !v);
   }
 
+  function close() {
+    setOpen(false);
+  }
+
   return (
     <>
       <button
@@ -1159,52 +1164,160 @@ function ClusterLauncher({
         onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={launcher.label}
-        aria-label={launcher.label}
-        data-testid={`rail-launcher-${launcher.label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
+        title={`${group.label} — all options`}
+        aria-label={`${group.label} options`}
+        data-testid={`rail-cluster-menu-${group.key}`}
         className={cn(
-          'flex h-5 w-5 flex-none items-center justify-center rounded-md text-gold-1 transition-[background] hover:bg-[var(--gold-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1',
-          open && 'bg-[var(--gold-soft)]'
+          'flex h-5 w-5 flex-none items-center justify-center rounded-md text-fg-4 transition-[background] hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1',
+          open && 'bg-surface-2 text-fg-1'
         )}
       >
-        <Icon size={13} strokeWidth={2} aria-hidden />
+        <MoreHorizontal size={14} strokeWidth={2} aria-hidden />
       </button>
       <AnimatePresence>
         {open && pos ? (
           <motion.div
             role="menu"
-            data-testid="rail-launcher-popover"
+            data-testid={`rail-cluster-menu-popover-${group.key}`}
             style={{ top: pos.top, left: pos.left }}
             initial={{ opacity: 0, x: -4, scale: 0.98 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -4, scale: 0.98 }}
             transition={FX_SPRING}
-            className="fixed z-50 w-60 rounded-[12px] border border-[var(--gold-line)] bg-bg-1 p-1.5 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)]"
+            className="fixed z-50 max-h-[70vh] w-60 overflow-y-auto rounded-[12px] border border-hairline bg-bg-1 p-1.5 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)]"
           >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                openEarn(launcher.prompt);
-                setOpen(false);
-                onTrigger();
-              }}
-              className="flex w-full items-start gap-2 rounded-[9px] px-2.5 py-2 text-left transition-[background] hover:bg-[var(--gold-soft)]"
-            >
-              <Sparkles
-                size={13}
-                strokeWidth={2}
-                aria-hidden
-                className="mt-0.5 flex-none text-gold-1"
+            {group.items.map((item, i) => (
+              <ClusterMenuEntry
+                key={`${group.key}-menu-${i}`}
+                item={item}
+                onLinkClick={onLinkClick}
+                onClose={close}
               />
-              <span className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-fg-2">
-                {launcher.label}
-              </span>
-            </button>
+            ))}
+            {group.launcher ? (
+              <>
+                <div className="my-1 h-px bg-hairline" aria-hidden />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openEarn(group.launcher!.prompt);
+                    close();
+                    onLinkClick();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-[9px] px-2.5 py-1.5 text-left transition-[background] hover:bg-[var(--gold-soft)]"
+                >
+                  <Sparkles
+                    size={13}
+                    strokeWidth={2}
+                    aria-hidden
+                    className="flex-none text-gold-1"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-gold-1">
+                    {group.launcher.label}
+                  </span>
+                </button>
+              </>
+            ) : null}
           </motion.div>
         ) : null}
       </AnimatePresence>
     </>
+  );
+}
+
+/** One entry in a ClusterMenu — a link, an Earn action, a nested group of
+ *  links (flattened under a label), or a muted "soon" row. */
+function ClusterMenuEntry({
+  item,
+  onLinkClick,
+  onClose
+}: {
+  item: RailNavItem;
+  onLinkClick: () => void;
+  onClose: () => void;
+}) {
+  const Icon = item.icon;
+  const rowBase =
+    'flex w-full items-center gap-2 rounded-[9px] px-2.5 py-1.5 text-left text-[12px] transition-[background]';
+
+  // Nested group (e.g. Capital → Equity/Debt/Hybrid): show every child link.
+  if (item.children && item.children.length > 0) {
+    return (
+      <div>
+        <p className="px-2.5 pb-0.5 pt-1.5 text-[9px] font-semibold uppercase tracking-[0.06em] text-fg-5">
+          {item.label}
+        </p>
+        {item.children.map((sub, j) =>
+          sub.href && sub.live !== false ? (
+            <Link
+              key={j}
+              href={sub.href}
+              role="menuitem"
+              onClick={() => {
+                onLinkClick();
+                onClose();
+              }}
+              className={cn(rowBase, 'pl-7 text-fg-3 hover:bg-surface-1')}
+            >
+              <span className="min-w-0 flex-1 truncate">{sub.label}</span>
+            </Link>
+          ) : (
+            <div key={j} className={cn(rowBase, 'pl-7 text-fg-5')}>
+              <span className="min-w-0 flex-1 truncate">{sub.label}</span>
+              <span className="text-[9px] font-semibold uppercase tracking-[0.06em]">soon</span>
+            </div>
+          )
+        )}
+      </div>
+    );
+  }
+
+  // Earn-action entry.
+  if (item.earnPrompt) {
+    return (
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => {
+          openEarn(item.earnPrompt as string);
+          onClose();
+          onLinkClick();
+        }}
+        className={cn(rowBase, 'text-fg-3 hover:bg-surface-1')}
+      >
+        <Icon size={14} strokeWidth={1.9} aria-hidden className="flex-none text-gold-1" />
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        <Sparkles size={11} strokeWidth={2} aria-hidden className="flex-none text-gold-1/70" />
+      </button>
+    );
+  }
+
+  // "Soon" — not yet built.
+  if (!item.href) {
+    return (
+      <div className={cn(rowBase, 'text-fg-5')}>
+        <Icon size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        <span className="text-[9px] font-semibold uppercase tracking-[0.06em]">soon</span>
+      </div>
+    );
+  }
+
+  // Normal route link.
+  return (
+    <Link
+      href={item.href}
+      role="menuitem"
+      onClick={() => {
+        onLinkClick();
+        onClose();
+      }}
+      className={cn(rowBase, 'text-fg-2 hover:bg-surface-1')}
+    >
+      <Icon size={14} strokeWidth={1.9} aria-hidden className="flex-none text-fg-4" />
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+    </Link>
   );
 }
 
