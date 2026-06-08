@@ -222,17 +222,26 @@ async function loadBriefing(
         eq: (
           col: string,
           val: string
-        ) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null }> };
+        ) => {
+          maybeSingle: () => Promise<{
+            data: Record<string, unknown> | null;
+            error: { message: string } | null;
+          }>;
+        };
       };
     };
   };
 
   try {
-    const { data } = await reader
+    const { data, error } = await reader
       .from('intelligence_briefings')
       .select('body, match_count, top_score, generated_at')
       .eq('org_id', orgId)
       .maybeSingle();
+    if (error) {
+      console.warn('[loadBriefing] failed to read intelligence_briefings:', error.message);
+      return null;
+    }
     if (!data || typeof data.body !== 'string') return null;
     return {
       body: data.body,
@@ -240,7 +249,8 @@ async function loadBriefing(
       topScore: typeof data.top_score === 'number' ? data.top_score : null,
       generatedAt: typeof data.generated_at === 'string' ? data.generated_at : ''
     };
-  } catch {
+  } catch (err) {
+    console.warn('[loadBriefing] unexpected error:', err);
     return null;
   }
 }

@@ -169,6 +169,8 @@ values fail fast.
 | `ANTHROPIC_API_KEY`             | AI validation (`lib/ai/trust-validate`) | Optional — fallback note still writes without it |
 | `VOYAGE_API_KEY`                | brain embedding pipeline                | Optional in dev                                  |
 | `EARN_MODEL`                    | Claude model override                   | Default `claude-sonnet-4-6`                      |
+| `CRON_SECRET`                   | `/api/cron/intelligence` auth           | Required for the scheduled flywheel; header-only |
+| `EDGAR_USER_AGENT`              | EDGAR Form D ingestion                  | SEC requires a descriptive UA with contact info  |
 | `SLACK_CLIENT_ID`               | Phase 6 OAuth                           | Codex-owned                                      |
 | `SLACK_CLIENT_SECRET`           | Phase 6 OAuth                           | Codex-owned                                      |
 | `SLACK_SIGNING_SECRET`          | Phase 6 webhooks                        | Codex-owned                                      |
