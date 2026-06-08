@@ -79,11 +79,11 @@ The signal scorer (`generate_signal_matches`) is **self-tuning**. On top of the
 deterministic keyword factors it layers two optional, never-block capabilities
 that degrade cleanly to the base behaviour when their inputs are absent:
 
-| Capability | What it adds | Powered by | How to enable in prod |
-| ---------- | ------------ | ---------- | --------------------- |
-| **Feedback loop** | Per-org, per-factor multipliers learned from accept/dismiss history (`match_scoring_weights`). Fires after every decision via `recompute_match_scoring_weights`. | SQL only | Nothing — on by default once the migration is applied. Stays neutral under 3 decisions. |
-| **Semantic fit** | A meaning-level factor via pgvector cosine against each org's mandate vector (`org_profile_embeddings`). | `VOYAGE_API_KEY` | Set the key, then run the `refresh_mandate_embedding` server action (e.g. after a profile edit) to populate each org's vector. |
-| **LLM-judge** | The routed specialist's calibrated second opinion, written onto the match rationale. | `ANTHROPIC_API_KEY` | Set the key. Triggered per-match by the `judge_match` action ("Get a read"). |
+| Capability        | What it adds                                                                                                                                                     | Powered by          | How to enable in prod                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Feedback loop** | Per-org, per-factor multipliers learned from accept/dismiss history (`match_scoring_weights`). Fires after every decision via `recompute_match_scoring_weights`. | SQL only            | Nothing — on by default once the migration is applied. Stays neutral under 3 decisions.                                        |
+| **Semantic fit**  | A meaning-level factor via pgvector cosine against each org's mandate vector (`org_profile_embeddings`).                                                         | `VOYAGE_API_KEY`    | Set the key, then run the `refresh_mandate_embedding` server action (e.g. after a profile edit) to populate each org's vector. |
+| **LLM-judge**     | The routed specialist's calibrated second opinion, written onto the match rationale.                                                                             | `ANTHROPIC_API_KEY` | Set the key. Triggered per-match by the `judge_match` action ("Get a read").                                                   |
 
 Enablement steps:
 
