@@ -25,11 +25,16 @@ const TITLE_MAX = 120;
 const HEADLINE_MAX = 280;
 const MIN_CHECK_MAX = 1_000_000_000_000; // $1T defensive bound
 
+/** Reg D exemption the raise is run under. null = unset. */
+export type RaiseExemption = '506b' | '506c';
+const EXEMPTIONS: readonly RaiseExemption[] = ['506b', '506c'];
+
 export interface RaisePageFields {
   title?: string | null;
   headline?: string | null;
   minCheck?: number | null;
   showAmounts?: boolean;
+  exemption?: RaiseExemption | null;
 }
 
 function clean(value: string | null | undefined, max: number): string | null {
@@ -121,6 +126,14 @@ export async function updateRaisePage(fields: RaisePageFields): Promise<RaiseMut
     minCheck = Math.round(n);
   }
 
+  let exemption: RaiseExemption | null = null;
+  if (fields.exemption != null) {
+    if (!EXEMPTIONS.includes(fields.exemption)) {
+      return { ok: false, error: 'Please choose a valid exemption.' };
+    }
+    exemption = fields.exemption;
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('raise_pages')
@@ -128,7 +141,8 @@ export async function updateRaisePage(fields: RaisePageFields): Promise<RaiseMut
       title: clean(fields.title, TITLE_MAX),
       headline: clean(fields.headline, HEADLINE_MAX),
       min_check: minCheck,
-      show_amounts: Boolean(fields.showAmounts)
+      show_amounts: Boolean(fields.showAmounts),
+      exemption
     })
     .eq('org_id', org.orgId)
     .is('revoked_at', null)

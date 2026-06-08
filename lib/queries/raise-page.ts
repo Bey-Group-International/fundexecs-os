@@ -19,6 +19,8 @@ export interface ActiveRaisePage {
   headline: string | null;
   minCheck: number | null;
   showAmounts: boolean;
+  /** Reg D exemption ('506b' | '506c'), or null when unset. */
+  exemption: '506b' | '506c' | null;
   /** Inbound "express interest" leads captured so far. */
   interestCount: number;
 }
@@ -35,7 +37,7 @@ export async function getActiveRaisePage(): Promise<ActiveRaisePage | null> {
   const supabase = await createClient();
   const { data: page } = await supabase
     .from('raise_pages')
-    .select('id, token, title, headline, min_check, show_amounts, expires_at')
+    .select('id, token, title, headline, min_check, show_amounts, exemption, expires_at')
     .eq('org_id', org.orgId)
     .is('revoked_at', null)
     .order('created_at', { ascending: false })
@@ -44,6 +46,8 @@ export async function getActiveRaisePage(): Promise<ActiveRaisePage | null> {
 
   if (!page) return null;
   if (page.expires_at && new Date(page.expires_at).getTime() <= Date.now()) return null;
+
+  const exemption = page.exemption === '506b' || page.exemption === '506c' ? page.exemption : null;
 
   const { count } = await supabase
     .from('raise_interests')
@@ -57,6 +61,7 @@ export async function getActiveRaisePage(): Promise<ActiveRaisePage | null> {
     headline: (page.headline ?? '').trim() || null,
     minCheck: page.min_check != null ? Number(page.min_check) : null,
     showAmounts: Boolean(page.show_amounts),
+    exemption,
     interestCount: count ?? 0
   };
 }
