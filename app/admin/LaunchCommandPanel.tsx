@@ -382,9 +382,11 @@ function FunnelStrip({ stages }: { stages: Stage[] }) {
 
 function AttentionQueue({
   items,
+  canJump,
   onJump
 }: {
   items: AttentionItem[];
+  canJump: (tab: LaunchTab) => boolean;
   onJump: (tab: LaunchTab) => void;
 }) {
   return (
@@ -406,13 +408,9 @@ function AttentionQueue({
         <div className="flex flex-col gap-2.5">
           {items.map((item) => {
             const Icon = item.icon;
-            return (
-              <button
-                key={item.title}
-                type="button"
-                onClick={() => onJump(item.tab)}
-                className="group flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3 text-left transition hover:border-[var(--azure-line)] hover:bg-surface-2"
-              >
+            const jumpable = canJump(item.tab);
+            const inner = (
+              <>
                 <span
                   className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border bg-bg-1"
                   style={{ color: TONE_VAR[item.tone], borderColor: TONE_VAR[item.tone] }}
@@ -423,11 +421,30 @@ function AttentionQueue({
                   <div className="text-[12.5px] font-semibold text-fg-1">{item.title}</div>
                   <div className="truncate text-[11px] text-fg-4">{item.detail}</div>
                 </div>
-                <span className="flex flex-none items-center gap-1 text-[11.5px] font-medium text-fg-3 transition group-hover:text-azure-1">
-                  {item.cta}
-                  <ArrowRight size={13} strokeWidth={2} aria-hidden />
-                </span>
+                {jumpable ? (
+                  <span className="flex flex-none items-center gap-1 text-[11.5px] font-medium text-fg-3 transition group-hover:text-azure-1">
+                    {item.cta}
+                    <ArrowRight size={13} strokeWidth={2} aria-hidden />
+                  </span>
+                ) : null}
+              </>
+            );
+            return jumpable ? (
+              <button
+                key={item.title}
+                type="button"
+                onClick={() => onJump(item.tab)}
+                className="group flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3 text-left transition hover:border-[var(--azure-line)] hover:bg-surface-2"
+              >
+                {inner}
               </button>
+            ) : (
+              <div
+                key={item.title}
+                className="flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 p-3"
+              >
+                {inner}
+              </div>
             );
           })}
         </div>
@@ -436,7 +453,15 @@ function AttentionQueue({
   );
 }
 
-function GateGrid({ gates, onJump }: { gates: Gate[]; onJump: (tab: LaunchTab) => void }) {
+function GateGrid({
+  gates,
+  canJump,
+  onJump
+}: {
+  gates: Gate[];
+  canJump: (tab: LaunchTab) => boolean;
+  onJump: (tab: LaunchTab) => void;
+}) {
   return (
     <Card>
       <SectionTitle eyebrow="Launch gates" title="Readiness checklist" className="mb-3" />
@@ -445,7 +470,8 @@ function GateGrid({ gates, onJump }: { gates: Gate[]; onJump: (tab: LaunchTab) =
           const meta = GATE_META[g.state];
           const Icon = g.icon;
           const MetaIcon = meta.icon;
-          const actionable = g.tab && (g.state === 'attention' || g.state === 'todo');
+          const actionable =
+            g.tab && canJump(g.tab) && (g.state === 'attention' || g.state === 'todo');
           const accent = TONE_VAR[meta.tone];
           const body = (
             <>
@@ -497,9 +523,13 @@ function GateGrid({ gates, onJump }: { gates: Gate[]; onJump: (tab: LaunchTab) =
 
 export function LaunchCommandPanel({
   snapshot,
+  visibleTabs,
   onJump
 }: {
   snapshot: LaunchSnapshot;
+  /** Tabs the host actually shows — gates/attention items only deep-link to
+   *  these. When omitted, every tab is assumed jumpable. */
+  visibleTabs?: LaunchTab[];
   onJump: (tab: LaunchTab) => void;
 }) {
   const gates = buildGates(snapshot);
@@ -507,6 +537,8 @@ export function LaunchCommandPanel({
   const { tone, verdict } = readinessTone(pct);
   const stages = buildFunnel(snapshot);
   const attention = buildAttention(snapshot);
+  const allowed = visibleTabs ? new Set(visibleTabs) : null;
+  const canJump = (t: LaunchTab) => !allowed || allowed.has(t);
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -524,8 +556,8 @@ export function LaunchCommandPanel({
       />
       <FunnelStrip stages={stages} />
       <div className="grid items-start gap-[18px] lg:grid-cols-2">
-        <AttentionQueue items={attention} onJump={onJump} />
-        <GateGrid gates={gates} onJump={onJump} />
+        <AttentionQueue items={attention} canJump={canJump} onJump={onJump} />
+        <GateGrid gates={gates} canJump={canJump} onJump={onJump} />
       </div>
     </div>
   );

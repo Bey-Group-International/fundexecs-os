@@ -107,9 +107,15 @@ export default async function SettingsPage() {
     stripeCustomerId: null,
     configured: false
   };
-  // Admin section — reserved for the Bey Group team (@beygroupintl.com), not
-  // org role. A normal operator who owns their own workspace is not an admin.
-  let isAdmin = false;
+  // Admin section access has two tiers:
+  //  • 'platform' — the Bey Group team (@beygroupintl.com): the full portal with
+  //    member/role/invite actions across the workspace.
+  //  • 'org' — an org owner/admin on their OWN workspace: a READ-ONLY, org-scoped
+  //    view (their team, launch readiness, and workspace activity). RLS keeps
+  //    every read inside their org; no platform-only data (applications,
+  //    referrals) is loaded, and the UI exposes no mutating controls.
+  //  • null — no admin surface (a normal member).
+  let adminScope: 'platform' | 'org' | null = null;
   let adminData: AdminData | null = null;
   let invites: BetaInvite[] = [];
   let betaLinks: BetaLinkWithStatus[] = [];
@@ -121,7 +127,7 @@ export default async function SettingsPage() {
     const ad = await getAdminData(org.orgId).catch(() => null);
     const me = ad?.members.find((m) => m.userId === user.id);
     viewerRole = me?.role ?? null;
-    isAdmin = true;
+    adminScope = 'platform';
     if (ad) {
       adminData = ad;
       [invites, adminMetrics, betaLinks, applications, referralOverview] = await Promise.all([
@@ -130,6 +136,20 @@ export default async function SettingsPage() {
         getBetaLinks(org.orgId).catch(() => []),
         getBetaApplications(org.orgId).catch(() => []),
         getReferralOverview(org.orgId).catch(() => null)
+      ]);
+    }
+  } else if (org && user && (orgTeam.viewerRole === 'owner' || orgTeam.viewerRole === 'admin')) {
+    // Org owner/admin — read-only, org-scoped. All reads stay RLS-bounded to
+    // their workspace; applications/referrals (platform-only) are left empty.
+    const ad = await getAdminData(org.orgId).catch(() => null);
+    if (ad) {
+      adminScope = 'org';
+      adminData = ad;
+      viewerRole = orgTeam.viewerRole;
+      [invites, adminMetrics, betaLinks] = await Promise.all([
+        getBetaInvites(org.orgId).catch(() => []),
+        getAdminMetrics(org.orgId).catch(() => null),
+        getBetaLinks(org.orgId).catch(() => [])
       ]);
     }
   }
@@ -174,7 +194,7 @@ export default async function SettingsPage() {
         proofMemberType={memberProfile?.memberType ?? null}
         level={identity?.level ?? 1}
         xp={identity?.xp ?? 0}
-        isAdmin={isAdmin}
+        adminScope={adminScope}
         adminData={adminData}
         invites={invites}
         betaLinks={betaLinks}

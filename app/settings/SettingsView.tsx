@@ -69,8 +69,12 @@ interface SettingsViewProps {
   /** Real Earn level + accumulated XP (from `profiles.xp` via getShellIdentity). */
   level: number;
   xp: number;
-  /** Owner/admin only — surfaces the Admin section (members, roles, beta invites). */
-  isAdmin: boolean;
+  /**
+   * Admin surface access: 'platform' = Bey Group team (full portal + actions),
+   * 'org' = an org owner/admin on their own workspace (read-only, org-scoped),
+   * null = no admin section.
+   */
+  adminScope: 'platform' | 'org' | null;
   adminData: AdminData | null;
   invites: BetaInvite[];
   betaLinks: BetaLinkWithStatus[];
@@ -591,7 +595,7 @@ export function SettingsView({
   proofMemberType,
   level,
   xp,
-  isAdmin,
+  adminScope,
   adminData,
   invites,
   betaLinks,
@@ -603,7 +607,9 @@ export function SettingsView({
   creditBalance,
   integrations
 }: SettingsViewProps) {
-  // The Admin section is owner/admin-only; hide it from the rail otherwise.
+  // The Admin section surfaces for platform admins (full) and org owners/admins
+  // (read-only, org-scoped); hide it from the rail for everyone else.
+  const isAdmin = adminScope != null;
   const visibleSections = SECTIONS.filter((s) => s.id !== 'admin' || isAdmin);
   // Lazy init — read the URL hash on first client render so deep links open
   // the right section without a flash. SSR returns 'account'; hydration runs
@@ -637,6 +643,14 @@ export function SettingsView({
   const displayName = fullName ?? (email ? email.split('@')[0] : 'Your profile');
   const activeSection = visibleSections.find((s) => s.id === active) ?? visibleSections[0]!;
   const ActiveIcon = activeSection.icon;
+
+  // The Admin rail copy depends on access tier: org owners/admins get a
+  // read-only, org-scoped view, so promise that rather than the owner controls.
+  const adminUnlocks =
+    adminScope === 'org'
+      ? 'Read-only — your team, launch readiness, and workspace activity.'
+      : SECTIONS.find((s) => s.id === 'admin')!.unlocks;
+  const unlocksFor = (s: SettingsSection) => (s.id === 'admin' ? adminUnlocks : s.unlocks);
 
   return (
     <div className="flex flex-col gap-[22px]" data-testid="settings-rail-view">
@@ -695,7 +709,7 @@ export function SettingsView({
                         isActive ? 'text-fg-3' : 'text-fg-5'
                       )}
                     >
-                      {s.unlocks}
+                      {unlocksFor(s)}
                     </span>
                   </span>
                 </button>
@@ -718,7 +732,9 @@ export function SettingsView({
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-4">
                 Unlocks
               </p>
-              <p className="mt-0.5 text-[13px] leading-snug text-fg-2">{activeSection.unlocks}</p>
+              <p className="mt-0.5 text-[13px] leading-snug text-fg-2">
+                {unlocksFor(activeSection)}
+              </p>
             </div>
           </div>
 
@@ -769,6 +785,7 @@ export function SettingsView({
           )}
           {activeSection.id === 'admin' && isAdmin && adminData && (
             <AdminView
+              scope={adminScope === 'org' ? 'org' : 'platform'}
               data={adminData}
               invites={invites}
               betaLinks={betaLinks}
