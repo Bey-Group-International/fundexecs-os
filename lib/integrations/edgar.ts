@@ -81,7 +81,13 @@ function parseEntry(block: string): FormDFiling | null {
   const filingHref = hrefMatch ? decodeEntities(hrefMatch[1]) : null;
 
   const updated = tag(block, 'updated');
-  const occurredAt = updated ? new Date(updated).toISOString() : null;
+  let occurredAt: string | null = null;
+  if (updated) {
+    const d = new Date(updated);
+    // Guard against a malformed feed date so one bad entry can't throw and
+    // drop the whole batch.
+    occurredAt = Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
 
   return { accession, formType, issuerName, filingHref, occurredAt };
 }

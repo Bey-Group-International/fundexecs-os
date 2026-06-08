@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import { NextResponse } from 'next/server';
 import { runIntelligenceCycle } from '@/lib/ai/intelligence-pipeline';
 
@@ -25,8 +26,13 @@ function authorized(request: Request): boolean {
   if (!secret) return false;
 
   // Header-only: never accept the secret as a query param (avoids leaking it
-  // through logs, browser history, or referrers).
-  return request.headers.get('authorization') === `Bearer ${secret}`;
+  // through logs, browser history, or referrers). Compared in constant time so
+  // the check doesn't leak the secret length/prefix via response timing.
+  const provided = request.headers.get('authorization') ?? '';
+  const expected = `Bearer ${secret}`;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export async function GET(request: Request) {

@@ -249,7 +249,8 @@ async function loadBriefing(
       topScore: typeof data.top_score === 'number' ? data.top_score : null,
       generatedAt: typeof data.generated_at === 'string' ? data.generated_at : ''
     };
-  } catch {
+  } catch (err) {
+    console.warn('[loadBriefing] unexpected error:', err);
     return null;
   }
 }
