@@ -45,6 +45,7 @@ import {
  * No migration: see lib/capital/instrument.ts.
  * ========================================================================= */
 
+/** Compact currency format: $1.2B / $3.4M / $50K, falling back to full below $1K. */
 function money(n: number, currency = 'USD'): string {
   if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -56,6 +57,7 @@ function money(n: number, currency = 'USD'): string {
   }).format(n);
 }
 
+/** Turn a snake_case enum value (e.g. `soft_circle`) into a Title Case label. */
 function titleCase(s: string): string {
   return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -79,6 +81,7 @@ interface ClassifiedCommitment {
   instrument: Instrument;
 }
 
+/** Small tone-coded badge naming a row's instrument (equity/debt/hybrid). */
 function InstrumentBadge({ instrument }: { instrument: Instrument }) {
   return (
     <Badge tone={INSTRUMENT_TONE[instrument]} className="text-[10px]">
@@ -89,6 +92,7 @@ function InstrumentBadge({ instrument }: { instrument: Instrument }) {
 
 /* ---- Result rows -------------------------------------------------------- */
 
+/** One result row for a commitment already in the user's stack. */
 function StackRow({ item }: { item: ClassifiedCommitment }) {
   const c = item.commitment;
   return (
@@ -119,6 +123,7 @@ function StackRow({ item }: { item: ClassifiedCommitment }) {
   );
 }
 
+/** One result row for an external capital source found in the network. */
 function SourceRow({
   result,
   instrument
@@ -163,6 +168,11 @@ export interface CapitalSearchProps {
   commitments: CapitalCommitment[];
 }
 
+/**
+ * Unified capital search surface. Filters the user's own commitments live
+ * (client-side) and searches external capital sources on demand, with a shared
+ * equity/debt/hybrid instrument chip narrowing both result groups.
+ */
 export function CapitalSearch({ commitments }: CapitalSearchProps) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<InstrumentFilter>('all');
@@ -216,6 +226,7 @@ export function CapitalSearch({ commitments }: CapitalSearchProps) {
       .filter(({ instrument }) => matchesInstrument(instrument, filter));
   }, [sources, filter]);
 
+  /** Run (or clear) the external capital-source search for the current query. */
   function searchSources() {
     const q = query.trim();
     // Always advance the request id — even on clear — so any in-flight response
