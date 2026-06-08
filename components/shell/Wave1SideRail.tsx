@@ -12,6 +12,7 @@ import type { ShellIdentity } from '@/lib/queries/identity';
 import { AccountMenu } from './account/AccountMenu';
 import type { LifecycleStage } from '@/lib/lifecycle';
 import { cn } from '@/lib/utils';
+import { compactMoney } from '@/lib/format';
 import { FX_EASE, FX_SPRING } from '@/components/dashboard/command/motion';
 import {
   RAIL_GROUPS,
@@ -43,11 +44,17 @@ export type { RailGroupKey, RailNavGroup, RailNavItem, RailLauncher };
 
 /** Live-signal payload the rail accepts — keyed by item `href`. */
 export interface RailSignal {
-  /** Pre-formatted value (e.g. "12", "78%"). */
+  /** Pre-formatted value (e.g. "12", "78%", "$4.2M"). */
   value: string | number;
   tone?: BadgeTone;
   /** Hover hint on the badge. */
   hint?: string;
+  /**
+   * Raw dollars-at-risk for the cluster rollup to sum (when the badge is a $
+   * figure). Display-only badges (scores, percentages, realized capital) omit
+   * this so they don't inflate the cluster's at-risk total.
+   */
+  amount?: number;
 }
 
 /**
@@ -113,7 +120,8 @@ const TONE_SEVERITY: Record<BadgeTone, number> = {
 };
 
 interface GroupRollup {
-  count: number;
+  /** Pre-formatted headline — a compact $ total ("$4.2M") or a plain count. */
+  label: string;
   tone: BadgeTone;
 }
 
@@ -123,14 +131,18 @@ function baseHref(href: string): string {
 }
 
 /**
- * Compute a per-cluster rollup from the per-item `signals.badges`. Count sums
- * the numeric portion of each child badge; tone follows the highest severity.
+ * Compute a per-cluster rollup from the per-item `signals.badges`. When child
+ * badges carry a raw `amount` (value-at-stake $), the rollup sums dollars and
+ * renders a compact figure; otherwise it falls back to summing the numeric
+ * portion of each badge (legacy counts). Tone follows the highest severity.
  */
 function computeGroupRollup(
   group: RailNavGroup,
   badges: Record<string, RailSignal> | undefined
 ): GroupRollup | null {
   if (!badges) return null;
+  let dollars = 0;
+  let hasDollars = false;
   let count = 0;
   let tone: BadgeTone | null = null;
   let any = false;
@@ -148,13 +160,21 @@ function computeGroupRollup(
     seen.add(key);
     const signal = badges[key];
     any = true;
-    const numeric = parseInt(String(signal.value), 10);
-    if (!Number.isNaN(numeric)) count += numeric;
-    const childTone = signal.tone ?? 'azure';
-    if (tone === null || TONE_SEVERITY[childTone] > TONE_SEVERITY[tone]) tone = childTone;
+    if (typeof signal.amount === 'number' && signal.amount > 0) {
+      dollars += signal.amount;
+      hasDollars = true;
+      // Only $-bearing badges drive the cluster tone — they're the at-risk ones.
+      const childTone = signal.tone ?? 'azure';
+      if (tone === null || TONE_SEVERITY[childTone] > TONE_SEVERITY[tone]) tone = childTone;
+    } else {
+      const numeric = parseInt(String(signal.value), 10);
+      if (!Number.isNaN(numeric)) count += numeric;
+    }
   }
   if (!any) return null;
-  return { count, tone: tone ?? 'azure' };
+  if (hasDollars) return { label: compactMoney(dollars), tone: tone ?? 'azure' };
+  if (count > 0) return { label: String(count), tone: tone ?? 'azure' };
+  return null;
 }
 
 /**
@@ -461,9 +481,9 @@ function NavGroup({
           <Badge
             tone={rollup.tone}
             className="px-1.5 py-0.5 text-[10px] tabular-nums"
-            title={`${group.label} — combined signal`}
+            title={`${group.label} — ${rollup.label} at stake`}
           >
-            {rollup.count}
+            {rollup.label}
           </Badge>
         ) : null}
         <motion.span animate={{ rotate: expanded ? 0 : -90 }} transition={FX_SPRING}>
