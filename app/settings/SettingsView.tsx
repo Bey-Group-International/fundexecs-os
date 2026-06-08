@@ -32,6 +32,7 @@ import { PlanCreditsSection } from './PlanCreditsSection';
 import { AdminView } from '@/app/admin/AdminView';
 import type { AdminData } from '@/lib/queries/admin';
 import type { AdminMetrics } from '@/lib/queries/admin-metrics';
+import type { ReferralOverview } from '@/lib/queries/referrals';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import type { BetaApplication } from '@/lib/queries/beta-applications';
@@ -76,6 +77,8 @@ interface SettingsViewProps {
   applications: BetaApplication[];
   /** Platform metrics for the Admin Knowledge / Chain-of-Trust panels. */
   adminMetrics: AdminMetrics | null;
+  /** Referral + commission picture for the Admin Referrals panel + invite badges. */
+  referralOverview: ReferralOverview | null;
   /** The viewing admin's own role — gates owner-only role changes. */
   viewerRole: OrgMemberRole | null;
   /** Current plan/seat/status for the Plan & credits section. */
@@ -597,6 +600,7 @@ export function SettingsView({
   betaLinks,
   applications,
   adminMetrics,
+  referralOverview,
   viewerRole,
   subscription,
   creditBalance,
@@ -773,6 +777,7 @@ export function SettingsView({
               betaLinks={betaLinks}
               applications={applications}
               metrics={adminMetrics}
+              referralOverview={referralOverview}
               viewerRole={viewerRole}
             />
           )}

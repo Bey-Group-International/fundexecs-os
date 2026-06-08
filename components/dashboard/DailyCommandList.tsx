@@ -45,7 +45,7 @@ export function DailyCommandList({ actions, className }: DailyCommandListProps) 
   return (
     <Card className={cn('p-5', className)} data-testid="daily-command-list">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <SectionTitle eyebrow="Daily command · prioritized" title="What to operate on today" />
+        <SectionTitle eyebrow="The Order Book · prioritized" title="Today's compounding reps" />
         {actions.length > 0 ? (
           <span className="text-[10.5px] font-semibold tabular-nums text-fg-4">
             {completed}/{actions.length} done

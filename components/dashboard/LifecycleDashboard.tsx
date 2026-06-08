@@ -1,4 +1,4 @@
-import { Card, SectionTitle } from '@/components/ui';
+import { Card } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { ProfileActionButton } from '@/components/profile';
 import type { MemberType } from '@/lib/member-types';
@@ -8,97 +8,86 @@ import type { FundProfile } from '@/lib/queries/fund-profile';
 import { cn } from '@/lib/utils';
 import { LifecycleStageRail } from './LifecycleStageRail';
 import { ReadinessGauge } from './ReadinessGauge';
-import { MajorAlertsCard } from './MajorAlertsCard';
 import { ExecutionScoreCard } from './ExecutionScoreCard';
 import { NextBestActionCard } from './NextBestActionCard';
 import { DailyCommandList } from './DailyCommandList';
 import { ActivityFeedCard } from './ActivityFeedCard';
 import { StageKpiGrid } from './StageKpiGrid';
 import { RaiseProgressBar } from './RaiseProgressBar';
-import { SinceAwayBanner } from './SinceAwayBanner';
 import { EarnBriefingCard } from './EarnBriefingCard';
 import { AgentTeamStrip } from './AgentTeamStrip';
 import { MomentumCard } from './MomentumCard';
 import { MarkVisited } from './MarkVisited';
 import { AchievementGrid } from './AchievementGrid';
 import { QuestProgressCard } from './QuestProgressCard';
+import { DashboardShell, RevealGroup, RevealItem, CommandModule, RestoreTray } from './command';
 
 /* ============================================================================
- * LifecycleDashboard — the single, lifecycle-aware Dashboard canvas.
+ * LifecycleDashboard — the lifecycle-aware command center (Aladdin-grade).
  *
- * Replaces the prior five stacked per-member-type layouts. Variant logic is
- * internal: the `memberType` prop selects copy + section ordering through
- * `MEMBER_TYPE_VARIANTS`; the underlying data shape is the same `DashboardData`
- * for every operator.
+ * Three-tier information model:
+ *   SPINE (always-on)   Hero · Stage Rail · Spotlight · Operate KPIs
+ *   PANELS (collapse/restore, persisted)  Briefing · Desk · Momentum ·
+ *                        Achievements/Quests · Tape
+ *   SIGNALS (pop-up only) Since-away · Risk Desk alerts · live tape
  *
- * Section ordering (compounding command center):
- *   0. Continuity — SinceAwayBanner ("since you were away") + MarkVisited
- *   1. Hero       — greeting · LifecycleStageRail (7-step + loopProgress)
- *   2. Briefing   — Earn's synthesized daily briefing (COO voice)
- *   3. Spotlight  — NextBestAction · ExecutionScore · ReadinessGauge
- *   4. Momentum   — committed-capital sparkline (hidden until there's data)
- *   5. Team       — AgentTeamStrip (15-strong desk, stage-aware)
- *   6. Operate    — MajorAlerts · DailyCommand · StageKpiGrid · RaiseProgress
- *   7. Audit      — ActivityFeed
- *
- * Solid `bg-bg-1` everywhere. No inline hex. Tokens-only. Cards rise in via the
- * shared `.fx-rise` (reduced-motion-guarded in globals.css).
+ * Interaction layer is client (motion physics + per-operator layout state +
+ * notifications); the heavy cards stay server-rendered and ride in as children.
+ * Voice is FundExecs OS house — trading-desk authority with leverage framing.
  * ========================================================================= */
 
 export interface MemberTypeVariant {
-  /** Hero greeting eyebrow ("CHIEF OPERATING OFFICER · YOUR LIVE AI GUIDE"). */
+  /** Hero eyebrow ("YOUR COO · HIGHEST-LEVERAGE MOVES, ON THE RECORD"). */
   eyebrow: string;
-  /** Verb that precedes the manager's name in the hero greeting. */
+  /** Verb-forward greeting that precedes nothing — name is appended. */
   greeting: (firstName: string) => string;
-  /** One-line summary of the operator's persona, shown under the greeting. */
+  /** One-line read on the operator's edge, shown under the greeting. */
   summary: string;
-  /** Order of the four "operate row" sub-sections. Lets a startup operator
-   *  see Raise Progress before Daily Command, while a service-provider sees
-   *  Daily Command first, etc. The dashboard composer renders this. */
+  /** Order of the four "operate row" sub-sections. */
   operateOrder: readonly ('alerts' | 'daily' | 'stage' | 'raise')[];
 }
 
 export const MEMBER_TYPE_VARIANTS: Record<MemberType | 'default', MemberTypeVariant> = {
   investment_firm: {
-    eyebrow: 'Chief Operating Officer · your live AI guide',
-    greeting: (n) => `Today's plan, ${n}.`,
+    eyebrow: 'Your COO · highest-leverage moves, on the record',
+    greeting: (n) => `The desk is open, ${n}.`,
     summary:
-      'Run the desk like a far larger institution — every move on the record, audit-ready, documented as it forms.',
+      'Run lean, hit like an institution. Every move documented as it forms — your edge compounds while the record builds itself.',
     operateOrder: ['stage', 'raise', 'alerts', 'daily']
   },
   individual_investor: {
-    eyebrow: 'Chief Operating Officer · your live AI guide',
-    greeting: (n) => `Good to see you, ${n}.`,
+    eyebrow: 'Your COO · highest-leverage moves, on the record',
+    greeting: (n) => `The desk is open, ${n}.`,
     summary:
-      'Your private allocator desk — Earn keeps the watchlist warm, the diligence clean, and the conviction sharp.',
+      'Your private allocator desk. Earn keeps the watchlist warm, the diligence clean, and the conviction priced — so capital moves on proof, not vibes.',
     operateOrder: ['stage', 'alerts', 'daily', 'raise']
   },
   service_provider: {
-    eyebrow: 'Chief Operating Officer · your live AI guide',
-    greeting: (n) => `Welcome back, ${n}.`,
+    eyebrow: 'Your COO · highest-leverage moves, on the record',
+    greeting: (n) => `The desk is open, ${n}.`,
     summary:
-      'Inbound, ideal-client matches, and demand signal — Earn keeps the practice on the record.',
+      'Inbound, ideal-client matches, and demand signal — the practice on the record, every relationship compounding into the next mandate.',
     operateOrder: ['daily', 'stage', 'alerts', 'raise']
   },
   startup: {
-    eyebrow: 'Chief Operating Officer · your live AI guide',
-    greeting: (n) => `Hey ${n} — let's get the raise closed.`,
+    eyebrow: 'Your COO · highest-leverage moves, on the record',
+    greeting: (n) => `Let's close the round, ${n}.`,
     summary:
-      'Raise materials, warm intros, investor targets — Earn keeps every conversation audit-ready.',
+      'Materials, warm intros, investor targets — sequenced for leverage. Earn keeps every conversation audit-ready so the round closes on conviction.',
     operateOrder: ['raise', 'daily', 'stage', 'alerts']
   },
   student: {
-    eyebrow: 'Chief Operating Officer · your live AI guide',
-    greeting: (n) => `Welcome, ${n}.`,
+    eyebrow: 'Your COO · highest-leverage moves, on the record',
+    greeting: (n) => `The desk is open, ${n}.`,
     summary:
-      "Your student-led-fund desk — Earn shapes the loop while you build the institution's instincts.",
+      "Your student-led-fund desk. Earn runs the loop while you build the institution's instincts — reps now, returns later.",
     operateOrder: ['daily', 'stage', 'alerts', 'raise']
   },
   default: {
-    eyebrow: 'Chief Operating Officer · your live AI guide',
-    greeting: (n) => `Good to see you, ${n}.`,
+    eyebrow: 'Your COO · highest-leverage moves, on the record',
+    greeting: (n) => `The desk is open, ${n}.`,
     summary:
-      'Your private-markets command center — Earn coordinates the team and your Chain of Trust holds the proof.',
+      'Your private-markets command center. Earn coordinates the desk and your Chain of Trust holds the proof — leverage in, record out.',
     operateOrder: ['stage', 'alerts', 'daily', 'raise']
   }
 };
@@ -123,112 +112,142 @@ export function LifecycleDashboard({
   const variant = MEMBER_TYPE_VARIANTS[memberType ?? 'default'];
   const firstName = displayName.split(' ')[0] || displayName || 'there';
   const currentStage: LifecycleStage = data.stage;
+  const operateSlots = variant.operateOrder.filter((slot) => slot !== 'alerts');
 
   return (
-    <div
-      className="flex flex-col gap-[14px]"
-      data-testid="lifecycle-dashboard"
-      data-member-type={memberType ?? 'unknown'}
-      data-stage={currentStage}
+    <DashboardShell
+      notifications={{
+        since: data.sinceLastVisit,
+        alerts: data.majorAlerts,
+        activity: data.activityFeed
+      }}
     >
-      {/* 0) Continuity — record this visit + summarize what changed */}
+      {/* Record this visit (server-driven continuity cookie). */}
       <MarkVisited />
-      <SinceAwayBanner since={data.sinceLastVisit} />
 
-      {/* 1) Hero — greeting + lifecycle rail */}
-      <Card className="fx-rise relative overflow-hidden p-5">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10"
-          style={{
-            background:
-              'radial-gradient(70% 130% at 0% 0%, rgba(91,141,239,0.08), transparent 60%), radial-gradient(60% 100% at 100% 0%, rgba(247,201,72,0.05), transparent 65%)'
-          }}
-        />
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-              Earnest Fundmaker · {variant.eyebrow}
-            </p>
-            <h1
-              data-testid="lifecycle-dashboard-greeting"
-              className="mt-1 text-[22px] font-semibold tracking-[-0.018em] text-fg-1 sm:text-[24px]"
-            >
-              {variant.greeting(firstName)}
-            </h1>
-            <p className="mt-0.5 max-w-[64ch] text-[12.5px] text-fg-3">{variant.summary}</p>
-            <div className="mt-2.5">
-              <ProfileActionButton variant="compact" profile={fundProfile} />
+      <RevealGroup
+        className="flex flex-col gap-[14px]"
+        data-testid="lifecycle-dashboard"
+        data-member-type={memberType ?? 'unknown'}
+        data-stage={currentStage}
+      >
+        {/* ---- SPINE: always-on ---- */}
+
+        {/* Hero — greeting + Earn presence */}
+        <RevealItem>
+          <Card className="relative overflow-hidden p-5">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 -z-10"
+              style={{
+                background:
+                  'radial-gradient(70% 130% at 0% 0%, rgba(91,141,239,0.08), transparent 60%), radial-gradient(60% 100% at 100% 0%, rgba(247,201,72,0.05), transparent 65%)'
+              }}
+            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
+                  Earnest Fundmaker · {variant.eyebrow}
+                </p>
+                <h1
+                  data-testid="lifecycle-dashboard-greeting"
+                  className="mt-1 text-[22px] font-semibold tracking-[-0.018em] text-fg-1 sm:text-[24px]"
+                >
+                  {variant.greeting(firstName)}
+                </h1>
+                <p className="mt-0.5 max-w-[64ch] text-[12.5px] text-fg-3">{variant.summary}</p>
+                <div className="mt-2.5">
+                  <ProfileActionButton variant="compact" profile={fundProfile} />
+                </div>
+              </div>
+
+              <div className="hidden flex-none flex-col items-center gap-1.5 sm:flex">
+                <EarnCoin size={48} glow online className="flex-none" />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-gold-1">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-1" aria-hidden />
+                  On the desk
+                </span>
+              </div>
             </div>
+          </Card>
+        </RevealItem>
+
+        {/* Lifecycle rail */}
+        <RevealItem>
+          <LifecycleStageRail
+            stage={data.stage}
+            stageBlurb={data.stageBlurb}
+            loopProgress={data.loopProgress}
+          />
+        </RevealItem>
+
+        {/* Spotlight — the three live functions */}
+        <RevealItem>
+          <div className="grid gap-[14px] lg:grid-cols-[1.3fr_1fr_1fr]">
+            <NextBestActionCard action={data.nextBestAction} />
+            <ExecutionScoreCard execution={data.executionScore} />
+            <ReadinessGauge score={data.readinessScore} breakdown={data.readinessBreakdown} />
           </div>
+        </RevealItem>
 
-          {/* Earn presence — anchors the hero with the COO's face (gold = Earn)
-              and a live status, so the greeting reads as Earn speaking. */}
-          <div className="hidden flex-none flex-col items-center gap-1.5 sm:flex">
-            <EarnCoin size={48} glow online className="flex-none" />
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-gold-1">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-1" aria-hidden />
-              On the desk
-            </span>
+        {/* Operate — KPIs / order book / raise, ordered per member type.
+            Alerts are now pop-up signals, so they're filtered out of the row. */}
+        <RevealItem>
+          <div className={cn('grid gap-[14px]', operateGridClass(operateSlots.length))}>
+            {operateSlots.map((slot) => {
+              if (slot === 'daily')
+                return <DailyCommandList key="daily" actions={data.dailyCommand} />;
+              if (slot === 'stage')
+                return <StageKpiGrid key="stage" stage={data.stage} kpis={data.stageKpis} />;
+              if (slot === 'raise')
+                return <RaiseProgressBar key="raise" progress={data.raiseProgress} />;
+              return null;
+            })}
           </div>
-        </div>
-      </Card>
+        </RevealItem>
 
-      <LifecycleStageRail
-        stage={data.stage}
-        stageBlurb={data.stageBlurb}
-        loopProgress={data.loopProgress}
-      />
+        {/* ---- PANELS: collapse / restore (persisted) ---- */}
 
-      {/* 2) Briefing — Earn's synthesized daily read */}
-      <EarnBriefingCard briefing={data.briefing} />
+        <CommandModule id="briefing" label="The Morning Call · Earn's read" accent="var(--gold-1)">
+          <EarnBriefingCard briefing={data.briefing} />
+        </CommandModule>
 
-      {/* 3) Spotlight — Next Best · Execution · Readiness */}
-      <div className="grid gap-[14px] lg:grid-cols-[1.3fr_1fr_1fr]">
-        <NextBestActionCard action={data.nextBestAction} />
-        <ExecutionScoreCard execution={data.executionScore} />
-        <ReadinessGauge score={data.readinessScore} breakdown={data.readinessBreakdown} />
-      </div>
+        <CommandModule id="desk" label="The Executive Desk" accent="var(--azure-1)">
+          <AgentTeamStrip team={data.agentTeam} activity={data.activityFeed} />
+        </CommandModule>
 
-      {/* 4) Momentum — committed-capital trend (self-hides until there's data) */}
-      <MomentumCard momentum={data.momentum} />
+        <CommandModule id="momentum" label="Committed Capital · Momentum" accent="var(--gold-1)">
+          <MomentumCard momentum={data.momentum} />
+        </CommandModule>
 
-      {/* 5) Team — the 15-strong desk, working the current stage */}
-      <AgentTeamStrip team={data.agentTeam} activity={data.activityFeed} />
+        <CommandModule id="progress" label="Proof & Plays" accent="var(--azure-1)">
+          <div className="grid gap-[14px] lg:grid-cols-[1.4fr_1fr]">
+            <AchievementGrid
+              achievements={data.progress.achievements}
+              placeholder={data.progress.placeholder}
+            />
+            <QuestProgressCard
+              quests={data.progress.quests}
+              placeholder={data.progress.placeholder}
+            />
+          </div>
+        </CommandModule>
 
-      {/* 5.5) Progress — achievements + quests (Phase-2 scaffold, honest placeholder) */}
-      <div className="grid gap-[14px] lg:grid-cols-[1.4fr_1fr]">
-        <AchievementGrid
-          achievements={data.progress.achievements}
-          placeholder={data.progress.placeholder}
-        />
-        <QuestProgressCard quests={data.progress.quests} placeholder={data.progress.placeholder} />
-      </div>
+        <CommandModule id="tape" label="The Tape · on the record" accent="var(--fg-5)">
+          <ActivityFeedCard items={data.activityFeed} />
+        </CommandModule>
 
-      {/* 6) Operate — order per member-type variant */}
-      <div className={cn('grid gap-[14px]', operateGridClass(variant.operateOrder.length))}>
-        {variant.operateOrder.map((slot) => {
-          if (slot === 'alerts') return <MajorAlertsCard key="alerts" alerts={data.majorAlerts} />;
-          if (slot === 'daily') return <DailyCommandList key="daily" actions={data.dailyCommand} />;
-          if (slot === 'stage')
-            return <StageKpiGrid key="stage" stage={data.stage} kpis={data.stageKpis} />;
-          if (slot === 'raise')
-            return <RaiseProgressBar key="raise" progress={data.raiseProgress} />;
-          return null;
-        })}
-      </div>
-
-      {/* 7) Audit feed — bottom */}
-      <ActivityFeedCard items={data.activityFeed} />
-    </div>
+        {/* Closed-panel tray — bring any dismissed panel back. */}
+        <RestoreTray />
+      </RevealGroup>
+    </DashboardShell>
   );
 }
 
-/** Compose a responsive grid that flows the four operate sections one or two
- *  per row across breakpoints. */
+/** Compose a responsive grid that flows the operate sections across breakpoints. */
 function operateGridClass(count: number): string {
   if (count <= 2) return 'sm:grid-cols-2';
-  return 'sm:grid-cols-2 lg:grid-cols-2';
+  return 'sm:grid-cols-2 lg:grid-cols-3';
 }
 
 export default LifecycleDashboard;

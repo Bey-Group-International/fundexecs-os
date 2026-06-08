@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Globe, Copy, Check, ExternalLink, Users, Wand2 } from 'lucide-react';
+import { Globe, Copy, Check, ExternalLink, Users, Wand2, Inbox } from 'lucide-react';
 import { Card, SectionTitle } from '@/components/ui';
 import {
   createRaiseShareLink,
@@ -98,6 +98,15 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
               <Globe size={12} strokeWidth={2} aria-hidden />
               Live
             </span>
+          ) : null}
+          {initial ? (
+            <Link
+              href="/capital-stack/reservations"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-hairline px-2.5 py-1 text-[11.5px] font-medium text-fg-2 transition hover:bg-surface-2"
+            >
+              <Inbox size={12} strokeWidth={2} aria-hidden />
+              Reservations
+            </Link>
           ) : null}
           {initial ? (
             <Link

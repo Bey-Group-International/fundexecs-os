@@ -96,11 +96,7 @@ export function ReadinessGauge({ score, breakdown, className }: ReadinessGaugePr
 
   return (
     <Card className={cn('@container p-5', className)} data-testid="readiness-gauge">
-      <SectionTitle
-        eyebrow="Institutional readiness"
-        title="How investable, today"
-        className="mb-3"
-      />
+      <SectionTitle eyebrow="Capital Readiness" title="How investable, today" className="mb-3" />
 
       <button
         type="button"

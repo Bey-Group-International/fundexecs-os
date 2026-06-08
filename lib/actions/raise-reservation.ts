@@ -35,6 +35,16 @@ const RESERVATION_MIN = 1; // at least $1
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Accepted accredited-verification methods (506(c) "reasonable steps"). */
+export const VERIFICATION_METHODS = [
+  'income',
+  'net_worth',
+  'professional_license',
+  'third_party_letter',
+  'other'
+] as const;
+export type VerificationMethod = (typeof VERIFICATION_METHODS)[number];
+
 export interface RaiseReservationInput {
   token: string;
   name: string;
@@ -44,6 +54,10 @@ export interface RaiseReservationInput {
   note?: string | null;
   /** Must be true for 506(c) raises. */
   accredited: boolean;
+  /** How the investor will verify accredited status (506(c) reasonable steps). */
+  verificationMethod?: string | null;
+  /** Optional evidence note or link (e.g. a third-party verification letter URL). */
+  verificationEvidence?: string | null;
 }
 
 function clean(value: string | null | undefined, max: number): string | null {
@@ -120,6 +134,22 @@ export async function submitRaiseReservation(
 
   const attested_at = new Date().toISOString();
 
+  // Accredited-verification intent: a declared method moves the reservation into
+  // 'pending' review; an owner/admin verifies or rejects it later. No method →
+  // stays 'unverified' (self-attestation only).
+  const vMethodRaw = clean(input.verificationMethod, 60);
+  const verificationMethod =
+    vMethodRaw && (VERIFICATION_METHODS as readonly string[]).includes(vMethodRaw)
+      ? vMethodRaw
+      : null;
+  const verificationEvidence = clean(input.verificationEvidence, 500);
+  const verificationStatus = verificationMethod ? 'pending' : 'unverified';
+  const verificationFields = {
+    verification_method: verificationMethod,
+    verification_evidence: verificationEvidence,
+    verification_status: verificationStatus
+  };
+
   // Attempt Stripe checkout — degrade gracefully if unconfigured.
   const secretKey = process.env.STRIPE_SECRET_KEY;
 
@@ -137,7 +167,8 @@ export async function submitRaiseReservation(
       attested_at,
       reservation_amount: amount,
       reservation_status: 'intent_only',
-      stripe_session_id: null
+      stripe_session_id: null,
+      ...verificationFields
     });
 
     if (insertErr) {
@@ -203,7 +234,8 @@ export async function submitRaiseReservation(
       attested_at,
       reservation_amount: amount,
       reservation_status: 'pending',
-      stripe_session_id: session.id
+      stripe_session_id: session.id,
+      ...verificationFields
     });
 
     if (insertErr) {
@@ -227,7 +259,8 @@ export async function submitRaiseReservation(
       attested_at,
       reservation_amount: amount,
       reservation_status: 'intent_only',
-      stripe_session_id: null
+      stripe_session_id: null,
+      ...verificationFields
     });
 
     if (insertErr) {
