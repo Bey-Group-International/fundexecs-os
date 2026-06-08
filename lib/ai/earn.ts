@@ -6,6 +6,7 @@ import { embedQuery, toVectorLiteral } from './voyage';
 import { AI_MODELS } from './models';
 import { buildWorkspaceSnapshot, buildDealSnapshot, buildRelationshipSnapshot } from './awareness';
 import { EARN_NAV_DESTINATIONS } from './earn-nav';
+import { log } from '@/lib/observability/log';
 
 // Interactive chat tier (Sonnet by default) — fast, strong for an assistant.
 const MODEL = AI_MODELS.chat;
@@ -400,6 +401,9 @@ export async function streamEarn(
   const lastUserText = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const model = pickChatModel(lastUserText);
 
+  const startedAt = Date.now();
+  let firstTokenAt = 0;
+
   const stream = anthropic.messages.stream({
     model,
     max_tokens: 1024,
@@ -408,9 +412,36 @@ export async function streamEarn(
     messages: promptMessages.map((m) => ({ role: m.role, content: m.content }))
   });
 
+  // Turn telemetry — one structured line per completed turn so cost/latency can
+  // be measured (and later optimized) at scale: which tier ran, whether we
+  // escalated, what grounding was present, token usage incl. prompt-cache hits,
+  // and time-to-first-token vs total. Best-effort; never affects the chat.
+  stream.on('finalMessage', (final) => {
+    try {
+      const u = final.usage;
+      log.info('earn_turn', {
+        orgId,
+        tier: model === AI_MODELS.reasoning ? 'reasoning' : 'chat',
+        escalated: model === AI_MODELS.reasoning,
+        rag: sources.length > 0,
+        ragCount: sources.length,
+        grounding: { snapshot: !!snapshot, entity: !!entitySnapshot, recap: !!recap },
+        inputTokens: u?.input_tokens ?? null,
+        outputTokens: u?.output_tokens ?? null,
+        cacheReadTokens: u?.cache_read_input_tokens ?? null,
+        cacheWriteTokens: u?.cache_creation_input_tokens ?? null,
+        ttftMs: firstTokenAt ? firstTokenAt - startedAt : null,
+        totalMs: Date.now() - startedAt
+      });
+    } catch {
+      // Telemetry must never break a turn.
+    }
+  });
+
   async function* deltas(): AsyncIterable<string> {
     for await (const event of stream) {
       if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        if (!firstTokenAt) firstTokenAt = Date.now();
         yield event.delta.text;
       }
     }
