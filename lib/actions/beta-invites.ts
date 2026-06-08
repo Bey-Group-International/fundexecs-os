@@ -25,6 +25,10 @@ type InviteRole = Database['public']['Enums']['org_member_role'];
  *  invite link verifies — a warm, personalized intro before the profile setup. */
 const INVITE_NEXT_PATH = '/beta/welcome';
 
+/** Someone who already joined doesn't need the welcome intro again — a re-sent
+ *  sign-in link drops them straight back into the app. */
+const RETURNING_NEXT_PATH = '/command-center';
+
 /** Conservative email shape check — the Supabase API is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -88,7 +92,8 @@ async function writeAudit(
  */
 async function mintInviteLink(
   email: string,
-  inviteId: string
+  inviteId: string,
+  next: string = INVITE_NEXT_PATH
 ): Promise<{ link: string } | { error: string }> {
   const admin = createAdminClient();
   const redirectTo = `${getSiteURL()}/auth/confirm`;
@@ -98,7 +103,7 @@ async function mintInviteLink(
     url.searchParams.set('token_hash', hashedToken);
     url.searchParams.set('type', verificationType);
     url.searchParams.set('invite_id', inviteId);
-    url.searchParams.set('next', INVITE_NEXT_PATH);
+    url.searchParams.set('next', next);
     return url.toString();
   };
 
@@ -246,10 +251,17 @@ export async function inviteBetaUser(emailInput: string, note?: string): Promise
 }
 
 /**
- * Re-send an invite to someone who never received (or never used) their link.
- * Regenerates a fresh magic link, re-arms the invite to `pending`, re-emails it
- * to the invitee, and bumps `last_sent_at`. Returns the new link as a fallback
- * the admin can copy if email delivery isn't configured.
+ * Re-send the magic link for an existing invite and re-email it to the invitee.
+ *
+ * Available on every status so the admin always has a re-send action:
+ *  - pending/revoked → re-arm to `pending` (a fresh invitation) and route the
+ *    link to the beta welcome intro.
+ *  - accepted (already joined) → preserve their accepted state (only bump
+ *    `last_sent_at`; never null `accepted_at` or reset to pending) and route the
+ *    link to the app home — it's just a passwordless sign-in link, not a
+ *    re-invitation. Lets an admin re-send a joined user their way back in.
+ *
+ * Returns the new link as a fallback the admin can copy if email isn't configured.
  */
 export async function resendBetaInvite(inviteId: string): Promise<InviteResult> {
   if (!inviteId) return { ok: false, error: 'Missing invite id.' };
@@ -270,12 +282,22 @@ export async function resendBetaInvite(inviteId: string): Promise<InviteResult> 
   if (readErr) return { ok: false, error: readErr.message };
   if (!invite) return { ok: false, error: 'Invite not found.' };
 
-  const minted = await mintInviteLink(invite.email, inviteId);
+  const alreadyJoined = invite.status === 'accepted';
+  const minted = await mintInviteLink(
+    invite.email,
+    inviteId,
+    alreadyJoined ? RETURNING_NEXT_PATH : INVITE_NEXT_PATH
+  );
   if ('error' in minted) return { ok: false, error: minted.error };
 
+  // Joined users keep their accepted state — only bump last_sent_at. Pending /
+  // revoked invites are re-armed to pending as a fresh invitation.
+  const update = alreadyJoined
+    ? { last_sent_at: new Date().toISOString() }
+    : { status: 'pending' as const, last_sent_at: new Date().toISOString(), accepted_at: null };
   const { error } = await supabase
     .from('beta_invites')
-    .update({ status: 'pending', last_sent_at: new Date().toISOString(), accepted_at: null })
+    .update(update)
     .eq('id', inviteId)
     .eq('org_id', org.orgId);
   if (error) return { ok: false, error: error.message };
@@ -290,6 +312,7 @@ export async function resendBetaInvite(inviteId: string): Promise<InviteResult> 
 
   await writeAudit(org.orgId, org.userId, 'resend_beta_invite', inviteId, {
     email: invite.email,
+    alreadyJoined,
     emailDelivery: via
   });
   return { ok: true, link: minted.link, email: invite.email, emailed: via !== 'none', via };
