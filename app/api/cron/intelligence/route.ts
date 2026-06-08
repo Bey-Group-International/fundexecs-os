@@ -10,7 +10,7 @@ import { runIntelligenceCycle } from '@/lib/ai/intelligence-pipeline';
  * endpoint can't be invoked by anyone else. Auth is header-only — never a
  * query param — so the secret can't leak through logs, history, or referrers.
  * Manual runs pass `-H "Authorization: Bearer <CRON_SECRET>"`. Runs the full
- * ingest → embed → score → judge → brief
+ * ingest → embed → network → score → judge → brief
  * cycle and returns a JSON summary. Every phase inside the cycle is
  * never-block, so this route returns 200 with a summary even on partial
  * failure (the summary carries the errors).

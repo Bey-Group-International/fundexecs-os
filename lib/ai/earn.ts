@@ -4,7 +4,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import { embedQuery, toVectorLiteral } from './voyage';
 import { AI_MODELS } from './models';
-import { buildWorkspaceSnapshot, buildDealSnapshot, buildRelationshipSnapshot } from './awareness';
+import {
+  buildWorkspaceSnapshot,
+  buildDealSnapshot,
+  buildRelationshipSnapshot,
+  buildIntelligenceGrounding
+} from './awareness';
 import { EARN_NAV_DESTINATIONS } from './earn-nav';
 import { log } from '@/lib/observability/log';
 
@@ -263,7 +268,8 @@ function buildSystem(
   contextBlock: string,
   hint?: EarnContextHint,
   snapshot?: string,
-  entitySnapshot?: string
+  entitySnapshot?: string,
+  intelligence?: string
 ): Anthropic.TextBlockParam[] {
   // Today's date (UTC) so "recently" / "this quarter" land correctly. Lives in
   // the cached capability block — the 5-minute prompt cache TTL keeps it fresh.
@@ -295,6 +301,11 @@ function buildSystem(
   // Earn speaks to the deal on screen, not just the book. Per-request.
   if (entitySnapshot) {
     system.push({ type: 'text', text: entitySnapshot });
+  }
+  // The org's already-computed intelligence brief (backend flywheel output), so
+  // Earn reflects the day's market/match signals rather than recomputing them.
+  if (intelligence) {
+    system.push({ type: 'text', text: intelligence });
   }
   if (contextBlock) {
     system.push({
@@ -365,23 +376,25 @@ export async function streamEarn(
   // focused-entity snapshot in parallel — none blocks chat. Each is timeboxed
   // and fails open so a stalled network call can't hold up the first streamed
   // token. The focused-entity slot resolves whichever of deal / LP is in focus.
-  const [{ sources, contextBlock }, recap, snapshot, entitySnapshot] = await Promise.all([
-    withTimeout(retrieveContext(supabase, orgId, messages), CONTEXT_TIMEOUT_MS, {
-      sources: [],
-      contextBlock: ''
-    }),
-    userId
-      ? withTimeout(retrieveMemory(supabase, userId, messages.length), MEMORY_TIMEOUT_MS, '')
-      : Promise.resolve(''),
-    withTimeout(buildWorkspaceSnapshot(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
-    dealId
-      ? withTimeout(buildDealSnapshot(supabase, orgId, dealId), SNAPSHOT_TIMEOUT_MS, '')
-      : lpId
-        ? withTimeout(buildRelationshipSnapshot(supabase, orgId, lpId), SNAPSHOT_TIMEOUT_MS, '')
-        : Promise.resolve('')
-  ]);
+  const [{ sources, contextBlock }, recap, snapshot, entitySnapshot, intelligence] =
+    await Promise.all([
+      withTimeout(retrieveContext(supabase, orgId, messages), CONTEXT_TIMEOUT_MS, {
+        sources: [],
+        contextBlock: ''
+      }),
+      userId
+        ? withTimeout(retrieveMemory(supabase, userId, messages.length), MEMORY_TIMEOUT_MS, '')
+        : Promise.resolve(''),
+      withTimeout(buildWorkspaceSnapshot(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
+      dealId
+        ? withTimeout(buildDealSnapshot(supabase, orgId, dealId), SNAPSHOT_TIMEOUT_MS, '')
+        : lpId
+          ? withTimeout(buildRelationshipSnapshot(supabase, orgId, lpId), SNAPSHOT_TIMEOUT_MS, '')
+          : Promise.resolve(''),
+      withTimeout(buildIntelligenceGrounding(supabase, orgId), SNAPSHOT_TIMEOUT_MS, '')
+    ]);
   const anthropic = new Anthropic();
-  const system = buildSystem(contextBlock, hint, snapshot, entitySnapshot);
+  const system = buildSystem(contextBlock, hint, snapshot, entitySnapshot, intelligence);
 
   // The continuity recap is operator-derived, so it rides in as a reference-only
   // user turn rather than a system block — it must not gain system authority.
@@ -425,7 +438,12 @@ export async function streamEarn(
         escalated: model === AI_MODELS.reasoning,
         rag: sources.length > 0,
         ragCount: sources.length,
-        grounding: { snapshot: !!snapshot, entity: !!entitySnapshot, recap: !!recap },
+        grounding: {
+          snapshot: !!snapshot,
+          entity: !!entitySnapshot,
+          recap: !!recap,
+          intelligence: !!intelligence
+        },
         inputTokens: u?.input_tokens ?? null,
         outputTokens: u?.output_tokens ?? null,
         cacheReadTokens: u?.cache_read_input_tokens ?? null,
