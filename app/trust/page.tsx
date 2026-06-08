@@ -25,9 +25,7 @@ export const metadata: Metadata = {
  */
 export default async function TrustPage() {
   const org = await getActiveOrg().catch(() => null);
-  const data = org
-    ? await getTrustCenterData(org.orgId).catch(() => null)
-    : null;
+  const data = org ? await getTrustCenterData(org.orgId).catch(() => null) : null;
 
   return (
     <AuthedShell title="Trust Center" subtitle="Chain of Trust" redirectFrom="/trust">

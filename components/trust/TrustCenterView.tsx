@@ -18,7 +18,15 @@ import {
   Clock,
   type LucideIcon
 } from 'lucide-react';
-import { Badge, Button, Card, ProgressBar, SectionTitle, SegTabs, type BadgeTone } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  ProgressBar,
+  SectionTitle,
+  SegTabs,
+  type BadgeTone
+} from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useTrustDrawer } from '@/components/shell/trust/TrustDrawerHost';
 import { TRUST_LAYERS, trustLayerMeta } from '@/components/shell/trust/trust-layers';
@@ -447,10 +455,20 @@ function ApprovalRow({
             className="rounded-md border border-hairline bg-bg-1 px-2.5 py-1.5 text-[12px] text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-1 focus:ring-azure-1"
           />
           <div className="flex gap-2">
-            <Button variant="danger" size="sm" onClick={() => decide('rejected')} disabled={pending}>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => decide('rejected')}
+              disabled={pending}
+            >
               Confirm reject
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setShowReject(false)} disabled={pending}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowReject(false)}
+              disabled={pending}
+            >
               Cancel
             </Button>
           </div>
@@ -485,9 +503,7 @@ function ApprovalsQueue({
           <Gavel size={15} strokeWidth={2} className="text-fg-3" aria-hidden />
           <span className="text-[13px] font-semibold text-fg-1">Governance queue</span>
         </div>
-        <Badge tone={approvals.length ? 'warning' : 'success'}>
-          {approvals.length} pending
-        </Badge>
+        <Badge tone={approvals.length ? 'warning' : 'success'}>{approvals.length} pending</Badge>
       </div>
       {approvals.length === 0 ? (
         <p className="rounded-lg border border-dashed border-hairline bg-bg-1 px-3 py-4 text-center text-[12px] text-fg-4">
@@ -636,11 +652,7 @@ export function TrustCenterView({ data }: { data: TrustCenterData }) {
   if (data.empty) {
     return (
       <div className="flex flex-col gap-5">
-        <SectionTitle
-          eyebrow="Institutional posture"
-          title="Trust Center"
-          className="mb-0"
-        />
+        <SectionTitle eyebrow="Institutional posture" title="Trust Center" className="mb-0" />
         <Card className="flex flex-col items-center gap-3 p-10 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-hairline bg-surface-1 text-gold-1">
             <ShieldCheck size={22} strokeWidth={1.8} aria-hidden />
@@ -663,20 +675,12 @@ export function TrustCenterView({ data }: { data: TrustCenterData }) {
     <div className="flex flex-col gap-5">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <SectionTitle
-          eyebrow="Institutional posture"
-          title="Trust Center"
-          className="mb-0"
-        />
+        <SectionTitle eyebrow="Institutional posture" title="Trust Center" className="mb-0" />
         <div className="flex items-center gap-2.5 print:hidden">
           <Badge tone="neutral" className="text-[10px]">
             {data.recordCount} chains · {data.pendingCount} pending
           </Badge>
-          <Button
-            variant="secondary"
-            icon={Printer}
-            onClick={() => window.print()}
-          >
+          <Button variant="secondary" icon={Printer} onClick={() => window.print()}>
             Export attestation
           </Button>
         </div>

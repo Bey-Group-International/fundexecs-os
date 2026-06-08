@@ -250,7 +250,9 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
   // /audit — the Trust Center deliberately does not re-render that log.)
   const { data: layersRaw } = await supabase
     .from('proof_layers')
-    .select('id, chain_record_id, layer_name, layer_order, human_approval_status, completion_percentage')
+    .select(
+      'id, chain_record_id, layer_name, layer_order, human_approval_status, completion_percentage'
+    )
     .in('chain_record_id', recordIds);
 
   const layers = (layersRaw ?? []) as {
@@ -405,8 +407,7 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
     capitalDeployed,
     capitalUnderProof,
     capitalExposed,
-    proofCoveragePct:
-      pipelineValue > 0 ? Math.round((capitalUnderProof / pipelineValue) * 100) : 0,
+    proofCoveragePct: pipelineValue > 0 ? Math.round((capitalUnderProof / pipelineValue) * 100) : 0,
     activeDeals: activeDeals.length,
     coveredDeals
   };
