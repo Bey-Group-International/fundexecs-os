@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import { embedQuery, toVectorLiteral } from './voyage';
 import { AI_MODELS } from './models';
-import { buildWorkspaceSnapshot } from './awareness';
+import { buildWorkspaceSnapshot, buildDealSnapshot } from './awareness';
 
 // Interactive chat tier (Sonnet by default) — fast, strong for an assistant.
 const MODEL = AI_MODELS.chat;
@@ -237,7 +237,8 @@ async function retrieveContext(
 function buildSystem(
   contextBlock: string,
   hint?: EarnContextHint,
-  snapshot?: string
+  snapshot?: string,
+  entitySnapshot?: string
 ): Anthropic.TextBlockParam[] {
   // Today's date (UTC) so "recently" / "this quarter" land correctly. Lives in
   // the cached capability block — the 5-minute prompt cache TTL keeps it fresh.
@@ -264,6 +265,11 @@ function buildSystem(
       type: 'text',
       text: `The operator is currently focused on: ${hint.entityLabel ?? hint.kind}${hint.kind && hint.entityLabel ? ` (${hint.kind})` : ''}${idNote}. Tailor guidance to this context. When you propose taking them somewhere or acting for them, prefer the tools (navigate / create_deal / run_diligence) over describing the steps. If a deal id is in context, pass it to run_diligence.`
     });
+  }
+  // Live state of the specific entity in focus (structured fields only), so
+  // Earn speaks to the deal on screen, not just the book. Per-request.
+  if (entitySnapshot) {
+    system.push({ type: 'text', text: entitySnapshot });
   }
   if (contextBlock) {
     system.push({
@@ -324,10 +330,13 @@ export async function streamEarn(
   /** Resolves after the stream completes with any tool calls Earn proposed. */
   tools: () => Promise<EarnToolUse[]>;
 }> {
-  // RAG grounding, cross-session memory, and the live workspace snapshot in
-  // parallel — none blocks chat. Each is timeboxed and fails open so a stalled
-  // network call can't hold up the first streamed token.
-  const [{ sources, contextBlock }, recap, snapshot] = await Promise.all([
+  // When a specific deal is in focus, pull its live state too (else skip the query).
+  const dealId = hint?.kind === 'deal' && hint.entityId ? hint.entityId : null;
+
+  // RAG grounding, cross-session memory, the workspace snapshot, and the
+  // focused-deal snapshot in parallel — none blocks chat. Each is timeboxed and
+  // fails open so a stalled network call can't hold up the first streamed token.
+  const [{ sources, contextBlock }, recap, snapshot, entitySnapshot] = await Promise.all([
     withTimeout(retrieveContext(supabase, orgId, messages), CONTEXT_TIMEOUT_MS, {
       sources: [],
       contextBlock: ''
@@ -335,10 +344,13 @@ export async function streamEarn(
     userId
       ? withTimeout(retrieveMemory(supabase, userId, messages.length), MEMORY_TIMEOUT_MS, '')
       : Promise.resolve(''),
-    withTimeout(buildWorkspaceSnapshot(supabase, orgId), SNAPSHOT_TIMEOUT_MS, '')
+    withTimeout(buildWorkspaceSnapshot(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
+    dealId
+      ? withTimeout(buildDealSnapshot(supabase, orgId, dealId), SNAPSHOT_TIMEOUT_MS, '')
+      : Promise.resolve('')
   ]);
   const anthropic = new Anthropic();
-  const system = buildSystem(contextBlock, hint, snapshot);
+  const system = buildSystem(contextBlock, hint, snapshot, entitySnapshot);
 
   // The continuity recap is operator-derived, so it rides in as a reference-only
   // user turn rather than a system block — it must not gain system authority.
