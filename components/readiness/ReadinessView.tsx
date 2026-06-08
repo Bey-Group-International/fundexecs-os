@@ -73,6 +73,7 @@ const DIMENSION_NEXT_ACTION: Record<Dimension, { action: string; cta: string; hr
   }
 };
 
+/** Map a 0–100 score to a semantic color + band label (Strong/Solid/Building/Gap). */
 function toneForScore(score: number): { color: string; label: string } {
   if (score >= 75) return { color: 'var(--success)', label: 'Strong' };
   if (score >= 50) return { color: 'var(--accent)', label: 'Solid' };
@@ -446,6 +447,7 @@ export function ReadinessView({
 
 /* ── small presentational helpers ─────────────────────────────────────── */
 
+/** Pill showing the compound multiplier, framed as "reinforcing" (≥1) or "drag" (<1). */
 function MultiplierBadge({ multiplier }: { multiplier: number }) {
   const reinforcing = multiplier >= 1;
   return (
@@ -467,6 +469,7 @@ function MultiplierBadge({ multiplier }: { multiplier: number }) {
   );
 }
 
+/** Headline dollar figure (projected/locked) with a label and one-line hint; shows "—" at zero. */
 function ValueTile({
   label,
   amount,
@@ -492,6 +495,7 @@ function ValueTile({
   );
 }
 
+/** Trend read: signed point delta + per-day velocity with a directional icon; falls back to a first-snapshot note under two samples. */
 function MomentumLine({
   delta,
   velocity,
@@ -522,6 +526,7 @@ function MomentumLine({
   );
 }
 
+/** A single what-if simulator readout: a large number with a unit suffix over a caption. */
 function SimStat({ label, value, suffix }: { label: string; value: number; suffix: string }) {
   return (
     <div>
@@ -534,6 +539,7 @@ function SimStat({ label, value, suffix }: { label: string; value: number; suffi
   );
 }
 
+/** Inline value + caption chip used in each ranked-action row (points, $ unlock, per-point). */
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <span className="inline-flex items-baseline gap-1">
