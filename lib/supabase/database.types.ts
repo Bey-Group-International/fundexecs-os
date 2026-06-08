@@ -1300,6 +1300,42 @@ export type Database = {
           },
         ]
       }
+      user_referral_codes: {
+        Row: {
+          code: string
+          created_at: string
+          org_id: string
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          org_id: string
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          org_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_referral_codes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_referral_codes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       referrals: {
         Row: {
           created_at: string
