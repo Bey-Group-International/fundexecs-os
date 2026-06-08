@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Compass
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Badge } from '@/components/ui';
 import {
@@ -225,6 +226,32 @@ function YouSays({ text }: { text: string }) {
         {text}
       </div>
     </div>
+  );
+}
+
+/** A low-emphasis intro action — kept quiet next to the single primary CTA. */
+function QuietAction({
+  children,
+  onClick,
+  active,
+  icon: Icon
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  active?: boolean;
+  icon?: LucideIcon;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 text-[12.5px] font-medium transition ${
+        active ? 'text-fg-2' : 'text-fg-4 hover:text-fg-2'
+      }`}
+    >
+      {Icon && <Icon size={14} strokeWidth={1.9} aria-hidden />}
+      {children}
+    </button>
   );
 }
 
@@ -558,94 +585,105 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
                 means for you — then I&apos;ll get you in.
               </p>
 
-              <div
-                className="flex flex-wrap items-center justify-center gap-2.5"
-                style={reveal(1140)}
-              >
+              {/* One clear primary, two quiet companions — the path in reads at a glance. */}
+              <div className="flex w-full flex-col items-center" style={reveal(1140)}>
                 <button type="button" onClick={startCapture} className={PRIMARY_BTN}>
                   Let&apos;s get me set up <ArrowRight size={15} strokeWidth={2} aria-hidden />
                 </button>
-                <Chip
-                  icon={Compass}
-                  active={showTour}
-                  onClick={() => {
-                    setShowTour((v) => !v);
-                    if (!showTour) ev('beta_breakdown_topic', { topic });
-                  }}
-                >
-                  {showTour ? 'Hide the tour' : 'Show me what this is'}
-                </Chip>
-                <Chip icon={MessageCircle} onClick={() => setAskOpen(true)}>
-                  Ask Earn
-                </Chip>
-              </div>
 
-              {showTour && (
-                <div className="fx-rise flex w-full flex-col gap-4 rounded-2xl border border-hairline bg-surface-1/70 p-4 text-left">
-                  <EarnSays line={breakdownLine[topic]} reducedMotion={reducedMotion} />
-                  <div className="flex flex-wrap gap-2">
-                    <Chip
-                      icon={Compass}
-                      active={topic === 'intro'}
-                      onClick={() => {
-                        setTopic('intro');
-                        ev('beta_breakdown_topic', { topic: 'intro' });
-                      }}
-                    >
-                      What it is
-                    </Chip>
-                    <Chip
-                      icon={Users}
-                      active={topic === 'team'}
-                      onClick={() => {
-                        setTopic('team');
-                        ev('beta_breakdown_topic', { topic: 'team' });
-                      }}
-                    >
-                      Meet the team
-                    </Chip>
-                    <Chip
-                      icon={ShieldCheck}
-                      active={topic === 'value'}
-                      onClick={() => {
-                        setTopic('value');
-                        ev('beta_breakdown_topic', { topic: 'value' });
-                      }}
-                    >
-                      What I get
-                    </Chip>
-                  </div>
-                  {topic === 'team' && (
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {TEAM_ROSTER.slice(0, 9).map((m) => (
-                        <div
-                          key={m.slug}
-                          className="flex items-center gap-2.5 rounded-xl border border-hairline bg-surface-1 p-2.5"
-                        >
-                          <TeamAvatar member={m} size={30} className="flex-none" />
-                          <div className="min-w-0">
-                            <div className="truncate text-[12px] font-semibold text-fg-1">
-                              {m.name}
-                            </div>
-                            <div className="truncate text-[10px] uppercase tracking-[0.08em] text-azure-1">
-                              {m.position}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+                  <QuietAction
+                    icon={Compass}
+                    active={showTour}
+                    onClick={() => {
+                      setShowTour((v) => !v);
+                      if (!showTour) ev('beta_breakdown_topic', { topic });
+                    }}
+                  >
+                    {showTour ? 'Hide the tour' : 'Show me what this is'}
+                  </QuietAction>
+                  <span aria-hidden className="h-3 w-px bg-[var(--border)]" />
+                  <QuietAction icon={MessageCircle} onClick={() => setAskOpen(true)}>
+                    Ask Earn
+                  </QuietAction>
+                  <span aria-hidden className="h-3 w-px bg-[var(--border)]" />
+                  <QuietAction onClick={skipToEnter}>Skip the intro</QuietAction>
                 </div>
-              )}
 
-              <button
-                type="button"
-                onClick={skipToEnter}
-                style={reveal(1220)}
-                className="text-[11.5px] text-fg-5 underline-offset-2 transition hover:text-fg-3 hover:underline"
-              >
-                Skip the intro — just sign me in
-              </button>
+                {/* Tour — animated open/close in place (grid-rows 0fr→1fr), so the
+                    centered hero eases rather than jumping. Zero footprint when
+                    closed; inert + aria-hidden keep it out of tab/AT order. */}
+                <div
+                  className={`grid w-full ${
+                    reducedMotion ? '' : 'transition-all duration-300 ease-out'
+                  }`}
+                  style={{
+                    gridTemplateRows: showTour ? '1fr' : '0fr',
+                    marginTop: showTour ? '1.25rem' : '0',
+                    opacity: showTour ? 1 : 0
+                  }}
+                  aria-hidden={!showTour}
+                  inert={!showTour}
+                >
+                  <div className="overflow-hidden">
+                    <div className="flex w-full flex-col gap-4 rounded-2xl border border-hairline bg-surface-1/70 p-4 text-left">
+                      <EarnSays line={breakdownLine[topic]} reducedMotion={reducedMotion} />
+                      <div className="flex flex-wrap gap-2">
+                        <Chip
+                          icon={Compass}
+                          active={topic === 'intro'}
+                          onClick={() => {
+                            setTopic('intro');
+                            ev('beta_breakdown_topic', { topic: 'intro' });
+                          }}
+                        >
+                          What it is
+                        </Chip>
+                        <Chip
+                          icon={Users}
+                          active={topic === 'team'}
+                          onClick={() => {
+                            setTopic('team');
+                            ev('beta_breakdown_topic', { topic: 'team' });
+                          }}
+                        >
+                          Meet the team
+                        </Chip>
+                        <Chip
+                          icon={ShieldCheck}
+                          active={topic === 'value'}
+                          onClick={() => {
+                            setTopic('value');
+                            ev('beta_breakdown_topic', { topic: 'value' });
+                          }}
+                        >
+                          What I get
+                        </Chip>
+                      </div>
+                      {topic === 'team' && (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                          {TEAM_ROSTER.slice(0, 9).map((m) => (
+                            <div
+                              key={m.slug}
+                              className="flex items-center gap-2.5 rounded-xl border border-hairline bg-surface-1 p-2.5"
+                            >
+                              <TeamAvatar member={m} size={30} className="flex-none" />
+                              <div className="min-w-0">
+                                <div className="truncate text-[12px] font-semibold text-fg-1">
+                                  {m.name}
+                                </div>
+                                <div className="truncate text-[10px] uppercase tracking-[0.08em] text-azure-1">
+                                  {m.position}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -802,7 +840,7 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
         <div ref={bottomRef} />
       </div>
 
-      {/* persistent Ask-Earn launcher + panel */}
+      {/* Persistent Ask-Earn launcher, once the conversation has begun. */}
       {step !== 'intro' && !askOpen && (
         <button
           type="button"
@@ -813,7 +851,22 @@ export function ClaimView({ token, invite }: { token: string; invite: BetaInvite
           Ask Earn
         </button>
       )}
-      {askOpen && (
+
+      {/* On the splash, Ask Earn opens as an intentional centered modal; once the
+          guided conversation is underway it docks bottom-right out of the way. */}
+      {askOpen && step === 'intro' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+            onClick={() => setAskOpen(false)}
+            aria-hidden
+          />
+          <div className="relative motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150">
+            <AskEarn token={token} onClose={() => setAskOpen(false)} />
+          </div>
+        </div>
+      )}
+      {askOpen && step !== 'intro' && (
         <div className="fixed bottom-5 right-5 z-40">
           <AskEarn token={token} onClose={() => setAskOpen(false)} />
         </div>
