@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import type { ShellIdentity } from '@/lib/queries/identity';
 import type { CreditWallet } from '@/lib/queries/credit-wallet';
@@ -10,6 +10,7 @@ import { EarnOrb } from './earn/EarnOrb';
 import { EarnDock } from './earn/EarnDock';
 import { EarnContextProvider } from './earn/EarnContext';
 import { TrustToaster } from './trust/TrustToaster';
+import { HelpLauncher } from '@/components/help/HelpLauncher';
 
 /** Generic fallback when no signed-in identity is supplied (e.g. SSR before
  *  auth resolves). Never shows a fabricated person's name. */
@@ -73,6 +74,14 @@ export function AppShell({
   const [dockOpen, setDockOpen] = useState(false);
   const id = identity ?? DEFAULT_IDENTITY;
 
+  // The Help launcher hands off to Earn via a window event so the two systems
+  // stay decoupled — open the dock when it fires.
+  useEffect(() => {
+    const open = () => setDockOpen(true);
+    window.addEventListener('fx:earn-open', open);
+    return () => window.removeEventListener('fx:earn-open', open);
+  }, []);
+
   return (
     <EarnContextProvider>
       <div className="relative flex h-screen overflow-hidden">
@@ -111,6 +120,7 @@ export function AppShell({
         {/* Shell-level systems — present on every authenticated screen. */}
         <EarnOrb open={dockOpen} onToggle={() => setDockOpen((v) => !v)} />
         <EarnDock open={dockOpen} onClose={() => setDockOpen(false)} />
+        <HelpLauncher />
         <TrustToaster />
       </div>
     </EarnContextProvider>
