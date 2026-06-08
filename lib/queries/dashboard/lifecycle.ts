@@ -12,6 +12,7 @@ import {
   type ReadinessDimensionScore
 } from '@/lib/lifecycle';
 import { readDailyDone, readDismissedAlerts, readLastVisit } from '@/lib/dashboard/state';
+import { loadValueAtStake, type ValueAtStake } from './value-at-stake';
 import { getSpecialists } from '@/lib/team/roster';
 import {
   getAchievements,
@@ -228,6 +229,9 @@ export interface DashboardData {
 
   /** The 15-strong executive desk with per-stage status. */
   agentTeam: AgentStatus[];
+
+  /** Per-surface "$ at risk" for the rail's value-at-stake badges (Phase 3). */
+  valueAtStake: ValueAtStake;
 
   /**
    * Gamification "Progress" section. PLACEHOLDER until Phase 2 — `getAchievements`
@@ -1129,6 +1133,18 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
   const stageResult = computeLifecycleStageResult(inputs);
   const readiness = computeReadinessScore(inputs);
 
+  // Per-surface "$ at risk" for the rail value-at-stake badges. Cheap reads;
+  // degrades to a zero-state on failure so it never blocks the dashboard.
+  const valueAtStake = await loadValueAtStake(
+    orgId,
+    {
+      target: raiseProgress.target,
+      committed: raiseProgress.committed,
+      softCircled: raiseProgress.softCircled
+    },
+    readiness.score
+  );
+
   const topActions = buildTopActions(stageResult.stage, fundProfile, raiseProgress, pipeline);
 
   // Daily command = top actions tagged with today's check-off state. Computed
@@ -1188,6 +1204,7 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     momentum,
     briefing,
     agentTeam,
+    valueAtStake,
     progress: {
       achievements,
       quests,
