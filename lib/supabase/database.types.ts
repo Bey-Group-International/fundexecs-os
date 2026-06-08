@@ -589,8 +589,13 @@ export type Database = {
           reservation_status: string
           reviewer_note: string | null
           stripe_session_id: string | null
+          verification_document_path: string | null
           verification_evidence: string | null
           verification_method: string | null
+          verification_provider: string | null
+          verification_provider_ref: string | null
+          verification_provider_status: string | null
+          verification_provider_url: string | null
           verification_status: string
           verified_at: string | null
           verified_by: string | null
@@ -611,8 +616,13 @@ export type Database = {
           reservation_status?: string
           reviewer_note?: string | null
           stripe_session_id?: string | null
+          verification_document_path?: string | null
           verification_evidence?: string | null
           verification_method?: string | null
+          verification_provider?: string | null
+          verification_provider_ref?: string | null
+          verification_provider_status?: string | null
+          verification_provider_url?: string | null
           verification_status?: string
           verified_at?: string | null
           verified_by?: string | null
@@ -633,8 +643,13 @@ export type Database = {
           reservation_status?: string
           reviewer_note?: string | null
           stripe_session_id?: string | null
+          verification_document_path?: string | null
           verification_evidence?: string | null
           verification_method?: string | null
+          verification_provider?: string | null
+          verification_provider_ref?: string | null
+          verification_provider_status?: string | null
+          verification_provider_url?: string | null
           verification_status?: string
           verified_at?: string | null
           verified_by?: string | null

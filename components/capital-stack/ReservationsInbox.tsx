@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, X, ShieldCheck, Mail } from 'lucide-react';
+import { Check, Download, FileText, X, ShieldCheck, Mail } from 'lucide-react';
 import { Card, Badge, SectionTitle, type BadgeTone } from '@/components/ui';
 import { setReservationVerification } from '@/lib/actions/raise-verification';
+import { getAccreditationEvidenceUrl } from '@/lib/actions/accreditation-evidence';
+import { ProviderVerificationButton } from '@/components/capital-stack/ProviderVerificationButton';
 import type { RaiseLeadsData, RaiseLead, VerificationStatus } from '@/lib/queries/raise-leads';
 
 /* ReservationsInbox — owner/admin review of inbound raise leads & reservations,
@@ -70,6 +72,8 @@ function LeadRow({ lead }: { lead: RaiseLead }) {
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [docPending, startDocTransition] = useTransition();
+  const [docError, setDocError] = useState<string | null>(null);
 
   const isReserved = lead.kind === 'reserved';
   const amount = lead.reservationAmount ?? lead.indicativeAmount;
@@ -81,6 +85,18 @@ function LeadRow({ lead }: { lead: RaiseLead }) {
       const res = await setReservationVerification(lead.id, decision, note || null);
       if (res.ok) router.refresh();
       else setError(res.error);
+    });
+  }
+
+  function openDocument() {
+    setDocError(null);
+    startDocTransition(async () => {
+      const res = await getAccreditationEvidenceUrl(lead.id);
+      if (res.ok) {
+        window.open(res.url, '_blank', 'noopener');
+      } else {
+        setDocError(res.error);
+      }
     });
   }
 
@@ -128,6 +144,28 @@ function LeadRow({ lead }: { lead: RaiseLead }) {
           />
           {lead.verificationEvidence ? <Row k="Evidence" v={lead.verificationEvidence} /> : null}
           {lead.reviewerNote ? <Row k="Reviewer note" v={lead.reviewerNote} /> : null}
+          {lead.verificationDocumentPath ? (
+            <div className="flex flex-col gap-1 pt-0.5">
+              <button
+                type="button"
+                onClick={openDocument}
+                disabled={docPending}
+                className="inline-flex items-center gap-1.5 self-start rounded-lg border border-hairline px-2.5 py-1 text-[11.5px] font-medium text-fg-2 transition hover:border-accent-line hover:text-fg-1 disabled:opacity-60"
+              >
+                {docPending ? (
+                  <FileText size={12} strokeWidth={2} aria-hidden />
+                ) : (
+                  <Download size={12} strokeWidth={2} aria-hidden />
+                )}
+                {docPending ? 'Opening…' : 'View accreditation document'}
+              </button>
+              {docError ? (
+                <p role="alert" className="text-[11px] text-danger">
+                  {docError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -159,6 +197,14 @@ function LeadRow({ lead }: { lead: RaiseLead }) {
               <X size={13} strokeWidth={2.2} aria-hidden />
               Reject
             </button>
+          </div>
+          <div className="flex items-center gap-2 pt-0.5">
+            <span className="text-[11px] text-fg-4">Or delegate to a verification service:</span>
+            <ProviderVerificationButton
+              interestId={lead.id}
+              providerStatus={lead.verificationProviderStatus}
+              providerUrl={lead.verificationProviderUrl}
+            />
           </div>
           {error ? (
             <p role="alert" className="text-[12px] text-danger">
