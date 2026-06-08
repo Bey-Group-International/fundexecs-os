@@ -1,4 +1,5 @@
 import { ClaimView } from './ClaimView';
+import { getBetaLinkWelcome } from '@/lib/queries/beta-welcome';
 
 /**
  * Beta claim page — public route where recipients claim links via email or
@@ -26,5 +27,7 @@ export default async function ClaimPage({
     );
   }
 
-  return <ClaimView token={token} />;
+  const invite = await getBetaLinkWelcome(token);
+
+  return <ClaimView token={token} invite={invite} />;
 }

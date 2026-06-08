@@ -11,21 +11,28 @@ import {
   X,
   Users,
   ShieldCheck,
-  Compass,
-  Check
+  Compass
 } from 'lucide-react';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Badge } from '@/components/ui';
 import { TEAM_ROSTER, TeamAvatar } from '@/lib/team';
 import { MEMBER_TYPES, MEMBER_TYPE_LABELS, MEMBER_TYPE_BLURBS } from '@/lib/member-types';
 import { claimBetaLinkWithEmail } from '@/lib/actions/beta-links';
-import { BETA_APPLICATION_COOKIE, type BetaApplication } from '@/lib/beta/welcome';
+import {
+  BETA_APPLICATION_COOKIE,
+  type BetaApplication,
+  type BetaInviteContext
+} from '@/lib/beta/welcome';
 import { track } from '@vercel/analytics';
 
-type Scene = 'welcome' | 'breakdown' | 'apply' | 'enter';
+/** The conversation advances through these turns; each is one thing Earn asks. */
+type Step = 'intro' | 'name' | 'type' | 'goal' | 'enter';
 type Topic = 'intro' | 'team' | 'value';
 
-const SCENE_ORDER: Scene[] = ['welcome', 'breakdown', 'apply', 'enter'];
+const STEP_ORDER: Step[] = ['intro', 'name', 'type', 'goal', 'enter'];
+
+/** One settled exchange in the visible transcript. */
+type ThreadEntry = { from: 'earn' | 'you'; text: string };
 
 /** Best-effort analytics — never let a tracking failure break the flow. */
 function ev(name: string, props?: Record<string, string>): void {
@@ -301,23 +308,49 @@ function withLastAssistant(turns: Turn[], content: string): Turn[] {
   return copy;
 }
 
-/* ── the experience ────────────────────────────────────────────────────────── */
-export function ClaimView({ token }: { token: string }) {
+/** A settled Earn line in the transcript — instant (history isn't re-typed). */
+function EarnHistory({ text }: { text: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <EarnCoin size={28} className="flex-none" />
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-hairline bg-surface-2 px-3.5 py-2.5 text-[13px] leading-6 text-fg-2">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+/** The invitee's own answer, right-aligned like a chat reply. */
+function YouSays({ text }: { text: string }) {
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-3.5 py-2.5 text-[13px] leading-6 text-white">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+/* ── the experience — a guided conversation with Earn ───────────────────────── */
+export function ClaimView({ token, invite }: { token: string; invite: BetaInviteContext | null }) {
   const searchParams = useSearchParams();
   const redirectedError = searchParams.get('error');
 
   const reducedMotion = usePrefersReducedMotion();
-  const [scene, setScene] = useState<Scene>('welcome');
+  const [step, setStep] = useState<Step>('intro');
+  const [thread, setThread] = useState<ThreadEntry[]>([]);
+  const [showTour, setShowTour] = useState(false);
   const [topic, setTopic] = useState<Topic>('intro');
   const [askOpen, setAskOpen] = useState(false);
 
-  // Move focus to the active scene on change so keyboard/SR users follow along.
-  const sceneRef = useRef<HTMLDivElement>(null);
-
-  // application capture
+  // captured application — committed as each conversational turn settles
   const [name, setName] = useState('');
   const [memberType, setMemberType] = useState<string | null>(null);
   const [goal, setGoal] = useState('');
+
+  // live inputs for the active turn
+  const [nameInput, setNameInput] = useState('');
+  const [goalInput, setGoalInput] = useState('');
 
   // auth
   const [email, setEmail] = useState('');
@@ -325,25 +358,37 @@ export function ClaimView({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(redirectedError);
 
   const firstName = name.trim().split(/\s+/)[0] || '';
+  const inviter = invite?.inviterName || null;
+  const label = invite?.label || null;
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   // Funnel: welcome view once on mount.
   useEffect(() => {
     ev('beta_welcome_view');
   }, []);
 
-  // Focus the scene container on each scene change (not a focus trap).
+  // Keep the newest turn in view as the conversation grows.
   useEffect(() => {
-    queueMicrotask(() => sceneRef.current?.focus());
-  }, [scene]);
+    queueMicrotask(() =>
+      bottomRef.current?.scrollIntoView({
+        behavior: reducedMotion ? 'auto' : 'smooth',
+        block: 'end'
+      })
+    );
+  }, [thread, step, memberType, reducedMotion]);
 
-  /** Advance scenes and emit the meaningful funnel events. */
-  function goScene(next: Scene) {
-    if (next === 'apply') ev('beta_application_started');
-    if (next === 'enter' && scene === 'apply') {
-      ev('beta_application_complete', { memberType: memberType ?? 'unspecified' });
-    }
-    setScene(next);
-  }
+  // Earn's line for each turn. Personalized at the top from the invite context.
+  const prompts: Record<Step, string> = {
+    intro: `Welcome. I'm Earn — Earnest Fundmaker, your private-market assistant. ${
+      inviter ? `${inviter} invited you` : "You've been invited"
+    } into the FundExecs OS private beta.`,
+    name: "Let's make it yours. First — what should I call you?",
+    type: `Good to meet you, ${firstName || 'there'}. Which of these is closest to you?`,
+    goal: memberType
+      ? `${MEMBER_TYPE_BLURBS[memberType as keyof typeof MEMBER_TYPE_BLURBS]} Noted. Last thing — what's the one outcome you want from FundExecs OS?`
+      : "Last thing — what's the one outcome you want from FundExecs OS?",
+    enter: `You're set${firstName ? `, ${firstName}` : ''}. One step — confirm it's you, and I'll have your desk ready and the right specialists on call.`
+  };
 
   const breakdownLine: Record<Topic, string> = {
     intro:
@@ -352,6 +397,45 @@ export function ClaimView({ token }: { token: string }) {
     value:
       'In the beta you get early access, a direct line to the team, and a real say in what we build. Command Center, Pipeline, and a Chain of Trust on every decision.'
   };
+
+  /** Settle the current turn into the transcript, then move to the next. */
+  function advance(to: Step, earnText: string, youText: string | null) {
+    setThread((t) => [
+      ...t,
+      { from: 'earn', text: earnText },
+      ...(youText ? [{ from: 'you' as const, text: youText }] : [])
+    ]);
+    setStep(to);
+  }
+
+  function startCapture() {
+    ev('beta_application_started');
+    advance('name', prompts.intro, "I'm in — let's set it up.");
+  }
+
+  function submitName() {
+    const v = nameInput.trim().slice(0, NAME_MAX);
+    if (!v) return;
+    setName(v);
+    advance('type', prompts.name, v);
+  }
+
+  function pickType(mt: string) {
+    setMemberType(mt);
+    advance('goal', prompts.type, MEMBER_TYPE_LABELS[mt as keyof typeof MEMBER_TYPE_LABELS]);
+  }
+
+  function submitGoal(skip: boolean) {
+    const v = skip ? '' : goalInput.trim().slice(0, GOAL_MAX);
+    setGoal(v);
+    ev('beta_application_complete', { memberType: memberType ?? 'unspecified' });
+    advance('enter', prompts.goal, v || 'Skip for now');
+  }
+
+  /** Jump straight to sign-in, skipping the capture conversation. */
+  function skipToEnter() {
+    setStep('enter');
+  }
 
   function startEmailClaim(e: React.FormEvent) {
     e.preventDefault();
@@ -393,9 +477,11 @@ export function ClaimView({ token }: { token: string }) {
     );
   }
 
+  const stepNumber = STEP_ORDER.indexOf(step) + 1;
+
   return (
     <main
-      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-bg-0 px-6 py-12 text-fg-1"
+      className="relative flex min-h-screen flex-col items-center overflow-hidden bg-bg-0 px-6 py-10 text-fg-1"
       style={{
         background:
           'radial-gradient(60% 50% at 80% 8%, rgba(247,201,72,0.12), transparent 70%), radial-gradient(55% 55% at 0% 95%, rgba(37,99,235,0.12), transparent 70%), linear-gradient(180deg, var(--bg-0), var(--bg-1))'
@@ -412,321 +498,297 @@ export function ClaimView({ token }: { token: string }) {
         <div
           role="progressbar"
           aria-valuemin={1}
-          aria-valuemax={SCENE_ORDER.length}
-          aria-valuenow={SCENE_ORDER.indexOf(scene) + 1}
-          aria-label={`Step ${SCENE_ORDER.indexOf(scene) + 1} of ${SCENE_ORDER.length}`}
+          aria-valuemax={STEP_ORDER.length}
+          aria-valuenow={stepNumber}
+          aria-label={`Step ${stepNumber} of ${STEP_ORDER.length}`}
           className="flex items-center gap-1.5"
         >
-          {SCENE_ORDER.map((s, i) => {
-            const done = SCENE_ORDER.indexOf(scene) >= i;
-            return (
-              <span
-                key={s}
-                className={`h-1.5 rounded-full transition-all ${done ? 'w-6 bg-gold-1' : 'w-3 bg-[var(--border)]'}`}
-              />
-            );
-          })}
+          {STEP_ORDER.map((s, i) => (
+            <span
+              key={s}
+              className={`h-1.5 rounded-full transition-all ${
+                stepNumber - 1 >= i ? 'w-6 bg-gold-1' : 'w-3 bg-[var(--border)]'
+              }`}
+            />
+          ))}
         </div>
       </div>
 
-      <div
-        key={scene}
-        ref={sceneRef}
-        tabIndex={-1}
-        className="fx-rise w-full max-w-xl outline-none"
-      >
+      <div className="w-full max-w-xl">
         {error && (
           <p className="mb-5 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-danger">
             {error}
           </p>
         )}
 
-        {/* ── WELCOME ── */}
-        {scene === 'welcome' && (
-          <div className="flex flex-col gap-7">
-            <Badge tone="gold" dot pulse={!reducedMotion} className="self-start">
-              Private beta · invitation
-            </Badge>
-            <EarnSays
-              size={56}
-              reducedMotion={reducedMotion}
-              line="Welcome. I'm Earn — Earnest Fundmaker, your private-market assistant. You've been invited into the FundExecs OS private beta."
-            />
-            <p className="max-w-md text-[13.5px] leading-7 text-fg-3">
-              I lead a fifteen-strong AI executive team. Give me ninety seconds to show you what
-              that means for you — then I&apos;ll get you in.
-            </p>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <button type="button" onClick={() => goScene('breakdown')} className={PRIMARY_BTN}>
-                Show me <ArrowRight size={15} strokeWidth={2} aria-hidden />
-              </button>
-              <Chip icon={MessageCircle} onClick={() => setAskOpen(true)}>
-                Ask Earn a question
-              </Chip>
-            </div>
-            <button
-              type="button"
-              onClick={() => goScene('enter')}
-              className="self-start text-[11.5px] text-fg-5 underline-offset-2 transition hover:text-fg-3 hover:underline"
-            >
-              Skip to sign-up
-            </button>
+        {/* settled transcript */}
+        {thread.length > 0 && (
+          <div className="mb-6 flex flex-col gap-3">
+            {thread.map((entry, i) =>
+              entry.from === 'earn' ? (
+                <EarnHistory key={i} text={entry.text} />
+              ) : (
+                <YouSays key={i} text={entry.text} />
+              )
+            )}
           </div>
         )}
 
-        {/* ── BREAKDOWN ── */}
-        {scene === 'breakdown' && (
-          <div className="flex flex-col gap-6">
-            <EarnSays line={breakdownLine[topic]} reducedMotion={reducedMotion} />
-
-            <div className="flex flex-wrap gap-2">
-              <Chip
-                icon={Compass}
-                active={topic === 'intro'}
-                onClick={() => {
-                  setTopic('intro');
-                  ev('beta_breakdown_topic', { topic: 'intro' });
-                }}
-              >
-                What it is
-              </Chip>
-              <Chip
-                icon={Users}
-                active={topic === 'team'}
-                onClick={() => {
-                  setTopic('team');
-                  ev('beta_breakdown_topic', { topic: 'team' });
-                }}
-              >
-                Meet the team
-              </Chip>
-              <Chip
-                icon={ShieldCheck}
-                active={topic === 'value'}
-                onClick={() => {
-                  setTopic('value');
-                  ev('beta_breakdown_topic', { topic: 'value' });
-                }}
-              >
-                What I get
-              </Chip>
-            </div>
-
-            {topic === 'team' && (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {TEAM_ROSTER.slice(0, 9).map((m) => (
-                  <div
-                    key={m.slug}
-                    className="flex items-center gap-2.5 rounded-xl border border-hairline bg-surface-1 p-2.5"
-                  >
-                    <TeamAvatar member={m} size={30} className="flex-none" />
-                    <div className="min-w-0">
-                      <div className="truncate text-[12px] font-semibold text-fg-1">{m.name}</div>
-                      <div className="truncate text-[10px] uppercase tracking-[0.08em] text-azure-1">
-                        {m.position}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex items-center gap-2.5">
-              <button type="button" onClick={() => goScene('apply')} className={PRIMARY_BTN}>
-                I&apos;m ready <ArrowRight size={15} strokeWidth={2} aria-hidden />
-              </button>
-              <button
-                type="button"
-                onClick={() => setScene('welcome')}
-                className="text-[12.5px] font-medium text-fg-4 transition hover:text-fg-2"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => goScene('enter')}
-                className="ml-auto text-[11.5px] text-fg-5 underline-offset-2 transition hover:text-fg-3 hover:underline"
-              >
-                Skip to sign-up
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── APPLY ── */}
-        {scene === 'apply' && (
-          <div className="flex flex-col gap-6">
-            <EarnSays
-              reducedMotion={reducedMotion}
-              line={
-                !name
-                  ? "Let's make it yours. First — what should I call you?"
-                  : !memberType
-                    ? `Good to meet you, ${firstName}. Which of these is closest to you?`
-                    : `${MEMBER_TYPE_BLURBS[memberType as keyof typeof MEMBER_TYPE_BLURBS]} Noted. Last thing — what's the one outcome you want from FundExecs OS?`
-              }
-            />
-
-            <div>
-              <label htmlFor="name" className="text-[12px] font-medium text-fg-3">
-                Your name
-              </label>
-              <input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && name.trim()) {
-                    e.preventDefault();
-                    // #goal only renders after a member type is picked. Until
-                    // then, advance to the member-type chooser instead.
-                    const next =
-                      document.getElementById('goal') ??
-                      document.getElementById('member-type-group')?.querySelector('button');
-                    (next as HTMLElement | null)?.focus();
-                  }
-                }}
-                enterKeyHint="next"
-                maxLength={NAME_MAX}
-                placeholder="Sam Rivera"
-                className="mt-1.5 w-full rounded-xl border border-hairline bg-surface-2 px-3 py-2.5 text-[13.5px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
-              />
-            </div>
-
-            {name.trim() && (
-              <div className="fx-rise">
-                <p className="mb-2 text-[12px] font-medium text-fg-3">I am a…</p>
-                <div id="member-type-group" className="flex flex-wrap gap-2">
-                  {MEMBER_TYPES.map((mt) => (
-                    <Chip key={mt} active={memberType === mt} onClick={() => setMemberType(mt)}>
-                      {memberType === mt && <Check size={14} strokeWidth={2.2} aria-hidden />}
-                      {MEMBER_TYPE_LABELS[mt]}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {memberType && (
-              <div className="fx-rise">
-                <label htmlFor="goal" className="text-[12px] font-medium text-fg-3">
-                  What you want (optional)
-                </label>
-                <input
-                  id="goal"
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && name.trim() && memberType) {
-                      e.preventDefault();
-                      goScene('enter');
-                    }
+        {/* active turn */}
+        <div key={step} className="fx-rise flex flex-col gap-6">
+          {/* ── INTRO ── */}
+          {step === 'intro' && (
+            <div className="flex flex-col gap-7">
+              <Badge tone="gold" dot pulse={!reducedMotion} className="self-start">
+                Private beta · {label ?? 'invitation'}
+              </Badge>
+              <EarnSays size={56} reducedMotion={reducedMotion} line={prompts.intro} />
+              <p className="max-w-md text-[13.5px] leading-7 text-fg-3">
+                I lead a fifteen-strong AI executive team. Give me ninety seconds to show you what
+                that means for you — then I&apos;ll get you in.
+              </p>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button type="button" onClick={startCapture} className={PRIMARY_BTN}>
+                  Let&apos;s get me set up <ArrowRight size={15} strokeWidth={2} aria-hidden />
+                </button>
+                <Chip
+                  icon={Compass}
+                  active={showTour}
+                  onClick={() => {
+                    setShowTour((v) => !v);
+                    if (!showTour) ev('beta_breakdown_topic', { topic });
                   }}
-                  enterKeyHint="go"
-                  maxLength={GOAL_MAX}
-                  placeholder="e.g. close my next raise faster"
-                  className="mt-1.5 w-full rounded-xl border border-hairline bg-surface-2 px-3 py-2.5 text-[13.5px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
-                />
+                >
+                  {showTour ? 'Hide the tour' : 'Show me what this is'}
+                </Chip>
+                <Chip icon={MessageCircle} onClick={() => setAskOpen(true)}>
+                  Ask Earn
+                </Chip>
               </div>
-            )}
 
-            <div className="flex items-center gap-2.5">
+              {showTour && (
+                <div className="fx-rise flex flex-col gap-4 rounded-2xl border border-hairline bg-surface-1/70 p-4">
+                  <EarnSays line={breakdownLine[topic]} reducedMotion={reducedMotion} />
+                  <div className="flex flex-wrap gap-2">
+                    <Chip
+                      icon={Compass}
+                      active={topic === 'intro'}
+                      onClick={() => {
+                        setTopic('intro');
+                        ev('beta_breakdown_topic', { topic: 'intro' });
+                      }}
+                    >
+                      What it is
+                    </Chip>
+                    <Chip
+                      icon={Users}
+                      active={topic === 'team'}
+                      onClick={() => {
+                        setTopic('team');
+                        ev('beta_breakdown_topic', { topic: 'team' });
+                      }}
+                    >
+                      Meet the team
+                    </Chip>
+                    <Chip
+                      icon={ShieldCheck}
+                      active={topic === 'value'}
+                      onClick={() => {
+                        setTopic('value');
+                        ev('beta_breakdown_topic', { topic: 'value' });
+                      }}
+                    >
+                      What I get
+                    </Chip>
+                  </div>
+                  {topic === 'team' && (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {TEAM_ROSTER.slice(0, 9).map((m) => (
+                        <div
+                          key={m.slug}
+                          className="flex items-center gap-2.5 rounded-xl border border-hairline bg-surface-1 p-2.5"
+                        >
+                          <TeamAvatar member={m} size={30} className="flex-none" />
+                          <div className="min-w-0">
+                            <div className="truncate text-[12px] font-semibold text-fg-1">
+                              {m.name}
+                            </div>
+                            <div className="truncate text-[10px] uppercase tracking-[0.08em] text-azure-1">
+                              {m.position}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 type="button"
-                onClick={() => goScene('enter')}
-                disabled={!name.trim() || !memberType}
-                className={PRIMARY_BTN}
+                onClick={skipToEnter}
+                className="self-start text-[11.5px] text-fg-5 underline-offset-2 transition hover:text-fg-3 hover:underline"
               >
-                Take me in <ArrowRight size={15} strokeWidth={2} aria-hidden />
-              </button>
-              <button
-                type="button"
-                onClick={() => setScene('breakdown')}
-                className="text-[12.5px] font-medium text-fg-4 transition hover:text-fg-2"
-              >
-                Back
+                Skip the intro — just sign me in
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ── ENTER ── */}
-        {scene === 'enter' && (
-          <div className="flex flex-col gap-6">
-            <EarnSays
-              size={56}
-              reducedMotion={reducedMotion}
-              line={`You're set${firstName ? `, ${firstName}` : ''}. One step — confirm it's you, and I'll have your desk ready and the right specialists on call.`}
-            />
-
-            <div className="rounded-2xl border border-hairline bg-surface-1 p-6 shadow-[var(--shadow-lg)]">
-              <button
-                type="button"
-                onClick={startGoogleClaim}
-                disabled={loading}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-hairline bg-surface-2 px-4 py-2.5 text-[13.5px] font-medium transition hover:bg-surface-3 disabled:opacity-60"
+          {/* ── NAME ── */}
+          {step === 'name' && (
+            <div className="flex flex-col gap-5">
+              <EarnSays reducedMotion={reducedMotion} line={prompts.name} />
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitName();
+                }}
+                className="flex flex-col gap-3 sm:flex-row sm:items-center"
               >
-                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 18 18">
-                  <path
-                    fill="#4285F4"
-                    d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z"
-                  />
-                </svg>
-                Continue with Google
-              </button>
-
-              <div className="my-5 flex items-center gap-3 text-[10.5px] uppercase tracking-[0.11em] text-fg-5">
-                <span className="h-px flex-1 bg-[var(--border)]" />
-                or claim with email
-                <span className="h-px flex-1 bg-[var(--border)]" />
-              </div>
-
-              <form onSubmit={startEmailClaim} className="space-y-3">
-                <div className="relative">
-                  <Mail
-                    size={15}
-                    strokeWidth={1.9}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-5"
-                    aria-hidden
-                  />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@fund.com"
-                    disabled={loading}
-                    className="w-full rounded-xl border border-hairline bg-surface-2 py-2.5 pl-9 pr-3 text-[13.5px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
-                  />
-                </div>
-                <button type="submit" disabled={loading} className={PRIMARY_BTN + ' w-full'}>
-                  {loading ? 'Please wait…' : 'Get my access link'}
-                  {!loading && <ArrowRight size={15} strokeWidth={2} aria-hidden />}
+                <input
+                  autoFocus
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  enterKeyHint="next"
+                  maxLength={NAME_MAX}
+                  placeholder="Sam Rivera"
+                  aria-label="Your name"
+                  className="w-full flex-1 rounded-xl border border-hairline bg-surface-2 px-3.5 py-2.5 text-[14px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
+                />
+                <button type="submit" disabled={!nameInput.trim()} className={PRIMARY_BTN}>
+                  Continue <ArrowRight size={15} strokeWidth={2} aria-hidden />
                 </button>
               </form>
             </div>
+          )}
 
-            <p className="text-center text-[11px] text-fg-5">
-              One-time setup · no password required · Secured by Supabase Auth
-            </p>
-          </div>
-        )}
+          {/* ── MEMBER TYPE ── */}
+          {step === 'type' && (
+            <div className="flex flex-col gap-5">
+              <EarnSays reducedMotion={reducedMotion} line={prompts.type} />
+              <div className="flex flex-wrap gap-2">
+                {MEMBER_TYPES.map((mt) => (
+                  <Chip key={mt} onClick={() => pickType(mt)}>
+                    {MEMBER_TYPE_LABELS[mt]}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── GOAL ── */}
+          {step === 'goal' && (
+            <div className="flex flex-col gap-5">
+              <EarnSays reducedMotion={reducedMotion} line={prompts.goal} />
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitGoal(false);
+                }}
+                className="flex flex-col gap-3"
+              >
+                <input
+                  autoFocus
+                  value={goalInput}
+                  onChange={(e) => setGoalInput(e.target.value)}
+                  enterKeyHint="go"
+                  maxLength={GOAL_MAX}
+                  placeholder="e.g. close my next raise faster"
+                  aria-label="What you want from FundExecs OS"
+                  className="w-full rounded-xl border border-hairline bg-surface-2 px-3.5 py-2.5 text-[14px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
+                />
+                <div className="flex items-center gap-2.5">
+                  <button type="submit" className={PRIMARY_BTN}>
+                    Take me in <ArrowRight size={15} strokeWidth={2} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => submitGoal(true)}
+                    className="text-[12.5px] font-medium text-fg-4 transition hover:text-fg-2"
+                  >
+                    Skip
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* ── ENTER (sign in) ── */}
+          {step === 'enter' && (
+            <div className="flex flex-col gap-6">
+              <EarnSays size={56} reducedMotion={reducedMotion} line={prompts.enter} />
+
+              <div className="rounded-2xl border border-hairline bg-surface-1 p-6 shadow-[var(--shadow-lg)]">
+                <button
+                  type="button"
+                  onClick={startGoogleClaim}
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-hairline bg-surface-2 px-4 py-2.5 text-[13.5px] font-medium transition hover:bg-surface-3 disabled:opacity-60"
+                >
+                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 18 18">
+                    <path
+                      fill="#4285F4"
+                      d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z"
+                    />
+                  </svg>
+                  Continue with Google
+                </button>
+
+                <div className="my-5 flex items-center gap-3 text-[10.5px] uppercase tracking-[0.11em] text-fg-5">
+                  <span className="h-px flex-1 bg-[var(--border)]" />
+                  or claim with email
+                  <span className="h-px flex-1 bg-[var(--border)]" />
+                </div>
+
+                <form onSubmit={startEmailClaim} className="space-y-3">
+                  <div className="relative">
+                    <Mail
+                      size={15}
+                      strokeWidth={1.9}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-5"
+                      aria-hidden
+                    />
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@fund.com"
+                      disabled={loading}
+                      className="w-full rounded-xl border border-hairline bg-surface-2 py-2.5 pl-9 pr-3 text-[13.5px] text-fg-1 placeholder:text-fg-5 outline-none focus:border-[var(--accent)]"
+                    />
+                  </div>
+                  <button type="submit" disabled={loading} className={PRIMARY_BTN + ' w-full'}>
+                    {loading ? 'Please wait…' : 'Get my access link'}
+                    {!loading && <ArrowRight size={15} strokeWidth={2} aria-hidden />}
+                  </button>
+                </form>
+              </div>
+
+              <p className="text-center text-[11px] text-fg-5">
+                One-time setup · no password required · Secured by Supabase Auth
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div ref={bottomRef} />
       </div>
 
       {/* persistent Ask-Earn launcher + panel */}
-      {scene !== 'welcome' && !askOpen && (
+      {step !== 'intro' && !askOpen && (
         <button
           type="button"
           onClick={() => setAskOpen(true)}
