@@ -4,10 +4,42 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import { embedQuery, toVectorLiteral } from './voyage';
 import { AI_MODELS } from './models';
-import { buildWorkspaceSnapshot, buildDealSnapshot } from './awareness';
+import { buildWorkspaceSnapshot, buildDealSnapshot, buildRelationshipSnapshot } from './awareness';
 
 // Interactive chat tier (Sonnet by default) — fast, strong for an assistant.
 const MODEL = AI_MODELS.chat;
+
+/* ----------------------------------------------------------------------------
+ * On-demand reasoning-tier escalation.
+ *
+ * The default chat tier is Sonnet for a snappy, conversational first token. But
+ * a genuinely analytical ask deserves Opus-grade thinking, so we escalate the
+ * single turn when the latest user message reads as analytical — gated behind
+ * `EARN_AUTO_REASONING` (default ON; set to '0' to pin every turn to Sonnet).
+ *
+ * The heuristic is deliberately conservative and keyword/length based (no extra
+ * model call): escalate only on a long message or a clear analytical-intent
+ * word. The default stays Sonnet so ordinary chat keeps its snap.
+ * --------------------------------------------------------------------------*/
+
+// Long asks tend to carry multi-part, analytical intent worth Opus depth.
+const REASONING_LENGTH_THRESHOLD = 280;
+// Case-insensitive analytical-intent markers. \b-bounded so "whyever" etc. don't
+// false-trigger; the two-word phrases match as substrings.
+const REASONING_WORDS =
+  /\b(analy[sz]e|compare|evaluate|assess|diligence|recommend|forecast|why|scenario|valuation|downside|trade-?off)\b|stress test|model out/i;
+
+/** Pick the model for a chat turn: reasoning (Opus) when the latest user turn
+ *  is clearly analytical, else chat (Sonnet). Cheap, deterministic, fail-safe —
+ *  any uncertainty falls through to the snappy Sonnet default. */
+export function pickChatModel(latestUserText: string): string {
+  if (process.env.EARN_AUTO_REASONING === '0') return AI_MODELS.chat;
+  const text = (latestUserText ?? '').trim();
+  if (text.length > REASONING_LENGTH_THRESHOLD || REASONING_WORDS.test(text)) {
+    return AI_MODELS.reasoning;
+  }
+  return AI_MODELS.chat;
+}
 
 const SYSTEM_PROMPT = `You are Earn — introduce yourself once as "Earnest Fundmaker, your Private Market Assistant," then refer to yourself as Earn. You are the Chief Operating Officer of a fifteen-strong AI executive team inside FundExecs OS, an AI-native private-market command center for funds, LPs, operators, capital providers, and ecosystem partners.
 
@@ -330,12 +362,16 @@ export async function streamEarn(
   /** Resolves after the stream completes with any tool calls Earn proposed. */
   tools: () => Promise<EarnToolUse[]>;
 }> {
-  // When a specific deal is in focus, pull its live state too (else skip the query).
+  // When a specific entity is in focus, pull its live state too (else skip the
+  // query). A deal and an LP can't both be focused, so the deal/relationship
+  // snapshots share the one `entitySnapshot` channel below.
   const dealId = hint?.kind === 'deal' && hint.entityId ? hint.entityId : null;
+  const lpId = hint?.kind === 'lp' && hint.entityId ? hint.entityId : null;
 
   // RAG grounding, cross-session memory, the workspace snapshot, and the
-  // focused-deal snapshot in parallel — none blocks chat. Each is timeboxed and
-  // fails open so a stalled network call can't hold up the first streamed token.
+  // focused-entity snapshot in parallel — none blocks chat. Each is timeboxed
+  // and fails open so a stalled network call can't hold up the first streamed
+  // token. The focused-entity slot resolves whichever of deal / LP is in focus.
   const [{ sources, contextBlock }, recap, snapshot, entitySnapshot] = await Promise.all([
     withTimeout(retrieveContext(supabase, orgId, messages), CONTEXT_TIMEOUT_MS, {
       sources: [],
@@ -347,7 +383,9 @@ export async function streamEarn(
     withTimeout(buildWorkspaceSnapshot(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
     dealId
       ? withTimeout(buildDealSnapshot(supabase, orgId, dealId), SNAPSHOT_TIMEOUT_MS, '')
-      : Promise.resolve('')
+      : lpId
+        ? withTimeout(buildRelationshipSnapshot(supabase, orgId, lpId), SNAPSHOT_TIMEOUT_MS, '')
+        : Promise.resolve('')
   ]);
   const anthropic = new Anthropic();
   const system = buildSystem(contextBlock, hint, snapshot, entitySnapshot);
@@ -365,8 +403,13 @@ export async function streamEarn(
       ]
     : messages;
 
+  // Escalate to the reasoning tier when the latest user turn is clearly
+  // analytical (env-toggleable); ordinary chat stays on snappy Sonnet.
+  const lastUserText = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  const model = pickChatModel(lastUserText);
+
   const stream = anthropic.messages.stream({
-    model: MODEL,
+    model,
     max_tokens: 1024,
     system,
     tools: EARN_TOOLS,
