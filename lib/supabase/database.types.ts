@@ -508,6 +508,7 @@ export type Database = {
       }
       raise_pages: {
         Row: {
+          accept_reservations: boolean
           created_at: string
           created_by: string | null
           exemption: string | null
@@ -523,6 +524,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          accept_reservations?: boolean
           created_at?: string
           created_by?: string | null
           exemption?: string | null
@@ -538,6 +540,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          accept_reservations?: boolean
           created_at?: string
           created_by?: string | null
           exemption?: string | null
@@ -571,34 +574,52 @@ export type Database = {
       }
       raise_interests: {
         Row: {
+          accredited: boolean | null
+          attested_at: string | null
           created_at: string
           email: string
           id: string
           indicative_amount: number | null
+          kind: string
           name: string
           note: string | null
           org_id: string
           raise_page_id: string
+          reservation_amount: number | null
+          reservation_status: string
+          stripe_session_id: string | null
         }
         Insert: {
+          accredited?: boolean | null
+          attested_at?: string | null
           created_at?: string
           email: string
           id?: string
           indicative_amount?: number | null
+          kind?: string
           name: string
           note?: string | null
           org_id: string
           raise_page_id: string
+          reservation_amount?: number | null
+          reservation_status?: string
+          stripe_session_id?: string | null
         }
         Update: {
+          accredited?: boolean | null
+          attested_at?: string | null
           created_at?: string
           email?: string
           id?: string
           indicative_amount?: number | null
+          kind?: string
           name?: string
           note?: string | null
           org_id?: string
           raise_page_id?: string
+          reservation_amount?: number | null
+          reservation_status?: string
+          stripe_session_id?: string | null
         }
         Relationships: [
           {
@@ -819,6 +840,59 @@ export type Database = {
           },
           {
             foreignKeyName: "capital_commitments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cap_table_entries: {
+        Row: {
+          amount_invested: number | null
+          as_of_date: string | null
+          created_at: string
+          holder_name: string
+          holder_type: string
+          id: string
+          memo: string | null
+          org_id: string
+          ownership_pct: number | null
+          security_type: string
+          units: number
+          updated_at: string
+        }
+        Insert: {
+          amount_invested?: number | null
+          as_of_date?: string | null
+          created_at?: string
+          holder_name: string
+          holder_type?: string
+          id?: string
+          memo?: string | null
+          org_id: string
+          ownership_pct?: number | null
+          security_type?: string
+          units?: number
+          updated_at?: string
+        }
+        Update: {
+          amount_invested?: number | null
+          as_of_date?: string | null
+          created_at?: string
+          holder_name?: string
+          holder_type?: string
+          id?: string
+          memo?: string | null
+          org_id?: string
+          ownership_pct?: number | null
+          security_type?: string
+          units?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cap_table_entries_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"

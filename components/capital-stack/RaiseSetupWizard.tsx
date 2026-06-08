@@ -49,6 +49,9 @@ export function RaiseSetupWizard({ initial }: { initial: ActiveRaisePage | null 
   const [minCheck, setMinCheck] = useState(initial?.minCheck ? String(initial.minCheck) : '');
   const [showAmounts, setShowAmounts] = useState(initial?.showAmounts ?? false);
   const [exemption, setExemption] = useState<'' | RaiseExemption>(initial?.exemption ?? '');
+  const [acceptReservations, setAcceptReservations] = useState(
+    initial?.acceptReservations ?? false
+  );
 
   const step = STEPS[stepIndex].id;
   const isLast = stepIndex === STEPS.length - 1;
@@ -76,7 +79,8 @@ export function RaiseSetupWizard({ initial }: { initial: ActiveRaisePage | null 
           headline,
           minCheck: minCheck ? Number(minCheck.replace(/[^0-9.]/g, '')) : null,
           showAmounts,
-          exemption: exemption || null
+          exemption: exemption || null,
+          acceptReservations
         });
         if (!saved.ok) {
           setError(saved.error);
@@ -189,6 +193,18 @@ export function RaiseSetupWizard({ initial }: { initial: ActiveRaisePage | null 
               />
               <span className="text-[12.5px] text-fg-2">
                 Show dollar amounts (committed / target) on the public page
+              </span>
+            </label>
+            <label className="flex items-center gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={acceptReservations}
+                onChange={(e) => setAcceptReservations(e.target.checked)}
+                className="h-4 w-4 accent-[var(--accent)]"
+                disabled={exemption !== '506c'}
+              />
+              <span className={`text-[12.5px] ${exemption !== '506c' ? 'text-fg-4' : 'text-fg-2'}`}>
+                Accept reservations via Stripe (506(c) raises only)
               </span>
             </label>
             <p className="text-[11.5px] text-fg-4">
@@ -319,6 +335,16 @@ export function RaiseSetupWizard({ initial }: { initial: ActiveRaisePage | null 
                       : exemption === '506c'
                         ? '506(c) — solicitation OK'
                         : 'Unset'
+                  }
+                />
+                <ReviewRow
+                  label="Accept reservations"
+                  value={
+                    exemption !== '506c'
+                      ? 'N/A (506(c) only)'
+                      : acceptReservations
+                        ? 'Yes — Stripe Checkout enabled'
+                        : 'No'
                   }
                 />
                 <button

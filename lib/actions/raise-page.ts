@@ -35,6 +35,8 @@ export interface RaisePageFields {
   minCheck?: number | null;
   showAmounts?: boolean;
   exemption?: RaiseExemption | null;
+  /** When true and exemption === '506c', the public page shows the Reserve CTA. */
+  acceptReservations?: boolean;
 }
 
 function clean(value: string | null | undefined, max: number): string | null {
@@ -142,7 +144,8 @@ export async function updateRaisePage(fields: RaisePageFields): Promise<RaiseMut
       headline: clean(fields.headline, HEADLINE_MAX),
       min_check: minCheck,
       show_amounts: Boolean(fields.showAmounts),
-      exemption
+      exemption,
+      accept_reservations: Boolean(fields.acceptReservations)
     })
     .eq('org_id', org.orgId)
     .is('revoked_at', null)
