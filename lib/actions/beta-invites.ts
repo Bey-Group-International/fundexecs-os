@@ -13,8 +13,9 @@ export type InviteActionResult = { ok: true } | { ok: false; error: string };
 export type DeleteInviteResult = { ok: true } | { ok: false; error: string };
 type InviteRole = Database['public']['Enums']['org_member_role'];
 
-/** New beta users land in onboarding after the link verifies. */
-const INVITE_NEXT_PATH = '/onboarding';
+/** New beta users land on the post-auth welcome (then onboarding) after the
+ *  invite link verifies — a warm, personalized intro before the profile setup. */
+const INVITE_NEXT_PATH = '/beta/welcome';
 
 /** Conservative email shape check — the Supabase API is the real validator. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
