@@ -14,6 +14,9 @@ import { cookies } from 'next/headers';
 export const LAST_VISIT_COOKIE = 'fx-lastvisit';
 export const DISMISSED_ALERTS_COOKIE = 'fx-dismissed';
 export const DAILY_DONE_COOKIE = 'fx-daily';
+/** Set once the member dismisses (or is shown + acts on) the Earn launch brief,
+ *  so the first-use welcome card never reappears for a returning user. */
+export const BRIEF_SEEN_COOKIE = 'fx-brief-seen';
 
 /** YYYY-MM-DD in UTC — the bucket key for "today's" daily check-offs. */
 export function todayKey(now: Date = new Date()): string {
@@ -39,6 +42,11 @@ export async function readDismissedAlerts(): Promise<Set<string>> {
       .filter(Boolean)
       .slice(0, 50)
   );
+}
+
+/** Whether the member has already seen Earn's first-use launch brief. */
+export async function readBriefSeen(): Promise<boolean> {
+  return (await cookies()).get(BRIEF_SEEN_COOKIE)?.value === '1';
 }
 
 /** Daily-command ids the user checked off *today*. A new day resets the set. */
