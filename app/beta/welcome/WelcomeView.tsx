@@ -8,6 +8,8 @@ import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Badge } from '@/components/ui';
 import { usePrefersReducedMotion, EarnSays, Chip, PRIMARY_BTN } from '@/components/beta/earn-chat';
 import { TEAM_ROSTER, TeamAvatar } from '@/lib/team';
+import { ArrivalProof } from '@/components/beta/ArrivalProof';
+import type { BetaMomentum } from '@/lib/queries/beta-momentum';
 
 type Topic = 'intro' | 'team' | 'value';
 
@@ -35,10 +37,12 @@ const BREAKDOWN: Record<Topic, string> = {
  */
 export function WelcomeView({
   name,
-  inviterName
+  inviterName,
+  momentum = null
 }: {
   name: string | null;
   inviterName: string | null;
+  momentum?: BetaMomentum | null;
 }) {
   const router = useRouter();
   const reducedMotion = usePrefersReducedMotion();
@@ -79,9 +83,12 @@ export function WelcomeView({
 
       <div className="fx-rise w-full max-w-xl">
         <div className="flex flex-col gap-7">
-          <Badge tone="gold" dot pulse={!reducedMotion} className="self-start">
-            Private beta · welcome
-          </Badge>
+          <div className="flex flex-col items-start gap-3">
+            <Badge tone="gold" dot pulse={!reducedMotion} className="self-start">
+              Private beta · welcome
+            </Badge>
+            <ArrivalProof momentum={momentum} className="justify-start" />
+          </div>
 
           <EarnSays size={56} reducedMotion={reducedMotion} line={greeting} />
 
