@@ -1,5 +1,9 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import {
+  computeCalibration,
+  type IntelligenceCalibration
+} from '@/lib/queries/intelligence-calibration';
 
 /* ============================================================================
  * lib/queries/inbox-intelligence.ts — Inbox Intelligence read surface loader.
@@ -38,6 +42,10 @@ export interface SignalRationaleFactor {
   weight: number;
   detail: string;
   routedSpecialist?: string | null;
+  /** Present on the `ai_judge` factor: Claude's calibrated 0-100 confidence. */
+  confidence?: number | null;
+  /** Adaptive multiplier the org's learning has applied to this factor. */
+  multiplier?: number | null;
 }
 
 export interface SignalMatch {
@@ -61,6 +69,8 @@ export interface InboxIntelligenceData {
   unroutedSignals: MarketSignal[];
   /** Total market signals visible (routed + unrouted). */
   signalCount: number;
+  /** Self-aware read model: what the scorer has learned from past decisions. */
+  calibration: IntelligenceCalibration;
   empty: boolean;
 }
 
@@ -112,7 +122,9 @@ function parseFactors(rationale: unknown): SignalRationaleFactor[] {
       factor: r.factor,
       weight: typeof r.weight === 'number' ? r.weight : 0,
       detail: typeof r.detail === 'string' ? r.detail : '',
-      routedSpecialist: specialist
+      routedSpecialist: specialist,
+      confidence: typeof r.confidence === 'number' ? r.confidence : null,
+      multiplier: typeof r.multiplier === 'number' ? r.multiplier : null
     });
   }
   return out;
@@ -167,10 +179,19 @@ export async function getInboxIntelligenceData(orgId: string): Promise<InboxInte
   const routedSignalIds = new Set(matches.map((m) => m.subjectId));
   const unroutedSignals = signals.filter((s) => !routedSignalIds.has(s.id));
 
+  const calibration = computeCalibration(
+    matches.map((m) => ({
+      score: m.score,
+      status: m.status,
+      factors: m.factors.map((f) => ({ factor: f.factor, weight: f.weight }))
+    }))
+  );
+
   return {
     matches,
     unroutedSignals,
     signalCount: signals.length,
+    calibration,
     empty: matches.length === 0 && signals.length === 0
   };
 }

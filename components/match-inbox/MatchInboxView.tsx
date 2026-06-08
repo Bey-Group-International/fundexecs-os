@@ -9,13 +9,24 @@ import {
   ChevronUp,
   Clock,
   Sparkles,
+  Brain,
   CheckCircle2,
   XCircle
 } from 'lucide-react';
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
+import { ConfidenceMeter, LearningIndicator } from '@/components/intelligence';
 import { cn } from '@/lib/utils';
-import { act_on_match, type MatchAction, type ActOnMatchResult } from '@/lib/actions/matches';
+import {
+  act_on_match,
+  judge_match,
+  type MatchAction,
+  type ActOnMatchResult
+} from '@/lib/actions/matches';
+import {
+  matchConfidence,
+  type IntelligenceCalibration
+} from '@/lib/queries/intelligence-calibration';
 import type { MatchInboxData, MatchItem } from '@/lib/queries/match-inbox';
 
 /* ---- Helpers ------------------------------------------------------------ */
@@ -65,19 +76,35 @@ function getRationale(rationale: Record<string, unknown>): {
 
 function MatchCard({
   match,
+  calibration,
   onAct
 }: {
   match: MatchItem;
+  calibration: IntelligenceCalibration;
   onAct: (id: string, action: MatchAction) => Promise<ActOnMatchResult>;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [optimisticStatus, setOptimisticStatus] = useState<MatchAction | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [judging, setJudging] = useState(false);
+  const [judge, setJudge] = useState<{ verdict: string; confidence: number } | null>(null);
 
   const { summary, reasons } = getRationale(match.rationale);
   const hasDetail = Boolean(summary) || reasons.length > 0;
   const meta = scoreMeta(match.score);
+  const confidence = matchConfidence(judge?.confidence ?? match.score, calibration);
+
+  function handleJudge() {
+    setJudging(true);
+    startTransition(async () => {
+      const result = await judge_match(match.id);
+      setJudging(false);
+      if (result.ok && result.verdict) {
+        setJudge({ verdict: result.verdict, confidence: result.confidence ?? match.score });
+      }
+    });
+  }
 
   function handleAct(action: MatchAction) {
     setOptimisticStatus(action);
@@ -134,6 +161,26 @@ function MatchCard({
           </p>
           {summary ? <p className="mt-1 text-[13px] text-fg-2">{summary}</p> : null}
 
+          <ConfidenceMeter
+            value={confidence.value}
+            band={confidence.band}
+            className="mt-2 max-w-[16rem]"
+          />
+
+          {judge ? (
+            <div className="mt-2 flex items-start gap-2 rounded-lg border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-2">
+              <Sparkles
+                size={13}
+                strokeWidth={2}
+                className="mt-px flex-none text-gold-1"
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 text-[12px] leading-relaxed text-fg-3">
+                <span className="font-semibold text-fg-2">Specialist read:</span> {judge.verdict}
+              </span>
+            </div>
+          ) : null}
+
           {error ? <p className="mt-1 text-[12px] text-danger">{error}</p> : null}
 
           {/* Actions */}
@@ -157,6 +204,17 @@ function MatchCard({
                 <X size={13} strokeWidth={2} aria-hidden />
                 Dismiss
               </button>
+              {!judge ? (
+                <button
+                  type="button"
+                  disabled={judging}
+                  onClick={handleJudge}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-hairline bg-surface-1 px-3 py-1.5 text-[12px] font-medium text-fg-2 transition hover:text-fg-1 disabled:opacity-50"
+                >
+                  <Brain size={13} strokeWidth={2} aria-hidden />
+                  {judging ? 'Thinking…' : 'Get a read'}
+                </button>
+              ) : null}
               {hasDetail ? (
                 <button
                   type="button"
@@ -283,6 +341,8 @@ export function MatchInboxView({ data }: MatchInboxViewProps) {
 
   return (
     <div className="space-y-8">
+      <LearningIndicator calibration={data.calibration} />
+
       {/* Pending triage */}
       <section aria-label="Pending matches">
         <SectionTitle
@@ -309,7 +369,7 @@ export function MatchInboxView({ data }: MatchInboxViewProps) {
         ) : (
           <div className="space-y-3">
             {localPending.map((m) => (
-              <MatchCard key={m.id} match={m} onAct={handleAct} />
+              <MatchCard key={m.id} match={m} calibration={data.calibration} onAct={handleAct} />
             ))}
           </div>
         )}
