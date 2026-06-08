@@ -5,8 +5,13 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
 import { requirePlatformAdmin } from '@/lib/access.server';
+import { isPlatformAdmin } from '@/lib/access';
 import { getSiteURL } from '@/lib/site-url';
 import type { Database, Json } from '@/lib/supabase/database.types';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+/** ~100 years — effectively permanent, reversible by setting ban_duration 'none'. */
+const SUSPEND_DURATION = '876000h';
 
 type OrgMemberRole = Database['public']['Enums']['org_member_role'];
 
@@ -196,6 +201,25 @@ export async function setApplicationReview(
   }
 
   const admin = createAdminClient();
+
+  // Resolve the claimant behind this claim (scoped to the org) so we can
+  // reconcile their account access to the review state.
+  const { data: claim, error: claimErr } = await admin
+    .from('beta_link_claims')
+    .select('user_id')
+    .eq('id', claimId)
+    .eq('org_id', org.orgId)
+    .maybeSingle();
+  if (claimErr) return { ok: false, error: claimErr.message };
+  if (!claim) return { ok: false, error: 'Application not found.' };
+
+  // Reject suspends the claimant's sign-in (they own their own workspace, so
+  // this is the only real access control); any other state restores it. Do the
+  // access change FIRST so the stored review status never claims a suspension
+  // that didn't actually take.
+  const suspend = await setApplicantSuspended(admin, claim.user_id, review === 'rejected');
+  if (!suspend.ok) return suspend;
+
   const { data, error } = await admin
     .from('beta_link_claims')
     .update({
@@ -211,7 +235,37 @@ export async function setApplicationReview(
   if (error) return { ok: false, error: error.message };
   if (!data) return { ok: false, error: 'Application not found.' };
 
-  await writeAudit(org.orgId, org.userId, `review_beta_application_${review}`, claimId);
+  await writeAudit(org.orgId, org.userId, `review_beta_application_${review}`, claimId, {
+    suspended: review === 'rejected'
+  });
+  return { ok: true };
+}
+
+/**
+ * Suspend or restore a beta applicant's auth account by toggling the Supabase
+ * GoTrue ban. Suspended users cannot sign in anywhere. Safety rail: a Bey Group
+ * team member (platform admin) is never suspended, so an admin can't lock out a
+ * teammate (or themselves) through the inbox. Restoring a team member is a no-op.
+ */
+async function setApplicantSuspended(
+  admin: SupabaseClient<Database>,
+  userId: string,
+  suspend: boolean
+): Promise<ReviewResult> {
+  const { data: target, error: readErr } = await admin.auth.admin.getUserById(userId);
+  if (readErr || !target?.user) {
+    return { ok: false, error: 'Could not load the applicant account.' };
+  }
+  if (isPlatformAdmin(target.user.email)) {
+    return suspend
+      ? { ok: false, error: 'This is a Bey Group team member and can’t be suspended.' }
+      : { ok: true };
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(userId, {
+    ban_duration: suspend ? SUSPEND_DURATION : 'none'
+  });
+  if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
 
