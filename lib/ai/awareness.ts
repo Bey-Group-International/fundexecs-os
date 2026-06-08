@@ -107,6 +107,68 @@ async function relationshipsLine(supabase: Db, orgId: string): Promise<string | 
   return `Relationships: ${hot} hot, ${warm} warmed in the last 7 days.`;
 }
 
+/** Stage key → display label, falling back to the raw key. */
+function dealStage(stage: string): string {
+  return STAGE_LABELS[stage] ?? stage;
+}
+
+/**
+ * When the operator is focused on a specific deal, distil that deal's live
+ * state — stage, size, status, and its latest diligence outcome — so Earn can
+ * speak to the thing on screen rather than the book as a whole. Structured
+ * fields only (stage / amount / status / conviction), never the deal's free
+ * text, so it stays safe in the system prompt. Returns '' when the deal can't
+ * be read (RLS / wrong id) so no block is emitted.
+ */
+export async function buildDealSnapshot(
+  supabase: Db,
+  orgId: string,
+  dealId: string
+): Promise<string> {
+  try {
+    const [dealRes, dilRes] = await Promise.all([
+      supabase
+        .from('deals')
+        .select('stage, status, amount')
+        .eq('org_id', orgId)
+        .eq('id', dealId)
+        .maybeSingle(),
+      supabase
+        .from('diligence_runs')
+        .select('status, conviction')
+        .eq('org_id', orgId)
+        .eq('deal_id', dealId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ]);
+
+    const deal = dealRes.data;
+    if (!deal) return '';
+
+    const facts = [`stage ${dealStage(deal.stage)}`];
+    if (deal.amount != null && deal.amount > 0) facts.push(money(deal.amount));
+    if (deal.status) facts.push(`status ${deal.status}`);
+
+    const dil = dilRes.data;
+    if (dil) {
+      if (dil.status === 'complete' && dil.conviction != null) {
+        facts.push(`diligence complete — conviction ${dil.conviction}/100`);
+      } else if (dil.status === 'queued' || dil.status === 'running') {
+        facts.push('diligence in progress');
+      } else if (dil.status === 'error') {
+        facts.push('last diligence run errored');
+      }
+    } else {
+      facts.push('no diligence run yet');
+    }
+
+    return `Focused deal (live state of the deal the operator is viewing): ${facts.join(', ')}.`;
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Build a few-line snapshot of the operator's live workspace, or '' when there
  * is nothing material yet (a brand-new org). Sections run in parallel and each

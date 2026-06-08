@@ -50,16 +50,21 @@ export function CommandModule({ id, label, children, accent, className }: Comman
       data-state={state}
       className={cn('flex flex-col', className)}
     >
-      <div className="mb-1.5 flex items-center justify-between gap-2 px-1">
+      <div className="mb-1.5 flex min-h-[24px] items-center justify-between gap-2 px-1">
+        {/* When open, the card's own title carries identity — the chrome shows
+            just the accent + controls. When collapsed, the label names the
+            hidden panel so it stays identifiable. */}
         <span className="inline-flex min-w-0 items-center gap-1.5">
           <span
             aria-hidden
             className="h-1.5 w-1.5 flex-none rounded-full"
             style={{ backgroundColor: accent ?? 'var(--fg-5)' }}
           />
-          <span className="truncate text-[9.5px] font-semibold uppercase tracking-[0.14em] text-fg-5">
-            {label}
-          </span>
+          {!open && (
+            <span className="truncate text-[9.5px] font-semibold uppercase tracking-[0.14em] text-fg-4">
+              {label}
+            </span>
+          )}
         </span>
         <span className="flex flex-none items-center gap-0.5">
           <motion.button
