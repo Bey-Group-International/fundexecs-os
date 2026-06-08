@@ -99,7 +99,13 @@ export function OnboardingView({
 
   if (stage === 'profile') {
     return (
-      <ProofOfTruthFlow profile={profile} redirectTo="/command-center" focusField={focusField} />
+      <ProofOfTruthFlow
+        profile={profile}
+        redirectTo="/command-center"
+        focusField={focusField}
+        offerPassword
+        email={email}
+      />
     );
   }
 

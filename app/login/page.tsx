@@ -6,6 +6,7 @@ import { Mail, Lock, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getSiteURL } from '@/lib/site-url';
 import { signInWithPasswordAction } from './actions';
+import { requestPasswordReset } from '@/lib/actions/account-security';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Badge } from '@/components/ui';
 import { getCOO } from '@/lib/team';
@@ -58,6 +59,18 @@ export default function LoginPage() {
     setMessage('Check your email to confirm your account, then sign in.');
     setMode('signin');
     setLoading(false);
+  }
+
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      setMessage('Enter your email above, then tap “Forgot password?”.');
+      return;
+    }
+    setLoading(true);
+    setMessage(null);
+    await requestPasswordReset(email);
+    setLoading(false);
+    setMessage('If an account exists for that email, a reset link is on its way.');
   }
 
   function handleGoogleSignIn() {
@@ -222,6 +235,18 @@ export default function LoginPage() {
                     className="w-full rounded-xl border border-hairline bg-surface-2 py-2.5 pl-9 pr-3 text-[13.5px] text-fg-1 placeholder:text-fg-5 focus:border-[var(--accent)] focus:outline-none"
                   />
                 </div>
+                {mode === 'signin' && (
+                  <div className="mt-1.5 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      disabled={loading}
+                      className="text-[11.5px] text-fg-4 transition hover:text-fg-2 disabled:opacity-60"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
               </div>
 
               {message && <p className="text-[12.5px] text-gold-1">{message}</p>}

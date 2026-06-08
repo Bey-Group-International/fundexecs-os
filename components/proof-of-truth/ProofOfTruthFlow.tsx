@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Check,
+  ShieldCheck,
   SkipForward,
   Sparkles,
   Zap
@@ -26,6 +27,7 @@ import {
   saveMemberProfile,
   setMemberType as setMemberTypeAction
 } from '@/lib/actions/member-profile';
+import { SetPasswordForm } from '@/components/account/SetPasswordForm';
 
 /** Where each member type goes first after onboarding — carries momentum into
  *  one concrete action instead of dropping them on a cold dashboard. */
@@ -55,6 +57,11 @@ interface ProofOfTruthFlowProps {
   redirectTo?: string;
   /** Optional question id to start on (Profile "close gap" deep-link). */
   focusField?: string;
+  /** Onboarding only: offer a "Secure your account" (set password) card on the
+   *  completion screen, so a new member leaves with a durable way back in. */
+  offerPassword?: boolean;
+  /** The member's email, shown on the secure-account card. */
+  email?: string;
 }
 
 type Stage = 'picker' | 'qa' | 'review' | 'done';
@@ -80,7 +87,9 @@ const IDLE_REC: RecState = {
 export function ProofOfTruthFlow({
   profile,
   redirectTo = '/command-center',
-  focusField
+  focusField,
+  offerPassword = false,
+  email
 }: ProofOfTruthFlowProps) {
   const router = useRouter();
 
@@ -383,6 +392,30 @@ export function ProofOfTruthFlow({
                   );
                 })}
               </div>
+
+              {/* Secure your account — set a password so a logout/expired link
+                  never costs them their progress. Optional; the actions below
+                  stay available either way. Onboarding-only (offerPassword). */}
+              {offerPassword && (
+                <div className="mt-5 rounded-xl border border-[var(--azure-line)] bg-[var(--azure-soft)] p-4">
+                  <div className="flex items-center gap-2 text-[12.5px] font-semibold text-fg-1">
+                    <ShieldCheck size={15} strokeWidth={2} aria-hidden className="text-azure-1" />
+                    Secure your account
+                  </div>
+                  <p className="mt-1 mb-3 text-[11.5px] leading-relaxed text-fg-4">
+                    Set a password
+                    {email ? (
+                      <>
+                        {' '}
+                        for <span className="font-medium text-fg-2">{email}</span>
+                      </>
+                    ) : null}{' '}
+                    so you can always sign back in and pick up where you left off — even if you get
+                    logged out. Optional; you can also do this later in Settings.
+                  </p>
+                  <SetPasswordForm submitLabel="Set password" />
+                </div>
+              )}
 
               {/* First-action nudge — carry momentum into one concrete step. */}
               <div className="mt-5 flex flex-col gap-2">

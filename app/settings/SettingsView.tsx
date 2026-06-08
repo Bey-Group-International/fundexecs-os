@@ -28,6 +28,7 @@ import type { OrgSubscription } from '@/lib/queries/subscription';
 import type { IntegrationView } from '@/lib/integrations/catalog';
 import { cn } from '@/lib/utils';
 import { IntegrationsPanel } from '@/components/integrations/IntegrationsPanel';
+import { SetPasswordForm } from '@/components/account/SetPasswordForm';
 import { PlanCreditsSection } from './PlanCreditsSection';
 import { AdminView } from '@/app/admin/AdminView';
 import type { AdminData } from '@/lib/queries/admin';
@@ -465,20 +466,16 @@ function NotificationsSection() {
 function SecuritySection() {
   return (
     <Card>
-      <SectionTitle
-        eyebrow="Security"
-        title="Sign-in and sessions"
-        action={
-          <Button variant="primary" size="sm">
-            Update password
-          </Button>
-        }
-      />
-      <div className="flex flex-col gap-4">
-        <FieldRow>
-          <Input label="Current password" type="password" icon={Lock} placeholder="••••••••" />
-          <Input label="New password" type="password" icon={Lock} placeholder="••••••••" />
-        </FieldRow>
+      <SectionTitle eyebrow="Security" title="Sign-in and sessions" />
+      <div className="flex flex-col gap-5">
+        <div>
+          <p className="mb-3 max-w-prose text-[12px] leading-relaxed text-fg-3">
+            Set or update your password so you can always sign in with your email — independent of
+            Google or a one-time magic link. If you ever get logged out, this is your way straight
+            back to where you left off.
+          </p>
+          <SetPasswordForm submitLabel="Update password" doneLabel="Password updated." />
+        </div>
         <ToggleRow
           title="Two-factor authentication"
           detail="Require a one-time code at sign-in"
