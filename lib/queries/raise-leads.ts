@@ -28,6 +28,10 @@ export interface RaiseLead {
   verificationEvidence: string | null;
   reviewerNote: string | null;
   verifiedAt: string | null;
+  verificationDocumentPath: string | null;
+  verificationProvider: string | null;
+  verificationProviderStatus: string | null;
+  verificationProviderUrl: string | null;
   createdAt: string;
 }
 
@@ -74,6 +78,10 @@ export async function getRaiseLeads(): Promise<RaiseLeadsData> {
     verificationEvidence: r.verification_evidence,
     reviewerNote: r.reviewer_note,
     verifiedAt: r.verified_at,
+    verificationDocumentPath: r.verification_document_path ?? null,
+    verificationProvider: r.verification_provider ?? null,
+    verificationProviderStatus: r.verification_provider_status ?? null,
+    verificationProviderUrl: r.verification_provider_url ?? null,
     createdAt: r.created_at
   }));
 
