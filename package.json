@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test:unit": "node --conditions=react-server --import tsx --test 'lib/**/*.test.ts'",
     "test:e2e": "playwright test",
     "seed:test-users": "node --env-file=.env.local scripts/provision-test-users.cjs",
     "wave1:complete-test-onboarding": "node --env-file=.env.local scripts/wave1-complete-test-onboarding.cjs"
@@ -49,6 +50,7 @@
     "postcss": "^8.5.15",
     "prettier": "^3.8.3",
     "tailwindcss": "^4.3.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.6.0"
   }
 }
