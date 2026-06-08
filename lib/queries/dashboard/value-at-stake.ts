@@ -138,7 +138,14 @@ export async function loadValueAtStake(
   try {
     const supabase = await createClient();
     const [{ data: deals }, { data: runs }] = await Promise.all([
-      supabase.from('deals').select('amount, stage, status, updated_at').eq('org_id', orgId),
+      // `stage` is normalized on write (see validateStage), so we can trim the
+      // obvious closed rows DB-side; the in-loop guards still catch won/archived
+      // status (status isn't canonicalized yet) and any stage variants.
+      supabase
+        .from('deals')
+        .select('amount, stage, status, updated_at')
+        .eq('org_id', orgId)
+        .neq('stage', 'closed'),
       supabase
         .from('diligence_runs')
         .select('conviction, status')

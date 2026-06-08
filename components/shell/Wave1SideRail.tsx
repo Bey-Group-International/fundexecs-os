@@ -131,10 +131,11 @@ function baseHref(href: string): string {
 }
 
 /**
- * Compute a per-cluster rollup from the per-item `signals.badges`. When child
- * badges carry a raw `amount` (value-at-stake $), the rollup sums dollars and
- * renders a compact figure; otherwise it falls back to summing the numeric
- * portion of each badge (legacy counts). Tone follows the highest severity.
+ * Compute a per-cluster rollup from the per-item `signals.badges`. Only badges
+ * carrying a raw `amount` (value-at-stake $) roll up: they sum to a compact
+ * dollar figure and the highest-severity one sets the tone. Score/percentage
+ * badges (Profile %, readiness/execution scores) are deliberately ignored —
+ * summing them is meaningless — so a cluster with no $ at stake shows no rollup.
  */
 function computeGroupRollup(
   group: RailNavGroup,
@@ -143,9 +144,7 @@ function computeGroupRollup(
   if (!badges) return null;
   let dollars = 0;
   let hasDollars = false;
-  let count = 0;
   let tone: BadgeTone | null = null;
-  let any = false;
   // Gather every routable href in the cluster (items + nested children), then
   // dedupe by resolved badge key so a badge shared by alias routes counts once.
   const hrefs: string[] = [];
@@ -159,22 +158,13 @@ function computeGroupRollup(
     if (!key || seen.has(key)) continue;
     seen.add(key);
     const signal = badges[key];
-    any = true;
-    if (typeof signal.amount === 'number' && signal.amount > 0) {
-      dollars += signal.amount;
-      hasDollars = true;
-      // Only $-bearing badges drive the cluster tone — they're the at-risk ones.
-      const childTone = signal.tone ?? 'azure';
-      if (tone === null || TONE_SEVERITY[childTone] > TONE_SEVERITY[tone]) tone = childTone;
-    } else {
-      const numeric = parseInt(String(signal.value), 10);
-      if (!Number.isNaN(numeric)) count += numeric;
-    }
+    if (typeof signal.amount !== 'number' || signal.amount <= 0) continue;
+    dollars += signal.amount;
+    hasDollars = true;
+    const childTone = signal.tone ?? 'azure';
+    if (tone === null || TONE_SEVERITY[childTone] > TONE_SEVERITY[tone]) tone = childTone;
   }
-  if (!any) return null;
-  if (hasDollars) return { label: compactMoney(dollars), tone: tone ?? 'azure' };
-  if (count > 0) return { label: String(count), tone: tone ?? 'azure' };
-  return null;
+  return hasDollars ? { label: compactMoney(dollars), tone: tone ?? 'azure' } : null;
 }
 
 /**
