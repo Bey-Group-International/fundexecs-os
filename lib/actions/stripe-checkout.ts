@@ -178,13 +178,26 @@ export async function createCustomTopUpCheckout(
     const amountCents = dollars * 100;
     const credits = dollars * CREDITS_PER_DOLLAR;
 
-    const hdrs = await headers();
+    // Pre-fill email and, when the org already has a Stripe customer (from a
+    // prior subscription), attach the top-up to it — so the one-off charge lands
+    // in the same billing history instead of spawning a guest customer. Matches
+    // the subscription/gift flows; removes a re-typed-email friction point.
+    const [sub, email, hdrs] = await Promise.all([
+      getOrgSubscription(org.orgId),
+      currentUserEmail(),
+      headers()
+    ]);
     const origin = resolveSiteOrigin(hdrs);
     const stripe = new Stripe(secretKey);
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       client_reference_id: org.orgId,
+      ...(sub.stripeCustomerId
+        ? { customer: sub.stripeCustomerId }
+        : email
+          ? { customer_email: email }
+          : {}),
       line_items: [
         {
           quantity: 1,

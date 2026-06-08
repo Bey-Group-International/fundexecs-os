@@ -8,26 +8,15 @@ import { TeamAvatar, getCOO } from '@/lib/team';
 import { cn } from '@/lib/utils';
 import { EarnMarkdown } from '@/components/shell/earn/EarnMarkdown';
 import { EarnActionCard, type EarnAction } from '@/components/shell/earn/EarnActionCard';
+import { EARN_NAV_DESTINATIONS } from '@/lib/ai/earn-nav';
 
 type Source = { brainId: string | null; snippet: string };
 
 /** Exact in-app routes Earn may auto-navigate to. Model-supplied destinations
  *  are validated against this allowlist so a bad payload can't push an
- *  arbitrary route. Mirrors EARN_NAV_DESTINATIONS in lib/ai/earn.ts. */
-const AUTO_NAV_DESTINATIONS = new Set([
-  '/command-center',
-  '/pipeline',
-  '/capital-stack',
-  '/profile',
-  '/trust',
-  '/materials',
-  '/partners',
-  '/match-inbox',
-  '/diligence',
-  '/audit',
-  '/integrations',
-  '/settings'
-]);
+ *  arbitrary route. Sourced from the same `EARN_NAV_DESTINATIONS` the server
+ *  tool schema uses (lib/ai/earn-nav) — single source of truth, no drift. */
+const AUTO_NAV_DESTINATIONS = new Set<string>(EARN_NAV_DESTINATIONS);
 
 type Msg = {
   role: 'user' | 'assistant';

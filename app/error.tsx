@@ -32,12 +32,24 @@ export default function Error({
           Reference: <span className="font-mono">{error.digest}</span>
         </p>
       ) : null}
-      <button
-        onClick={reset}
-        className="mt-6 rounded-xl border border-hairline bg-surface-1 px-5 py-2 text-sm font-medium text-fg-1 transition hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-      >
-        Try again
-      </button>
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        <button
+          onClick={reset}
+          className="rounded-xl border border-hairline bg-surface-1 px-5 py-2 text-sm font-medium text-fg-1 transition hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
+        >
+          Try again
+        </button>
+        {/* Full-document navigation (not a soft route) — an escape hatch when a
+            persistent error makes `reset()` loop on the same broken state. A
+            hard reload is the point here, so the next/link rule doesn't apply. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a
+          href="/"
+          className="rounded-xl px-5 py-2 text-sm font-medium text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
+        >
+          Back to home
+        </a>
+      </div>
     </main>
   );
 }

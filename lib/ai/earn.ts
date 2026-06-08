@@ -5,6 +5,7 @@ import type { Database } from '@/lib/supabase/database.types';
 import { embedQuery, toVectorLiteral } from './voyage';
 import { AI_MODELS } from './models';
 import { buildWorkspaceSnapshot, buildDealSnapshot, buildRelationshipSnapshot } from './awareness';
+import { EARN_NAV_DESTINATIONS } from './earn-nav';
 
 // Interactive chat tier (Sonnet by default) — fast, strong for an assistant.
 const MODEL = AI_MODELS.chat;
@@ -81,20 +82,9 @@ export interface EarnContextHint {
  * `lib/actions/earn-actions.ts`; this module only declares the contract.
  * --------------------------------------------------------------------------*/
 
-export const EARN_NAV_DESTINATIONS = [
-  '/command-center',
-  '/pipeline',
-  '/capital-stack',
-  '/profile',
-  '/trust',
-  '/materials',
-  '/partners',
-  '/match-inbox',
-  '/diligence',
-  '/audit',
-  '/integrations',
-  '/settings'
-] as const;
+// Single source of truth shared with the client allowlist — see ./earn-nav.
+// Imported at the top of this module; re-exported here to preserve the public API.
+export { EARN_NAV_DESTINATIONS };
 
 export type EarnToolMode = 'auto' | 'confirm';
 

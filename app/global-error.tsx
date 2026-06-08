@@ -59,22 +59,49 @@ export default function GlobalError({
             Reference: <span style={{ fontFamily: 'monospace' }}>{error.digest}</span>
           </p>
         ) : null}
-        <button
-          onClick={reset}
+        <div
           style={{
             marginTop: '24px',
-            borderRadius: '12px',
-            border: '1px solid var(--border, rgba(255,255,255,0.1))',
-            background: 'var(--surface-1, rgba(255,255,255,0.05))',
-            color: 'var(--fg-1, #e6edf6)',
-            padding: '8px 20px',
-            fontSize: '14px',
-            fontWeight: 500,
-            cursor: 'pointer'
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px'
           }}
         >
-          Try again
-        </button>
+          <button
+            onClick={reset}
+            style={{
+              borderRadius: '12px',
+              border: '1px solid var(--border, rgba(255,255,255,0.1))',
+              background: 'var(--surface-1, rgba(255,255,255,0.05))',
+              color: 'var(--fg-1, #e6edf6)',
+              padding: '8px 20px',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer'
+            }}
+          >
+            Try again
+          </button>
+          {/* Escape hatch — a hard navigation that fully reloads the document
+              when the root layout keeps throwing on retry. A hard reload is the
+              intent, so the next/link rule doesn't apply here. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a
+            href="/"
+            style={{
+              borderRadius: '12px',
+              padding: '8px 20px',
+              fontSize: '14px',
+              fontWeight: 500,
+              color: 'var(--fg-3, #9aa7ba)',
+              textDecoration: 'none'
+            }}
+          >
+            Back to home
+          </a>
+        </div>
       </body>
     </html>
   );
