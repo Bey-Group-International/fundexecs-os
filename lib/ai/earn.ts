@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import { embedQuery, toVectorLiteral } from './voyage';
 import { AI_MODELS } from './models';
+import { buildWorkspaceSnapshot } from './awareness';
 
 // Interactive chat tier (Sonnet by default) — fast, strong for an assistant.
 const MODEL = AI_MODELS.chat;
@@ -175,6 +176,7 @@ async function retrieveMemory(
 // embed + vector match (gets the longer budget); memory is a single indexed read.
 const CONTEXT_TIMEOUT_MS = 1500;
 const MEMORY_TIMEOUT_MS = 800;
+const SNAPSHOT_TIMEOUT_MS = 800;
 
 /**
  * Resolve `promise`, or `fallback` if it hasn't settled within `ms`. Grounding
@@ -232,7 +234,11 @@ async function retrieveContext(
  *  Note: the cross-session recap is operator-derived text and is deliberately
  *  NOT placed here — it rides in as a reference-only user turn (see streamEarn)
  *  so it never carries system-level authority. */
-function buildSystem(contextBlock: string, hint?: EarnContextHint): Anthropic.TextBlockParam[] {
+function buildSystem(
+  contextBlock: string,
+  hint?: EarnContextHint,
+  snapshot?: string
+): Anthropic.TextBlockParam[] {
   // Today's date (UTC) so "recently" / "this quarter" land correctly. Lives in
   // the cached capability block — the 5-minute prompt cache TTL keeps it fresh.
   const today = new Date().toISOString().slice(0, 10);
@@ -244,6 +250,14 @@ function buildSystem(contextBlock: string, hint?: EarnContextHint): Anthropic.Te
       cache_control: { type: 'ephemeral' }
     }
   ];
+  // Live workspace telemetry (counts/sums/labels only — no user free text), so
+  // Earn speaks to the operator's actual book. Per-request, so not cached.
+  if (snapshot) {
+    system.push({
+      type: 'text',
+      text: `Live workspace snapshot (the operator's current book — ground guidance in this, don't recite it back):\n${snapshot}`
+    });
+  }
   if (hint?.entityLabel || hint?.kind) {
     const idNote = hint.entityId ? ` [id: ${hint.entityId}]` : '';
     system.push({
@@ -310,20 +324,21 @@ export async function streamEarn(
   /** Resolves after the stream completes with any tool calls Earn proposed. */
   tools: () => Promise<EarnToolUse[]>;
 }> {
-  // RAG grounding and cross-session memory in parallel — neither blocks chat.
-  // Each is timeboxed and fails open so a stalled network call can't hold up
-  // the first streamed token.
-  const [{ sources, contextBlock }, recap] = await Promise.all([
+  // RAG grounding, cross-session memory, and the live workspace snapshot in
+  // parallel — none blocks chat. Each is timeboxed and fails open so a stalled
+  // network call can't hold up the first streamed token.
+  const [{ sources, contextBlock }, recap, snapshot] = await Promise.all([
     withTimeout(retrieveContext(supabase, orgId, messages), CONTEXT_TIMEOUT_MS, {
       sources: [],
       contextBlock: ''
     }),
     userId
       ? withTimeout(retrieveMemory(supabase, userId, messages.length), MEMORY_TIMEOUT_MS, '')
-      : Promise.resolve('')
+      : Promise.resolve(''),
+    withTimeout(buildWorkspaceSnapshot(supabase, orgId), SNAPSHOT_TIMEOUT_MS, '')
   ]);
   const anthropic = new Anthropic();
-  const system = buildSystem(contextBlock, hint);
+  const system = buildSystem(contextBlock, hint, snapshot);
 
   // The continuity recap is operator-derived, so it rides in as a reference-only
   // user turn rather than a system block — it must not gain system authority.
