@@ -8,7 +8,16 @@ import { submitRaiseInterest } from '@/lib/actions/raise-interest';
  * Lead-gen only (no payment). On success it swaps to a calm confirmation so the
  * prospect knows the owner will follow up. Token comes from the page route. */
 
-export function RaiseInterestForm({ token, minCheck }: { token: string; minCheck: number | null }) {
+export function RaiseInterestForm({
+  token,
+  minCheck,
+  gated = false
+}: {
+  token: string;
+  minCheck: number | null;
+  /** 506(b) private placement: frame the form as "request access". */
+  gated?: boolean;
+}) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [amount, setAmount] = useState('');
@@ -21,7 +30,9 @@ export function RaiseInterestForm({ token, minCheck }: { token: string; minCheck
     return (
       <div className="rounded-2xl border border-success-line bg-success-soft p-6 text-center">
         <CheckCircle2 className="mx-auto mb-2 text-success" size={26} strokeWidth={2} aria-hidden />
-        <h3 className="text-[15px] font-semibold text-fg-1">Interest registered</h3>
+        <h3 className="text-[15px] font-semibold text-fg-1">
+          {gated ? 'Access requested' : 'Interest registered'}
+        </h3>
         <p className="mx-auto mt-1 max-w-[42ch] text-[13px] text-fg-3">
           Thanks — the team has been notified and will reach out to you directly. No commitment is
           made by submitting this.
@@ -117,11 +128,13 @@ export function RaiseInterestForm({ token, minCheck }: { token: string; minCheck
         disabled={pending}
         className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-[var(--shadow-md)] transition hover:bg-accent-2 disabled:opacity-60"
       >
-        {pending ? 'Sending…' : 'Express interest'}
+        {pending ? 'Sending…' : gated ? 'Request access' : 'Express interest'}
         {!pending ? <ArrowRight size={15} strokeWidth={2.2} aria-hidden /> : null}
       </button>
       <p className="text-center text-[11px] text-fg-4">
-        Expressing interest is not a commitment to invest.
+        {gated
+          ? 'Requesting access is not a commitment to invest.'
+          : 'Expressing interest is not a commitment to invest.'}
       </p>
     </form>
   );

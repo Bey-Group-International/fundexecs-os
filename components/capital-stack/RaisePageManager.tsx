@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Globe, Copy, Check, ExternalLink, Users } from 'lucide-react';
+import Link from 'next/link';
+import { Globe, Copy, Check, ExternalLink, Users, Wand2 } from 'lucide-react';
 import { Card, SectionTitle } from '@/components/ui';
 import {
   createRaiseShareLink,
   updateRaisePage,
-  revokeRaiseShareLink
+  revokeRaiseShareLink,
+  type RaiseExemption
 } from '@/lib/actions/raise-page';
 import type { ActiveRaisePage } from '@/lib/queries/raise-page';
 
@@ -26,6 +28,7 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
   const [headline, setHeadline] = useState(initial?.headline ?? '');
   const [minCheck, setMinCheck] = useState(initial?.minCheck ? String(initial.minCheck) : '');
   const [showAmounts, setShowAmounts] = useState(initial?.showAmounts ?? false);
+  const [exemption, setExemption] = useState<'' | RaiseExemption>(initial?.exemption ?? '');
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
   // NOTE: these useState seeds run only on mount. To resync the editable copy
@@ -50,7 +53,8 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
         title,
         headline,
         minCheck: minCheck ? Number(minCheck.replace(/[^0-9.]/g, '')) : null,
-        showAmounts
+        showAmounts,
+        exemption: exemption || null
       });
       if (res.ok) {
         setSavedAt(Date.now());
@@ -84,12 +88,23 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
     <Card className="mt-6 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SectionTitle eyebrow="Capital · public surface" title="Public raise page" />
-        {initial ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-success-line bg-success-soft px-2.5 py-0.5 text-[11px] font-semibold text-success">
-            <Globe size={12} strokeWidth={2} aria-hidden />
-            Live
-          </span>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {initial ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-success-line bg-success-soft px-2.5 py-0.5 text-[11px] font-semibold text-success">
+              <Globe size={12} strokeWidth={2} aria-hidden />
+              Live
+            </span>
+          ) : null}
+          {initial ? (
+            <Link
+              href="/capital-stack/setup"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-hairline px-2.5 py-1 text-[11.5px] font-medium text-fg-2 transition hover:bg-surface-2"
+            >
+              <Wand2 size={12} strokeWidth={2} aria-hidden />
+              Guided setup
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       {!initial ? (
@@ -98,15 +113,24 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
             Publish a shareable, link-only page that shows your raise momentum and lets prospects
             express interest. Amounts stay hidden unless you opt in; the page is not search-indexed.
           </p>
-          <button
-            type="button"
-            onClick={publish}
-            disabled={pending}
-            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-accent-2 disabled:opacity-60"
-          >
-            <Globe size={15} strokeWidth={2.2} aria-hidden />
-            {pending ? 'Publishing…' : 'Publish raise page'}
-          </button>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Link
+              href="/capital-stack/setup"
+              className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-accent-2"
+            >
+              <Wand2 size={15} strokeWidth={2.2} aria-hidden />
+              Guided setup
+            </Link>
+            <button
+              type="button"
+              onClick={publish}
+              disabled={pending}
+              className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2 text-[13px] font-medium text-fg-2 transition hover:bg-surface-2 disabled:opacity-60"
+            >
+              <Globe size={15} strokeWidth={2.2} aria-hidden />
+              {pending ? 'Publishing…' : 'Quick publish'}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="mt-3 flex flex-col gap-4">
@@ -186,6 +210,22 @@ export function RaisePageManager({ initial }: { initial: ActiveRaisePage | null 
                 className="h-4 w-4 accent-[var(--accent)]"
               />
               <span className="text-[12.5px] text-fg-2">Show dollar amounts publicly</span>
+            </label>
+            <label className="flex flex-col gap-1.5 sm:col-span-2">
+              <span className="text-[11.5px] font-medium text-fg-2">Reg D exemption</span>
+              <select
+                value={exemption}
+                onChange={(e) => setExemption(e.target.value as '' | RaiseExemption)}
+                className={inputCls}
+              >
+                <option value="">Unset</option>
+                <option value="506c">506(c) — general solicitation, accredited only</option>
+                <option value="506b">506(b) — private, no public solicitation</option>
+              </select>
+              <span className="text-[11px] text-fg-4">
+                506(b) gates the public page to “request access” and hides amounts. Use the guided
+                setup for help choosing — and to connect with legal counsel.
+              </span>
             </label>
           </div>
 

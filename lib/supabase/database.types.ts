@@ -510,6 +510,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          exemption: string | null
           expires_at: string | null
           headline: string | null
           id: string
@@ -524,6 +525,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          exemption?: string | null
           expires_at?: string | null
           headline?: string | null
           id?: string
@@ -538,6 +540,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          exemption?: string | null
           expires_at?: string | null
           headline?: string | null
           id?: string

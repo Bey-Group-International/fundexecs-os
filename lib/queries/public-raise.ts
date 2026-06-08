@@ -45,6 +45,12 @@ export interface PublicRaise {
   interestCount: number;
   /** Average Chain-of-Trust completion across the org's records, 0–100. */
   trustPct: number;
+  /**
+   * Reg D exemption gating the page. '506b' renders a gated "request access"
+   * CTA (no general solicitation, amounts hidden); '506c'/null render the open
+   * "express interest" CTA.
+   */
+  exemption: '506b' | '506c' | null;
 }
 
 function pctOf(n: number, total: number): number {
@@ -62,7 +68,9 @@ export async function getPublicRaise(token: string): Promise<PublicRaise | null>
 
   const { data: page } = await admin
     .from('raise_pages')
-    .select('id, org_id, title, headline, min_check, show_amounts, revoked_at, expires_at')
+    .select(
+      'id, org_id, title, headline, min_check, show_amounts, exemption, revoked_at, expires_at'
+    )
     .eq('token', token)
     .maybeSingle();
 
@@ -70,7 +78,10 @@ export async function getPublicRaise(token: string): Promise<PublicRaise | null>
   if (page.expires_at && new Date(page.expires_at).getTime() <= Date.now()) return null;
 
   const orgId = page.org_id as string;
-  const showAmounts = Boolean(page.show_amounts);
+  const exemption = page.exemption === '506b' || page.exemption === '506c' ? page.exemption : null;
+  // 506(b) prohibits general solicitation, so a public page under it never
+  // broadcasts dollar amounts regardless of the owner's show_amounts toggle.
+  const showAmounts = Boolean(page.show_amounts) && exemption !== '506b';
 
   const [{ data: org }, { data: members }, summaryRes, { count: interestCount }, { data: cot }] =
     await Promise.all([
@@ -147,6 +158,7 @@ export async function getPublicRaise(token: string): Promise<PublicRaise | null>
     softCircled: showAmounts ? softCircled : null,
     minCheck: page.min_check != null ? Number(page.min_check) : null,
     interestCount: interestCount ?? 0,
-    trustPct
+    trustPct,
+    exemption
   };
 }

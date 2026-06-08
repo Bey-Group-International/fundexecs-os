@@ -72,6 +72,8 @@ export default async function PublicRaisePage({ params }: { params: Promise<{ to
   const committedPct = Math.max(0, Math.min(100, raise.committedPct));
   const coveragePct = Math.max(0, Math.min(100, raise.coveragePct));
   const softPct = Math.max(0, coveragePct - committedPct);
+  // 506(b) = private placement (no general solicitation): gate the CTA.
+  const gated = raise.exemption === '506b';
 
   return (
     <main className="fx-theme-light min-h-screen bg-bg-0 px-4 py-10 sm:py-14">
@@ -99,7 +101,13 @@ export default async function PublicRaisePage({ params }: { params: Promise<{ to
               }}
             />
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-accent">
-              Open raise · {raise.memberLabel}
+              {gated ? 'Private placement' : 'Open raise'} · {raise.memberLabel}
+              {raise.exemption ? (
+                <span className="text-fg-4">
+                  {' '}
+                  · Reg D {raise.exemption === '506b' ? '506(b)' : '506(c)'}
+                </span>
+              ) : null}
             </p>
             <h1 className="mt-1.5 text-[26px] font-semibold tracking-[-0.02em] text-fg-1 sm:text-[30px]">
               {heading}
@@ -168,16 +176,17 @@ export default async function PublicRaisePage({ params }: { params: Promise<{ to
             ) : null}
           </section>
 
-          {/* Express interest */}
+          {/* Express interest / request access (gated under 506(b)) */}
           <section className="border-t border-hairline bg-surface-1/50 px-6 py-6">
             <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-fg-1">
-              Express interest
+              {gated ? 'Request access' : 'Express interest'}
             </h2>
             <p className="mt-1 mb-4 max-w-[56ch] text-[13px] text-fg-3">
-              Share your details and the team will follow up directly. This is not a commitment to
-              invest.
+              {gated
+                ? 'This is a private placement (Reg D 506(b)). Request access and the team will follow up directly if you qualify. This is not a commitment to invest.'
+                : 'Share your details and the team will follow up directly. This is not a commitment to invest.'}
             </p>
-            <RaiseInterestForm token={token} minCheck={raise.minCheck} />
+            <RaiseInterestForm token={token} minCheck={raise.minCheck} gated={gated} />
           </section>
 
           {/* Footer */}
