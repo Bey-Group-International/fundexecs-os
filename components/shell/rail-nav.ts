@@ -9,6 +9,7 @@ import {
   // Capital Formation
   TrendingUp,
   Layers,
+  PieChart,
   MessagesSquare,
   // Deal Execution
   Briefcase,
@@ -107,6 +108,7 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
     items: [
       { href: '/pipeline', label: 'LP Pipeline', icon: TrendingUp, live: true },
       { href: '/capital-stack', label: 'Capital Stack', icon: Layers, live: true },
+      { href: '/cap-table', label: 'Cap Table', icon: PieChart, live: true },
       { href: '/objections', label: 'Objections', icon: MessagesSquare, live: true }
     ]
   },
