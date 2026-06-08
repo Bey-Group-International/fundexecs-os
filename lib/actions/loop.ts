@@ -89,7 +89,8 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
     }
   });
   if (markerErr) {
-    if ((markerErr as { code?: string }).code === '23505') {
+    // 23505 = unique_violation: a concurrent/prior close already claimed it.
+    if (markerErr.code === '23505') {
       return { ok: true, credited: false };
     }
     return { ok: false, error: markerErr.message };
@@ -142,10 +143,10 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
       // auto-credited execution proof.
       if (layerRow && layerRow.human_approval_status !== 'approved') {
         const nextCompletion = applyLoopContribution(
-          Number(layerRow.completion_percentage),
+          Number(layerRow.completion_percentage ?? 0),
           input.source
         );
-        await supabase
+        const { error: layerErr } = await supabase
           .from('proof_layers')
           .update({
             completion_percentage: nextCompletion,
@@ -156,23 +157,29 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
                 : layerRow.human_approval_status
           })
           .eq('id', layerRow.id);
-        credited = true;
+        // Only claim credit if the proof bump actually landed. On failure the
+        // marker is already written, so the close stays recorded but uncredited
+        // (an honest under-credit) — `credited: false` tells the caller the
+        // truth rather than a false positive.
+        credited = !layerErr;
 
         // Keep the chain record's headline completion coherent: the mean of its
-        // four layers after the bump.
-        const { data: allLayers } = await supabase
-          .from('proof_layers')
-          .select('completion_percentage')
-          .eq('chain_record_id', chainId);
-        const rows = (allLayers ?? []) as Array<{ completion_percentage: number }>;
-        if (rows.length > 0) {
-          const avg = Math.round(
-            rows.reduce((sum, l) => sum + Number(l.completion_percentage ?? 0), 0) / rows.length
-          );
-          await supabase
-            .from('chain_of_trust_records')
-            .update({ completion_percentage: avg })
-            .eq('id', chainId);
+        // four layers after the bump. Cosmetic, so failures here are tolerated.
+        if (credited) {
+          const { data: allLayers } = await supabase
+            .from('proof_layers')
+            .select('completion_percentage')
+            .eq('chain_record_id', chainId);
+          const rows = (allLayers ?? []) as Array<{ completion_percentage: number }>;
+          if (rows.length > 0) {
+            const avg = Math.round(
+              rows.reduce((sum, l) => sum + Number(l.completion_percentage ?? 0), 0) / rows.length
+            );
+            await supabase
+              .from('chain_of_trust_records')
+              .update({ completion_percentage: avg })
+              .eq('id', chainId);
+          }
         }
       }
     }
