@@ -1341,6 +1341,7 @@ export type Database = {
           id: string
           referral_id: string
           source_ref: string
+          tier: number
         }
         Insert: {
           commission_credits: number
@@ -1349,6 +1350,7 @@ export type Database = {
           id?: string
           referral_id: string
           source_ref: string
+          tier?: number
         }
         Update: {
           commission_credits?: number
@@ -1357,6 +1359,7 @@ export type Database = {
           id?: string
           referral_id?: string
           source_ref?: string
+          tier?: number
         }
         Relationships: [
           {
@@ -1367,6 +1370,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      referral_tiers: {
+        Row: {
+          rate_bps: number
+          tier: number
+        }
+        Insert: {
+          rate_bps: number
+          tier: number
+        }
+        Update: {
+          rate_bps?: number
+          tier?: number
+        }
+        Relationships: []
       }
       deals: {
         Row: {
