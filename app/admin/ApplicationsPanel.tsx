@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, X, RotateCcw, Quote, Link2, Inbox, Clock, Ban } from 'lucide-react';
+import { Check, X, RotateCcw, Quote, Link2, Inbox, Clock, Ban, Building2 } from 'lucide-react';
 import { Avatar, Badge, Button, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { setApplicationReview } from '@/lib/actions/beta-links';
 import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
@@ -72,6 +72,12 @@ function ApplicationCard({
               )}
             </div>
             <div className="truncate text-[12px] text-fg-4">{app.email}</div>
+            {app.company && (
+              <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-fg-4">
+                <Building2 size={12} strokeWidth={1.9} className="flex-none" aria-hidden />
+                <span className="truncate">{app.company}</span>
+              </div>
+            )}
           </div>
         </div>
         <Badge tone={REVIEW_TONE[app.review]} dot className="flex-none text-[10px]">
