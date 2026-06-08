@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { ArrowRight, CheckCircle2, Info } from 'lucide-react';
+import { useRef, useState, useTransition } from 'react';
+import { ArrowRight, CheckCircle2, FileText, Info, X } from 'lucide-react';
 import { submitRaiseReservation } from '@/lib/actions/raise-reservation';
+import { createAccreditationUploadUrl } from '@/lib/actions/accreditation-evidence';
 
 /* RaiseReserveForm — opt-in reservation form on a 506(c) public raise page.
  *
@@ -13,6 +14,20 @@ import { submitRaiseReservation } from '@/lib/actions/raise-reservation';
  *
  * The accredited-investor attestation is always required here (506(c)-only). */
 
+const ALLOWED_UPLOAD_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp'
+]);
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
+function formatBytes(n: number): string {
+  if (n >= 1_048_576) return `${(n / 1_048_576).toFixed(1)} MB`;
+  if (n >= 1_024) return `${Math.round(n / 1_024)} KB`;
+  return `${n} B`;
+}
+
 export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck: number | null }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -21,6 +36,9 @@ export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck:
   const [accredited, setAccredited] = useState(false);
   const [verificationMethod, setVerificationMethod] = useState('');
   const [verificationEvidence, setVerificationEvidence] = useState('');
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [intentOnly, setIntentOnly] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -38,11 +56,65 @@ export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck:
     );
   }
 
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setDocError(null);
+    const file = e.target.files?.[0] ?? null;
+    // Reset the input value so re-selecting the same file fires onChange again.
+    e.target.value = '';
+    if (!file) return;
+    if (!ALLOWED_UPLOAD_TYPES.has(file.type)) {
+      setDocError('Only PDF, PNG, JPEG, or WebP files are accepted.');
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setDocError('File exceeds the 15 MB limit.');
+      return;
+    }
+    setDocFile(file);
+  }
+
+  function clearDocFile() {
+    setDocFile(null);
+    setDocError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     startTransition(async () => {
       try {
+        // If a document was selected, upload it first and obtain the storage path.
+        let verificationDocumentPath: string | null = null;
+        if (docFile) {
+          const uploadRes = await createAccreditationUploadUrl({
+            token,
+            filename: docFile.name,
+            contentType: docFile.type,
+            sizeBytes: docFile.size
+          });
+          if (!uploadRes.ok) {
+            setError(`Document upload failed: ${uploadRes.error}`);
+            return;
+          }
+          // PUT the file directly to Supabase Storage via the signed URL.
+          try {
+            const put = await fetch(uploadRes.signedUrl, {
+              method: 'PUT',
+              body: docFile,
+              headers: { 'Content-Type': docFile.type }
+            });
+            if (!put.ok) {
+              setError(`Document upload failed (HTTP ${put.status}). Please try again.`);
+              return;
+            }
+          } catch {
+            setError('Document upload failed. Please check your connection and try again.');
+            return;
+          }
+          verificationDocumentPath = uploadRes.path;
+        }
+
         const res = await submitRaiseReservation({
           token,
           name,
@@ -51,7 +123,8 @@ export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck:
           note,
           accredited,
           verificationMethod: verificationMethod || null,
-          verificationEvidence: verificationEvidence || null
+          verificationEvidence: verificationEvidence || null,
+          verificationDocumentPath
         });
         if (!res.ok) {
           setError(res.error);
@@ -153,6 +226,59 @@ export function RaiseReserveForm({ token, minCheck }: { token: string; minCheck:
           placeholder="e.g. link to a verification letter; the team will follow up"
         />
       </Field>
+
+      {/* Accreditation document upload — optional; investors may attach a PDF or image */}
+      <div className="flex flex-col gap-1.5">
+        <span className="flex items-center justify-between text-[11.5px] font-medium text-fg-2">
+          <span className="flex items-center gap-1.5">
+            <FileText size={12} strokeWidth={2} aria-hidden />
+            Accreditation document
+          </span>
+          <span className="font-normal text-fg-4">Optional — PDF or image, up to 15&nbsp;MB</span>
+        </span>
+
+        {/* Hidden file input; triggered by the button below */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,image/png,image/jpeg,image/webp"
+          onChange={onFileChange}
+          className="hidden"
+          aria-label="Upload accreditation document"
+        />
+
+        {docFile ? (
+          /* Selected-file confirmation with clear button */
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-hairline bg-surface-1 px-3 py-2">
+            <span className="min-w-0 truncate text-[12.5px] text-fg-2">
+              {docFile.name}
+              <span className="ml-2 text-fg-4">({formatBytes(docFile.size)})</span>
+            </span>
+            <button
+              type="button"
+              onClick={clearDocFile}
+              aria-label="Remove selected file"
+              className="shrink-0 rounded p-0.5 text-fg-4 transition hover:text-danger"
+            >
+              <X size={13} strokeWidth={2.2} aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-hairline bg-surface-1 px-3 py-2 text-[12.5px] text-fg-3 transition hover:border-accent-line hover:text-fg-1"
+          >
+            <FileText size={13} strokeWidth={2} aria-hidden />
+            Choose file…
+          </button>
+        )}
+        {docError ? (
+          <p role="alert" className="text-[12px] text-danger">
+            {docError}
+          </p>
+        ) : null}
+      </div>
 
       {/* Accreditation attestation — always required on the reserve path */}
       <label className="flex items-start gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
