@@ -2926,6 +2926,59 @@ export type Database = {
           },
         ]
       }
+      org_posture_snapshots: {
+        Row: {
+          capital: number | null
+          compliance: number | null
+          composite: number
+          created_at: string
+          execution: number | null
+          governance: number | null
+          id: string
+          member_type: string | null
+          org_id: string
+          snapshot_date: string
+          stage: string | null
+          updated_at: string
+        }
+        Insert: {
+          capital?: number | null
+          compliance?: number | null
+          composite: number
+          created_at?: string
+          execution?: number | null
+          governance?: number | null
+          id?: string
+          member_type?: string | null
+          org_id: string
+          snapshot_date?: string
+          stage?: string | null
+          updated_at?: string
+        }
+        Update: {
+          capital?: number | null
+          compliance?: number | null
+          composite?: number
+          created_at?: string
+          execution?: number | null
+          governance?: number | null
+          id?: string
+          member_type?: string | null
+          org_id?: string
+          snapshot_date?: string
+          stage?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_posture_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -3451,6 +3504,19 @@ export type Database = {
       accept_beta_invite: {
         Args: { _email: string; _invite_id?: string; _user_id: string }
         Returns: Json
+      }
+      upsert_org_posture_snapshot: {
+        Args: {
+          _capital?: number
+          _composite: number
+          _compliance?: number
+          _execution?: number
+          _governance?: number
+          _member_type?: string
+          _org_id: string
+          _stage?: string
+        }
+        Returns: undefined
       }
       claim_beta_link: {
         Args: { _email: string; _token: string; _user_id: string }

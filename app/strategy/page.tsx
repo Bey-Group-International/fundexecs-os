@@ -7,6 +7,8 @@ import { getStrategyData } from '@/lib/queries/strategy';
 import { getDashboardData } from '@/lib/queries/dashboard/lifecycle';
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, LIFECYCLE_STAGE_BLURBS } from '@/lib/lifecycle';
 import { computeInstitutionalPosture } from '@/lib/strategy/posture';
+import { getMemberProfile } from '@/lib/queries/member-profile';
+import { capturePostureSnapshot, getPostureTrend } from '@/lib/queries/strategy-posture';
 import { StrategyView } from './StrategyView';
 import { StrategyHero } from './StrategyHero';
 import { PostureScorecard } from './PostureScorecard';
@@ -41,9 +43,10 @@ export default async function StrategyPage() {
   // Strategy objectives + the lifecycle/posture context the hero binds to. The
   // dashboard loader already derives the stage, loop progress, and readiness
   // from the tested engine — reuse it rather than recomputing here.
-  const [{ objectives }, dashboard] = await Promise.all([
+  const [{ objectives }, dashboard, memberProfile] = await Promise.all([
     getStrategyData(org.orgId),
-    getDashboardData(org.orgId)
+    getDashboardData(org.orgId),
+    getMemberProfile()
   ]);
 
   // The stage the current one unlocks (compounding): next in the ordered loop.
@@ -61,6 +64,27 @@ export default async function StrategyPage() {
     capitalReadiness,
     objectives: objectives.map((o) => ({ priority: o.priority, done: o.state === 'done' }))
   });
+
+  // Snapshot-backed compounding (blueprint Phase 3): the momentum Δ + streak and
+  // the peer percentile live in org_posture_snapshots. Persist today's row first
+  // (idempotent per day, via the upsert RPC) so even a brand-new org seeds its
+  // first point, then read the trend against the same-stage / same-member-type
+  // cohort. Both are best-effort and degrade to a calm zero-state — never a
+  // fabricated Δ or rank. A pillar score absent from the dimension list passes
+  // through as null (unmeasured), not a coerced zero.
+  const pillarScore = (key: string) => posture.dimensions.find((d) => d.key === key)?.score ?? null;
+  const memberType = memberProfile?.memberType ?? null;
+  await capturePostureSnapshot({
+    orgId: org.orgId,
+    composite: posture.composite,
+    compliance: pillarScore('compliance'),
+    governance: pillarScore('governance'),
+    execution: pillarScore('execution'),
+    capital: pillarScore('capital'),
+    stage: dashboard.stage,
+    memberType
+  });
+  const postureTrend = await getPostureTrend(org.orgId, dashboard.stage, memberType);
 
   return (
     <AppShell
@@ -80,7 +104,7 @@ export default async function StrategyPage() {
           nextStageLabel={nextStage ? LIFECYCLE_STAGE_LABELS[nextStage] : null}
           nextStageBlurb={nextStage ? LIFECYCLE_STAGE_BLURBS[nextStage] : null}
         />
-        <PostureScorecard posture={posture} />
+        <PostureScorecard posture={posture} trend={postureTrend} />
         <StrategyView initialObjectives={objectives} />
       </div>
     </AppShell>
