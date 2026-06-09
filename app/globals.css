@@ -179,6 +179,83 @@
   --radius-2xl: 16px; /* cards, panels (rounded-2xl) */
 }
 
+/* =====================================================================
+   Motion tokens — the single source of truth for every easing and
+   duration used across FundExecs OS. Live in :root (not @theme) because
+   they are theme-agnostic: the same motion grammar is used in dark mode,
+   light mode, and the .fx-theme-light scope. Every `fx-*` animation in
+   this file consumes these tokens; their JS twins live in
+   components/dashboard/command/motion.ts. Adding a new motion? Pick the
+   closest existing token first; only add a new one if no existing token
+   carries the same semantic and value.
+
+   See docs/MOTION.md for the full reference, the two-bar policy
+   (landing vs authenticated), and the reduced-motion tiering rule.
+   ===================================================================== */
+:root {
+  /* ── Easing — semantic names over four physical curves ────────────────── */
+  /* House ease. Confident in, gentle out. The authoritative reference. */
+  --ease-standard: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* Entrance — rises, reveals, page-enters. Aliases the standard for v1. */
+  --ease-entrance: var(--ease-standard);
+  /* Exit — dismissals, drawer slide-outs. Aliases the standard for v1. */
+  --ease-exit: var(--ease-standard);
+  /* Emphasize — breathing attention loops (glow, think dots, cascade). */
+  --ease-emphasize: ease-in-out;
+  /* Soft-out — one-shot fades and soft glows that settle to rest. */
+  --ease-soft-out: ease-out;
+  /* Linear — continuous spins, marquees, gradient sweeps. No acceleration. */
+  --ease-linear: linear;
+
+  /* ── Duration — short scale ───────────────────────────────────────────── */
+  /* Micro-interaction (focus rings, control press feedback). */
+  --dur-instant: 80ms;
+  /* Hover/exit reactivity on interactive elements. */
+  --dur-quick: 160ms;
+  /* Menus, popovers, in-panel toggles. */
+  --dur-standard: 240ms;
+  /* Status-line handoffs — calm text swap. */
+  --dur-status: 400ms;
+  /* Page-enter rise (fx-rise). */
+  --dur-page: 420ms;
+  /* One-shot celebration entrance. */
+  --dur-celebrate: 500ms;
+  /* Framer-motion collapse/expand body (height + opacity). */
+  --dur-collapse: 280ms;
+  /* EarnDock right-side slide-in / slide-out. */
+  --dur-dock-slide: 300ms;
+
+  /* ── Duration — sustained, surface-specific loops ─────────────────────── */
+  /* Earn thinking dots breathing cycle. */
+  --dur-think: 1250ms;
+  /* Celebrate glow envelope (one-shot ring expansion). */
+  --dur-celebrate-glow: 1600ms;
+  /* Desk on-point cascade loop. */
+  --dur-cascade: 1800ms;
+  /* On-point pulse — soft expanding ring on the active avatar. */
+  --dur-onpoint: 2200ms;
+  /* Live-presence breathing + desk-shimmer hairline travel. */
+  --dur-glow: 2400ms;
+  /* Earn orb context pulse — Wave-1 "the orb knows where you are". */
+  --dur-orb-pulse: 2600ms;
+  /* Product-preview gloss sweep (landing). */
+  --dur-sweep: 4500ms;
+  /* Landing mascot coin float. */
+  --dur-coin-float: 5000ms;
+  /* Landing animated-gradient text shimmer. */
+  --dur-text-shimmer: 6000ms;
+  /* Landing textured-grid backdrop pan. */
+  --dur-grid-pan: 12000ms;
+  /* Landing aurora drift. */
+  --dur-aurora: 18000ms;
+  /* Constellation orbit — outer ring. */
+  --dur-spin-outer: 48000ms;
+  /* Constellation orbit — inner ring. */
+  --dur-spin-inner: 60000ms;
+  /* Landing live-activity marquee. */
+  --dur-marquee: 60000ms;
+}
+
 /* base */
 * {
   box-sizing: border-box;
@@ -240,7 +317,8 @@ body {
 }
 
 /* Page-enter reveal — content gently rises + fades in. Keyed by route in the
-   shell so it replays on each navigation. Transform/opacity only. */
+   shell so it replays on each navigation. Transform/opacity only.
+   tier: meaningful — communicates "you arrived at a new surface". */
 @keyframes fx-rise {
   from {
     opacity: 0;
@@ -252,11 +330,12 @@ body {
   }
 }
 .fx-rise {
-  animation: fx-rise 0.42s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: fx-rise var(--dur-page) var(--ease-entrance) both;
 }
 
 /* Soft pulsing glow for "live"/active accents (e.g. presence dots, the Earn
-   orb halo). Opacity only — cheap and transform-free. */
+   orb halo). Opacity only — cheap and transform-free.
+   tier: meaningful — signals a live, in-use state. */
 @keyframes fx-glow-pulse {
   0%,
   100% {
@@ -267,11 +346,12 @@ body {
   }
 }
 .fx-glow-pulse {
-  animation: fx-glow-pulse 2.4s ease-in-out infinite;
+  animation: fx-glow-pulse var(--dur-glow) var(--ease-emphasize) infinite;
 }
 
 /* Marketing landing — gentle mascot float (transform-only). Used on the
-   public `/` hero. Honored by the reduced-motion guard below. */
+   public `/` hero. Honored by the reduced-motion guard below.
+   tier: decorative — pure landing delight; no state. */
 @keyframes fx-coin-float {
   0%,
   100% {
@@ -282,13 +362,14 @@ body {
   }
 }
 .fx-coin-float {
-  animation: fx-coin-float 5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+  animation: fx-coin-float var(--dur-coin-float) var(--ease-standard) infinite;
 }
 
 /* Marketing landing — Live Activity marquee. The track is duplicated in the
    DOM (the second copy is aria-hidden) so the loop is seamless. Transform-only.
    Pauses on hover/focus-within of `.fx-marquee-wrap`; fully stopped under
-   reduced-motion (the ticker also renders a static, wrapping row in that case). */
+   reduced-motion (the ticker also renders a static, wrapping row in that case).
+   tier: decorative — landing flavor; state is in the static fallback row. */
 @keyframes fx-marquee {
   from {
     transform: translateX(0);
@@ -298,17 +379,23 @@ body {
   }
 }
 .fx-marquee-animate {
-  animation: fx-marquee 60s linear infinite;
+  animation: fx-marquee var(--dur-marquee) var(--ease-linear) infinite;
 }
 .fx-marquee-wrap:hover .fx-marquee-animate,
 .fx-marquee-wrap:focus-within .fx-marquee-animate {
+  animation-play-state: paused;
+}
+/* Off-screen pause — set via IntersectionObserver in ActivityTicker. Keeps
+   the 60s loop from burning CPU/GPU while the ticker isn't on screen. */
+.fx-marquee-wrap[data-in-view='false'] .fx-marquee-animate {
   animation-play-state: paused;
 }
 
 /* Earn orb context pulse — Wave-1 hint that the orb "knows" what surface the
    operator is focused on. CSS-only: the orb carries a `data-context` attr;
    when it's a high-attention surface (deal in focus, audit, trust gaps) we
-   layer a second, slower pulse ring. Transform-only; reduced-motion off. */
+   layer a second, slower pulse ring. Transform-only; reduced-motion off.
+   tier: meaningful — carries the orb's context awareness. */
 @keyframes fx-earn-context-pulse {
   0%,
   100% {
@@ -325,11 +412,12 @@ body {
 .earn-orb[data-context='deal'],
 .earn-orb[data-context='audit'],
 .earn-orb[data-context='trust'] {
-  animation: fx-earn-context-pulse 2.6s ease-in-out infinite;
+  animation: fx-earn-context-pulse var(--dur-orb-pulse) var(--ease-emphasize) infinite;
 }
 
 /* Celebration moment — a single, refined entrance for level-up / streak-high /
-   badge-earned toasts. Transform + opacity only; one shot, then it settles. */
+   badge-earned toasts. Transform + opacity only; one shot, then it settles.
+   tier: meaningful — marks a real state change (reward earned). */
 @keyframes fx-celebrate {
   0% {
     opacity: 0;
@@ -345,10 +433,11 @@ body {
   }
 }
 .fx-celebrate {
-  animation: fx-celebrate 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: fx-celebrate var(--dur-celebrate) var(--ease-standard) both;
 }
 
-/* The reward glyph gets a brief gold halo pulse to mark the moment, then rests. */
+/* The reward glyph gets a brief gold halo pulse to mark the moment, then rests.
+   tier: meaningful — paired with fx-celebrate to anchor the reward. */
 @keyframes fx-celebrate-glow {
   0%,
   100% {
@@ -359,11 +448,12 @@ body {
   }
 }
 .fx-celebrate-glow {
-  animation: fx-celebrate-glow 1.6s ease-out 1;
+  animation: fx-celebrate-glow var(--dur-celebrate-glow) var(--ease-soft-out) 1;
 }
 
 /* Living-team on-point pulse — a soft expanding ring on the active avatar.
-   Box-shadow only (no layout cost); silenced under reduced-motion below. */
+   Box-shadow only (no layout cost); silenced under reduced-motion below.
+   tier: meaningful — signals which specialist is on point. */
 @keyframes fx-onpoint-pulse {
   0% {
     box-shadow: 0 0 0 0 rgba(91, 141, 239, 0.5);
@@ -374,12 +464,13 @@ body {
   }
 }
 .fx-onpoint-pulse {
-  animation: fx-onpoint-pulse 2.2s ease-out infinite;
+  animation: fx-onpoint-pulse var(--dur-onpoint) var(--ease-soft-out) infinite;
 }
 
 /* Earn "thinking" dots — three gold dots that breathe in sequence while a
    reply is in flight. Restrained (opacity + a 1px lift), staggered via
-   per-dot animation-delay set inline. Silenced under reduced-motion below. */
+   per-dot animation-delay set inline. Silenced under reduced-motion below.
+   tier: meaningful — communicates "request in flight" (Cognition: routing). */
 @keyframes fx-earn-think {
   0%,
   80%,
@@ -393,13 +484,14 @@ body {
   }
 }
 .fx-earn-think {
-  animation: fx-earn-think 1.25s ease-in-out infinite;
+  animation: fx-earn-think var(--dur-think) var(--ease-emphasize) infinite;
 }
 
 /* Desk choreography — while Earn coordinates the desk, the "on point"
    avatars activate in sequence (a gentle staggered fade/lift led by Earn).
    Per-avatar stagger is set inline via animation-delay. Opacity + ≤2px
-   transform only; silenced under reduced-motion below. */
+   transform only; silenced under reduced-motion below.
+   tier: meaningful — visualizes the desk coordinating around a request. */
 @keyframes fx-onpoint-cascade {
   0%,
   100% {
@@ -412,11 +504,12 @@ body {
   }
 }
 .fx-onpoint-cascade {
-  animation: fx-onpoint-cascade 1.8s ease-in-out infinite;
+  animation: fx-onpoint-cascade var(--dur-cascade) var(--ease-emphasize) infinite;
 }
 
 /* Status-line handoff — a brief fade-in so the desk status reads as a smooth
-   handoff rather than a hard text swap. Opacity + 1px lift only. */
+   handoff rather than a hard text swap. Opacity + 1px lift only.
+   tier: meaningful — softens a real text-state change. */
 @keyframes fx-status-fade {
   from {
     opacity: 0;
@@ -428,11 +521,12 @@ body {
   }
 }
 .fx-status-fade {
-  animation: fx-status-fade 0.4s ease-out both;
+  animation: fx-status-fade var(--dur-status) var(--ease-soft-out) both;
 }
 
 /* Working hairline — a whisper-quiet sweep under the desk strip while Earn
-   works. Transform-only travel of a short gradient segment. */
+   works. Transform-only travel of a short gradient segment.
+   tier: meaningful — signals "work in progress" under the desk strip. */
 @keyframes fx-desk-shimmer {
   0% {
     transform: translateX(-110%);
@@ -442,14 +536,17 @@ body {
   }
 }
 .fx-desk-shimmer {
-  animation: fx-desk-shimmer 2.4s ease-in-out infinite;
+  animation: fx-desk-shimmer var(--dur-glow) var(--ease-emphasize) infinite;
 }
 
 /* ── Landing (cinematic) ──────────────────────────────────────────────────
    Ambient, GPU-cheap effects for the public marketing page. All transform/
-   opacity/background-position only, and all silenced under reduced-motion. */
+   opacity/background-position only, and all silenced under reduced-motion.
+   The two-bar policy (see docs/MOTION.md): landing keeps cinematic permission;
+   authenticated tightens. Everything below is tier: decorative unless noted. */
 
-/* Slow drifting aurora — animate background-position of a large gradient. */
+/* Slow drifting aurora — animate background-position of a large gradient.
+   tier: decorative — landing atmosphere. */
 @keyframes fx-aurora {
   0% {
     background-position:
@@ -471,10 +568,11 @@ body {
   background-size:
     200% 200%,
     200% 200%;
-  animation: fx-aurora 18s ease-in-out infinite;
+  animation: fx-aurora var(--dur-aurora) var(--ease-emphasize) infinite;
 }
 
-/* Animated gradient text — sweeps a multi-stop gradient through the glyphs. */
+/* Animated gradient text — sweeps a multi-stop gradient through the glyphs.
+   tier: decorative — landing flourish on headline text. */
 @keyframes fx-text-shimmer {
   to {
     background-position: 200% center;
@@ -494,10 +592,11 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  animation: fx-text-shimmer 6s linear infinite;
+  animation: fx-text-shimmer var(--dur-text-shimmer) var(--ease-linear) infinite;
 }
 
-/* Subtle grid pan for textured backdrops. */
+/* Subtle grid pan for textured backdrops.
+   tier: decorative — landing texture. */
 @keyframes fx-grid-pan {
   to {
     background-position:
@@ -506,10 +605,11 @@ body {
   }
 }
 .fx-grid-pan {
-  animation: fx-grid-pan 12s linear infinite;
+  animation: fx-grid-pan var(--dur-grid-pan) var(--ease-linear) infinite;
 }
 
-/* Constellation orbit rings — rotate the ring; items counter-rotate to stay upright. */
+/* Constellation orbit rings — rotate the ring; items counter-rotate to stay upright.
+   tier: decorative — landing constellation visual. */
 @keyframes fx-spin {
   to {
     transform: rotate(360deg);
@@ -521,19 +621,20 @@ body {
   }
 }
 .fx-spin-slow {
-  animation: fx-spin 48s linear infinite;
+  animation: fx-spin var(--dur-spin-outer) var(--ease-linear) infinite;
 }
 .fx-spin-slow-rev {
-  animation: fx-spin-rev 60s linear infinite;
+  animation: fx-spin-rev var(--dur-spin-inner) var(--ease-linear) infinite;
 }
 .fx-counter-spin {
-  animation: fx-spin-rev 48s linear infinite;
+  animation: fx-spin-rev var(--dur-spin-outer) var(--ease-linear) infinite;
 }
 .fx-counter-spin-rev {
-  animation: fx-spin 60s linear infinite;
+  animation: fx-spin var(--dur-spin-inner) var(--ease-linear) infinite;
 }
 
-/* Shimmer sweep across a surface (e.g. product-preview gloss). */
+/* Shimmer sweep across a surface (e.g. product-preview gloss).
+   tier: decorative — landing product-preview gloss. */
 @keyframes fx-sweep {
   0% {
     transform: translateX(-120%);
@@ -544,23 +645,175 @@ body {
   }
 }
 .fx-sweep {
-  animation: fx-sweep 4.5s ease-in-out infinite;
+  animation: fx-sweep var(--dur-sweep) var(--ease-emphasize) infinite;
 }
 
-/* Accessibility: honor reduced-motion by disabling our decorative motion and
-   neutralizing long/looping transitions across the app. */
+/* =====================================================================
+   Reduced-motion tiering (phase 2). Three layers in this @media block:
+
+     1. MEANINGFUL tier — animations that carry state. They MUST stay on
+        under reduced-motion (silencing them would remove information),
+        but are softened to a single, opacity-led settle:
+          - max duration: --dur-standard (240 ms);
+          - max one iteration (no infinite loops);
+          - opacity-only or ≤4 px transform;
+          - lands at the meaningful end state (the indicator is still
+            visible after the brief animation).
+        Each class targets a dedicated `fx-*-rm` keyframe so the soft
+        treatment is explicit, named, and easy to audit.
+
+     2. DECORATIVE tier — flavor only. Hard off via `animation: none`.
+
+     3. SAFETY NET — universal `*` resetter neutralizes any animation
+        the design system didn't author (third-party widgets, transient
+        inline styles). Class-selector rules above beat it via
+        specificity (class > universal) even when both use !important.
+
+   Tier source-of-truth: the comment block above each `fx-*` rule in
+   this file. If you add a new animation, tag its tier and route it
+   to one of the two policies below. See docs/MOTION.md for the rule.
+   ===================================================================== */
+
+/* ── Meaningful-tier reduced-motion keyframes — one per class above ─────── */
+
+/* fx-rise → tiny 2 px nudge (≤4 px rule), single shot. */
+@keyframes fx-rise-rm {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* fx-glow-pulse → fade up to the peak opacity and stay. */
+@keyframes fx-glow-pulse-rm {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* .earn-orb[data-context] → fade up to the context halo and stay. */
+@keyframes fx-earn-context-pulse-rm {
+  from {
+    box-shadow: 0 8px 24px -6px rgba(247, 201, 72, 0);
+  }
+  to {
+    box-shadow: 0 8px 24px -6px rgba(247, 201, 72, 0.55);
+  }
+}
+
+/* fx-celebrate → opacity-only entrance. Drops the 16 px lift + scale. */
+@keyframes fx-celebrate-rm {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* fx-celebrate-glow → soft halo lands and rests. */
+@keyframes fx-celebrate-glow-rm {
+  from {
+    box-shadow: 0 0 0 0 rgba(247, 201, 72, 0);
+  }
+  to {
+    box-shadow: 0 0 0 4px rgba(247, 201, 72, 0.14);
+  }
+}
+
+/* fx-onpoint-pulse → a single small ring that settles. */
+@keyframes fx-onpoint-pulse-rm {
+  from {
+    box-shadow: 0 0 0 0 rgba(91, 141, 239, 0);
+  }
+  to {
+    box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.35);
+  }
+}
+
+/* fx-earn-think → the three dots fade up to their peak; no breathing. */
+@keyframes fx-earn-think-rm {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* fx-onpoint-cascade → opacity-only settle to "active". */
+@keyframes fx-onpoint-cascade-rm {
+  from {
+    opacity: 0.82;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* fx-status-fade — already short (400 ms) and small (1 px). Below the cap;
+   no -rm keyframe needed. The @media rule clamps it to --dur-standard. */
+
+/* fx-desk-shimmer → drop the travelling hairline; surface a quiet idle band. */
+@keyframes fx-desk-shimmer-rm {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.6;
+  }
+}
+
+/* ── The @media rule itself ──────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .fx-rise,
-  .fx-glow-pulse,
+  /* 1. MEANINGFUL tier — softened, single-shot, opacity-led.
+        Specificity: class selector (0,1,0) > universal `*` (0,0,0); since
+        both use !important, class wins. */
+  .fx-rise {
+    animation: fx-rise-rm var(--dur-standard) var(--ease-soft-out) 1 both !important;
+  }
+  .fx-glow-pulse {
+    animation: fx-glow-pulse-rm var(--dur-standard) var(--ease-soft-out) 1 forwards !important;
+  }
+  .earn-orb[data-context='deal'],
+  .earn-orb[data-context='audit'],
+  .earn-orb[data-context='trust'] {
+    animation: fx-earn-context-pulse-rm var(--dur-standard) var(--ease-soft-out) 1 forwards !important;
+  }
+  .fx-celebrate {
+    animation: fx-celebrate-rm var(--dur-standard) var(--ease-soft-out) 1 both !important;
+  }
+  .fx-celebrate-glow {
+    animation: fx-celebrate-glow-rm var(--dur-standard) var(--ease-soft-out) 1 forwards !important;
+  }
+  .fx-onpoint-pulse {
+    animation: fx-onpoint-pulse-rm var(--dur-standard) var(--ease-soft-out) 1 forwards !important;
+  }
+  .fx-earn-think {
+    animation: fx-earn-think-rm var(--dur-standard) var(--ease-soft-out) 1 forwards !important;
+  }
+  .fx-onpoint-cascade {
+    animation: fx-onpoint-cascade-rm var(--dur-standard) var(--ease-soft-out) 1 forwards !important;
+  }
+  .fx-status-fade {
+    /* Already below the 240 ms cap (400 ms is borderline — clamp). */
+    animation-duration: var(--dur-standard) !important;
+    animation-iteration-count: 1 !important;
+  }
+  .fx-desk-shimmer {
+    animation: fx-desk-shimmer-rm var(--dur-standard) var(--ease-soft-out) 1 forwards !important;
+  }
+
+  /* 2. DECORATIVE tier — hard off. No state to communicate. */
   .fx-coin-float,
   .fx-marquee-animate,
-  .fx-celebrate,
-  .fx-celebrate-glow,
-  .fx-onpoint-pulse,
-  .fx-earn-think,
-  .fx-onpoint-cascade,
-  .fx-status-fade,
-  .fx-desk-shimmer,
   .fx-aurora,
   .fx-text-gradient,
   .fx-grid-pan,
@@ -568,10 +821,15 @@ body {
   .fx-spin-slow-rev,
   .fx-counter-spin,
   .fx-counter-spin-rev,
-  .fx-sweep,
-  .earn-orb {
+  .fx-sweep {
     animation: none !important;
   }
+
+  /* 3. SAFETY NET — neutralize any animation that the design system did
+        not author (third-party widgets, transient inline styles). Class
+        selectors above beat this universal one via specificity. The
+        0.001 ms literal is a one-shot neutralizer, not a duration scale
+        value — intentionally untokenized. */
   *,
   *::before,
   *::after {

@@ -30,6 +30,24 @@ export interface PostureInput {
   capitalReadiness: number | null;
   /** The 100/30/10 objectives — drives the governance pillar. */
   objectives: PostureObjectiveInput[];
+  /**
+   * The standing compliance tier (blueprint Phase 4), reduced to completion +
+   * an open-overdue count. When present it grounds the Compliance pillar in
+   * real compliance work; when omitted the pillar falls back to the
+   * Chain-of-Trust truth+concept proxy. Optional so existing callers are
+   * unaffected.
+   */
+  compliance?: PostureComplianceInput;
+}
+
+/** The standing compliance tier reduced to what the Compliance pillar needs. */
+export interface PostureComplianceInput {
+  /** Total compliance objectives in the lane. */
+  total: number;
+  /** How many are done. */
+  done: number;
+  /** Open objectives that have aged into High priority (overdue). */
+  overdue: number;
 }
 
 /** A band turns the composite into a one-word institutional standing. */
@@ -98,6 +116,19 @@ function governanceScore(objectives: PostureObjectiveInput[]): number | null {
   return clamp100((earned / total) * 100);
 }
 
+/**
+ * Compliance score from the standing compliance tier: completion of the lane,
+ * with each open-overdue (aged-into-High) item docking a fixed penalty —
+ * ignored compliance is the risk the pillar exists to surface. Returns null
+ * when the lane is empty so the caller can fall back to the trust proxy.
+ */
+function complianceScore(input: PostureComplianceInput): number | null {
+  if (input.total <= 0) return null;
+  const base = (input.done / input.total) * 100;
+  const penalty = input.overdue * 12;
+  return clamp100(base - penalty);
+}
+
 /** Composite band thresholds — aligned with the readiness hero's bands. */
 function bandFor(composite: number | null): PostureBand {
   if (composite === null) return 'unmeasured';
@@ -120,9 +151,13 @@ function bandFor(composite: number | null): PostureBand {
  * not-yet-authored plan shows "—" rather than dragging the number to zero.
  */
 export function computeInstitutionalPosture(input: PostureInput): PostureResult {
-  const { trust, capitalReadiness, objectives } = input;
+  const { trust, capitalReadiness, objectives, compliance: complianceLane } = input;
 
-  const compliance = clamp100(0.6 * trust.truth + 0.4 * trust.concept);
+  // Prefer the real standing compliance tier when it has objectives; otherwise
+  // fall back to the Chain-of-Trust truth+concept audit-readiness proxy.
+  const trustComplianceProxy = clamp100(0.6 * trust.truth + 0.4 * trust.concept);
+  const laneCompliance = complianceLane ? complianceScore(complianceLane) : null;
+  const compliance = laneCompliance ?? trustComplianceProxy;
   const execution = clamp100(0.55 * trust.execution + 0.45 * trust.work);
   const capital = capitalReadiness === null ? null : clamp100(capitalReadiness);
   const governance = governanceScore(objectives);

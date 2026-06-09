@@ -11,6 +11,8 @@ import {
   storeIntegrationSecret
 } from '@/lib/integrations/connections';
 import { refreshProviderToken } from '@/lib/integrations/oauth';
+import { asPaidIntegration, PAID_INTEGRATION_ACTION } from '@/lib/credits/costs';
+import { meterIntegration } from '@/lib/credits/meter';
 
 /**
  * POST /api/integrations/:provider/sync
@@ -79,6 +81,26 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ provider:
       { error: `Reconnect ${providerId}; no private token is stored.` },
       { status: 400 }
     );
+  }
+
+  // Paid integrations (Apollo, etc.) cost real money per call — gate by plan and
+  // debit Earn credits before hitting the vendor. Owned/free providers (Gmail,
+  // Calendar, …) aren't in PAID_INTEGRATIONS and skip metering entirely.
+  const paid = asPaidIntegration(providerId);
+  if (paid) {
+    const meter = await meterIntegration(orgId, paid, PAID_INTEGRATION_ACTION[paid], connection.id);
+    if (!meter.ok) {
+      const upgrade = meter.upgradeTo ?? 'a higher plan';
+      const status = meter.reason === 'gated' ? 403 : 402;
+      const error =
+        meter.reason === 'gated'
+          ? `${providerId} isn't available on the ${meter.plan} plan — upgrade to ${upgrade} to use it.`
+          : `Out of Earn credits to sync ${providerId} — top up or upgrade to ${upgrade}.`;
+      return NextResponse.json(
+        { error, reason: meter.reason, upgradeTo: meter.upgradeTo },
+        { status }
+      );
+    }
   }
 
   try {

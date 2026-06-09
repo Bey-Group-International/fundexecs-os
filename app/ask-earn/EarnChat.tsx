@@ -67,7 +67,7 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
   const earn = getCOO();
   const router = useRouter();
   // Phase-aware cognition lifecycle (routing → retrieving → streaming → …).
-  const { phase, begin, onEvent, settle } = useEarnLifecycle();
+  const { phase, specialistSlug, begin, onEvent, settle } = useEarnLifecycle();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
@@ -150,9 +150,18 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
           sources?: Source[];
           message?: string;
           action?: EarnAction;
+          balance?: number;
         }) => {
           // Drive the phase-aware cognition indicator off every event.
           onEvent(evt.type);
+          // A debit landed — broadcast the new balance so the top-nav wallet
+          // gauge updates live without refetching (it listens for `earn:credit`).
+          if (evt.type === 'credit' && typeof evt.balance === 'number') {
+            window.dispatchEvent(
+              new CustomEvent('earn:credit', { detail: { balance: evt.balance } })
+            );
+            return;
+          }
           // Safe navigation runs immediately (the dock persists across routes).
           if (
             evt.type === 'action' &&
@@ -304,7 +313,7 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
               </div>
             </div>
           ))}
-          <EarnCognition phase={phase} />
+          <EarnCognition phase={phase} specialistSlug={specialistSlug} />
           {error && <div className="text-[12px] text-danger">{error}</div>}
           <div ref={endRef} />
         </Card>

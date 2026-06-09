@@ -444,18 +444,102 @@ async function loadMaterialsReadiness(orgId: string): Promise<number> {
   // readiness from governance completion so the dashboard never goes blank.
   const { data } = await supabase
     .from('governance_objectives')
-    .select('status, archived_at, deleted_at')
+    .select('status, archived_at, deleted_at, source, approved_at')
     .eq('org_id', orgId)
     .is('deleted_at', null);
 
-  const rows = (data ?? []) as Array<{ status: string; archived_at: string | null }>;
-  const active = rows.filter((r) => !r.archived_at);
+  const rows = (data ?? []) as Array<{
+    status: string;
+    archived_at: string | null;
+    source: string | null;
+    approved_at: string | null;
+  }>;
+  // Exclude unapproved drafts (signal/cascade objectives the operator hasn't
+  // accepted yet) so pending suggestions don't drag readiness down. Manual
+  // objectives always count; non-manual ones only once approved.
+  const active = rows.filter(
+    (r) =>
+      !r.archived_at && ((r.source ?? 'manual').toLowerCase() === 'manual' || r.approved_at != null)
+  );
   if (active.length === 0) return 0;
   const done = active.filter((r) => {
     const s = (r.status ?? '').toLowerCase();
     return s === 'done' || s === 'complete' || s === 'completed' || s === 'closed';
   }).length;
   return Math.round((done / active.length) * 100);
+}
+
+/* ---------------------------------------------------------------------------
+ * Lightweight lifecycle inputs — for callers that only need the stage/gate
+ * state (e.g. the strategy gate-unlock writeback), not the full dashboard.
+ * ------------------------------------------------------------------------- */
+
+/** The lifecycle inputs plus the trust layers, for reuse by the strategy layer. */
+export interface LifecycleContext {
+  inputs: LifecycleInputs;
+  trust: { truth: number; concept: number; execution: number; work: number };
+}
+
+/**
+ * Build just the `LifecycleInputs` for an org by composing the same loaders
+ * `getDashboardData` uses, without the heavier command-center / momentum / feed
+ * reads. Exported so server actions can re-run `computeLifecycleStageResult`
+ * around a write (gate-unlock detection) and the strategy loader can derive a
+ * real objective `pct`. RLS-scoped; degrades to a zero-state on any failure.
+ */
+export async function loadLifecycleContext(orgId: string): Promise<LifecycleContext> {
+  const zeroTrust = { truth: 0, concept: 0, execution: 0, work: 0 };
+  try {
+    const fundProfile = await getFundProfile(orgId);
+    const [trust, pipeline, materialsReadiness, raiseProgress] = await Promise.all([
+      loadTrustProgress(orgId, fundProfile.managerUserId),
+      loadPipelineSignals(orgId),
+      loadMaterialsReadiness(orgId),
+      loadRaiseProgress(orgId, fundProfile)
+    ]);
+
+    const layers = {
+      truth: trust.truth,
+      concept: trust.concept,
+      execution: trust.execution,
+      work: trust.work
+    };
+    const inputs: LifecycleInputs = {
+      profileCompleteness: fundProfile.completenessScore,
+      trust: layers,
+      hasTrustRecord: trust.hasRecord,
+      materialsReadiness,
+      pipeline: {
+        total: pipeline.total,
+        contacted: pipeline.contacted,
+        softCircled: pipeline.softCircled,
+        committed: pipeline.committed,
+        inDiligence: pipeline.inDiligence
+      },
+      raise: {
+        target: raiseProgress.target,
+        softCircled: raiseProgress.softCircled,
+        committed: raiseProgress.committed
+      },
+      hasDeployedCapital: raiseProgress.committed > 0,
+      completedDiligenceRuns: pipeline.completedDiligenceRuns
+    };
+    return { inputs, trust: layers };
+  } catch {
+    return {
+      inputs: {
+        profileCompleteness: 0,
+        trust: zeroTrust,
+        hasTrustRecord: false,
+        materialsReadiness: 0,
+        pipeline: { total: 0, contacted: 0, softCircled: 0, committed: 0, inDiligence: 0 },
+        raise: { target: 0, softCircled: 0, committed: 0 },
+        hasDeployedCapital: false,
+        completedDiligenceRuns: 0
+      },
+      trust: zeroTrust
+    };
+  }
 }
 
 /* ---------------------------------------------------------------------------
