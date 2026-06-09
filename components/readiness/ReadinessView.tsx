@@ -3,25 +3,27 @@
 import { useMemo, useState } from 'react';
 import {
   ArrowUpRight,
+  ChevronDown,
+  Minus,
   RotateCcw,
   SlidersHorizontal,
+  Sparkles,
   TrendingDown,
-  TrendingUp,
-  Minus,
-  Zap
+  TrendingUp
 } from 'lucide-react';
 import { Card, SectionTitle, AnimatedNumber } from '@/components/ui';
 import { RingGauge } from '@/components/dashboard/RingGauge';
 import { RadarChart, type RadarAxis } from '@/components/dashboard/RadarChart';
-import { Sparkline } from '@/components/dashboard/Sparkline';
 import { compactMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { ReadinessDimension, ReadinessDimensionScore } from '@/lib/lifecycle';
 import {
+  INSTITUTIONAL_BAR,
   computeCompoundReadiness,
   computeReadinessValue,
   rankByValue,
   type CompoundReadiness,
+  type ReadinessTrajectory,
   type ReadinessValue,
   type RankedDimension
 } from '@/lib/readiness';
@@ -87,15 +89,18 @@ export interface ReadinessViewProps {
   value: ReadinessValue;
   ranked: RankedDimension[];
   history: ReadinessHistory;
+  trajectory: ReadinessTrajectory;
   target: number;
   lockedByReadiness: number;
 }
 
 /**
- * ReadinessView — the interactive compound-readiness surface. Server hands in
- * the live model; the what-if sliders recompute the compound score, projected
- * value, and action ranking entirely client-side via the same pure engine, so
- * "what happens if I close Proof?" answers instantly without a round-trip.
+ * ReadinessView — the compound-readiness surface, refined to lead with the one
+ * move that matters. The first screen answers "where do I stand, and what do I
+ * do next?": the compound score against the institutional bar, the single
+ * highest-value action as a one-click CTA, a since-last-week digest, and the
+ * forward trajectory of steady execution. The what-if simulator and radar — the
+ * exploratory depth — live behind a disclosure so they never crowd the decision.
  */
 export function ReadinessView({
   breakdown,
@@ -103,71 +108,40 @@ export function ReadinessView({
   value,
   ranked,
   history,
+  trajectory,
   target,
   lockedByReadiness
 }: ReadinessViewProps) {
-  // What-if state: a per-dimension score override. Starts at the live scores.
-  const liveScores = useMemo(
-    () =>
-      Object.fromEntries(breakdown.map((d) => [d.dimension, d.score])) as Record<Dimension, number>,
-    [breakdown]
-  );
-  const [draft, setDraft] = useState<Record<Dimension, number>>(liveScores);
+  const gapToBar = Math.max(0, INSTITUTIONAL_BAR - compound.compoundScore);
+  const atBar = compound.compoundScore >= INSTITUTIONAL_BAR;
+  const premium = compound.compoundScore - compound.baseScore;
+  const overall = toneForScore(compound.compoundScore);
 
-  const dirty = useMemo(
-    () => breakdown.some((d) => draft[d.dimension] !== d.score),
-    [draft, breakdown]
-  );
+  // The single highest-value move (skip any already maxed).
+  const topMove = ranked.find((r) => r.gap > 0) ?? null;
 
-  // Recompute the entire model from the draft scores. Pure + cheap.
-  const sim = useMemo(() => {
-    const simBreakdown: ReadinessDimensionScore[] = breakdown.map((d) => ({
-      ...d,
-      score: draft[d.dimension],
-      contribution: (draft[d.dimension] * d.weight) / 100
-    }));
-    const c = computeCompoundReadiness(simBreakdown);
-    const v = computeReadinessValue(c, target);
-    return { compound: c, value: v, ranked: rankByValue(c, v) };
-  }, [draft, breakdown, target]);
-
-  // When the sliders are untouched, show the server model verbatim; otherwise
-  // show the simulated one. Keeps the "live" view authoritative.
-  const view = dirty ? sim : { compound, value, ranked };
-
-  const overall = toneForScore(view.compound.compoundScore);
-  const gap = Math.max(0, 100 - view.compound.compoundScore);
-  const premium = view.compound.compoundScore - view.compound.baseScore;
-
-  const axes: RadarAxis[] = breakdown.map((d) => ({
-    label: DIMENSION_LABEL[d.dimension],
-    value: draft[d.dimension]
-  }));
-
-  const trendPoints = history.series.map((p) => p.score);
-  const mom = history.momentum;
+  const pastScores = history.series.map((p) => p.score);
+  const digest = history.digest;
+  const weekValueDelta = target > 0 ? Math.round((target * digest.weekDelta) / 100) : 0;
 
   return (
     <div className="flex flex-col gap-5">
-      {/* ── Hero: compound score + multiplier + projected value + trend ── */}
+      {/* ── Hero: where you stand + your #1 move ──────────────────────────── */}
       <Card className="@container p-5">
-        <SectionTitle
-          eyebrow="Compound Readiness"
-          title="How investable, compounded"
-          className="mb-4"
-        />
-        <div className="flex flex-col gap-5 @[44rem]:flex-row @[44rem]:items-center">
+        <SectionTitle eyebrow="Compound Readiness" title="Where you stand" className="mb-4" />
+        <div className="flex flex-col gap-5 @[46rem]:flex-row @[46rem]:items-stretch">
+          {/* Standing */}
           <div className="flex flex-none items-center gap-4">
             <RingGauge
-              value={view.compound.compoundScore}
+              value={compound.compoundScore}
               size={132}
               stroke={11}
               color={overall.color}
               glow
-              ariaLabel={`Compound readiness ${view.compound.compoundScore} of 100`}
+              ariaLabel={`Compound readiness ${compound.compoundScore} of 100`}
             >
               <AnimatedNumber
-                value={view.compound.compoundScore}
+                value={compound.compoundScore}
                 className="text-[34px] font-semibold tracking-[-0.02em]"
               />
               <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-fg-4">
@@ -175,86 +149,437 @@ export function ReadinessView({
               </span>
             </RingGauge>
             <div className="min-w-0">
-              <MultiplierBadge multiplier={view.compound.multiplier} />
+              <MultiplierBadge multiplier={compound.multiplier} />
               <p className="mt-2 text-[12px] text-fg-3">
                 Base{' '}
-                <span className="font-semibold tabular-nums text-fg-1">
-                  {view.compound.baseScore}
-                </span>{' '}
+                <span className="font-semibold tabular-nums text-fg-1">{compound.baseScore}</span>{' '}
                 {premium >= 0 ? '+' : '−'}
                 <span className="font-semibold tabular-nums text-fg-1">
                   {Math.abs(premium)}
                 </span>{' '}
                 from compounding
               </p>
-              <p className="mt-0.5 text-[11px] text-fg-4">
-                {gap === 0
-                  ? 'You clear the institutional bar.'
-                  : `${gap} points to institutional-ready`}
+              <p className="mt-1 flex items-center gap-1.5 text-[11px] text-fg-4">
+                <span
+                  className="inline-block h-1.5 w-1.5 flex-none rounded-full"
+                  style={{ backgroundColor: atBar ? 'var(--success)' : 'var(--warning)' }}
+                  aria-hidden
+                />
+                {atBar ? (
+                  <>Clears the institutional bar ({INSTITUTIONAL_BAR})</>
+                ) : (
+                  <>
+                    <span className="font-semibold tabular-nums text-fg-2">{gapToBar}</span> to the
+                    institutional bar ({INSTITUTIONAL_BAR})
+                  </>
+                )}
               </p>
             </div>
           </div>
 
-          <div className="grid flex-1 gap-3 @[30rem]:grid-cols-2">
-            <ValueTile
-              label="Projected closeable"
-              amount={view.value.projected}
-              hint={
-                target > 0 ? `at ${view.compound.compoundScore}% readiness` : 'set a target raise'
-              }
-              tone="success"
-            />
-            <ValueTile
-              label="Locked by readiness"
-              amount={dirty ? view.value.locked : lockedByReadiness}
-              hint="unlocks as the score climbs"
-              tone="warning"
-            />
+          {/* #1 move — the focal point */}
+          <div className="flex-1 @[46rem]:border-l @[46rem]:border-hairline @[46rem]:pl-5">
+            {topMove ? (
+              <NextMove move={topMove} target={target} />
+            ) : (
+              <div className="flex h-full flex-col justify-center rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] p-4">
+                <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-success">
+                  <Sparkles size={12} strokeWidth={2} aria-hidden />
+                  Institutional-ready
+                </p>
+                <p className="mt-1 text-[14px] font-semibold text-fg-1">
+                  Every dimension is maxed. Hold the line.
+                </p>
+                <p className="mt-1 text-[12px] text-fg-3">
+                  Keep each layer current so the score doesn&apos;t drift below the bar.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Trend + momentum */}
-        <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-hairline bg-bg-1 px-4 py-3">
-          <div className="min-w-0">
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
-              Trend · 30 days
-            </p>
-            <MomentumLine
-              delta={mom.delta}
-              velocity={mom.velocity}
-              direction={mom.direction}
-              samples={mom.samples}
-            />
-          </div>
-          {trendPoints.length >= 2 ? (
-            <Sparkline
-              points={trendPoints}
-              tone={mom.direction === 'down' ? 'danger' : 'success'}
-              width={160}
-              height={40}
-              ariaLabel={`Readiness trend over ${mom.samples} snapshots`}
-            />
-          ) : (
-            <p className="text-[11px] text-fg-4">
-              Trend builds as you return — check back tomorrow.
-            </p>
-          )}
+        {/* Value at stake — compact, always honest about the target */}
+        <div className="mt-4 grid gap-3 @[30rem]:grid-cols-2">
+          <ValueTile
+            label="Projected closeable"
+            amount={value.projected}
+            hint={target > 0 ? `at ${compound.compoundScore}% readiness` : 'set a target raise'}
+            tone="success"
+          />
+          <ValueTile
+            label="Locked by readiness"
+            amount={lockedByReadiness}
+            hint="unlocks as the score climbs"
+            tone="warning"
+          />
         </div>
       </Card>
 
-      <div className="grid gap-5 @container lg:grid-cols-[1.15fr_1fr]">
-        {/* ── What-if simulator ── */}
+      {/* ── Momentum + trajectory ─────────────────────────────────────────── */}
+      <Card className="p-5">
+        <SectionTitle
+          eyebrow="Compounding"
+          title="Where steady execution lands you"
+          className="mb-3"
+        />
+        <DigestStrip digest={digest} weekValueDelta={weekValueDelta} hasTarget={target > 0} />
+        <div className="mt-4">
+          <TrajectoryChart past={pastScores} trajectory={trajectory} />
+          <TrajectoryCaption trajectory={trajectory} target={target} />
+        </div>
+      </Card>
+
+      {/* ── Other moves, ranked by value ──────────────────────────────────── */}
+      {ranked.some((r) => r.gap > 0 && r !== topMove) ? (
         <Card className="p-5">
+          <SectionTitle eyebrow="Then" title="Next moves, by value unlocked" className="mb-3" />
+          <ol className="flex flex-col gap-2">
+            {ranked
+              .filter((r) => r !== topMove)
+              .map((r, i) => (
+                <MoveRow key={r.dimension} move={r} rank={i + 2} target={target} />
+              ))}
+          </ol>
+        </Card>
+      ) : null}
+
+      {/* ── Explore the model (progressive disclosure) ────────────────────── */}
+      <ExploreModel breakdown={breakdown} target={target} />
+    </div>
+  );
+}
+
+/* ── #1 move ───────────────────────────────────────────────────────────── */
+
+/** The hero call-to-action: the single highest-value dimension to move next. */
+function NextMove({ move, target }: { move: RankedDimension; target: number }) {
+  const next = DIMENSION_NEXT_ACTION[move.dimension];
+  return (
+    <div className="flex h-full flex-col justify-center">
+      <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-azure-1">
+        <Sparkles size={12} strokeWidth={2} aria-hidden />
+        Your #1 move
+      </p>
+      <p className="mt-1 text-[16px] font-semibold tracking-[-0.01em] text-fg-1">
+        {DIMENSION_LABEL[move.dimension]}
+        <span className="text-fg-4"> · {DIMENSION_HINT[move.dimension]}</span>
+      </p>
+      <p className="mt-1 text-[12.5px] text-fg-3">{next.action}</p>
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px]">
+        <Stat label="readiness" value={`+${move.lift.toFixed(1)} pts`} />
+        {target > 0 ? <Stat label="unlocks" value={compactMoney(move.valueUnlock)} accent /> : null}
+      </div>
+      <a
+        href={next.href}
+        className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg bg-azure-1 px-3.5 py-2 text-[12.5px] font-semibold text-[#070b14] transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-azure-1"
+      >
+        {next.cta}
+        <ArrowUpRight size={14} strokeWidth={2.2} aria-hidden />
+      </a>
+    </div>
+  );
+}
+
+/* ── Digest ────────────────────────────────────────────────────────────── */
+
+/** "Since last week" read — score Δ, derived $ Δ, and the tracking streak. */
+function DigestStrip({
+  digest,
+  weekValueDelta,
+  hasTarget
+}: {
+  digest: ReadinessHistory['digest'];
+  weekValueDelta: number;
+  hasTarget: boolean;
+}) {
+  if (!digest.hasPrior) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-hairline bg-bg-1 px-4 py-3 text-[12px] text-fg-3">
+        <Minus size={14} strokeWidth={2} className="text-fg-4" aria-hidden />
+        First snapshot recorded — your week-over-week change appears here once you return.
+      </div>
+    );
+  }
+  const up = digest.weekDelta > 0;
+  const flat = digest.weekDelta === 0;
+  const color = up ? 'text-success' : flat ? 'text-fg-3' : 'text-danger';
+  const Icon = up ? TrendingUp : flat ? Minus : TrendingDown;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-hairline bg-bg-1 px-4 py-3">
+      <div className="min-w-0">
+        <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+          Since last week
+        </p>
+        <p className={cn('mt-0.5 flex items-center gap-1.5 text-[14px] font-semibold', color)}>
+          <Icon size={15} strokeWidth={2.2} aria-hidden />
+          {up ? '+' : ''}
+          {digest.weekDelta} pts
+          {hasTarget && weekValueDelta !== 0 ? (
+            <span className="text-[12px] font-medium text-fg-4">
+              · {weekValueDelta > 0 ? '+' : ''}
+              {compactMoney(weekValueDelta)} projected
+            </span>
+          ) : null}
+        </p>
+      </div>
+      <p className="text-[11px] text-fg-4">
+        <span className="font-semibold tabular-nums text-fg-2">{digest.trackedDays}</span> day
+        {digest.trackedDays === 1 ? '' : 's'} tracked
+      </p>
+    </div>
+  );
+}
+
+/* ── Trajectory chart ──────────────────────────────────────────────────── */
+
+const CHART_W = 320;
+const CHART_H = 96;
+
+/**
+ * Past trend (solid) flowing into the projected curve (dashed), on a fixed
+ * 0–100 scale so the institutional-bar reference line is meaningful. Pure SVG,
+ * tone-driven, reduced-motion safe (no animation).
+ */
+function TrajectoryChart({
+  past,
+  trajectory
+}: {
+  past: number[];
+  trajectory: ReadinessTrajectory;
+}) {
+  const futureScores = trajectory.points.map((p) => p.score);
+  // Shared "now" point: the last past snapshot, or the projection's start.
+  const nowX = past.length > 0 ? past.length - 1 : 0;
+  const maxWeek = trajectory.points.length - 1;
+  const maxX = nowX + maxWeek;
+
+  const x = (i: number) => (maxX > 0 ? (i / maxX) * CHART_W : 0);
+  const y = (v: number) => CHART_H - (Math.max(0, Math.min(100, v)) / 100) * CHART_H;
+
+  const pastPath = past.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i)} ${y(v)}`).join(' ');
+  const futurePath = futureScores
+    .map((v, i) => `${i === 0 ? 'M' : 'L'}${x(nowX + i)} ${y(v)}`)
+    .join(' ');
+  const barY = y(INSTITUTIONAL_BAR);
+
+  const lastFuture = trajectory.points[trajectory.points.length - 1];
+  const crossX = trajectory.weeksToBar !== null ? x(nowX + trajectory.weeksToBar) : null;
+
+  return (
+    <svg
+      viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+      width="100%"
+      height={CHART_H}
+      role="img"
+      aria-label={`Readiness trajectory. Now ${futureScores[0]} of 100, projected ${lastFuture.score} in ${maxWeek} weeks. Institutional bar at ${INSTITUTIONAL_BAR}.`}
+      className="block"
+      preserveAspectRatio="none"
+    >
+      {/* Institutional bar reference */}
+      <line
+        x1={0}
+        y1={barY}
+        x2={CHART_W}
+        y2={barY}
+        stroke="var(--fg-5)"
+        strokeWidth={1}
+        strokeDasharray="3 3"
+      />
+      {/* Cross-the-bar marker */}
+      {crossX !== null ? (
+        <line
+          x1={crossX}
+          y1={0}
+          x2={crossX}
+          y2={CHART_H}
+          stroke="var(--success)"
+          strokeWidth={1}
+          strokeDasharray="2 3"
+          opacity={0.5}
+        />
+      ) : null}
+      {/* Projection (dashed) */}
+      <path
+        d={futurePath}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth={2}
+        strokeDasharray="4 3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* History (solid) */}
+      {past.length >= 2 ? (
+        <path
+          d={pastPath}
+          fill="none"
+          stroke="var(--fg-3)"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : null}
+      {/* Now marker */}
+      <circle cx={x(nowX)} cy={y(futureScores[0])} r={3} fill="var(--accent)" />
+    </svg>
+  );
+}
+
+/** One-line read of the projection: when (and whether) it reaches the bar. */
+function TrajectoryCaption({
+  trajectory,
+  target
+}: {
+  trajectory: ReadinessTrajectory;
+  target: number;
+}) {
+  const last = trajectory.points[trajectory.points.length - 1];
+  const weeks = trajectory.points.length - 1;
+  const reachesBar = trajectory.weeksToBar !== null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+      <p className="text-[11.5px] text-fg-3">
+        {reachesBar ? (
+          <>
+            At ~{trajectory.pacePerWeek} pts/week, you clear the institutional bar in{' '}
+            <span className="font-semibold text-success">
+              {trajectory.weeksToBar} week{trajectory.weeksToBar === 1 ? '' : 's'}
+            </span>
+            .
+          </>
+        ) : (
+          <>
+            At ~{trajectory.pacePerWeek} pts/week you reach{' '}
+            <span className="font-semibold text-fg-1">{last.score}</span> in {weeks} weeks — keep
+            the cadence up to clear the bar.
+          </>
+        )}
+      </p>
+      <p className="text-[11px] text-fg-4">
+        <span className="inline-block h-0.5 w-4 align-middle [border-top:2px_dashed_var(--accent)]" />{' '}
+        projected
+        {target > 0 ? (
+          <>
+            {' '}
+            ·{' '}
+            <span className="font-semibold tabular-nums text-fg-2">
+              {compactMoney(last.projected)}
+            </span>{' '}
+            in {weeks}w
+          </>
+        ) : null}
+      </p>
+    </div>
+  );
+}
+
+/* ── Ranked move row ───────────────────────────────────────────────────── */
+
+/** A secondary move in the ranked list (rank ≥ 2). */
+function MoveRow({ move, rank, target }: { move: RankedDimension; rank: number; target: number }) {
+  const tone = toneForScore(move.score);
+  const next = DIMENSION_NEXT_ACTION[move.dimension];
+  const maxed = move.gap === 0;
+  return (
+    <li className="rounded-xl border border-hairline bg-bg-1 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-[13px] font-semibold text-fg-1">
+          <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-surface-2 text-[10px] tabular-nums text-fg-3">
+            {rank}
+          </span>
+          {DIMENSION_LABEL[move.dimension]}
+        </span>
+        <span className="text-[12px] font-semibold tabular-nums" style={{ color: tone.color }}>
+          {move.score}
+          <span className="text-fg-5"> / 100</span>
+        </span>
+      </div>
+      {maxed ? (
+        <p className="mt-2 pl-7 text-[11.5px] font-semibold text-success">Maxed — nice work.</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 pl-7">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+            <Stat label="+points" value={move.lift.toFixed(1)} />
+            {target > 0 ? (
+              <Stat label="unlocks" value={compactMoney(move.valueUnlock)} accent />
+            ) : (
+              <Stat label="gap" value={`${move.gap} pts`} />
+            )}
+          </div>
+          <a
+            href={next.href}
+            className="inline-flex flex-none items-center gap-1 text-[11px] font-semibold text-azure-1 hover:underline"
+          >
+            {next.cta}
+            <ArrowUpRight size={12} strokeWidth={2} aria-hidden />
+          </a>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/* ── Explore the model (what-if + radar, collapsed) ────────────────────── */
+
+/**
+ * The exploratory depth — drag-to-simulate and the balance radar — behind a
+ * native disclosure so the first screen stays a decision, not a dashboard. The
+ * simulator is self-contained: it recomputes its own compound/value off draft
+ * scores and never touches the live standing above.
+ */
+function ExploreModel({
+  breakdown,
+  target
+}: {
+  breakdown: ReadinessDimensionScore[];
+  target: number;
+}) {
+  const liveScores = useMemo(
+    () =>
+      Object.fromEntries(breakdown.map((d) => [d.dimension, d.score])) as Record<Dimension, number>,
+    [breakdown]
+  );
+  const [draft, setDraft] = useState<Record<Dimension, number>>(liveScores);
+  const dirty = useMemo(
+    () => breakdown.some((d) => draft[d.dimension] !== d.score),
+    [draft, breakdown]
+  );
+
+  const sim = useMemo(() => {
+    const simBreakdown: ReadinessDimensionScore[] = breakdown.map((d) => ({
+      ...d,
+      score: draft[d.dimension],
+      contribution: (draft[d.dimension] * d.weight) / 100
+    }));
+    const c = computeCompoundReadiness(simBreakdown);
+    return { compound: c, value: computeReadinessValue(c, target) };
+  }, [draft, breakdown, target]);
+
+  const axes: RadarAxis[] = breakdown.map((d) => ({
+    label: DIMENSION_LABEL[d.dimension],
+    value: draft[d.dimension]
+  }));
+
+  return (
+    <details className="group rounded-2xl border border-hairline bg-surface-1">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2 text-[13px] font-semibold text-fg-1">
+          <SlidersHorizontal size={15} strokeWidth={2} aria-hidden />
+          Explore the model — what-if &amp; balance
+        </span>
+        <ChevronDown
+          size={16}
+          strokeWidth={2}
+          className="text-fg-4 transition-transform group-open:rotate-180"
+          aria-hidden
+        />
+      </summary>
+
+      <div className="grid gap-5 border-t border-hairline p-5 @container lg:grid-cols-[1.15fr_1fr]">
+        {/* What-if simulator */}
+        <div>
           <div className="mb-3 flex items-center justify-between gap-2">
-            <SectionTitle
-              eyebrow="What if"
-              title={
-                <span className="inline-flex items-center gap-2">
-                  <SlidersHorizontal size={15} strokeWidth={2} aria-hidden />
-                  Drag to see the compounding
-                </span>
-              }
-            />
+            <p className="text-[12.5px] font-semibold text-fg-1">Drag to see the compounding</p>
             {dirty ? (
               <button
                 type="button"
@@ -273,7 +598,7 @@ export function ReadinessView({
               const tone = toneForScore(draft[dim]);
               const delta = draft[dim] - d.score;
               const isFoundation =
-                view.compound.dimensions.find((x) => x.dimension === dim)?.kind === 'foundation';
+                sim.compound.dimensions.find((x) => x.dimension === dim)?.kind === 'foundation';
               return (
                 <li key={dim}>
                   <div className="mb-1 flex items-center justify-between gap-2">
@@ -318,29 +643,35 @@ export function ReadinessView({
           </ul>
 
           <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-hairline bg-bg-1 p-3 text-center">
-            <SimStat label="Compound" value={view.compound.compoundScore} suffix="/100" />
-            <SimStat label="Synergy" value={Math.round(view.compound.synergy * 100)} suffix="%" />
+            <SimStat label="Compound" value={sim.compound.compoundScore} suffix="/100" />
+            <SimStat label="Synergy" value={Math.round(sim.compound.synergy * 100)} suffix="%" />
             <SimStat
               label="Balance bonus"
-              value={Math.round(view.compound.balanceBonus)}
+              value={Math.round(sim.compound.balanceBonus)}
               suffix="pts"
             />
           </div>
+          {target > 0 ? (
+            <p className="mt-2 text-center text-[11.5px] text-fg-3">
+              Projected closeable:{' '}
+              <span className="font-semibold text-success">
+                {compactMoney(sim.value.projected)}
+              </span>
+            </p>
+          ) : null}
           <p className="mt-2 text-[11px] leading-relaxed text-fg-4">
             Foundation (Profile · Proof) sets{' '}
             <span className="font-semibold text-fg-2">synergy</span> — execution counts for more
-            once you&apos;re credible. Clear every link past {/* balance floor */}40 and the loop
-            earns a <span className="font-semibold text-fg-2">balance bonus</span>.
+            once you&apos;re credible. Clear every link past 40 and the loop earns a{' '}
+            <span className="font-semibold text-fg-2">balance bonus</span>.
           </p>
-        </Card>
+        </div>
 
-        {/* ── Radar ── */}
-        <Card className="flex flex-col items-center p-5">
-          <SectionTitle
-            eyebrow="Shape"
-            title="Balance across the five"
-            className="mb-2 self-start"
-          />
+        {/* Radar */}
+        <div className="flex flex-col items-center">
+          <p className="mb-2 self-start text-[12.5px] font-semibold text-fg-1">
+            Balance across the five
+          </p>
           <RadarChart
             axes={axes}
             ariaLabel={`Readiness radar. ${breakdown
@@ -350,98 +681,13 @@ export function ReadinessView({
           <p className="mt-2 text-center text-[11px] text-fg-4">
             A round shape compounds; a spiky one leaks value through its weakest link{' '}
             <span className="font-semibold text-fg-2">
-              ({DIMENSION_LABEL[view.compound.weakestLink]})
+              ({DIMENSION_LABEL[sim.compound.weakestLink]})
             </span>
             .
           </p>
-        </Card>
+        </div>
       </div>
-
-      {/* ── Ranked actions: fastest value, not biggest gap ── */}
-      <Card className="p-5">
-        <SectionTitle
-          eyebrow="Drive to 100%"
-          title={
-            <span className="inline-flex items-center gap-2">
-              <Zap size={15} strokeWidth={2} aria-hidden />
-              Ranked by value unlocked
-            </span>
-          }
-          className="mb-3"
-        />
-        <ol className="flex flex-col gap-2">
-          {view.ranked.map((r, i) => {
-            const tone = toneForScore(r.score);
-            const next = DIMENSION_NEXT_ACTION[r.dimension];
-            const maxed = r.gap === 0;
-            return (
-              <li
-                key={r.dimension}
-                className={cn(
-                  'rounded-xl border bg-bg-1 p-3',
-                  i === 0 && !maxed ? 'border-[var(--azure-line)]' : 'border-hairline'
-                )}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-[13px] font-semibold text-fg-1">
-                    <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-surface-2 text-[10px] tabular-nums text-fg-3">
-                      {i + 1}
-                    </span>
-                    {DIMENSION_LABEL[r.dimension]}
-                    {i === 0 && !maxed ? (
-                      <span className="rounded-full bg-[var(--azure-soft)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-azure-1">
-                        Best lever
-                      </span>
-                    ) : null}
-                  </span>
-                  <span
-                    className="text-[12px] font-semibold tabular-nums"
-                    style={{ color: tone.color }}
-                  >
-                    {r.score}
-                    <span className="text-fg-5"> / 100</span>
-                  </span>
-                </div>
-                <p className="mt-0.5 pl-7 text-[11px] text-fg-4">{DIMENSION_HINT[r.dimension]}</p>
-
-                {maxed ? (
-                  <p className="mt-2 pl-7 text-[11.5px] font-semibold text-success">
-                    Maxed — nice work.
-                  </p>
-                ) : (
-                  <>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 pl-7 text-[11px]">
-                      <Stat label="+points" value={`${r.lift.toFixed(1)}`} />
-                      {target > 0 ? (
-                        <>
-                          <Stat label="unlocks" value={compactMoney(r.valueUnlock)} accent />
-                          <Stat
-                            label="per point"
-                            value={compactMoney(Math.round(r.valuePerPoint))}
-                          />
-                        </>
-                      ) : (
-                        <Stat label="gap" value={`${r.gap} pts`} />
-                      )}
-                    </div>
-                    <div className="mt-2 flex items-start justify-between gap-3 pl-7">
-                      <p className="text-[11.5px] text-fg-3">{next.action}</p>
-                      <a
-                        href={next.href}
-                        className="inline-flex flex-none items-center gap-1 text-[11px] font-semibold text-azure-1 hover:underline"
-                      >
-                        {next.cta}
-                        <ArrowUpRight size={12} strokeWidth={2} aria-hidden />
-                      </a>
-                    </div>
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </Card>
-    </div>
+    </details>
   );
 }
 
@@ -495,37 +741,6 @@ function ValueTile({
   );
 }
 
-/** Trend read: signed point delta + per-day velocity with a directional icon; falls back to a first-snapshot note under two samples. */
-function MomentumLine({
-  delta,
-  velocity,
-  direction,
-  samples
-}: {
-  delta: number;
-  velocity: number;
-  direction: 'up' | 'down' | 'flat';
-  samples: number;
-}) {
-  if (samples < 2) {
-    return <p className="mt-0.5 text-[12.5px] font-semibold text-fg-2">First snapshot recorded</p>;
-  }
-  const color =
-    direction === 'up' ? 'text-success' : direction === 'down' ? 'text-danger' : 'text-fg-3';
-  const Icon = direction === 'up' ? TrendingUp : direction === 'down' ? TrendingDown : Minus;
-  return (
-    <p className={cn('mt-0.5 flex items-center gap-1.5 text-[12.5px] font-semibold', color)}>
-      <Icon size={14} strokeWidth={2.2} aria-hidden />
-      {delta > 0 ? '+' : ''}
-      {delta} pts
-      <span className="text-[11px] font-medium text-fg-4">
-        · {velocity > 0 ? '+' : ''}
-        {velocity}/day
-      </span>
-    </p>
-  );
-}
-
 /** A single what-if simulator readout: a large number with a unit suffix over a caption. */
 function SimStat({ label, value, suffix }: { label: string; value: number; suffix: string }) {
   return (
@@ -539,7 +754,7 @@ function SimStat({ label, value, suffix }: { label: string; value: number; suffi
   );
 }
 
-/** Inline value + caption chip used in each ranked-action row (points, $ unlock, per-point). */
+/** Inline value + caption chip used in move rows and the #1 move (points, $ unlock). */
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <span className="inline-flex items-baseline gap-1">
