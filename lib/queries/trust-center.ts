@@ -143,6 +143,8 @@ export interface TrustCenterData {
   checklist: ChecklistItem[];
   nextActions: NextAction[];
   capital: CapitalPosture;
+  /** IRI movement over time — delta vs the last snapshot + a short trend line. */
+  trend: { delta: number | null; points: number[]; sinceLabel: string | null };
   recordCount: number;
   pendingCount: number;
   viewer: { id: string; canApprove: boolean };
@@ -171,6 +173,7 @@ function emptyData(viewerId: string, canApprove: boolean): TrustCenterData {
       activeDeals: 0,
       coveredDeals: 0
     },
+    trend: { delta: null, points: [], sinceLabel: null },
     recordCount: 0,
     pendingCount: 0,
     viewer: { id: viewerId, canApprove },
@@ -593,6 +596,32 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
 
   const pendingCount = approvals.length;
 
+  // ---- Posture trend (compounding signal). Best-effort: the snapshot table
+  // may lag the migration, so a failure just leaves the trend empty. The
+  // current reading is appended as the latest point; the delta compares it to
+  // the most recent snapshot from a prior day. ----
+  let trend: TrustCenterData['trend'] = { delta: null, points: [], sinceLabel: null };
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: snaps } = await supabase
+      .from('trust_posture_snapshots')
+      .select('iri, snapshot_date')
+      .eq('org_id', orgId)
+      .order('snapshot_date', { ascending: false })
+      .limit(14);
+    const rows = (snaps ?? []) as { iri: number; snapshot_date: string }[];
+    const prior = rows.filter((r) => r.snapshot_date < today);
+    const points = [...prior].reverse().map((r) => Math.round(Number(r.iri) || 0));
+    points.push(iri);
+    trend = {
+      delta: prior.length ? iri - Math.round(Number(prior[0].iri) || 0) : null,
+      points: points.slice(-12),
+      sinceLabel: prior[0]?.snapshot_date ?? null
+    };
+  } catch {
+    // trend stays empty
+  }
+
   return {
     empty: false,
     iri,
@@ -604,6 +633,7 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
     checklist,
     nextActions: nextActions.slice(0, 4),
     capital,
+    trend,
     recordCount: summaries.length,
     pendingCount,
     viewer: { id: viewerId, canApprove },
@@ -619,4 +649,32 @@ function fmtMoney(n: number): string {
   if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `$${Math.round(n / 1_000)}K`;
   return `$${Math.round(n)}`;
+}
+
+/**
+ * Persist today's Trust Center posture (idempotent per org per day) via the
+ * SECURITY DEFINER upsert RPC. Called from the /trust page render — mirroring
+ * capturePostureSnapshot on /strategy — so the trend builds passively with no
+ * cron and no extra query: it reuses the IRI + coverage already computed for
+ * the page. Values come from the server, never the client. Best-effort: a
+ * failed snapshot must never break the page.
+ */
+export async function captureTrustSnapshot(input: {
+  orgId: string;
+  iri: number;
+  coveragePct: number;
+}): Promise<void> {
+  try {
+    const supabase = await createClient();
+    const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+    await supabase.rpc('upsert_trust_posture_snapshot', {
+      _org_id: input.orgId,
+      _iri: clamp(input.iri),
+      _coverage_pct: clamp(input.coveragePct)
+    });
+  } catch (err) {
+    // Best-effort telemetry; never surface a failure. Warn so a migration/RPC/
+    // auth failure stays diagnosable.
+    console.warn('[captureTrustSnapshot] failed to persist posture snapshot:', err);
+  }
 }

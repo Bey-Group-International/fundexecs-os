@@ -56,6 +56,13 @@ export const BALANCE_FLOOR = 40;
 /** Maximum points a perfectly balanced, complete system earns on top. */
 export const MAX_BALANCE_BONUS = 8;
 
+/**
+ * The compound score an LP broadly treats as "institutional-ready". Aligns with
+ * the Command Center alert threshold so every surface draws the same line. Used
+ * as the benchmark reference on the gauge and trajectory.
+ */
+export const INSTITUTIONAL_BAR = 70;
+
 const clamp100 = (n: number): number => Math.max(0, Math.min(100, n));
 const isFoundation = (d: ReadinessDimension): boolean => FOUNDATION_DIMENSIONS.includes(d);
 
@@ -275,4 +282,97 @@ export function rankByValue(compound: CompoundReadiness, value: ReadinessValue):
       };
     })
     .sort((a, b) => b.valuePerPoint - a.valuePerPoint || b.lift - a.lift || b.gap - a.gap);
+}
+
+/* ============================================================================
+ * Forward trajectory — "compound results" made visible over time
+ * ========================================================================= */
+
+/** One future week on the projected readiness curve. */
+export interface TrajectoryPoint {
+  /** Weeks from now (0 = today). */
+  week: number;
+  /** Projected compound score that week, 0–100. */
+  score: number;
+  /** Projected closeable capital that week (0 when no target). */
+  projected: number;
+}
+
+export interface ReadinessTrajectory {
+  /** Today → horizon, inclusive of week 0. */
+  points: TrajectoryPoint[];
+  /** First week the curve reaches the institutional bar, or null if not within the horizon. */
+  weeksToBar: number | null;
+  /** First week the curve reaches 100, or null if not within the horizon. */
+  weeksToMax: number | null;
+  /** Points/week of progress the projection assumes. */
+  pacePerWeek: number;
+}
+
+/** Default forward horizon and weekly improvement pace for the projection. */
+const TRAJECTORY_WEEKS = 8;
+const TRAJECTORY_PACE = 6;
+
+/**
+ * Raise the single weakest dimension by `pace` points (capped at 100). Modelling
+ * "fix the gating link first" — exactly what the action ranking tells the user
+ * to do — so the projected curve mirrors the advice, and synergy + the balance
+ * bonus naturally accelerate it as the foundation and weakest link climb.
+ */
+function advanceWeakest(byDim: Record<ReadinessDimension, number>, pace: number): void {
+  const order: ReadinessDimension[] = ['profile', 'proof', 'materials', 'pipeline', 'capital'];
+  let weakest: ReadinessDimension | null = null;
+  for (const d of order) {
+    if (byDim[d] >= 100) continue;
+    if (weakest === null || byDim[d] < byDim[weakest]) weakest = d;
+  }
+  if (weakest) byDim[weakest] = clamp100(byDim[weakest] + pace);
+}
+
+/**
+ * Project the compounding curve forward. Starting from today's scores, each
+ * week advances the weakest dimension by `pacePerWeek` and recomputes the
+ * compound score + projected capital — so the user sees where steady execution
+ * lands them, and when they cross the institutional bar. Pure: the what-if panel
+ * and the server share it.
+ */
+export function projectTrajectory(
+  breakdown: ReadinessDimensionScore[],
+  target: number,
+  opts: { weeks?: number; pacePerWeek?: number } = {}
+): ReadinessTrajectory {
+  // Normalize: a negative/NaN horizon would yield an empty curve (the chart and
+  // caption assume at least week 0), and a negative pace would project the
+  // regressions the "pts/week" copy contradicts.
+  const rawWeeks = opts.weeks ?? TRAJECTORY_WEEKS;
+  const rawPace = opts.pacePerWeek ?? TRAJECTORY_PACE;
+  const weeks = Number.isFinite(rawWeeks) ? Math.max(0, Math.floor(rawWeeks)) : TRAJECTORY_WEEKS;
+  const pacePerWeek = Number.isFinite(rawPace) ? Math.max(0, rawPace) : TRAJECTORY_PACE;
+
+  const byDim = Object.fromEntries(
+    breakdown.map((d) => [d.dimension, clamp100(d.score)])
+  ) as Record<ReadinessDimension, number>;
+  const weights = Object.fromEntries(breakdown.map((d) => [d.dimension, d.weight])) as Record<
+    ReadinessDimension,
+    number
+  >;
+
+  const points: TrajectoryPoint[] = [];
+  let weeksToBar: number | null = null;
+  let weeksToMax: number | null = null;
+
+  for (let week = 0; week <= weeks; week++) {
+    if (week > 0) advanceWeakest(byDim, pacePerWeek);
+    const simBreakdown: ReadinessDimensionScore[] = breakdown.map((d) => ({
+      ...d,
+      score: byDim[d.dimension],
+      contribution: (byDim[d.dimension] * weights[d.dimension]) / 100
+    }));
+    const { compoundScore } = computeCompoundReadiness(simBreakdown);
+    points.push({ week, score: compoundScore, projected: projectValue(target, compoundScore) });
+    if (weeksToBar === null && compoundScore >= INSTITUTIONAL_BAR) weeksToBar = week;
+    if (weeksToMax === null && compoundScore >= 100) weeksToMax = week;
+  }
+
+  return { points, weeksToBar, weeksToMax, pacePerWeek };
 }
