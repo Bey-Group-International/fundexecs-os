@@ -8,7 +8,8 @@ import {
   buildWorkspaceSnapshot,
   buildDealSnapshot,
   buildRelationshipSnapshot,
-  buildIntelligenceGrounding
+  buildIntelligenceGrounding,
+  buildMatchGrounding
 } from './awareness';
 import { EARN_NAV_DESTINATIONS } from './earn-nav';
 import { log } from '@/lib/observability/log';
@@ -300,7 +301,8 @@ function buildSystem(
   hint?: EarnContextHint,
   snapshot?: string,
   entitySnapshot?: string,
-  intelligence?: string
+  intelligence?: string,
+  matchGrounding?: string
 ): Anthropic.TextBlockParam[] {
   // Today's date (UTC) so "recently" / "this quarter" land correctly. Lives in
   // the cached capability block — the 5-minute prompt cache TTL keeps it fresh.
@@ -337,6 +339,11 @@ function buildSystem(
   // Earn reflects the day's market/match signals rather than recomputing them.
   if (intelligence) {
     system.push({ type: 'text', text: intelligence });
+  }
+  // Top matches + calibration confidence, so Earn can proactively propose
+  // reviewing/acting on the adaptive match flywheel's output. Structured only.
+  if (matchGrounding) {
+    system.push({ type: 'text', text: matchGrounding });
   }
   if (contextBlock) {
     system.push({
@@ -407,7 +414,7 @@ export async function streamEarn(
   // focused-entity snapshot in parallel — none blocks chat. Each is timeboxed
   // and fails open so a stalled network call can't hold up the first streamed
   // token. The focused-entity slot resolves whichever of deal / LP is in focus.
-  const [{ sources, contextBlock }, recap, snapshot, entitySnapshot, intelligence] =
+  const [{ sources, contextBlock }, recap, snapshot, entitySnapshot, intelligence, matchGrounding] =
     await Promise.all([
       withTimeout(retrieveContext(supabase, orgId, messages), CONTEXT_TIMEOUT_MS, {
         sources: [],
@@ -422,10 +429,18 @@ export async function streamEarn(
         : lpId
           ? withTimeout(buildRelationshipSnapshot(supabase, orgId, lpId), SNAPSHOT_TIMEOUT_MS, '')
           : Promise.resolve(''),
-      withTimeout(buildIntelligenceGrounding(supabase, orgId), SNAPSHOT_TIMEOUT_MS, '')
+      withTimeout(buildIntelligenceGrounding(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
+      withTimeout(buildMatchGrounding(supabase, orgId), SNAPSHOT_TIMEOUT_MS, '')
     ]);
   const anthropic = new Anthropic();
-  const system = buildSystem(contextBlock, hint, snapshot, entitySnapshot, intelligence);
+  const system = buildSystem(
+    contextBlock,
+    hint,
+    snapshot,
+    entitySnapshot,
+    intelligence,
+    matchGrounding
+  );
 
   // The continuity recap is operator-derived, so it rides in as a reference-only
   // user turn rather than a system block — it must not gain system authority.
@@ -473,7 +488,8 @@ export async function streamEarn(
           snapshot: !!snapshot,
           entity: !!entitySnapshot,
           recap: !!recap,
-          intelligence: !!intelligence
+          intelligence: !!intelligence,
+          matches: !!matchGrounding
         },
         inputTokens: u?.input_tokens ?? null,
         outputTokens: u?.output_tokens ?? null,
