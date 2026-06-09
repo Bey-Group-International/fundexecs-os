@@ -880,6 +880,121 @@ export type Database = {
           },
         ]
       }
+      capital_material_versions: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          id: string
+          material_id: string
+          org_id: string
+          source: string
+          source_snapshot: Json
+          title: string
+          version_number: number
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          material_id: string
+          org_id: string
+          source?: string
+          source_snapshot?: Json
+          title: string
+          version_number: number
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          material_id?: string
+          org_id?: string
+          source?: string
+          source_snapshot?: Json
+          title?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_material_versions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_material_versions_material_org_fkey"
+            columns: ["material_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "capital_materials"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "capital_material_versions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      capital_materials: {
+        Row: {
+          audience: string
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          last_generated_at: string | null
+          org_id: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          audience?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          last_generated_at?: string | null
+          org_id: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          audience?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          last_generated_at?: string | null
+          org_id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_materials_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_materials_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cap_table_entries: {
         Row: {
           amount_invested: number | null
