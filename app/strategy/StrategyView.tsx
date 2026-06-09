@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
 import {
@@ -13,6 +13,7 @@ import {
   Eye,
   Archive,
   Trash2,
+  Wand2,
   type LucideIcon
 } from 'lucide-react';
 import {
@@ -27,8 +28,15 @@ import {
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { cn } from '@/lib/utils';
 import type { StrategyObjective } from '@/lib/queries/strategy';
-import { deleteObjective, markObjectiveRead, setObjectiveStatus } from '@/lib/actions/strategy';
+import {
+  deleteObjective,
+  draftStrategyObjectives,
+  markObjectiveRead,
+  setObjectiveStatus
+} from '@/lib/actions/strategy';
+import { weightedCompletion, isPendingDraft } from '@/lib/strategy/capital';
 import { ObjectiveDrawer, type ObjectiveDraft } from '@/components/drawers/ObjectiveDrawer';
+import { DraftReviewInbox } from './DraftReviewInbox';
 
 type Tier = '100' | '30' | '10';
 type Priority = 'High' | 'Medium' | 'Low';
@@ -38,23 +46,6 @@ const PRIORITY_TONE: Record<Priority, BadgeTone> = {
   Medium: 'azure',
   Low: 'neutral'
 };
-
-// Capital proxy: higher-priority objectives carry more weight in the posture
-// rollup, so the plan reflects value at stake — not raw task count. Swaps to
-// true dollar-weighting once objectives link to deals (see blueprint Q1).
-const PRIORITY_WEIGHT: Record<Priority, number> = {
-  High: 3,
-  Medium: 2,
-  Low: 1
-};
-
-/** Priority-weighted average completion across a set of objectives, 0–100. */
-function weightedCompletion(list: Array<{ priority: Priority; pct: number }>): number {
-  const totalWeight = list.reduce((s, o) => s + PRIORITY_WEIGHT[o.priority], 0);
-  if (totalWeight === 0) return 0;
-  const earned = list.reduce((s, o) => s + o.pct * PRIORITY_WEIGHT[o.priority], 0);
-  return Math.round(earned / totalWeight);
-}
 
 const TIER_COLOR: Record<Tier, string> = {
   '100': 'var(--gold-1)',
@@ -168,7 +159,12 @@ function ObjectiveCard({
 }
 
 export function StrategyView({ initialObjectives }: { initialObjectives: StrategyObjective[] }) {
-  const cards = useCardState(initialObjectives, (o) => ({
+  // Pending specialist drafts live in the team-review inbox, not the plan grid;
+  // everything else (manual + approved) is the live plan the cards manage.
+  const drafts = initialObjectives.filter(isPendingDraft);
+  const plan = initialObjectives.filter((o) => !isPendingDraft(o));
+
+  const cards = useCardState(plan, (o) => ({
     read: o.read,
     archived: o.state === 'archived',
     closed: o.state === 'done'
@@ -176,7 +172,21 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
   const [tier, setTier] = useState<'all' | Tier>('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitial, setDrawerInitial] = useState<ObjectiveDraft | null>(null);
+  const [drafting, startDrafting] = useTransition();
+  const [draftError, setDraftError] = useState<string | null>(null);
   const router = useRouter();
+
+  function draftWithTeam() {
+    setDraftError(null);
+    startDrafting(async () => {
+      const res = await draftStrategyObjectives();
+      if (!res.ok) {
+        setDraftError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   function act(id: string, a: Action) {
     if (a === 'delete') {
@@ -239,11 +249,28 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
               { id: '10', label: '10-day' }
             ]}
           />
+          <Button
+            variant="secondary"
+            icon={Wand2}
+            onClick={draftWithTeam}
+            disabled={drafting}
+            data-testid="strategy-draft-team"
+          >
+            {drafting ? 'Drafting…' : 'Draft with team'}
+          </Button>
           <Button variant="primary" icon={Plus} onClick={openNew} data-testid="strategy-new">
             New objective
           </Button>
         </div>
       </div>
+
+      {draftError && (
+        <p className="-mt-2 text-[11.5px] text-danger" role="status">
+          {draftError}
+        </p>
+      )}
+
+      <DraftReviewInbox drafts={drafts} />
 
       <Card className="flex items-center gap-4 bg-[linear-gradient(100deg,rgba(247,201,72,0.08),transparent_58%)] px-[18px] py-3.5">
         <EarnCoin size={36} glow />

@@ -7,6 +7,7 @@ import { getStrategyData } from '@/lib/queries/strategy';
 import { getDashboardData } from '@/lib/queries/dashboard/lifecycle';
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, LIFECYCLE_STAGE_BLURBS } from '@/lib/lifecycle';
 import { computeInstitutionalPosture } from '@/lib/strategy/posture';
+import { isPendingDraft } from '@/lib/strategy/capital';
 import { StrategyView } from './StrategyView';
 import { StrategyHero } from './StrategyHero';
 import { PostureScorecard } from './PostureScorecard';
@@ -59,7 +60,15 @@ export default async function StrategyPage() {
   const posture = computeInstitutionalPosture({
     trust: dashboard.executionScore.layers,
     capitalReadiness,
-    objectives: objectives.map((o) => ({ priority: o.priority, done: o.state === 'done' }))
+    // Only the live plan counts toward posture — pending team drafts aren't yet
+    // part of the operator's governance. Carry the hybrid capital weight through.
+    objectives: objectives
+      .filter((o) => !isPendingDraft(o))
+      .map((o) => ({
+        priority: o.priority,
+        done: o.state === 'done',
+        capitalWeight: o.capitalWeight
+      }))
   });
 
   return (

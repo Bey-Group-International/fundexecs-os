@@ -18,6 +18,20 @@ export interface StrategyObjective {
   read: boolean;
   state: 'open' | 'done' | 'archived';
   ai: string | null;
+  // Phase 2b compounding fields — present once the strategy_objective_compounding
+  // migration is applied; the loader degrades to safe defaults before then.
+  /** Posture lane, or null when uncategorized / pre-migration. */
+  category: string | null;
+  /** Provenance: manual | signal | lifecycle | cascade. */
+  source: string;
+  /** Real value-at-stake from a linked deal, when known (hybrid weighting). */
+  capitalWeight: number | null;
+  /** False while a specialist draft awaits approval; true once live. */
+  approved: boolean;
+  /** Cascade parent, when this was spawned by a completed objective. */
+  parentObjectiveId: string | null;
+  /** Lifecycle stage this objective advances. */
+  lifecycleStage: string | null;
 }
 
 export interface StrategyData {
@@ -75,21 +89,35 @@ function shortName(full: string): string {
 export async function getStrategyData(orgId: string): Promise<StrategyData> {
   const supabase = await createClient();
 
-  const [plansRes, objsRes] = await Promise.all([
-    supabase
-      .from('governance_plans')
-      .select('id, name, horizon, status')
-      .eq('org_id', orgId)
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('governance_objectives')
-      .select(
-        'id, plan_id, objective, timeline, priority, status, read_at, archived_at, ai_recommendation, owner_id'
-      )
-      .eq('org_id', orgId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: true })
-  ]);
+  const plansRes = await supabase
+    .from('governance_plans')
+    .select('id, name, horizon, status')
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: true });
+
+  // Try the Phase 2b compounding columns first; if the migration hasn't been
+  // applied yet (the columns don't exist) the query errors and we fall back to
+  // the legacy shape. So the page is safe both before and after `db push`, and
+  // pre-migration rows simply read as live manual objectives.
+  const extended = await supabase
+    .from('governance_objectives')
+    .select(
+      'id, plan_id, objective, timeline, priority, status, read_at, archived_at, ai_recommendation, owner_id, category, capital_weight, source, parent_objective_id, lifecycle_stage, approved_at'
+    )
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true });
+  const hasCompoundingCols = !extended.error;
+  const objsRes = extended.error
+    ? await supabase
+        .from('governance_objectives')
+        .select(
+          'id, plan_id, objective, timeline, priority, status, read_at, archived_at, ai_recommendation, owner_id'
+        )
+        .eq('org_id', orgId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true })
+    : extended;
 
   if (plansRes.error && objsRes.error) return EMPTY;
 
@@ -108,8 +136,19 @@ export async function getStrategyData(orgId: string): Promise<StrategyData> {
     | 'archived_at'
     | 'ai_recommendation'
     | 'owner_id'
-  >;
-  const rawObjectives = (objsRes.data ?? []) as ObjSel[];
+  > &
+    Partial<
+      Pick<
+        ObjectiveRow,
+        | 'category'
+        | 'capital_weight'
+        | 'source'
+        | 'parent_objective_id'
+        | 'lifecycle_stage'
+        | 'approved_at'
+      >
+    >;
+  const rawObjectives = (objsRes.data ?? []) as unknown as ObjSel[];
 
   // Resolve owner display names from the profiles table in one round-trip.
   const ownerIds = Array.from(
@@ -139,7 +178,15 @@ export async function getStrategyData(orgId: string): Promise<StrategyData> {
       pct: statusPct(state, o.status),
       read: o.read_at != null,
       state,
-      ai: o.ai_recommendation
+      ai: o.ai_recommendation,
+      // Compounding fields — defaulted to "live manual objective" when the
+      // migration isn't applied, so nothing pre-existing is hidden as a draft.
+      category: hasCompoundingCols ? (o.category ?? null) : null,
+      source: (hasCompoundingCols ? o.source : 'manual') ?? 'manual',
+      capitalWeight: hasCompoundingCols ? (o.capital_weight ?? null) : null,
+      approved: hasCompoundingCols ? o.approved_at != null : true,
+      parentObjectiveId: hasCompoundingCols ? (o.parent_objective_id ?? null) : null,
+      lifecycleStage: hasCompoundingCols ? (o.lifecycle_stage ?? null) : null
     } satisfies StrategyObjective;
   });
 

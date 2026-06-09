@@ -116,6 +116,108 @@ export async function approveDraftObjective(id: string): Promise<ObjectiveResult
   return { ok: true, objective: data as ObjectiveRow };
 }
 
+export type BatchResult = { ok: true; count: number } | { ok: false; error: string };
+
+/**
+ * Approve a batch of pending specialist/signal drafts into the live plan in one
+ * round-trip — the "review N moves from your team" inbox accept. Org-scoped so a
+ * client can't approve another org's drafts. Phase 2b.
+ */
+export async function approveDraftObjectives(ids: string[]): Promise<BatchResult> {
+  const clean = Array.from(new Set((ids ?? []).filter(Boolean)));
+  if (clean.length === 0) return { ok: false, error: 'No drafts selected.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('governance_objectives')
+    .update({ approved_at: new Date().toISOString(), status: 'open' })
+    .eq('org_id', org.orgId)
+    .in('id', clean)
+    .select('id');
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, count: (data ?? []).length };
+}
+
+export type DraftRunResult =
+  | { ok: true; created: number; skipped: number }
+  | { ok: false; error: string };
+
+/**
+ * Have the executive team draft the next moves for where the operator is in the
+ * lifecycle. Reads the current stage from the tested lifecycle engine, pulls the
+ * stage playbook (the veteran's plan), and inserts the moves as **pending
+ * drafts** routed into the team-review inbox — a first-timer gets a seasoned
+ * plan to approve rather than a blank page. Idempotent: it skips templates that
+ * already exist as a pending draft for the stage, so re-running never piles up
+ * duplicates. Requires the strategy_objective_compounding migration; before it's
+ * applied the probe query errors and we return a clear hint.
+ */
+export async function draftStrategyObjectives(): Promise<DraftRunResult> {
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+
+  const planId = await resolvePlanId(org.orgId, null);
+  if (!planId) return { ok: false, error: 'No governance plan to attach drafts to.' };
+
+  const [{ getDashboardData }, { playbookForStage }, { getMember }, { LIFECYCLE_STAGE_LABELS }] =
+    await Promise.all([
+      import('@/lib/queries/dashboard/lifecycle'),
+      import('@/lib/strategy/playbook'),
+      import('@/lib/team/roster'),
+      import('@/lib/lifecycle')
+    ]);
+
+  const dashboard = await getDashboardData(org.orgId);
+  const stage = dashboard.stage;
+  const templates = playbookForStage(stage);
+  if (templates.length === 0) return { ok: true, created: 0, skipped: 0 };
+
+  const supabase = await createClient();
+
+  // Existing pending drafts for this stage — both the idempotency guard and the
+  // probe that tells us whether the migration is applied (these columns exist).
+  const existing = await supabase
+    .from('governance_objectives')
+    .select('objective')
+    .eq('org_id', org.orgId)
+    .eq('lifecycle_stage', stage)
+    .is('approved_at', null)
+    .is('deleted_at', null);
+  if (existing.error) {
+    return {
+      ok: false,
+      error: 'Team drafting needs the strategy compounding migration applied first.'
+    };
+  }
+
+  const have = new Set(((existing.data ?? []) as { objective: string }[]).map((r) => r.objective));
+  const toInsert = templates.filter((t) => !have.has(t.title));
+  if (toInsert.length === 0) return { ok: true, created: 0, skipped: templates.length };
+
+  const stageLabel = LIFECYCLE_STAGE_LABELS[stage];
+  const rows: ObjectiveInsert[] = toInsert.map((t) => ({
+    org_id: org.orgId,
+    plan_id: planId,
+    objective: t.title,
+    timeline: t.timeline,
+    priority: t.priority,
+    status: 'open',
+    category: t.category,
+    source: 'lifecycle',
+    lifecycle_stage: stage,
+    // No approved_at → stays a pending draft until the operator accepts it.
+    ai_recommendation: `${getMember(t.ownerSlug)?.name ?? 'Your team'} proposes this for the ${stageLabel} stage.`,
+    owner_id: null
+  }));
+
+  const { error } = await supabase.from('governance_objectives').insert(rows);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, created: rows.length, skipped: templates.length - rows.length };
+}
+
 export interface UpdateObjectiveInput {
   objective?: string;
   timeline?: string | null;

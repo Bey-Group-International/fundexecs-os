@@ -11,12 +11,16 @@
  * delta. Pure and deterministic, like lib/lifecycle.ts — unit-tested.
  * ========================================================================= */
 
+import { capitalWeightOf, type Priority } from './capital';
+
 export type PostureDimensionKey = 'compliance' | 'governance' | 'execution' | 'capital';
 
 /** One objective, reduced to what the governance pillar needs. */
 export interface PostureObjectiveInput {
-  priority: 'High' | 'Medium' | 'Low';
+  priority: Priority;
   done: boolean;
+  /** Real value-at-stake from a linked deal, when known (hybrid weighting). */
+  capitalWeight?: number | null;
 }
 
 export interface PostureInput {
@@ -53,13 +57,6 @@ export interface PostureResult {
   dimensions: PostureDimension[];
 }
 
-/** Priority → capital proxy weight (matches the Phase-1 governance rollup). */
-const PRIORITY_WEIGHT: Record<PostureObjectiveInput['priority'], number> = {
-  High: 3,
-  Medium: 2,
-  Low: 1
-};
-
 const DIMENSION_LABEL: Record<PostureDimensionKey, string> = {
   compliance: 'Compliance',
   governance: 'Governance',
@@ -90,7 +87,7 @@ function governanceScore(objectives: PostureObjectiveInput[]): number | null {
   let earned = 0;
   let total = 0;
   for (const o of objectives) {
-    const w = PRIORITY_WEIGHT[o.priority];
+    const w = capitalWeightOf(o);
     total += w;
     if (o.done) earned += w;
   }
