@@ -209,6 +209,17 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Opt-in horizontal scroll without a visible scrollbar — for overflowing
+   strips like tab bars, where a native scrollbar would clutter the control.
+   A partially-clipped next item hints that more is scrollable. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* During a theme flip the toggle adds this class to <html>; suppress every
    transition so nothing animates `color` and gets stuck mid-flip. */
 .fx-no-transition,
