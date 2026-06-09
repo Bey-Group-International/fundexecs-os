@@ -251,7 +251,9 @@ export function buildLadder(items: LadderItem[]): ProfileLadderState {
   }
 
   const overallPct =
-    totalRequired === 0 ? 0 : Math.max(0, Math.min(100, Math.round((totalEarned / totalRequired) * 100)));
+    totalRequired === 0
+      ? 0
+      : Math.max(0, Math.min(100, Math.round((totalEarned / totalRequired) * 100)));
   const institutionalReady = collecting.every((t) => t.complete) && totalRequired > 0;
   const remainingGaps = collecting.reduce((sum, t) => sum + t.gaps, 0);
 

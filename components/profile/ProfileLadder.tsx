@@ -1,4 +1,12 @@
-import { Check, Lock, type LucideIcon, IdCard, Crosshair, FileCheck2, Landmark } from 'lucide-react';
+import {
+  Check,
+  Lock,
+  type LucideIcon,
+  IdCard,
+  Crosshair,
+  FileCheck2,
+  Landmark
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ProfileLadderState, ProfileTierId } from '@/lib/proof-of-truth/tiers';
 

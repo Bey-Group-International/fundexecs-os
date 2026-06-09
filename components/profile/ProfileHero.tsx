@@ -138,7 +138,9 @@ export function ProfileHero({ profile, className }: ProfileHeroProps) {
             className="rounded-full border px-2 py-0.5 text-center text-[10.5px] font-semibold uppercase tracking-[0.1em]"
             style={{ color: tone.color, borderColor: tone.color, backgroundColor: tone.bg }}
           >
-            {profile.ladder.institutionalReady ? 'Institutionally ready' : profile.ladder.readinessLabel}
+            {profile.ladder.institutionalReady
+              ? 'Institutionally ready'
+              : profile.ladder.readinessLabel}
           </span>
           <p className="text-center text-[10.5px] text-fg-4">
             {profile.gaps.length === 0

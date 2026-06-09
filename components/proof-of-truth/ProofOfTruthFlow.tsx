@@ -726,11 +726,7 @@ export function ProofOfTruthFlow({
                   Next gap
                 </Button>
               ) : isApproved && nextGap === -1 ? (
-                <Button
-                  variant="primary"
-                  iconRight={Check}
-                  onClick={() => setStage('review')}
-                >
+                <Button variant="primary" iconRight={Check} onClick={() => setStage('review')}>
                   Review
                 </Button>
               ) : (

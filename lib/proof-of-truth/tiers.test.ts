@@ -1,13 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getQuestionSet, type ProfileQuestion } from './questions';
-import {
-  buildLadder,
-  scoreDepth,
-  tierForQuestion,
-  WEAK_TEXT_LEN,
-  type LadderItem
-} from './tiers';
+import { buildLadder, scoreDepth, tierForQuestion, WEAK_TEXT_LEN, type LadderItem } from './tiers';
 
 function q(memberType: 'investment_firm', id: string): ProfileQuestion {
   const found = getQuestionSet(memberType).find((x) => x.id === id);
@@ -28,10 +22,13 @@ test('tierForQuestion routes identity, mandate, and evidence fields', () => {
 test('scoreDepth weighs prose by length and specificity', () => {
   const prose = { kind: 'textarea' as const };
   // Long enough AND specific (two sentences) → strong.
-  assert.deepEqual(scoreDepth(prose, { text: 'We back seed founders. Why now matters most.', tagCount: 0 }), {
-    present: true,
-    weak: false
-  });
+  assert.deepEqual(
+    scoreDepth(prose, { text: 'We back seed founders. Why now matters most.', tagCount: 0 }),
+    {
+      present: true,
+      weak: false
+    }
+  );
   // Long enough AND specific (carries a number) → strong even as one sentence.
   assert.deepEqual(
     scoreDepth(prose, { text: 'We lead $1M pre-seed rounds in vertical AI tooling', tagCount: 0 }),
@@ -47,7 +44,10 @@ test('scoreDepth weighs prose by length and specificity', () => {
 
 test('scoreDepth requires a figure for numeric fields', () => {
   const num = { kind: 'text' as const, expects: 'number' as const };
-  assert.deepEqual(scoreDepth(num, { text: '$250K–$2M', tagCount: 0 }), { present: true, weak: false });
+  assert.deepEqual(scoreDepth(num, { text: '$250K–$2M', tagCount: 0 }), {
+    present: true,
+    weak: false
+  });
   assert.deepEqual(scoreDepth(num, { text: 'varies', tagCount: 0 }), { present: true, weak: true });
 });
 
