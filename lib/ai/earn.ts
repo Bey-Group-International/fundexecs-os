@@ -234,6 +234,37 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
  * of `askEarn` so the streaming path can reuse the exact same RAG step. Never
  * throws for a missing key / empty knowledge — returns empty context instead.
  */
+/* ----------------------------------------------------------------------------
+ * Cost guardrail — bound the grounding injected per turn.
+ *
+ * Retrieved brain chunks are the dominant, otherwise-unbounded input-token cost
+ * on every Earn turn, and that cost grows with the knowledge base. Capping each
+ * chunk and the combined RAG block keeps per-turn input tokens — and spend —
+ * flat at scale. Env-tunable; the `earn_turn` telemetry makes the effect
+ * observable. Pure + exported for unit tests.
+ * --------------------------------------------------------------------------*/
+const RAG_CHUNK_MAX = Number(process.env.EARN_RAG_CHUNK_MAX) || 700;
+const RAG_CONTEXT_MAX = Number(process.env.EARN_RAG_CONTEXT_MAX) || 4000;
+
+/** Join retrieved chunks into a numbered context block, capping each chunk and
+ *  the total to a character budget so input cost stays bounded. The first chunk
+ *  is always kept (capped) so a single huge chunk can't blank the context. */
+export function clampRagContext(
+  chunks: string[],
+  chunkMax: number = RAG_CHUNK_MAX,
+  totalMax: number = RAG_CONTEXT_MAX
+): string {
+  const parts: string[] = [];
+  let used = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const piece = `[${i + 1}] ${(chunks[i] ?? '').slice(0, chunkMax)}`;
+    if (parts.length > 0 && used + piece.length > totalMax) break;
+    parts.push(piece);
+    used += piece.length + 2; // approximate the "\n\n" join separator
+  }
+  return parts.join('\n\n');
+}
+
 async function retrieveContext(
   supabase: SupabaseClient<Database>,
   orgId: string,
@@ -251,7 +282,7 @@ async function retrieveContext(
     if (data && data.length) {
       return {
         sources: data.map((d) => ({ brainId: d.brain_id, snippet: d.content.slice(0, 200) })),
-        contextBlock: data.map((d, i) => `[${i + 1}] ${d.content}`).join('\n\n')
+        contextBlock: clampRagContext(data.map((d) => d.content))
       };
     }
   } catch {
