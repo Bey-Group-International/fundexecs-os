@@ -2,11 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ACTION_COST,
+  asPaidIntegration,
   asPlan,
   canUseIntegration,
   costOf,
   nextPlanUp,
   MONTHLY_GRANT,
+  PAID_INTEGRATION_ACTION,
+  PAID_INTEGRATIONS,
   PLANS
 } from './costs';
 
@@ -64,6 +67,22 @@ test('monthly grant amounts match the SQL CASE in the migration', () => {
   assert.equal(MONTHLY_GRANT.standard, 500);
   assert.equal(MONTHLY_GRANT.pro, 2500);
   assert.equal(MONTHLY_GRANT.institutional, 15000);
+});
+
+test('every paid integration maps to a real, positive-cost metered action', () => {
+  for (const provider of PAID_INTEGRATIONS) {
+    const action = PAID_INTEGRATION_ACTION[provider];
+    assert.ok(action, `${provider} must map to an action`);
+    assert.ok(costOf(action) > 0, `${provider}'s action ${action} must cost credits`);
+  }
+});
+
+test('asPaidIntegration narrows known providers and rejects owned/unknown ones', () => {
+  assert.equal(asPaidIntegration('apollo'), 'apollo');
+  assert.equal(asPaidIntegration('granola'), 'granola');
+  for (const owned of ['gmail', 'google_calendar', 'slack', '', 'APOLLO']) {
+    assert.equal(asPaidIntegration(owned), null, `expected null for: ${owned}`);
+  }
 });
 
 test('nextPlanUp walks the ladder and tops out at institutional', () => {
