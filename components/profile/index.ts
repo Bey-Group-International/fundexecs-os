@@ -12,6 +12,9 @@ export type { ProfileSectionsProps } from './ProfileSections';
 export { ProfileGapsCard } from './ProfileGapsCard';
 export type { ProfileGapsCardProps } from './ProfileGapsCard';
 
+export { ProfileLadder } from './ProfileLadder';
+export type { ProfileLadderProps } from './ProfileLadder';
+
 export { ProfileRailSummary, ProfileRailSummaryEmpty } from './ProfileRailSummary';
 export type { ProfileRailSummaryProps } from './ProfileRailSummary';
 
