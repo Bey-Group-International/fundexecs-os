@@ -23,6 +23,12 @@ export interface ProfileQuestion {
   prompt: string;
   /** Input affordance for the Phase-3 UI. */
   kind: 'text' | 'textarea' | 'tags' | 'url' | 'select';
+  /**
+   * What a strong answer must carry. `'number'` marks a free-text field that
+   * only reads strong with an actual figure (check size, raise) — depth scoring
+   * treats a digit-less answer like "varies" as thin, not done.
+   */
+  expects?: 'number';
   placeholder?: string;
   /** Options for `kind: 'select'`. */
   options?: string[];
@@ -168,6 +174,7 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Typical check size',
       prompt: 'What check size do you typically write?',
       kind: 'text',
+      expects: 'number',
       placeholder: 'e.g. $250K–$2M',
       why: 'Check size lets founders and co-investors judge fit before reaching out.'
     },
@@ -276,6 +283,7 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Raising',
       prompt: 'Are you raising, and on what terms?',
       kind: 'text',
+      expects: 'number',
       placeholder: 'e.g. $1.5M on a SAFE',
       why: 'Round size and terms let investors size their check and move quickly.'
     },
@@ -345,6 +353,7 @@ const SPECIFIC: Record<MemberType, ProfileQuestion[]> = {
       label: 'Typical check size',
       prompt: 'What check size do you typically write?',
       kind: 'text',
+      expects: 'number',
       placeholder: 'e.g. $25K–$100K',
       why: 'Check size lets founders and syndicate leads judge fit instantly.'
     },

@@ -10,6 +10,7 @@ import { getProfile } from '@/lib/queries/fund-profile';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import {
   ProfileHero,
+  ProfileLadder,
   ProfileSections,
   ProfileGapsCard,
   ProfileRailSummary
@@ -77,6 +78,7 @@ export default async function ProfilePage() {
     >
       <div className="flex flex-col gap-[18px]" data-testid="profile-page">
         <ProfileHero profile={profile} />
+        <ProfileLadder ladder={profile.ladder} />
         <ProfileGapsCard profile={profile} />
         <ProfileSections profile={profile} />
       </div>
