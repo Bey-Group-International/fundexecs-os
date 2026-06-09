@@ -1029,7 +1029,12 @@ export function AdminView({
         </div>
       )}
 
-      <SegTabs active={tab} onChange={(id) => setTab(id as Tab)} tabs={tabs} />
+      {/* The platform scope has 8 tabs — too many for the settings column. Scroll
+          the strip horizontally (body uses overflow-x: clip, so an unwrapped
+          strip would clip the last tabs out of reach) instead of squeeze-wrapping. */}
+      <div className="no-scrollbar -mx-1 overflow-x-auto px-1">
+        <SegTabs active={tab} onChange={(id) => setTab(id as Tab)} tabs={tabs} />
+      </div>
 
       {tab === 'overview' && (
         <LaunchCommandPanel
