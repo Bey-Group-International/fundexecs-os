@@ -154,7 +154,7 @@ behavior matches the documentation.
 - **Decorative motion goes off.** `fx-coin-float`, `fx-marquee-animate`,
   `fx-aurora`, `fx-text-gradient`, `fx-grid-pan`, the four constellation
   spin classes, and `fx-sweep` are hard-disabled via
-  `animation: none !important` under reduced motion.
+  `animation-name: none !important` under reduced motion.
 
 - **Safety net.** A universal `* { animation-duration: 0.001ms !important; … }`
   rule remains as the final layer so anything the design system did NOT
@@ -173,7 +173,7 @@ When you add a new `fx-*` class:
 (prefers-reduced-motion: reduce)` block. Follow the existing
    pattern (single shot, ≤ 240 ms, opacity-led, lands at peak).
 3. If it is `decorative`, add the class to the decorative-tier
-   `animation: none !important` selector list.
+   `animation-name: none !important` selector list.
 4. Update the inventory tables above in the same PR.
 
 ## Performance discipline
