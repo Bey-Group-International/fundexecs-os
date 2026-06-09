@@ -600,7 +600,7 @@ function slug(label: string): string {
 /**
  * NavItem — one loop entry. Renders one of: a route Link, an Earn-action button
  * (`earnPrompt`), a muted "soon" row (no href), or an expandable parent
- * (`children`, e.g. Capital → Equity/Debt/Hybrid).
+ * (`children`, e.g. Execute → Pre-Acquisition/Post-Acquisition/Exit).
  */
 function NavItem({
   item,
@@ -1084,7 +1084,7 @@ function ChainPip({ state }: { state: LinkState }) {
 /**
  * ClusterMenu — a small "more" affordance in the cluster header that pops out
  * the cluster's *full* option set: every nav link (flattening nested groups
- * like Capital → Equity/Debt/Hybrid so nothing is buried), plus the Earn
+ * like Execute → Pre-Acquisition/Post-Acquisition/Exit so nothing is buried), plus the Earn
  * launcher action at the foot. Fixed-positioned beside the rail so the rail's
  * overflow never clips it; closes on outside-click / Escape / scroll.
  */
@@ -1209,7 +1209,7 @@ function ClusterMenuEntry({
   const rowBase =
     'flex w-full items-center gap-2 rounded-[9px] px-2.5 py-1.5 text-left text-[12px] transition-[background]';
 
-  // Nested group (e.g. Capital → Equity/Debt/Hybrid): show every child link.
+  // Nested group (e.g. Execute → Pre-Acquisition/Post-Acquisition/Exit): show every child link.
   if (item.children && item.children.length > 0) {
     return (
       <div>

@@ -48,7 +48,7 @@ import type { LifecycleStage } from '@/lib/lifecycle';
 /** Stable cluster keys — used for stage emphasis + persisted collapse. */
 export type RailGroupKey = 'build' | 'source' | 'run' | 'drive';
 
-/** A nested third-tier row (e.g. Capital → Equity/Debt/Hybrid). */
+/** A nested third-tier row (e.g. Execute → Pre-Acquisition/Post-Acquisition/Exit). */
 export interface RailSubItem {
   /** Route to navigate to. Omit for an unbuilt "soon" sub-row. */
   href?: string;
@@ -179,14 +179,11 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         hint: 'LP universe + pipeline'
       },
       {
+        href: '/capital-stack',
         label: 'Capital',
         icon: Layers,
-        hint: 'The raise, by instrument',
-        children: [
-          { href: '/capital-stack?type=equity', label: 'Equity', live: true },
-          { href: '/capital-stack?type=debt', label: 'Debt', live: true },
-          { href: '/capital-stack?type=hybrid', label: 'Hybrid', live: true }
-        ]
+        live: true,
+        hint: 'Search & shape the raise — equity, debt, hybrid in one place'
       }
     ]
   },
