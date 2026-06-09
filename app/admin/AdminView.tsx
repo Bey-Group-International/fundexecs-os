@@ -526,7 +526,7 @@ function UsersPanel({
                   {canManageMembers ? (
                     <RoleMenu
                       role={role}
-                      canGrantOwner={viewerRole === 'owner'}
+                      canGrantOwner={canGrantOwner}
                       isLastOwner={isLastOwner}
                       pending={pendingId === m.id}
                       onChange={(next) => onRole(m.id, next)}
@@ -820,7 +820,7 @@ export function AdminView({
   viewerRole
 }: {
   /** 'platform' = Bey Group team (full portal + actions); 'org' = org
-   *  owner/admin on their own workspace (read-only, org-scoped subset). */
+   *  owner/admin on their own workspace (org-scoped management subset). */
   scope?: 'platform' | 'org';
   data: AdminData;
   invites: BetaInvite[];
@@ -859,20 +859,33 @@ export function AdminView({
   const ownerCount = data.members.filter((m) => roles[m.id] === 'owner').length;
 
   function approve(id: string) {
+    setRowErrors((e) => ({ ...e, [id]: '' }));
     cards.complete(id);
-    window.emitTrust?.({
-      layer: 'execution',
-      title: 'Member approved',
-      msg: 'An applicant was approved into the organization.',
-      entity: id
+    void approveMember(id).then((res) => {
+      if (!res.ok) {
+        cards.restore(id);
+        setRowErrors((e) => ({ ...e, [id]: res.error }));
+        router.refresh();
+        return;
+      }
+      window.emitTrust?.({
+        layer: 'execution',
+        title: 'Member approved',
+        msg: 'An applicant was approved into the organization.',
+        entity: id
+      });
+      router.refresh();
     });
-    void approveMember(id).then(() => router.refresh());
   }
 
   function archive(id: string) {
+    setRowErrors((e) => ({ ...e, [id]: '' }));
     cards.archive(id);
     void archiveMember(id).then((res) => {
-      if (!res.ok) setRowErrors((e) => ({ ...e, [id]: res.error }));
+      if (!res.ok) {
+        cards.restore(id);
+        setRowErrors((e) => ({ ...e, [id]: res.error }));
+      }
       router.refresh();
     });
   }
@@ -976,8 +989,8 @@ export function AdminView({
     });
   }
 
-  // Org owners/admins get a read-only, org-scoped subset of tabs — their team,
-  // launch readiness, and workspace activity. Platform-only surfaces
+  // Org owners/admins get an org-scoped subset of tabs — their team, launch
+  // readiness, and workspace activity. Platform-only surfaces
   // (applications, beta invites, referrals, the platform knowledge base / trust
   // metrics) stay reserved for the Bey Group team.
   const allTabs = [

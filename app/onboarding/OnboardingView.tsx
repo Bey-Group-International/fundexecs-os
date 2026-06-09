@@ -6,9 +6,9 @@ import { ArrowRight, Building2, Mail, User } from 'lucide-react';
 import { Badge, Button, Card, Input, Select } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { OnboardingStepper } from '@/components/onboarding/OnboardingStepper';
-import { createClient } from '@/lib/supabase/client';
 import type { MemberProfile } from '@/lib/queries/member-profile';
 import { ProofOfTruthFlow } from '@/components/proof-of-truth/ProofOfTruthFlow';
+import { saveOnboardingIdentity } from './actions';
 
 interface OnboardingViewProps {
   email: string;
@@ -31,7 +31,7 @@ const ROLES = [
 
 /**
  * Onboarding — captures identity + organization (for users without an org, the
- * existing `create_organization` RPC + `profiles` full_name/role write), then
+ * server action (create_organization RPC + profiles full_name/role write), then
  * hands off into the conversational Proof of Truth profile builder where Earn
  * guides the member through their verified, member-type-specific profile.
  *
@@ -65,30 +65,18 @@ export function OnboardingView({
   async function continueToProfile() {
     setSubmitting(true);
     setError(null);
-    const supabase = createClient();
     try {
-      const {
-        data: { user }
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
+      const result = await saveOnboardingIdentity({
+        fullName: name,
+        role,
+        organizationName: org,
+        organizationType: orgType
+      });
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
-
-      if (!hasOrg && org.trim()) {
-        const { error: rpcError } = await supabase.rpc('create_organization', {
-          _name: org.trim(),
-          _type: orgType as never
-        });
-        if (rpcError) throw rpcError;
-      }
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ role, full_name: name.trim() || undefined })
-        .eq('id', user.id);
-      if (profileError) throw profileError;
-
+      router.refresh();
       setStage('profile');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
@@ -161,6 +149,7 @@ export function OnboardingView({
                 value={org}
                 onChange={(e) => setOrg(e.target.value)}
                 placeholder="Your organization"
+                required
               />
               <Select
                 label="Organization type"
