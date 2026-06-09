@@ -44,6 +44,9 @@ export default async function StrategyPage() {
   const stageIndex = LIFECYCLE_STAGES.indexOf(dashboard.stage);
   const nextStage = stageIndex >= 0 ? (LIFECYCLE_STAGES[stageIndex + 1] ?? null) : null;
 
+  // Active (non-archived) objective count — surfaced in the hero's Earn strip.
+  const objectiveCount = objectives.filter((o) => o.state !== 'archived').length;
+
   return (
     <AppShell
       identity={await getShellIdentity()}
@@ -61,6 +64,7 @@ export default async function StrategyPage() {
           readinessBreakdown={dashboard.readinessBreakdown}
           nextStageLabel={nextStage ? LIFECYCLE_STAGE_LABELS[nextStage] : null}
           nextStageBlurb={nextStage ? LIFECYCLE_STAGE_BLURBS[nextStage] : null}
+          objectiveCount={objectiveCount}
         />
         <StrategyView initialObjectives={objectives} />
       </div>

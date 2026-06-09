@@ -1,8 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useCardState } from '@/lib/ui/useCardState';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
   Calendar,
@@ -13,6 +11,8 @@ import {
   Eye,
   Archive,
   Trash2,
+  X,
+  RotateCcw,
   type LucideIcon
 } from 'lucide-react';
 import {
@@ -27,7 +27,13 @@ import {
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { cn } from '@/lib/utils';
 import type { StrategyObjective } from '@/lib/queries/strategy';
-import { deleteObjective, markObjectiveRead, setObjectiveStatus } from '@/lib/actions/strategy';
+import {
+  createObjective,
+  deleteObjective,
+  markObjectiveRead,
+  restoreObjective,
+  setObjectiveStatus
+} from '@/lib/actions/strategy';
 import { ObjectiveDrawer, type ObjectiveDraft } from '@/components/drawers/ObjectiveDrawer';
 
 type Tier = '100' | '30' | '10';
@@ -68,6 +74,14 @@ const TIER_LABEL: Record<Tier, string> = {
   '10': '10-day'
 };
 
+// Quick-add encodes the chosen horizon in the objective timeline so the loader's
+// `deriveTier` reads it back into the same tier (it scans the timeline string).
+const TIER_TIMELINE: Record<Tier, string> = {
+  '100': '100-day',
+  '30': '30-day',
+  '10': '10-day'
+};
+
 const TIER_ORDER: Tier[] = ['100', '30', '10'];
 
 type Action = 'done' | 'read' | 'archive' | 'delete';
@@ -81,10 +95,16 @@ const ROW_ACTIONS: Array<{ act: Action; icon: LucideIcon; label: string }> = [
 
 function ObjectiveCard({
   o,
-  onAct
+  confirming,
+  onAct,
+  onRequestDelete,
+  onCancelDelete
 }: {
   o: StrategyObjective;
+  confirming: boolean;
   onAct: (id: string, a: Action) => void;
+  onRequestDelete: (id: string) => void;
+  onCancelDelete: () => void;
 }) {
   const color = TIER_COLOR[o.tier];
   const done = o.state === 'done';
@@ -96,7 +116,7 @@ function ObjectiveCard({
         done && 'opacity-60'
       )}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span
             className="rounded-md border bg-white/[0.05] px-2 py-0.5 font-mono text-[12px] font-semibold tabular-nums"
@@ -109,20 +129,44 @@ function ObjectiveCard({
             {o.priority} priority
           </Badge>
         </div>
-        <div className="flex gap-1 opacity-30 transition group-hover:opacity-100">
-          {ROW_ACTIONS.map(({ act, icon: Icon, label }) => (
+
+        {confirming ? (
+          // Inline confirm — a deliberate two-step so delete is never one click.
+          <div className="flex items-center gap-1.5" role="group" aria-label="Confirm delete">
+            <span className="text-[11px] font-medium text-fg-3">Delete?</span>
             <button
-              key={act}
               type="button"
-              title={label}
-              aria-label={label}
-              onClick={() => onAct(o.id, act)}
+              onClick={() => onAct(o.id, 'delete')}
+              className="flex h-[26px] items-center gap-1 rounded-md border border-[var(--danger-line,var(--gold-line))] bg-surface-1 px-2 text-[11px] font-semibold text-danger transition hover:bg-surface-2"
+            >
+              <Check size={12} strokeWidth={2} aria-hidden />
+              Confirm
+            </button>
+            <button
+              type="button"
+              onClick={onCancelDelete}
+              aria-label="Cancel delete"
               className="flex h-[26px] w-[26px] items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-4 transition hover:bg-surface-2 hover:text-fg-1"
             >
-              <Icon size={12} strokeWidth={1.9} aria-hidden />
+              <X size={12} strokeWidth={2} aria-hidden />
             </button>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="flex gap-1 opacity-30 transition group-hover:opacity-100 focus-within:opacity-100">
+            {ROW_ACTIONS.map(({ act, icon: Icon, label }) => (
+              <button
+                key={act}
+                type="button"
+                title={label}
+                aria-label={`${label}: ${o.title}`}
+                onClick={() => (act === 'delete' ? onRequestDelete(o.id) : onAct(o.id, act))}
+                className="flex h-[26px] w-[26px] items-center justify-center rounded-md border border-hairline bg-surface-1 text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 focus-visible:opacity-100"
+              >
+                <Icon size={12} strokeWidth={1.9} aria-hidden />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className={cn('mt-3 text-[14.5px] font-semibold text-fg-1', done && 'line-through')}>
@@ -167,23 +211,48 @@ function ObjectiveCard({
   );
 }
 
+/** A transient bottom flash: a status line with an optional Undo. */
+interface Flash {
+  message: string;
+  undoId?: string;
+}
+
 export function StrategyView({ initialObjectives }: { initialObjectives: StrategyObjective[] }) {
-  const cards = useCardState(initialObjectives, (o) => ({
-    read: o.read,
-    archived: o.state === 'archived',
-    closed: o.state === 'done'
-  }));
+  // Objectives created via quick-add live here optimistically until the next
+  // server render reconciles them; prepended so new items show at the top.
+  const [extra, setExtra] = useState<StrategyObjective[]>([]);
+  const source = useMemo(() => [...extra, ...initialObjectives], [extra, initialObjectives]);
+
+  const [patches, setPatches] = useState<
+    Record<string, { read?: boolean; archived?: boolean; closed?: boolean; deleted?: boolean }>
+  >({});
+  const patch = (id: string, next: (typeof patches)[string]) =>
+    setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...next } }));
+
   const [tier, setTier] = useState<'all' | Tier>('all');
+  const [drafts, setDrafts] = useState<Record<Tier, string>>({ '100': '', '30': '', '10': '' });
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [flash, setFlash] = useState<Flash | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitial, setDrawerInitial] = useState<ObjectiveDraft | null>(null);
-  const router = useRouter();
+  // Monotonic counter for optimistic temp ids — avoids impure Date.now() in render.
+  const tempSeq = useRef(0);
+
+  // Auto-dismiss the flash so the undo affordance never lingers.
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 6000);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   function act(id: string, a: Action) {
+    setConfirmId(null);
     if (a === 'delete') {
-      cards.delete(id);
-      void deleteObjective(id).then(() => router.refresh());
+      patch(id, { deleted: true });
+      setFlash({ message: 'Objective deleted', undoId: id });
+      void deleteObjective(id);
     } else if (a === 'done') {
-      cards.complete(id);
+      patch(id, { read: true, closed: true });
       // Completing an objective advances the Execution layer of Chain of Trust.
       window.emitTrust?.({
         layer: 'execution',
@@ -192,14 +261,57 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
         pct: 100,
         entity: id
       });
-      void setObjectiveStatus(id, 'completed').then(() => router.refresh());
+      void setObjectiveStatus(id, 'completed');
     } else if (a === 'read') {
-      cards.markRead(id);
-      void markObjectiveRead(id).then(() => router.refresh());
+      patch(id, { read: true });
+      void markObjectiveRead(id);
     } else if (a === 'archive') {
-      cards.archive(id);
-      void setObjectiveStatus(id, 'archived').then(() => router.refresh());
+      patch(id, { archived: true, read: true });
+      setFlash({ message: 'Objective archived', undoId: id });
+      void setObjectiveStatus(id, 'archived');
     }
+  }
+
+  function undo(id: string) {
+    patch(id, { deleted: false, archived: false, closed: false });
+    setFlash(null);
+    void restoreObjective(id);
+  }
+
+  function quickAdd(t: Tier) {
+    const title = drafts[t].trim();
+    if (!title) return;
+    setDrafts((prev) => ({ ...prev, [t]: '' }));
+
+    const tempId = `tmp-${(tempSeq.current += 1)}`;
+    const optimistic: StrategyObjective = {
+      id: tempId,
+      planId: '',
+      tier: t,
+      title,
+      timeline: TIER_TIMELINE[t],
+      owner: null,
+      priority: 'Medium',
+      pct: 0,
+      read: true,
+      state: 'open',
+      ai: null
+    };
+    setExtra((prev) => [optimistic, ...prev]);
+
+    void createObjective({
+      objective: title,
+      timeline: TIER_TIMELINE[t],
+      priority: 'medium'
+    }).then((res) => {
+      if (res.ok) {
+        // Swap the temp id for the real one so future actions hit the DB row.
+        setExtra((prev) => prev.map((e) => (e.id === tempId ? { ...e, id: res.objective.id } : e)));
+      } else {
+        setExtra((prev) => prev.filter((e) => e.id !== tempId));
+        setFlash({ message: res.error || 'Could not add objective' });
+      }
+    });
   }
 
   function openNew() {
@@ -209,13 +321,21 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
 
   // Project the shared card flags back onto each objective's display shape:
   // a closed card reads as "done" (100%), an archived card drops out.
-  const objectives = cards.items
-    .filter((o) => !o.deleted)
-    .map((o) => ({
-      ...o,
-      state: o.archived ? ('archived' as const) : o.closed ? ('done' as const) : ('open' as const),
-      pct: o.closed ? 100 : o.pct
-    }));
+  const objectives = source
+    .map((o) => ({ o, p: patches[o.id] ?? {} }))
+    .filter(
+      ({ o, p }) => !(p.deleted ?? false) && !(o.state === 'archived' && p.archived !== false)
+    )
+    .map(({ o, p }) => {
+      const archived = p.archived ?? o.state === 'archived';
+      const closed = p.closed ?? o.state === 'done';
+      return {
+        ...o,
+        read: p.read ?? o.read,
+        state: archived ? ('archived' as const) : closed ? ('done' as const) : ('open' as const),
+        pct: closed ? 100 : o.pct
+      };
+    });
 
   const active = objectives.filter((o) => o.state !== 'archived');
   const visible = active.filter((o) => tier === 'all' || o.tier === tier);
@@ -245,21 +365,6 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
         </div>
       </div>
 
-      <Card className="flex items-center gap-4 bg-[linear-gradient(100deg,rgba(247,201,72,0.08),transparent_58%)] px-[18px] py-3.5">
-        <EarnCoin size={36} glow />
-        <div className="min-w-0 flex-1 text-[13px] text-fg-2">
-          <span className="font-semibold text-fg-1">Earnest Fundmaker</span>, your private market
-          assistant, is tracking your plan —{' '}
-          <span className="font-semibold text-gold-1">
-            {active.length} {active.length === 1 ? 'objective' : 'objectives'}
-          </span>{' '}
-          across the 100 / 30 / 10 horizons.
-        </div>
-        <Badge tone="gold" dot className="flex-none">
-          Execution ready
-        </Badge>
-      </Card>
-
       <Card className="p-4">
         {/* Overall posture — priority-weighted so the number reflects value at
             stake, not task count. The seam for the full Institutional Posture
@@ -282,7 +387,7 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
             const list = active.filter((o) => o.tier === t);
             const avg = weightedCompletion(list);
             return (
-              <div key={t}>
+              <div key={t} className="flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
                     {TIER_LABEL[t]} horizon
@@ -303,6 +408,26 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
                   height={5}
                   ariaLabel={`Capital-weighted completion for ${t}`}
                 />
+
+                {/* Inline quick-add — capture an objective straight into this
+                    horizon without opening the drawer. */}
+                <form
+                  className="mt-3 flex items-center gap-1.5 rounded-md border border-hairline bg-surface-1 px-2 py-1 transition focus-within:border-azure-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    quickAdd(t);
+                  }}
+                >
+                  <Plus size={12} strokeWidth={2} className="flex-none text-fg-4" aria-hidden />
+                  <input
+                    value={drafts[t]}
+                    onChange={(e) => setDrafts((prev) => ({ ...prev, [t]: e.target.value }))}
+                    placeholder={`Quick add ${TIER_LABEL[t]}`}
+                    aria-label={`Quick add a ${TIER_LABEL[t]} objective`}
+                    data-testid={`strategy-quickadd-${t}`}
+                    className="min-w-0 flex-1 bg-transparent text-[11.5px] text-fg-1 placeholder:text-fg-5 focus:outline-none"
+                  />
+                </form>
               </div>
             );
           })}
@@ -325,7 +450,16 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
       ) : (
         <div className="grid gap-3.5 lg:grid-cols-2">
           {visible.length ? (
-            visible.map((o) => <ObjectiveCard key={o.id} o={o} onAct={act} />)
+            visible.map((o) => (
+              <ObjectiveCard
+                key={o.id}
+                o={o}
+                confirming={confirmId === o.id}
+                onAct={act}
+                onRequestDelete={setConfirmId}
+                onCancelDelete={() => setConfirmId(null)}
+              />
+            ))
           ) : (
             <Card className="col-span-full flex flex-col items-center gap-3 p-10 text-center">
               <p className="text-[13px] text-fg-4">
@@ -342,6 +476,27 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
                 </Button>
               </div>
             </Card>
+          )}
+        </div>
+      )}
+
+      {/* Undo / status flash. role=status + aria-live so it's announced. */}
+      {flash && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-between gap-3 rounded-[10px] border border-hairline bg-surface-1 px-4 py-2.5"
+        >
+          <span className="text-[12px] text-fg-2">{flash.message}</span>
+          {flash.undoId && (
+            <button
+              type="button"
+              onClick={() => undo(flash.undoId as string)}
+              className="flex items-center gap-1.5 rounded-md border border-hairline bg-surface-2 px-2.5 py-1 text-[11.5px] font-semibold text-fg-1 transition hover:bg-surface-3"
+            >
+              <RotateCcw size={12} strokeWidth={2} aria-hidden />
+              Undo
+            </button>
           )}
         </div>
       )}

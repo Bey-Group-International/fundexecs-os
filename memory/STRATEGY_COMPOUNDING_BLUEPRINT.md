@@ -65,6 +65,24 @@ Low 1`) and roll up a **weighted completion** per horizon + one overall
 - Files: `app/strategy/StrategyView.tsx` only.
 - No peer percentile yet (would require a cohort table — Phase 3). No fake Δ.
 
+### Refine pass — simplify / fortify / optimize flow (UI-only) ✅ shipped
+
+Consolidated the surface and hardened the loop after Phases 1 + 2a stacked three
+summary cards before any objective.
+
+- **One summary:** removed the standalone Earn banner; folded its objective-count
+  line into the hero's Earn strip. The page now leads with a single summary
+  (hero) → capital-weighted tier card → objectives.
+- **Flow:** inline quick-add per horizon (type + Enter creates at that tier via
+  the `TIER_TIMELINE` → `deriveTier` round-trip), with optimistic insert.
+- **Fortify:** undo on archive/delete (new `restoreObjective` action) + a
+  two-step inline confirm before delete; every mutation now `revalidatePath`s
+  and the per-action full `router.refresh()` is gone (optimistic local state +
+  server revalidation); `role=status`/`aria-live` flash, fuller aria-labels.
+- **Deferred:** "real editable progress" — `pct` should come from lifecycle
+  gates (Phase 2c real-pct), not a manual slider, so a hand-edit now would fight
+  that design.
+
 ### Phase 2a — Lifecycle/posture hero (UI-only, no new tables) ✅ shipped
 
 The read-only, verifiable half of the gate-unlock mechanic, reusing the tested

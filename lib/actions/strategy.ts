@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { awardTrustXp } from '@/lib/actions/xp';
@@ -93,6 +94,7 @@ export async function createObjective(input: CreateObjectiveInput): Promise<Obje
     .select('*')
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? 'Insert failed.' };
+  revalidatePath('/strategy');
   return { ok: true, objective: data as ObjectiveRow };
 }
 
@@ -113,6 +115,7 @@ export async function approveDraftObjective(id: string): Promise<ObjectiveResult
     .select('*')
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? 'Approve failed.' };
+  revalidatePath('/strategy');
   return { ok: true, objective: data as ObjectiveRow };
 }
 
@@ -148,6 +151,7 @@ export async function updateObjective(
     .select('*')
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? 'Update failed.' };
+  revalidatePath('/strategy');
   return { ok: true, objective: data as ObjectiveRow };
 }
 
@@ -192,6 +196,7 @@ export async function setObjectiveStatus(
       // best-effort
     }
   }
+  revalidatePath('/strategy');
   return { ok: true, objective: data as ObjectiveRow };
 }
 
@@ -210,6 +215,27 @@ export async function deleteObjective(id: string): Promise<ObjectiveResult> {
     .select('*')
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? 'Delete failed.' };
+  revalidatePath('/strategy');
+  return { ok: true, objective: data as ObjectiveRow };
+}
+
+/**
+ * Undo a soft delete or archive: clear the `deleted_at` / `archived_at` /
+ * `closed_at` timestamps and reopen the objective. Powers the inline "Undo"
+ * affordance on destructive row actions.
+ */
+export async function restoreObjective(id: string): Promise<ObjectiveResult> {
+  if (!id) return { ok: false, error: 'Missing objective id.' };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('governance_objectives')
+    .update({ deleted_at: null, archived_at: null, closed_at: null, status: 'open' })
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error || !data) return { ok: false, error: error?.message ?? 'Restore failed.' };
+  revalidatePath('/strategy');
   return { ok: true, objective: data as ObjectiveRow };
 }
 
