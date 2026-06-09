@@ -3,6 +3,15 @@
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { awardTrustXp } from '@/lib/actions/xp';
+import { loadLifecycleContext } from '@/lib/queries/dashboard/lifecycle';
+import { computeLifecycleStageResult } from '@/lib/lifecycle';
+import {
+  computeCascadeChildren,
+  detectGateUnlock,
+  type GateUnlock,
+  type ObjectiveTier,
+  type CascadeChildSpec
+} from '@/lib/strategy/compounding';
 import type { Database } from '@/lib/supabase/database.types';
 
 type ObjectiveRow = Database['public']['Tables']['governance_objectives']['Row'];
@@ -44,6 +53,11 @@ export interface CreateObjectiveInput {
   approved?: boolean;
 }
 
+/**
+ * Resolve the plan id to attach an objective to: the explicitly requested id when
+ * given, otherwise the org's earliest governance plan. Returns null when neither
+ * resolves so the caller can surface a clear error.
+ */
 async function resolvePlanId(orgId: string, requested: string | null): Promise<string | null> {
   if (requested) return requested;
   const supabase = await createClient();
@@ -57,6 +71,12 @@ async function resolvePlanId(orgId: string, requested: string | null): Promise<s
   return (data as Pick<PlanRow, 'id'> | null)?.id ?? null;
 }
 
+/**
+ * Create a governance objective for the active org. The legacy manual path only
+ * needs `objective` (+ optional plan/timeline/priority); Phase 2b fields are
+ * written only when explicitly provided so existing callers are unaffected.
+ * RLS-scoped; returns a typed error result rather than throwing.
+ */
 export async function createObjective(input: CreateObjectiveInput): Promise<ObjectiveResult> {
   const title = input.objective?.trim();
   if (!title) return { ok: false, error: 'Objective text is required.' };
@@ -123,6 +143,11 @@ export interface UpdateObjectiveInput {
   aiRecommendation?: string | null;
 }
 
+/**
+ * Patch an objective's editable fields (title/timeline/priority/recommendation).
+ * Only provided keys are written; an empty patch or blank title is rejected with
+ * a typed error. RLS-scoped; never throws.
+ */
 export async function updateObjective(
   id: string,
   patch: UpdateObjectiveInput
@@ -195,6 +220,146 @@ export async function setObjectiveStatus(
   return { ok: true, objective: data as ObjectiveRow };
 }
 
+/* ---------------------------------------------------------------------------
+ * Compounding: cascade on completion + gate-unlock writeback (Phase 2b).
+ * ------------------------------------------------------------------------- */
+
+/** Derive the 100/30/10 tier from an objective's plan horizon + timeline. */
+function deriveTier(horizon: string | null, timeline: string | null): ObjectiveTier {
+  const hay = `${horizon ?? ''} ${timeline ?? ''}`.toLowerCase();
+  if (hay.includes('100')) return '100';
+  if (hay.includes('30')) return '30';
+  if (hay.includes('10')) return '10';
+  return '100';
+}
+
+/**
+ * Spawn the next-tier child drafts for a completed objective. Closing a 100-day
+ * bet proposes its 30-day milestone; a 30 proposes a 10-day move; a 10 is a leaf
+ * (no children). Children are inserted as `source='cascade'` drafts (unapproved)
+ * so the operator still confirms them — "Earn drafts, you approve". Best-effort:
+ * any failure leaves the parent completion intact. Exported so it can be invoked
+ * directly (e.g. from a batch flow) as well as from the completion path.
+ */
+export async function cascadeObjective(id: string): Promise<{ spawned: number }> {
+  try {
+    const org = await getActiveOrg();
+    if (!org) return { spawned: 0 };
+
+    const supabase = await createClient();
+    const { data: parent } = await supabase
+      .from('governance_objectives')
+      .select('id, org_id, plan_id, objective, timeline, category, lifecycle_stage')
+      .eq('id', id)
+      .maybeSingle();
+    if (!parent) return { spawned: 0 };
+
+    const { data: plan } = await supabase
+      .from('governance_plans')
+      .select('horizon')
+      .eq('id', parent.plan_id)
+      .maybeSingle();
+
+    const tier = deriveTier(
+      (plan as { horizon: string | null } | null)?.horizon ?? null,
+      parent.timeline
+    );
+    const children: CascadeChildSpec[] = computeCascadeChildren({
+      tier,
+      title: parent.objective,
+      category: parent.category,
+      lifecycleStage: parent.lifecycle_stage
+    });
+    if (children.length === 0) return { spawned: 0 };
+
+    // Idempotency guard — if this parent already has cascade children, don't
+    // spawn a second set (re-completing / double-invocation is a no-op).
+    const { count: existingChildren } = await supabase
+      .from('governance_objectives')
+      .select('id', { count: 'exact', head: true })
+      .eq('parent_objective_id', parent.id)
+      .eq('source', 'cascade')
+      .is('deleted_at', null);
+    if ((existingChildren ?? 0) > 0) return { spawned: 0 };
+
+    const rows: ObjectiveInsert[] = children.map((c) => ({
+      org_id: parent.org_id,
+      plan_id: parent.plan_id,
+      objective: c.objective,
+      timeline: c.timeline,
+      priority: 'medium',
+      status: 'open',
+      owner_id: org.userId,
+      source: 'cascade',
+      parent_objective_id: parent.id,
+      category: c.category,
+      lifecycle_stage: c.lifecycleStage
+      // approved_at intentionally left null → enters as a pending draft.
+    }));
+
+    const { data, error } = await supabase.from('governance_objectives').insert(rows).select('id');
+    if (error) return { spawned: 0 };
+    return { spawned: (data ?? []).length };
+  } catch {
+    return { spawned: 0 };
+  }
+}
+
+export interface CompleteObjectiveResult {
+  ok: boolean;
+  error?: string;
+  objective?: ObjectiveRow;
+  /** Cascade children spawned as drafts (count). */
+  cascadeSpawned: number;
+  /** The stage a newly-cleared gate unlocked, when completion flipped one. */
+  gateUnlock: GateUnlock | null;
+}
+
+/**
+ * Complete an objective with the full compounding payload: marks it done (reusing
+ * `setObjectiveStatus`), spawns the next-tier cascade drafts, and re-runs the
+ * lifecycle engine to detect whether the completion flipped a gate cleared — if
+ * so it surfaces the unlocked stage. Each compounding step is best-effort and
+ * never undoes the completion. RLS-scoped via the underlying actions.
+ */
+export async function completeObjective(id: string): Promise<CompleteObjectiveResult> {
+  if (!id)
+    return { ok: false, error: 'Missing objective id.', cascadeSpawned: 0, gateUnlock: null };
+
+  const org = await getActiveOrg();
+
+  // Snapshot the lifecycle gates BEFORE the write so we can diff for an unlock.
+  let beforeGates: ReturnType<typeof computeLifecycleStageResult>['gatesCleared'] | null = null;
+  if (org) {
+    try {
+      const { inputs } = await loadLifecycleContext(org.orgId);
+      beforeGates = computeLifecycleStageResult(inputs).gatesCleared;
+    } catch {
+      beforeGates = null;
+    }
+  }
+
+  const result = await setObjectiveStatus(id, 'completed');
+  if (!result.ok) return { ok: false, error: result.error, cascadeSpawned: 0, gateUnlock: null };
+
+  // Cascade — spawn the next-tier draft(s).
+  const { spawned } = await cascadeObjective(id);
+
+  // Gate-unlock — re-run the engine and diff the gate state.
+  let gateUnlock: GateUnlock | null = null;
+  if (org && beforeGates) {
+    try {
+      const { inputs } = await loadLifecycleContext(org.orgId);
+      const afterGates = computeLifecycleStageResult(inputs).gatesCleared;
+      gateUnlock = detectGateUnlock(beforeGates, afterGates);
+    } catch {
+      gateUnlock = null;
+    }
+  }
+
+  return { ok: true, objective: result.objective, cascadeSpawned: spawned, gateUnlock };
+}
+
 /**
  * Soft-delete via `deleted_at`. Reserve hard delete for explicit owner
  * cleanup flows.
@@ -213,6 +378,10 @@ export async function deleteObjective(id: string): Promise<ObjectiveResult> {
   return { ok: true, objective: data as ObjectiveRow };
 }
 
+/**
+ * Stamp `read_at` the first time an objective is opened (no-op if already read).
+ * RLS-scoped; returns ok with a minimal stub when there was nothing to update.
+ */
 export async function markObjectiveRead(id: string): Promise<ObjectiveResult> {
   if (!id) return { ok: false, error: 'Missing objective id.' };
 

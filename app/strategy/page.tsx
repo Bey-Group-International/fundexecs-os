@@ -5,8 +5,13 @@ import { Card } from '@/components/ui';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getStrategyData } from '@/lib/queries/strategy';
 import { getComplianceLane } from '@/lib/queries/compliance';
-import { getDashboardData } from '@/lib/queries/dashboard/lifecycle';
-import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, LIFECYCLE_STAGE_BLURBS } from '@/lib/lifecycle';
+import { getDashboardData, loadLifecycleContext } from '@/lib/queries/dashboard/lifecycle';
+import {
+  computeLifecycleStageResult,
+  LIFECYCLE_STAGES,
+  LIFECYCLE_STAGE_LABELS,
+  LIFECYCLE_STAGE_BLURBS
+} from '@/lib/lifecycle';
 import { computeInstitutionalPosture } from '@/lib/strategy/posture';
 import { getMemberProfile } from '@/lib/queries/member-profile';
 import { capturePostureSnapshot, getPostureTrend } from '@/lib/queries/strategy-posture';
@@ -42,11 +47,21 @@ export default async function StrategyPage() {
     );
   }
 
+  // Lifecycle gate/trust context, derived once via the tested engine. Drives
+  // both the dashboard hero and the real objective `pct` (gate progress + the
+  // linked trust layer), so the strategy loader doesn't re-query.
+  const lifecycleCtx = await loadLifecycleContext(org.orgId);
+  const stageResult = computeLifecycleStageResult(lifecycleCtx.inputs);
+
   // Strategy objectives + the lifecycle/posture context the hero binds to. The
   // dashboard loader already derives the stage, loop progress, and readiness
   // from the tested engine — reuse it rather than recomputing here.
   const [{ objectives }, dashboard, memberProfile, complianceLane] = await Promise.all([
-    getStrategyData(org.orgId),
+    getStrategyData(org.orgId, {
+      gatesCleared: stageResult.gatesCleared,
+      loopProgress: stageResult.loopProgress,
+      trust: lifecycleCtx.trust
+    }),
     getDashboardData(org.orgId),
     getMemberProfile(),
     getComplianceLane(org.orgId)
