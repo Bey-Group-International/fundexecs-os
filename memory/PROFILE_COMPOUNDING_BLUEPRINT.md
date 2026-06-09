@@ -16,9 +16,9 @@ phase keeps the never-block / degrade-gracefully posture and is covered by
 | #   | Today                                                                                         | Full compounding loop                                                |
 | --- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | 1   | ✅ **Shipped** — depth scoring (`scoreDepth`) across field types: numbers, specificity, proof | —                                                                    |
-| 2   | Wizard is still linear paging with a "next gap" augment                                       | **Single highest-value question** served at a time                   |
-| 3   | `nextGapIndex` = forward scan in schema order                                                 | **Impact-ranked** next-best-question (tier × counterparty weight)    |
-| 4   | `completion_pct` written as hardcoded 100 on save                                             | Persist the **real ladder score** + per-rung state                   |
+| 2   | Wizard pages linearly; remaining gap = the guided one-question flow (Phase 3)                  | **Single highest-value question** served at a time                   |
+| 3   | ✅ **Shipped** — impact-ranked next-best gap (`rankedOpenGaps` + `compareGaps`) + skip loop    | —                                                                    |
+| 4   | ✅ **Shipped** — publish persists the honest `completion_pct` (`ladder.overallPct`)            | —                                                                    |
 | 5   | Ladder is private to the member                                                               | **Compounding payoff surfaced**: "Mandate complete → matchable to N" |
 
 ## Phase 1 — Depth scoring (completed in the readiness-ladder PR)
@@ -76,16 +76,24 @@ the index off `rankedGaps`, auto-advances on approve, shows the
 "Institutionally ready" capstone at zero gaps, and keeps a visited-stack so Back
 stays navigable.
 
-## Phase 4 — Persist the real ladder
+## Phase 4 — Persist the real ladder ✅ shipped
 
-**Problem:** `answersToProfileInput` hardcodes `completionPct: 100`; the DB never
-reflects partial readiness.
+**Problem:** `answersToProfileInput` hardcoded `completionPct: 100`, so the DB and
+the Settings "Proof of Truth" % always read 100 regardless of what was actually
+strong.
 
-**Design:** compute the ladder at save time; write
-`completion_pct = ladder.overallPct` and
-`status = ladder.institutionalReady ? 'complete' : 'in_progress'`. Optionally
-stash `details.__ladder = { readinessTierId, overallPct }` (no migration) so the
-dashboard rail can read achieved readiness without recomputing.
+**Delivered:** publish now writes `completionPct = ladder.overallPct` (the
+depth-weighted score), so `member_profiles.completion_pct` — surfaced on
+`/settings` and the trust surface — tells the truth.
+
+**Deliberately NOT done:** the original sketch tied `status` to
+`institutionalReady`. That would have **trapped** members — `middleware.ts` uses
+`member_profiles.status === 'complete'` as the onboarding gate, force-redirecting
+anything else back to `/onboarding` on every route. Publishing keeps
+`status: 'complete'` (onboarding is done the moment they publish); readiness is
+carried by the honest `completion_pct`, never by the gate. No `details.__ladder`
+stash either — the dashboard/hero already recompute the ladder server-side via
+`getFundProfile`, so persisting it would only risk going stale.
 
 ## Phase 5 — Surface the compounding payoff
 
@@ -102,6 +110,6 @@ matchable LP mandates from the existing matching layer, fail-open); Evidence →
 
 1. ~~**Phase 1 — depth scoring**~~ ✅ shipped — makes the ladder honest.
 2. ~~**Phase 2 — ranking**~~ ✅ shipped — incl. the never-stuck / skip loop.
-3. **Phase 4 — persist** (small, independent) — persist real ladder pct on save.
+3. ~~**Phase 4 — persist**~~ ✅ shipped — honest `completion_pct` on publish.
 4. **Phase 3 — guided wizard** (build on `rankedOpenGaps` + the skip stack).
 5. **Phase 5 — payoff** (polish; own PR).

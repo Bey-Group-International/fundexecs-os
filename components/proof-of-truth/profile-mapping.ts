@@ -156,8 +156,14 @@ export function answersToProfileInput(
     focusAreas: [],
     links: {},
     details: {},
+    // Publishing IS the onboarding gate (`member_profiles.status` in middleware):
+    // 'complete' lets the member into the app. We never downgrade it for a thin
+    // or skipped field — that would force a re-onboarding loop, the opposite of
+    // "skip and come back later". Readiness lives in the honest completion_pct.
     status: 'complete',
-    completionPct: 100
+    // The real ladder score (depth-weighted), not a hardcoded 100 — so Settings
+    // and the trust surface reflect what's actually strong on the record.
+    completionPct: computeLadder(memberType, answers).overallPct
   };
 
   for (const q of getQuestionSet(memberType)) {
