@@ -268,29 +268,13 @@ export function Wave1SideRail({
   const activeKey = resolveActiveKey(pathname, fullPath);
   const activeGroupKey = findActiveGroupKey(activeKey);
 
-  // Auto-expand baseline: active cluster + stage-emphasized clusters. Secondary
-  // clusters (Desk Tools) stay collapsed unless they own the route. Manual
-  // overrides win on top.
-  const autoExpanded = new Set<RailGroupKey>(emphasizedGroups);
-  if (activeGroupKey) autoExpanded.add(activeGroupKey);
-
   const overrides = useSyncExternalStore(
     subscribeRailCollapse,
     getRailCollapseSnapshot,
     getRailCollapseServerSnapshot
   );
 
-  function isExpanded(group: RailNavGroup): boolean {
-    const manual = overrides[group.key];
-    if (typeof manual === 'boolean') return manual;
-    return autoExpanded.has(group.key);
-  }
-
-  function toggleGroup(group: RailNavGroup) {
-    writeRailCollapseState(group.key, !isExpanded(group));
-  }
-
-  // The operating spine is a collapsible section too (default open). Persisted
+  // The operating spine is a collapsible section (default open). Persisted
   // under the `momentum` pseudo-key so operators can reclaim its vertical space.
   const spineExpanded = typeof overrides.momentum === 'boolean' ? overrides.momentum : true;
   function toggleSpine() {
@@ -367,7 +351,6 @@ export function Wave1SideRail({
           ) : null}
 
           {RAIL_GROUPS.map((group) => {
-            const extraTop = group.key === 'build' ? sourceOfTruthSummary : undefined;
             // The chain verbs share the cluster keys, so a link maps 1:1 to a
             // group. When closing (Drive active), Build is the wrap target.
             const chain = signals?.momentum?.chain;
@@ -378,15 +361,11 @@ export function Wave1SideRail({
               <NavGroup
                 key={group.key}
                 group={group}
-                activeKey={activeKey}
+                active={activeGroupKey === group.key}
                 emphasized={emphasizedGroups.has(group.key)}
-                expanded={isExpanded(group)}
-                onToggle={() => toggleGroup(group)}
                 rollup={computeGroupRollup(group, signals?.badges)}
-                badges={signals?.badges}
                 chainState={chainState}
                 onLinkClick={onClose}
-                extraTop={extraTop}
               />
             );
           })}
@@ -454,71 +433,83 @@ function PinnedLink({
 
 interface NavGroupProps {
   group: RailNavGroup;
-  activeKey: string | null;
+  /** Whether the active route lives in this cluster (highlights the row). */
+  active: boolean;
   emphasized: boolean;
-  expanded: boolean;
-  onToggle: () => void;
   rollup: GroupRollup | null;
-  badges?: Record<string, RailSignal>;
   /** This cluster's position in the loop chain (Phase 4), if a chain is live. */
   chainState?: LinkState;
   onLinkClick: () => void;
-  extraTop?: ReactNode;
 }
 
-function NavGroup({
-  group,
-  activeKey,
-  emphasized,
-  expanded,
-  onToggle,
-  rollup,
-  badges,
-  chainState,
-  onLinkClick,
-  extraTop
-}: NavGroupProps) {
-  const panelId = useId();
-  const headerRef = useRef<HTMLButtonElement | null>(null);
+/**
+ * NavGroup — one loop cluster as a single row that pops out its full option
+ * menu. There's no inline drop-down: clicking the row opens a fixed-positioned
+ * menu beside the rail listing every option (links + the Earn action), so each
+ * cluster has exactly one access pattern. Closes on outside-click / Escape /
+ * scroll.
+ */
+function NavGroup({ group, active, emphasized, rollup, chainState, onLinkClick }: NavGroupProps) {
   const GroupIcon = group.icon;
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
-    if (emphasized && expanded) headerRef.current?.scrollIntoView({ block: 'nearest' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emphasized]);
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!btnRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    const onScroll = () => setOpen(false);
+    window.addEventListener('mousedown', onDocClick);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('mousedown', onDocClick);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open]);
+
+  function toggle() {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.top, left: r.right + 8 });
+    setOpen((v) => !v);
+  }
+  function close() {
+    setOpen(false);
+  }
 
   return (
-    <motion.section
-      layout
-      data-testid={`rail-group-${group.key}`}
-      data-state={expanded ? 'open' : 'collapsed'}
-      className={cn(
-        'overflow-hidden rounded-[12px] border bg-bg-1',
-        emphasized ? 'border-[var(--azure-line)]' : 'border-hairline'
-      )}
-    >
-      {/* Collapsible header — toggle + a small pop-out Earn launcher beside it. */}
-      <div
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-testid={`rail-group-${group.key}`}
+        title={`${group.label} — options`}
         className={cn(
-          'flex w-full items-center gap-2 px-2.5 py-2 transition-[background] hover:bg-surface-1',
-          emphasized ? 'text-gold-1' : 'text-fg-4'
+          'flex w-full items-center gap-2 rounded-[12px] border px-2.5 py-2.5 text-left transition-[background]',
+          active
+            ? 'border-[var(--azure-line)] bg-gradient-to-r from-[var(--azure-soft)] to-surface-1'
+            : open
+              ? 'border-[var(--azure-line)] bg-surface-1'
+              : 'border-hairline hover:bg-surface-1',
+          emphasized ? 'text-gold-1' : 'text-fg-2'
         )}
       >
-        <button
-          type="button"
-          ref={headerRef}
-          onClick={onToggle}
-          aria-expanded={expanded}
-          aria-controls={panelId}
-          data-testid={`rail-group-toggle-${group.key}`}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
-        >
-          <GroupIcon size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
-          <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.06em]">
-            {group.label}
-          </span>
-          {chainState ? <ChainPip state={chainState} /> : null}
-        </button>
+        <GroupIcon size={15} strokeWidth={1.9} aria-hidden className="flex-none" />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.06em]">
+          {group.label}
+        </span>
+        {chainState ? <ChainPip state={chainState} /> : null}
         {rollup ? (
           <Badge
             tone={rollup.tone}
@@ -528,266 +519,62 @@ function NavGroup({
             {rollup.label}
           </Badge>
         ) : null}
-        <ClusterMenu group={group} onLinkClick={onLinkClick} />
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={`${expanded ? 'Collapse' : 'Expand'} ${group.label}`}
-          className="flex h-5 w-5 flex-none items-center justify-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
-        >
-          <motion.span
-            className={cn(
-              'block rounded-full transition-colors',
-              expanded
-                ? emphasized
-                  ? 'h-2 w-2 bg-gold-1'
-                  : 'h-2 w-2 bg-azure-1'
-                : 'h-1.5 w-1.5 bg-fg-5/50'
-            )}
-            animate={{ scale: expanded ? 1 : 0.85 }}
-            transition={FX_SPRING}
-            aria-hidden
-          />
-        </button>
-      </div>
-
-      {/* Panel */}
-      <AnimatePresence initial={false}>
-        {expanded ? (
+        <MoreHorizontal
+          size={14}
+          strokeWidth={2}
+          aria-hidden
+          className={cn('flex-none', emphasized ? 'text-gold-1/70' : 'text-fg-4')}
+        />
+      </button>
+      <AnimatePresence>
+        {open && pos ? (
           <motion.div
-            id={panelId}
-            key="panel"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24, ease: FX_EASE }}
-            className="overflow-hidden"
+            role="menu"
+            data-testid={`rail-cluster-menu-popover-${group.key}`}
+            style={{ top: pos.top, left: pos.left }}
+            initial={{ opacity: 0, x: -4, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -4, scale: 0.98 }}
+            transition={FX_SPRING}
+            className="fixed z-50 max-h-[70vh] w-60 overflow-y-auto rounded-[12px] border border-hairline bg-bg-1 p-1.5 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)]"
           >
-            {/* Subsections first — the navigable links sit right under the
-                header so they're the easiest thing to reach on expand. */}
-            <ul className="flex flex-col gap-0.5 px-1.5 pb-1 pt-1.5">
-              {group.items.map((item, i) => (
-                <NavItem
-                  key={`${group.key}:${i}`}
-                  item={item}
-                  groupKey={group.key}
-                  index={i}
-                  activeKey={activeKey}
-                  badges={badges}
-                  onLinkClick={onLinkClick}
-                />
-              ))}
-            </ul>
-            {extraTop ? <div className="px-2.5 pb-2 pt-0.5">{extraTop}</div> : null}
+            {group.items.map((item, i) => (
+              <ClusterMenuEntry
+                key={`${group.key}-menu-${i}`}
+                item={item}
+                onLinkClick={onLinkClick}
+                onClose={close}
+              />
+            ))}
+            {group.launcher ? (
+              <>
+                <div className="my-1 h-px bg-hairline" aria-hidden />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openEarn(group.launcher!.prompt);
+                    close();
+                    onLinkClick();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-[9px] px-2.5 py-1.5 text-left transition-[background] hover:bg-[var(--gold-soft)]"
+                >
+                  <Sparkles
+                    size={13}
+                    strokeWidth={2}
+                    aria-hidden
+                    className="flex-none text-gold-1"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-gold-1">
+                    {group.launcher.label}
+                  </span>
+                </button>
+              </>
+            ) : null}
           </motion.div>
         ) : null}
       </AnimatePresence>
-    </motion.section>
-  );
-}
-
-/** Slugify a label for stable test ids. */
-function slug(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-}
-
-/**
- * NavItem — one loop entry. Renders one of: a route Link, an Earn-action button
- * (`earnPrompt`), a muted "soon" row (no href), or an expandable parent
- * (`children`, e.g. Execute → Pre-Acquisition/Post-Acquisition/Exit).
- */
-function NavItem({
-  item,
-  groupKey,
-  index,
-  activeKey,
-  badges,
-  onLinkClick
-}: {
-  item: RailNavItem;
-  groupKey: RailGroupKey;
-  index: number;
-  activeKey: string | null;
-  badges?: Record<string, RailSignal>;
-  onLinkClick: () => void;
-}) {
-  const Icon = item.icon;
-
-  if (item.children && item.children.length > 0) {
-    return (
-      <NavParent
-        item={item}
-        groupKey={groupKey}
-        index={index}
-        activeKey={activeKey}
-        onLinkClick={onLinkClick}
-      />
-    );
-  }
-
-  // Earn-action item (AI verb — opens the dock, no route).
-  if (item.earnPrompt) {
-    return (
-      <li>
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.98 }}
-          transition={FX_SPRING}
-          onClick={() => {
-            openEarn(item.earnPrompt as string);
-            onLinkClick();
-          }}
-          title={item.hint}
-          data-testid={`rail-action-${slug(item.label)}`}
-          className="relative flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left text-[12px] font-medium text-fg-3 transition-[background,transform] will-change-transform hover:translate-x-0.5 hover:bg-surface-1 motion-reduce:transition-none"
-        >
-          <Icon size={16} strokeWidth={1.9} aria-hidden className="text-gold-1" />
-          <span className="flex-1">{item.label}</span>
-          <Sparkles size={12} strokeWidth={2} aria-hidden className="text-gold-1/70" />
-        </motion.button>
-      </li>
-    );
-  }
-
-  // "Soon" — routed surface not built yet; muted + non-interactive.
-  if (!item.href) {
-    return (
-      <li>
-        <div
-          title={item.hint}
-          data-testid={`rail-soon-${slug(item.label)}`}
-          className="flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[12px] font-medium text-fg-5"
-        >
-          <Icon size={16} strokeWidth={1.9} aria-hidden />
-          <span className="flex-1">
-            {item.label}
-            <span className="ml-1.5 text-[9.5px] font-semibold uppercase tracking-[0.11em] text-fg-5">
-              soon
-            </span>
-          </span>
-        </div>
-      </li>
-    );
-  }
-
-  // Normal route link.
-  const itemKey = `${groupKey}:${index}`;
-  const active = activeKey === itemKey;
-  const signal = badges?.[item.href] ?? badges?.[baseHref(item.href)];
-  return (
-    <li>
-      <Link
-        href={item.href}
-        onClick={onLinkClick}
-        aria-current={active ? 'page' : undefined}
-        title={item.hint}
-        data-testid={`rail-link-${baseHref(item.href).replace(/^\//, '') || 'root'}${
-          item.href.includes('?') ? `-${item.href.split('?')[1].replace(/[^a-z0-9]/gi, '')}` : ''
-        }`}
-        className={cn(
-          'relative flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[12px] font-medium transition-[background,box-shadow,transform] will-change-transform motion-reduce:transition-none motion-reduce:hover:translate-x-0',
-          active
-            ? 'bg-gradient-to-r from-[var(--azure-soft)] to-surface-1 text-fg-1'
-            : 'text-fg-3 hover:translate-x-0.5 hover:bg-surface-1'
-        )}
-      >
-        {active ? (
-          <span
-            className="absolute -left-1.5 bottom-1.5 top-1.5 w-[3px] rounded-full bg-azure-1"
-            aria-hidden
-          />
-        ) : null}
-        <Icon size={16} strokeWidth={1.9} aria-hidden />
-        <span className="flex-1">{item.label}</span>
-        {signal ? (
-          <Badge
-            tone={signal.tone ?? 'azure'}
-            className="px-1.5 py-0.5 text-[10px] tabular-nums"
-            title={signal.hint}
-          >
-            {signal.value}
-          </Badge>
-        ) : null}
-      </Link>
-    </li>
-  );
-}
-
-/**
- * NavParent — a third-tier group (e.g. Capital → Equity/Debt/Hybrid). Rendered
- * as an open dot sub-tree: a quiet parent label with its child links shown
- * beneath on a hairline connector, each marked by a state dot — no expand
- * chevron (the dot structure carries it).
- */
-function NavParent({
-  item,
-  groupKey,
-  index,
-  activeKey,
-  onLinkClick
-}: {
-  item: RailNavItem;
-  groupKey: RailGroupKey;
-  index: number;
-  activeKey: string | null;
-  onLinkClick: () => void;
-}) {
-  const Icon = item.icon;
-  const children = item.children ?? [];
-
-  return (
-    <li>
-      {/* Parent label — quiet heading; children render as a dotted sub-tree. */}
-      <div className="flex items-center gap-3 px-2.5 pb-0.5 pt-1.5 text-fg-4" title={item.hint}>
-        <Icon size={16} strokeWidth={1.9} aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{item.label}</span>
-      </div>
-      <ul className="ml-[18px] flex flex-col gap-0.5 border-l border-hairline pl-1.5">
-        {children.map((sub, j) => {
-          const subKey = `${groupKey}:${index}:${j}`;
-          const active = activeKey === subKey;
-          const isSoon = !sub.href || sub.live === false;
-          return (
-            <li key={subKey}>
-              {isSoon || !sub.href ? (
-                <div
-                  title={sub.hint}
-                  className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[11px] text-fg-5"
-                >
-                  <span className="h-1 w-1 flex-none rounded-full bg-fg-5/60" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{sub.label}</span>
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.06em]">soon</span>
-                </div>
-              ) : (
-                <Link
-                  href={sub.href}
-                  onClick={onLinkClick}
-                  aria-current={active ? 'page' : undefined}
-                  title={sub.hint}
-                  data-testid={`rail-sublink-${slug(item.label)}-${slug(sub.label)}`}
-                  className={cn(
-                    'flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[11px] transition-[background] hover:bg-surface-1',
-                    active ? 'bg-[var(--azure-soft)] font-medium text-fg-1' : 'text-fg-3'
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'h-1.5 w-1.5 flex-none rounded-full',
-                      active ? 'bg-azure-1' : 'bg-fg-5/60'
-                    )}
-                    aria-hidden
-                  />
-                  <span className="min-w-0 flex-1 truncate">{sub.label}</span>
-                </Link>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </li>
+    </>
   );
 }
 
@@ -1092,119 +879,6 @@ function ChainPip({ state }: { state: LinkState }) {
     );
   }
   return null;
-}
-
-/**
- * ClusterMenu — a small "more" affordance in the cluster header that pops out
- * the cluster's *full* option set: every nav link (flattening nested groups
- * like Execute → Pre-Acquisition/Post-Acquisition/Exit so nothing is buried), plus the Earn
- * launcher action at the foot. Fixed-positioned beside the rail so the rail's
- * overflow never clips it; closes on outside-click / Escape / scroll.
- */
-function ClusterMenu({ group, onLinkClick }: { group: RailNavGroup; onLinkClick: () => void }) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (!btnRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    const onScroll = () => setOpen(false);
-    window.addEventListener('mousedown', onDocClick);
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onScroll);
-    return () => {
-      window.removeEventListener('mousedown', onDocClick);
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('resize', onScroll);
-    };
-  }, [open]);
-
-  function toggle() {
-    const r = btnRef.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.top, left: r.right + 8 });
-    setOpen((v) => !v);
-  }
-
-  function close() {
-    setOpen(false);
-  }
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={toggle}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={`${group.label} — all options`}
-        aria-label={`${group.label} options`}
-        data-testid={`rail-cluster-menu-${group.key}`}
-        className={cn(
-          'flex h-5 w-5 flex-none items-center justify-center rounded-md text-fg-4 transition-[background] hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1',
-          open && 'bg-surface-2 text-fg-1'
-        )}
-      >
-        <MoreHorizontal size={14} strokeWidth={2} aria-hidden />
-      </button>
-      <AnimatePresence>
-        {open && pos ? (
-          <motion.div
-            role="menu"
-            data-testid={`rail-cluster-menu-popover-${group.key}`}
-            style={{ top: pos.top, left: pos.left }}
-            initial={{ opacity: 0, x: -4, scale: 0.98 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: -4, scale: 0.98 }}
-            transition={FX_SPRING}
-            className="fixed z-50 max-h-[70vh] w-60 overflow-y-auto rounded-[12px] border border-hairline bg-bg-1 p-1.5 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)]"
-          >
-            {group.items.map((item, i) => (
-              <ClusterMenuEntry
-                key={`${group.key}-menu-${i}`}
-                item={item}
-                onLinkClick={onLinkClick}
-                onClose={close}
-              />
-            ))}
-            {group.launcher ? (
-              <>
-                <div className="my-1 h-px bg-hairline" aria-hidden />
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    openEarn(group.launcher!.prompt);
-                    close();
-                    onLinkClick();
-                  }}
-                  className="flex w-full items-center gap-2 rounded-[9px] px-2.5 py-1.5 text-left transition-[background] hover:bg-[var(--gold-soft)]"
-                >
-                  <Sparkles
-                    size={13}
-                    strokeWidth={2}
-                    aria-hidden
-                    className="flex-none text-gold-1"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-gold-1">
-                    {group.launcher.label}
-                  </span>
-                </button>
-              </>
-            ) : null}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </>
-  );
 }
 
 /** One entry in a ClusterMenu — a link, an Earn action, a nested group of
