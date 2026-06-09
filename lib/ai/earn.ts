@@ -243,8 +243,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
  * flat at scale. Env-tunable; the `earn_turn` telemetry makes the effect
  * observable. Pure + exported for unit tests.
  * --------------------------------------------------------------------------*/
-const RAG_CHUNK_MAX = Number(process.env.EARN_RAG_CHUNK_MAX) || 700;
-const RAG_CONTEXT_MAX = Number(process.env.EARN_RAG_CONTEXT_MAX) || 4000;
+const RAG_CHUNK_MAX = Math.max(1, Number(process.env.EARN_RAG_CHUNK_MAX) || 700);
+const RAG_CONTEXT_MAX = Math.max(1, Number(process.env.EARN_RAG_CONTEXT_MAX) || 4000);
 
 /** Join retrieved chunks into a numbered context block, capping each chunk and
  *  the total to a character budget so input cost stays bounded. The first chunk
