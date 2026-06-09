@@ -9,7 +9,16 @@ import { PipelineView } from './PipelineView';
 
 export const metadata: Metadata = { title: 'Pipeline' };
 
-export default async function PipelinePage() {
+/** The pipeline board — deals, LPs, and the capital stack. A `?deal` param,
+ *  deep-linked from the Deal Desk, opens that deal's detail drawer on load. */
+export default async function PipelinePage({
+  searchParams
+}: {
+  searchParams: Promise<{ deal?: string | string[] }>;
+}) {
+  const { deal } = await searchParams;
+  // A deal id deep-linked from the Deal Desk opens that deal's detail drawer.
+  const initialDealId = (Array.isArray(deal) ? deal[0] : deal) ?? null;
   const org = await getActiveOrg();
 
   if (!org) {
@@ -55,7 +64,7 @@ export default async function PipelinePage() {
       title="Pipeline"
       subtitle="Where capital gets formed — deals, LPs, and the stack that closes them"
     >
-      <PipelineView data={data} lpData={lp} />
+      <PipelineView data={data} lpData={lp} initialDealId={initialDealId} />
     </AppShell>
   );
 }

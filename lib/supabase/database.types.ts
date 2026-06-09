@@ -3539,6 +3539,44 @@ export type Database = {
           },
         ]
       }
+      trust_posture_snapshots: {
+        Row: {
+          coverage_pct: number
+          created_at: string
+          id: string
+          iri: number
+          org_id: string
+          snapshot_date: string
+          updated_at: string
+        }
+        Insert: {
+          coverage_pct?: number
+          created_at?: string
+          id?: string
+          iri: number
+          org_id: string
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Update: {
+          coverage_pct?: number
+          created_at?: string
+          id?: string
+          iri?: number
+          org_id?: string
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trust_posture_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       warm_introductions: {
         Row: {
           connector_contact_id: string | null
@@ -3637,6 +3675,10 @@ export type Database = {
           _org_id: string
           _stage?: string
         }
+        Returns: undefined
+      }
+      upsert_trust_posture_snapshot: {
+        Args: { _coverage_pct?: number; _iri: number; _org_id: string }
         Returns: undefined
       }
       claim_beta_link: {
