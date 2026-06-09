@@ -6,6 +6,7 @@ import {
   canUseIntegration,
   costOf,
   nextPlanUp,
+  type IntegrationActionByProvider,
   type MeteredAction,
   type PaidIntegration,
   type Plan
@@ -104,15 +105,6 @@ export async function meterAction(
   return { ok: true, debited: 0, balance: wallet.balance };
 }
 
-/** Locks each paid integration to the metered action that represents its cost,
- *  so a non-integration action can't be billed against an integration call. */
-type IntegrationActionByProvider = {
-  apollo: 'apollo_enrich';
-  granola: 'meeting_copilot';
-  docusign: 'docusign_envelope';
-  carta: 'carta_sync';
-};
-
 /**
  * Gate + meter a paid third-party integration in one call. First checks the
  * plan is allowed to use the provider at all (free plans get none), then debits.
@@ -145,15 +137,7 @@ export async function claimMonthlyGrant(orgId: string): Promise<number | null> {
   const admin = adminOrNull();
   if (!admin) return null;
   try {
-    // `claim_monthly_credit_grant` ships in this PR's migration; the generated
-    // RPC types regenerate only after it applies, so name the call through a
-    // cast to a same-shaped (uuid → integer) RPC until then.
-    const { data, error } = await admin.rpc(
-      'claim_monthly_credit_grant' as 'consume_credits',
-      {
-        _org_id: orgId
-      } as never
-    );
+    const { data, error } = await admin.rpc('claim_monthly_credit_grant', { _org_id: orgId });
     if (error || typeof data !== 'number') return null;
     return data;
   } catch {

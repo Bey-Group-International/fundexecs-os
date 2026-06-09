@@ -1,7 +1,6 @@
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
-import { PERSONAS, type PersonaKey } from '@/components/dashboard/fixtures/personas';
 import type { CommitmentScheduleRow, CommitmentSnapshot } from './types';
 
 const STATUS_TONE: Record<CommitmentScheduleRow['status'], BadgeTone> = {
@@ -10,6 +9,18 @@ const STATUS_TONE: Record<CommitmentScheduleRow['status'], BadgeTone> = {
   distributed: 'gold',
   'in-progress': 'warning'
 };
+
+function humanize(value: string): string {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((token) => {
+      if (/[A-Z]/.test(token)) return token;
+      if (token.length <= 2) return token.toUpperCase();
+      return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
 
 export interface CommitmentTrackerProps {
   snapshot: CommitmentSnapshot;
@@ -21,8 +32,6 @@ export interface CommitmentTrackerProps {
  * schedule rows use the anonymized activity-ticker pattern that mirrors the
  * live www.fundexecs.com homepage: initials disc · persona label · city ·
  * committed/called · status pill. Persona labels map through
- * `components/dashboard/fixtures/personas.ts` so future re-shoots stay in
- * lockstep with the marketing site.
  */
 export function CommitmentTracker({ snapshot, className }: CommitmentTrackerProps) {
   return (
@@ -61,7 +70,6 @@ export function CommitmentTracker({ snapshot, className }: CommitmentTrackerProp
       ) : (
         <ul className="flex flex-col">
           {snapshot.schedule.map((row) => {
-            const persona = PERSONAS[row.persona as PersonaKey];
             return (
               <li
                 key={row.id}
@@ -74,9 +82,7 @@ export function CommitmentTracker({ snapshot, className }: CommitmentTrackerProp
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-[12.5px] font-semibold text-fg-1">{row.initials}</p>
-                    <p className="truncate text-[10.5px] text-fg-4">
-                      {persona?.label ?? row.persona}
-                    </p>
+                    <p className="truncate text-[10.5px] text-fg-4">{humanize(row.persona)}</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-end gap-3 sm:contents">

@@ -99,3 +99,32 @@ test('all-empty input yields a measurable building composite (trust/capital defa
   assert.equal(r.composite, 0);
   assert.equal(r.band, 'building');
 });
+
+test('compliance pillar uses the standing tier when it has objectives', () => {
+  const r = computeInstitutionalPosture({
+    ...base,
+    // Trust proxy would be 0; the lane (3 of 4 done, none overdue) wins.
+    compliance: { total: 4, done: 3, overdue: 0 }
+  });
+  // 3/4 = 75, no penalty.
+  assert.equal(dim(r, 'compliance').score, 75);
+});
+
+test('an empty compliance lane falls back to the trust truth+concept proxy', () => {
+  const r = computeInstitutionalPosture({
+    ...base,
+    trust: { truth: 100, concept: 50, execution: 0, work: 0 },
+    compliance: { total: 0, done: 0, overdue: 0 }
+  });
+  // 0.6*100 + 0.4*50 = 80 (the proxy), not 0.
+  assert.equal(dim(r, 'compliance').score, 80);
+});
+
+test('overdue compliance items dock the compliance pillar', () => {
+  const r = computeInstitutionalPosture({
+    ...base,
+    compliance: { total: 4, done: 3, overdue: 2 }
+  });
+  // 75 base − 2*12 penalty = 51.
+  assert.equal(dim(r, 'compliance').score, 51);
+});

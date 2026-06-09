@@ -4,12 +4,21 @@ import { getShellIdentity } from '@/lib/queries/identity';
 import { Card } from '@/components/ui';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getStrategyData } from '@/lib/queries/strategy';
-import { getDashboardData } from '@/lib/queries/dashboard/lifecycle';
-import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, LIFECYCLE_STAGE_BLURBS } from '@/lib/lifecycle';
+import { getComplianceLane } from '@/lib/queries/compliance';
+import { getDashboardData, loadLifecycleContext } from '@/lib/queries/dashboard/lifecycle';
+import {
+  computeLifecycleStageResult,
+  LIFECYCLE_STAGES,
+  LIFECYCLE_STAGE_LABELS,
+  LIFECYCLE_STAGE_BLURBS
+} from '@/lib/lifecycle';
 import { computeInstitutionalPosture } from '@/lib/strategy/posture';
+import { getMemberProfile } from '@/lib/queries/member-profile';
+import { capturePostureSnapshot, getPostureTrend } from '@/lib/queries/strategy-posture';
 import { StrategyView } from './StrategyView';
 import { StrategyHero } from './StrategyHero';
 import { PostureScorecard } from './PostureScorecard';
+import { ComplianceLane } from './ComplianceLane';
 
 export const metadata: Metadata = { title: 'Strategy' };
 
@@ -38,12 +47,24 @@ export default async function StrategyPage() {
     );
   }
 
+  // Lifecycle gate/trust context, derived once via the tested engine. Drives
+  // both the dashboard hero and the real objective `pct` (gate progress + the
+  // linked trust layer), so the strategy loader doesn't re-query.
+  const lifecycleCtx = await loadLifecycleContext(org.orgId);
+  const stageResult = computeLifecycleStageResult(lifecycleCtx.inputs);
+
   // Strategy objectives + the lifecycle/posture context the hero binds to. The
   // dashboard loader already derives the stage, loop progress, and readiness
   // from the tested engine — reuse it rather than recomputing here.
-  const [{ objectives }, dashboard] = await Promise.all([
-    getStrategyData(org.orgId),
-    getDashboardData(org.orgId)
+  const [{ objectives }, dashboard, memberProfile, complianceLane] = await Promise.all([
+    getStrategyData(org.orgId, {
+      gatesCleared: stageResult.gatesCleared,
+      loopProgress: stageResult.loopProgress,
+      trust: lifecycleCtx.trust
+    }),
+    getDashboardData(org.orgId),
+    getMemberProfile(),
+    getComplianceLane(org.orgId)
   ]);
 
   // The stage the current one unlocks (compounding): next in the ordered loop.
@@ -59,8 +80,36 @@ export default async function StrategyPage() {
   const posture = computeInstitutionalPosture({
     trust: dashboard.executionScore.layers,
     capitalReadiness,
-    objectives: objectives.map((o) => ({ priority: o.priority, done: o.state === 'done' }))
+    objectives: objectives.map((o) => ({ priority: o.priority, done: o.state === 'done' })),
+    // The Compliance pillar is now grounded in Adrian's standing compliance
+    // tier (Phase 4) when it has objectives, falling back to the trust proxy.
+    compliance: {
+      total: complianceLane.objectives.length,
+      done: complianceLane.objectives.filter((o) => o.state === 'done').length,
+      overdue: complianceLane.objectives.filter((o) => o.escalated && o.state === 'open').length
+    }
   });
+
+  // Snapshot-backed compounding (blueprint Phase 3): the momentum Δ + streak and
+  // the peer percentile live in org_posture_snapshots. Persist today's row first
+  // (idempotent per day, via the upsert RPC) so even a brand-new org seeds its
+  // first point, then read the trend against the same-stage / same-member-type
+  // cohort. Both are best-effort and degrade to a calm zero-state — never a
+  // fabricated Δ or rank. A pillar score absent from the dimension list passes
+  // through as null (unmeasured), not a coerced zero.
+  const pillarScore = (key: string) => posture.dimensions.find((d) => d.key === key)?.score ?? null;
+  const memberType = memberProfile?.memberType ?? null;
+  await capturePostureSnapshot({
+    orgId: org.orgId,
+    composite: posture.composite,
+    compliance: pillarScore('compliance'),
+    governance: pillarScore('governance'),
+    execution: pillarScore('execution'),
+    capital: pillarScore('capital'),
+    stage: dashboard.stage,
+    memberType
+  });
+  const postureTrend = await getPostureTrend(org.orgId, dashboard.stage, memberType);
 
   return (
     <AppShell
@@ -80,7 +129,8 @@ export default async function StrategyPage() {
           nextStageLabel={nextStage ? LIFECYCLE_STAGE_LABELS[nextStage] : null}
           nextStageBlurb={nextStage ? LIFECYCLE_STAGE_BLURBS[nextStage] : null}
         />
-        <PostureScorecard posture={posture} />
+        <PostureScorecard posture={posture} trend={postureTrend} />
+        <ComplianceLane lane={complianceLane} />
         <StrategyView initialObjectives={objectives} />
       </div>
     </AppShell>

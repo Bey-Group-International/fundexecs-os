@@ -51,9 +51,9 @@ const ACCESS_LABEL: Record<LpDocumentAccess, string> = {
 
 export interface DocumentVaultListProps {
   documents: LpDocument[];
-  /** Click handler fired with the doc id — wired to a download / preview
-   *  action by the backend later. */
-  onOpen?: (documentId: string) => void;
+  /** Click handler fired with the doc id to request a signed document URL. */
+  onOpen?: (documentId: string) => void | Promise<void>;
+  openingDocumentId?: string | null;
   className?: string;
 }
 
@@ -63,7 +63,12 @@ export interface DocumentVaultListProps {
  * row; the leading icon disc adopts a tone-matched border. Solid bg-bg-1
  * surfaces throughout (no translucent overlays).
  */
-export function DocumentVaultList({ documents, onOpen, className }: DocumentVaultListProps) {
+export function DocumentVaultList({
+  documents,
+  onOpen,
+  openingDocumentId,
+  className
+}: DocumentVaultListProps) {
   return (
     <Card className={cn('p-5', className)} data-testid="lp-document-vault">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -112,10 +117,13 @@ export function DocumentVaultList({ documents, onOpen, className }: DocumentVaul
                 </Badge>
                 <button
                   type="button"
-                  onClick={() => onOpen?.(doc.id)}
+                  disabled={openingDocumentId === doc.id}
+                  onClick={() => {
+                    void onOpen?.(doc.id);
+                  }}
                   aria-label={`Open ${doc.name}`}
                   data-testid={`lp-document-open-${doc.id}`}
-                  className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-surface-1 text-fg-3 transition hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
+                  className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-hairline bg-surface-1 text-fg-3 transition hover:bg-surface-2 hover:text-fg-1 disabled:cursor-wait disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
                 >
                   <Download size={13} strokeWidth={2} aria-hidden />
                 </button>

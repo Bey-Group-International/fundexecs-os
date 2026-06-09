@@ -1865,6 +1865,7 @@ export type Database = {
           objective: string
           org_id: string
           owner_id: string | null
+          owner_specialist: string | null
           parent_objective_id: string | null
           plan_id: string
           priority: string
@@ -1889,6 +1890,7 @@ export type Database = {
           objective: string
           org_id: string
           owner_id?: string | null
+          owner_specialist?: string | null
           parent_objective_id?: string | null
           plan_id: string
           priority?: string
@@ -1913,6 +1915,7 @@ export type Database = {
           objective?: string
           org_id?: string
           owner_id?: string | null
+          owner_specialist?: string | null
           parent_objective_id?: string | null
           plan_id?: string
           priority?: string
@@ -1969,6 +1972,7 @@ export type Database = {
           name: string
           org_id: string
           owner_id: string | null
+          owner_specialist: string | null
           status: string
           updated_at: string
         }
@@ -1979,6 +1983,7 @@ export type Database = {
           name: string
           org_id: string
           owner_id?: string | null
+          owner_specialist?: string | null
           status?: string
           updated_at?: string
         }
@@ -1989,6 +1994,7 @@ export type Database = {
           name?: string
           org_id?: string
           owner_id?: string | null
+          owner_specialist?: string | null
           status?: string
           updated_at?: string
         }
@@ -2251,6 +2257,333 @@ export type Database = {
           },
           {
             foreignKeyName: "knowledge_documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lp_room_answer_citations: {
+        Row: {
+          answer_id: string
+          created_at: string
+          document_id: string | null
+          id: string
+          label: string
+          org_id: string
+        }
+        Insert: {
+          answer_id: string
+          created_at?: string
+          document_id?: string | null
+          id?: string
+          label: string
+          org_id: string
+        }
+        Update: {
+          answer_id?: string
+          created_at?: string
+          document_id?: string | null
+          id?: string
+          label?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_room_answer_citations_answer_id_fkey"
+            columns: ["answer_id"]
+            isOneToOne: false
+            referencedRelation: "lp_room_answers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_room_answer_citations_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "lp_room_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_room_answer_citations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lp_room_answers: {
+        Row: {
+          author_id: string | null
+          author_name: string
+          author_role: string | null
+          body: string
+          created_at: string
+          id: string
+          org_id: string
+          question_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_name?: string
+          author_role?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          org_id: string
+          question_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          author_name?: string
+          author_role?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          question_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_room_answers_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_room_answers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_room_answers_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "lp_room_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lp_room_documents: {
+        Row: {
+          access_level: string
+          created_at: string
+          id: string
+          kind: string
+          mime_type: string | null
+          name: string
+          org_id: string
+          signed: boolean
+          size_bytes: number
+          storage_bucket: string
+          storage_path: string
+          updated_at: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          access_level?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          name: string
+          org_id: string
+          signed?: boolean
+          size_bytes?: number
+          storage_bucket?: string
+          storage_path: string
+          updated_at?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          access_level?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          name?: string
+          org_id?: string
+          signed?: boolean
+          size_bytes?: number
+          storage_bucket?: string
+          storage_path?: string
+          updated_at?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_room_documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_room_documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lp_room_questions: {
+        Row: {
+          asked_by: string
+          asker_name: string
+          body: string
+          created_at: string
+          id: string
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          asked_by: string
+          asker_name: string
+          body: string
+          created_at?: string
+          id?: string
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          asked_by?: string
+          asker_name?: string
+          body?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_room_questions_asked_by_fkey"
+            columns: ["asked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_room_questions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lp_room_update_attachments: {
+        Row: {
+          created_at: string
+          document_id: string | null
+          id: string
+          name: string
+          org_id: string
+          update_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_id?: string | null
+          id?: string
+          name: string
+          org_id: string
+          update_id: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          update_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_room_update_attachments_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "lp_room_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_room_update_attachments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_room_update_attachments_update_id_fkey"
+            columns: ["update_id"]
+            isOneToOne: false
+            referencedRelation: "lp_room_updates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lp_room_updates: {
+        Row: {
+          author_id: string | null
+          author_name: string
+          author_role: string
+          body: string
+          created_at: string
+          id: string
+          lifecycle: string
+          org_id: string
+          posted_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_name?: string
+          author_role?: string
+          body: string
+          created_at?: string
+          id?: string
+          lifecycle?: string
+          org_id: string
+          posted_at?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          author_name?: string
+          author_role?: string
+          body?: string
+          created_at?: string
+          id?: string
+          lifecycle?: string
+          org_id?: string
+          posted_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_room_updates_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_room_updates_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -2595,6 +2928,59 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_posture_snapshots: {
+        Row: {
+          capital: number | null
+          compliance: number | null
+          composite: number
+          created_at: string
+          execution: number | null
+          governance: number | null
+          id: string
+          member_type: string | null
+          org_id: string
+          snapshot_date: string
+          stage: string | null
+          updated_at: string
+        }
+        Insert: {
+          capital?: number | null
+          compliance?: number | null
+          composite: number
+          created_at?: string
+          execution?: number | null
+          governance?: number | null
+          id?: string
+          member_type?: string | null
+          org_id: string
+          snapshot_date?: string
+          stage?: string | null
+          updated_at?: string
+        }
+        Update: {
+          capital?: number | null
+          compliance?: number | null
+          composite?: number
+          created_at?: string
+          execution?: number | null
+          governance?: number | null
+          id?: string
+          member_type?: string | null
+          org_id?: string
+          snapshot_date?: string
+          stage?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_posture_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -3125,6 +3511,19 @@ export type Database = {
         Args: { _email: string; _invite_id?: string; _user_id: string }
         Returns: Json
       }
+      upsert_org_posture_snapshot: {
+        Args: {
+          _capital?: number
+          _composite: number
+          _compliance?: number
+          _execution?: number
+          _governance?: number
+          _member_type?: string
+          _org_id: string
+          _stage?: string
+        }
+        Returns: undefined
+      }
       claim_beta_link: {
         Args: { _email: string; _token: string; _user_id: string }
         Returns: { ok: boolean; error_reason: string }[]
@@ -3163,6 +3562,10 @@ export type Database = {
           withdrawn_total: number
         }[]
       }
+      claim_monthly_credit_grant: {
+        Args: { _org_id: string }
+        Returns: number
+      }
       consume_credits: {
         Args: {
           _amount: number
@@ -3175,6 +3578,11 @@ export type Database = {
       create_organization: {
         Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
         Returns: string
+      }
+      ensure_compliance_tier: { Args: { _org: string }; Returns: string }
+      refresh_compliance_tier: {
+        Args: { _org: string; _stale_days?: number }
+        Returns: number
       }
       generate_deal_matches: { Args: { _org_id: string }; Returns: number }
       generate_lp_matches: { Args: { _org_id: string }; Returns: number }
