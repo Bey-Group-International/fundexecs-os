@@ -70,16 +70,31 @@ test('every JS duration matches its CSS twin (value × 1000)', () => {
   ];
 
   // The JS map and the CSS file MUST cover the same set of tokens — assert
-  // both directions so a one-sided addition trips the test.
+  // both directions so a one-sided addition trips the test:
+  //   CSS-side: every --dur-* declared in globals.css has a pairs entry.
+  //   JS-side:  every key in MOTION_DURATIONS_S has a pairs entry.
+  // Catching both prevents a silent half-add on either side.
   const cssDurNames = [...CSS.matchAll(/--(dur-[a-z-]+)\s*:/g)].map((m) => m[1]);
-  const jsCovered = new Set(pairs.map(([, css]) => css));
+  const cssCovered = new Set(pairs.map(([, css]) => css));
   for (const css of cssDurNames) {
     assert.ok(
-      jsCovered.has(css),
+      cssCovered.has(css),
       `CSS declares --${css} but no MOTION_DURATIONS_S entry covers it. Add the JS twin in components/dashboard/command/motion.ts and a row in this test.`
     );
   }
-  assert.equal(jsCovered.size, cssDurNames.length, 'duration token count drift');
+  const jsCoveredKeys = new Set(pairs.map(([js]) => js as string));
+  for (const jsKey of Object.keys(MOTION_DURATIONS_S)) {
+    assert.ok(
+      jsCoveredKeys.has(jsKey),
+      `MOTION_DURATIONS_S has key '${jsKey}' but no pairs entry covers it. Add a CSS --dur-* token in app/globals.css and a row in this test.`
+    );
+  }
+  assert.equal(cssCovered.size, cssDurNames.length, 'CSS duration token count drift');
+  assert.equal(
+    jsCoveredKeys.size,
+    Object.keys(MOTION_DURATIONS_S).length,
+    'JS duration token count drift'
+  );
 
   for (const [jsKey, cssName] of pairs) {
     const cssValue = readCssToken(cssName);
