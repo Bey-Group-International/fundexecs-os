@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -49,6 +49,7 @@ import {
   type Answers
 } from './profile-mapping';
 import { ProfileLadder } from '@/components/profile/ProfileLadder';
+import { buildPayoffs } from '@/lib/proof-of-truth/payoffs';
 import { MemberTypePicker } from './MemberTypePicker';
 import { LiveProfilePanel } from './LiveProfilePanel';
 import { Recommendations } from './Recommendations';
@@ -61,6 +62,13 @@ interface ProofOfTruthFlowProps {
   redirectTo?: string;
   /** Optional question id to start on (Profile "close gap" deep-link). */
   focusField?: string;
+  /**
+   * How the wizard enters. `'guided'` drops the member straight on the highest-
+   * impact open gap (resume / fix-a-gap); `'linear'` starts at question one so a
+   * true first-timer walks the full arc. Omitted → inferred: a close-gap link or
+   * any existing progress is guided, an empty profile is linear.
+   */
+  mode?: 'guided' | 'linear';
   /** Onboarding only: offer a "Secure your account" (set password) card on the
    *  completion screen, so a new member leaves with a durable way back in. */
   offerPassword?: boolean;
@@ -95,6 +103,7 @@ export function ProofOfTruthFlow({
   profile,
   redirectTo = '/command-center',
   focusField,
+  mode,
   offerPassword = false,
   email,
   showReferralNudge = false
@@ -102,16 +111,40 @@ export function ProofOfTruthFlow({
   const router = useRouter();
 
   const [memberType, setMemberType] = useState<MemberType | null>(profile.memberType);
+  // Seed once from the server profile (persisted fields + resumable draft).
+  const seeded = useMemo(() => seedAnswers(profile), [profile]);
+
+  // Guided vs linear entry. A close-gap deep-link, or any existing progress,
+  // means the member is resuming → drop them on the work that's open. An empty
+  // profile is a true first run → walk the full arc from question one. An
+  // explicit `mode` prop overrides the inference.
+  const guided = mode ? mode === 'guided' : Boolean(focusField) || Object.keys(seeded).length > 0;
+
+  // Resolve where the wizard opens: a focused gap wins; otherwise guided entry
+  // jumps to the highest-impact open gap (or straight to Review when the record
+  // is already strong), while linear entry starts at question one.
+  const start = useMemo<{ stage: Stage; index: number }>(() => {
+    if (!profile.memberType) return { stage: 'picker', index: 0 };
+    if (focusField) {
+      const i = getQuestionSet(profile.memberType).findIndex((q) => q.id === focusField);
+      if (i >= 0) return { stage: 'qa', index: i };
+    }
+    if (guided) {
+      const gaps = rankedOpenGaps(profile.memberType, seeded);
+      if (gaps.length === 0) return { stage: 'review', index: 0 };
+      return { stage: 'qa', index: gaps[0].index };
+    }
+    return { stage: 'qa', index: 0 };
+  }, [profile.memberType, focusField, guided, seeded]);
+
   // `answers` holds ONLY approved values (the profile derives from this).
-  const [answers, setAnswers] = useState<Answers>(() => seedAnswers(profile));
-  const [stage, setStage] = useState<Stage>(profile.memberType ? 'qa' : 'picker');
-  // Start on the focused question when a "close gap" deep-link points at one
-  // (only meaningful once a member type is set, so the question set exists).
-  const [index, setIndex] = useState(() => {
-    if (!profile.memberType || !focusField) return 0;
-    const i = getQuestionSet(profile.memberType).findIndex((q) => q.id === focusField);
-    return i >= 0 ? i : 0;
-  });
+  const [answers, setAnswers] = useState<Answers>(seeded);
+  const [stage, setStage] = useState<Stage>(start.stage);
+  const [index, setIndex] = useState(start.index);
+  // The questions actually served, in order, so Back returns to the previous
+  // screen the member saw — not the schema-previous question, which the gap-
+  // driven loop may have jumped clean over.
+  const [history, setHistory] = useState<number[]>([]);
   const [pickerBusy, setPickerBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -352,15 +385,29 @@ export function ProofOfTruthFlow({
       return;
     }
     setMemberType(type);
+    setHistory([]);
     setIndex(0);
     setStage('qa');
   }
 
   // --- navigation ---
 
+  /** Advance to a question, remembering where we came from so Back is coherent. */
+  function goToIndex(target: number) {
+    if (target === index) return;
+    setHistory((h) => [...h, index]);
+    setIndex(target);
+  }
+
+  /** Step back to the previously-served question; out to the picker at the root. */
   function goBack() {
-    if (index > 0) setIndex((i) => i - 1);
-    else setStage('picker');
+    if (history.length > 0) {
+      const prev = history[history.length - 1];
+      setHistory((h) => h.slice(0, -1));
+      setIndex(prev);
+    } else {
+      setStage('picker');
+    }
   }
 
   /**
@@ -377,7 +424,7 @@ export function ProofOfTruthFlow({
   /** Move to the best gap not yet deferred; fall through to Review when none. */
   function goToNextGap(exclude: string[]) {
     const target = nextOpenGap(exclude);
-    if (target >= 0) setIndex(target);
+    if (target >= 0) goToIndex(target);
     else setStage('review');
   }
 
@@ -597,7 +644,11 @@ export function ProofOfTruthFlow({
               </div>
             </div>
 
-            <ProfileLadder ladder={computeLadder(memberType, answers)} className="mb-4" />
+            <ProfileLadder
+              ladder={computeLadder(memberType, answers)}
+              payoffs={buildPayoffs({ memberType })}
+              className="mb-4"
+            />
 
             <div className="rounded-xl border border-hairline bg-surface-1 px-4 py-1">
               {questions.map((q) => {
@@ -629,8 +680,11 @@ export function ProofOfTruthFlow({
                 icon={ArrowLeft}
                 disabled={submitting}
                 onClick={() => {
+                  // Back from Review lands on the first thing still worth fixing
+                  // (incl. anything skipped), or the last question if all strong.
+                  const gaps = rankedOpenGaps(memberType, answers);
                   setStage('qa');
-                  setIndex(questions.length - 1);
+                  setIndex(gaps.length ? gaps[0].index : questions.length - 1);
                 }}
               >
                 Back
