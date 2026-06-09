@@ -799,11 +799,12 @@ export function TrustCenterView({ data }: { data: TrustCenterData }) {
   }, [data.records]);
 
   // Record today's posture so the index can show movement over time. One row
-  // per org per day (server upserts); fire-and-forget, skipped when empty.
+  // per org per day; the server derives the values (it does not trust the
+  // client), upserts, and skips when empty. Fire-and-forget on mount.
   useEffect(() => {
     if (data.empty) return;
-    void recordTrustSnapshot({ iri: data.iri, coveragePct: data.capital.proofCoveragePct });
-  }, [data.empty, data.iri, data.capital.proofCoveragePct]);
+    void recordTrustSnapshot();
+  }, [data.empty]);
 
   // Keep the surface live: re-pull posture + queue when the tab regains focus,
   // so an approver returning to the page never acts on a stale queue.

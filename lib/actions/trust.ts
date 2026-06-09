@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
 import { awardTrustXp } from '@/lib/actions/xp';
 import { getTrustRecord, type TrustRecord } from '@/lib/queries/trust';
+import { getTrustCenterData } from '@/lib/queries/trust-center';
 import { aiValidateEvidence as runAiValidation } from '@/lib/ai/trust-validate';
 
 const TRUST_BUCKET = 'trust-evidence';
@@ -514,29 +515,34 @@ export async function revokeEvidence(evidenceId: string): Promise<RevokeResult> 
 }
 
 // ====================================================================
-// 8. recordTrustSnapshot — persist today's posture for trend tracking
+// 8. recordTrustSnapshot — persist today's posture for trend tracking.
 //    Fire-and-forget from the Trust Center on load. One row per org per
 //    day (upsert), so the surface can show the IRI moving over time.
 //    Best-effort: never throws, never blocks the page.
+//
+//    Values are derived server-side from getTrustCenterData — NOT taken
+//    from the (untrusted) client — so a member can't POST arbitrary
+//    numbers and skew the stored trend / attestation history.
 // ====================================================================
 
-export async function recordTrustSnapshot(input: {
-  iri: number;
-  coveragePct: number;
-}): Promise<void> {
+export async function recordTrustSnapshot(): Promise<void> {
   try {
     const org = await getActiveOrg();
     if (!org) return;
+    const data = await getTrustCenterData(org.orgId);
+    if (data.empty) return;
     const supabase = await createClient();
     const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
     // SECURITY DEFINER upsert (mirrors upsert_org_posture_snapshot) — one
     // authorized daily write, no broad table-write grant needed.
     await supabase.rpc('upsert_trust_posture_snapshot', {
       _org_id: org.orgId,
-      _iri: clamp(input.iri),
-      _coverage_pct: clamp(input.coveragePct)
+      _iri: clamp(data.iri),
+      _coverage_pct: clamp(data.capital.proofCoveragePct)
     });
-  } catch {
-    // Trend tracking is non-critical — swallow (e.g. RPC not migrated yet).
+  } catch (err) {
+    // Trend tracking is non-critical — never block the page. Warn so a
+    // migration/RPC/auth failure is still diagnosable.
+    console.warn('[recordTrustSnapshot] failed to persist posture snapshot:', err);
   }
 }
