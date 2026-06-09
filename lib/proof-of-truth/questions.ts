@@ -35,6 +35,12 @@ export interface ProfileQuestion {
   /** When true, the member may skip this question without approving an answer. */
   optional?: boolean;
   /**
+   * Counterparty impact, 1–3, overriding the rung default — the wizard serves
+   * higher-impact gaps first. Use sparingly, only where a field punches above
+   * its rung (a stated objective, a sharp headline).
+   */
+  impact?: 1 | 2 | 3;
+  /**
    * Why this field matters to a counterparty. Shown as onboarding context and
    * reused as the Profile gap reason, so the "why" is written once.
    */
@@ -60,6 +66,7 @@ const COMMON: ProfileQuestion[] = [
     label: 'Headline',
     prompt: 'In one line, how would you describe what you do?',
     kind: 'text',
+    impact: 2,
     placeholder: 'A single, precise sentence',
     why: 'A sharp one-liner tells a counterparty whether to keep reading.'
   },
@@ -122,6 +129,7 @@ const UNIVERSAL: ProfileQuestion[] = [
     label: '90-day objective',
     prompt: "What's the one outcome you want from FundExecs OS in the next 90 days?",
     kind: 'textarea',
+    impact: 3,
     placeholder: 'e.g. Close my seed round, find 3 LPs, sign 2 clients',
     why: 'Your objective lets Earn point every move on your desk at the outcome you actually want.'
   },

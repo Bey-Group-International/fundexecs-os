@@ -1,7 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getQuestionSet, type ProfileQuestion } from './questions';
-import { buildLadder, scoreDepth, tierForQuestion, WEAK_TEXT_LEN, type LadderItem } from './tiers';
+import {
+  buildLadder,
+  compareGaps,
+  impactWeight,
+  scoreDepth,
+  tierForQuestion,
+  WEAK_TEXT_LEN,
+  type LadderItem
+} from './tiers';
 
 function q(memberType: 'investment_firm', id: string): ProfileQuestion {
   const found = getQuestionSet(memberType).find((x) => x.id === id);
@@ -61,6 +69,29 @@ test('scoreDepth flags a lone tag as thin; plain text is never weak', () => {
     present: true,
     weak: false
   });
+});
+
+test('impactWeight falls back to rung default, honouring overrides', () => {
+  assert.equal(impactWeight(q('investment_firm', 'display_name')), 1); // identity default
+  assert.equal(impactWeight(q('investment_firm', 'firm_type')), 2); // mandate default
+  assert.equal(impactWeight(q('investment_firm', 'thesis')), 3); // evidence default
+  assert.equal(impactWeight(q('investment_firm', 'headline')), 2); // override above identity
+  assert.equal(impactWeight(q('investment_firm', 'objective')), 3); // override above mandate
+});
+
+test('compareGaps orders by rung, then impact, then severity', () => {
+  const mk = (tierOrder: number, impact: number, missing: boolean) => ({
+    tierOrder,
+    impact,
+    missing
+  });
+  // Lower rung first, regardless of impact.
+  assert.ok(compareGaps(mk(1, 1, false), mk(2, 3, true)) < 0);
+  // Same rung: higher impact first.
+  assert.ok(compareGaps(mk(2, 3, false), mk(2, 1, true)) < 0);
+  // Same rung and impact: missing before thin.
+  assert.ok(compareGaps(mk(2, 2, true), mk(2, 2, false)) < 0);
+  assert.equal(compareGaps(mk(2, 2, false), mk(2, 2, false)), 0);
 });
 
 test('buildLadder gates rungs and computes readiness in order', () => {

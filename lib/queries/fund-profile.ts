@@ -4,6 +4,9 @@ import type { MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
 import {
   buildLadder,
+  compareGaps,
+  getTier,
+  impactWeight,
   scoreDepth,
   tierForQuestion,
   type CollectingTierId,
@@ -287,16 +290,24 @@ function buildFromSchema(
   }
 
   const ladder = buildLadder(items);
-  // Order gaps by rung (identity first), then missing before weak — the order a
-  // member should close them, and the order the wizard serves them.
-  gaps.sort((a, b) => {
-    const byTier =
-      ladder.tiers.findIndex((t) => t.tier.id === a.tier) -
-      ladder.tiers.findIndex((t) => t.tier.id === b.tier);
-    if (byTier !== 0) return byTier;
-    if (a.severity !== b.severity) return a.severity === 'missing' ? -1 : 1;
-    return 0;
-  });
+  // Order gaps the way a member should close them — by rung in climb order, then
+  // by counterparty impact, then missing before thin. Same comparator the wizard
+  // uses, so `/profile` and onboarding always agree on the next-best question.
+  const qById = new Map(questions.map((q) => [q.id, q]));
+  gaps.sort((a, b) =>
+    compareGaps(
+      {
+        tierOrder: getTier(a.tier).order,
+        impact: impactWeight(qById.get(a.field)!),
+        missing: a.severity === 'missing'
+      },
+      {
+        tierOrder: getTier(b.tier).order,
+        impact: impactWeight(qById.get(b.field)!),
+        missing: b.severity === 'missing'
+      }
+    )
+  );
 
   return { sections, completenessScore: ladder.overallPct, gaps, ladder };
 }
