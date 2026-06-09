@@ -36,7 +36,10 @@ export function completionPct(memberType: MemberType, answers: Answers): number 
 }
 
 /** Whether a single question's current answer is present, and whether it's thin. */
-export function scoreAnswer(q: ProfileQuestion, answers: Answers): { present: boolean; weak: boolean } {
+export function scoreAnswer(
+  q: ProfileQuestion,
+  answers: Answers
+): { present: boolean; weak: boolean } {
   const raw = answers[q.id] ?? '';
   if (q.kind === 'tags') {
     return scoreDepth(q, { text: '', tagCount: splitTags(raw).length });
@@ -67,13 +70,31 @@ export function computeLadder(memberType: MemberType, answers: Answers): Profile
 export function nextGapIndex(memberType: MemberType, answers: Answers, after: number): number {
   const set = getQuestionSet(memberType);
   const n = set.length;
-  for (let step = 1; step <= n; step += 1) {
-    const i = (after + step) % n;
+  const ladder = computeLadder(memberType, answers);
+  const targetTier = ladder.currentTierId;
+  if (!targetTier) return -1;
+
+  const order = Array.from({ length: n }, (_, step) => (after + step + 1) % n);
+
+  // Prefer the next open gap on the rung the member is currently climbing, so
+  // the wizard fills Identity before Mandate before Evidence rather than just
+  // walking the raw question order.
+  for (const i of order) {
+    const q = set[i];
+    if (q.optional || tierForQuestion(q) !== targetTier) continue;
+    const { present, weak } = scoreAnswer(q, answers);
+    if (!present || weak) return i;
+  }
+
+  // Fallback: any remaining required gap (covers the capstone tier, where no
+  // collecting question matches the target rung).
+  for (const i of order) {
     const q = set[i];
     if (q.optional) continue;
     const { present, weak } = scoreAnswer(q, answers);
     if (!present || weak) return i;
   }
+
   return -1;
 }
 
