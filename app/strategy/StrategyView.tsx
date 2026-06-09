@@ -39,6 +39,23 @@ const PRIORITY_TONE: Record<Priority, BadgeTone> = {
   Low: 'neutral'
 };
 
+// Capital proxy: higher-priority objectives carry more weight in the posture
+// rollup, so the plan reflects value at stake — not raw task count. Swaps to
+// true dollar-weighting once objectives link to deals (see blueprint Q1).
+const PRIORITY_WEIGHT: Record<Priority, number> = {
+  High: 3,
+  Medium: 2,
+  Low: 1
+};
+
+/** Priority-weighted average completion across a set of objectives, 0–100. */
+function weightedCompletion(list: Array<{ priority: Priority; pct: number }>): number {
+  const totalWeight = list.reduce((s, o) => s + PRIORITY_WEIGHT[o.priority], 0);
+  if (totalWeight === 0) return 0;
+  const earned = list.reduce((s, o) => s + o.pct * PRIORITY_WEIGHT[o.priority], 0);
+  return Math.round(earned / totalWeight);
+}
+
 const TIER_COLOR: Record<Tier, string> = {
   '100': 'var(--gold-1)',
   '30': 'var(--azure-1)',
@@ -243,37 +260,53 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
         </Badge>
       </Card>
 
-      <Card className="grid gap-6 p-4 sm:grid-cols-3">
-        {TIER_ORDER.map((t) => {
-          const list = active.filter((o) => o.tier === t);
-          const avg = list.length
-            ? Math.round(list.reduce((s, o) => s + o.pct, 0) / list.length)
-            : 0;
-          return (
-            <div key={t}>
-              <div className="flex items-baseline gap-2">
-                <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-                  {TIER_LABEL[t]} horizon
-                </span>
-                <span className="text-[11px] tabular-nums text-fg-5">
-                  {list.length} {list.length === 1 ? 'objective' : 'objectives'}
-                </span>
+      <Card className="p-4">
+        {/* Overall posture — priority-weighted so the number reflects value at
+            stake, not task count. The seam for the full Institutional Posture
+            scorecard (Compliance · Governance · Execution · Capital) — see
+            memory/STRATEGY_COMPOUNDING_BLUEPRINT.md. */}
+        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-hairline pb-3.5">
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+              Execution posture
+            </span>
+            <span className="text-[11px] text-fg-5">capital-weighted across all horizons</span>
+          </div>
+          <span className="text-[28px] font-semibold tabular-nums tracking-[-0.02em] text-gold-1">
+            {weightedCompletion(active)}%
+          </span>
+        </div>
+
+        <div className="grid gap-6 pt-4 sm:grid-cols-3">
+          {TIER_ORDER.map((t) => {
+            const list = active.filter((o) => o.tier === t);
+            const avg = weightedCompletion(list);
+            return (
+              <div key={t}>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                    {TIER_LABEL[t]} horizon
+                  </span>
+                  <span className="text-[11px] tabular-nums text-fg-5">
+                    {list.length} {list.length === 1 ? 'objective' : 'objectives'}
+                  </span>
+                </div>
+                <div
+                  className="my-2 text-[28px] font-semibold tabular-nums tracking-[-0.02em]"
+                  style={{ color: TIER_COLOR[t] }}
+                >
+                  {avg}%
+                </div>
+                <ProgressBar
+                  value={avg}
+                  color={TIER_COLOR[t]}
+                  height={5}
+                  ariaLabel={`Capital-weighted completion for ${t}`}
+                />
               </div>
-              <div
-                className="my-2 text-[28px] font-semibold tabular-nums tracking-[-0.02em]"
-                style={{ color: TIER_COLOR[t] }}
-              >
-                {avg}%
-              </div>
-              <ProgressBar
-                value={avg}
-                color={TIER_COLOR[t]}
-                height={5}
-                ariaLabel={`Average completion for ${t}`}
-              />
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </Card>
 
       {active.length === 0 ? (

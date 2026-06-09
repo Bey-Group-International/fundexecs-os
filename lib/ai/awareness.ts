@@ -252,3 +252,56 @@ export async function buildWorkspaceSnapshot(supabase: Db, orgId: string): Promi
   if (lines.length === 0) return '';
   return lines.map((l) => `- ${l}`).join('\n');
 }
+
+/** Max chars of the pre-generated brief we fold into Earn's grounding. */
+const BRIEF_MAX_CHARS = 700;
+
+/**
+ * Surface the org's already-computed intelligence brief so conversational Earn
+ * reflects the backend flywheel (the `generate_signal_matches` /
+ * `intelligence_briefings` pipeline) instead of recomputing or ignoring it.
+ *
+ * The brief `body` is first-party, system-generated text (not operator free
+ * text), summarising live market + match signals; we reference it rather than
+ * re-derive it. `intelligence_briefings` is additive and not in the generated
+ * types yet, so we read through a narrow typed escape. Fails open to '' (no
+ * brief / read error) so it never blocks a chat turn.
+ */
+export async function buildIntelligenceGrounding(supabase: Db, orgId: string): Promise<string> {
+  const reader = supabase as unknown as {
+    from: (table: string) => {
+      select: (cols: string) => {
+        eq: (
+          col: string,
+          val: string
+        ) => {
+          maybeSingle: () => Promise<{ data: Record<string, unknown> | null; error: unknown }>;
+        };
+      };
+    };
+  };
+
+  try {
+    const { data, error } = await reader
+      .from('intelligence_briefings')
+      .select('body, match_count, top_score')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (error || !data || typeof data.body !== 'string' || !data.body.trim()) return '';
+
+    const body = data.body.trim().slice(0, BRIEF_MAX_CHARS);
+    const matchCount = typeof data.match_count === 'number' ? data.match_count : 0;
+    const topScore = typeof data.top_score === 'number' ? data.top_score : null;
+
+    const signals =
+      matchCount > 0
+        ? `\nSignals: ${matchCount} new match${matchCount === 1 ? '' : 'es'} surfaced${
+            topScore != null ? `, top fit ${topScore}/100` : ''
+          }.`
+        : '';
+
+    return `Today's intelligence brief (already generated for this operator from live market + match signals — reference it, don't recompute):\n${body}${signals}`;
+  } catch {
+    return '';
+  }
+}
