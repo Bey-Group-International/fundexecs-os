@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 
 /* ----------------------------------------------------------------------------
  * Reduced-motion tiering smoke (phase 2).
@@ -31,21 +31,20 @@ test.describe('reduced-motion tiering @reduced-motion', () => {
     // on the page, then assert the computed animation-name is `none`.
     const aurora = page.locator('.fx-aurora').first();
     await expect(aurora).toBeAttached({ timeout: 10_000 });
-    const auroraAnim = await aurora.evaluate((el) => {
-      const cs = getComputedStyle(el as HTMLElement);
-      return {
-        name: cs.animationName,
-        duration: cs.animationDuration,
-        iterationCount: cs.animationIterationCount
-      };
-    });
-    expect(auroraAnim.name, 'fx-aurora must be off under reduced motion').toBe('none');
+    await expect
+      .poll(() => readAnimationName(aurora), {
+        message: 'fx-aurora must be off under reduced motion'
+      })
+      .toBe('none');
 
     // fx-marquee-animate is the ticker track inside fx-marquee-wrap.
     const marquee = page.locator('.fx-marquee-animate').first();
     if (await marquee.count()) {
-      const marqueeAnim = await marquee.evaluate((el) => getComputedStyle(el).animationName);
-      expect(marqueeAnim, 'fx-marquee-animate must be off under reduced motion').toBe('none');
+      await expect
+        .poll(() => readAnimationName(marquee), {
+          message: 'fx-marquee-animate must be off under reduced motion'
+        })
+        .toBe('none');
     }
   });
 
@@ -118,3 +117,7 @@ test.describe('reduced-motion tiering @reduced-motion', () => {
     expect(second, 'AnimatedNumber must snap (final value stable)').toBe(first);
   });
 });
+
+function readAnimationName(locator: Locator) {
+  return locator.evaluate((el) => getComputedStyle(el).animationName);
+}
