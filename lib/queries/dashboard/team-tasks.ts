@@ -22,6 +22,13 @@ export function normalizeTaskStatus(status: string): TaskRuntime {
   return 'queued';
 }
 
+/** A pending run proposal awaiting the operator's approve / reject. */
+export interface TaskProposalSummary {
+  runId: string;
+  action: string;
+  steps: string[];
+}
+
 export interface AgentTaskSummary {
   /** Open work = queued + running + awaiting + blocked. */
   open: number;
@@ -30,7 +37,13 @@ export interface AgentTaskSummary {
   failed: number;
   doneToday: number;
   /** The single most relevant active task to surface on the card. */
-  current: { id: string; title: string; status: TaskRuntime } | null;
+  current: {
+    id: string;
+    title: string;
+    status: TaskRuntime;
+    /** Gated run proposal on this task (present when status is 'awaiting'). */
+    proposal: TaskProposalSummary | null;
+  } | null;
   /** A failed task that can be retried (when there's no active task). */
   retryable: { id: string; title: string } | null;
 }
@@ -93,7 +106,27 @@ export async function getTeamTasks(orgId: string): Promise<TeamTaskMap> {
     // surface the most relevant active task: running > awaiting > queued/blocked.
     const rank = (x: TaskRuntime) => (x === 'running' ? 3 : x === 'awaiting' ? 2 : 1);
     if (!s.current || rank(rt) > rank(s.current.status)) {
-      s.current = { id: row.id, title: row.title, status: rt };
+      s.current = { id: row.id, title: row.title, status: rt, proposal: null };
+    }
+  }
+
+  // Attach pending run proposals to whichever surfaced task they belong to, so
+  // an 'awaiting' card can render its confirm card. Cheap second read scoped to
+  // open proposals only.
+  const { data: runs } = await supabase
+    .from('task_runs')
+    .select('id, task_id, action, steps')
+    .eq('org_id', orgId)
+    .eq('status', 'proposed');
+
+  if (runs && runs.length > 0) {
+    const byTask = new Map(runs.map((r) => [r.task_id, r] as const));
+    for (const s of Object.values(map)) {
+      if (!s.current) continue;
+      const run = byTask.get(s.current.id);
+      if (!run) continue;
+      const steps = Array.isArray(run.steps) ? (run.steps as unknown[]).map(String) : [];
+      s.current.proposal = { runId: run.id, action: run.action, steps };
     }
   }
 

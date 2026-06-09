@@ -3428,6 +3428,69 @@ export type Database = {
           },
         ]
       }
+      task_runs: {
+        Row: {
+          action: string
+          agent_slug: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: string
+          org_id: string
+          proposed_by: string | null
+          status: string
+          steps: Json
+          task_id: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          agent_slug: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          org_id: string
+          proposed_by?: string | null
+          status?: string
+          steps?: Json
+          task_id: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          agent_slug?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          org_id?: string
+          proposed_by?: string | null
+          status?: string
+          steps?: Json
+          task_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_runs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_runs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           agent_slug: string | null
