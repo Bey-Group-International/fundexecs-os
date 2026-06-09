@@ -2,6 +2,14 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import type { MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
+import {
+  buildLadder,
+  scoreDepth,
+  tierForQuestion,
+  type CollectingTierId,
+  type LadderItem,
+  type ProfileLadderState
+} from '@/lib/proof-of-truth/tiers';
 
 /* ============================================================================
  * lib/queries/fund-profile.ts — the Profile, the Source-of-Truth record.
@@ -36,6 +44,8 @@ export interface FundProfileGap {
   reason: string;
   /** 'missing' = absent; 'weak' = present but thin. */
   severity: 'missing' | 'weak';
+  /** Which readiness rung this gap sits on (identity → mandate → evidence). */
+  tier: CollectingTierId;
 }
 
 /**
@@ -54,7 +64,11 @@ export interface ProfileSection {
   /** Normalized href for `kind: 'url'`; null otherwise. */
   href: string | null;
   present: boolean;
+  /** Present but thin (prose under the weak threshold) — fillable, not done. */
+  weak: boolean;
   optional: boolean;
+  /** Which readiness rung this section belongs to. */
+  tier: CollectingTierId;
   /** Why this section matters, for empty-state coaching. */
   why: string | null;
 }
@@ -117,6 +131,8 @@ export interface FundProfile {
   completenessScore: number;
   /** The required fields that are missing or weak. */
   gaps: FundProfileGap[];
+  /** The four-rung readiness ladder (Identity → Mandate → Evidence → Institutional). */
+  ladder: ProfileLadderState;
 }
 
 /** Back-compat alias — the Profile record. */
@@ -169,12 +185,6 @@ function team(details: Details): FundTeamMember[] {
   return out;
 }
 
-/** A string is "weak" (vs. absent) when present but shorter than this. */
-const WEAK_TEXT_LEN = 40;
-
-/** Free-text kinds where a too-short answer counts as "weak", not done. */
-const PROSE_KINDS = new Set<ProfileQuestion['kind']>(['textarea']);
-
 /** The columns on `member_profiles` a 'profile'-target question can read. */
 interface MemberRow {
   display_name: string | null;
@@ -220,22 +230,24 @@ function normalizeHref(value: string): string {
 function buildFromSchema(
   memberType: MemberType,
   row: MemberRow
-): { sections: ProfileSection[]; completenessScore: number; gaps: FundProfileGap[] } {
+): {
+  sections: ProfileSection[];
+  completenessScore: number;
+  gaps: FundProfileGap[];
+  ladder: ProfileLadderState;
+} {
   const questions = getQuestionSet(memberType);
   const sections: ProfileSection[] = [];
   const gaps: FundProfileGap[] = [];
-
-  let required = 0;
-  let earned = 0;
+  const items: LadderItem[] = [];
 
   for (const q of questions) {
     const answer = answerFor(q, row);
     const isTags = q.kind === 'tags';
     const tags = isTags && Array.isArray(answer) ? answer : [];
     const text = !isTags && typeof answer === 'string' ? answer : null;
-    const present = isTags ? tags.length > 0 : Boolean(text);
-    const weak =
-      present && !isTags && PROSE_KINDS.has(q.kind) && (text?.length ?? 0) < WEAK_TEXT_LEN;
+    const { present, weak } = scoreDepth(q, { text: text ?? '', tagCount: tags.length });
+    const tier = tierForQuestion(q);
 
     sections.push({
       id: q.id,
@@ -245,37 +257,48 @@ function buildFromSchema(
       tags,
       href: q.kind === 'url' && text ? normalizeHref(text) : null,
       present,
+      weak,
       optional: Boolean(q.optional),
+      tier,
       why: q.why ?? null
     });
 
-    if (!q.optional) {
-      required += 1;
-      if (present && !weak) earned += 1;
-      else if (present && weak) earned += 0.5;
+    items.push({ tier, optional: Boolean(q.optional), present, weak });
 
+    if (!q.optional) {
       if (!present) {
         gaps.push({
           field: q.id,
           label: q.label,
           reason: q.why ?? `${q.label} helps counterparties trust the record.`,
-          severity: 'missing'
+          severity: 'missing',
+          tier
         });
       } else if (weak) {
         gaps.push({
           field: q.id,
           label: q.label,
           reason: q.why ?? `${q.label} reads thin — a little more detail goes a long way.`,
-          severity: 'weak'
+          severity: 'weak',
+          tier
         });
       }
     }
   }
 
-  const completenessScore =
-    required === 0 ? 0 : Math.max(0, Math.min(100, Math.round((earned / required) * 100)));
+  const ladder = buildLadder(items);
+  // Order gaps by rung (identity first), then missing before weak — the order a
+  // member should close them, and the order the wizard serves them.
+  gaps.sort((a, b) => {
+    const byTier =
+      ladder.tiers.findIndex((t) => t.tier.id === a.tier) -
+      ladder.tiers.findIndex((t) => t.tier.id === b.tier);
+    if (byTier !== 0) return byTier;
+    if (a.severity !== b.severity) return a.severity === 'missing' ? -1 : 1;
+    return 0;
+  });
 
-  return { sections, completenessScore, gaps };
+  return { sections, completenessScore: ladder.overallPct, gaps, ladder };
 }
 
 /* ---------------------------------------------------------------------------
@@ -350,7 +373,8 @@ export async function getFundProfile(orgId: string): Promise<FundProfile> {
       team: team(details),
       focusAreas: strList(row.focus_areas),
       completenessScore: schema.completenessScore,
-      gaps: schema.gaps
+      gaps: schema.gaps,
+      ladder: schema.ladder
     };
   };
 
