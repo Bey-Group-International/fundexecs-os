@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { getChainOfTrustActivity, type ActivityEntry } from '@/lib/landing/activity';
 
@@ -65,7 +65,9 @@ export function ActivityTicker() {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [inView, setInView] = useState(true);
   const [showAll, setShowAll] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -86,6 +88,26 @@ export function ActivityTicker() {
     return () => {
       active = false;
     };
+  }, []);
+
+  // Pause the marquee while it's off-screen — IntersectionObserver toggles
+  // `data-in-view`; globals.css matches that attribute to pause the loop.
+  // Keeps a 60-second linear loop from burning a GPU layer when no one
+  // is looking. Hover/focus pause is handled by a separate selector and
+  // still works while the ticker is in view.
+  useEffect(() => {
+    const node = wrapRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          setInView(entry.isIntersecting);
+        }
+      },
+      { rootMargin: '0px', threshold: 0 }
+    );
+    io.observe(node);
+    return () => io.disconnect();
   }, []);
 
   return (
@@ -112,9 +134,12 @@ export function ActivityTicker() {
         </div>
       </div>
 
-      {/* Marquee. Hover/focus pauses the scroll (see globals.css). */}
+      {/* Marquee. Hover/focus pauses the scroll; off-screen pause via the
+          IntersectionObserver above sets data-in-view (see globals.css). */}
       <div
+        ref={wrapRef}
         className="fx-marquee-wrap mt-4 overflow-hidden"
+        data-in-view={inView}
         tabIndex={0}
         role="region"
         aria-label="Recent anonymized platform activity"

@@ -53,6 +53,7 @@ test('every JS duration matches its CSS twin (value × 1000)', () => {
     ['page', 'dur-page'],
     ['celebrate', 'dur-celebrate'],
     ['collapse', 'dur-collapse'],
+    ['dockSlide', 'dur-dock-slide'],
     ['think', 'dur-think'],
     ['celebrateGlow', 'dur-celebrate-glow'],
     ['cascade', 'dur-cascade'],

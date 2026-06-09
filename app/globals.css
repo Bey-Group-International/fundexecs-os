@@ -222,6 +222,8 @@
   --dur-celebrate: 500ms;
   /* Framer-motion collapse/expand body (height + opacity). */
   --dur-collapse: 280ms;
+  /* EarnDock right-side slide-in / slide-out. */
+  --dur-dock-slide: 300ms;
 
   /* ── Duration — sustained, surface-specific loops ─────────────────────── */
   /* Earn thinking dots breathing cycle. */
@@ -381,6 +383,11 @@ body {
 }
 .fx-marquee-wrap:hover .fx-marquee-animate,
 .fx-marquee-wrap:focus-within .fx-marquee-animate {
+  animation-play-state: paused;
+}
+/* Off-screen pause — set via IntersectionObserver in ActivityTicker. Keeps
+   the 60s loop from burning CPU/GPU while the ticker isn't on screen. */
+.fx-marquee-wrap[data-in-view='false'] .fx-marquee-animate {
   animation-play-state: paused;
 }
 
