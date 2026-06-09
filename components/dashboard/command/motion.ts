@@ -56,6 +56,8 @@ export const MOTION_DURATIONS_S = {
   page: 0.42,
   /** Mirrors `--dur-celebrate`. = 500ms. One-shot celebration entrance. */
   celebrate: 0.5,
+  /** Mirrors `--dur-collapse`. = 280ms. Framer-motion collapse/expand body. */
+  collapse: 0.28,
   /** Mirrors `--dur-think`. = 1250ms. Earn thinking dots cycle. */
   think: 1.25,
   /** Mirrors `--dur-celebrate-glow`. = 1600ms. */
@@ -121,9 +123,12 @@ export const fxRiseItem: Variants = {
   }
 };
 
-/** Collapse/expand body transition (height + opacity). */
+/** Collapse/expand body transition (height + opacity). Preserves the
+ *  pre-tokenization 280 ms timing — distinct from the standard 240 ms
+ *  in-panel transitions because a collapse needs slightly more breathing
+ *  room to read as deliberate. */
 export const fxCollapse: Transition = {
-  duration: MOTION_DURATIONS_S.standard,
+  duration: MOTION_DURATIONS_S.collapse,
   ease: MOTION_EASING.standard
 };
 

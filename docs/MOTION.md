@@ -47,28 +47,29 @@ distinct curves without a rename pass through every consumer.
 Short-scale tokens are interchangeable across surfaces; sustained tokens
 are surface-specific.
 
-| Token                  | CSS value | JS twin (seconds) | Use for                                                    |
-| ---------------------- | --------- | ----------------- | ---------------------------------------------------------- |
-| `--dur-instant`        | `80ms`    | `0.08`            | Micro-interaction (focus rings, press feedback).           |
-| `--dur-quick`          | `160ms`   | `0.16`            | Hover/exit reactivity.                                     |
-| `--dur-standard`       | `240ms`   | `0.24`            | Menus, popovers, in-panel toggles, framer-motion collapse. |
-| `--dur-status`         | `400ms`   | `0.4`             | Status-line handoff fade.                                  |
-| `--dur-page`           | `420ms`   | `0.42`            | Page-enter rise (`fx-rise`).                               |
-| `--dur-celebrate`      | `500ms`   | `0.5`             | One-shot celebration entrance.                             |
-| `--dur-think`          | `1250ms`  | `1.25`            | Earn thinking dots breathing cycle.                        |
-| `--dur-celebrate-glow` | `1600ms`  | `1.6`             | Celebrate glow envelope.                                   |
-| `--dur-cascade`        | `1800ms`  | `1.8`             | Desk on-point cascade loop.                                |
-| `--dur-onpoint`        | `2200ms`  | `2.2`             | On-point pulse on the active avatar.                       |
-| `--dur-glow`           | `2400ms`  | `2.4`             | Live-presence breathing, desk-shimmer hairline.            |
-| `--dur-orb-pulse`      | `2600ms`  | `2.6`             | Earn orb context pulse.                                    |
-| `--dur-sweep`          | `4500ms`  | `4.5`             | Product-preview gloss sweep.                               |
-| `--dur-coin-float`     | `5000ms`  | `5`               | Landing mascot coin float.                                 |
-| `--dur-text-shimmer`   | `6000ms`  | `6`               | Landing animated-gradient text shimmer.                    |
-| `--dur-grid-pan`       | `12000ms` | `12`              | Landing textured-grid backdrop pan.                        |
-| `--dur-aurora`         | `18000ms` | `18`              | Landing aurora drift.                                      |
-| `--dur-spin-outer`     | `48000ms` | `48`              | Constellation orbit, outer ring.                           |
-| `--dur-spin-inner`     | `60000ms` | `60`              | Constellation orbit, inner ring.                           |
-| `--dur-marquee`        | `60000ms` | `60`              | Landing live-activity marquee.                             |
+| Token                  | CSS value | JS twin (seconds) | Use for                                                |
+| ---------------------- | --------- | ----------------- | ------------------------------------------------------ |
+| `--dur-instant`        | `80ms`    | `0.08`            | Micro-interaction (focus rings, press feedback).       |
+| `--dur-quick`          | `160ms`   | `0.16`            | Hover/exit reactivity.                                 |
+| `--dur-standard`       | `240ms`   | `0.24`            | Menus, popovers, in-panel toggles.                     |
+| `--dur-collapse`       | `280ms`   | `0.28`            | Framer-motion collapse/expand body (height + opacity). |
+| `--dur-status`         | `400ms`   | `0.4`             | Status-line handoff fade.                              |
+| `--dur-page`           | `420ms`   | `0.42`            | Page-enter rise (`fx-rise`).                           |
+| `--dur-celebrate`      | `500ms`   | `0.5`             | One-shot celebration entrance.                         |
+| `--dur-think`          | `1250ms`  | `1.25`            | Earn thinking dots breathing cycle.                    |
+| `--dur-celebrate-glow` | `1600ms`  | `1.6`             | Celebrate glow envelope.                               |
+| `--dur-cascade`        | `1800ms`  | `1.8`             | Desk on-point cascade loop.                            |
+| `--dur-onpoint`        | `2200ms`  | `2.2`             | On-point pulse on the active avatar.                   |
+| `--dur-glow`           | `2400ms`  | `2.4`             | Live-presence breathing, desk-shimmer hairline.        |
+| `--dur-orb-pulse`      | `2600ms`  | `2.6`             | Earn orb context pulse.                                |
+| `--dur-sweep`          | `4500ms`  | `4.5`             | Product-preview gloss sweep.                           |
+| `--dur-coin-float`     | `5000ms`  | `5`               | Landing mascot coin float.                             |
+| `--dur-text-shimmer`   | `6000ms`  | `6`               | Landing animated-gradient text shimmer.                |
+| `--dur-grid-pan`       | `12000ms` | `12`              | Landing textured-grid backdrop pan.                    |
+| `--dur-aurora`         | `18000ms` | `18`              | Landing aurora drift.                                  |
+| `--dur-spin-outer`     | `48000ms` | `48`              | Constellation orbit, outer ring.                       |
+| `--dur-spin-inner`     | `60000ms` | `60`              | Constellation orbit, inner ring.                       |
+| `--dur-marquee`        | `60000ms` | `60`              | Landing live-activity marquee.                         |
 
 The house spring (`FX_SPRING` in `motion.ts` — stiffness 420, damping
 32, mass 0.7) is not a CSS token because CSS has no spring primitive.
@@ -83,18 +84,18 @@ is the rubric for any future addition.
 
 ### Authenticated surfaces
 
-| Class                                | Tier       | What it expresses                                     | Where it's used                             |
-| ------------------------------------ | ---------- | ----------------------------------------------------- | ------------------------------------------- |
-| `fx-rise`                            | meaningful | You arrived at a new surface.                         | `AppShell.tsx`, keyed by route.             |
-| `fx-glow-pulse`                      | meaningful | This element is live and in use.                      | Presence dots, EarnOrb halo.                |
-| `fx-earn-context-pulse`              | meaningful | The orb knows what surface you're focused on.         | `EarnOrb` via `data-context`.               |
-| `fx-celebrate` + `fx-celebrate-glow` | meaningful | A reward state change just happened.                  | Level-up, streak-high, badge-earned toasts. |
-| `fx-onpoint-pulse`                   | meaningful | This specialist is on point for the current request.  | Active avatar in the desk strip.            |
-| `fx-earn-think`                      | meaningful | Earn is processing your request (Cognition: routing). | `EarnCognition` thinking dots.              |
-| `fx-onpoint-cascade`                 | meaningful | The desk is coordinating around a request.            | `EarnAgentActivity` while busy.             |
-| `fx-status-fade`                     | meaningful | The desk status line just changed.                    | Status handoffs in the dock.                |
-| `fx-desk-shimmer`                    | meaningful | Earn is working under the desk strip.                 | Hairline under `EarnAgentActivity`.         |
-| `fx-no-transition`                   | utility    | Suppresses every transition during a theme flip.      | Theme toggle.                               |
+| Class                                                          | Tier       | What it expresses                                     | Where it's used                             |
+| -------------------------------------------------------------- | ---------- | ----------------------------------------------------- | ------------------------------------------- |
+| `fx-rise`                                                      | meaningful | You arrived at a new surface.                         | `AppShell.tsx`, keyed by route.             |
+| `fx-glow-pulse`                                                | meaningful | This element is live and in use.                      | Presence dots, EarnOrb halo.                |
+| `.earn-orb[data-context]` (keyframes: `fx-earn-context-pulse`) | meaningful | The orb knows what surface you're focused on.         | `EarnOrb` via `data-context`.               |
+| `fx-celebrate` + `fx-celebrate-glow`                           | meaningful | A reward state change just happened.                  | Level-up, streak-high, badge-earned toasts. |
+| `fx-onpoint-pulse`                                             | meaningful | This specialist is on point for the current request.  | Active avatar in the desk strip.            |
+| `fx-earn-think`                                                | meaningful | Earn is processing your request (Cognition: routing). | `EarnCognition` thinking dots.              |
+| `fx-onpoint-cascade`                                           | meaningful | The desk is coordinating around a request.            | `EarnAgentActivity` while busy.             |
+| `fx-status-fade`                                               | meaningful | The desk status line just changed.                    | Status handoffs in the dock.                |
+| `fx-desk-shimmer`                                              | meaningful | Earn is working under the desk strip.                 | Hairline under `EarnAgentActivity`.         |
+| `fx-no-transition`                                             | utility    | Suppresses every transition during a theme flip.      | Theme toggle.                               |
 
 ### Landing surfaces
 

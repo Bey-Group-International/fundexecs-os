@@ -220,6 +220,8 @@
   --dur-page: 420ms;
   /* One-shot celebration entrance. */
   --dur-celebrate: 500ms;
+  /* Framer-motion collapse/expand body (height + opacity). */
+  --dur-collapse: 280ms;
 
   /* ── Duration — sustained, surface-specific loops ─────────────────────── */
   /* Earn thinking dots breathing cycle. */
