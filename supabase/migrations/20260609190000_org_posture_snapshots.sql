@@ -36,7 +36,18 @@ create table if not exists public.org_posture_snapshots (
   member_type   text,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
-  unique (org_id, snapshot_date)
+  unique (org_id, snapshot_date),
+  -- Scores are 0–100 by construction (clamp100 in lib/strategy/posture.ts);
+  -- enforce that floor/ceiling at the DB so a bad writer can't store garbage.
+  constraint org_posture_snapshots_composite_range check (composite between 0 and 100),
+  constraint org_posture_snapshots_compliance_range
+    check (compliance is null or compliance between 0 and 100),
+  constraint org_posture_snapshots_governance_range
+    check (governance is null or governance between 0 and 100),
+  constraint org_posture_snapshots_execution_range
+    check (execution is null or execution between 0 and 100),
+  constraint org_posture_snapshots_capital_range
+    check (capital is null or capital between 0 and 100)
 );
 
 create index if not exists org_posture_snapshots_org_day_idx
