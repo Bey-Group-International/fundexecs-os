@@ -9,8 +9,9 @@ import { createClient } from '@/lib/supabase/server';
  *
  * Reads the live `credit_wallets` + `credit_transactions` (member-read RLS).
  * Falls back to a clearly-flagged `configured:false` default if no wallet row
- * exists yet, so the top-nav renders cleanly. Credit *consumption* (deducting
- * via `consume_credits` on AI runs) is a separate follow-up; this is read-only.
+ * exists yet, so the top-nav renders cleanly. This query is read-only; the
+ * debit/grant seam lives in `lib/credits/` (`meterAction` over the
+ * service-role `consume_credits` RPC), wired into the AI-run routes.
  * ========================================================================= */
 
 export interface CreditConsumption {
