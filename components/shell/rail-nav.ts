@@ -136,7 +136,7 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         hint: 'Structure · story · narrative'
       },
       {
-        href: '/profile?view=readiness',
+        href: '/readiness',
         label: 'Readiness',
         icon: Gauge,
         live: true,
