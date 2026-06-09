@@ -10,6 +10,7 @@ import { handOffLine } from '@/lib/team/cognition-copy';
 import { FX_EASE, FX_SPRING } from '@/components/dashboard/command/motion';
 import { cn } from '@/lib/utils';
 import type { EarnPhase } from './useEarnLifecycle';
+import { PHASE_RANK } from './useEarnLifecycle';
 
 /* ============================================================================
  * EarnCognition — the phase-aware thinking indicator for the Earn chat.
@@ -202,17 +203,10 @@ function useEarnCognitionDevOverride(): { phase: EarnPhase; specialistSlug: stri
         const params = new URLSearchParams(window.location.search);
         const phaseParam = params.get('earn_phase');
         const slugParam = params.get('earn_specialist');
-        // Only honor a recognized phase string. Anything else clears the override.
-        const valid: EarnPhase[] = [
-          'idle',
-          'routing',
-          'handing_off',
-          'retrieving',
-          'streaming',
-          'proposing',
-          'settled'
-        ];
-        if (phaseParam && (valid as string[]).includes(phaseParam)) {
+        // Validate phase against PHASE_RANK so the dev seam can't drift from
+        // the canonical phase set in useEarnLifecycle. A future phase
+        // addition only requires updating PHASE_RANK.
+        if (phaseParam && Object.hasOwn(PHASE_RANK, phaseParam)) {
           setOverride({ phase: phaseParam as EarnPhase, specialistSlug: slugParam });
         } else {
           setOverride(null);

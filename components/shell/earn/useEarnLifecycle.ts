@@ -53,9 +53,12 @@ export interface UseEarnLifecycleReturn {
   /** Current phase of the Earn turn lifecycle. */
   phase: EarnPhase;
   /**
-   * The specialist slug currently being routed to, if `phase === 'handing_off'`.
-   * Null at every other phase. Set via `handOff(slug)`; cleared on `begin()`
-   * and at the end of the settle window.
+   * The specialist slug most recently captured by `handOff(slug)`. Renderers
+   * should only read it when `phase === 'handing_off'`. It is cleared on
+   * `begin()` (start of a new turn) and at the end of the `settle()` window
+   * (700 ms after a settled stream); it is intentionally NOT cleared when
+   * the phase advances past `handing_off`, so phase-5 telemetry can record
+   * who Earn would have routed to even if the late event arrives.
    */
   specialistSlug: string | null;
   /**

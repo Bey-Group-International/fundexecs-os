@@ -777,7 +777,7 @@ body {
         Specificity: class selector (0,1,0) > universal `*` (0,0,0); since
         both use !important, class wins. */
   .fx-rise {
-    animation: fx-rise-rm var(--dur-status) var(--ease-soft-out) 1 both !important;
+    animation: fx-rise-rm var(--dur-standard) var(--ease-soft-out) 1 both !important;
   }
   .fx-glow-pulse {
     animation: fx-glow-pulse-rm var(--dur-standard) var(--ease-soft-out) 1 forwards !important;
