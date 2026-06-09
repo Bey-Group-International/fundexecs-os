@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pickChatModel, earnToolMode, EARN_NAV_DESTINATIONS } from './earn';
+import { pickChatModel, earnToolMode, clampRagContext, EARN_NAV_DESTINATIONS } from './earn';
 import { AI_MODELS } from './models';
 
 /* ----------------------------------------------------------------------------
@@ -70,6 +70,24 @@ test('earnToolMode: navigate auto-runs, mutating tools require confirmation', ()
   assert.equal(earnToolMode('run_diligence'), 'confirm');
   // Unknown / future tools default to the safe side: confirm.
   assert.equal(earnToolMode('delete_everything'), 'confirm');
+});
+
+test('clampRagContext caps each chunk and the overall budget (cost guardrail)', () => {
+  const big = 'x'.repeat(2000);
+
+  // Each chunk is capped to chunkMax (plus the "[n] " prefix).
+  const oneCapped = clampRagContext([big], 100, 10_000);
+  assert.ok(oneCapped.startsWith('[1] '));
+  assert.equal(oneCapped.length, '[1] '.length + 100);
+
+  // The total budget stops further chunks, but the first is always kept.
+  const limited = clampRagContext([big, big, big], 100, 150);
+  assert.ok(limited.includes('[1] '));
+  assert.ok(!limited.includes('[2] '));
+
+  // Empty / sparse input is safe.
+  assert.equal(clampRagContext([]), '');
+  assert.equal(clampRagContext(['a', 'b'], 50, 10_000), '[1] a\n\n[2] b');
 });
 
 test('EARN_NAV_DESTINATIONS are all absolute in-app paths and include core surfaces', () => {
