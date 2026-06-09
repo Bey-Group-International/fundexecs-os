@@ -127,7 +127,9 @@ function ViewTabs({ view }: { view: DeskView }) {
             href={href}
             aria-current={active ? 'page' : undefined}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition ${
-              active ? 'bg-surface-1 text-fg-1 shadow-[var(--shadow-sm)]' : 'text-fg-4 hover:text-fg-2'
+              active
+                ? 'bg-surface-1 text-fg-1 shadow-[var(--shadow-sm)]'
+                : 'text-fg-4 hover:text-fg-2'
             }`}
           >
             <Icon size={13} strokeWidth={2} aria-hidden />
