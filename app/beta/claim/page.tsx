@@ -1,6 +1,18 @@
+import type { Metadata } from 'next';
 import { ClaimView } from './ClaimView';
 import { getBetaLinkWelcome } from '@/lib/queries/beta-welcome';
 import { getBetaMomentum } from '@/lib/queries/beta-momentum';
+
+/**
+ * Personalized, token-gated invite page — keep it out of search indexes while
+ * still giving recipients a proper tab/share title.
+ */
+export const metadata: Metadata = {
+  title: 'Claim your beta invite',
+  description:
+    'Claim your FundExecs OS beta invitation and meet Earn — your AI executive team for the full private-market capital lifecycle.',
+  robots: { index: false, follow: false }
+};
 
 /**
  * Beta claim page — public route where recipients claim links via email or
