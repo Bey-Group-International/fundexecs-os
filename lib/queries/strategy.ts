@@ -95,10 +95,13 @@ export async function getStrategyData(orgId: string): Promise<StrategyData> {
     .eq('org_id', orgId)
     .order('created_at', { ascending: true });
 
-  // Try the Phase 2b compounding columns first; if the migration hasn't been
-  // applied yet (the columns don't exist) the query errors and we fall back to
-  // the legacy shape. So the page is safe both before and after `db push`, and
-  // pre-migration rows simply read as live manual objectives.
+  // Try the Phase 2b compounding columns first. Only a genuine "column doesn't
+  // exist" (Postgres undefined_column / 42703) means the migration isn't applied
+  // — fall back to the legacy shape for that case alone. Any other error (RLS,
+  // privilege, transient) must NOT masquerade as "no compounding columns", which
+  // would mislabel real pending drafts (source≠manual) as live plan objectives
+  // and hide them from the review inbox. So the page is safe both before and
+  // after `db push`, and a true DB error degrades to an empty result instead.
   const extended = await supabase
     .from('governance_objectives')
     .select(
@@ -107,8 +110,9 @@ export async function getStrategyData(orgId: string): Promise<StrategyData> {
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: true });
+  const missingCompoundingCols = extended.error?.code === '42703';
   const hasCompoundingCols = !extended.error;
-  const objsRes = extended.error
+  const objsRes = missingCompoundingCols
     ? await supabase
         .from('governance_objectives')
         .select(

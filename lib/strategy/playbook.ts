@@ -191,7 +191,7 @@ export const STAGE_PLAYBOOK: Record<LifecycleStage, PlaybookTemplate[]> = {
   prove: [
     {
       tier: '100',
-      title: 'Publish a verifiable, audit-ready track-record record',
+      title: 'Publish a verifiable, audit-ready track record',
       timeline: 'Next 100 days',
       priority: 'medium',
       category: 'compliance',

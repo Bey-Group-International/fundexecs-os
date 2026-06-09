@@ -135,6 +135,9 @@ export async function approveDraftObjectives(ids: string[]): Promise<BatchResult
     .from('governance_objectives')
     .update({ approved_at: new Date().toISOString(), status: 'open' })
     .eq('org_id', org.orgId)
+    // Only stamp objectives that are still pending — guards a direct API call
+    // from re-approving (and reopening) already-approved or archived rows.
+    .is('approved_at', null)
     .in('id', clean)
     .select('id');
   if (error) return { ok: false, error: error.message };
@@ -193,8 +196,11 @@ export async function draftStrategyObjectives(): Promise<DraftRunResult> {
     };
   }
 
-  const have = new Set(((existing.data ?? []) as { objective: string }[]).map((r) => r.objective));
-  const toInsert = templates.filter((t) => !have.has(t.title));
+  // Normalize for dedupe so a manual case/whitespace edit can't spawn a dup.
+  const have = new Set(
+    ((existing.data ?? []) as { objective: string }[]).map((r) => r.objective.trim().toLowerCase())
+  );
+  const toInsert = templates.filter((t) => !have.has(t.title.trim().toLowerCase()));
   if (toInsert.length === 0) return { ok: true, created: 0, skipped: templates.length };
 
   const stageLabel = LIFECYCLE_STAGE_LABELS[stage];
