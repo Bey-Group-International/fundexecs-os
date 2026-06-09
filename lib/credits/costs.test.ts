@@ -48,7 +48,8 @@ test('free plan unlocks no paid integrations; richer plans unlock more', () => {
 });
 
 test('monthly grant grows with plan and is positive for every plan', () => {
-  for (const plan of PLANS) assert.ok(MONTHLY_GRANT[plan] > 0, `grant for ${plan} must be positive`);
+  for (const plan of PLANS)
+    assert.ok(MONTHLY_GRANT[plan] > 0, `grant for ${plan} must be positive`);
   assert.ok(MONTHLY_GRANT.free < MONTHLY_GRANT.standard);
   assert.ok(MONTHLY_GRANT.standard < MONTHLY_GRANT.pro);
   assert.ok(MONTHLY_GRANT.pro < MONTHLY_GRANT.institutional);

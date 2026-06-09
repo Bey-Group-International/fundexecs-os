@@ -41,7 +41,9 @@ function adminOrNull() {
 }
 
 /** Read the org's current plan + balance (best-effort; free/0 on any miss). */
-async function readWallet(orgId: string): Promise<{ plan: Plan; balance: number; exists: boolean }> {
+async function readWallet(
+  orgId: string
+): Promise<{ plan: Plan; balance: number; exists: boolean }> {
   const admin = adminOrNull();
   if (!admin) return { plan: 'free', balance: 0, exists: false };
   try {
@@ -136,9 +138,12 @@ export async function claimMonthlyGrant(orgId: string): Promise<number | null> {
     // `claim_monthly_credit_grant` ships in this PR's migration; the generated
     // RPC types regenerate only after it applies, so name the call through a
     // cast to a same-shaped (uuid → integer) RPC until then.
-    const { data, error } = await admin.rpc('claim_monthly_credit_grant' as 'consume_credits', {
-      _org_id: orgId
-    } as never);
+    const { data, error } = await admin.rpc(
+      'claim_monthly_credit_grant' as 'consume_credits',
+      {
+        _org_id: orgId
+      } as never
+    );
     if (error || typeof data !== 'number') return null;
     return data;
   } catch {
