@@ -1,8 +1,8 @@
 /**
  * LP Room — public exports.
  *
- * Backend (Claude) imports prop contracts and fixtures from here when wiring
- * the room to real Supabase data.
+ * LP Room exports. Keep this surface component/contract-only so fixture data
+ * cannot leak back into shipped routes.
  */
 export { LpRoom } from './LpRoom';
 export type { LpRoomProps } from './LpRoom';
@@ -43,20 +43,10 @@ export type {
   LpDocumentKind,
   LpQuestion,
   LpQuestionDraft,
+  LpQuestionSubmitResult,
   LpQuestionStatus,
   LpRoomData,
   LpUpdate,
   LpUpdateAttachment,
   LpUpdateLifecycle
 } from './types';
-
-export {
-  FIXTURE_CAPITAL_ACCOUNT,
-  FIXTURE_COMMITMENTS,
-  FIXTURE_DISTRIBUTIONS,
-  FIXTURE_DOCUMENTS,
-  FIXTURE_FUND,
-  FIXTURE_LP_ROOM,
-  FIXTURE_QUESTIONS,
-  FIXTURE_UPDATES
-} from './fixtures';

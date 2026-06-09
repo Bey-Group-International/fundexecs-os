@@ -2,8 +2,7 @@
  * LP Room — typed prop contracts.
  *
  * Every component under `app/lp-room/*` and `components/lp-room/*` is driven
- * by these typed props. Backend wiring lands later: Claude maps each contract
- * onto its query / server action and removes the fixture defaults.
+ * by live query props and persisted server actions.
  *
  * Voice anchor: Eleanor — Head of Investor Relations. Sections use the live
  * www.fundexecs.com brand voice ("on the record", "audit-ready", "documented
@@ -116,7 +115,7 @@ export interface LpUpdate {
 
 export interface CommitmentScheduleRow {
   id: string;
-  /** Persona key from `components/dashboard/fixtures/personas.ts`. */
+  /** LP type or relationship label from the live capital commitment row. */
   persona: string;
   /** Anonymized initials ("J.R."). */
   initials: string;
@@ -177,13 +176,16 @@ export interface LpQuestion {
   thread: LpAnswer[];
 }
 
-/** Draft payload emitted by the composer. The shell only validates that
- *  `body` is non-empty; backend wires `onSubmit` to a server action later. */
+/** Draft payload emitted by the persisted Q&A composer. */
 export interface LpQuestionDraft {
   body: string;
   /** Optional override asker label — defaults to the signed-in identity. */
   askerName?: string;
 }
+
+export type LpQuestionSubmitResult =
+  | { ok: true; questionId?: string }
+  | { ok: false; error: string };
 
 /* ----------------------------------------------------------------------------
  * DistributionsFeed

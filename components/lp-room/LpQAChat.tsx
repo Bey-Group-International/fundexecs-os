@@ -5,7 +5,12 @@ import { ArrowUp, MessageSquare, FileText, ShieldCheck } from 'lucide-react';
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
-import type { LpQuestion, LpQuestionDraft, LpQuestionStatus } from './types';
+import type {
+  LpQuestion,
+  LpQuestionDraft,
+  LpQuestionStatus,
+  LpQuestionSubmitResult
+} from './types';
 
 const STATUS_TONE: Record<LpQuestionStatus, BadgeTone> = {
   open: 'warning',
@@ -21,20 +26,17 @@ const STATUS_LABEL: Record<LpQuestionStatus, string> = {
 
 export interface LpQAChatProps {
   questions: LpQuestion[];
-  /** Composer submit handler. The shell only fires this when `body` is
-   *  non-empty; backend wires the actual server action later. */
-  onSubmit?: (draft: LpQuestionDraft) => void;
+  /** Composer submit handler. The shell only fires this when `body` is non-empty. */
+  onSubmit?: (draft: LpQuestionDraft) => Promise<LpQuestionSubmitResult | void>;
   /** Optional explicit composer-disabled state (e.g. for read-only LPs). */
   composerDisabled?: boolean;
   className?: string;
 }
 
 /**
- * LpQAChat — threaded, citation-aware Q&A shell. **UI-only**: no API calls,
- * no socket. Submitting calls `onSubmit?(draft)`; backend wires this to a
- * server action that persists the question and routes Eleanor's reply.
- * Body text and answers render plaintext; Earn citations appear as
- * small chip rows that mirror the Vault.
+ * LpQAChat — threaded, citation-aware Q&A.
+ * Submitting calls the provided server action and only shows confirmation
+ * after the question persists.
  */
 export function LpQAChat({
   questions,
@@ -44,16 +46,34 @@ export function LpQAChat({
 }: LpQAChatProps) {
   const [draft, setDraft] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = draft.trim();
     if (!body) return;
-    onSubmit?.({ body });
-    setDraft('');
-    setSubmitted(true);
-    // Clear the "thanks" line after a beat so the composer feels alive.
-    setTimeout(() => setSubmitted(false), 2400);
+    if (!onSubmit) {
+      setError('Question submission is unavailable right now.');
+      return;
+    }
+    setPending(true);
+    setError(null);
+    setSubmitted(false);
+    try {
+      const result = await onSubmit({ body });
+      if (result && !result.ok) {
+        setError(result.error);
+        return;
+      }
+      setDraft('');
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 2600);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Question could not be recorded.');
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -158,7 +178,7 @@ export function LpQAChat({
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Ask Eleanor a question. Every reply is on the record."
           rows={2}
-          disabled={composerDisabled}
+          disabled={composerDisabled || pending}
           className="w-full resize-none border-0 bg-transparent text-[13px] text-fg-1 outline-none placeholder:text-fg-4 disabled:opacity-60"
         />
         <div className="mt-1 flex items-center justify-between gap-2">
@@ -168,18 +188,23 @@ export function LpQAChat({
           </span>
           <button
             type="submit"
-            disabled={composerDisabled || draft.trim().length === 0}
+            disabled={composerDisabled || pending || draft.trim().length === 0}
             data-testid="lp-qa-composer-submit"
             className="inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-[var(--cta-gradient)] px-3 py-1.5 text-[12px] font-semibold text-white shadow-[var(--shadow-cta)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <MessageSquare size={12} strokeWidth={2} aria-hidden />
-            Send
+            {pending ? 'Recording' : 'Send'}
             <ArrowUp size={12} strokeWidth={2} aria-hidden />
           </button>
         </div>
+        {error ? (
+          <p className="mt-2 text-[10.5px] text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
         {submitted ? (
           <p className="mt-2 text-[10.5px] text-success" data-testid="lp-qa-composer-confirmation">
-            Sent — Eleanor will reply on the record, typically within one business day.
+            Recorded — Eleanor will reply on the record, typically within one business day.
           </p>
         ) : null}
       </form>
