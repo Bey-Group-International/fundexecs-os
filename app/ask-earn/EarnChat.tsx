@@ -8,6 +8,8 @@ import { TeamAvatar, getCOO } from '@/lib/team';
 import { cn } from '@/lib/utils';
 import { EarnMarkdown } from '@/components/shell/earn/EarnMarkdown';
 import { EarnActionCard, type EarnAction } from '@/components/shell/earn/EarnActionCard';
+import { EarnCognition } from '@/components/shell/earn/EarnCognition';
+import { useEarnLifecycle } from '@/components/shell/earn/useEarnLifecycle';
 import { EARN_NAV_DESTINATIONS } from '@/lib/ai/earn-nav';
 
 type Source = { brainId: string | null; snippet: string };
@@ -64,6 +66,8 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
 ) {
   const earn = getCOO();
   const router = useRouter();
+  // Phase-aware cognition lifecycle (routing → retrieving → streaming → …).
+  const { phase, begin, onEvent, settle } = useEarnLifecycle();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
@@ -109,6 +113,7 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
       setInput('');
       setLoading(true);
       setError(null);
+      begin();
 
       try {
         const res = await fetch('/api/ask-earn', {
@@ -146,6 +151,8 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
           message?: string;
           action?: EarnAction;
         }) => {
+          // Drive the phase-aware cognition indicator off every event.
+          onEvent(evt.type);
           // Safe navigation runs immediately (the dock persists across routes).
           if (
             evt.type === 'action' &&
@@ -211,9 +218,10 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
         ]);
       } finally {
         setLoading(false);
+        settle();
       }
     },
-    [messages, loading, context, router]
+    [messages, loading, context, router, begin, onEvent, settle]
   );
 
   useImperativeHandle(
@@ -296,21 +304,7 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
               </div>
             </div>
           ))}
-          {loading && messages[messages.length - 1]?.role !== 'assistant' && (
-            <div className="fx-rise flex items-center gap-2.5 text-[12px] text-fg-4">
-              <TeamAvatar member={earn} size={24} online className="flex-none" />
-              <span className="text-fg-3">Earn is consulting the desk</span>
-              <span aria-hidden className="inline-flex items-center gap-1">
-                {[0, 1, 2].map((i) => (
-                  <span
-                    key={i}
-                    className="fx-earn-think inline-block h-1 w-1 rounded-full bg-gold-1"
-                    style={{ animationDelay: `${i * 0.16}s` }}
-                  />
-                ))}
-              </span>
-            </div>
-          )}
+          <EarnCognition phase={phase} />
           {error && <div className="text-[12px] text-danger">{error}</div>}
           <div ref={endRef} />
         </Card>

@@ -104,14 +104,24 @@ export async function meterAction(
   return { ok: true, debited: 0, balance: wallet.balance };
 }
 
+/** Locks each paid integration to the metered action that represents its cost,
+ *  so a non-integration action can't be billed against an integration call. */
+type IntegrationActionByProvider = {
+  apollo: 'apollo_enrich';
+  granola: 'meeting_copilot';
+  docusign: 'docusign_envelope';
+  carta: 'carta_sync';
+};
+
 /**
  * Gate + meter a paid third-party integration in one call. First checks the
  * plan is allowed to use the provider at all (free plans get none), then debits.
+ * The action is type-locked to the provider so the wrong cost can't be charged.
  */
-export async function meterIntegration(
+export async function meterIntegration<P extends PaidIntegration>(
   orgId: string,
-  provider: PaidIntegration,
-  action: MeteredAction,
+  provider: P,
+  action: IntegrationActionByProvider[P],
   refId?: string
 ): Promise<MeterResult> {
   const wallet = await readWallet(orgId);

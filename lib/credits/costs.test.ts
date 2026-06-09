@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ACTION_COST,
   asPlan,
   canUseIntegration,
   costOf,
   nextPlanUp,
   MONTHLY_GRANT,
-  PLANS,
-  type Plan
+  PLANS
 } from './costs';
 
 /* ----------------------------------------------------------------------------
@@ -31,7 +31,10 @@ test('owned compute is cheap; vendor-cost runs are dearer', () => {
   assert.ok(costOf('diligence_run') > costOf('deck_review'));
   assert.ok(costOf('meeting_copilot') > costOf('earn_chat'));
   // No negative or NaN costs anywhere.
-  for (const action of Object.keys(MONTHLY_GRANT) as Plan[]) void action;
+  for (const [action, cost] of Object.entries(ACTION_COST)) {
+    assert.ok(Number.isFinite(cost), `cost for ${action} must be finite`);
+    assert.ok(cost >= 0, `cost for ${action} must be non-negative`);
+  }
 });
 
 test('free plan unlocks no paid integrations; richer plans unlock more', () => {
