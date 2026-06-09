@@ -528,19 +528,15 @@ export async function recordTrustSnapshot(input: {
     const org = await getActiveOrg();
     if (!org) return;
     const supabase = await createClient();
-    const today = new Date().toISOString().slice(0, 10);
     const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
-    await supabase.from('trust_posture_snapshots').upsert(
-      {
-        org_id: org.orgId,
-        snapshot_date: today,
-        iri: clamp(input.iri),
-        coverage_pct: clamp(input.coveragePct),
-        captured_at: new Date().toISOString()
-      },
-      { onConflict: 'org_id,snapshot_date' }
-    );
+    // SECURITY DEFINER upsert (mirrors upsert_org_posture_snapshot) — one
+    // authorized daily write, no broad table-write grant needed.
+    await supabase.rpc('upsert_trust_posture_snapshot', {
+      _org_id: org.orgId,
+      _iri: clamp(input.iri),
+      _coverage_pct: clamp(input.coveragePct)
+    });
   } catch {
-    // Trend tracking is non-critical — swallow (e.g. table not migrated yet).
+    // Trend tracking is non-critical — swallow (e.g. RPC not migrated yet).
   }
 }

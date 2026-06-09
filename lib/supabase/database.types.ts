@@ -3541,28 +3541,31 @@ export type Database = {
       }
       trust_posture_snapshots: {
         Row: {
-          captured_at: string
           coverage_pct: number
+          created_at: string
           id: string
           iri: number
           org_id: string
           snapshot_date: string
+          updated_at: string
         }
         Insert: {
-          captured_at?: string
           coverage_pct?: number
+          created_at?: string
           id?: string
-          iri?: number
+          iri: number
           org_id: string
           snapshot_date?: string
+          updated_at?: string
         }
         Update: {
-          captured_at?: string
           coverage_pct?: number
+          created_at?: string
           id?: string
           iri?: number
           org_id?: string
           snapshot_date?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -3672,6 +3675,10 @@ export type Database = {
           _org_id: string
           _stage?: string
         }
+        Returns: undefined
+      }
+      upsert_trust_posture_snapshot: {
+        Args: { _coverage_pct?: number; _iri: number; _org_id: string }
         Returns: undefined
       }
       claim_beta_link: {
