@@ -1,8 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { BookOpen, Check } from 'lucide-react';
+import { BookOpen, Check, ArrowRight } from 'lucide-react';
 import { EarnCoin } from '@/components/screens/EarnCoin';
+import { TeamAvatar } from '@/lib/team';
+import { getMember } from '@/lib/team/roster';
+import { handOffLine } from '@/lib/team/cognition-copy';
+import { FX_EASE, FX_SPRING } from '@/components/dashboard/command/motion';
 import { cn } from '@/lib/utils';
 import type { EarnPhase } from './useEarnLifecycle';
 
@@ -12,12 +17,14 @@ import type { EarnPhase } from './useEarnLifecycle';
  * Replaces the static "Earn is thinking…" block with intentional, phased
  * motion that maps to what is actually happening in the AI pipeline:
  *
- *   routing    → soft pulsing ring around the Earn coin (request in flight)
- *   retrieving → source brain chips stagger in (Earn consults the desk)
- *   streaming  → breathing shimmer on the composing caret (reply arriving)
- *   proposing  → already visible via the action card; indicator yields
- *   settled    → a brief spring-settle check, then gone
- *   idle       → nothing rendered
+ *   routing     → soft pulsing ring around the Earn coin (request in flight)
+ *   handing_off → a named specialist is being routed to; calm desk transition
+ *                 (DORMANT in phase 2 — see the dev-trigger seam below)
+ *   retrieving  → source brain chips stagger in (Earn consults the desk)
+ *   streaming   → breathing shimmer on the composing caret (reply arriving)
+ *   proposing   → already visible via the action card; indicator yields
+ *   settled     → a brief spring-settle check, then gone
+ *   idle        → nothing rendered
  *
  * The component is purely presentational. It is shown/hidden by the caller
  * (EarnChat) based on the current lifecycle phase.
@@ -26,13 +33,13 @@ import type { EarnPhase } from './useEarnLifecycle';
  * technology informed. Under prefers-reduced-motion all animations collapse
  * to a simple opacity transition or static state so the indicator stays
  * understandable without motion.
+ *
+ * Motion grammar: easing + spring physics come from the shared
+ * `components/dashboard/command/motion.ts` JS twins (FX_EASE, FX_SPRING).
+ * Local timings on motion/react components are kept declarative; the CSS
+ * sibling animations on .fx-* classes handle their own reduced-motion
+ * treatment via the meaningful-tier rules in app/globals.css.
  * ========================================================================= */
-
-/** The house ease — matches the CSS `cubic-bezier(0.22, 0.61, 0.36, 1)`. */
-const EASE: [number, number, number, number] = [0.22, 0.61, 0.36, 1];
-
-/** The house spring — light and snappy, same physics as the command center. */
-const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.7 } as const;
 
 /* ── Brain-chip placeholder names shown while Earn retrieves context ─────── */
 const BRAIN_LABELS = ['Mandate', 'Pipeline', 'Capital', 'LP Intel'] as const;
@@ -83,7 +90,7 @@ function BrainChips({ reduced }: { reduced: boolean }) {
   };
   const item = {
     hidden: { opacity: 0, y: reduced ? 0 : 6 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.36, ease: EASE } }
+    show: { opacity: 1, y: 0, transition: { duration: 0.36, ease: FX_EASE } }
   };
 
   return (
@@ -132,10 +139,28 @@ function SettledCheck({ reduced }: { reduced: boolean }) {
       initial={{ opacity: 0, scale: reduced ? 1 : 0.6 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: reduced ? 1 : 0.8 }}
-      transition={reduced ? { duration: 0.15 } : { ...SPRING }}
+      transition={reduced ? { duration: 0.15 } : { ...FX_SPRING }}
     >
       <Check size={11} strokeWidth={2.4} className="text-gold-1" aria-hidden />
     </motion.span>
+  );
+}
+
+/** Hand-off treatment: the named specialist's avatar + a single status line.
+ *  Phase 2 keeps this dormant — fires only via the dev-trigger seam below. */
+function HandingOffBlock({ slug, reduced }: { slug: string | null | undefined; reduced: boolean }) {
+  const member = slug ? getMember(slug) : null;
+  const line = handOffLine(slug);
+  return (
+    <div className="flex items-center gap-2">
+      {member ? (
+        <span className={cn('relative flex-none', !reduced && 'fx-onpoint-pulse rounded-full')}>
+          <TeamAvatar member={member} size={20} />
+        </span>
+      ) : null}
+      <span className={cn('text-[12px] text-fg-3', !reduced && 'fx-status-fade')}>{line}</span>
+      <ArrowRight size={11} strokeWidth={2} className="text-fg-4" aria-hidden />
+    </div>
   );
 }
 
@@ -143,17 +168,75 @@ function SettledCheck({ reduced }: { reduced: boolean }) {
 const PHASE_LABEL: Record<EarnPhase, string> = {
   idle: '',
   routing: 'Earn is consulting the desk',
+  handing_off: 'Routing to a specialist',
   retrieving: 'Reviewing knowledge sources',
   streaming: 'Earn is responding',
   proposing: 'Earn is proposing a next step',
   settled: 'Done'
 };
 
+/* ── Dev-trigger seam (NON-PRODUCTION ONLY) ─────────────────────────────────
+ *  Lets a reviewer exercise the `handing_off` render today, before phase 5
+ *  wires the real stream event. Reads the URL on mount and again on
+ *  popstate; if `?earn_phase=handing_off&earn_specialist=<slug>` is set,
+ *  returns an override the renderer applies.
+ *
+ *  Compiles out in production: the body checks
+ *  `process.env.NODE_ENV !== 'production'` (Next inlines this at build, so
+ *  the entire effect body is dead-code-eliminated in prod bundles). On the
+ *  off chance it ever leaked, an unprivileged user toggling a query string
+ *  can only cause a presentational render — no AI call, no data mutation.
+ *  ─────────────────────────────────────────────────────────────────────── */
+function useEarnCognitionDevOverride(): { phase: EarnPhase; specialistSlug: string | null } | null {
+  const [override, setOverride] = useState<{
+    phase: EarnPhase;
+    specialistSlug: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return;
+    if (typeof window === 'undefined') return;
+
+    const read = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const phaseParam = params.get('earn_phase');
+        const slugParam = params.get('earn_specialist');
+        // Only honor a recognized phase string. Anything else clears the override.
+        const valid: EarnPhase[] = [
+          'idle',
+          'routing',
+          'handing_off',
+          'retrieving',
+          'streaming',
+          'proposing',
+          'settled'
+        ];
+        if (phaseParam && (valid as string[]).includes(phaseParam)) {
+          setOverride({ phase: phaseParam as EarnPhase, specialistSlug: slugParam });
+        } else {
+          setOverride(null);
+        }
+      } catch {
+        setOverride(null);
+      }
+    };
+
+    read();
+    window.addEventListener('popstate', read);
+    return () => window.removeEventListener('popstate', read);
+  }, []);
+
+  return override;
+}
+
 /* ── Main component ─────────────────────────────────────────────────────── */
 
 export interface EarnCognitionProps {
   /** Current turn phase from useEarnLifecycle. */
   phase: EarnPhase;
+  /** Specialist slug when `phase === 'handing_off'`. Ignored at other phases. */
+  specialistSlug?: string | null;
   className?: string;
 }
 
@@ -165,11 +248,16 @@ export interface EarnCognitionProps {
  * Each phase transition animates via AnimatePresence so the swap is a smooth
  * handoff, not a hard cut.
  */
-export function EarnCognition({ phase, className }: EarnCognitionProps) {
+export function EarnCognition({ phase, specialistSlug, className }: EarnCognitionProps) {
   const reduced = useReducedMotion() ?? false;
-  const label = PHASE_LABEL[phase];
+  // Dev-only seam — overrides props from `?earn_phase=...&earn_specialist=...`.
+  // No-op in production builds (Next inlines NODE_ENV at build time).
+  const devOverride = useEarnCognitionDevOverride();
+  const effectivePhase = devOverride?.phase ?? phase;
+  const effectiveSlug = devOverride?.specialistSlug ?? specialistSlug ?? null;
+  const label = PHASE_LABEL[effectivePhase];
 
-  if (phase === 'idle') return null;
+  if (effectivePhase === 'idle') return null;
 
   return (
     <div
@@ -182,7 +270,7 @@ export function EarnCognition({ phase, className }: EarnCognitionProps) {
       <span className="relative mt-0.5 flex-none">
         <EarnCoin size={24} online />
         <AnimatePresence>
-          {phase === 'routing' && <RoutingRing key="ring" reduced={reduced} />}
+          {effectivePhase === 'routing' && <RoutingRing key="ring" reduced={reduced} />}
         </AnimatePresence>
       </span>
 
@@ -192,41 +280,57 @@ export function EarnCognition({ phase, className }: EarnCognitionProps) {
         <span className="sr-only">{label}</span>
 
         <AnimatePresence mode="wait">
-          {phase === 'routing' && (
+          {effectivePhase === 'routing' && (
             <motion.div
               key="routing"
               className="flex items-center gap-2 text-[12px] text-fg-3"
               initial={{ opacity: 0, y: reduced ? 0 : 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: reduced ? 0 : -4 }}
-              transition={{ duration: 0.25, ease: EASE }}
+              transition={{ duration: 0.25, ease: FX_EASE }}
             >
               <span>Earn is consulting the desk</span>
               <ThinkDots reduced={reduced} />
             </motion.div>
           )}
 
-          {phase === 'retrieving' && (
+          {effectivePhase === 'handing_off' && (
+            <motion.div
+              key="handing_off"
+              className="flex flex-col gap-1.5"
+              initial={{ opacity: 0, y: reduced ? 0 : 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: FX_EASE }}
+            >
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                Routing to a specialist
+              </span>
+              <HandingOffBlock slug={effectiveSlug} reduced={reduced} />
+            </motion.div>
+          )}
+
+          {effectivePhase === 'retrieving' && (
             <motion.div
               key="retrieving"
               className="flex flex-col gap-1.5"
               initial={{ opacity: 0, y: reduced ? 0 : 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.25, ease: EASE }}
+              transition={{ duration: 0.25, ease: FX_EASE }}
             >
               <span className="text-[12px] text-fg-3">Reviewing knowledge sources</span>
               <BrainChips reduced={reduced} />
             </motion.div>
           )}
 
-          {phase === 'streaming' && (
+          {effectivePhase === 'streaming' && (
             <motion.div
               key="streaming"
               initial={{ opacity: 0, y: reduced ? 0 : 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.22, ease: EASE }}
+              transition={{ duration: 0.22, ease: FX_EASE }}
             >
               <StreamingCaret reduced={reduced} />
             </motion.div>
@@ -234,20 +338,20 @@ export function EarnCognition({ phase, className }: EarnCognitionProps) {
 
           {/* `proposing` — the action card itself is the indicator; show a
               calm label so there's a status update for assistive technology. */}
-          {phase === 'proposing' && (
+          {effectivePhase === 'proposing' && (
             <motion.div
               key="proposing"
               className="text-[12px] text-fg-3"
               initial={{ opacity: 0, y: reduced ? 0 : 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.22, ease: EASE }}
+              transition={{ duration: 0.22, ease: FX_EASE }}
             >
               Earn is proposing a next step
             </motion.div>
           )}
 
-          {phase === 'settled' && (
+          {effectivePhase === 'settled' && (
             <motion.div
               key="settled"
               className="flex items-center gap-1.5"

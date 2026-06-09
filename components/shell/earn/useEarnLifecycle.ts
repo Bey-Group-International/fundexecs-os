@@ -3,30 +3,46 @@
 import { useCallback, useRef, useState } from 'react';
 
 /**
- * The six phases of an Earn turn, in order of progression.
+ * The phases of an Earn turn, in order of progression.
  *
- *   idle       — no turn in flight; the chat is at rest.
- *   routing    — the request was sent; we're waiting for the first byte back.
- *   retrieving — a `sources` event arrived; Earn is consulting the brains.
- *   streaming  — the first `delta` arrived; the reply is composing in real time.
- *   proposing  — an `action` event arrived; Earn is proposing a next step.
- *   settled    — the `done` event (or stream end); a brief flourish, then rest.
+ *   idle        — no turn in flight; the chat is at rest.
+ *   routing     — the request was sent; we're waiting for the first byte back.
+ *   handing_off — Earn is routing this turn to a named specialist; a calm
+ *                 transition shown before retrieval starts. DORMANT in phase 2:
+ *                 the lifecycle and renderer support it, but no stream event
+ *                 fires it yet — phase 5 (`route_to_specialist` tool) wires
+ *                 the trigger. Exercise it today via the dev URL param
+ *                 `?earn_phase=handing_off&earn_specialist=<slug>` (non-prod
+ *                 only — see EarnCognition's dev-trigger seam).
+ *   retrieving  — a `sources` event arrived; Earn is consulting the brains.
+ *   streaming   — the first `delta` arrived; the reply is composing in real time.
+ *   proposing   — an `action` event arrived; Earn is proposing a next step.
+ *   settled     — the `done` event (or stream end); a brief flourish, then rest.
  *
  * A turn moves forward through these phases but never backward.
  * Multiple events of the same type advance only if the phase hasn't passed that
  * point yet (e.g. a second `delta` won't move from `streaming` back to
  * `retrieving`).
  */
-export type EarnPhase = 'idle' | 'routing' | 'retrieving' | 'streaming' | 'proposing' | 'settled';
+export type EarnPhase =
+  | 'idle'
+  | 'routing'
+  | 'handing_off'
+  | 'retrieving'
+  | 'streaming'
+  | 'proposing'
+  | 'settled';
 
-/** Numeric rank keeps phase-advancement logic simple. Higher = further along. */
-const PHASE_RANK: Record<EarnPhase, number> = {
+/** Numeric rank keeps phase-advancement logic simple. Higher = further along.
+ *  Exported so unit tests can lock the ordering without rendering React. */
+export const PHASE_RANK: Record<EarnPhase, number> = {
   idle: 0,
   routing: 1,
-  retrieving: 2,
-  streaming: 3,
-  proposing: 4,
-  settled: 5
+  handing_off: 2,
+  retrieving: 3,
+  streaming: 4,
+  proposing: 5,
+  settled: 6
 };
 
 /** Event types emitted by `applyEvent` in EarnChat that drive the lifecycle.
@@ -36,6 +52,12 @@ export type EarnEventType = 'sources' | 'delta' | 'action' | 'degraded' | 'done'
 export interface UseEarnLifecycleReturn {
   /** Current phase of the Earn turn lifecycle. */
   phase: EarnPhase;
+  /**
+   * The specialist slug currently being routed to, if `phase === 'handing_off'`.
+   * Null at every other phase. Set via `handOff(slug)`; cleared on `begin()`
+   * and at the end of the settle window.
+   */
+  specialistSlug: string | null;
   /**
    * Call when a streaming event arrives inside `applyEvent`. Maps event type
    * to the appropriate lifecycle phase — only advances, never retreats.
@@ -47,6 +69,14 @@ export interface UseEarnLifecycleReturn {
    * Resets any previous turn's lifecycle state first.
    */
   begin: () => void;
+  /**
+   * Phase 5 will call this from the stream when a `route_to_specialist` event
+   * arrives. In phase 2 it's exposed for the dev-trigger seam in
+   * `EarnCognition` and for the unit test; the production stream does not
+   * fire it yet. Advances the phase to `handing_off` (rank-gated) and stores
+   * the slug for the renderer to consume.
+   */
+  handOff: (slug: string) => void;
   /**
    * Call when loading is set to `false` (stream end or error) to ensure the
    * lifecycle settles cleanly, then returns to idle after a short flourish.
@@ -71,6 +101,7 @@ export interface UseEarnLifecycleReturn {
  */
 export function useEarnLifecycle(): UseEarnLifecycleReturn {
   const [phase, setPhase] = useState<EarnPhase>('idle');
+  const [specialistSlug, setSpecialistSlug] = useState<string | null>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Advance to `next` only if it ranks higher than the current phase. */
@@ -88,6 +119,16 @@ export function useEarnLifecycle(): UseEarnLifecycleReturn {
       settleTimer.current = null;
     }
     setPhase('routing');
+    setSpecialistSlug(null);
+  }, []);
+
+  const handOff = useCallback((slug: string) => {
+    // Rank-gated: only advance if we have not passed handing_off yet.
+    setPhase((current) => (PHASE_RANK.handing_off > PHASE_RANK[current] ? 'handing_off' : current));
+    // Slug is captured even if the phase did not advance — phase 5 may want
+    // to record who Earn would have routed to for telemetry. The renderer
+    // only reads it when phase === 'handing_off'.
+    setSpecialistSlug(slug);
   }, []);
 
   const onEvent = useCallback(
@@ -121,9 +162,10 @@ export function useEarnLifecycle(): UseEarnLifecycleReturn {
     // Return to idle after the flourish window (700 ms — enough for a spring).
     settleTimer.current = setTimeout(() => {
       setPhase('idle');
+      setSpecialistSlug(null);
       settleTimer.current = null;
     }, 700);
   }, []);
 
-  return { phase, onEvent, begin, settle };
+  return { phase, specialistSlug, onEvent, begin, handOff, settle };
 }
