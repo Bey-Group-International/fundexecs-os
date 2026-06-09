@@ -3,11 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getActiveOrg } from '@/lib/queries/org';
 import type { Database } from '@/lib/supabase/database.types';
 
 type OrgType = Database['public']['Enums']['org_type'];
-type ProfileUpdate = Database['public']['Tables']['profiles']['Update'];
 
 type OnboardingIdentityResult = { ok: true } | { ok: false; error: string };
 
@@ -49,8 +47,8 @@ function cleanOrgType(value: unknown): OrgType {
 /**
  * First-run identity/workspace setup.
  *
- * Runs server-side so the first organization + owner membership and profile
- * update share the same cookie-aware Supabase server client and RLS boundary.
+ * Runs server-side so first organization, owner membership, and profile
+ * identity persist together through one transactional RPC.
  */
 export async function saveOnboardingIdentity(input: {
   fullName: string;
@@ -65,28 +63,21 @@ export async function saveOnboardingIdentity(input: {
 
   if (!user) redirect('/login?redirectedFrom=/onboarding');
 
-  const existingOrg = await getActiveOrg();
   const organizationName = cleanStr(input.organizationName, 120);
   const organizationType = cleanOrgType(input.organizationType);
 
-  if (!existingOrg) {
-    if (!organizationName) {
-      return { ok: false, error: 'Organization name is required to create your workspace.' };
-    }
-
-    const { error } = await supabase.rpc('create_organization', {
-      _name: organizationName,
-      _type: organizationType
-    });
-    if (error) return { ok: false, error: error.message };
+  const { error } = await supabase.rpc('save_onboarding_identity', {
+    _full_name: cleanStr(input.fullName, 120),
+    _role: cleanRole(input.role),
+    _org_name: organizationName,
+    _org_type: organizationType
+  });
+  if (error) {
+    const message = error.message.includes('organization name is required')
+      ? 'Organization name is required to create your workspace.'
+      : error.message;
+    return { ok: false, error: message };
   }
-
-  const profile: ProfileUpdate = { role: cleanRole(input.role) };
-  const fullName = cleanStr(input.fullName, 120);
-  if (fullName) profile.full_name = fullName;
-
-  const { error: profileError } = await supabase.from('profiles').update(profile).eq('id', user.id);
-  if (profileError) return { ok: false, error: profileError.message };
 
   revalidatePath('/onboarding');
   revalidatePath('/settings');
