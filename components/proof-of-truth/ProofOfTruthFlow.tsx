@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft,
-  ArrowRight,
   ArrowUpRight,
   Check,
   Copy,
@@ -44,7 +43,7 @@ import {
   answersToProfileInput,
   completionPct,
   computeLadder,
-  nextGapIndex,
+  rankedOpenGaps,
   seedAnswers,
   splitTags,
   type Answers
@@ -129,6 +128,10 @@ export function ProofOfTruthFlow({
   const [dislikedByQuestion, setDislikedByQuestion] = useState<Record<string, string[]>>({});
   // Per-question typed-input drafts (not yet approved), keyed by question id.
   const [typedByQuestion, setTypedByQuestion] = useState<Record<string, string>>({});
+  // Questions the member chose to defer this session ("skip / come back later").
+  // They stay open gaps on the record — skipping never drops them, it parks them
+  // so the wizard stops re-serving them and can drive on to the rest.
+  const [skipped, setSkipped] = useState<string[]>([]);
 
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(null);
   // Token guards against a stale fetch resolving onto the wrong question.
@@ -308,6 +311,10 @@ export function ProofOfTruthFlow({
   function approveValue(value: string) {
     if (!question) return;
     commitAnswer(question.id, value);
+    // Answering clears any deferral on this question.
+    if (skipped.includes(question.id)) {
+      setSkipped((prev) => prev.filter((id) => id !== question.id));
+    }
   }
 
   function dislikeOption(value: string) {
@@ -351,17 +358,39 @@ export function ProofOfTruthFlow({
 
   // --- navigation ---
 
-  function goNext() {
-    if (index < questions.length - 1) {
-      setIndex((i) => i + 1);
-    } else {
-      setStage('review');
-    }
-  }
-
   function goBack() {
     if (index > 0) setIndex((i) => i - 1);
     else setStage('picker');
+  }
+
+  /**
+   * The index of the best remaining open gap the member hasn't deferred, or -1
+   * when nothing actionable is left (every required field is strong or parked).
+   * Drives the wizard loop: approve → next gap, or skip → next gap.
+   */
+  function nextOpenGap(exclude: string[]): number {
+    if (!memberType) return -1;
+    const pick = rankedOpenGaps(memberType, answers).find((g) => !exclude.includes(g.id));
+    return pick ? pick.index : -1;
+  }
+
+  /** Move to the best gap not yet deferred; fall through to Review when none. */
+  function goToNextGap(exclude: string[]) {
+    const target = nextOpenGap(exclude);
+    if (target >= 0) setIndex(target);
+    else setStage('review');
+  }
+
+  /**
+   * Never trap the member: defer the current question and move on. The field
+   * stays an open gap (it still shows on /profile and in Review), so "skip" is
+   * always "come back later", never "lose it".
+   */
+  function skipForNow() {
+    if (!question) return;
+    const exclude = skipped.includes(question.id) ? skipped : [...skipped, question.id];
+    setSkipped(exclude);
+    goToNextGap(exclude);
   }
 
   function focusInput() {
@@ -624,12 +653,11 @@ export function ProofOfTruthFlow({
 
   if (!question || !memberType) return null;
 
-  const isLast = index === questions.length - 1;
-  const canAdvance = isApproved || !!question.optional;
   // The readiness ladder + the next field that still needs work (the wizard
-  // loop): jump straight to the highest open rung instead of paging linearly.
+  // loop): jump straight to the highest-impact open gap instead of paging
+  // linearly. `deferredTarget` honours what the member has skipped this session.
   const ladder = computeLadder(memberType, answers);
-  const nextGap = nextGapIndex(memberType, answers, index);
+  const deferredTarget = nextOpenGap(skipped);
 
   return (
     <Shell step="profile" pct={pct}>
@@ -714,29 +742,20 @@ export function ProofOfTruthFlow({
               Back
             </Button>
             <div className="flex items-center gap-2">
-              {question.optional && !isApproved && (
-                <Button variant="ghost" icon={SkipForward} onClick={goNext}>
-                  Skip
+              {/* The member is never stuck on a screen. Unanswered → a single
+                  "Skip for now" parks it and drives on (come back later).
+                  Answered → loop to the next open gap, or close out to Review. */}
+              {!isApproved ? (
+                <Button variant="ghost" icon={SkipForward} onClick={skipForNow}>
+                  Skip for now
                 </Button>
-              )}
-              {/* Wizard loop: jump to the next open field, or close out to Review
-                  once every required field reads strong. */}
-              {isApproved && nextGap >= 0 && nextGap !== index ? (
-                <Button variant="gold" iconRight={Zap} onClick={() => setIndex(nextGap)}>
+              ) : deferredTarget >= 0 ? (
+                <Button variant="gold" iconRight={Zap} onClick={() => goToNextGap(skipped)}>
                   Next gap
                 </Button>
-              ) : isApproved && nextGap === -1 ? (
+              ) : (
                 <Button variant="primary" iconRight={Check} onClick={() => setStage('review')}>
                   Review
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  iconRight={isLast ? Check : ArrowRight}
-                  disabled={!canAdvance}
-                  onClick={goNext}
-                >
-                  {isLast ? 'Review' : 'Next'}
                 </Button>
               )}
             </div>

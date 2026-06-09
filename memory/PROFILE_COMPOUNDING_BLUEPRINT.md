@@ -45,17 +45,25 @@ is live and feeds both the ladder and the wizard scoring.
 `components/proof-of-truth/profile-mapping.ts` (`scoreAnswer`),
 `lib/queries/fund-profile.ts` (server scoring block), `tiers.test.ts`.
 
-## Phase 2 — Next-best-question ranking
+## Phase 2 — Next-best-question ranking ✅ shipped
 
-**Problem:** `nextGapIndex` walks schema order, so it can send someone to a
-low-value field before a thesis.
+**Problem:** the old `nextGapIndex` walked schema order, so it could send someone
+to a low-value field before a thesis.
 
-**Design — `rankedGaps(memberType, scored)` in `tiers.ts`:** sort by
-`tierOrder` (climb gating) → `impactWeight` (per-question; default by tier:
-evidence 3, mandate 2, identity 1) → severity (missing before weak). Add an
-optional `impact?: 1 | 2 | 3` to `ProfileQuestion` for hand-tuned overrides
-(thesis = 3). `nextGapIndex` becomes "first ranked gap not yet strong";
-`fund-profile.ts` reuses the same comparator so `/profile` and the wizard agree.
+**Delivered:** `impactWeight(q)` (override `impact?: 1 | 2 | 3`, else by rung —
+evidence 3, mandate 2, identity 1) and a shared `compareGaps` comparator in
+`tiers.ts`, ordering by `tierOrder` (climb gating) → impact → severity (missing
+before thin). `nextGapIndex` was replaced by `rankedOpenGaps`, and
+`fund-profile.ts` reuses the same comparator, so `/profile` and the wizard serve
+the identical next-best question. `headline` and `objective` carry impact
+overrides.
+
+**Never-stuck / skip loop (shipped with Phase 2):** a member can never be
+trapped on a screen. Any unanswered question shows **"Skip for now"**, which
+parks it (`skipped` state) and drives on to the next-best open gap — the field
+stays an open gap on the record and in Review, so skip always means "come back
+later", never "lose it". The old disabled-`Next` dead-end on required questions
+is gone.
 
 ## Phase 3 — True one-question-at-a-time wizard
 
@@ -92,8 +100,8 @@ matchable LP mandates from the existing matching layer, fail-open); Evidence →
 
 ## Sequencing
 
-1. **Phase 1 — depth scoring** (lowest risk, makes the ladder honest). **First.**
-2. **Phase 2 — ranking** (small, unlocks Phase 3).
-3. **Phase 4 — persist** (small, independent; can land with 1–2).
-4. **Phase 3 — guided wizard** (the big behavioral change; own PR).
+1. ~~**Phase 1 — depth scoring**~~ ✅ shipped — makes the ladder honest.
+2. ~~**Phase 2 — ranking**~~ ✅ shipped — incl. the never-stuck / skip loop.
+3. **Phase 4 — persist** (small, independent) — persist real ladder pct on save.
+4. **Phase 3 — guided wizard** (build on `rankedOpenGaps` + the skip stack).
 5. **Phase 5 — payoff** (polish; own PR).

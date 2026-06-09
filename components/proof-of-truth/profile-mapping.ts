@@ -2,6 +2,9 @@ import type { MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
 import {
   buildLadder,
+  compareGaps,
+  getTier,
+  impactWeight,
   scoreDepth,
   tierForQuestion,
   type LadderItem,
@@ -60,42 +63,35 @@ export function computeLadder(memberType: MemberType, answers: Answers): Profile
   return buildLadder(items);
 }
 
+/** A still-open required question: its id and its index in the question set. */
+export interface RankedGap {
+  id: string;
+  index: number;
+}
+
 /**
- * The index of the next required question that still needs work (missing or
- * thin), searched forward from `after` and wrapping once. This is the wizard's
- * "next best question" — it always points at the highest rung still open, in
- * climb order, so approving answers drives straight to 100%. Returns -1 when
- * every required field is strong.
+ * Every required question that still needs work (missing or thin), ordered
+ * best-first — by rung in climb order, then by counterparty impact, then missing
+ * before thin (the shared `compareGaps` order `/profile` uses too). This is the
+ * wizard's "next best question": serve `[0]` to drive straight at the highest-
+ * value open gap. Optional fields never appear — they lift quality, never gate.
  */
-export function nextGapIndex(memberType: MemberType, answers: Answers, after: number): number {
-  const set = getQuestionSet(memberType);
-  const n = set.length;
-  const ladder = computeLadder(memberType, answers);
-  const targetTier = ladder.currentTierId;
-  if (!targetTier) return -1;
-
-  const order = Array.from({ length: n }, (_, step) => (after + step + 1) % n);
-
-  // Prefer the next open gap on the rung the member is currently climbing, so
-  // the wizard fills Identity before Mandate before Evidence rather than just
-  // walking the raw question order.
-  for (const i of order) {
-    const q = set[i];
-    if (q.optional || tierForQuestion(q) !== targetTier) continue;
+export function rankedOpenGaps(memberType: MemberType, answers: Answers): RankedGap[] {
+  const open: Array<{ id: string; index: number; tierOrder: number; impact: number; missing: boolean }> = [];
+  getQuestionSet(memberType).forEach((q, index) => {
+    if (q.optional) return;
     const { present, weak } = scoreAnswer(q, answers);
-    if (!present || weak) return i;
-  }
-
-  // Fallback: any remaining required gap (covers the capstone tier, where no
-  // collecting question matches the target rung).
-  for (const i of order) {
-    const q = set[i];
-    if (q.optional) continue;
-    const { present, weak } = scoreAnswer(q, answers);
-    if (!present || weak) return i;
-  }
-
-  return -1;
+    if (present && !weak) return;
+    open.push({
+      id: q.id,
+      index,
+      tierOrder: getTier(tierForQuestion(q)).order,
+      impact: impactWeight(q),
+      missing: !present
+    });
+  });
+  open.sort((a, b) => compareGaps(a, b));
+  return open.map(({ id, index }) => ({ id, index }));
 }
 
 /**

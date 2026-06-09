@@ -162,6 +162,45 @@ export function tierForQuestion(q: ProfileQuestion): CollectingTierId {
   return 'mandate';
 }
 
+/**
+ * Default counterparty impact by rung — evidence is the substance they press on
+ * hardest, identity the table stakes. A question may override this with its own
+ * `impact`, so a 90-day objective can outrank a generic mandate field.
+ */
+const TIER_IMPACT: Record<CollectingTierId, 1 | 2 | 3> = {
+  identity: 1,
+  mandate: 2,
+  evidence: 3
+};
+
+/** How much closing this field moves the needle: explicit override, else by rung. */
+export function impactWeight(q: ProfileQuestion): number {
+  return q.impact ?? TIER_IMPACT[tierForQuestion(q)];
+}
+
+/** The sort unit for ordering open gaps. */
+export interface GapOrder {
+  /** 1-based rung position — lower (identity) sorts first. */
+  tierOrder: number;
+  /** Counterparty impact — higher sorts first within a rung. */
+  impact: number;
+  /** Missing fields sort before merely-thin ones. */
+  missing: boolean;
+}
+
+/**
+ * Order gaps the way a member should close them: by rung in climb order (each
+ * rung is gated on the one above), then by counterparty impact (a thesis before
+ * a website), then missing before merely thin. Shared by `/profile` and the
+ * wizard so both serve the same next-best question.
+ */
+export function compareGaps(a: GapOrder, b: GapOrder): number {
+  if (a.tierOrder !== b.tierOrder) return a.tierOrder - b.tierOrder;
+  if (a.impact !== b.impact) return b.impact - a.impact;
+  if (a.missing !== b.missing) return a.missing ? -1 : 1;
+  return 0;
+}
+
 /** One scored answer, the unit the ladder is built from. */
 export interface LadderItem {
   tier: CollectingTierId;
