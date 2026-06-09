@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { AuthedShell } from '@/components/shell/AuthedShell';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getTrustCenterData } from '@/lib/queries/trust-center';
+import { getTrustCenterData, captureTrustSnapshot } from '@/lib/queries/trust-center';
 import { TrustDrawerHost } from '@/components/shell/trust/TrustDrawerHost';
 import { TrustCenterView } from '@/components/trust/TrustCenterView';
 
@@ -34,6 +34,16 @@ export default async function TrustPage() {
         return null;
       })
     : null;
+
+  // Persist today's posture from the server using the values already computed
+  // for this render — no client trust, no second query. Best-effort.
+  if (org && data && !data.empty) {
+    await captureTrustSnapshot({
+      orgId: org.orgId,
+      iri: data.iri,
+      coveragePct: data.capital.proofCoveragePct
+    });
+  }
 
   return (
     <AuthedShell title="Trust Center" subtitle="Chain of Trust" redirectFrom="/trust">

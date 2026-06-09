@@ -30,7 +30,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useTrustDrawer } from '@/components/shell/trust/TrustDrawerHost';
 import { TRUST_LAYERS, trustLayerMeta } from '@/components/shell/trust/trust-layers';
-import { approveEvidence, recordTrustSnapshot } from '@/lib/actions/trust';
+import { approveEvidence } from '@/lib/actions/trust';
 import type { TrustLayerKey } from '@/lib/queries/trust';
 import type {
   TrustCenterData,
@@ -797,14 +797,6 @@ export function TrustCenterView({ data }: { data: TrustCenterData }) {
     if (present.has('objective')) tabs.push({ id: 'objective', label: 'Objectives' });
     return tabs;
   }, [data.records]);
-
-  // Record today's posture so the index can show movement over time. One row
-  // per org per day; the server derives the values (it does not trust the
-  // client), upserts, and skips when empty. Fire-and-forget on mount.
-  useEffect(() => {
-    if (data.empty) return;
-    void recordTrustSnapshot();
-  }, [data.empty]);
 
   // Keep the surface live: re-pull posture + queue when the tab regains focus,
   // so an approver returning to the page never acts on a stale queue.

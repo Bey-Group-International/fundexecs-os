@@ -650,3 +650,31 @@ function fmtMoney(n: number): string {
   if (abs >= 1_000) return `$${Math.round(n / 1_000)}K`;
   return `$${Math.round(n)}`;
 }
+
+/**
+ * Persist today's Trust Center posture (idempotent per org per day) via the
+ * SECURITY DEFINER upsert RPC. Called from the /trust page render — mirroring
+ * capturePostureSnapshot on /strategy — so the trend builds passively with no
+ * cron and no extra query: it reuses the IRI + coverage already computed for
+ * the page. Values come from the server, never the client. Best-effort: a
+ * failed snapshot must never break the page.
+ */
+export async function captureTrustSnapshot(input: {
+  orgId: string;
+  iri: number;
+  coveragePct: number;
+}): Promise<void> {
+  try {
+    const supabase = await createClient();
+    const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+    await supabase.rpc('upsert_trust_posture_snapshot', {
+      _org_id: input.orgId,
+      _iri: clamp(input.iri),
+      _coverage_pct: clamp(input.coveragePct)
+    });
+  } catch (err) {
+    // Best-effort telemetry; never surface a failure. Warn so a migration/RPC/
+    // auth failure stays diagnosable.
+    console.warn('[captureTrustSnapshot] failed to persist posture snapshot:', err);
+  }
+}
