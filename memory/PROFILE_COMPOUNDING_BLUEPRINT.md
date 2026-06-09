@@ -82,10 +82,12 @@ incoherent now that forward motion (Phase 2) jumps by impact.
   question the gap loop jumped over.
 - Review's Back lands on the first thing still worth fixing (incl. skipped).
 
-**Reachability note:** `middleware.ts` bounces a `status: 'complete'` profile
-away from `/onboarding`, so guided *resume* mainly serves in-progress members.
-Editing a published profile's gaps from `/profile` is gated by that same
-middleware — a pre-existing tension, not introduced here.
+**Reachability — resolved:** `middleware.ts` still bounces a `status: 'complete'`
+profile away from `/onboarding` (so it can't get stuck re-running the flow), but
+now lets through an explicit **edit intent** — a `?focus=` close-gap link or
+`?edit=1`. The Profile's section cards deep-link to `?focus=<field>`, gaps to
+`?focus=<gap>`, and Settings to `?edit=1`, so editing a published record works
+end to end and lands guided on the field in question.
 
 ## Phase 4 — Persist the real ladder ✅ shipped
 

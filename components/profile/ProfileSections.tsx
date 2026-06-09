@@ -128,7 +128,7 @@ function SectionCard({ section }: { section: ProfileSection }) {
 
   return (
     <Link
-      href="/onboarding"
+      href={`/onboarding?focus=${encodeURIComponent(section.id)}`}
       data-testid={`profile-section-${section.id}`}
       className="group block h-full rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-0"
     >
