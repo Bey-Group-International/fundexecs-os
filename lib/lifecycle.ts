@@ -102,9 +102,9 @@ export interface LifecycleInputs {
   hasTrustRecord: boolean;
 
   /**
-   * Raise-readiness materials progress, 0–100. Until a dedicated materials
-   * model lands this is approximated from governance/objective completion;
-   * the loader documents its source. Gates stage 2.
+   * Raise-readiness materials progress, 0-100. The loader prefers persisted
+   * Capital Materials Studio status and falls back to governance completion
+   * for workspaces with no materials yet. Gates stage 2.
    */
   materialsReadiness: number;
 

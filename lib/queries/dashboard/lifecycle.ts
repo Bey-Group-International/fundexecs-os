@@ -426,13 +426,22 @@ async function loadPipelineSignals(orgId: string): Promise<PipelineSignals> {
   };
 }
 
-/**
- * Approximate raise-materials readiness from governance objective completion
- * until a dedicated materials model lands. Returns 0–100. Documented seam:
- * swap for a Capital Materials Studio signal in a later wave.
- */
 async function loadMaterialsReadiness(orgId: string): Promise<number> {
   const supabase = await createClient();
+  const { data: materials, error: materialsError } = await supabase
+    .from('capital_materials')
+    .select('status')
+    .eq('org_id', orgId)
+    .neq('status', 'archived');
+
+  if (!materialsError && materials && materials.length > 0) {
+    const ready = materials.filter((row) => row.status === 'ready').length;
+    const draft = materials.filter((row) => row.status === 'draft').length;
+    return Math.min(100, ready * 25 + draft * 10);
+  }
+
+  // Fallback for orgs created before Materials Studio is used: estimate
+  // readiness from governance completion so the dashboard never goes blank.
   const { data } = await supabase
     .from('governance_objectives')
     .select('status, archived_at, deleted_at, source, approved_at')

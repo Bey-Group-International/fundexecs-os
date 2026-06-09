@@ -1,4 +1,4 @@
-import { FilePlus, type LucideIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 /* ============================================================================
  * Stub-route copy registry — single source of truth for the
@@ -20,10 +20,10 @@ import { FilePlus, type LucideIcon } from 'lucide-react';
  * `redirect()` to the real surface instead of stubbing, so the rail is
  * intentional rather than a dead-end.
  *
- * As of the live build, Match Inbox, Capital Stack, Objections, Partner
- * Marketplace, Inbox Intelligence, and the Memory Audit Trail all ship real
- * surfaces — so `/materials` (Capital Materials Studio) is the only remaining
- * genuine stub.
+ * As of the live build, Match Inbox, Capital Stack, Materials Studio,
+ * Objections, Partner Marketplace, Inbox Intelligence, and the Memory Audit
+ * Trail all ship real surfaces. Keep this object empty until a new route
+ * intentionally ships as a visible placeholder.
  * ========================================================================= */
 
 export interface StubRoute {
@@ -35,19 +35,4 @@ export interface StubRoute {
   stageLabel?: string;
 }
 
-export const STUB_ROUTES: Record<string, StubRoute> = {
-  '/materials': {
-    area: 'Intelligence',
-    title: 'Capital Materials Studio',
-    blurb:
-      'Generate decks, memos, and one-pagers directly from your Profile — version-controlled, on-brand, and always tied to your latest numbers.',
-    capabilities: [
-      'Decks and one-pagers built from Source-of-Truth fields.',
-      'Earn rewrites for any audience (LP, co-investor, internal IC).',
-      'Versioned exports so every share is traceable.',
-      'Materials auto-refresh when underlying data changes.'
-    ],
-    icon: FilePlus,
-    stageLabel: 'Get raise-ready'
-  }
-};
+export const STUB_ROUTES: Record<string, StubRoute> = {};

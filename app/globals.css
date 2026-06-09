@@ -662,7 +662,7 @@ body {
         Each class targets a dedicated `fx-*-rm` keyframe so the soft
         treatment is explicit, named, and easy to audit.
 
-     2. DECORATIVE tier — flavor only. Hard off via `animation: none`.
+     2. DECORATIVE tier — flavor only. Hard off via `animation-name: none`.
 
      3. SAFETY NET — universal `*` resetter neutralizes any animation
         the design system didn't author (third-party widgets, transient
@@ -822,7 +822,7 @@ body {
   .fx-counter-spin,
   .fx-counter-spin-rev,
   .fx-sweep {
-    animation: none !important;
+    animation-name: none !important;
   }
 
   /* 3. SAFETY NET — neutralize any animation that the design system did
