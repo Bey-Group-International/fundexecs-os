@@ -67,6 +67,8 @@ function dealTone(status: string, stageKey: string): BadgeTone {
 
 type Tab = 'formation' | 'lpmap' | 'flow' | 'partners';
 
+/** The Earn status band — a live read of how many relationships sit across how
+ * many active formation stages, framed as Earn "working the book". */
 function EarnBand({ data }: { data: PipelineData }) {
   const activeStages = data.stages.filter((s) => s.deals.length > 0).length;
   return (
@@ -87,6 +89,70 @@ function EarnBand({ data }: { data: PipelineData }) {
   );
 }
 
+/**
+ * NextMove — the single decisive action the operator should take next. A
+ * deterministic, honest heuristic over the deals already loaded: the
+ * highest-thesis-fit deal that hasn't yet committed/closed, tie-broken by
+ * amount. No AI call, no new data — the page opens to a decision, not a scan.
+ */
+function NextMove({
+  data,
+  onSelect
+}: {
+  data: PipelineData;
+  onSelect: (deal: PipelineDeal) => void;
+}) {
+  let best: { deal: PipelineDeal; stageLabel: string } | null = null;
+  for (const stage of data.stages) {
+    const k = stage.key.toLowerCase();
+    if (k === 'committed' || k === 'closed') continue;
+    for (const d of stage.deals) {
+      if (
+        !best ||
+        d.fit > best.deal.fit ||
+        (d.fit === best.deal.fit && (d.amount ?? 0) > (best.deal.amount ?? 0))
+      ) {
+        best = { deal: d, stageLabel: stage.label };
+      }
+    }
+  }
+  if (!best) return null;
+  const { deal, stageLabel } = best;
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3 border-[var(--gold-line)] bg-[var(--gold-soft)] px-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl border border-[var(--gold-line)] bg-bg-1 text-gold-1">
+          <Sparkles size={16} strokeWidth={2} aria-hidden />
+        </span>
+        <div className="min-w-0 text-[12.5px] text-fg-2">
+          <span className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-fg-4">
+            Next best move
+          </span>
+          <div className="truncate text-fg-1">
+            Advance <span className="font-semibold">{deal.name}</span> — best-fit deal in{' '}
+            <span className="font-semibold">{stageLabel}</span>
+            <span className="ml-1 tabular-nums text-gold-1">{deal.fit}% fit</span>
+            {deal.amount != null ? (
+              <span className="text-fg-3"> · {formatCurrency(deal.amount)}</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <Button
+        variant="primary"
+        size="sm"
+        icon={ArrowUpRight}
+        onClick={() => onSelect(deal)}
+        data-testid="pipeline-next-move"
+      >
+        Open deal
+      </Button>
+    </Card>
+  );
+}
+
+/** The capital-formation stage board: deals in draggable columns by stage, with
+ * optimistic moves and a click-through to the deal detail drawer. */
 function FormationBoard({
   stages,
   onSelectDeal,
@@ -169,6 +235,20 @@ function FormationBoard({
                         aria-hidden
                       />
                     </div>
+                    {/* Thesis-fit (0–98), already computed server-side — surfaced
+                        here so the card carries the signal, echoing the LP board. */}
+                    <div className="mt-2 flex items-center gap-2">
+                      <ProgressBar
+                        value={d.fit}
+                        color={TONE_HEX[tone]}
+                        height={4}
+                        className="flex-1"
+                        ariaLabel={`${d.name} thesis fit`}
+                      />
+                      <span className="flex-none font-mono text-[10px] tabular-nums text-fg-4">
+                        {d.fit}%
+                      </span>
+                    </div>
                   </button>
                 );
               })}
@@ -180,6 +260,8 @@ function FormationBoard({
   );
 }
 
+/** Recent deal movement — the most recent deals across all stages, shown as a
+ * compact activity list with their current stage and amount. */
 function DealFlow({ data }: { data: PipelineData }) {
   const recent = data.stages
     .flatMap((s) => s.deals.map((d) => ({ deal: d, stageLabel: s.label, stageKey: s.key })))
@@ -226,6 +308,8 @@ function partnerTone(status: string): BadgeTone {
   return 'azure';
 }
 
+/** The capital-stack partners panel — service providers and partnership
+ * counterparties as a grid, with an action to add a new provider. */
 function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd: () => void }) {
   return (
     <Card>
@@ -270,8 +354,11 @@ function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd
   );
 }
 
-/** Interactive pipeline board: formation board, LP map, deal flow, and partners,
- *  with optimistic stage moves and an optionally deep-linked deal drawer. */
+/** The Pipeline surface: KPI strip, next-best-move, and the tabbed boards
+ * (capital formation, LP pipeline, deal flow, partners). Owns optimistic deal
+ * stage moves and the new-deal / new-partner / deal-detail drawers; opens a
+ * deep-linked deal's drawer on load when handed an `initialDealId` (from the
+ * Deal Desk). */
 export function PipelineView({
   data,
   lpData,
@@ -399,6 +486,8 @@ export function PipelineView({
       />
 
       <EarnBand data={data} />
+
+      <NextMove data={data} onSelect={(d) => setActiveDealId(d.id)} />
 
       {moveError ? (
         <div
