@@ -296,8 +296,16 @@ function buildFromSchema(
   const qById = new Map(questions.map((q) => [q.id, q]));
   gaps.sort((a, b) =>
     compareGaps(
-      { tierOrder: getTier(a.tier).order, impact: impactWeight(qById.get(a.field)!), missing: a.severity === 'missing' },
-      { tierOrder: getTier(b.tier).order, impact: impactWeight(qById.get(b.field)!), missing: b.severity === 'missing' }
+      {
+        tierOrder: getTier(a.tier).order,
+        impact: impactWeight(qById.get(a.field)!),
+        missing: a.severity === 'missing'
+      },
+      {
+        tierOrder: getTier(b.tier).order,
+        impact: impactWeight(qById.get(b.field)!),
+        missing: b.severity === 'missing'
+      }
     )
   );
 

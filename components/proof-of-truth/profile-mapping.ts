@@ -77,7 +77,13 @@ export interface RankedGap {
  * value open gap. Optional fields never appear — they lift quality, never gate.
  */
 export function rankedOpenGaps(memberType: MemberType, answers: Answers): RankedGap[] {
-  const open: Array<{ id: string; index: number; tierOrder: number; impact: number; missing: boolean }> = [];
+  const open: Array<{
+    id: string;
+    index: number;
+    tierOrder: number;
+    impact: number;
+    missing: boolean;
+  }> = [];
   getQuestionSet(memberType).forEach((q, index) => {
     if (q.optional) return;
     const { present, weak } = scoreAnswer(q, answers);

@@ -80,7 +80,11 @@ test('impactWeight falls back to rung default, honouring overrides', () => {
 });
 
 test('compareGaps orders by rung, then impact, then severity', () => {
-  const mk = (tierOrder: number, impact: number, missing: boolean) => ({ tierOrder, impact, missing });
+  const mk = (tierOrder: number, impact: number, missing: boolean) => ({
+    tierOrder,
+    impact,
+    missing
+  });
   // Lower rung first, regardless of impact.
   assert.ok(compareGaps(mk(1, 1, false), mk(2, 3, true)) < 0);
   // Same rung: higher impact first.
