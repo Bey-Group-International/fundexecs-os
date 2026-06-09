@@ -16,7 +16,7 @@ phase keeps the never-block / degrade-gracefully posture and is covered by
 | #   | Today                                                                                         | Full compounding loop                                                |
 | --- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | 1   | ✅ **Shipped** — depth scoring (`scoreDepth`) across field types: numbers, specificity, proof | —                                                                    |
-| 2   | Wizard pages linearly; remaining gap = the guided one-question flow (Phase 3)                  | **Single highest-value question** served at a time                   |
+| 2   | ✅ **Shipped** — guided entry resumes at the open rung; visited-stack Back                     | —                                                                    |
 | 3   | ✅ **Shipped** — impact-ranked next-best gap (`rankedOpenGaps` + `compareGaps`) + skip loop    | —                                                                    |
 | 4   | ✅ **Shipped** — publish persists the honest `completion_pct` (`ladder.overallPct`)            | —                                                                    |
 | 5   | Ladder is private to the member                                                               | **Compounding payoff surfaced**: "Mandate complete → matchable to N" |
@@ -65,16 +65,27 @@ stays an open gap on the record and in Review, so skip always means "come back
 later", never "lose it". The old disabled-`Next` dead-end on required questions
 is gone.
 
-## Phase 3 — True one-question-at-a-time wizard
+## Phase 3 — True one-question-at-a-time wizard ✅ shipped
 
-**Problem:** the flow still pages linearly; answered fields reappear on Back/Next.
+**Problem:** entry always started at question one and Back walked schema order —
+incoherent now that forward motion (Phase 2) jumps by impact.
 
-**Design (additive mode, not a rewrite):** add `mode: 'guided' | 'linear'` to
-`ProofOfTruthFlow`. Default **guided** on resume / "close gap" entry; **linear**
-for true first-run so a first-timer still sees the full arc. Guided mode drives
-the index off `rankedGaps`, auto-advances on approve, shows the
-"Institutionally ready" capstone at zero gaps, and keeps a visited-stack so Back
-stays navigable.
+**Delivered — `mode: 'guided' | 'linear'` on `ProofOfTruthFlow`:**
+- **Guided entry resumes at the open rung:** drops the member straight on the
+  highest-impact open gap (`rankedOpenGaps[0]`), or straight to Review when the
+  record is already strong. A close-gap `focusField` still wins.
+- **Linear entry** starts at question one, so a true first-timer walks the full
+  arc. Mode is inferred when not passed: a close-gap link or any existing
+  progress → guided; an empty profile → linear.
+- **Visited-stack Back:** a `history` stack records the questions actually
+  served, so Back returns to the previous *screen* — not the schema-previous
+  question the gap loop jumped over.
+- Review's Back lands on the first thing still worth fixing (incl. skipped).
+
+**Reachability note:** `middleware.ts` bounces a `status: 'complete'` profile
+away from `/onboarding`, so guided *resume* mainly serves in-progress members.
+Editing a published profile's gaps from `/profile` is gated by that same
+middleware — a pre-existing tension, not introduced here.
 
 ## Phase 4 — Persist the real ladder ✅ shipped
 
@@ -111,5 +122,5 @@ matchable LP mandates from the existing matching layer, fail-open); Evidence →
 1. ~~**Phase 1 — depth scoring**~~ ✅ shipped — makes the ladder honest.
 2. ~~**Phase 2 — ranking**~~ ✅ shipped — incl. the never-stuck / skip loop.
 3. ~~**Phase 4 — persist**~~ ✅ shipped — honest `completion_pct` on publish.
-4. **Phase 3 — guided wizard** (build on `rankedOpenGaps` + the skip stack).
-5. **Phase 5 — payoff** (polish; own PR).
+4. ~~**Phase 3 — guided wizard**~~ ✅ shipped — guided resume + visited-stack Back.
+5. **Phase 5 — payoff** (polish; own PR) — the only piece left.
