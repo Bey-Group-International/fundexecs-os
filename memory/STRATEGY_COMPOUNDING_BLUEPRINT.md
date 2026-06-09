@@ -84,7 +84,7 @@ Implements **#1 (Earn drafts)** + the cascade + completion-writeback parts of
 
 **Shipped (committed, awaiting `supabase db push`):**
 
-- `supabase/migrations/20260609150000_strategy_objective_compounding.sql` —
+- `supabase/migrations/20260609160000_strategy_objective_compounding.sql` —
   additive columns on `governance_objectives`: `category`, `capital_weight`,
   `source`, `source_signal_id` (FK → `market_signals`), `parent_objective_id`
   (self-FK), `lifecycle_stage`, `approved_at`; guarded check constraints + FK
