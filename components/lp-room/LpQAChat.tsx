@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, MessageSquare, FileText, ShieldCheck } from 'lucide-react';
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { EmptyState } from '@/components/shell/EmptyState';
@@ -48,11 +48,28 @@ export function LpQAChat({
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittedTimerRef = useRef<number | null>(null);
+
+  function clearSubmittedTimer() {
+    if (submittedTimerRef.current !== null) {
+      window.clearTimeout(submittedTimerRef.current);
+      submittedTimerRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (submittedTimerRef.current !== null) {
+        window.clearTimeout(submittedTimerRef.current);
+      }
+    };
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = draft.trim();
     if (!body) return;
+    clearSubmittedTimer();
     if (!onSubmit) {
       setError('Question submission is unavailable right now.');
       return;
@@ -68,7 +85,10 @@ export function LpQAChat({
       }
       setDraft('');
       setSubmitted(true);
-      setTimeout(() => setSubmitted(false), 2600);
+      submittedTimerRef.current = window.setTimeout(() => {
+        setSubmitted(false);
+        submittedTimerRef.current = null;
+      }, 2600);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Question could not be recorded.');
     } finally {

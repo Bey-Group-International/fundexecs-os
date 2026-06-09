@@ -147,6 +147,22 @@ function formatDateOnly(value: string | null): string {
   });
 }
 
+function yearFrom(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const dateOnly = /^(\d{4})-\d{2}-\d{2}$/.exec(value);
+  if (dateOnly) return Number(dateOnly[1]);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getFullYear();
+}
+
+function earliestYear(values: Array<string | null | undefined>): number {
+  const years = values
+    .map(yearFrom)
+    .filter((year): year is number => year !== null && Number.isFinite(year));
+  return years.length > 0 ? Math.min(...years) : new Date().getFullYear();
+}
+
 function formatMonth(iso: string | null): string {
   if (!iso) return 'TBD';
   const date = new Date(iso);
@@ -343,6 +359,12 @@ export async function getLpRoomData(orgId: string): Promise<LpRoomData> {
       .sort()[0] ?? null;
   const focusStrategy = fundProfile.focusAreas.join(', ');
   const strategy = fundProfile.strategy ?? (focusStrategy || 'Strategy not set');
+  const vintage = earliestYear([
+    ...capitalAccountRows.map((row) => row.entry_date),
+    ...commitmentRows.map((row) => row.created_at),
+    ...distributionRows.map((row) => row.distribution_date),
+    ...updateRows.map((row) => row.posted_at)
+  ]);
   const dpi = called > 0 && distributed > 0 ? `${(distributed / called).toFixed(2)}x` : undefined;
   const tvpi =
     called > 0 && capitalAccount.navBalance !== null
@@ -351,7 +373,7 @@ export async function getLpRoomData(orgId: string): Promise<LpRoomData> {
 
   const fund: FundOverview = {
     name: fundProfile.fundName,
-    vintage: new Date().getFullYear(),
+    vintage,
     strategy,
     sizeTarget: target > 0 ? money(target, currency) : 'TBD',
     committed: money(committed, currency),

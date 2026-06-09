@@ -258,7 +258,13 @@ begin
   ) then
     create policy "members read lp_room_documents" on public.lp_room_documents
       for select to authenticated
-      using (private.is_org_member(org_id));
+      using (
+        private.is_org_member(org_id)
+        and (
+          access_level <> 'admin-only'
+          or private.is_org_admin(org_id)
+        )
+      );
   end if;
 
   if not exists (
@@ -433,8 +439,19 @@ begin
       using (
         bucket_id = 'lp-room-documents'
         and case
-          when (storage.foldername(name))[1] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-            then private.is_org_member(((storage.foldername(name))[1])::uuid)
+          when (storage.foldername(storage.objects.name))[1] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            then exists (
+              select 1
+              from public.lp_room_documents document
+              where document.storage_bucket = storage.objects.bucket_id
+                and document.storage_path = storage.objects.name
+                and document.org_id = ((storage.foldername(storage.objects.name))[1])::uuid
+                and private.is_org_member(document.org_id)
+                and (
+                  document.access_level <> 'admin-only'
+                  or private.is_org_admin(document.org_id)
+                )
+            )
           else false
         end
       );

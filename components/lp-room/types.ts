@@ -184,7 +184,7 @@ export interface LpQuestionDraft {
 }
 
 export type LpQuestionSubmitResult =
-  | { ok: true; questionId?: string }
+  | { ok: true; questionId: string }
   | { ok: false; error: string };
 
 /* ----------------------------------------------------------------------------

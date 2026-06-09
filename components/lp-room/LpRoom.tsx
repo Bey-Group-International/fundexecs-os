@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FundOverviewCard } from './FundOverviewCard';
 import { DocumentVaultList } from './DocumentVaultList';
@@ -34,9 +34,11 @@ export function LpRoom({ data, onOpenDocument, onSubmitQuestion }: LpRoomProps) 
   const router = useRouter();
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const openingRequestRef = useRef<string | null>(null);
 
   const handleOpenDocument = useCallback(
     async (documentId: string) => {
+      openingRequestRef.current = documentId;
       setOpeningDocumentId(documentId);
       setDocumentError(null);
       try {
@@ -44,15 +46,20 @@ export function LpRoom({ data, onOpenDocument, onSubmitQuestion }: LpRoomProps) 
           ? await onOpenDocument(documentId)
           : await openLpDocument(documentId);
         if (!result.ok) {
-          setDocumentError(result.error);
+          if (openingRequestRef.current === documentId) setDocumentError(result.error);
           return;
         }
         const opened = window.open(result.signedUrl, '_blank', 'noopener,noreferrer');
         if (!opened) window.location.assign(result.signedUrl);
       } catch (err) {
-        setDocumentError(err instanceof Error ? err.message : 'Document could not be opened.');
+        if (openingRequestRef.current === documentId) {
+          setDocumentError(err instanceof Error ? err.message : 'Document could not be opened.');
+        }
       } finally {
-        setOpeningDocumentId(null);
+        if (openingRequestRef.current === documentId) {
+          openingRequestRef.current = null;
+          setOpeningDocumentId(null);
+        }
       }
     },
     [onOpenDocument]

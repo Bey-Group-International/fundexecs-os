@@ -11,7 +11,15 @@ const STATUS_TONE: Record<CommitmentScheduleRow['status'], BadgeTone> = {
 };
 
 function humanize(value: string): string {
-  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((token) => {
+      if (/[A-Z]/.test(token)) return token;
+      if (token.length <= 2) return token.toUpperCase();
+      return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+    })
+    .join(' ');
 }
 
 export interface CommitmentTrackerProps {

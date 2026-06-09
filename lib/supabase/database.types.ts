@@ -2532,7 +2532,7 @@ export type Database = {
         Row: {
           author_id: string | null
           author_name: string
-          author_role: string | null
+          author_role: string
           body: string
           created_at: string
           id: string
@@ -2545,7 +2545,7 @@ export type Database = {
         Insert: {
           author_id?: string | null
           author_name?: string
-          author_role?: string | null
+          author_role?: string
           body: string
           created_at?: string
           id?: string
@@ -2558,7 +2558,7 @@ export type Database = {
         Update: {
           author_id?: string | null
           author_name?: string
-          author_role?: string | null
+          author_role?: string
           body?: string
           created_at?: string
           id?: string
