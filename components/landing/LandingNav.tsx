@@ -5,9 +5,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EarnCoin } from '@/components/screens/EarnCoin';
-
-const PRIMARY_CTA =
-  'inline-flex items-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-4 py-2 text-sm font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+import { NAV_CTA } from '@/components/landing/cta';
 
 /**
  * LandingNav — the public marketing nav. Sticky; gains a subtle backdrop blur
@@ -59,7 +57,7 @@ export function LandingNav() {
           >
             Sign in
           </Link>
-          <Link href="/login" className={PRIMARY_CTA}>
+          <Link href="/login" className={NAV_CTA}>
             Get started
             <ArrowRight size={15} strokeWidth={1.9} aria-hidden />
           </Link>

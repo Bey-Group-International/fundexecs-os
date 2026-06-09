@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { Card } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Reveal, Stagger, StaggerItem, Magnetic } from '@/components/landing/Motion';
+import { PRIMARY_CTA } from '@/components/landing/cta';
 
 /* ============================================================================
  * components/landing/Sections.tsx — the animated content sections below the
@@ -14,9 +15,6 @@ import { Reveal, Stagger, StaggerItem, Magnetic } from '@/components/landing/Mot
  * ========================================================================= */
 
 const EASE = [0.22, 0.61, 0.36, 1] as const;
-
-const PRIMARY_CTA =
-  'inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_12px_30px_-10px_rgba(37,99,235,0.7)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
 // ── Value propositions ───────────────────────────────────────────────────────
 
