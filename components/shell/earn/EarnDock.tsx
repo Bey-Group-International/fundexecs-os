@@ -234,7 +234,12 @@ export function EarnDock({ open, onClose }: EarnDockProps) {
       data-context={earnCtx.kind}
       className={cn(
         'fixed right-0 top-0 z-[45] flex h-full w-full max-w-[400px] flex-col border-l border-hairline bg-bg-1 shadow-[var(--shadow-lg)]',
-        'transition-transform duration-300 ease-[cubic-bezier(.22,.61,.36,1)] will-change-transform',
+        // Slide-in driven by the --dur-dock-slide / --ease-standard tokens.
+        // Under reduced motion the transition is removed so the dock snaps
+        // to its final position; the Tailwind universal resetter in
+        // globals.css does not catch the `transition-*` family, so this
+        // motion-reduce variant is the explicit way to opt out.
+        'transition-transform duration-[var(--dur-dock-slide)] ease-[var(--ease-standard)] will-change-transform motion-reduce:transition-none',
         open ? 'translate-x-0' : 'translate-x-full'
       )}
     >

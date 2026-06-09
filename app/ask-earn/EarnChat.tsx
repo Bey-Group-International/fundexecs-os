@@ -67,7 +67,7 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
   const earn = getCOO();
   const router = useRouter();
   // Phase-aware cognition lifecycle (routing → retrieving → streaming → …).
-  const { phase, begin, onEvent, settle } = useEarnLifecycle();
+  const { phase, specialistSlug, begin, onEvent, settle } = useEarnLifecycle();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
@@ -313,7 +313,7 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
               </div>
             </div>
           ))}
-          <EarnCognition phase={phase} />
+          <EarnCognition phase={phase} specialistSlug={specialistSlug} />
           {error && <div className="text-[12px] text-danger">{error}</div>}
           <div ref={endRef} />
         </Card>

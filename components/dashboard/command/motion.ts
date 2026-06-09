@@ -58,6 +58,8 @@ export const MOTION_DURATIONS_S = {
   celebrate: 0.5,
   /** Mirrors `--dur-collapse`. = 280ms. Framer-motion collapse/expand body. */
   collapse: 0.28,
+  /** Mirrors `--dur-dock-slide`. = 300ms. EarnDock right-side slide. */
+  dockSlide: 0.3,
   /** Mirrors `--dur-think`. = 1250ms. Earn thinking dots cycle. */
   think: 1.25,
   /** Mirrors `--dur-celebrate-glow`. = 1600ms. */
