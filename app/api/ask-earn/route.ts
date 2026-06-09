@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { streamEarn, type EarnMessage, type EarnSource } from '@/lib/ai/earn';
+import { meterAction } from '@/lib/credits/meter';
 
 interface EarnContextHintBody {
   kind?: string;
@@ -105,6 +106,28 @@ export async function POST(req: NextRequest) {
         controller.close();
         return;
       }
+
+      // Meter this turn against the org's credit wallet (service-role debit).
+      // A genuine shortfall fails closed with a calm upgrade message; infra
+      // errors fail open inside `meterAction` so a misconfig can't break chat.
+      const meter = await meterAction(org.orgId, 'earn_chat', user.id);
+      if (!meter.ok) {
+        const tail =
+          meter.reason === 'insufficient' && meter.upgradeTo
+            ? ` Upgrade to ${meter.upgradeTo} or top up to keep going.`
+            : ' Top up to keep going.';
+        controller.enqueue(
+          line({
+            type: 'degraded',
+            message: `You're out of Earn credits for now.${tail} Your conversation is saved.`
+          })
+        );
+        controller.enqueue(line({ type: 'done' }));
+        controller.close();
+        return;
+      }
+      // Live balance for the wallet gauge (current client ignores unknown types).
+      controller.enqueue(line({ type: 'credit', balance: meter.balance, debited: meter.debited }));
 
       // Diligence is a write: it is NOT auto-run here. Earn proposes the
       // `run_diligence` tool, which surfaces a confirm card (confirm-on-write)
