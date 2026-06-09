@@ -40,6 +40,8 @@ export {
   DISC_PALETTE
 } from './avatar';
 export type { GradientStops, DiscPaletteKey } from './avatar';
+export { AGENT_CAPABILITIES, proposalForTask } from './capabilities';
+export type { AgentCapability, TaskProposal } from './capabilities';
 
 export type TeamAvatarVariant = 'tile' | 'disc';
 
