@@ -44,11 +44,12 @@ function LoadingState() {
 
 /**
  * Recommendations — Earn's coin-fronted "Recommend" experience for the current
- * question. The member triggers it explicitly (Earn never auto-suggests). On
- * request, Earn returns an insight line plus three distinct option cards, each
- * approvable (👍) or dismissable (👎). A single ♾️ control regenerates the set,
- * avoiding values the member already passed on. Renders the trigger only until
- * asked; renders nothing extra when degraded (the flow falls back to plain
+ * question. On an open (unanswered) question the builder asks Earn automatically
+ * so the member is met with suggestions; on an answered one it stays manual via
+ * the trigger. Earn returns an insight line plus three distinct option cards,
+ * each approvable (👍) or dismissable (👎). A single ♾️ control regenerates the
+ * set, avoiding values the member already passed on. Renders the trigger only
+ * until asked; renders nothing extra when degraded (the flow falls back to plain
  * manual entry — Earn never blocks).
  */
 export function Recommendations({

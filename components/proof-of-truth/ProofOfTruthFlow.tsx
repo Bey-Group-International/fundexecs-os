@@ -181,6 +181,17 @@ export function ProofOfTruthFlow({
   useEffect(() => {
     typedRef.current = typedByQuestion;
   }, [typedByQuestion]);
+  // Mirrors of the recommendation + disliked maps, so the auto-suggest effect can
+  // read the latest state without listing them as deps (which would re-run it on
+  // every fetch tick / keystroke and risk a double request).
+  const recRef = useRef(recByQuestion);
+  useEffect(() => {
+    recRef.current = recByQuestion;
+  }, [recByQuestion]);
+  const dislikedRef = useRef(dislikedByQuestion);
+  useEffect(() => {
+    dislikedRef.current = dislikedByQuestion;
+  }, [dislikedByQuestion]);
 
   // Keystroke-level autosave: debounce-persist typed-but-unapproved text into the
   // resumable draft, so a crash / logout / accidental close mid-sentence never
@@ -325,14 +336,34 @@ export function ProofOfTruthFlow({
     []
   );
 
-  // Do NOT auto-fetch on entering a question. The member triggers Earn via the
-  // Recommend button. On unmount/question-change, invalidate any in-flight fetch.
+  // On question-change / unmount, invalidate any in-flight fetch so a stale
+  // response can't land on the wrong question.
   useEffect(() => {
     const tokenRef = requestToken;
     return () => {
       tokenRef.current++;
     };
   }, [index, memberType]);
+
+  // Proactively bring Earn's recommendations to every open question: as the
+  // builder lands on a question that isn't answered yet, fetch three suggestions
+  // so the member is met with options to compound value, not a blank box. The
+  // per-question cache (recRef) makes this fire at most once per question; a
+  // short debounce means skimming past a question never spends a call, and the
+  // member can still regenerate or pass on any option. Answered questions stay
+  // opt-in (manual "Recommend"), so editing doesn't re-run cost on every field.
+  useEffect(() => {
+    if (stage !== 'qa' || !question || !memberType) return;
+    if (recRef.current[question.id]?.requested) return; // already fetched this session
+    if ((answersRef.current[question.id] ?? '').trim()) return; // already answered → opt-in
+    const q = question;
+    const type = memberType;
+    const timer = window.setTimeout(() => {
+      if (recRef.current[q.id]?.requested) return;
+      fetchRecommendations(q, type, dislikedRef.current[q.id] ?? []);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [stage, memberType, question, fetchRecommendations]);
 
   // --- recommendation actions ---
 
@@ -736,7 +767,7 @@ export function ProofOfTruthFlow({
             </div>
           </div>
 
-          {/* Earn recommends — only on the Recommend button (never auto). */}
+          {/* Earn recommends — auto-surfaced on open questions, manual on answered. */}
           <Recommendations
             requested={rec.requested}
             loading={rec.loading}

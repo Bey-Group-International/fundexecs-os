@@ -23,6 +23,8 @@ import { createProfileShareLink } from '@/lib/actions/profile-share';
 import type { FundProfile, ProfileSection } from '@/lib/queries/fund-profile';
 
 const ONBOARDING = '/onboarding';
+/** General edit intent — clears the middleware's post-publish onboarding bounce. */
+const EDIT = `${ONBOARDING}?edit=1`;
 
 function toneForScore(score: number): { color: string; bg: string; label: string } {
   if (score >= 75) return { color: 'var(--success)', bg: 'var(--success-soft)', label: 'Strong' };
@@ -90,11 +92,16 @@ export function ProfileActionButton({
     setDrawerOpen(true);
   }, []);
 
-  // Primary action is mixed by state: review-in-place at 100%, else keep building.
+  // Primary action is mixed by state: review-in-place at 100%, else open the
+  // builder focused on the highest-priority gap (the work that compounds most),
+  // falling back to a general edit when there's no specific gap.
   const onPrimary = useCallback(() => {
-    if (isReview) openReview();
-    else router.push(ONBOARDING);
-  }, [isReview, openReview, router]);
+    if (isReview) {
+      openReview();
+      return;
+    }
+    router.push(topGaps[0] ? gapHref(topGaps[0].field) : EDIT);
+  }, [isReview, openReview, router, topGaps]);
 
   // Mint (or reuse) the public share link and copy it. Reactive state feeds the
   // menu label so the click resolves to a clear "Link copied" / error inline.
@@ -265,7 +272,7 @@ export function ProfileActionButton({
                 />
               ))}
               <MenuLinkRow
-                href={ONBOARDING}
+                href={EDIT}
                 icon={PenLine}
                 label={
                   profile.gaps.length > topGaps.length
@@ -277,7 +284,7 @@ export function ProfileActionButton({
             </MenuGroup>
           ) : (
             <MenuLinkRow
-              href={ONBOARDING}
+              href={EDIT}
               icon={PenLine}
               label="Edit in onboarding"
               onNavigate={() => setMenuOpen(false)}
@@ -321,7 +328,7 @@ export function ProfileActionButton({
               Close
             </button>
             <Link
-              href={ONBOARDING}
+              href={EDIT}
               className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--cta-gradient)] px-3 py-1.5 text-[12px] font-semibold text-white shadow-[var(--shadow-cta)] transition hover:brightness-110"
             >
               Open in onboarding

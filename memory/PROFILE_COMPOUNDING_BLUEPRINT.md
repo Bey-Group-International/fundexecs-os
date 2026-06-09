@@ -139,3 +139,17 @@ already fires on save (`lib/ai/profile-embedding.ts`), so the count is live.
 **All five phases shipped.** The Profile is now a compounding ladder end to end:
 honest depth scoring → impact-ranked, never-stuck wizard → guided resume →
 persisted readiness → a visible payoff at the top of every rung.
+
+## Builder assistance (post-loop refinement)
+
+"Resume profile" is the editable builder, met with Earn's help on every open
+question:
+- **Resume routes into the builder, focused on the top gap.** `ProfileActionButton`
+  (primary + menu + drawer) and the Settings/Profile links now carry an edit
+  intent (`?focus=<field>` / `?edit=1`), so they clear the middleware bounce and
+  land — guided — on the highest-value gap.
+- **Recommendations come to each open question automatically.** The wizard fetches
+  Earn's three suggestions when it lands on an unanswered question (debounced,
+  cached once per question), so the member is met with options to compound value
+  rather than a blank box. Answered fields stay opt-in (manual "Recommend") to
+  keep editing cheap; the member can always regenerate or pass on any option.
