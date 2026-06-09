@@ -17,7 +17,10 @@ type Admin = ReturnType<typeof createAdminClient>;
 
 /** Distinct org ids that have at least one active member. */
 async function activeOrgIds(admin: Admin): Promise<string[]> {
-  const { data } = await admin.from('org_members').select('org_id').eq('status', 'active');
+  const { data, error } = await admin.from('org_members').select('org_id').eq('status', 'active');
+  if (error) {
+    throw new Error(`failed to load active orgs: ${error.message}`);
+  }
   return [...new Set((data ?? []).map((r) => r.org_id))];
 }
 

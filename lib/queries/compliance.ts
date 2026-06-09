@@ -44,6 +44,7 @@ const EMPTY: ComplianceLane = {
   highCount: 0
 };
 
+/** Map the stored lowercase priority ('high'/'low'/...) to the UI's CompliancePriority, defaulting to Medium. */
 function normalizePriority(priority: string): CompliancePriority {
   const p = priority.toLowerCase();
   if (p === 'high') return 'High';
@@ -51,6 +52,7 @@ function normalizePriority(priority: string): CompliancePriority {
   return 'Medium';
 }
 
+/** Collapse a stored status + archived_at into the lane's tri-state ('open' | 'done' | 'archived'). */
 function normalizeState(status: string, archivedAt: string | null): ComplianceObjective['state'] {
   if (archivedAt) return 'archived';
   const s = status.toLowerCase();
@@ -88,6 +90,7 @@ export async function getComplianceLane(orgId: string): Promise<ComplianceLane> 
     )
     .eq('org_id', orgId)
     .eq('category', 'compliance')
+    .eq('owner_specialist', COMPLIANCE_OWNER_SLUG)
     .is('deleted_at', null)
     .order('created_at', { ascending: true });
 

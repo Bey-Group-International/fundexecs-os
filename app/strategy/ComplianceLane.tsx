@@ -25,6 +25,7 @@ const PRIORITY_TONE: Record<ComplianceObjective['priority'], BadgeTone> = {
   Low: 'neutral'
 };
 
+/** One compliance objective: shield/radar mark, title, priority + state badges, timeline, and Adrian's note. */
 function ComplianceRow({ o }: { o: ComplianceObjective }) {
   const done = o.state === 'done';
   return (
@@ -78,6 +79,7 @@ function ComplianceRow({ o }: { o: ComplianceObjective }) {
   );
 }
 
+/** Renders the standing compliance tier card: Adrian's header, the lane intro, and the objective rows (or its empty state). */
 export function ComplianceLane({ lane }: ComplianceLaneProps) {
   const { ownerName, ownerRole, objectives, highCount } = lane;
 

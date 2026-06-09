@@ -73,6 +73,24 @@ begin
     return null;
   end if;
 
+  -- Authorize: the cron (service_role) or an active member of the org. Without
+  -- this guard any authenticated caller could seed a lane into an arbitrary org
+  -- (the function is SECURITY DEFINER and bypasses RLS).
+  if coalesce((select auth.role()), '') <> 'service_role'
+     and not exists (
+       select 1 from public.org_members om
+       where om.org_id = _org
+         and om.user_id = auth.uid()
+         and om.status = 'active'
+     )
+  then
+    raise exception 'not a member of org %', _org using errcode = '42501';
+  end if;
+
+  -- Serialize concurrent seeds for the same org so the select-then-insert
+  -- below stays race-free (two first-reads cannot both create the lane).
+  perform pg_advisory_xact_lock(hashtext(_org::text));
+
   -- One canonical compliance lane per org. Match on the category marker so we
   -- never create a duplicate plan, regardless of name.
   select id
@@ -173,7 +191,21 @@ begin
     return 0;
   end if;
 
-  -- (a) Never-empty guarantee.
+  -- Authorize: the cron (service_role) or an active member of the org. Mirrors
+  -- ensure_compliance_tier; this RPC is SECURITY DEFINER and mutates org rows.
+  if coalesce((select auth.role()), '') <> 'service_role'
+     and not exists (
+       select 1 from public.org_members om
+       where om.org_id = _org
+         and om.user_id = auth.uid()
+         and om.status = 'active'
+     )
+  then
+    raise exception 'not a member of org %', _org using errcode = '42501';
+  end if;
+
+  -- (a) Never-empty guarantee. Takes a per-org advisory xact lock that also
+  -- serializes the signal-draft insert in section (c) below.
   _plan := public.ensure_compliance_tier(_org);
   if _plan is null then
     return 0;
