@@ -3,6 +3,15 @@
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { awardTrustXp } from '@/lib/actions/xp';
+import { loadLifecycleContext } from '@/lib/queries/dashboard/lifecycle';
+import { computeLifecycleStageResult } from '@/lib/lifecycle';
+import {
+  computeCascadeChildren,
+  detectGateUnlock,
+  type GateUnlock,
+  type ObjectiveTier,
+  type CascadeChildSpec
+} from '@/lib/strategy/compounding';
 import type { Database } from '@/lib/supabase/database.types';
 
 type ObjectiveRow = Database['public']['Tables']['governance_objectives']['Row'];
@@ -193,6 +202,136 @@ export async function setObjectiveStatus(
     }
   }
   return { ok: true, objective: data as ObjectiveRow };
+}
+
+/* ---------------------------------------------------------------------------
+ * Compounding: cascade on completion + gate-unlock writeback (Phase 2b).
+ * ------------------------------------------------------------------------- */
+
+/** Derive the 100/30/10 tier from an objective's plan horizon + timeline. */
+function deriveTier(horizon: string | null, timeline: string | null): ObjectiveTier {
+  const hay = `${horizon ?? ''} ${timeline ?? ''}`.toLowerCase();
+  if (hay.includes('100')) return '100';
+  if (hay.includes('30')) return '30';
+  if (hay.includes('10')) return '10';
+  return '100';
+}
+
+/**
+ * Spawn the next-tier child drafts for a completed objective. Closing a 100-day
+ * bet proposes its 30-day milestone; a 30 proposes a 10-day move; a 10 is a leaf
+ * (no children). Children are inserted as `source='cascade'` drafts (unapproved)
+ * so the operator still confirms them — "Earn drafts, you approve". Best-effort:
+ * any failure leaves the parent completion intact. Exported so it can be invoked
+ * directly (e.g. from a batch flow) as well as from the completion path.
+ */
+export async function cascadeObjective(id: string): Promise<{ spawned: number }> {
+  try {
+    const org = await getActiveOrg();
+    if (!org) return { spawned: 0 };
+
+    const supabase = await createClient();
+    const { data: parent } = await supabase
+      .from('governance_objectives')
+      .select('id, org_id, plan_id, objective, timeline, category, lifecycle_stage')
+      .eq('id', id)
+      .maybeSingle();
+    if (!parent) return { spawned: 0 };
+
+    const { data: plan } = await supabase
+      .from('governance_plans')
+      .select('horizon')
+      .eq('id', parent.plan_id)
+      .maybeSingle();
+
+    const tier = deriveTier(
+      (plan as { horizon: string | null } | null)?.horizon ?? null,
+      parent.timeline
+    );
+    const children: CascadeChildSpec[] = computeCascadeChildren({
+      tier,
+      title: parent.objective,
+      category: parent.category,
+      lifecycleStage: parent.lifecycle_stage
+    });
+    if (children.length === 0) return { spawned: 0 };
+
+    const rows: ObjectiveInsert[] = children.map((c) => ({
+      org_id: parent.org_id,
+      plan_id: parent.plan_id,
+      objective: c.objective,
+      timeline: c.timeline,
+      priority: 'medium',
+      status: 'open',
+      owner_id: org.userId,
+      source: 'cascade',
+      parent_objective_id: parent.id,
+      category: c.category,
+      lifecycle_stage: c.lifecycleStage
+      // approved_at intentionally left null → enters as a pending draft.
+    }));
+
+    const { data, error } = await supabase.from('governance_objectives').insert(rows).select('id');
+    if (error) return { spawned: 0 };
+    return { spawned: (data ?? []).length };
+  } catch {
+    return { spawned: 0 };
+  }
+}
+
+export interface CompleteObjectiveResult {
+  ok: boolean;
+  error?: string;
+  objective?: ObjectiveRow;
+  /** Cascade children spawned as drafts (count). */
+  cascadeSpawned: number;
+  /** The stage a newly-cleared gate unlocked, when completion flipped one. */
+  gateUnlock: GateUnlock | null;
+}
+
+/**
+ * Complete an objective with the full compounding payload: marks it done (reusing
+ * `setObjectiveStatus`), spawns the next-tier cascade drafts, and re-runs the
+ * lifecycle engine to detect whether the completion flipped a gate cleared — if
+ * so it surfaces the unlocked stage. Each compounding step is best-effort and
+ * never undoes the completion. RLS-scoped via the underlying actions.
+ */
+export async function completeObjective(id: string): Promise<CompleteObjectiveResult> {
+  if (!id)
+    return { ok: false, error: 'Missing objective id.', cascadeSpawned: 0, gateUnlock: null };
+
+  const org = await getActiveOrg();
+
+  // Snapshot the lifecycle gates BEFORE the write so we can diff for an unlock.
+  let beforeGates: ReturnType<typeof computeLifecycleStageResult>['gatesCleared'] | null = null;
+  if (org) {
+    try {
+      const { inputs } = await loadLifecycleContext(org.orgId);
+      beforeGates = computeLifecycleStageResult(inputs).gatesCleared;
+    } catch {
+      beforeGates = null;
+    }
+  }
+
+  const result = await setObjectiveStatus(id, 'completed');
+  if (!result.ok) return { ok: false, error: result.error, cascadeSpawned: 0, gateUnlock: null };
+
+  // Cascade — spawn the next-tier draft(s).
+  const { spawned } = await cascadeObjective(id);
+
+  // Gate-unlock — re-run the engine and diff the gate state.
+  let gateUnlock: GateUnlock | null = null;
+  if (org && beforeGates) {
+    try {
+      const { inputs } = await loadLifecycleContext(org.orgId);
+      const afterGates = computeLifecycleStageResult(inputs).gatesCleared;
+      gateUnlock = detectGateUnlock(beforeGates, afterGates);
+    } catch {
+      gateUnlock = null;
+    }
+  }
+
+  return { ok: true, objective: result.objective, cascadeSpawned: spawned, gateUnlock };
 }
 
 /**

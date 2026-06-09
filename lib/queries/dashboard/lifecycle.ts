@@ -450,6 +450,79 @@ async function loadMaterialsReadiness(orgId: string): Promise<number> {
 }
 
 /* ---------------------------------------------------------------------------
+ * Lightweight lifecycle inputs — for callers that only need the stage/gate
+ * state (e.g. the strategy gate-unlock writeback), not the full dashboard.
+ * ------------------------------------------------------------------------- */
+
+/** The lifecycle inputs plus the trust layers, for reuse by the strategy layer. */
+export interface LifecycleContext {
+  inputs: LifecycleInputs;
+  trust: { truth: number; concept: number; execution: number; work: number };
+}
+
+/**
+ * Build just the `LifecycleInputs` for an org by composing the same loaders
+ * `getDashboardData` uses, without the heavier command-center / momentum / feed
+ * reads. Exported so server actions can re-run `computeLifecycleStageResult`
+ * around a write (gate-unlock detection) and the strategy loader can derive a
+ * real objective `pct`. RLS-scoped; degrades to a zero-state on any failure.
+ */
+export async function loadLifecycleContext(orgId: string): Promise<LifecycleContext> {
+  const zeroTrust = { truth: 0, concept: 0, execution: 0, work: 0 };
+  try {
+    const fundProfile = await getFundProfile(orgId);
+    const [trust, pipeline, materialsReadiness, raiseProgress] = await Promise.all([
+      loadTrustProgress(orgId, fundProfile.managerUserId),
+      loadPipelineSignals(orgId),
+      loadMaterialsReadiness(orgId),
+      loadRaiseProgress(orgId, fundProfile)
+    ]);
+
+    const layers = {
+      truth: trust.truth,
+      concept: trust.concept,
+      execution: trust.execution,
+      work: trust.work
+    };
+    const inputs: LifecycleInputs = {
+      profileCompleteness: fundProfile.completenessScore,
+      trust: layers,
+      hasTrustRecord: trust.hasRecord,
+      materialsReadiness,
+      pipeline: {
+        total: pipeline.total,
+        contacted: pipeline.contacted,
+        softCircled: pipeline.softCircled,
+        committed: pipeline.committed,
+        inDiligence: pipeline.inDiligence
+      },
+      raise: {
+        target: raiseProgress.target,
+        softCircled: raiseProgress.softCircled,
+        committed: raiseProgress.committed
+      },
+      hasDeployedCapital: raiseProgress.committed > 0,
+      completedDiligenceRuns: pipeline.completedDiligenceRuns
+    };
+    return { inputs, trust: layers };
+  } catch {
+    return {
+      inputs: {
+        profileCompleteness: 0,
+        trust: zeroTrust,
+        hasTrustRecord: false,
+        materialsReadiness: 0,
+        pipeline: { total: 0, contacted: 0, softCircled: 0, committed: 0, inDiligence: 0 },
+        raise: { target: 0, softCircled: 0, committed: 0 },
+        hasDeployedCapital: false,
+        completedDiligenceRuns: 0
+      },
+      trust: zeroTrust
+    };
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * Stage-appropriate KPIs + actions.
  * ------------------------------------------------------------------------- */
 
