@@ -327,7 +327,7 @@ function ProofOfTruthCard({
           </div>
         </div>
         <Link
-          href="/onboarding"
+          href="/onboarding?edit=1"
           className="inline-flex flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-3 py-1.5 text-[12.5px] font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] transition hover:brightness-110"
         >
           {cta}

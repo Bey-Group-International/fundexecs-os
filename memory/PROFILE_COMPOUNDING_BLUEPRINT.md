@@ -13,13 +13,13 @@ phase keeps the never-block / degrade-gracefully posture and is covered by
 
 ## The five gaps between "slice" and "full loop"
 
-| #   | Today                                                                                         | Full compounding loop                                                |
-| --- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| 1   | ✅ **Shipped** — depth scoring (`scoreDepth`) across field types: numbers, specificity, proof | —                                                                    |
-| 2   | Wizard is still linear paging with a "next gap" augment                                       | **Single highest-value question** served at a time                   |
-| 3   | `nextGapIndex` = forward scan in schema order                                                 | **Impact-ranked** next-best-question (tier × counterparty weight)    |
-| 4   | `completion_pct` written as hardcoded 100 on save                                             | Persist the **real ladder score** + per-rung state                   |
-| 5   | Ladder is private to the member                                                               | **Compounding payoff surfaced**: "Mandate complete → matchable to N" |
+| #   | Today                                                                                           | Full compounding loop |
+| --- | ----------------------------------------------------------------------------------------------- | --------------------- |
+| 1   | ✅ **Shipped** — depth scoring (`scoreDepth`) across field types: numbers, specificity, proof   | —                     |
+| 2   | ✅ **Shipped** — guided entry resumes at the open rung; visited-stack Back                      | —                     |
+| 3   | ✅ **Shipped** — impact-ranked next-best gap (`rankedOpenGaps` + `compareGaps`) + skip loop     | —                     |
+| 4   | ✅ **Shipped** — publish persists the honest `completion_pct` (`ladder.overallPct`)             | —                     |
+| 5   | ✅ **Shipped** — completed rungs show their payoff ("Matchable — N waiting", "Diligence-ready") | —                     |
 
 ## Phase 1 — Depth scoring (completed in the readiness-ladder PR)
 
@@ -65,43 +65,77 @@ stays an open gap on the record and in Review, so skip always means "come back
 later", never "lose it". The old disabled-`Next` dead-end on required questions
 is gone.
 
-## Phase 3 — True one-question-at-a-time wizard
+## Phase 3 — True one-question-at-a-time wizard ✅ shipped
 
-**Problem:** the flow still pages linearly; answered fields reappear on Back/Next.
+**Problem:** entry always started at question one and Back walked schema order —
+incoherent now that forward motion (Phase 2) jumps by impact.
 
-**Design (additive mode, not a rewrite):** add `mode: 'guided' | 'linear'` to
-`ProofOfTruthFlow`. Default **guided** on resume / "close gap" entry; **linear**
-for true first-run so a first-timer still sees the full arc. Guided mode drives
-the index off `rankedGaps`, auto-advances on approve, shows the
-"Institutionally ready" capstone at zero gaps, and keeps a visited-stack so Back
-stays navigable.
+**Delivered — `mode: 'guided' | 'linear'` on `ProofOfTruthFlow`:**
 
-## Phase 4 — Persist the real ladder
+- **Guided entry resumes at the open rung:** drops the member straight on the
+  highest-impact open gap (`rankedOpenGaps[0]`), or straight to Review when the
+  record is already strong. A close-gap `focusField` still wins.
+- **Linear entry** starts at question one, so a true first-timer walks the full
+  arc. Mode is inferred when not passed: a close-gap link or any existing
+  progress → guided; an empty profile → linear.
+- **Visited-stack Back:** a `history` stack records the questions actually
+  served, so Back returns to the previous _screen_ — not the schema-previous
+  question the gap loop jumped over.
+- Review's Back lands on the first thing still worth fixing (incl. skipped).
 
-**Problem:** `answersToProfileInput` hardcodes `completionPct: 100`; the DB never
-reflects partial readiness.
+**Reachability — resolved:** `middleware.ts` still bounces a `status: 'complete'`
+profile away from `/onboarding` (so it can't get stuck re-running the flow), but
+now lets through an explicit **edit intent** — a `?focus=` close-gap link or
+`?edit=1`. The Profile's section cards deep-link to `?focus=<field>`, gaps to
+`?focus=<gap>`, and Settings to `?edit=1`, so editing a published record works
+end to end and lands guided on the field in question.
 
-**Design:** compute the ladder at save time; write
-`completion_pct = ladder.overallPct` and
-`status = ladder.institutionalReady ? 'complete' : 'in_progress'`. Optionally
-stash `details.__ladder = { readinessTierId, overallPct }` (no migration) so the
-dashboard rail can read achieved readiness without recomputing.
+## Phase 4 — Persist the real ladder ✅ shipped
 
-## Phase 5 — Surface the compounding payoff
+**Problem:** `answersToProfileInput` hardcoded `completionPct: 100`, so the DB and
+the Settings "Proof of Truth" % always read 100 regardless of what was actually
+strong.
 
-**Problem:** climbing a rung has no felt consequence — the "multiply value" is
+**Delivered:** publish now writes `completionPct = ladder.overallPct` (the
+depth-weighted score), so `member_profiles.completion_pct` — surfaced on
+`/settings` and the trust surface — tells the truth.
+
+**Deliberately NOT done:** the original sketch tied `status` to
+`institutionalReady`. That would have **trapped** members — `middleware.ts` uses
+`member_profiles.status === 'complete'` as the onboarding gate, force-redirecting
+anything else back to `/onboarding` on every route. Publishing keeps
+`status: 'complete'` (onboarding is done the moment they publish); readiness is
+carried by the honest `completion_pct`, never by the gate. No `details.__ladder`
+stash either — the dashboard/hero already recompute the ladder server-side via
+`getFundProfile`, so persisting it would only risk going stale.
+
+## Phase 5 — Surface the compounding payoff ✅ shipped
+
+**Problem:** climbing a rung had no felt consequence — the "multiply value" was
 invisible.
 
-**Design:** when a rung flips complete, show a one-line payoff in `ProfileLadder`
-/ the wizard capstone — Mandate → "You're now matchable" (+ a live count of
-matchable LP mandates from the existing matching layer, fail-open); Evidence →
-"Diligence-ready". The embedding refresh already fires on save
-(`lib/ai/profile-embedding.ts`); this just reads the matching count.
+**Delivered — `buildPayoffs({ memberType, matchCount })` + a `payoffs` prop on
+`ProfileLadder`:** once a rung reads complete it shows the consequence it
+unlocked instead of a generic "On the record":
+
+- **Mandate → "Matchable — N matches waiting"** when there's a live count
+  (`getPendingMatchCount` over the `matches` table, head-only, fail-open to 0),
+  degrading to a member-type-aware "Matchable to <counterparty>" otherwise.
+- **Identity → "Discoverable on the network"**, **Evidence → "Diligence-ready"**.
+
+`/profile` passes the live count (server-side); the wizard Review passes the
+qualitative lines (client-side, no fetch). `ProfileLadder` stays pure — the
+caller supplies the payoffs. The embedding refresh that keeps matching warm
+already fires on save (`lib/ai/profile-embedding.ts`), so the count is live.
 
 ## Sequencing
 
 1. ~~**Phase 1 — depth scoring**~~ ✅ shipped — makes the ladder honest.
 2. ~~**Phase 2 — ranking**~~ ✅ shipped — incl. the never-stuck / skip loop.
-3. **Phase 4 — persist** (small, independent) — persist real ladder pct on save.
-4. **Phase 3 — guided wizard** (build on `rankedOpenGaps` + the skip stack).
-5. **Phase 5 — payoff** (polish; own PR).
+3. ~~**Phase 4 — persist**~~ ✅ shipped — honest `completion_pct` on publish.
+4. ~~**Phase 3 — guided wizard**~~ ✅ shipped — guided resume + visited-stack Back.
+5. ~~**Phase 5 — payoff**~~ ✅ shipped — completed rungs surface what they unlock.
+
+**All five phases shipped.** The Profile is now a compounding ladder end to end:
+honest depth scoring → impact-ranked, never-stuck wizard → guided resume →
+persisted readiness → a visible payoff at the top of every rung.
