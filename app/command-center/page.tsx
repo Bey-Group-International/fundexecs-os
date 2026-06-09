@@ -9,6 +9,7 @@ import { getMemberProfile } from '@/lib/queries/member-profile';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getDashboardData } from '@/lib/queries/dashboard';
 import { getCommandMetrics } from '@/lib/queries/dashboard/command-metrics';
+import { getTeamTasks } from '@/lib/queries/dashboard/team-tasks';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { LifecycleDashboard } from '@/components/dashboard/LifecycleDashboard';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
@@ -86,7 +87,7 @@ export default async function CommandCenterPage() {
     );
   }
 
-  const [dashboard, wallet, fundProfile, metrics, briefSeen] = await Promise.all([
+  const [dashboard, wallet, fundProfile, metrics, teamTasks, briefSeen] = await Promise.all([
     getDashboardData(org.orgId),
     getCreditWallet(org.orgId),
     getFundProfile(org.orgId),
@@ -95,6 +96,7 @@ export default async function CommandCenterPage() {
       underReview: 0,
       tasksDueThisWeek: 0
     })),
+    getTeamTasks(org.orgId).catch(() => ({})),
     readBriefSeen()
   ]);
   const navSignals = buildRailSignals(dashboard, memberType);
@@ -118,6 +120,7 @@ export default async function CommandCenterPage() {
         memberType={memberType}
         data={dashboard}
         metrics={metrics}
+        teamTasks={teamTasks}
         fundProfile={fundProfile}
         showLaunchBrief={showLaunchBrief}
       />

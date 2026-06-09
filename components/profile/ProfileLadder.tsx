@@ -31,10 +31,21 @@ export interface ProfileLadderProps {
   ladder: ProfileLadderState;
   /** 'full' = the Profile surface strip; 'compact' = the wizard header. */
   variant?: 'full' | 'compact';
+  /**
+   * Per-rung payoff line shown once a rung is complete — the compounding
+   * consequence it unlocks (e.g. "Matchable — 12 matches waiting"). Optional;
+   * when absent a completed rung just reads "On the record".
+   */
+  payoffs?: Partial<Record<ProfileTierId, string>>;
   className?: string;
 }
 
-export function ProfileLadder({ ladder, variant = 'full', className }: ProfileLadderProps) {
+export function ProfileLadder({
+  ladder,
+  variant = 'full',
+  payoffs,
+  className
+}: ProfileLadderProps) {
   const compact = variant === 'compact';
 
   return (
@@ -130,15 +141,26 @@ export function ProfileLadder({ ladder, variant = 'full', className }: ProfileLa
                 </div>
               )}
 
-              {!compact && (
-                <p className="text-[10.5px] leading-snug text-fg-4">
-                  {rung.gaps > 0 && !rung.complete
-                    ? `${rung.gaps} to close`
-                    : rung.complete
-                      ? 'On the record'
-                      : rung.tier.blurb}
-                </p>
-              )}
+              {!compact &&
+                (() => {
+                  const payoff = rung.complete ? payoffs?.[rung.tier.id] : undefined;
+                  return (
+                    <p
+                      className={cn(
+                        'text-[10.5px] leading-snug',
+                        payoff ? 'font-medium text-gold-1' : 'text-fg-4'
+                      )}
+                    >
+                      {payoff
+                        ? payoff
+                        : rung.gaps > 0 && !rung.complete
+                          ? `${rung.gaps} to close`
+                          : rung.complete
+                            ? 'On the record'
+                            : rung.tier.blurb}
+                    </p>
+                  );
+                })()}
             </li>
           );
         })}

@@ -2929,36 +2929,45 @@ export type Database = {
       }
       tasks: {
         Row: {
+          agent_slug: string | null
           assignee_id: string | null
           created_at: string
           description: string | null
           due_at: string | null
           id: string
           org_id: string
+          priority: number
+          result: Json | null
           source: string
           status: string
           title: string
           updated_at: string
         }
         Insert: {
+          agent_slug?: string | null
           assignee_id?: string | null
           created_at?: string
           description?: string | null
           due_at?: string | null
           id?: string
           org_id: string
+          priority?: number
+          result?: Json | null
           source?: string
           status?: string
           title: string
           updated_at?: string
         }
         Update: {
+          agent_slug?: string | null
           assignee_id?: string | null
           created_at?: string
           description?: string | null
           due_at?: string | null
           id?: string
           org_id?: string
+          priority?: number
+          result?: Json | null
           source?: string
           status?: string
           title?: string

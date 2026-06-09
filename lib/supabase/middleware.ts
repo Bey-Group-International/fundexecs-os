@@ -233,10 +233,19 @@ export async function updateSession(request: NextRequest) {
     }
 
     if (isComplete && isOnboarding) {
-      const commandCenter = request.nextUrl.clone();
-      commandCenter.pathname = '/command-center';
-      commandCenter.search = '';
-      return redirectTo(commandCenter);
+      // A finished profile is normally bounced out of onboarding so it can't
+      // get stuck re-running the flow. But the Profile's "close gap" / "edit"
+      // deep-links return to the wizard deliberately, to sharpen a published
+      // record — honour an explicit edit intent (`?focus=` or `?edit=`) instead
+      // of redirecting, so post-publish editing actually works.
+      const isEditIntent =
+        request.nextUrl.searchParams.has('focus') || request.nextUrl.searchParams.has('edit');
+      if (!isEditIntent) {
+        const commandCenter = request.nextUrl.clone();
+        commandCenter.pathname = '/command-center';
+        commandCenter.search = '';
+        return redirectTo(commandCenter);
+      }
     }
   }
 

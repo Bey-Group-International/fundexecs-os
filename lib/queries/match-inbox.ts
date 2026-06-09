@@ -86,3 +86,18 @@ export async function getMatchInboxData(orgId: string): Promise<MatchInboxData> 
 
   return { pending, actioned, calibration, empty: items.length === 0 };
 }
+
+/**
+ * Cheap count of pending matches waiting for the org — feeds the Profile's
+ * "Matchable — N waiting" payoff. Head-only count, fail-open to 0 so the payoff
+ * never breaks the page.
+ */
+export async function getPendingMatchCount(orgId: string): Promise<number> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from('matches')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('status', 'pending');
+  return count ?? 0;
+}

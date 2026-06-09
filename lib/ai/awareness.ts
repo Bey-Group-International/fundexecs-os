@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
+import { computeCalibration } from '@/lib/queries/intelligence-calibration';
 
 /* ----------------------------------------------------------------------------
  * Live workspace awareness — a compact, real-time snapshot of the operator's
@@ -301,6 +302,55 @@ export async function buildIntelligenceGrounding(supabase: Db, orgId: string): P
         : '';
 
     return `Today's intelligence brief (already generated for this operator from live market + match signals — reference it, don't recompute):\n${body}${signals}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Surface the org's adaptive match flywheel — top signal matches awaiting
+ * review plus the model's calibration confidence — so Earn can *propose* acting
+ * on them (review/act in the match inbox via the navigate tool) rather than
+ * leaving them to the backend alone.
+ *
+ * Structured fields only (counts / scores / calibration stage) — never the
+ * match rationale free text — so it stays injection-safe in the system prompt.
+ * Reuses the pure `computeCalibration` (stage derives from accept/dismiss
+ * decisions; factors not needed here). Fails open to '' so it never blocks chat.
+ */
+export async function buildMatchGrounding(supabase: Db, orgId: string): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from('matches')
+      .select('score, status')
+      .eq('org_id', orgId)
+      .eq('kind', 'signal')
+      .order('score', { ascending: false })
+      .limit(100);
+    if (!data || data.length === 0) return '';
+
+    const awaiting = data.filter((m) => m.status !== 'accepted' && m.status !== 'dismissed');
+    const cal = computeCalibration(data.map((m) => ({ score: m.score, status: m.status })));
+
+    const parts: string[] = [];
+    if (awaiting.length > 0) {
+      const topOpen = Math.max(...awaiting.map((m) => m.score ?? 0));
+      parts.push(
+        `${awaiting.length} signal match${awaiting.length === 1 ? '' : 'es'} awaiting review` +
+          (topOpen > 0 ? `, top fit ${topOpen}/100` : '')
+      );
+    }
+    if (cal.decisions > 0) {
+      const pct = Math.round(cal.acceptanceRate * 100);
+      parts.push(
+        `match calibration ${cal.stage} (${cal.decisions} decision${
+          cal.decisions === 1 ? '' : 's'
+        }, ${pct}% accepted)`
+      );
+    }
+    if (parts.length === 0) return '';
+
+    return `Match inbox (the operator's adaptive match flywheel — when relevant, propose reviewing or acting on these in the match inbox):\n- ${parts.join('.\n- ')}.`;
   } catch {
     return '';
   }
