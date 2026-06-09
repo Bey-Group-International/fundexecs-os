@@ -53,6 +53,7 @@ are surface-specific.
 | `--dur-quick`          | `160ms`   | `0.16`            | Hover/exit reactivity.                                 |
 | `--dur-standard`       | `240ms`   | `0.24`            | Menus, popovers, in-panel toggles.                     |
 | `--dur-collapse`       | `280ms`   | `0.28`            | Framer-motion collapse/expand body (height + opacity). |
+| `--dur-dock-slide`     | `300ms`   | `0.3`             | EarnDock right-side slide-in / slide-out.              |
 | `--dur-status`         | `400ms`   | `0.4`             | Status-line handoff fade.                              |
 | `--dur-page`           | `420ms`   | `0.42`            | Page-enter rise (`fx-rise`).                           |
 | `--dur-celebrate`      | `500ms`   | `0.5`             | One-shot celebration entrance.                         |
@@ -131,39 +132,49 @@ reduced-motion tiering below.
 
 ## Reduced-motion tiering
 
-Two tiers, two behaviors under `@media (prefers-reduced-motion: reduce)`:
+Two tiers, two behaviors under `@media (prefers-reduced-motion: reduce)`.
+Phase 2 enforces this; the CSS rule structure has been split so the
+behavior matches the documentation.
 
-- **Meaningful motion stays on.** It carries state the operator needs:
-  the orb context pulse signals where Earn is focused, the Cognition
-  phases signal what step of an Earn turn we are in, the status fade
-  softens a real text-state change, the desk shimmer signals "work in
-  progress," `fx-rise` signals "you arrived at a new surface,"
-  `fx-celebrate` signals "a reward was earned." Removing this motion
-  removes information.
+- **Meaningful motion stays on, softened.** Each `fx-*` class tagged
+  `meaningful` keeps animating under reduced motion but is replaced by
+  a dedicated `fx-*-rm` keyframe that lands the element at its
+  meaningful end state in a single, calm pass:
+  - max duration is `--dur-standard` (240 ms);
+  - `animation-iteration-count` is clamped to 1 (no infinite loops);
+  - opacity-only or `≤4 px` transform; box-shadow halos are allowed;
+  - lands at the peak/settled state so the indicator stays visible
+    after the brief animation (e.g. the orb halo settles to its gold
+    ring instead of pulsing forever).
 
-- **Decorative motion goes off.** It carries no state — aurora,
-  marquee, constellation orbits, mascot float, text shimmer, gradient
-  sweeps, count-ups (the `AnimatedNumber` component snaps directly to
-  its final value under reduced motion). Removing this motion removes
-  flavor, not information.
+  The reduced-motion variants live alongside their base keyframes in
+  `app/globals.css` under the comment block "Meaningful-tier
+  reduced-motion keyframes".
 
-### Phase 1 status
+- **Decorative motion goes off.** `fx-coin-float`, `fx-marquee-animate`,
+  `fx-aurora`, `fx-text-gradient`, `fx-grid-pan`, the four constellation
+  spin classes, and `fx-sweep` are hard-disabled via
+  `animation: none !important` under reduced motion.
 
-This document codifies the tiering and tags every `fx-*` class with its
-tier in `app/globals.css`. The behavior in the
-`@media (prefers-reduced-motion: reduce)` block is intentionally
-unchanged in phase 1 — it still silences both tiers uniformly. Phase 2
-(Cognition lifecycle hardening + Earn dock motion polish) will split
-this block so meaningful classes are retained and decorative classes
-are removed under the OS preference.
+- **Safety net.** A universal `* { animation-duration: 0.001ms !important; … }`
+  rule remains as the final layer so anything the design system did NOT
+  author (third-party widgets, transient inline animations) is also
+  neutralized. The class-targeted meaningful and decorative rules above
+  beat this universal one via specificity (`0,1,0` > `0,0,0`) even when
+  both use `!important`.
 
-The global resetter inside the reduced-motion block
-(`*, *::before, *::after { animation-duration: 0.001ms; … }`) is
-intentionally heavy-handed. It guarantees that any motion the design
-system has not authored (third-party widgets, transient inline
-animations) is also neutralized when the operator asks for less motion.
-Phase 2 may refine this, but the default remains: when in doubt under
-reduced motion, prefer silence.
+### Authoring rule for new motion
+
+When you add a new `fx-*` class:
+
+1. Tag the tier in its leading comment.
+2. If it is `meaningful`, also author a sibling `fx-<name>-rm` keyframe
+   and add a class-targeted override inside the `@media
+(prefers-reduced-motion: reduce)` block. Follow the existing
+   pattern (single shot, ≤ 240 ms, opacity-led, lands at peak).
+3. If it is `decorative`, add the class to the decorative-tier
+   `animation: none !important` selector list.
+4. Update the inventory tables above in the same PR.
 
 ## Performance discipline
 
@@ -184,10 +195,12 @@ product ships.
 - **Tabular figures for any number that animates.** `AnimatedNumber`
   uses `font-feature-settings: 'tnum'` so the displayed width does not
   jitter mid-count. Any new count-up or live number must do the same.
-- **Off-screen loops should pause where the cost is non-trivial.** The
-  marquee already pauses on `:hover` and `:focus-within`. A future
-  pass should add `IntersectionObserver` pause for the landing-page
-  loops; documented here so it does not slip out of the tracking list.
+- **Off-screen loops pause where the cost is non-trivial.** The
+  marquee pauses on `:hover` and `:focus-within`, AND on
+  `data-in-view="false"` (set by an `IntersectionObserver` in
+  `ActivityTicker`), so the 60-second loop stops while the ticker is
+  off-screen. Any future long-running landing loop should follow the
+  same pattern.
 
 ## The `motion/react` rule
 
