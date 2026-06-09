@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck,
@@ -30,7 +30,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useTrustDrawer } from '@/components/shell/trust/TrustDrawerHost';
 import { TRUST_LAYERS, trustLayerMeta } from '@/components/shell/trust/trust-layers';
-import { approveEvidence } from '@/lib/actions/trust';
+import { approveEvidence, recordTrustSnapshot } from '@/lib/actions/trust';
 import type { TrustLayerKey } from '@/lib/queries/trust';
 import type {
   TrustCenterData,
@@ -89,6 +89,33 @@ function fmtTime(iso: string | null): string {
   return d.toLocaleDateString();
 }
 
+/** Tiny inline trend line for the IRI history (points are 0–100). */
+function Sparkline({ points }: { points: number[] }) {
+  if (points.length < 2) return null;
+  const w = 72;
+  const h = 20;
+  const stepX = w / (points.length - 1);
+  const y = (v: number) => h - (Math.max(0, Math.min(100, v)) / 100) * h;
+  const d = points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${(i * stepX).toFixed(1)},${y(p).toFixed(1)}`)
+    .join(' ');
+  const up = points[points.length - 1] >= points[0];
+  const color = up ? 'var(--success)' : 'var(--proof-execution)';
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
+      <path
+        d={d}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx={w} cy={y(points[points.length - 1])} r={1.9} fill={color} />
+    </svg>
+  );
+}
+
 /* ---------------------------------- header --------------------------------- */
 
 function PostureHero({ data }: { data: TrustCenterData }) {
@@ -123,6 +150,32 @@ function PostureHero({ data }: { data: TrustCenterData }) {
             height={8}
             ariaLabel="Institutional Readiness Index"
           />
+          {/* Compounding signal — how the index has moved. */}
+          {data.trend.delta !== null || data.trend.points.length > 1 ? (
+            <div className="flex items-center gap-2.5">
+              {data.trend.delta !== null ? (
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 text-[11.5px] font-semibold tabular-nums',
+                    data.trend.delta > 0
+                      ? 'text-success'
+                      : data.trend.delta < 0
+                        ? 'text-[var(--proof-execution)]'
+                        : 'text-fg-4'
+                  )}
+                >
+                  {data.trend.delta > 0 ? '▲' : data.trend.delta < 0 ? '▼' : '—'}{' '}
+                  {Math.abs(data.trend.delta)} pts
+                </span>
+              ) : (
+                <span className="text-[11px] text-fg-5">baseline reading</span>
+              )}
+              <Sparkline points={data.trend.points} />
+              {data.trend.sinceLabel ? (
+                <span className="text-[10.5px] text-fg-5">since {data.trend.sinceLabel}</span>
+              ) : null}
+            </div>
+          ) : null}
           <p className="text-[11.5px] leading-relaxed text-fg-4">
             Weighted by the capital each chain secures and by how far through the four proof layers
             it has advanced. Unweighted average across all {data.recordCount} chains is{' '}
@@ -236,13 +289,103 @@ const ACTION_ICON: Record<NextAction['kind'], LucideIcon> = {
   maintain: CircleCheck
 };
 
+/**
+ * PrimaryMove — the single highest-leverage action, surfaced as a hero band so
+ * the page leads with one move. For an approver this is usually "sign off N
+ * items gating $X", whose CTA jumps straight to the governance queue.
+ */
+function PrimaryMove({ action }: { action: NextAction }) {
+  const drawer = useTrustDrawer();
+  const Icon = ACTION_ICON[action.kind];
+  return (
+    <Card className="border-[var(--gold-line)] bg-[linear-gradient(110deg,rgba(247,201,72,0.10),transparent_62%)] p-4 print:hidden">
+      <div className="flex flex-wrap items-center gap-4">
+        <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
+          <Icon size={20} strokeWidth={1.9} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gold-1">
+            Your next move
+          </p>
+          <p className="mt-0.5 text-[15px] font-semibold tracking-[-0.01em] text-fg-1">
+            {action.title}
+          </p>
+          <p className="mt-0.5 text-[12px] leading-relaxed text-fg-3">{action.detail}</p>
+        </div>
+        {action.kind === 'advance' && action.recordId ? (
+          <Button
+            variant="primary"
+            icon={ArrowUpRight}
+            onClick={() => drawer.open({ recordId: action.recordId })}
+          >
+            Open chain
+          </Button>
+        ) : action.kind === 'approve' ? (
+          <Button
+            variant="primary"
+            icon={Gavel}
+            onClick={() =>
+              document.getElementById('approvals')?.scrollIntoView({ behavior: 'smooth' })
+            }
+          >
+            Review queue
+          </Button>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+/** Print-only attestation document — the exportable record of org posture. */
+function PrintAttestation({ data }: { data: TrustCenterData }) {
+  return (
+    <div className="hidden print:block">
+      <h1 className="text-[18px] font-semibold text-fg-1">Chain-of-Trust Attestation</h1>
+      <p className="mt-1 text-[11px] leading-relaxed text-fg-3">
+        Institutional Readiness Index {data.iri}% · {data.tier.label} · Capital under proof{' '}
+        {data.capital.proofCoveragePct}% ({fmtMoney(data.capital.capitalUnderProof)} of{' '}
+        {fmtMoney(data.capital.pipelineValue)} active pipeline) · generated{' '}
+        {new Date(data.generatedAt).toLocaleString()}
+      </p>
+      {data.records.length > 0 ? (
+        <table className="mt-4 w-full border-collapse text-[11px]">
+          <thead>
+            <tr className="border-b border-hairline text-left text-fg-4">
+              <th className="py-1 pr-3 font-semibold">Chain</th>
+              <th className="py-1 pr-3 font-semibold">Type</th>
+              <th className="py-1 pr-3 font-semibold">Tier</th>
+              <th className="py-1 pr-3 font-semibold">Score</th>
+              <th className="py-1 pr-3 font-semibold">Capital</th>
+              <th className="py-1 font-semibold">Evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.records.map((r) => (
+              <tr key={r.id} className="border-b border-hairline">
+                <td className="py-1 pr-3 text-fg-1">{r.title}</td>
+                <td className="py-1 pr-3 text-fg-3">{r.entityType.replaceAll('_', ' ')}</td>
+                <td className="py-1 pr-3 text-fg-3">{r.tier.label}</td>
+                <td className="py-1 pr-3 tabular-nums text-fg-1">{r.score}%</td>
+                <td className="py-1 pr-3 tabular-nums text-fg-3">{fmtMoney(r.capitalAtStake)}</td>
+                <td className="py-1 tabular-nums text-fg-3">
+                  {r.approvedEvidence} approved · {r.pendingEvidence} pending
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+    </div>
+  );
+}
+
 function NextActions({ actions }: { actions: NextAction[] }) {
   const drawer = useTrustDrawer();
   return (
-    <Card className="p-4">
+    <Card className="p-4 print:hidden">
       <div className="mb-3 flex items-center gap-2">
         <Sparkles size={15} strokeWidth={2} className="text-gold-1" aria-hidden />
-        <span className="text-[13px] font-semibold text-fg-1">Where to move next</span>
+        <span className="text-[13px] font-semibold text-fg-1">More moves</span>
         <span className="text-[11px] text-fg-4">ranked by capital leverage</span>
       </div>
       <ol className="flex flex-col gap-2.5">
@@ -655,6 +798,30 @@ export function TrustCenterView({ data }: { data: TrustCenterData }) {
     return tabs;
   }, [data.records]);
 
+  // Record today's posture so the index can show movement over time. One row
+  // per org per day (server upserts); fire-and-forget, skipped when empty.
+  useEffect(() => {
+    if (data.empty) return;
+    void recordTrustSnapshot({ iri: data.iri, coveragePct: data.capital.proofCoveragePct });
+  }, [data.empty, data.iri, data.capital.proofCoveragePct]);
+
+  // Keep the surface live: re-pull posture + queue when the tab regains focus,
+  // so an approver returning to the page never acts on a stale queue.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') router.refresh();
+    };
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [router]);
+
+  const primaryMove = data.nextActions[0] ?? null;
+  const moreMoves = data.nextActions.slice(1);
+
   if (data.empty) {
     return (
       <div className="flex flex-col gap-5">
@@ -692,36 +859,31 @@ export function TrustCenterView({ data }: { data: TrustCenterData }) {
         </div>
       </div>
 
-      {/* Print-only attestation header */}
-      <div className="hidden print:block">
-        <p className="text-[11px] uppercase tracking-[0.12em] text-fg-4">
-          Chain-of-Trust Attestation
-        </p>
-        <p className="text-[11px] text-fg-3">
-          Institutional Readiness Index {data.iri}% · {data.tier.label} · generated{' '}
-          {new Date(data.generatedAt).toLocaleString()}
-        </p>
-      </div>
+      {/* Exportable attestation (print only) */}
+      <PrintAttestation data={data} />
+
+      {/* Lead with one move. */}
+      {primaryMove ? <PrimaryMove action={primaryMove} /> : null}
 
       <PostureHero data={data} />
       <CapitalStrip data={data} />
 
-      <NextActions actions={data.nextActions} />
+      {/* Approver-first: the governance queue gets full width, front of mind. */}
+      <ApprovalsQueue
+        approvals={data.approvals}
+        canApprove={data.viewer.canApprove}
+        onDone={refresh}
+      />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <ApprovalsQueue
-          approvals={data.approvals}
-          canApprove={data.viewer.canApprove}
-          onDone={refresh}
-        />
-        <div className="flex flex-col gap-5">
-          <Checklist items={data.checklist} />
-          <LayerRollup rollup={data.layerRollup} />
-        </div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Checklist items={data.checklist} />
+        <LayerRollup rollup={data.layerRollup} />
       </div>
 
+      {moreMoves.length > 0 ? <NextActions actions={moreMoves} /> : null}
+
       {/* Records */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <SectionTitle eyebrow="Every chain" title="Chains of Trust" className="mb-0" />
         {typeTabs.length > 1 ? (
           <SegTabs
@@ -732,7 +894,7 @@ export function TrustCenterView({ data }: { data: TrustCenterData }) {
           />
         ) : null}
       </div>
-      <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3 print:hidden">
         {filtered.map((rec) => (
           <RecordCard key={rec.id} rec={rec} />
         ))}

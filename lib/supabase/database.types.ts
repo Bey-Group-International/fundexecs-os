@@ -3539,6 +3539,41 @@ export type Database = {
           },
         ]
       }
+      trust_posture_snapshots: {
+        Row: {
+          captured_at: string
+          coverage_pct: number
+          id: string
+          iri: number
+          org_id: string
+          snapshot_date: string
+        }
+        Insert: {
+          captured_at?: string
+          coverage_pct?: number
+          id?: string
+          iri?: number
+          org_id: string
+          snapshot_date?: string
+        }
+        Update: {
+          captured_at?: string
+          coverage_pct?: number
+          id?: string
+          iri?: number
+          org_id?: string
+          snapshot_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trust_posture_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       warm_introductions: {
         Row: {
           connector_contact_id: string | null

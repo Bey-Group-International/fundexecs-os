@@ -512,3 +512,35 @@ export async function revokeEvidence(evidenceId: string): Promise<RevokeResult> 
   refresh();
   return { ok: true };
 }
+
+// ====================================================================
+// 8. recordTrustSnapshot — persist today's posture for trend tracking
+//    Fire-and-forget from the Trust Center on load. One row per org per
+//    day (upsert), so the surface can show the IRI moving over time.
+//    Best-effort: never throws, never blocks the page.
+// ====================================================================
+
+export async function recordTrustSnapshot(input: {
+  iri: number;
+  coveragePct: number;
+}): Promise<void> {
+  try {
+    const org = await getActiveOrg();
+    if (!org) return;
+    const supabase = await createClient();
+    const today = new Date().toISOString().slice(0, 10);
+    const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+    await supabase.from('trust_posture_snapshots').upsert(
+      {
+        org_id: org.orgId,
+        snapshot_date: today,
+        iri: clamp(input.iri),
+        coverage_pct: clamp(input.coveragePct),
+        captured_at: new Date().toISOString()
+      },
+      { onConflict: 'org_id,snapshot_date' }
+    );
+  } catch {
+    // Trend tracking is non-critical — swallow (e.g. table not migrated yet).
+  }
+}

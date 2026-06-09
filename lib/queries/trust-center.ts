@@ -143,6 +143,8 @@ export interface TrustCenterData {
   checklist: ChecklistItem[];
   nextActions: NextAction[];
   capital: CapitalPosture;
+  /** IRI movement over time — delta vs the last snapshot + a short trend line. */
+  trend: { delta: number | null; points: number[]; sinceLabel: string | null };
   recordCount: number;
   pendingCount: number;
   viewer: { id: string; canApprove: boolean };
@@ -171,6 +173,7 @@ function emptyData(viewerId: string, canApprove: boolean): TrustCenterData {
       activeDeals: 0,
       coveredDeals: 0
     },
+    trend: { delta: null, points: [], sinceLabel: null },
     recordCount: 0,
     pendingCount: 0,
     viewer: { id: viewerId, canApprove },
@@ -593,6 +596,32 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
 
   const pendingCount = approvals.length;
 
+  // ---- Posture trend (compounding signal). Best-effort: the snapshot table
+  // may lag the migration, so a failure just leaves the trend empty. The
+  // current reading is appended as the latest point; the delta compares it to
+  // the most recent snapshot from a prior day. ----
+  let trend: TrustCenterData['trend'] = { delta: null, points: [], sinceLabel: null };
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: snaps } = await supabase
+      .from('trust_posture_snapshots')
+      .select('iri, snapshot_date')
+      .eq('org_id', orgId)
+      .order('snapshot_date', { ascending: false })
+      .limit(14);
+    const rows = (snaps ?? []) as { iri: number; snapshot_date: string }[];
+    const prior = rows.filter((r) => r.snapshot_date < today);
+    const points = [...prior].reverse().map((r) => Math.round(Number(r.iri) || 0));
+    points.push(iri);
+    trend = {
+      delta: prior.length ? iri - Math.round(Number(prior[0].iri) || 0) : null,
+      points: points.slice(-12),
+      sinceLabel: prior[0]?.snapshot_date ?? null
+    };
+  } catch {
+    // trend stays empty
+  }
+
   return {
     empty: false,
     iri,
@@ -604,6 +633,7 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
     checklist,
     nextActions: nextActions.slice(0, 4),
     capital,
+    trend,
     recordCount: summaries.length,
     pendingCount,
     viewer: { id: viewerId, canApprove },
