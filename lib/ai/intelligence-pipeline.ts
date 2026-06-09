@@ -7,6 +7,10 @@ import { refreshOrgProfileEmbedding } from './profile-embedding';
 import { embedNetworkRecords } from './network-embeddings';
 import { AI_MODELS } from './models';
 import { fetchRecentFormD } from '@/lib/integrations/edgar';
+import {
+  refreshComplianceTiers,
+  type ComplianceRefreshSummary
+} from '@/lib/strategy/compliance-refresh';
 
 /* ============================================================================
  * lib/ai/intelligence-pipeline.ts — the live self-aware loop.
@@ -18,6 +22,9 @@ import { fetchRecentFormD } from '@/lib/integrations/edgar';
  *   4. score     — run generate_signal_matches for every active org
  *   5. judge     — Claude pre-judges the top few new high-score matches
  *   6. brief     — Earn writes each org a short daily briefing
+ *   7. compliance — Adrian's standing compliance tier: ensure (never-empty),
+ *                   age ignored items into High, draft follow-ups from the
+ *                   Form ADV / Form D signals ingested in step 1
  *
  * Every step is never-block and independently wrapped: a failure in one (a
  * missing key, an EDGAR hiccup, a Claude timeout) is captured into the summary
@@ -34,6 +41,7 @@ export interface CycleSummary {
   score: { orgs: number; matchesCreated: number; failed: number };
   judge: { judged: number };
   brief: { written: number };
+  compliance: ComplianceRefreshSummary;
   errors: string[];
 }
 
@@ -312,6 +320,11 @@ export async function runIntelligenceCycle(): Promise<CycleSummary> {
   const score = await safe('score', scoreActiveOrgs, { orgs: 0, matchesCreated: 0, failed: 0 });
   const judge = await safe('judge', () => proactiveJudge(), { judged: 0 });
   const brief = await safe('brief', () => generateBriefings(), { written: 0 });
+  const compliance = await safe('compliance', refreshComplianceTiers, {
+    orgs: 0,
+    touched: 0,
+    failed: 0
+  });
 
-  return { ingest, embed, network, score, judge, brief, errors };
+  return { ingest, embed, network, score, judge, brief, compliance, errors };
 }
