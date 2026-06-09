@@ -95,7 +95,28 @@ lifecycle engine via `getDashboardData` — no migration.
 - `app/strategy/page.tsx` composes `getStrategyData` + `getDashboardData` and
   derives the next stage from `LIFECYCLE_STAGES`.
 
-### Phase 2b — Real signals in, gate-unlock writeback (data layer) 🟡 migration written, not applied
+### Phase 2c — Live plan vs. proposed drafts (migration applied) ✅ shipped
+
+The migration is now applied to the live DB, and ~10 drafts/org are already
+seeded (the standing compliance tier — Form ADV, Form D, Rule 206(4)-7, Code of
+Ethics — plus signal-driven Form D follow-ups). Before this, those drafts were
+rendering into the live plan. Phase 2c separates them.
+
+- `getStrategyData` selects `category` / `source` / `approved_at`, computes
+  `isDraft = source ≠ 'manual' && approved_at is null`, and returns `objectives`
+  (live) split from `drafts` (pending). The capital-weighted posture rollup now
+  reflects only the live plan, not unapproved drafts.
+- `StrategyView` adds a **"Proposed objectives — from your executive team"**
+  section with **Approve** (`approveDraftObjective`) / **Dismiss** per draft,
+  category + source labels (Lifecycle playbook / Market signal), and a category
+  chip on live cards. Approve moves it into the plan optimistically; Dismiss is
+  undoable.
+- Delivers the **standing compliance tier (#4)** + the approve half of **Earn
+  drafts, you approve (#1)** on the surface.
+- Follow-up: `loadMaterialsReadiness` (dashboard) still counts unapproved drafts
+  as incomplete — should exclude `isDraft` so readiness isn't dragged down.
+
+### Phase 2b — Real signals in, gate-unlock writeback (data layer) ✅ migration applied
 
 Implements **#1 (Earn drafts)** + the cascade + completion-writeback parts of
 **#2** (the migration-dependent half of Phase 2).

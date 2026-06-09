@@ -28,6 +28,7 @@ import { EarnCoin } from '@/components/screens/EarnCoin';
 import { cn } from '@/lib/utils';
 import type { StrategyObjective } from '@/lib/queries/strategy';
 import {
+  approveDraftObjective,
   createObjective,
   deleteObjective,
   markObjectiveRead,
@@ -43,6 +44,20 @@ const PRIORITY_TONE: Record<Priority, BadgeTone> = {
   High: 'warning',
   Medium: 'azure',
   Low: 'neutral'
+};
+
+// Map a draft's posture lane to a badge tone + the specialist source label.
+const CATEGORY_TONE: Record<string, BadgeTone> = {
+  compliance: 'warning',
+  governance: 'azure',
+  capital: 'gold',
+  execution: 'success'
+};
+
+const SOURCE_LABEL: Record<string, string> = {
+  lifecycle: 'Lifecycle playbook',
+  signal: 'Market signal',
+  cascade: 'Cascaded'
 };
 
 // Capital proxy: higher-priority objectives carry more weight in the posture
@@ -128,6 +143,11 @@ function ObjectiveCard({
           <Badge tone={PRIORITY_TONE[o.priority]} className="text-[10px]">
             {o.priority} priority
           </Badge>
+          {o.category && (
+            <Badge tone={CATEGORY_TONE[o.category] ?? 'neutral'} className="text-[10px] capitalize">
+              {o.category}
+            </Badge>
+          )}
         </div>
 
         {confirming ? (
@@ -211,17 +231,26 @@ function ObjectiveCard({
   );
 }
 
-/** A transient bottom flash: a status line with an optional Undo. */
+/** A transient bottom flash: a status line with an optional Undo action. */
 interface Flash {
   message: string;
-  undoId?: string;
+  onUndo?: () => void;
 }
 
-export function StrategyView({ initialObjectives }: { initialObjectives: StrategyObjective[] }) {
+export function StrategyView({
+  initialObjectives,
+  initialDrafts = []
+}: {
+  initialObjectives: StrategyObjective[];
+  initialDrafts?: StrategyObjective[];
+}) {
   // Objectives created via quick-add live here optimistically until the next
   // server render reconciles them; prepended so new items show at the top.
   const [extra, setExtra] = useState<StrategyObjective[]>([]);
   const source = useMemo(() => [...extra, ...initialObjectives], [extra, initialObjectives]);
+
+  // Pending specialist/signal drafts proposed to the operator for approval.
+  const [proposed, setProposed] = useState<StrategyObjective[]>(initialDrafts);
 
   const [patches, setPatches] = useState<
     Record<string, { read?: boolean; archived?: boolean; closed?: boolean; deleted?: boolean }>
@@ -249,7 +278,7 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
     setConfirmId(null);
     if (a === 'delete') {
       patch(id, { deleted: true });
-      setFlash({ message: 'Objective deleted', undoId: id });
+      setFlash({ message: 'Objective deleted', onUndo: () => undo(id) });
       void deleteObjective(id);
     } else if (a === 'done') {
       patch(id, { read: true, closed: true });
@@ -267,7 +296,7 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
       void markObjectiveRead(id);
     } else if (a === 'archive') {
       patch(id, { archived: true, read: true });
-      setFlash({ message: 'Objective archived', undoId: id });
+      setFlash({ message: 'Objective archived', onUndo: () => undo(id) });
       void setObjectiveStatus(id, 'archived');
     }
   }
@@ -276,6 +305,29 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
     patch(id, { deleted: false, archived: false, closed: false });
     setFlash(null);
     void restoreObjective(id);
+  }
+
+  // Approve a proposed draft into the live plan — it leaves the proposals list
+  // and shows up immediately as a live objective.
+  function approveDraft(d: StrategyObjective) {
+    setProposed((prev) => prev.filter((p) => p.id !== d.id));
+    setExtra((prev) => [{ ...d, isDraft: false, source: 'manual' }, ...prev]);
+    setFlash({ message: `Added to your plan: ${d.title}` });
+    void approveDraftObjective(d.id);
+  }
+
+  // Dismiss a proposed draft (soft delete). Undo restores it to the proposals.
+  function dismissDraft(d: StrategyObjective) {
+    setProposed((prev) => prev.filter((p) => p.id !== d.id));
+    setFlash({
+      message: 'Proposal dismissed',
+      onUndo: () => {
+        setProposed((prev) => [d, ...prev]);
+        setFlash(null);
+        void restoreObjective(d.id);
+      }
+    });
+    void deleteObjective(d.id);
   }
 
   function quickAdd(t: Tier) {
@@ -295,7 +347,10 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
       pct: 0,
       read: true,
       state: 'open',
-      ai: null
+      ai: null,
+      category: null,
+      source: 'manual',
+      isDraft: false
     };
     setExtra((prev) => [optimistic, ...prev]);
 
@@ -434,6 +489,79 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
         </div>
       </Card>
 
+      {/* Proposed drafts — specialist/signal objectives awaiting approval.
+          Kept out of the live plan + posture rollup until the operator accepts. */}
+      {proposed.length > 0 && (
+        <Card className="p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <SectionTitle
+              eyebrow="From your executive team"
+              title="Proposed objectives"
+              className="mb-0"
+            />
+            <Badge tone="azure" dot>
+              {proposed.length} pending review
+            </Badge>
+          </div>
+          <p className="mb-3 text-[11.5px] leading-relaxed text-fg-4">
+            Drafts surfaced by your specialists and live market signals. Approve to add one to your
+            plan, or dismiss it.
+          </p>
+          <div className="flex flex-col gap-2">
+            {proposed.slice(0, 8).map((d) => (
+              <div
+                key={d.id}
+                className="flex flex-wrap items-center gap-3 rounded-[10px] border border-hairline bg-surface-1 px-3 py-2.5"
+              >
+                <span
+                  className="flex-none rounded-md border bg-white/[0.05] px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums"
+                  style={{ color: TIER_COLOR[d.tier], borderColor: TIER_COLOR[d.tier] }}
+                >
+                  {d.tier}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-medium text-fg-1">{d.title}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-4">
+                    {d.category && (
+                      <Badge tone={CATEGORY_TONE[d.category] ?? 'neutral'} className="text-[10px]">
+                        {d.category}
+                      </Badge>
+                    )}
+                    <span>{SOURCE_LABEL[d.source] ?? 'Proposed'}</span>
+                    {d.timeline && <span className="text-fg-5">· {d.timeline}</span>}
+                  </div>
+                </div>
+                <div className="flex flex-none gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => dismissDraft(d)}
+                    aria-label={`Dismiss proposal: ${d.title}`}
+                    className="flex h-[28px] items-center gap-1 rounded-md border border-hairline bg-surface-1 px-2.5 text-[11.5px] font-medium text-fg-4 transition hover:bg-surface-2 hover:text-fg-1"
+                  >
+                    <X size={12} strokeWidth={2} aria-hidden />
+                    Dismiss
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => approveDraft(d)}
+                    aria-label={`Approve proposal: ${d.title}`}
+                    className="flex h-[28px] items-center gap-1 rounded-md border border-[var(--gold-line)] bg-[rgba(247,201,72,0.08)] px-2.5 text-[11.5px] font-semibold text-gold-1 transition hover:bg-[rgba(247,201,72,0.16)]"
+                  >
+                    <Check size={12} strokeWidth={2} aria-hidden />
+                    Approve
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {proposed.length > 8 && (
+            <p className="mt-2.5 text-[11px] text-fg-5">
+              +{proposed.length - 8} more proposed — clear these first.
+            </p>
+          )}
+        </Card>
+      )}
+
       {active.length === 0 ? (
         // First-run: no objectives anywhere — invite the member to start a plan.
         <Card className="flex flex-col items-center gap-3 p-10 text-center">
@@ -488,10 +616,10 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
           className="flex items-center justify-between gap-3 rounded-[10px] border border-hairline bg-surface-1 px-4 py-2.5"
         >
           <span className="text-[12px] text-fg-2">{flash.message}</span>
-          {flash.undoId && (
+          {flash.onUndo && (
             <button
               type="button"
-              onClick={() => undo(flash.undoId as string)}
+              onClick={flash.onUndo}
               className="flex items-center gap-1.5 rounded-md border border-hairline bg-surface-2 px-2.5 py-1 text-[11.5px] font-semibold text-fg-1 transition hover:bg-surface-3"
             >
               <RotateCcw size={12} strokeWidth={2} aria-hidden />

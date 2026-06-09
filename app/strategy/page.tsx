@@ -35,7 +35,7 @@ export default async function StrategyPage() {
   // Strategy objectives + the lifecycle/posture context the hero binds to. The
   // dashboard loader already derives the stage, loop progress, and readiness
   // from the tested engine — reuse it rather than recomputing here.
-  const [{ objectives }, dashboard] = await Promise.all([
+  const [{ objectives, drafts }, dashboard] = await Promise.all([
     getStrategyData(org.orgId),
     getDashboardData(org.orgId)
   ]);
@@ -66,7 +66,7 @@ export default async function StrategyPage() {
           nextStageBlurb={nextStage ? LIFECYCLE_STAGE_BLURBS[nextStage] : null}
           objectiveCount={objectiveCount}
         />
-        <StrategyView initialObjectives={objectives} />
+        <StrategyView initialObjectives={objectives} initialDrafts={drafts} />
       </div>
     </AppShell>
   );
