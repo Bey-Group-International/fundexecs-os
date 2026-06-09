@@ -270,12 +270,28 @@ function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd
   );
 }
 
-export function PipelineView({ data, lpData }: { data: PipelineData; lpData: LpPipelineData }) {
+/** Interactive pipeline board: formation board, LP map, deal flow, and partners,
+ *  with optimistic stage moves and an optionally deep-linked deal drawer. */
+export function PipelineView({
+  data,
+  lpData,
+  initialDealId = null
+}: {
+  data: PipelineData;
+  lpData: LpPipelineData;
+  /** Deal id deep-linked from the Deal Desk — opens its detail drawer on load. */
+  initialDealId?: string | null;
+}) {
   const router = useRouter();
+  // Honor a deep-linked deal only if it exists in the current book.
+  const linkedDealId =
+    initialDealId && data.stages.some((s) => s.deals.some((d) => d.id === initialDealId))
+      ? initialDealId
+      : null;
   const [tab, setTab] = useState<Tab>('formation');
   const [newDealOpen, setNewDealOpen] = useState(false);
   const [newPartnerOpen, setNewPartnerOpen] = useState(false);
-  const [activeDealId, setActiveDealId] = useState<string | null>(null);
+  const [activeDealId, setActiveDealId] = useState<string | null>(linkedDealId);
 
   // Optimistic stage moves (dealId → target stage key) applied over the server
   // data so a drag feels instant; reconciled by router.refresh() on success and
