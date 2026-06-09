@@ -117,6 +117,10 @@ function coverageTone(pct: number): BadgeTone {
   return 'neutral';
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 type Tab =
   | 'overview'
   | 'users'
@@ -526,7 +530,7 @@ function UsersPanel({
                   {canManageMembers ? (
                     <RoleMenu
                       role={role}
-                      canGrantOwner={viewerRole === 'owner'}
+                      canGrantOwner={canGrantOwner}
                       isLastOwner={isLastOwner}
                       pending={pendingId === m.id}
                       onChange={(next) => onRole(m.id, next)}
@@ -820,7 +824,7 @@ export function AdminView({
   viewerRole
 }: {
   /** 'platform' = Bey Group team (full portal + actions); 'org' = org
-   *  owner/admin on their own workspace (read-only, org-scoped subset). */
+   *  owner/admin on their own workspace (org-scoped management subset). */
   scope?: 'platform' | 'org';
   data: AdminData;
   invites: BetaInvite[];
@@ -859,22 +863,54 @@ export function AdminView({
   const ownerCount = data.members.filter((m) => roles[m.id] === 'owner').length;
 
   function approve(id: string) {
+    setRowErrors((e) => ({ ...e, [id]: '' }));
     cards.complete(id);
-    window.emitTrust?.({
-      layer: 'execution',
-      title: 'Member approved',
-      msg: 'An applicant was approved into the organization.',
-      entity: id
-    });
-    void approveMember(id).then(() => router.refresh());
+    void approveMember(id)
+      .then((res) => {
+        if (!res.ok) {
+          cards.restore(id);
+          setRowErrors((e) => ({ ...e, [id]: res.error }));
+          return;
+        }
+        window.emitTrust?.({
+          layer: 'execution',
+          title: 'Member approved',
+          msg: 'An applicant was approved into the organization.',
+          entity: id
+        });
+      })
+      .catch((err: unknown) => {
+        cards.restore(id);
+        setRowErrors((e) => ({
+          ...e,
+          [id]: errorMessage(err, 'Approve failed. Please try again.')
+        }));
+      })
+      .finally(() => {
+        router.refresh();
+      });
   }
 
   function archive(id: string) {
+    setRowErrors((e) => ({ ...e, [id]: '' }));
     cards.archive(id);
-    void archiveMember(id).then((res) => {
-      if (!res.ok) setRowErrors((e) => ({ ...e, [id]: res.error }));
-      router.refresh();
-    });
+    void archiveMember(id)
+      .then((res) => {
+        if (!res.ok) {
+          cards.restore(id);
+          setRowErrors((e) => ({ ...e, [id]: res.error }));
+        }
+      })
+      .catch((err: unknown) => {
+        cards.restore(id);
+        setRowErrors((e) => ({
+          ...e,
+          [id]: errorMessage(err, 'Archive failed. Please try again.')
+        }));
+      })
+      .finally(() => {
+        router.refresh();
+      });
   }
 
   function changeRole(id: string, role: OrgMemberRole) {
@@ -976,9 +1012,9 @@ export function AdminView({
     });
   }
 
-  // Org owners/admins get a read-only, org-scoped subset of tabs — their team,
-  // launch readiness, and workspace activity. Platform-only surfaces
-  // (applications, beta invites, referrals, the platform knowledge base / trust
+  // Org owners/admins get an org-scoped subset of tabs — their team, launch
+  // readiness, and workspace activity. Platform-only surfaces
+  // (applications, beta links, referrals, the platform knowledge base / trust
   // metrics) stay reserved for the Bey Group team.
   const allTabs = [
     { id: 'overview' as const, label: 'Overview', icon: LayoutDashboard },

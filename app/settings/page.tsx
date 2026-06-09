@@ -140,7 +140,7 @@ export default async function SettingsPage() {
       ]);
     }
   } else if (org && user && (orgTeam.viewerRole === 'owner' || orgTeam.viewerRole === 'admin')) {
-    // Org owner/admin — read-only, org-scoped. All reads stay RLS-bounded to
+    // Org owner/admin — org-scoped admin subset. All reads stay RLS-bounded to
     // their workspace; applications/referrals (platform-only) are left empty.
     const ad = await getAdminData(org.orgId).catch(() => null);
     if (ad) {

@@ -3694,6 +3694,15 @@ export type Database = {
         Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
         Returns: string
       }
+      save_onboarding_identity: {
+        Args: {
+          _full_name?: string | null
+          _org_name?: string | null
+          _org_type?: Database["public"]["Enums"]["org_type"] | null
+          _role?: string | null
+        }
+        Returns: string
+      }
       ensure_compliance_tier: { Args: { _org: string }; Returns: string }
       refresh_compliance_tier: {
         Args: { _org: string; _stale_days?: number }
