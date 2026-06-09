@@ -1,12 +1,89 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowUpRight, Briefcase, Target, TrendingUp, Layers } from 'lucide-react';
+import { ArrowUpRight, Briefcase, Target, TrendingUp, Layers, Radar } from 'lucide-react';
 import { AppShell } from '@/components/shell/AppShell';
 import { getShellIdentity } from '@/lib/queries/identity';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getPipelineData, type PipelineDeal } from '@/lib/queries/pipeline';
+import { getPipelineData, type PipelineDeal, type PipelineStage } from '@/lib/queries/pipeline';
 import { Badge, Card, ProgressBar, SectionTitle } from '@/components/ui';
 import { formatCompactUsd, fitTone, stageColor } from './ui';
+
+/* ----------------------------------------------------------------------------
+ * The Deal Desk is a single route with two honest views, selected by `?view`:
+ *
+ *   • sourcing  (Source › Deals)     — screen the incoming flow, top of funnel
+ *   • execution (Drive › Deal Desk)  — drive the live deals to close [default]
+ *
+ * Both are a UI lens over the same `getPipelineData` book — no extra queries.
+ * The desk decides; the pipeline board operates, so every deal deep-links into
+ * the board's detail drawer (`/pipeline?deal=<id>`) rather than dead-ending.
+ * --------------------------------------------------------------------------*/
+
+type DeskView = 'sourcing' | 'execution';
+
+/** Top-of-funnel stages owned by the Sourcing view. */
+const SOURCING_STAGE_KEYS = new Set(['visitor', 'prospect', 'qualified', 'meeting']);
+/** Live, in-flight stages owned by the Execution view. */
+const EXECUTION_STAGE_KEYS = new Set(['diligence', 'soft-circle', 'committed', 'closed']);
+
+function resolveView(view: string | string[] | undefined): DeskView {
+  const raw = Array.isArray(view) ? view[0] : view;
+  return raw === 'sourcing' ? 'sourcing' : 'execution';
+}
+
+interface ViewCopy {
+  navTitle: string;
+  subtitle: string;
+  eyebrow: string;
+  heading: string;
+  listEyebrow: string;
+  listTitle: string;
+  funnelTitle: string;
+  emptyTitle: string;
+  emptyBody: string;
+}
+
+const VIEW_COPY: Record<DeskView, ViewCopy> = {
+  sourcing: {
+    navTitle: 'Deals',
+    subtitle: 'Source, screen, qualify — triage incoming deal flow',
+    eyebrow: 'Sourcing',
+    heading: 'Deals to screen',
+    listEyebrow: 'Ranked by thesis-fit',
+    listTitle: 'Screen next',
+    funnelTitle: 'Sourcing funnel',
+    emptyTitle: 'No deals to screen yet',
+    emptyBody:
+      'New inbound opportunities land here first — ranked by thesis-fit so you screen the strongest fits before anything goes stale. Add your first deal from the pipeline board.'
+  },
+  execution: {
+    navTitle: 'Deal Desk',
+    subtitle: 'Decide and drive — work the live deals to close',
+    eyebrow: 'Deal execution',
+    heading: 'The desk',
+    listEyebrow: 'Ranked by thesis-fit',
+    listTitle: 'Live deals',
+    funnelTitle: 'Formation funnel',
+    emptyTitle: 'No live deals on the desk yet',
+    emptyBody:
+      'Deals in diligence and beyond surface here — ranked by thesis-fit, with stage and live capital — so you can drive each one to close. Advance a deal from the pipeline board to begin.'
+  }
+};
+
+export async function generateMetadata({
+  searchParams
+}: {
+  searchParams: Promise<{ view?: string | string[] }>;
+}): Promise<Metadata> {
+  const view = resolveView((await searchParams).view);
+  return {
+    title: { absolute: `FundExecs OS — ${VIEW_COPY[view].navTitle}` },
+    description:
+      view === 'sourcing'
+        ? 'Source and screen incoming deal flow — triage the strongest fits first.'
+        : 'The investment-opportunity desk — decide and drive live deals to close.'
+  };
+}
 
 /** A Next Link styled as a secondary Button (Button is a native <button>, so
  *  we render a matching anchor for navigation CTAs). */
@@ -33,16 +110,45 @@ function LinkButton({
   );
 }
 
-export const metadata: Metadata = {
-  title: { absolute: 'FundExecs OS — Deal Desk' },
-  description: 'The investment-opportunity desk — source, screen, decide, and deploy.'
-};
-
-const SUBTITLE = 'Source, screen, decide — your live opportunity desk';
-
-function NoOrg({ identity }: { identity: Awaited<ReturnType<typeof getShellIdentity>> }) {
+/** Source → Drive flow switch. Server-rendered links so the desk has no client
+ *  cost; the active mode reads from `?view`. */
+function ViewTabs({ view }: { view: DeskView }) {
+  const tabs: Array<{ id: DeskView; label: string; href: string; icon: typeof Radar }> = [
+    { id: 'sourcing', label: 'Sourcing', href: '/deal-desk?view=sourcing', icon: Radar },
+    { id: 'execution', label: 'Execution', href: '/deal-desk?view=execution', icon: Briefcase }
+  ];
   return (
-    <AppShell identity={identity} title="Deal Desk" subtitle={SUBTITLE}>
+    <div className="inline-flex items-center gap-1 rounded-xl border border-hairline bg-surface-2 p-1">
+      {tabs.map(({ id, label, href, icon: Icon }) => {
+        const active = id === view;
+        return (
+          <Link
+            key={id}
+            href={href}
+            aria-current={active ? 'page' : undefined}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition ${
+              active ? 'bg-surface-1 text-fg-1 shadow-[var(--shadow-sm)]' : 'text-fg-4 hover:text-fg-2'
+            }`}
+          >
+            <Icon size={13} strokeWidth={2} aria-hidden />
+            {label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+function NoOrg({
+  identity,
+  view
+}: {
+  identity: Awaited<ReturnType<typeof getShellIdentity>>;
+  view: DeskView;
+}) {
+  const copy = VIEW_COPY[view];
+  return (
+    <AppShell identity={identity} title={copy.navTitle} subtitle={copy.subtitle}>
       <Card className="p-10 text-center">
         <h2 className="text-[15px] font-semibold text-fg-1">No organization yet</h2>
         <p className="mx-auto mt-2 max-w-md text-[12.5px] text-fg-4">
@@ -54,36 +160,56 @@ function NoOrg({ identity }: { identity: Awaited<ReturnType<typeof getShellIdent
   );
 }
 
-export default async function DealDeskPage() {
-  const org = await getActiveOrg();
-  const identity = await getShellIdentity();
-  if (!org) return <NoOrg identity={identity} />;
+interface Kpi {
+  label: string;
+  value: string;
+  icon: typeof Briefcase;
+  hint: string;
+}
 
-  const data = await getPipelineData(org.orgId);
-
-  // Top live deals across every stage, ranked by thesis-fit then size.
-  const liveDeals: PipelineDeal[] = data.stages
-    .flatMap((s) => s.deals.map((d) => ({ deal: d, stageLabel: s.label })))
-    .sort((a, b) => b.deal.fit - a.deal.fit || (b.deal.amount ?? 0) - (a.deal.amount ?? 0))
-    .slice(0, 8)
-    .map((x) => x.deal);
-
-  const stageLabelByDealId = new Map<string, string>();
-  for (const s of data.stages) for (const d of s.deals) stageLabelByDealId.set(d.id, s.label);
-
-  const peakStageCount = data.stages.reduce((m, s) => Math.max(m, s.deals.length), 0);
-  const avgFit = data.totalDeals
-    ? Math.round(
-        data.stages.flatMap((s) => s.deals).reduce((sum, d) => sum + d.fit, 0) / data.totalDeals
-      )
+/** Build the four KPIs for a view from its own slice of the book. */
+function buildKpis(
+  view: DeskView,
+  data: Awaited<ReturnType<typeof getPipelineData>>,
+  viewStages: PipelineStage[],
+  viewDeals: PipelineDeal[]
+): Kpi[] {
+  const value = viewDeals.reduce((sum, d) => sum + (d.amount ?? 0), 0);
+  const avgFit = viewDeals.length
+    ? Math.round(viewDeals.reduce((sum, d) => sum + d.fit, 0) / viewDeals.length)
     : 0;
+  const countOf = (key: string) => viewStages.find((s) => s.key === key)?.deals.length ?? 0;
 
-  const kpis = [
+  if (view === 'sourcing') {
+    return [
+      {
+        label: 'To screen',
+        value: `${viewDeals.length}`,
+        icon: Briefcase,
+        hint: 'Awaiting qualification'
+      },
+      {
+        label: 'New inbound',
+        value: `${countOf('visitor') + countOf('prospect')}`,
+        icon: Radar,
+        hint: 'Fresh in the funnel'
+      },
+      {
+        label: 'Sourcing value',
+        value: formatCompactUsd(value),
+        icon: Layers,
+        hint: 'Across deals in screening'
+      },
+      { label: 'Avg thesis-fit', value: `${avgFit}`, icon: Target, hint: 'Across sourced deals' }
+    ];
+  }
+
+  return [
     {
-      label: 'Pipeline value',
-      value: formatCompactUsd(data.pipelineValue),
+      label: 'Live value',
+      value: formatCompactUsd(value),
       icon: Briefcase,
-      hint: `${data.totalDeals} ${data.totalDeals === 1 ? 'deal' : 'deals'} in play`
+      hint: `${viewDeals.length} ${viewDeals.length === 1 ? 'deal' : 'deals'} in flight`
     },
     {
       label: 'Soft-circled',
@@ -97,20 +223,50 @@ export default async function DealDeskPage() {
       icon: TrendingUp,
       hint: `${data.conversionPct}% conversion`
     },
-    {
-      label: 'Avg thesis-fit',
-      value: `${avgFit}`,
-      icon: Target,
-      hint: 'Across live deals'
-    }
+    { label: 'Avg thesis-fit', value: `${avgFit}`, icon: Target, hint: 'Across live deals' }
   ];
+}
+
+export default async function DealDeskPage({
+  searchParams
+}: {
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
+  const view = resolveView((await searchParams).view);
+  const copy = VIEW_COPY[view];
+
+  const org = await getActiveOrg();
+  const identity = await getShellIdentity();
+  if (!org) return <NoOrg identity={identity} view={view} />;
+
+  const data = await getPipelineData(org.orgId);
+
+  // Slice the shared book down to the stages this view owns.
+  const keys = view === 'sourcing' ? SOURCING_STAGE_KEYS : EXECUTION_STAGE_KEYS;
+  const viewStages = data.stages.filter((s) => keys.has(s.key));
+  const viewDeals = viewStages.flatMap((s) => s.deals);
+
+  // Ranked register — strongest thesis-fit first, then size.
+  const rankedDeals: PipelineDeal[] = viewStages
+    .flatMap((s) => s.deals)
+    .sort((a, b) => b.fit - a.fit || (b.amount ?? 0) - (a.amount ?? 0))
+    .slice(0, 8);
+
+  const stageLabelByDealId = new Map<string, string>();
+  for (const s of viewStages) for (const d of s.deals) stageLabelByDealId.set(d.id, s.label);
+
+  const peakStageCount = viewStages.reduce((m, s) => Math.max(m, s.deals.length), 0);
+  const kpis = buildKpis(view, data, viewStages, viewDeals);
 
   return (
-    <AppShell identity={identity} title="Deal Desk" subtitle={SUBTITLE}>
+    <AppShell identity={identity} title={copy.navTitle} subtitle={copy.subtitle}>
       <div className="flex flex-col gap-[18px]">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <SectionTitle eyebrow="Deal execution" title="The desk" className="mb-0" />
-          <LinkButton href="/pipeline">Open pipeline board</LinkButton>
+          <SectionTitle eyebrow={copy.eyebrow} title={copy.heading} className="mb-0" />
+          <div className="flex items-center gap-2.5">
+            <ViewTabs view={view} />
+            <LinkButton href="/pipeline">Open pipeline board</LinkButton>
+          </div>
         </div>
 
         {/* Hero KPI strip — bold, gradient-washed, tabular figures. */}
@@ -132,29 +288,26 @@ export default async function DealDeskPage() {
           ))}
         </Card>
 
-        {data.totalDeals === 0 ? (
+        {viewDeals.length === 0 ? (
           <Card className="flex flex-col items-center gap-3 p-10 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-hairline bg-surface-2">
               <Briefcase size={20} strokeWidth={1.8} className="text-fg-3" aria-hidden />
             </span>
-            <h3 className="text-[15px] font-semibold text-fg-1">No deals on the desk yet</h3>
-            <p className="max-w-md text-[12.5px] leading-relaxed text-fg-4">
-              When opportunities land in your pipeline they surface here — ranked by thesis-fit,
-              with their funnel stage and live capital. Add your first deal from the pipeline board.
-            </p>
+            <h3 className="text-[15px] font-semibold text-fg-1">{copy.emptyTitle}</h3>
+            <p className="max-w-md text-[12.5px] leading-relaxed text-fg-4">{copy.emptyBody}</p>
             <LinkButton href="/pipeline" variant="primary">
               Open pipeline board
             </LinkButton>
           </Card>
         ) : (
           <div className="grid gap-[18px] lg:grid-cols-[minmax(0,1fr)_320px]">
-            {/* Live deals register — ranked by thesis-fit. */}
+            {/* Ranked deal register — strongest thesis-fit first. */}
             <div className="flex flex-col gap-2.5">
-              <SectionTitle eyebrow="Ranked by thesis-fit" title="Live deals" className="mb-0" />
-              {liveDeals.map((d) => {
+              <SectionTitle eyebrow={copy.listEyebrow} title={copy.listTitle} className="mb-0" />
+              {rankedDeals.map((d) => {
                 const tone = fitTone(d.fit);
                 return (
-                  <Link key={d.id} href="/pipeline" className="block">
+                  <Link key={d.id} href={`/pipeline?deal=${d.id}`} className="block">
                     <Card clickable className="flex items-center gap-4 p-4">
                       <div
                         className="flex h-11 w-11 flex-none flex-col items-center justify-center rounded-xl border tabular-nums"
@@ -206,11 +359,11 @@ export default async function DealDeskPage() {
             {/* Funnel rail — stage distribution with proportional bars. */}
             <Card className="h-fit p-[18px]">
               <div className="mb-3.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-                Formation funnel
+                {copy.funnelTitle}
               </div>
               <div className="flex flex-col gap-3">
-                {data.stages.map((s, i) => {
-                  const color = stageColor(i, data.stages.length);
+                {viewStages.map((s, i) => {
+                  const color = stageColor(i, viewStages.length);
                   const pct = peakStageCount ? (s.deals.length / peakStageCount) * 100 : 0;
                   return (
                     <div key={s.key}>
