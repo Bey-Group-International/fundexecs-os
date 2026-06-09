@@ -3490,6 +3490,10 @@ export type Database = {
           withdrawn_total: number
         }[]
       }
+      claim_monthly_credit_grant: {
+        Args: { _org_id: string }
+        Returns: number
+      }
       consume_credits: {
         Args: {
           _amount: number

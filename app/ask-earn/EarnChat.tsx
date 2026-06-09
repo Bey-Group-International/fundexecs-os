@@ -150,9 +150,18 @@ export const EarnChat = forwardRef<EarnChatHandle, EarnChatProps>(function EarnC
           sources?: Source[];
           message?: string;
           action?: EarnAction;
+          balance?: number;
         }) => {
           // Drive the phase-aware cognition indicator off every event.
           onEvent(evt.type);
+          // A debit landed — broadcast the new balance so the top-nav wallet
+          // gauge updates live without refetching (it listens for `earn:credit`).
+          if (evt.type === 'credit' && typeof evt.balance === 'number') {
+            window.dispatchEvent(
+              new CustomEvent('earn:credit', { detail: { balance: evt.balance } })
+            );
+            return;
+          }
           // Safe navigation runs immediately (the dock persists across routes).
           if (
             evt.type === 'action' &&
