@@ -67,6 +67,8 @@ function dealTone(status: string, stageKey: string): BadgeTone {
 
 type Tab = 'formation' | 'lpmap' | 'flow' | 'partners';
 
+/** The Earn status band — a live read of how many relationships sit across how
+ * many active formation stages, framed as Earn "working the book". */
 function EarnBand({ data }: { data: PipelineData }) {
   const activeStages = data.stages.filter((s) => s.deals.length > 0).length;
   return (
@@ -149,6 +151,8 @@ function NextMove({
   );
 }
 
+/** The capital-formation stage board: deals in draggable columns by stage, with
+ * optimistic moves and a click-through to the deal detail drawer. */
 function FormationBoard({
   stages,
   onSelectDeal,
@@ -256,6 +260,8 @@ function FormationBoard({
   );
 }
 
+/** Recent deal movement — the most recent deals across all stages, shown as a
+ * compact activity list with their current stage and amount. */
 function DealFlow({ data }: { data: PipelineData }) {
   const recent = data.stages
     .flatMap((s) => s.deals.map((d) => ({ deal: d, stageLabel: s.label, stageKey: s.key })))
@@ -302,6 +308,8 @@ function partnerTone(status: string): BadgeTone {
   return 'azure';
 }
 
+/** The capital-stack partners panel — service providers and partnership
+ * counterparties as a grid, with an action to add a new provider. */
 function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd: () => void }) {
   return (
     <Card>
@@ -346,6 +354,9 @@ function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd
   );
 }
 
+/** The Pipeline surface: KPI strip, next-best-move, and the tabbed boards
+ * (capital formation, LP pipeline, deal flow, partners). Owns optimistic deal
+ * stage moves and the new-deal / new-partner / deal-detail drawers. */
 export function PipelineView({ data, lpData }: { data: PipelineData; lpData: LpPipelineData }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('formation');
