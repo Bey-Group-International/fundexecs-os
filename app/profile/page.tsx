@@ -7,6 +7,8 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getDashboardData } from '@/lib/queries/dashboard';
 import { getProfile } from '@/lib/queries/fund-profile';
+import { getPendingMatchCount } from '@/lib/queries/match-inbox';
+import { buildPayoffs } from '@/lib/proof-of-truth/payoffs';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import {
   ProfileHero,
@@ -58,13 +60,18 @@ export default async function ProfilePage() {
     );
   }
 
-  const [profile, wallet, dashboard] = await Promise.all([
+  const [profile, wallet, dashboard, matchCount] = await Promise.all([
     getProfile(org.orgId),
     getCreditWallet(org.orgId).catch(() => null),
-    getDashboardData(org.orgId).catch(() => null)
+    getDashboardData(org.orgId).catch(() => null),
+    getPendingMatchCount(org.orgId).catch(() => 0)
   ]);
   const navSignals = dashboard
     ? buildRailSignals(dashboard, profile?.memberType ?? null)
+    : undefined;
+  // The compounding payoff per completed rung — mandate carries the live count.
+  const payoffs = profile.memberType
+    ? buildPayoffs({ memberType: profile.memberType, matchCount })
     : undefined;
 
   return (
@@ -78,7 +85,7 @@ export default async function ProfilePage() {
     >
       <div className="flex flex-col gap-[18px]" data-testid="profile-page">
         <ProfileHero profile={profile} />
-        <ProfileLadder ladder={profile.ladder} />
+        <ProfileLadder ladder={profile.ladder} payoffs={payoffs} />
         <ProfileGapsCard profile={profile} />
         <ProfileSections profile={profile} />
       </div>
