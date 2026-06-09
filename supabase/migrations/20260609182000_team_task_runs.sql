@@ -6,6 +6,10 @@
 -- propose / approve / reject is also written to the append-only `trust_events`
 -- log (the Chain-of-Trust audit), so the desk has a tamper-evident record of
 -- who authorized what and when.
+--
+-- RLS uses the relocated helpers in the non-exposed `private` schema
+-- (`private.is_org_member` / `private.is_org_admin`), matching how
+-- public.tasks is secured after 20260604120500_harden_security_definer_helpers.
 
 create table if not exists public.task_runs (
   id uuid primary key default gen_random_uuid(),
@@ -43,19 +47,24 @@ create unique index if not exists task_runs_one_open_per_task_idx
 create index if not exists task_runs_org_status_idx
   on public.task_runs (org_id, status);
 
+drop trigger if exists set_updated_at on public.task_runs;
 create trigger set_updated_at before update on public.task_runs
   for each row execute function public.set_updated_at();
 
 alter table public.task_runs enable row level security;
 
 -- RLS mirrors public.tasks: org members read / insert / update their org's
--- runs; admins may delete. is_org_member / is_org_admin are the same
--- SECURITY DEFINER helpers used across the schema.
+-- runs; admins may delete. is_org_member / is_org_admin are the SECURITY
+-- DEFINER helpers in the non-exposed `private` schema.
+drop policy if exists "members read task_runs" on public.task_runs;
 create policy "members read task_runs" on public.task_runs
-  for select to authenticated using (public.is_org_member(org_id));
+  for select to authenticated using (private.is_org_member(org_id));
+drop policy if exists "members insert task_runs" on public.task_runs;
 create policy "members insert task_runs" on public.task_runs
-  for insert to authenticated with check (public.is_org_member(org_id));
+  for insert to authenticated with check (private.is_org_member(org_id));
+drop policy if exists "members update task_runs" on public.task_runs;
 create policy "members update task_runs" on public.task_runs
-  for update to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
+  for update to authenticated using (private.is_org_member(org_id)) with check (private.is_org_member(org_id));
+drop policy if exists "admins delete task_runs" on public.task_runs;
 create policy "admins delete task_runs" on public.task_runs
-  for delete to authenticated using (public.is_org_admin(org_id));
+  for delete to authenticated using (private.is_org_admin(org_id));
