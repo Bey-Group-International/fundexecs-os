@@ -3703,6 +3703,14 @@ export type Database = {
         Args: { _email: string; _invite_id?: string; _user_id: string }
         Returns: Json
       }
+      propose_task_run: {
+        Args: { p_action: string; p_steps: Json; p_task_id: string }
+        Returns: string
+      }
+      decide_task_run: {
+        Args: { p_decision: string; p_note: string; p_run_id: string }
+        Returns: undefined
+      }
       upsert_org_posture_snapshot: {
         Args: {
           _capital?: number
