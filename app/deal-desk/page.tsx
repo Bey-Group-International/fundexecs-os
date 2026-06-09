@@ -26,6 +26,7 @@ const SOURCING_STAGE_KEYS = new Set(['visitor', 'prospect', 'qualified', 'meetin
 /** Live, in-flight stages owned by the Execution view. */
 const EXECUTION_STAGE_KEYS = new Set(['diligence', 'soft-circle', 'committed', 'closed']);
 
+/** Resolve the `?view` param to a desk view, defaulting to execution. */
 function resolveView(view: string | string[] | undefined): DeskView {
   const raw = Array.isArray(view) ? view[0] : view;
   return raw === 'sourcing' ? 'sourcing' : 'execution';
@@ -70,6 +71,7 @@ const VIEW_COPY: Record<DeskView, ViewCopy> = {
   }
 };
 
+/** Per-view page title and description so each desk mode reads distinctly. */
 export async function generateMetadata({
   searchParams
 }: {
@@ -141,6 +143,7 @@ function ViewTabs({ view }: { view: DeskView }) {
   );
 }
 
+/** Fallback shown when the user has no active organization yet. */
 function NoOrg({
   identity,
   view
@@ -229,6 +232,8 @@ function buildKpis(
   ];
 }
 
+/** The Deal Desk surface — renders the sourcing or execution view from `?view`,
+ *  each a slice of the shared pipeline book ranked by thesis-fit. */
 export default async function DealDeskPage({
   searchParams
 }: {

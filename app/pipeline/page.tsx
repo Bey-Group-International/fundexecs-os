@@ -9,6 +9,8 @@ import { PipelineView } from './PipelineView';
 
 export const metadata: Metadata = { title: 'Pipeline' };
 
+/** The pipeline board — deals, LPs, and the capital stack. A `?deal` param,
+ *  deep-linked from the Deal Desk, opens that deal's detail drawer on load. */
 export default async function PipelinePage({
   searchParams
 }: {

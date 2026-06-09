@@ -270,6 +270,8 @@ function PartnersStack({ partners, onAdd }: { partners: PipelinePartner[]; onAdd
   );
 }
 
+/** Interactive pipeline board: formation board, LP map, deal flow, and partners,
+ *  with optimistic stage moves and an optionally deep-linked deal drawer. */
 export function PipelineView({
   data,
   lpData,
