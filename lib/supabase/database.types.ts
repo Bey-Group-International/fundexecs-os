@@ -1865,6 +1865,7 @@ export type Database = {
           objective: string
           org_id: string
           owner_id: string | null
+          owner_specialist: string | null
           parent_objective_id: string | null
           plan_id: string
           priority: string
@@ -1889,6 +1890,7 @@ export type Database = {
           objective: string
           org_id: string
           owner_id?: string | null
+          owner_specialist?: string | null
           parent_objective_id?: string | null
           plan_id: string
           priority?: string
@@ -1913,6 +1915,7 @@ export type Database = {
           objective?: string
           org_id?: string
           owner_id?: string | null
+          owner_specialist?: string | null
           parent_objective_id?: string | null
           plan_id?: string
           priority?: string
@@ -1969,6 +1972,7 @@ export type Database = {
           name: string
           org_id: string
           owner_id: string | null
+          owner_specialist: string | null
           status: string
           updated_at: string
         }
@@ -1979,6 +1983,7 @@ export type Database = {
           name: string
           org_id: string
           owner_id?: string | null
+          owner_specialist?: string | null
           status?: string
           updated_at?: string
         }
@@ -1989,6 +1994,7 @@ export type Database = {
           name?: string
           org_id?: string
           owner_id?: string | null
+          owner_specialist?: string | null
           status?: string
           updated_at?: string
         }
@@ -3572,6 +3578,11 @@ export type Database = {
       create_organization: {
         Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }
         Returns: string
+      }
+      ensure_compliance_tier: { Args: { _org: string }; Returns: string }
+      refresh_compliance_tier: {
+        Args: { _org: string; _stale_days?: number }
+        Returns: number
       }
       generate_deal_matches: { Args: { _org_id: string }; Returns: number }
       generate_lp_matches: { Args: { _org_id: string }; Returns: number }

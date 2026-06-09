@@ -4,6 +4,7 @@ import { getShellIdentity } from '@/lib/queries/identity';
 import { Card } from '@/components/ui';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getStrategyData } from '@/lib/queries/strategy';
+import { getComplianceLane } from '@/lib/queries/compliance';
 import { getDashboardData } from '@/lib/queries/dashboard/lifecycle';
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, LIFECYCLE_STAGE_BLURBS } from '@/lib/lifecycle';
 import { computeInstitutionalPosture } from '@/lib/strategy/posture';
@@ -12,6 +13,7 @@ import { capturePostureSnapshot, getPostureTrend } from '@/lib/queries/strategy-
 import { StrategyView } from './StrategyView';
 import { StrategyHero } from './StrategyHero';
 import { PostureScorecard } from './PostureScorecard';
+import { ComplianceLane } from './ComplianceLane';
 
 export const metadata: Metadata = { title: 'Strategy' };
 
@@ -43,10 +45,11 @@ export default async function StrategyPage() {
   // Strategy objectives + the lifecycle/posture context the hero binds to. The
   // dashboard loader already derives the stage, loop progress, and readiness
   // from the tested engine — reuse it rather than recomputing here.
-  const [{ objectives }, dashboard, memberProfile] = await Promise.all([
+  const [{ objectives }, dashboard, memberProfile, complianceLane] = await Promise.all([
     getStrategyData(org.orgId),
     getDashboardData(org.orgId),
-    getMemberProfile()
+    getMemberProfile(),
+    getComplianceLane(org.orgId)
   ]);
 
   // The stage the current one unlocks (compounding): next in the ordered loop.
@@ -62,7 +65,14 @@ export default async function StrategyPage() {
   const posture = computeInstitutionalPosture({
     trust: dashboard.executionScore.layers,
     capitalReadiness,
-    objectives: objectives.map((o) => ({ priority: o.priority, done: o.state === 'done' }))
+    objectives: objectives.map((o) => ({ priority: o.priority, done: o.state === 'done' })),
+    // The Compliance pillar is now grounded in Adrian's standing compliance
+    // tier (Phase 4) when it has objectives, falling back to the trust proxy.
+    compliance: {
+      total: complianceLane.objectives.length,
+      done: complianceLane.objectives.filter((o) => o.state === 'done').length,
+      overdue: complianceLane.objectives.filter((o) => o.escalated && o.state === 'open').length
+    }
   });
 
   // Snapshot-backed compounding (blueprint Phase 3): the momentum Δ + streak and
@@ -105,6 +115,7 @@ export default async function StrategyPage() {
           nextStageBlurb={nextStage ? LIFECYCLE_STAGE_BLURBS[nextStage] : null}
         />
         <PostureScorecard posture={posture} trend={postureTrend} />
+        <ComplianceLane lane={complianceLane} />
         <StrategyView initialObjectives={objectives} />
       </div>
     </AppShell>
