@@ -8,6 +8,7 @@ const base: PostureInput = {
   objectives: []
 };
 
+/** Look up a single posture dimension by key, asserting it exists. */
 function dim(result: ReturnType<typeof computeInstitutionalPosture>, key: string) {
   const d = result.dimensions.find((x) => x.key === key);
   assert.ok(d, `dimension ${key} present`);

@@ -77,6 +77,7 @@ const DIMENSION_CUE: Record<PostureDimensionKey, string> = {
 /** Equal base weights; the composite renormalizes over the pillars in play. */
 const BASE_WEIGHT = 0.25;
 
+/** Round and clamp a raw number into the 0–100 score range. */
 const clamp100 = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
 
 /**
