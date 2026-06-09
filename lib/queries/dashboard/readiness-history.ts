@@ -36,10 +36,26 @@ export interface ReadinessMomentum {
   samples: number;
 }
 
+/** A compact "since last week" read for the digest card. */
+export interface ReadinessDigest {
+  /** Most recent compound score. */
+  current: number;
+  /** Compound score ~7 days ago (the closest snapshot at or before that point). */
+  prior: number;
+  /** current − prior. */
+  weekDelta: number;
+  /** Whether a prior snapshot existed to compare against. */
+  hasPrior: boolean;
+  /** Number of snapshots recorded (the tracking streak length). */
+  trackedDays: number;
+}
+
 export interface ReadinessHistory {
   /** Oldest → newest trend points (at most `WINDOW_DAYS`). */
   series: ReadinessTrendPoint[];
   momentum: ReadinessMomentum;
+  /** Week-over-week digest derived from the same series. */
+  digest: ReadinessDigest;
 }
 
 /** How far back the trend + momentum window reaches. */
@@ -52,7 +68,48 @@ const EMPTY_MOMENTUM: ReadinessMomentum = {
   samples: 0
 };
 
-const EMPTY_HISTORY: ReadinessHistory = { series: [], momentum: EMPTY_MOMENTUM };
+const EMPTY_DIGEST: ReadinessDigest = {
+  current: 0,
+  prior: 0,
+  weekDelta: 0,
+  hasPrior: false,
+  trackedDays: 0
+};
+
+const EMPTY_HISTORY: ReadinessHistory = {
+  series: [],
+  momentum: EMPTY_MOMENTUM,
+  digest: EMPTY_DIGEST
+};
+
+/** Days back the digest compares against ("since last week"). */
+const DIGEST_WINDOW_DAYS = 7;
+
+/**
+ * Week-over-week digest: the latest score vs. the closest snapshot at least
+ * {@link DIGEST_WINDOW_DAYS} old (falling back to the earliest when the history
+ * is younger than a week). Score-only — the page derives any dollar delta from
+ * the live target.
+ */
+function digestFrom(series: ReadinessTrendPoint[]): ReadinessDigest {
+  if (series.length === 0) return EMPTY_DIGEST;
+  const current = series[series.length - 1].score;
+  if (series.length < 2) {
+    return { current, prior: current, weekDelta: 0, hasPrior: false, trackedDays: series.length };
+  }
+  const lastMs = new Date(series[series.length - 1].date).getTime();
+  const cutoff = lastMs - DIGEST_WINDOW_DAYS * 86_400_000;
+  // Latest snapshot at or before the cutoff; fall back to the earliest point.
+  const priorPoint =
+    [...series].reverse().find((p) => new Date(p.date).getTime() <= cutoff) ?? series[0];
+  return {
+    current,
+    prior: priorPoint.score,
+    weekDelta: current - priorPoint.score,
+    hasPrior: true,
+    trackedDays: series.length
+  };
+}
 
 interface SnapshotRow {
   captured_on: string;
@@ -107,7 +164,7 @@ export async function loadReadinessHistory(orgId: string): Promise<ReadinessHist
       baseScore: r.base_score ?? 0
     }));
 
-    return { series, momentum: momentumFrom(series) };
+    return { series, momentum: momentumFrom(series), digest: digestFrom(series) };
   } catch {
     return EMPTY_HISTORY;
   }
