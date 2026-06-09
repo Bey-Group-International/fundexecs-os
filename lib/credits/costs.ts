@@ -97,6 +97,23 @@ export function canUseIntegration(plan: Plan, provider: PaidIntegration): boolea
   return INTEGRATION_ACCESS[plan].includes(provider);
 }
 
+/** Canonical provider → metered-action map. Single source of truth for both the
+ *  runtime debit (sync route) and the compile-time type-lock in `meter.ts`. */
+export const PAID_INTEGRATION_ACTION = {
+  apollo: 'apollo_enrich',
+  granola: 'meeting_copilot',
+  docusign: 'docusign_envelope',
+  carta: 'carta_sync'
+} as const satisfies Record<PaidIntegration, MeteredAction>;
+
+/** Maps each paid integration to the action that represents its per-call cost. */
+export type IntegrationActionByProvider = typeof PAID_INTEGRATION_ACTION;
+
+/** Narrow a provider id string to a known paid integration, or null. */
+export function asPaidIntegration(id: string): PaidIntegration | null {
+  return (PAID_INTEGRATIONS as readonly string[]).includes(id) ? (id as PaidIntegration) : null;
+}
+
 /* --------------------------------------------------------------------------
  * 3. Monthly free grant — the credits each plan is topped up to per month.
  *    Claimed idempotently per calendar month via `claim_monthly_credit_grant`.

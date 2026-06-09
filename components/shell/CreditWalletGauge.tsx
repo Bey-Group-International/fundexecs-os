@@ -96,13 +96,29 @@ export function CreditWalletGauge({ wallet: walletProp, className }: CreditWalle
     };
   }, [walletProp]);
 
-  const state = deriveState(wallet);
-  const configured = !!wallet?.configured;
+  // Live debits: Earn broadcasts `earn:credit` after each metered run so the
+  // gauge reflects the new balance immediately, without a refetch.
+  const [liveBalance, setLiveBalance] = useState<number | null>(null);
+  useEffect(() => {
+    const onCredit = (e: Event) => {
+      const detail = (e as CustomEvent<{ balance?: number }>).detail;
+      if (typeof detail?.balance === 'number') setLiveBalance(detail.balance);
+    };
+    window.addEventListener('earn:credit', onCredit);
+    return () => window.removeEventListener('earn:credit', onCredit);
+  }, []);
+
+  // A live balance overrides the resolved wallet's balance until the next load.
+  const effectiveWallet =
+    wallet && liveBalance != null ? { ...wallet, balance: liveBalance } : wallet;
+
+  const state = deriveState(effectiveWallet);
+  const configured = !!effectiveWallet?.configured;
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
 
   const tooltip = configured
-    ? `${state.balanceLabel} Earn coins · ${wallet?.plan ?? 'standard'} plan${state.recentCount ? ` · ${state.recentCount} recent` : ''} — click to top up`
+    ? `${state.balanceLabel} Earn coins · ${effectiveWallet?.plan ?? 'standard'} plan${state.recentCount ? ` · ${state.recentCount} recent` : ''} — click to top up`
     : 'Earn coins — your AI credits. Click to top up.';
 
   return (
@@ -161,7 +177,7 @@ export function CreditWalletGauge({ wallet: walletProp, className }: CreditWalle
 
       {/* Top-up popover */}
       <WalletTopUpPopover
-        wallet={wallet ?? null}
+        wallet={effectiveWallet ?? null}
         anchorRef={buttonRef}
         open={popoverOpen}
         onClose={() => setPopoverOpen(false)}
