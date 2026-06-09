@@ -22,8 +22,12 @@ export interface PostureObjectiveInput {
 export interface PostureInput {
   /** Chain-of-Trust layer completion, 0–100 each (truth/concept/execution/work). */
   trust: { truth: number; concept: number; execution: number; work: number };
-  /** The lifecycle engine's capital readiness dimension, 0–100. */
-  capitalReadiness: number;
+  /**
+   * The lifecycle engine's capital readiness dimension, 0–100, or null when the
+   * dimension is absent. Null is treated as unmeasured (excluded from the
+   * composite) rather than coerced to a fabricated 0.
+   */
+  capitalReadiness: number | null;
   /** The 100/30/10 objectives — drives the governance pillar. */
   objectives: PostureObjectiveInput[];
 }
@@ -119,7 +123,7 @@ export function computeInstitutionalPosture(input: PostureInput): PostureResult 
 
   const compliance = clamp100(0.6 * trust.truth + 0.4 * trust.concept);
   const execution = clamp100(0.55 * trust.execution + 0.45 * trust.work);
-  const capital = clamp100(capitalReadiness);
+  const capital = capitalReadiness === null ? null : clamp100(capitalReadiness);
   const governance = governanceScore(objectives);
 
   const scores: Record<PostureDimensionKey, number | null> = {

@@ -49,6 +49,17 @@ test('governance is capital-weighted objective completion (High3/Med2/Low1)', ()
   assert.equal(dim(r, 'governance').score, 50);
 });
 
+test('capital is null (unmeasured), not zero, when the dimension is absent', () => {
+  const r = computeInstitutionalPosture({
+    trust: { truth: 100, concept: 100, execution: 100, work: 100 },
+    capitalReadiness: null,
+    objectives: [{ priority: 'High', done: true }]
+  });
+  // Capital excluded; the other three pillars are all 100 → composite 100.
+  assert.equal(dim(r, 'capital').score, null);
+  assert.equal(r.composite, 100);
+});
+
 test('governance is null (not zero) when no objectives are authored', () => {
   const r = computeInstitutionalPosture(base);
   assert.equal(dim(r, 'governance').score, null);

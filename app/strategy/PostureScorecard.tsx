@@ -29,6 +29,7 @@ function pillarColor(score: number | null): string {
   return 'var(--warning)';
 }
 
+/** Render the posture composite, its band, and the four coached pillars. */
 export function PostureScorecard({ posture }: PostureScorecardProps) {
   const band = BAND_META[posture.band];
 

@@ -13,6 +13,10 @@ import { PostureScorecard } from './PostureScorecard';
 
 export const metadata: Metadata = { title: 'Strategy' };
 
+/**
+ * `/strategy` — the lifecycle hero, the Institutional Posture scorecard, and the
+ * 100/30/10 operating plan, composed from the strategy + dashboard loaders.
+ */
 export default async function StrategyPage() {
   const org = await getActiveOrg();
 
@@ -48,9 +52,10 @@ export default async function StrategyPage() {
 
   // Institutional Posture — composed from inputs already loaded above (Chain-of-
   // Trust layers, the capital readiness dimension, and the operating plan). Pure;
-  // no extra query, no migration.
+  // no extra query, no migration. A missing capital dimension is passed through
+  // as null (unmeasured) rather than a fabricated 0 — the composite renormalizes.
   const capitalReadiness =
-    dashboard.readinessBreakdown.find((d) => d.dimension === 'capital')?.score ?? 0;
+    dashboard.readinessBreakdown.find((d) => d.dimension === 'capital')?.score ?? null;
   const posture = computeInstitutionalPosture({
     trust: dashboard.executionScore.layers,
     capitalReadiness,
