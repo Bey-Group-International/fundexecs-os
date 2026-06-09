@@ -5,6 +5,7 @@ import type { MemberType } from '@/lib/member-types';
 import type { LifecycleStage } from '@/lib/lifecycle';
 import type { DashboardData } from '@/lib/queries/dashboard';
 import type { CommandMetrics as CommandMetricsData } from '@/lib/queries/dashboard/command-metrics';
+import type { TeamTaskMap } from '@/lib/queries/dashboard/team-tasks';
 import type { FundProfile } from '@/lib/queries/fund-profile';
 import { MajorAlertsCard } from './MajorAlertsCard';
 import { ExecutionScoreCard } from './ExecutionScoreCard';
@@ -92,6 +93,8 @@ export interface LifecycleDashboardProps {
   memberType: MemberType | null;
   data: DashboardData;
   metrics: CommandMetricsData;
+  /** Per-specialist real task workload (keyed by brain slug). */
+  teamTasks?: TeamTaskMap;
   fundProfile: FundProfile;
   /** First use after onboarding: show Earn's dismissible launch brief on top. */
   showLaunchBrief?: boolean;
@@ -102,6 +105,7 @@ export function LifecycleDashboard({
   memberType,
   data,
   metrics,
+  teamTasks,
   fundProfile,
   showLaunchBrief = false
 }: LifecycleDashboardProps) {
@@ -224,7 +228,7 @@ export function LifecycleDashboard({
 
         {/* 7 · Team tasks */}
         <RevealItem>
-          <TeamTasks team={data.agentTeam} />
+          <TeamTasks team={data.agentTeam} taskSummaries={teamTasks} />
         </RevealItem>
 
         {/* 8 · Recent activity */}
