@@ -3,6 +3,14 @@ import { AlertTriangle, ArrowUpRight, ShieldCheck, type LucideIcon } from 'lucid
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { FundProfile, FundProfileGap } from '@/lib/queries/fund-profile';
+import type { CollectingTierId } from '@/lib/proof-of-truth/tiers';
+
+/** Short rung label shown on each gap, so the list reads as a climb. */
+const TIER_LABEL: Record<CollectingTierId, string> = {
+  identity: 'Identity',
+  mandate: 'Mandate',
+  evidence: 'Evidence'
+};
 
 const SEVERITY_META: Record<
   FundProfileGap['severity'],
@@ -58,7 +66,7 @@ export function ProfileGapsCard({ profile, className }: ProfileGapsCardProps) {
             return (
               <li key={`${gap.field}-${gap.severity}`}>
                 <Link
-                  href="/onboarding"
+                  href={`/onboarding?focus=${encodeURIComponent(gap.field)}`}
                   data-testid={`profile-gap-${gap.field}`}
                   className="group flex items-start gap-3 rounded-xl border border-hairline bg-bg-1 px-3 py-2.5 transition-[background,transform,box-shadow] hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-[var(--shadow-sm)]"
                 >
@@ -74,6 +82,9 @@ export function ProfileGapsCard({ profile, className }: ProfileGapsCardProps) {
                       <Badge tone={meta.tone} className="text-[9.5px] uppercase">
                         {gap.severity}
                       </Badge>
+                      <span className="rounded-full border border-hairline bg-surface-1 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.08em] text-fg-4">
+                        {TIER_LABEL[gap.tier]}
+                      </span>
                       <p className="truncate text-[12.5px] font-semibold text-fg-1">{gap.label}</p>
                     </div>
                     <p className="mt-0.5 text-[11.5px] text-fg-3">{gap.reason}</p>

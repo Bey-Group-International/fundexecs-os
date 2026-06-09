@@ -1,5 +1,12 @@
 import type { MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
+import {
+  buildLadder,
+  scoreDepth,
+  tierForQuestion,
+  type LadderItem,
+  type ProfileLadderState
+} from '@/lib/proof-of-truth/tiers';
 import type { MemberProfileInput } from '@/lib/actions/member-profile';
 import type { MemberProfile } from '@/lib/queries/member-profile';
 
@@ -26,6 +33,69 @@ export function completionPct(memberType: MemberType, answers: Answers): number 
   if (!set.length) return 0;
   const answered = set.filter((q) => (answers[q.id] ?? '').trim().length > 0).length;
   return Math.round((answered / set.length) * 100);
+}
+
+/** Whether a single question's current answer is present, and whether it's thin. */
+export function scoreAnswer(
+  q: ProfileQuestion,
+  answers: Answers
+): { present: boolean; weak: boolean } {
+  const raw = answers[q.id] ?? '';
+  if (q.kind === 'tags') {
+    return scoreDepth(q, { text: '', tagCount: splitTags(raw).length });
+  }
+  return scoreDepth(q, { text: raw, tagCount: 0 });
+}
+
+/**
+ * Compute the readiness ladder from the in-progress answers, using the SAME
+ * tier model and weak-text rule the server Profile surface uses — so the
+ * wizard and `/profile` always agree on where the member stands.
+ */
+export function computeLadder(memberType: MemberType, answers: Answers): ProfileLadderState {
+  const items: LadderItem[] = getQuestionSet(memberType).map((q) => {
+    const { present, weak } = scoreAnswer(q, answers);
+    return { tier: tierForQuestion(q), optional: Boolean(q.optional), present, weak };
+  });
+  return buildLadder(items);
+}
+
+/**
+ * The index of the next required question that still needs work (missing or
+ * thin), searched forward from `after` and wrapping once. This is the wizard's
+ * "next best question" — it always points at the highest rung still open, in
+ * climb order, so approving answers drives straight to 100%. Returns -1 when
+ * every required field is strong.
+ */
+export function nextGapIndex(memberType: MemberType, answers: Answers, after: number): number {
+  const set = getQuestionSet(memberType);
+  const n = set.length;
+  const ladder = computeLadder(memberType, answers);
+  const targetTier = ladder.currentTierId;
+  if (!targetTier) return -1;
+
+  const order = Array.from({ length: n }, (_, step) => (after + step + 1) % n);
+
+  // Prefer the next open gap on the rung the member is currently climbing, so
+  // the wizard fills Identity before Mandate before Evidence rather than just
+  // walking the raw question order.
+  for (const i of order) {
+    const q = set[i];
+    if (q.optional || tierForQuestion(q) !== targetTier) continue;
+    const { present, weak } = scoreAnswer(q, answers);
+    if (!present || weak) return i;
+  }
+
+  // Fallback: any remaining required gap (covers the capstone tier, where no
+  // collecting question matches the target rung).
+  for (const i of order) {
+    const q = set[i];
+    if (q.optional) continue;
+    const { present, weak } = scoreAnswer(q, answers);
+    if (!present || weak) return i;
+  }
+
+  return -1;
 }
 
 /**

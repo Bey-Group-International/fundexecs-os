@@ -600,7 +600,7 @@ function slug(label: string): string {
 /**
  * NavItem — one loop entry. Renders one of: a route Link, an Earn-action button
  * (`earnPrompt`), a muted "soon" row (no href), or an expandable parent
- * (`children`, e.g. Capital → Equity/Debt/Hybrid).
+ * (`children`, e.g. Execute → Pre-Acquisition/Post-Acquisition/Exit).
  */
 function NavItem({
   item,
@@ -719,7 +719,12 @@ function NavItem({
   );
 }
 
-/** NavParent — an item with an expandable third tier of sub-rows. */
+/**
+ * NavParent — a third-tier group (e.g. Capital → Equity/Debt/Hybrid). Now that
+ * the cluster "more" menu surfaces every option, the inline version is flat: a
+ * small parent label with its child links shown directly beneath it — no expand
+ * chevron, no dot bullets.
+ */
 function NavParent({
   item,
   groupKey,
@@ -733,87 +738,50 @@ function NavParent({
   activeKey: string | null;
   onLinkClick: () => void;
 }) {
-  const panelId = useId();
   const Icon = item.icon;
   const children = item.children ?? [];
-  const childActive = children.some((_, j) => activeKey === `${groupKey}:${index}:${j}`);
-  // Auto-open when a child is active; manual toggle overrides afterward.
-  const [override, setOverride] = useState<boolean | null>(null);
-  const open = override ?? childActive;
 
   return (
     <li>
-      <button
-        type="button"
-        onClick={() => setOverride(!open)}
-        aria-expanded={open}
-        aria-controls={panelId}
-        title={item.hint}
-        data-testid={`rail-parent-${slug(item.label)}`}
-        className="flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left text-[12px] font-medium text-fg-3 transition-[background] hover:bg-surface-1"
-      >
+      {/* Parent label — a quiet heading; children render flat beneath it. */}
+      <div className="flex items-center gap-3 px-2.5 pb-0.5 pt-1.5 text-fg-4" title={item.hint}>
         <Icon size={16} strokeWidth={1.9} aria-hidden />
-        <span className="flex-1">{item.label}</span>
-        <motion.span animate={{ rotate: open ? 0 : -90 }} transition={FX_SPRING}>
-          <ChevronDown size={13} strokeWidth={2} aria-hidden className="text-fg-5" />
-        </motion.span>
-      </button>
-      <AnimatePresence initial={false}>
-        {open ? (
-          <motion.ul
-            id={panelId}
-            key="sub"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: FX_EASE }}
-            className="ml-[18px] flex flex-col gap-0.5 overflow-hidden border-l border-hairline pl-1.5 pt-0.5"
-          >
-            {children.map((sub, j) => {
-              const subKey = `${groupKey}:${index}:${j}`;
-              const active = activeKey === subKey;
-              const isSoon = !sub.href || sub.live === false;
-              return (
-                <li key={subKey}>
-                  {isSoon || !sub.href ? (
-                    <div
-                      title={sub.hint}
-                      className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[11px] text-fg-5"
-                    >
-                      <span className="h-1 w-1 flex-none rounded-full bg-fg-5/60" aria-hidden />
-                      {sub.label}
-                      <span className="ml-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-fg-5">
-                        soon
-                      </span>
-                    </div>
-                  ) : (
-                    <Link
-                      href={sub.href}
-                      onClick={onLinkClick}
-                      aria-current={active ? 'page' : undefined}
-                      title={sub.hint}
-                      data-testid={`rail-sublink-${slug(item.label)}-${slug(sub.label)}`}
-                      className={cn(
-                        'flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[11px] transition-[background] hover:bg-surface-1',
-                        active ? 'bg-[var(--azure-soft)] font-medium text-fg-1' : 'text-fg-3'
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'h-1.5 w-1.5 flex-none rounded-full',
-                          active ? 'bg-azure-1' : 'bg-fg-5/60'
-                        )}
-                        aria-hidden
-                      />
-                      {sub.label}
-                    </Link>
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{item.label}</span>
+      </div>
+      <ul className="flex flex-col gap-0.5">
+        {children.map((sub, j) => {
+          const subKey = `${groupKey}:${index}:${j}`;
+          const active = activeKey === subKey;
+          const isSoon = !sub.href || sub.live === false;
+          return (
+            <li key={subKey}>
+              {isSoon || !sub.href ? (
+                <div
+                  title={sub.hint}
+                  className="flex items-center gap-2 rounded-[10px] py-1.5 pl-[38px] pr-2.5 text-[12px] text-fg-5"
+                >
+                  <span className="min-w-0 flex-1 truncate">{sub.label}</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.06em]">soon</span>
+                </div>
+              ) : (
+                <Link
+                  href={sub.href}
+                  onClick={onLinkClick}
+                  aria-current={active ? 'page' : undefined}
+                  title={sub.hint}
+                  data-testid={`rail-sublink-${slug(item.label)}-${slug(sub.label)}`}
+                  className={cn(
+                    'flex items-center rounded-[10px] py-1.5 pl-[38px] pr-2.5 text-[12px] transition-[background] hover:bg-surface-1',
+                    active ? 'bg-[var(--azure-soft)] font-medium text-fg-1' : 'text-fg-3'
                   )}
-                </li>
-              );
-            })}
-          </motion.ul>
-        ) : null}
-      </AnimatePresence>
+                >
+                  <span className="min-w-0 flex-1 truncate">{sub.label}</span>
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </li>
   );
 }
@@ -1116,7 +1084,7 @@ function ChainPip({ state }: { state: LinkState }) {
 /**
  * ClusterMenu — a small "more" affordance in the cluster header that pops out
  * the cluster's *full* option set: every nav link (flattening nested groups
- * like Capital → Equity/Debt/Hybrid so nothing is buried), plus the Earn
+ * like Execute → Pre-Acquisition/Post-Acquisition/Exit so nothing is buried), plus the Earn
  * launcher action at the foot. Fixed-positioned beside the rail so the rail's
  * overflow never clips it; closes on outside-click / Escape / scroll.
  */
@@ -1241,7 +1209,7 @@ function ClusterMenuEntry({
   const rowBase =
     'flex w-full items-center gap-2 rounded-[9px] px-2.5 py-1.5 text-left text-[12px] transition-[background]';
 
-  // Nested group (e.g. Capital → Equity/Debt/Hybrid): show every child link.
+  // Nested group (e.g. Execute → Pre-Acquisition/Post-Acquisition/Exit): show every child link.
   if (item.children && item.children.length > 0) {
     return (
       <div>

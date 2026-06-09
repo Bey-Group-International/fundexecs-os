@@ -135,15 +135,17 @@ export function ProfileHero({ profile, className }: ProfileHeroProps) {
             </div>
           </div>
           <span
-            className="rounded-full border px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.1em]"
+            className="rounded-full border px-2 py-0.5 text-center text-[10.5px] font-semibold uppercase tracking-[0.1em]"
             style={{ color: tone.color, borderColor: tone.color, backgroundColor: tone.bg }}
           >
-            {tone.label}
+            {profile.ladder.institutionalReady
+              ? 'Institutionally ready'
+              : profile.ladder.readinessLabel}
           </span>
           <p className="text-center text-[10.5px] text-fg-4">
             {profile.gaps.length === 0
               ? 'Every required field on the record.'
-              : `${profile.gaps.length} gap${profile.gaps.length === 1 ? '' : 's'} for Earn to close.`}
+              : `${profile.gaps.length} gap${profile.gaps.length === 1 ? '' : 's'} to ${profile.ladder.readinessTierId === null ? 'get discoverable' : 'climb the ladder'}.`}
           </p>
         </div>
       </div>
