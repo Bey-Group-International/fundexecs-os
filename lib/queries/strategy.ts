@@ -64,6 +64,7 @@ function deriveTier(horizon: string | null, timeline: string | null): '100' | '3
   return '100';
 }
 
+/** Normalize a raw priority string to the display-cased union. */
 function normalizePriority(priority: string): 'High' | 'Medium' | 'Low' {
   const p = priority.toLowerCase();
   if (p === 'high') return 'High';
@@ -71,6 +72,7 @@ function normalizePriority(priority: string): 'High' | 'Medium' | 'Low' {
   return 'Medium';
 }
 
+/** Collapse a status string + `archived_at` into the normalized objective state. */
 function normalizeState(status: string, archivedAt: string | null): StrategyObjective['state'] {
   if (archivedAt) return 'archived';
   const s = status.toLowerCase();
@@ -79,6 +81,7 @@ function normalizeState(status: string, archivedAt: string | null): StrategyObje
   return 'open';
 }
 
+/** Map a raw source string to a known `ObjectiveSource`, defaulting to manual. */
 function normalizeSource(source: string | null): ObjectiveSource {
   const s = (source ?? 'manual').toLowerCase();
   if (s === 'signal' || s === 'lifecycle' || s === 'cascade') return s;

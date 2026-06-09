@@ -435,12 +435,23 @@ async function loadMaterialsReadiness(orgId: string): Promise<number> {
   const supabase = await createClient();
   const { data } = await supabase
     .from('governance_objectives')
-    .select('status, archived_at, deleted_at')
+    .select('status, archived_at, deleted_at, source, approved_at')
     .eq('org_id', orgId)
     .is('deleted_at', null);
 
-  const rows = (data ?? []) as Array<{ status: string; archived_at: string | null }>;
-  const active = rows.filter((r) => !r.archived_at);
+  const rows = (data ?? []) as Array<{
+    status: string;
+    archived_at: string | null;
+    source: string | null;
+    approved_at: string | null;
+  }>;
+  // Exclude unapproved drafts (signal/cascade objectives the operator hasn't
+  // accepted yet) so pending suggestions don't drag readiness down. Manual
+  // objectives always count; non-manual ones only once approved.
+  const active = rows.filter(
+    (r) =>
+      !r.archived_at && ((r.source ?? 'manual').toLowerCase() === 'manual' || r.approved_at != null)
+  );
   if (active.length === 0) return 0;
   const done = active.filter((r) => {
     const s = (r.status ?? '').toLowerCase();

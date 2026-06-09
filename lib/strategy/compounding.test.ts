@@ -80,6 +80,18 @@ test('in-progress status floors a low signal at 50', () => {
   assert.equal(deriveObjectivePct(input), 50);
 });
 
+test('legacy active status floors a low signal at 50', () => {
+  const input: ObjectiveProgressInput = {
+    state: 'open',
+    status: 'active',
+    lifecycleStage: 'source_lps',
+    gatesCleared: { source_lps: false },
+    loopProgress: 10
+  };
+  // mean signal is 10, but a legacy 'active' status floors to 50
+  assert.equal(deriveObjectivePct(input), 50);
+});
+
 /* ---- isPendingDraft ------------------------------------------------------ */
 
 test('approved objective is never a draft', () => {

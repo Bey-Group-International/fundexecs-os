@@ -139,7 +139,8 @@ export function deriveObjectivePct(input: ObjectiveProgressInput): number {
   // Mean of the available real signals, floored by the legacy status hint so an
   // explicitly in-progress objective never reads below 50 once it has a signal.
   const mean = signals.reduce((s, n) => s + n, 0) / signals.length;
-  const floor = input.status.toLowerCase().includes('progress') ? 50 : 0;
+  const status = input.status.toLowerCase();
+  const floor = status.includes('progress') || status === 'active' ? 50 : 0;
   return clamp100(Math.max(mean, floor));
 }
 

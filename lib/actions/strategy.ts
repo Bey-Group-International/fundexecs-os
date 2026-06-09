@@ -53,6 +53,11 @@ export interface CreateObjectiveInput {
   approved?: boolean;
 }
 
+/**
+ * Resolve the plan id to attach an objective to: the explicitly requested id when
+ * given, otherwise the org's earliest governance plan. Returns null when neither
+ * resolves so the caller can surface a clear error.
+ */
 async function resolvePlanId(orgId: string, requested: string | null): Promise<string | null> {
   if (requested) return requested;
   const supabase = await createClient();
@@ -66,6 +71,12 @@ async function resolvePlanId(orgId: string, requested: string | null): Promise<s
   return (data as Pick<PlanRow, 'id'> | null)?.id ?? null;
 }
 
+/**
+ * Create a governance objective for the active org. The legacy manual path only
+ * needs `objective` (+ optional plan/timeline/priority); Phase 2b fields are
+ * written only when explicitly provided so existing callers are unaffected.
+ * RLS-scoped; returns a typed error result rather than throwing.
+ */
 export async function createObjective(input: CreateObjectiveInput): Promise<ObjectiveResult> {
   const title = input.objective?.trim();
   if (!title) return { ok: false, error: 'Objective text is required.' };
@@ -132,6 +143,11 @@ export interface UpdateObjectiveInput {
   aiRecommendation?: string | null;
 }
 
+/**
+ * Patch an objective's editable fields (title/timeline/priority/recommendation).
+ * Only provided keys are written; an empty patch or blank title is rejected with
+ * a typed error. RLS-scoped; never throws.
+ */
 export async function updateObjective(
   id: string,
   patch: UpdateObjectiveInput
@@ -256,6 +272,16 @@ export async function cascadeObjective(id: string): Promise<{ spawned: number }>
     });
     if (children.length === 0) return { spawned: 0 };
 
+    // Idempotency guard — if this parent already has cascade children, don't
+    // spawn a second set (re-completing / double-invocation is a no-op).
+    const { count: existingChildren } = await supabase
+      .from('governance_objectives')
+      .select('id', { count: 'exact', head: true })
+      .eq('parent_objective_id', parent.id)
+      .eq('source', 'cascade')
+      .is('deleted_at', null);
+    if ((existingChildren ?? 0) > 0) return { spawned: 0 };
+
     const rows: ObjectiveInsert[] = children.map((c) => ({
       org_id: parent.org_id,
       plan_id: parent.plan_id,
@@ -352,6 +378,10 @@ export async function deleteObjective(id: string): Promise<ObjectiveResult> {
   return { ok: true, objective: data as ObjectiveRow };
 }
 
+/**
+ * Stamp `read_at` the first time an objective is opened (no-op if already read).
+ * RLS-scoped; returns ok with a minimal stub when there was nothing to update.
+ */
 export async function markObjectiveRead(id: string): Promise<ObjectiveResult> {
   if (!id) return { ok: false, error: 'Missing objective id.' };
 

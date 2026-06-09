@@ -93,6 +93,10 @@ const SOURCE_LABEL: Record<StrategyObjective['source'], string> = {
   cascade: 'Cascade draft'
 };
 
+/**
+ * A single objective card: title, tier/source badges, progress, and the row
+ * action menu (complete / read / archive / delete) plus draft approval.
+ */
 function ObjectiveCard({
   o,
   onAct,
@@ -232,6 +236,11 @@ function ObjectiveCard({
   );
 }
 
+/**
+ * Client view for the 100/30/10 operating plan: groups objectives by tier, shows
+ * priority-weighted completion, and wires optimistic row actions / draft approval
+ * back to the server actions.
+ */
 export function StrategyView({ initialObjectives }: { initialObjectives: StrategyObjective[] }) {
   const cards = useCardState(initialObjectives, (o) => ({
     read: o.read,
