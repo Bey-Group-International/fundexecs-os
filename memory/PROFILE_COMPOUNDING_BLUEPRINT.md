@@ -13,13 +13,13 @@ phase keeps the never-block / degrade-gracefully posture and is covered by
 
 ## The five gaps between "slice" and "full loop"
 
-| #   | Today                                                                                         | Full compounding loop                                                |
-| --- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| 1   | ✅ **Shipped** — depth scoring (`scoreDepth`) across field types: numbers, specificity, proof | —                                                                    |
-| 2   | ✅ **Shipped** — guided entry resumes at the open rung; visited-stack Back                     | —                                                                    |
-| 3   | ✅ **Shipped** — impact-ranked next-best gap (`rankedOpenGaps` + `compareGaps`) + skip loop    | —                                                                    |
-| 4   | ✅ **Shipped** — publish persists the honest `completion_pct` (`ladder.overallPct`)            | —                                                                    |
-| 5   | ✅ **Shipped** — completed rungs show their payoff ("Matchable — N waiting", "Diligence-ready") | —                                                                    |
+| #   | Today                                                                                           | Full compounding loop |
+| --- | ----------------------------------------------------------------------------------------------- | --------------------- |
+| 1   | ✅ **Shipped** — depth scoring (`scoreDepth`) across field types: numbers, specificity, proof   | —                     |
+| 2   | ✅ **Shipped** — guided entry resumes at the open rung; visited-stack Back                      | —                     |
+| 3   | ✅ **Shipped** — impact-ranked next-best gap (`rankedOpenGaps` + `compareGaps`) + skip loop     | —                     |
+| 4   | ✅ **Shipped** — publish persists the honest `completion_pct` (`ladder.overallPct`)             | —                     |
+| 5   | ✅ **Shipped** — completed rungs show their payoff ("Matchable — N waiting", "Diligence-ready") | —                     |
 
 ## Phase 1 — Depth scoring (completed in the readiness-ladder PR)
 
@@ -71,6 +71,7 @@ is gone.
 incoherent now that forward motion (Phase 2) jumps by impact.
 
 **Delivered — `mode: 'guided' | 'linear'` on `ProofOfTruthFlow`:**
+
 - **Guided entry resumes at the open rung:** drops the member straight on the
   highest-impact open gap (`rankedOpenGaps[0]`), or straight to Review when the
   record is already strong. A close-gap `focusField` still wins.
@@ -78,7 +79,7 @@ incoherent now that forward motion (Phase 2) jumps by impact.
   arc. Mode is inferred when not passed: a close-gap link or any existing
   progress → guided; an empty profile → linear.
 - **Visited-stack Back:** a `history` stack records the questions actually
-  served, so Back returns to the previous *screen* — not the schema-previous
+  served, so Back returns to the previous _screen_ — not the schema-previous
   question the gap loop jumped over.
 - Review's Back lands on the first thing still worth fixing (incl. skipped).
 
@@ -116,6 +117,7 @@ invisible.
 **Delivered — `buildPayoffs({ memberType, matchCount })` + a `payoffs` prop on
 `ProfileLadder`:** once a rung reads complete it shows the consequence it
 unlocked instead of a generic "On the record":
+
 - **Mandate → "Matchable — N matches waiting"** when there's a live count
   (`getPendingMatchCount` over the `matches` table, head-only, fail-open to 0),
   degrading to a member-type-aware "Matchable to <counterparty>" otherwise.

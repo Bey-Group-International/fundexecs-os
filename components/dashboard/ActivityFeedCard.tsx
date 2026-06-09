@@ -1,5 +1,6 @@
 import { ShieldCheck, Brain, Sparkles, type LucideIcon } from 'lucide-react';
 import { Badge, Card, SectionTitle } from '@/components/ui';
+import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
 import type { ActivityItem } from '@/lib/queries/dashboard';
 
@@ -45,12 +46,11 @@ export function ActivityFeedCard({ items, className }: ActivityFeedCardProps) {
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-hairline bg-surface-1 px-4 py-6 text-center">
-          <p className="text-[12.5px] font-medium text-fg-2">No activity yet.</p>
-          <p className="mt-0.5 text-[11px] text-fg-4">
-            As Earn and the AI committee execute, every action lands here — documented as it forms.
-          </p>
-        </div>
+        <EmptyState
+          variant="card"
+          title="No activity yet"
+          body="As Earn and the AI committee execute, every action lands here — documented as it forms."
+        />
       ) : (
         <ul className="flex flex-col gap-1.5" data-testid="activity-feed-items">
           {items.map((item) => {

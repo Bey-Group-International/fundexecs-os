@@ -1,4 +1,5 @@
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
+import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
 import { PERSONAS, type PersonaKey } from '@/components/dashboard/fixtures/personas';
 import type { CommitmentScheduleRow, CommitmentSnapshot } from './types';
@@ -51,12 +52,12 @@ export function CommitmentTracker({ snapshot, className }: CommitmentTrackerProp
       </div>
 
       {snapshot.schedule.length === 0 ? (
-        <div className="mt-3 rounded-xl border border-dashed border-hairline bg-surface-1 p-6 text-center">
-          <p className="text-[12.5px] font-medium text-fg-2">No commitments mapped yet</p>
-          <p className="mt-1 text-[11.5px] text-fg-4">
-            Subscriptions will appear here as Sloane and Eleanor close each ticket.
-          </p>
-        </div>
+        <EmptyState
+          variant="card"
+          className="mt-3"
+          title="No commitments mapped yet"
+          body="Subscriptions will appear here as Sloane and Eleanor close each ticket."
+        />
       ) : (
         <ul className="flex flex-col">
           {snapshot.schedule.map((row) => {

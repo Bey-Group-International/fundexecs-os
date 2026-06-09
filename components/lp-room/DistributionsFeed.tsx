@@ -1,5 +1,6 @@
 import { ArrowDownToLine } from 'lucide-react';
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
+import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
 import type { DistributionItem } from './types';
 
@@ -64,18 +65,12 @@ export function DistributionsFeed({
       </div>
 
       {distributions.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-hairline bg-surface-1 p-6 text-center">
-          <ArrowDownToLine
-            size={20}
-            strokeWidth={1.5}
-            className="mx-auto mb-2 text-fg-5"
-            aria-hidden
-          />
-          <p className="text-[12.5px] font-medium text-fg-2">No distributions yet</p>
-          <p className="mt-1 text-[11.5px] text-fg-4">
-            Distributions will appear here once capital is returned to LPs.
-          </p>
-        </div>
+        <EmptyState
+          variant="card"
+          icon={ArrowDownToLine}
+          title="No distributions yet"
+          body="Distributions will appear here once capital is returned to LPs."
+        />
       ) : (
         <>
           <div

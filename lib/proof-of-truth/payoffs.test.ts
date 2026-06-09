@@ -10,13 +10,19 @@ test('buildPayoffs shows the live match count on the mandate line', () => {
 });
 
 test('buildPayoffs singularises one match', () => {
-  assert.equal(buildPayoffs({ memberType: 'startup', matchCount: 1 }).mandate, 'Matchable — 1 match waiting');
+  assert.equal(
+    buildPayoffs({ memberType: 'startup', matchCount: 1 }).mandate,
+    'Matchable — 1 match waiting'
+  );
 });
 
 test('buildPayoffs degrades to a qualitative, member-type-aware line', () => {
   // No count, zero, and null all fall back to the counterparty noun.
   assert.equal(buildPayoffs({ memberType: 'service_provider' }).mandate, 'Matchable to clients');
-  assert.equal(buildPayoffs({ memberType: 'startup', matchCount: 0 }).mandate, 'Matchable to investors');
+  assert.equal(
+    buildPayoffs({ memberType: 'startup', matchCount: 0 }).mandate,
+    'Matchable to investors'
+  );
   assert.equal(
     buildPayoffs({ memberType: 'investment_firm', matchCount: null }).mandate,
     'Matchable to LP & co-investor mandates'

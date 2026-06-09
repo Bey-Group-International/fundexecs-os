@@ -8,13 +8,8 @@ import { EarnCoin } from '@/components/screens/EarnCoin';
 import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
 import { HeroStats } from '@/components/landing/HeroStats';
 import { Magnetic } from '@/components/landing/Motion';
+import { PRIMARY_CTA, SECONDARY_CTA } from '@/components/landing/cta';
 import { getCOO } from '@/lib/team';
-
-const PRIMARY_CTA =
-  'inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_12px_30px_-10px_rgba(37,99,235,0.7)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-
-const SECONDARY_CTA =
-  'inline-flex items-center justify-center gap-2 rounded-xl border border-hairline bg-surface-1 px-6 py-3.5 text-[15px] font-medium text-fg-2 backdrop-blur-sm transition hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1';
 
 /**
  * Hero — the cinematic, pointer-reactive opener. A drifting aurora + grid

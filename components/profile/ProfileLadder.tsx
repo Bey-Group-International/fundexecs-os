@@ -40,7 +40,12 @@ export interface ProfileLadderProps {
   className?: string;
 }
 
-export function ProfileLadder({ ladder, variant = 'full', payoffs, className }: ProfileLadderProps) {
+export function ProfileLadder({
+  ladder,
+  variant = 'full',
+  payoffs,
+  className
+}: ProfileLadderProps) {
   const compact = variant === 'compact';
 
   return (
