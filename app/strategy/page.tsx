@@ -6,8 +6,10 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { getStrategyData } from '@/lib/queries/strategy';
 import { getDashboardData } from '@/lib/queries/dashboard/lifecycle';
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, LIFECYCLE_STAGE_BLURBS } from '@/lib/lifecycle';
+import { computeInstitutionalPosture } from '@/lib/strategy/posture';
 import { StrategyView } from './StrategyView';
 import { StrategyHero } from './StrategyHero';
+import { PostureScorecard } from './PostureScorecard';
 
 export const metadata: Metadata = { title: 'Strategy' };
 
@@ -44,6 +46,17 @@ export default async function StrategyPage() {
   const stageIndex = LIFECYCLE_STAGES.indexOf(dashboard.stage);
   const nextStage = stageIndex >= 0 ? (LIFECYCLE_STAGES[stageIndex + 1] ?? null) : null;
 
+  // Institutional Posture — composed from inputs already loaded above (Chain-of-
+  // Trust layers, the capital readiness dimension, and the operating plan). Pure;
+  // no extra query, no migration.
+  const capitalReadiness =
+    dashboard.readinessBreakdown.find((d) => d.dimension === 'capital')?.score ?? 0;
+  const posture = computeInstitutionalPosture({
+    trust: dashboard.executionScore.layers,
+    capitalReadiness,
+    objectives: objectives.map((o) => ({ priority: o.priority, done: o.state === 'done' }))
+  });
+
   return (
     <AppShell
       identity={await getShellIdentity()}
@@ -62,6 +75,7 @@ export default async function StrategyPage() {
           nextStageLabel={nextStage ? LIFECYCLE_STAGE_LABELS[nextStage] : null}
           nextStageBlurb={nextStage ? LIFECYCLE_STAGE_BLURBS[nextStage] : null}
         />
+        <PostureScorecard posture={posture} />
         <StrategyView initialObjectives={objectives} />
       </div>
     </AppShell>
