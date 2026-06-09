@@ -1853,51 +1853,72 @@ export type Database = {
       governance_objectives: {
         Row: {
           ai_recommendation: string | null
+          approved_at: string | null
           archived_at: string | null
+          capital_weight: number | null
+          category: string | null
           closed_at: string | null
           created_at: string
           deleted_at: string | null
           id: string
+          lifecycle_stage: string | null
           objective: string
           org_id: string
           owner_id: string | null
+          parent_objective_id: string | null
           plan_id: string
           priority: string
           read_at: string | null
+          source: string
+          source_signal_id: string | null
           status: string
           timeline: string | null
           updated_at: string
         }
         Insert: {
           ai_recommendation?: string | null
+          approved_at?: string | null
           archived_at?: string | null
+          capital_weight?: number | null
+          category?: string | null
           closed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           id?: string
+          lifecycle_stage?: string | null
           objective: string
           org_id: string
           owner_id?: string | null
+          parent_objective_id?: string | null
           plan_id: string
           priority?: string
           read_at?: string | null
+          source?: string
+          source_signal_id?: string | null
           status?: string
           timeline?: string | null
           updated_at?: string
         }
         Update: {
           ai_recommendation?: string | null
+          approved_at?: string | null
           archived_at?: string | null
+          capital_weight?: number | null
+          category?: string | null
           closed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           id?: string
+          lifecycle_stage?: string | null
           objective?: string
           org_id?: string
           owner_id?: string | null
+          parent_objective_id?: string | null
           plan_id?: string
           priority?: string
           read_at?: string | null
+          source?: string
+          source_signal_id?: string | null
           status?: string
           timeline?: string | null
           updated_at?: string
@@ -1918,10 +1939,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "governance_objectives_parent_objective_id_fkey"
+            columns: ["parent_objective_id"]
+            isOneToOne: false
+            referencedRelation: "governance_objectives"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "governance_objectives_plan_id_fkey"
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "governance_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "governance_objectives_source_signal_id_fkey"
+            columns: ["source_signal_id"]
+            isOneToOne: false
+            referencedRelation: "market_signals"
             referencedColumns: ["id"]
           },
         ]

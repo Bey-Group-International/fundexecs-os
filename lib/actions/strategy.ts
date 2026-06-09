@@ -19,6 +19,29 @@ export interface CreateObjectiveInput {
   timeline?: string | null;
   priority?: 'high' | 'medium' | 'low';
   aiRecommendation?: string | null;
+  // Phase 2b (requires the strategy_objective_compounding migration). All
+  // optional and only written to the insert when explicitly provided, so the
+  // existing manual-create path (ObjectiveDrawer) is unchanged and safe to run
+  // before the migration is applied.
+  /** Posture lane this objective belongs to. */
+  category?: 'capital' | 'governance' | 'compliance' | 'execution';
+  /** Value-at-stake multiplier for capital-weighted scoring. */
+  capitalWeight?: number;
+  /** Where the objective came from. Defaults to 'manual' at the DB level. */
+  source?: 'manual' | 'signal' | 'lifecycle' | 'cascade';
+  /** The market signal this was drafted from, when source='signal'. */
+  sourceSignalId?: string | null;
+  /** Cascade parent — set when this is a child spawned from a completed bet. */
+  parentObjectiveId?: string | null;
+  /** Lifecycle loop stage this objective advances. */
+  lifecycleStage?: string | null;
+  /**
+   * When true, stamp `approved_at` now (the objective enters the live plan
+   * immediately). Specialist drafts omit this and stay pending until approved.
+   * Omitted entirely → `approved_at` is left untouched, preserving the legacy
+   * insert shape.
+   */
+  approved?: boolean;
 }
 
 async function resolvePlanId(orgId: string, requested: string | null): Promise<string | null> {
@@ -55,12 +78,41 @@ export async function createObjective(input: CreateObjectiveInput): Promise<Obje
     ai_recommendation: input.aiRecommendation ?? null,
     owner_id: org.userId
   };
+  // Phase 2b fields — only added when provided so the legacy insert is untouched.
+  if (input.category !== undefined) insert.category = input.category;
+  if (input.capitalWeight !== undefined) insert.capital_weight = input.capitalWeight;
+  if (input.source !== undefined) insert.source = input.source;
+  if (input.sourceSignalId !== undefined) insert.source_signal_id = input.sourceSignalId;
+  if (input.parentObjectiveId !== undefined) insert.parent_objective_id = input.parentObjectiveId;
+  if (input.lifecycleStage !== undefined) insert.lifecycle_stage = input.lifecycleStage;
+  if (input.approved === true) insert.approved_at = new Date().toISOString();
+
   const { data, error } = await supabase
     .from('governance_objectives')
     .insert(insert)
     .select('*')
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? 'Insert failed.' };
+  return { ok: true, objective: data as ObjectiveRow };
+}
+
+/**
+ * Approve a pending specialist/signal draft into the live plan by stamping
+ * `approved_at`. Phase 2b — requires the strategy_objective_compounding
+ * migration; not yet wired to the UI.
+ */
+export async function approveDraftObjective(id: string): Promise<ObjectiveResult> {
+  if (!id) return { ok: false, error: 'Missing objective id.' };
+
+  const supabase = await createClient();
+  const update: ObjectiveUpdate = { approved_at: new Date().toISOString(), status: 'open' };
+  const { data, error } = await supabase
+    .from('governance_objectives')
+    .update(update)
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error || !data) return { ok: false, error: error?.message ?? 'Approve failed.' };
   return { ok: true, objective: data as ObjectiveRow };
 }
 
