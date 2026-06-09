@@ -117,6 +117,10 @@ function coverageTone(pct: number): BadgeTone {
   return 'neutral';
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 type Tab =
   | 'overview'
   | 'users'
@@ -861,33 +865,52 @@ export function AdminView({
   function approve(id: string) {
     setRowErrors((e) => ({ ...e, [id]: '' }));
     cards.complete(id);
-    void approveMember(id).then((res) => {
-      if (!res.ok) {
+    void approveMember(id)
+      .then((res) => {
+        if (!res.ok) {
+          cards.restore(id);
+          setRowErrors((e) => ({ ...e, [id]: res.error }));
+          return;
+        }
+        window.emitTrust?.({
+          layer: 'execution',
+          title: 'Member approved',
+          msg: 'An applicant was approved into the organization.',
+          entity: id
+        });
+      })
+      .catch((err: unknown) => {
         cards.restore(id);
-        setRowErrors((e) => ({ ...e, [id]: res.error }));
+        setRowErrors((e) => ({
+          ...e,
+          [id]: errorMessage(err, 'Approve failed. Please try again.')
+        }));
+      })
+      .finally(() => {
         router.refresh();
-        return;
-      }
-      window.emitTrust?.({
-        layer: 'execution',
-        title: 'Member approved',
-        msg: 'An applicant was approved into the organization.',
-        entity: id
       });
-      router.refresh();
-    });
   }
 
   function archive(id: string) {
     setRowErrors((e) => ({ ...e, [id]: '' }));
     cards.archive(id);
-    void archiveMember(id).then((res) => {
-      if (!res.ok) {
+    void archiveMember(id)
+      .then((res) => {
+        if (!res.ok) {
+          cards.restore(id);
+          setRowErrors((e) => ({ ...e, [id]: res.error }));
+        }
+      })
+      .catch((err: unknown) => {
         cards.restore(id);
-        setRowErrors((e) => ({ ...e, [id]: res.error }));
-      }
-      router.refresh();
-    });
+        setRowErrors((e) => ({
+          ...e,
+          [id]: errorMessage(err, 'Archive failed. Please try again.')
+        }));
+      })
+      .finally(() => {
+        router.refresh();
+      });
   }
 
   function changeRole(id: string, role: OrgMemberRole) {
@@ -991,7 +1014,7 @@ export function AdminView({
 
   // Org owners/admins get an org-scoped subset of tabs — their team, launch
   // readiness, and workspace activity. Platform-only surfaces
-  // (applications, beta invites, referrals, the platform knowledge base / trust
+  // (applications, beta links, referrals, the platform knowledge base / trust
   // metrics) stay reserved for the Bey Group team.
   const allTabs = [
     { id: 'overview' as const, label: 'Overview', icon: LayoutDashboard },

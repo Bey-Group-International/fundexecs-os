@@ -29,6 +29,12 @@ const ROLES = [
   { value: 'advisor', label: 'Advisor' }
 ];
 
+function isNextRedirectError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const digest = 'digest' in error ? (error as { digest?: unknown }).digest : undefined;
+  return typeof digest === 'string' && digest.startsWith('NEXT_REDIRECT');
+}
+
 /**
  * Onboarding — captures identity + organization (for users without an org, the
  * server action (create_organization RPC + profiles full_name/role write), then
@@ -63,6 +69,11 @@ export function OnboardingView({
   const [orgType, setOrgType] = useState('fund');
 
   async function continueToProfile() {
+    if (!hasOrg && !org.trim()) {
+      setError('Organization name is required to create your workspace.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -79,6 +90,7 @@ export function OnboardingView({
       router.refresh();
       setStage('profile');
     } catch (err) {
+      if (isNextRedirectError(err)) throw err;
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
