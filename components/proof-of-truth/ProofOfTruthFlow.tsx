@@ -49,6 +49,7 @@ import {
   type Answers
 } from './profile-mapping';
 import { ProfileLadder } from '@/components/profile/ProfileLadder';
+import { buildPayoffs } from '@/lib/proof-of-truth/payoffs';
 import { MemberTypePicker } from './MemberTypePicker';
 import { LiveProfilePanel } from './LiveProfilePanel';
 import { Recommendations } from './Recommendations';
@@ -643,7 +644,11 @@ export function ProofOfTruthFlow({
               </div>
             </div>
 
-            <ProfileLadder ladder={computeLadder(memberType, answers)} className="mb-4" />
+            <ProfileLadder
+              ladder={computeLadder(memberType, answers)}
+              payoffs={buildPayoffs({ memberType })}
+              className="mb-4"
+            />
 
             <div className="rounded-xl border border-hairline bg-surface-1 px-4 py-1">
               {questions.map((q) => {

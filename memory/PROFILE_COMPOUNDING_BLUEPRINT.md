@@ -19,7 +19,7 @@ phase keeps the never-block / degrade-gracefully posture and is covered by
 | 2   | ✅ **Shipped** — guided entry resumes at the open rung; visited-stack Back                     | —                                                                    |
 | 3   | ✅ **Shipped** — impact-ranked next-best gap (`rankedOpenGaps` + `compareGaps`) + skip loop    | —                                                                    |
 | 4   | ✅ **Shipped** — publish persists the honest `completion_pct` (`ladder.overallPct`)            | —                                                                    |
-| 5   | Ladder is private to the member                                                               | **Compounding payoff surfaced**: "Mandate complete → matchable to N" |
+| 5   | ✅ **Shipped** — completed rungs show their payoff ("Matchable — N waiting", "Diligence-ready") | —                                                                    |
 
 ## Phase 1 — Depth scoring (completed in the readiness-ladder PR)
 
@@ -106,16 +106,23 @@ carried by the honest `completion_pct`, never by the gate. No `details.__ladder`
 stash either — the dashboard/hero already recompute the ladder server-side via
 `getFundProfile`, so persisting it would only risk going stale.
 
-## Phase 5 — Surface the compounding payoff
+## Phase 5 — Surface the compounding payoff ✅ shipped
 
-**Problem:** climbing a rung has no felt consequence — the "multiply value" is
+**Problem:** climbing a rung had no felt consequence — the "multiply value" was
 invisible.
 
-**Design:** when a rung flips complete, show a one-line payoff in `ProfileLadder`
-/ the wizard capstone — Mandate → "You're now matchable" (+ a live count of
-matchable LP mandates from the existing matching layer, fail-open); Evidence →
-"Diligence-ready". The embedding refresh already fires on save
-(`lib/ai/profile-embedding.ts`); this just reads the matching count.
+**Delivered — `buildPayoffs({ memberType, matchCount })` + a `payoffs` prop on
+`ProfileLadder`:** once a rung reads complete it shows the consequence it
+unlocked instead of a generic "On the record":
+- **Mandate → "Matchable — N matches waiting"** when there's a live count
+  (`getPendingMatchCount` over the `matches` table, head-only, fail-open to 0),
+  degrading to a member-type-aware "Matchable to <counterparty>" otherwise.
+- **Identity → "Discoverable on the network"**, **Evidence → "Diligence-ready"**.
+
+`/profile` passes the live count (server-side); the wizard Review passes the
+qualitative lines (client-side, no fetch). `ProfileLadder` stays pure — the
+caller supplies the payoffs. The embedding refresh that keeps matching warm
+already fires on save (`lib/ai/profile-embedding.ts`), so the count is live.
 
 ## Sequencing
 
@@ -123,4 +130,8 @@ matchable LP mandates from the existing matching layer, fail-open); Evidence →
 2. ~~**Phase 2 — ranking**~~ ✅ shipped — incl. the never-stuck / skip loop.
 3. ~~**Phase 4 — persist**~~ ✅ shipped — honest `completion_pct` on publish.
 4. ~~**Phase 3 — guided wizard**~~ ✅ shipped — guided resume + visited-stack Back.
-5. **Phase 5 — payoff** (polish; own PR) — the only piece left.
+5. ~~**Phase 5 — payoff**~~ ✅ shipped — completed rungs surface what they unlock.
+
+**All five phases shipped.** The Profile is now a compounding ladder end to end:
+honest depth scoring → impact-ranked, never-stuck wizard → guided resume →
+persisted readiness → a visible payoff at the top of every rung.
