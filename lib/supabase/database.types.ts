@@ -2009,6 +2009,50 @@ export type Database = {
           },
         ]
       }
+      org_posture_snapshots: {
+        Row: {
+          captured_on: string
+          created_at: string
+          id: string
+          lanes: Json
+          member_type: string | null
+          org_id: string
+          score: number
+          stage: string | null
+          updated_at: string
+        }
+        Insert: {
+          captured_on?: string
+          created_at?: string
+          id?: string
+          lanes?: Json
+          member_type?: string | null
+          org_id: string
+          score: number
+          stage?: string | null
+          updated_at?: string
+        }
+        Update: {
+          captured_on?: string
+          created_at?: string
+          id?: string
+          lanes?: Json
+          member_type?: string | null
+          org_id?: string
+          score?: number
+          stage?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_posture_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_connections: {
         Row: {
           created_at: string
@@ -3162,6 +3206,10 @@ export type Database = {
           _ref_id?: string
         }
         Returns: number
+      }
+      posture_percentile: {
+        Args: { _member_type: string | null; _score: number }
+        Returns: { percentile: number | null; cohort_count: number }[]
       }
       create_organization: {
         Args: { _name: string; _type?: Database["public"]["Enums"]["org_type"] }

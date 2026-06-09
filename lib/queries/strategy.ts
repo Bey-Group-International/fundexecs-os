@@ -172,3 +172,36 @@ export async function getStrategyData(orgId: string): Promise<StrategyData> {
     drafts: mapped.filter((o) => o.isDraft)
   };
 }
+
+export interface PosturePercentile {
+  /** Share of the cohort scoring at or below this org, 0–100. */
+  percentile: number;
+  /** Number of orgs in the cohort (drives the privacy floor). */
+  cohortCount: number;
+}
+
+/**
+ * Peer percentile for a posture score via the `posture_percentile` RPC (a
+ * SECURITY DEFINER aggregate — no other org's data leaks). Pass `memberType`
+ * to scope the cohort, or null for the whole platform. Degrades to null on any
+ * error (e.g. before the Phase 3b migration is applied) so callers can simply
+ * hide the rank.
+ */
+export async function getPosturePercentile(
+  memberType: string | null,
+  score: number
+): Promise<PosturePercentile | null> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc('posture_percentile', {
+      _member_type: memberType,
+      _score: score
+    });
+    if (error) return null;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || row.percentile == null) return null;
+    return { percentile: Number(row.percentile), cohortCount: Number(row.cohort_count) };
+  } catch {
+    return null;
+  }
+}

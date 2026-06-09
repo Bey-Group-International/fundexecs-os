@@ -1,4 +1,4 @@
-import { ArrowRight, Lock, Sparkles, Flame, TrendingUp, TrendingDown } from 'lucide-react';
+import { ArrowRight, Lock, Sparkles, Flame, TrendingUp, TrendingDown, Trophy } from 'lucide-react';
 import { Badge, Card, ProgressBar, SectionTitle } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import type { PostureLane } from '@/lib/strategy/posture';
@@ -27,6 +27,11 @@ export interface StrategyHeroProps {
   streak: number;
   /** Committed-capital momentum over the last 8 weeks, % change (null = flat). */
   momentumDeltaPct: number | null;
+  /**
+   * Peer percentile (share of the cohort at or below this org), or null when
+   * the cohort is below the privacy floor. Shown as "Top (100 − percentile)%".
+   */
+  peerPercentile: number | null;
   /** Label of the stage the current one unlocks, or null at the final stage. */
   nextStageLabel: string | null;
   /** What unlocks once the current stage's gate clears. */
@@ -52,12 +57,15 @@ export function StrategyHero({
   postureLanes,
   streak,
   momentumDeltaPct,
+  peerPercentile,
   nextStageLabel,
   nextStageBlurb,
   objectiveCount
 }: StrategyHeroProps) {
   const band = postureBand(postureScore);
   const momentumUp = (momentumDeltaPct ?? 0) >= 0;
+  // "Top X%" — at least 1% so a cohort-leader doesn't read as "Top 0%".
+  const topPct = peerPercentile == null ? null : Math.max(1, 100 - peerPercentile);
 
   return (
     <Card className="flex flex-col gap-4 p-[18px]">
@@ -141,6 +149,12 @@ export function StrategyHero({
           <p className="text-[11px] leading-relaxed text-fg-5">
             How you&rsquo;d hold up to institutional diligence right now.
           </p>
+          {topPct != null && (
+            <div className="mt-1.5 inline-flex items-center gap-1.5 self-start rounded-full border border-[var(--gold-line)] bg-[rgba(247,201,72,0.08)] px-2 py-0.5 text-[10.5px] font-semibold text-gold-1">
+              <Trophy size={11} strokeWidth={2} aria-hidden />
+              Top {topPct}% of funds
+            </div>
+          )}
 
           <div className="mt-3 flex flex-col gap-2 border-t border-hairline pt-3">
             {postureLanes.map((lane) => (

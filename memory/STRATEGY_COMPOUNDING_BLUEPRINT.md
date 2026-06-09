@@ -178,14 +178,34 @@ Implements most of **#3** + the felt-progress half of **#2**, no new tables.
 - Fix: `loadMaterialsReadiness` now excludes unapproved drafts so the seeded
   compliance tier no longer drags readiness/posture down.
 
-### Phase 3b — Snapshots + peer percentile (needs migration)
+### Phase 3b — Snapshots + peer percentile 🟡 migration written, not applied
 
-- `org_posture_snapshots` (additive migration, daily upsert RPC like
-  `dashboard_snapshots`) → posture Δ-this-week (vs the live momentum proxy) and
-  the percentile.
-- Peer percentile vs same-stage / same-member-type cohort — only shown once
-  N ≥ a privacy floor; otherwise show the composite alone (never fabricate a
-  rank).
+Implements the peer-percentile half of **#3**. All runtime code is guarded so
+it is safe and invisible until the migration is applied (then it lights up as
+orgs accumulate snapshots).
+
+**Shipped (committed, awaiting `supabase db push`):**
+
+- `supabase/migrations/20260609160000_org_posture_snapshots.sql` —
+  `org_posture_snapshots` (one row/org/day, unique `(org_id, captured_on)`,
+  RLS via `private.is_org_member`) + `posture_percentile(_member_type, _score)`
+  SECURITY DEFINER function that ranks across the cohort but returns ONLY an
+  aggregate (percentile + cohort size — no row leakage). search_path pinned.
+- `database.types.ts` — hand-added the table + RPC types.
+- `lib/actions/strategy.ts` — `recordPostureSnapshot` upserts today's snapshot
+  (resolves `member_type` server-side; best-effort, no-ops pre-migration).
+- `lib/queries/strategy.ts` — `getPosturePercentile` (guarded RPC read → null on
+  error).
+- `app/strategy/PostureSnapshotRecorder.tsx` — invisible client recorder fires
+  the snapshot on mount (keeps the DB write out of the server render).
+- `StrategyHero` shows a **"Top X%" of funds** chip, only above the
+  `POSTURE_COHORT_FLOOR` (5) — never a fabricated rank.
+
+**Pending (after the migration is applied):**
+
+- Regenerate `database.types.ts` from the live DB to replace the hand-edit.
+- Optional: a daily cron to snapshot all orgs (today it's lazy-on-load), and
+  scope the cohort to same stage / member_type instead of whole-platform.
 
 ### Phase 4 — Standing compliance tier (Adrian)
 

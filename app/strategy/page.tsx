@@ -3,12 +3,16 @@ import { AppShell } from '@/components/shell/AppShell';
 import { getShellIdentity } from '@/lib/queries/identity';
 import { Card } from '@/components/ui';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getStrategyData } from '@/lib/queries/strategy';
+import { getStrategyData, getPosturePercentile } from '@/lib/queries/strategy';
 import { getDashboardData } from '@/lib/queries/dashboard/lifecycle';
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, LIFECYCLE_STAGE_BLURBS } from '@/lib/lifecycle';
 import { computePosture, complianceLaneScore } from '@/lib/strategy/posture';
 import { StrategyView } from './StrategyView';
 import { StrategyHero } from './StrategyHero';
+import { PostureSnapshotRecorder } from './PostureSnapshotRecorder';
+
+/** Minimum cohort size before a peer percentile is shown (privacy floor). */
+const POSTURE_COHORT_FLOOR = 5;
 
 export const metadata: Metadata = { title: 'Strategy' };
 
@@ -65,6 +69,14 @@ export default async function StrategyPage() {
     })
   });
 
+  // Peer percentile (whole-platform cohort for now). Shown only above the
+  // privacy floor; degrades to null before the Phase 3b migration is applied.
+  const percentileRes = await getPosturePercentile(null, posture.score);
+  const peerPercentile =
+    percentileRes && percentileRes.cohortCount >= POSTURE_COHORT_FLOOR
+      ? percentileRes.percentile
+      : null;
+
   return (
     <AppShell
       identity={await getShellIdentity()}
@@ -82,11 +94,17 @@ export default async function StrategyPage() {
           postureLanes={posture.lanes}
           streak={dashboard.executionScore.streak}
           momentumDeltaPct={dashboard.momentum.deltaPct}
+          peerPercentile={peerPercentile}
           nextStageLabel={nextStage ? LIFECYCLE_STAGE_LABELS[nextStage] : null}
           nextStageBlurb={nextStage ? LIFECYCLE_STAGE_BLURBS[nextStage] : null}
           objectiveCount={objectiveCount}
         />
         <StrategyView initialObjectives={objectives} initialDrafts={drafts} />
+        <PostureSnapshotRecorder
+          score={posture.score}
+          lanes={Object.fromEntries(posture.lanes.map((l) => [l.key, l.score]))}
+          stage={dashboard.stage}
+        />
       </div>
     </AppShell>
   );

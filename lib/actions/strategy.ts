@@ -10,8 +10,49 @@ type ObjectiveRow = Database['public']['Tables']['governance_objectives']['Row']
 type ObjectiveInsert = Database['public']['Tables']['governance_objectives']['Insert'];
 type ObjectiveUpdate = Database['public']['Tables']['governance_objectives']['Update'];
 type PlanRow = Database['public']['Tables']['governance_plans']['Row'];
+type PostureSnapshotInsert = Database['public']['Tables']['org_posture_snapshots']['Insert'];
 
 export type ObjectiveResult = { ok: true; objective: ObjectiveRow } | { ok: false; error: string };
+
+/**
+ * Record today's Institutional Posture snapshot for the active org (one row per
+ * org per day, upserted). Fired lazily when a member loads /strategy; powers
+ * the peer percentile + posture momentum. Best-effort and self-contained:
+ * resolves the member_type server-side and never throws — if the snapshots
+ * table isn't present yet (pre-migration) it simply no-ops.
+ */
+export async function recordPostureSnapshot(input: {
+  score: number;
+  lanes: Record<string, number>;
+  stage?: string | null;
+}): Promise<{ ok: boolean }> {
+  try {
+    const org = await getActiveOrg();
+    if (!org) return { ok: false };
+
+    const supabase = await createClient();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('member_type')
+      .eq('id', org.userId)
+      .maybeSingle();
+
+    const row: PostureSnapshotInsert = {
+      org_id: org.orgId,
+      score: input.score,
+      lanes: input.lanes,
+      stage: input.stage ?? null,
+      member_type: (profile as { member_type: string | null } | null)?.member_type ?? null,
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await supabase
+      .from('org_posture_snapshots')
+      .upsert(row, { onConflict: 'org_id,captured_on' });
+    return { ok: !error };
+  } catch {
+    return { ok: false };
+  }
+}
 
 export interface CreateObjectiveInput {
   /** Plan id is optional — if omitted we attach to the org's first plan. */
