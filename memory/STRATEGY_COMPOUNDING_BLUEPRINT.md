@@ -160,20 +160,32 @@ numeric`, `source text` (`'manual' | 'signal' | 'lifecycle' | 'cascade'`),
 - On objective `done`: re-run lifecycle; if a gate flips cleared, surface the
   unlocked stage ("Proof of Concept complete → LP outreach unlocks").
 
-### Phase 3 — Institutional Posture scorecard + peer percentile
+### Phase 3a — Institutional Posture scorecard + streak/momentum (UI-only) ✅ shipped
 
-Implements **#3** fully.
+Implements most of **#3** + the felt-progress half of **#2**, no new tables.
 
-- `lib/strategy/posture.ts` (pure, testable like `lib/lifecycle.ts`): composite
-  across **Compliance · Governance · Execution · Capital** from lifecycle +
-  objective + trust inputs.
+- `lib/strategy/posture.ts` (pure, tested — `posture.test.ts`, 9 cases):
+  `computePosture` blends **Compliance (30) · Governance (20) · Execution (25) ·
+  Capital (25)** into a 0–100 composite with a per-lane breakdown;
+  `complianceLaneScore` derives the compliance lane from the live/draft split
+  (pending compliance drafts drag it down; approving + completing them lifts it).
+- `app/strategy/page.tsx` derives the four lane inputs from data already loaded
+  (readiness breakdown + Chain-of-Trust execution score + compliance objective
+  split) — no extra queries.
+- `StrategyHero` right column is now the **Institutional Posture** scorecard
+  (four lane bars + band) with a **Day-N streak** and **8-week capital momentum
+  Δ** footer (both already computed in `getDashboardData`).
+- Fix: `loadMaterialsReadiness` now excludes unapproved drafts so the seeded
+  compliance tier no longer drags readiness/posture down.
+
+### Phase 3b — Snapshots + peer percentile (needs migration)
+
 - `org_posture_snapshots` (additive migration, daily upsert RPC like
-  `dashboard_snapshots`) → enables momentum Δ + streak (**#2**) and the
-  percentile.
-- Peer percentile computed against same-stage / same-member-type cohort from
-  snapshots — only shown once N≥ a privacy floor; otherwise show the composite
-  alone (never fabricate a rank).
-- Posture header card on `/strategy` with four sub-bars + Δ-this-week + streak.
+  `dashboard_snapshots`) → posture Δ-this-week (vs the live momentum proxy) and
+  the percentile.
+- Peer percentile vs same-stage / same-member-type cohort — only shown once
+  N ≥ a privacy floor; otherwise show the composite alone (never fabricate a
+  rank).
 
 ### Phase 4 — Standing compliance tier (Adrian)
 

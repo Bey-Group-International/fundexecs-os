@@ -1,14 +1,14 @@
-import { ArrowRight, Lock, Sparkles } from 'lucide-react';
+import { ArrowRight, Lock, Sparkles, Flame, TrendingUp, TrendingDown } from 'lucide-react';
 import { Badge, Card, ProgressBar, SectionTitle } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
-import type { ReadinessDimensionScore } from '@/lib/lifecycle';
+import type { PostureLane } from '@/lib/strategy/posture';
 
 /**
  * Lifecycle + posture hero for `/strategy`. Surfaces where the operator is in
- * the seven-stage capital-formation loop, the Institutional Readiness composite
- * an LP would broadly agree with, and — the compounding part — exactly which
- * stage the current one unlocks. All values come from the tested lifecycle
- * engine via `getDashboardData`; nothing here is fabricated.
+ * the seven-stage capital-formation loop, the four-lane Institutional Posture
+ * scorecard (Compliance · Governance · Execution · Capital), and — the
+ * compounding part — which stage the current one unlocks, plus streak +
+ * capital momentum. All values come from tested engines; nothing is fabricated.
  */
 export interface StrategyHeroProps {
   stageLabel: string;
@@ -19,10 +19,14 @@ export interface StrategyHeroProps {
   stageCount: number;
   /** 0–100 progress through the seven-stage loop. */
   loopProgress: number;
-  /** 0–100 institutional-readiness composite. */
-  readinessScore: number;
-  /** Per-dimension readiness breakdown (profile/proof/materials/pipeline/capital). */
-  readinessBreakdown: ReadinessDimensionScore[];
+  /** 0–100 institutional-posture composite. */
+  postureScore: number;
+  /** Per-lane posture breakdown (compliance/governance/execution/capital). */
+  postureLanes: PostureLane[];
+  /** Consecutive-active-day streak (0 when none). */
+  streak: number;
+  /** Committed-capital momentum over the last 8 weeks, % change (null = flat). */
+  momentumDeltaPct: number | null;
   /** Label of the stage the current one unlocks, or null at the final stage. */
   nextStageLabel: string | null;
   /** What unlocks once the current stage's gate clears. */
@@ -31,16 +35,8 @@ export interface StrategyHeroProps {
   objectiveCount: number;
 }
 
-const DIMENSION_LABEL: Record<string, string> = {
-  profile: 'Profile',
-  proof: 'Proof',
-  materials: 'Materials',
-  pipeline: 'Pipeline',
-  capital: 'Capital'
-};
-
-/** Readiness band → tone + one-word standing, so the number reads as a posture. */
-function readinessBand(score: number): { tone: 'success' | 'gold' | 'warning'; label: string } {
+/** Posture band → tone + one-word standing, so the number reads as a posture. */
+function postureBand(score: number): { tone: 'success' | 'gold' | 'warning'; label: string } {
   if (score >= 75) return { tone: 'success', label: 'Institutional' };
   if (score >= 50) return { tone: 'gold', label: 'Emerging' };
   return { tone: 'warning', label: 'Building' };
@@ -52,13 +48,16 @@ export function StrategyHero({
   stageIndex,
   stageCount,
   loopProgress,
-  readinessScore,
-  readinessBreakdown,
+  postureScore,
+  postureLanes,
+  streak,
+  momentumDeltaPct,
   nextStageLabel,
   nextStageBlurb,
   objectiveCount
 }: StrategyHeroProps) {
-  const band = readinessBand(readinessScore);
+  const band = postureBand(postureScore);
+  const momentumUp = (momentumDeltaPct ?? 0) >= 0;
 
   return (
     <Card className="flex flex-col gap-4 p-[18px]">
@@ -123,11 +122,11 @@ export function StrategyHero({
           )}
         </div>
 
-        {/* Right: Institutional Readiness composite + per-dimension breakdown. */}
+        {/* Right: Institutional Posture scorecard + per-lane breakdown. */}
         <div className="flex flex-col rounded-[12px] border border-hairline bg-surface-1 p-4">
           <div className="flex items-baseline justify-between">
             <span className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-              Institutional readiness
+              Institutional posture
             </span>
             <Badge tone={band.tone} dot>
               {band.label}
@@ -135,33 +134,52 @@ export function StrategyHero({
           </div>
           <div className="my-1 flex items-baseline gap-1.5">
             <span className="text-[34px] font-semibold tabular-nums leading-none tracking-[-0.02em] text-fg-1">
-              {readinessScore}
+              {postureScore}
             </span>
             <span className="text-[13px] font-medium text-fg-4">/ 100</span>
           </div>
           <p className="text-[11px] leading-relaxed text-fg-5">
-            How investable you are right now — the number an LP would broadly agree with.
+            How you&rsquo;d hold up to institutional diligence right now.
           </p>
 
           <div className="mt-3 flex flex-col gap-2 border-t border-hairline pt-3">
-            {readinessBreakdown.map((d) => (
-              <div key={d.dimension} className="flex items-center gap-2.5">
-                <span className="w-[58px] flex-none text-[10.5px] font-medium text-fg-4">
-                  {DIMENSION_LABEL[d.dimension] ?? d.dimension}
+            {postureLanes.map((lane) => (
+              <div key={lane.key} className="flex items-center gap-2.5">
+                <span className="w-[72px] flex-none text-[10.5px] font-medium text-fg-4">
+                  {lane.label}
                 </span>
                 <div className="flex-1">
                   <ProgressBar
-                    value={d.score}
+                    value={lane.score}
                     color="var(--azure-1)"
                     height={4}
-                    ariaLabel={`${DIMENSION_LABEL[d.dimension] ?? d.dimension} readiness`}
+                    ariaLabel={`${lane.label} posture`}
                   />
                 </div>
                 <span className="w-[26px] flex-none text-right text-[10.5px] tabular-nums text-fg-3">
-                  {d.score}
+                  {lane.score}
                 </span>
               </div>
             ))}
+          </div>
+
+          {/* Momentum + streak — felt progress, no new tables. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-hairline pt-2.5 text-[11px] text-fg-3">
+            <span className="flex items-center gap-1.5">
+              <Flame size={12} strokeWidth={1.9} className="text-gold-1" aria-hidden />
+              Day {streak} streak
+            </span>
+            {momentumDeltaPct != null && (
+              <span className="flex items-center gap-1.5">
+                {momentumUp ? (
+                  <TrendingUp size={12} strokeWidth={1.9} className="text-success" aria-hidden />
+                ) : (
+                  <TrendingDown size={12} strokeWidth={1.9} className="text-warning" aria-hidden />
+                )}
+                {momentumUp ? '+' : ''}
+                {momentumDeltaPct}% capital · 8 wks
+              </span>
+            )}
           </div>
         </div>
       </div>

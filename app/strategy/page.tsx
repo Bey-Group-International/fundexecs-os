@@ -6,6 +6,7 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { getStrategyData } from '@/lib/queries/strategy';
 import { getDashboardData } from '@/lib/queries/dashboard/lifecycle';
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, LIFECYCLE_STAGE_BLURBS } from '@/lib/lifecycle';
+import { computePosture, complianceLaneScore } from '@/lib/strategy/posture';
 import { StrategyView } from './StrategyView';
 import { StrategyHero } from './StrategyHero';
 
@@ -47,6 +48,23 @@ export default async function StrategyPage() {
   // Active (non-archived) objective count — surfaced in the hero's Earn strip.
   const objectiveCount = objectives.filter((o) => o.state !== 'archived').length;
 
+  // Institutional Posture — derive the four lane inputs from data already
+  // loaded: the lifecycle readiness breakdown + Chain-of-Trust execution score
+  // + the live/draft compliance objective split. No extra queries.
+  const dim = (k: string) =>
+    dashboard.readinessBreakdown.find((d) => d.dimension === k)?.score ?? 0;
+  const complianceLive = objectives.filter((o) => o.category === 'compliance');
+  const posture = computePosture({
+    capital: dim('capital'),
+    governance: Math.round((dim('profile') + dim('materials')) / 2),
+    execution: dashboard.executionScore.score,
+    compliance: complianceLaneScore({
+      doneLive: complianceLive.filter((o) => o.state === 'done').length,
+      openLive: complianceLive.filter((o) => o.state === 'open').length,
+      pendingDrafts: drafts.filter((d) => d.category === 'compliance').length
+    })
+  });
+
   return (
     <AppShell
       identity={await getShellIdentity()}
@@ -60,8 +78,10 @@ export default async function StrategyPage() {
           stageIndex={stageIndex >= 0 ? stageIndex : 0}
           stageCount={LIFECYCLE_STAGES.length}
           loopProgress={dashboard.loopProgress}
-          readinessScore={dashboard.readinessScore}
-          readinessBreakdown={dashboard.readinessBreakdown}
+          postureScore={posture.score}
+          postureLanes={posture.lanes}
+          streak={dashboard.executionScore.streak}
+          momentumDeltaPct={dashboard.momentum.deltaPct}
           nextStageLabel={nextStage ? LIFECYCLE_STAGE_LABELS[nextStage] : null}
           nextStageBlurb={nextStage ? LIFECYCLE_STAGE_BLURBS[nextStage] : null}
           objectiveCount={objectiveCount}

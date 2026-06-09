@@ -435,12 +435,21 @@ async function loadMaterialsReadiness(orgId: string): Promise<number> {
   const supabase = await createClient();
   const { data } = await supabase
     .from('governance_objectives')
-    .select('status, archived_at, deleted_at')
+    .select('status, archived_at, deleted_at, source, approved_at')
     .eq('org_id', orgId)
     .is('deleted_at', null);
 
-  const rows = (data ?? []) as Array<{ status: string; archived_at: string | null }>;
-  const active = rows.filter((r) => !r.archived_at);
+  const rows = (data ?? []) as Array<{
+    status: string;
+    archived_at: string | null;
+    source: string | null;
+    approved_at: string | null;
+  }>;
+  // Only count the live plan — unapproved specialist/signal drafts (e.g. the
+  // seeded compliance tier) aren't "incomplete materials" the manager owns yet.
+  const isDraft = (r: (typeof rows)[number]) =>
+    (r.source ?? 'manual') !== 'manual' && r.approved_at == null;
+  const active = rows.filter((r) => !r.archived_at && !isDraft(r));
   if (active.length === 0) return 0;
   const done = active.filter((r) => {
     const s = (r.status ?? '').toLowerCase();
