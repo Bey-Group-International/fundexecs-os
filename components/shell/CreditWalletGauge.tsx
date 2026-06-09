@@ -97,20 +97,33 @@ export function CreditWalletGauge({ wallet: walletProp, className }: CreditWalle
   }, [walletProp]);
 
   // Live debits: Earn broadcasts `earn:credit` after each metered run so the
-  // gauge reflects the new balance immediately, without a refetch.
-  const [liveBalance, setLiveBalance] = useState<number | null>(null);
+  // gauge reflects the new balance immediately, without a refetch. The live
+  // value is stored alongside the wallet it applies to, so it's ignored once the
+  // wallet source changes (org switch / refetch) rather than shadowing fresh
+  // server data.
+  const [live, setLive] = useState<{
+    wallet: CreditWallet | null | undefined;
+    balance: number;
+  } | null>(null);
   useEffect(() => {
     const onCredit = (e: Event) => {
       const detail = (e as CustomEvent<{ balance?: number }>).detail;
-      if (typeof detail?.balance === 'number') setLiveBalance(detail.balance);
+      // Defensive: ignore malformed events (NaN / Infinity / negative).
+      if (
+        typeof detail?.balance === 'number' &&
+        Number.isFinite(detail.balance) &&
+        detail.balance >= 0
+      ) {
+        setLive({ wallet, balance: detail.balance });
+      }
     };
     window.addEventListener('earn:credit', onCredit);
     return () => window.removeEventListener('earn:credit', onCredit);
-  }, []);
+  }, [wallet]);
 
-  // A live balance overrides the resolved wallet's balance until the next load.
+  // Apply the live balance only while it still belongs to the current wallet.
   const effectiveWallet =
-    wallet && liveBalance != null ? { ...wallet, balance: liveBalance } : wallet;
+    wallet && live && live.wallet === wallet ? { ...wallet, balance: live.balance } : wallet;
 
   const state = deriveState(effectiveWallet);
   const configured = !!effectiveWallet?.configured;
