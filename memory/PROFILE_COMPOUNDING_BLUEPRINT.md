@@ -13,21 +13,22 @@ phase keeps the never-block / degrade-gracefully posture and is covered by
 
 ## The five gaps between "slice" and "full loop"
 
-| # | Today | Full compounding loop |
-|---|---|---|
-| 1 | Quality = presence + weak/strong on prose only (40-char rule) | **Depth scoring** across field types — numbers, specificity, proof |
-| 2 | Wizard is still linear paging with a "next gap" augment | **Single highest-value question** served at a time |
-| 3 | `nextGapIndex` = forward scan in schema order | **Impact-ranked** next-best-question (tier × counterparty weight) |
-| 4 | `completion_pct` written as hardcoded 100 on save | Persist the **real ladder score** + per-rung state |
-| 5 | Ladder is private to the member | **Compounding payoff surfaced**: "Mandate complete → matchable to N" |
+| #   | Today                                                                                         | Full compounding loop                                                |
+| --- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 1   | ✅ **Shipped** — depth scoring (`scoreDepth`) across field types: numbers, specificity, proof | —                                                                    |
+| 2   | Wizard is still linear paging with a "next gap" augment                                       | **Single highest-value question** served at a time                   |
+| 3   | `nextGapIndex` = forward scan in schema order                                                 | **Impact-ranked** next-best-question (tier × counterparty weight)    |
+| 4   | `completion_pct` written as hardcoded 100 on save                                             | Persist the **real ladder score** + per-rung state                   |
+| 5   | Ladder is private to the member                                                               | **Compounding payoff surfaced**: "Mandate complete → matchable to N" |
 
-## Phase 1 — Depth scoring (quality-weighted, not presence-weighted)
+## Phase 1 — Depth scoring (completed in the readiness-ladder PR)
 
-**Problem:** `check_size: "varies"` scores the same as `"$250K–$2M"`; only
-`textarea` can read "weak".
+**Status:** Implemented as the baseline in the readiness-ladder PR — `scoreDepth`
+is live and feeds both the ladder and the wizard scoring.
 
-**Design — `scoreDepth(q, value): { present, weak }` in `tiers.ts`** (replaces
-`isWeakText`, keeps the `{ present, weak }` unit `buildLadder` already consumes):
+**Implemented design — `scoreDepth(q, value): { present, weak }` in `tiers.ts`**
+(replaces `isWeakText`, keeps the `{ present, weak }` unit `buildLadder` already consumes):
+
 - **tags:** present when ≥1 chip; thin when exactly 1 — a single sector/service
   barely signals a mandate.
 - **numeric text** (`expects: 'number'` on check_size / raising): thin unless the
