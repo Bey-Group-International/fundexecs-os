@@ -9,6 +9,7 @@ import {
   Download
 } from 'lucide-react';
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
+import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
 import type { LpDocument, LpDocumentAccess, LpDocumentKind } from './types';
 
@@ -129,12 +130,10 @@ export function DocumentVaultList({ documents, onOpen, className }: DocumentVaul
 
 function EmptyHint() {
   return (
-    <div className="rounded-xl border border-dashed border-hairline bg-surface-1 p-6 text-center">
-      <p className="text-[12.5px] font-medium text-fg-2">No artifacts in the Vault yet</p>
-      <p className="mt-1 text-[11.5px] text-fg-4">
-        Once Eleanor posts the LPA, side letters, and reports, every signed artifact lands here —
-        audit-ready.
-      </p>
-    </div>
+    <EmptyState
+      variant="card"
+      title="No artifacts in the Vault yet"
+      body="Once Eleanor posts the LPA, side letters, and reports, every signed artifact lands here — audit-ready."
+    />
   );
 }

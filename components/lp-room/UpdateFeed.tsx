@@ -1,5 +1,6 @@
 import { Paperclip, Sparkles } from 'lucide-react';
 import { Badge, Card, SectionTitle } from '@/components/ui';
+import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
 import type { LpUpdate, LpUpdateLifecycle } from './types';
 
@@ -40,12 +41,11 @@ export function UpdateFeed({ updates, className }: UpdateFeedProps) {
         </Badge>
       </div>
       {updates.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-hairline bg-surface-1 p-6 text-center">
-          <p className="text-[12.5px] font-medium text-fg-2">No updates yet</p>
-          <p className="mt-1 text-[11.5px] text-fg-4">
-            Eleanor will post here as the fund moves through each lifecycle stage.
-          </p>
-        </div>
+        <EmptyState
+          variant="card"
+          title="No updates yet"
+          body="Eleanor will post here as the fund moves through each lifecycle stage."
+        />
       ) : (
         <ol className="flex flex-col gap-3">
           {updates.map((update) => {

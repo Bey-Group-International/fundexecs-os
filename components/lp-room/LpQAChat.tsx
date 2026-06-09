@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowUp, MessageSquare, FileText, ShieldCheck } from 'lucide-react';
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
+import { EmptyState } from '@/components/shell/EmptyState';
 import { cn } from '@/lib/utils';
 import type { LpQuestion, LpQuestionDraft, LpQuestionStatus } from './types';
 
@@ -68,12 +69,11 @@ export function LpQAChat({
       </div>
 
       {questions.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-hairline bg-surface-1 p-6 text-center">
-          <p className="text-[12.5px] font-medium text-fg-2">No questions yet</p>
-          <p className="mt-1 text-[11.5px] text-fg-4">
-            Be the first to ask — Eleanor responds within one business day, citations attached.
-          </p>
-        </div>
+        <EmptyState
+          variant="card"
+          title="No questions yet"
+          body="Be the first to ask — Eleanor responds within one business day, citations attached."
+        />
       ) : (
         <ol className="flex flex-col gap-3">
           {questions.map((q) => (
