@@ -130,7 +130,7 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
       },
       {
         href: '/strategy',
-        label: 'Approach',
+        label: 'Strategy',
         icon: Compass,
         live: true,
         hint: 'Structure · story · narrative'
