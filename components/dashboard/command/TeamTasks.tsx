@@ -84,6 +84,8 @@ function OrchestrationLine({ active }: { active: { name: string; status: string 
   }, [idx, lines, reduce]);
 
   const text = reduce ? lines.join(' · ') : shown;
+  // Announce only the completed line (not every typed character).
+  const liveText = reduce ? lines.join(' · ') : lines[idx % lines.length];
 
   return (
     <div className="flex items-center gap-2 rounded-xl border border-[var(--azure-line)] bg-[var(--azure-soft)] px-3 py-2">
@@ -93,11 +95,14 @@ function OrchestrationLine({ active }: { active: { name: string; status: string 
         ) : null}
         <span className="relative inline-block h-2 w-2 rounded-full bg-azure-1" />
       </span>
-      <p className="min-w-0 flex-1 truncate text-[12px] text-fg-2" aria-live="polite">
+      <p className="min-w-0 flex-1 truncate text-[12px] text-fg-2" aria-hidden="true">
         <span className="font-semibold text-azure-1">Live</span> · {text}
         {!reduce ? (
           <span className="ml-0.5 inline-block w-1.5 animate-pulse text-azure-1">▍</span>
         ) : null}
+      </p>
+      <p className="sr-only" aria-live="polite">
+        Live · {liveText}
       </p>
     </div>
   );
@@ -167,7 +172,13 @@ function AssignComposer({ slug, onClose }: { slug: string; onClose: () => void }
   return (
     <div className="mt-2 flex flex-col gap-1.5">
       <div className="flex items-center gap-1.5">
+        <label htmlFor={`assign-task-${slug}`} className="sr-only">
+          Assign a task to this specialist
+        </label>
         <input
+          id={`assign-task-${slug}`}
+          aria-label="Assign a task"
+          aria-describedby={error ? `assign-task-${slug}-error` : undefined}
           autoFocus
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -195,7 +206,11 @@ function AssignComposer({ slug, onClose }: { slug: string; onClose: () => void }
           <X size={13} strokeWidth={2} aria-hidden />
         </button>
       </div>
-      {error ? <p className="text-[10.5px] text-danger">{error}</p> : null}
+      {error ? (
+        <p id={`assign-task-${slug}-error`} className="text-[10.5px] text-danger">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -294,6 +309,8 @@ function AgentCard({
       <div className="ml-[46px] flex items-center gap-1.5">
         {summary?.current ? (
           <TaskControl taskId={summary.current.id} status={summary.current.status} />
+        ) : summary?.retryable ? (
+          <TaskControl taskId={summary.retryable.id} status="failed" />
         ) : null}
         {!composing ? (
           <button

@@ -31,30 +31,42 @@ export interface AgentTaskSummary {
   doneToday: number;
   /** The single most relevant active task to surface on the card. */
   current: { id: string; title: string; status: TaskRuntime } | null;
+  /** A failed task that can be retried (when there's no active task). */
+  retryable: { id: string; title: string } | null;
 }
 
 export type TeamTaskMap = Record<string, AgentTaskSummary>;
 
 function empty(): AgentTaskSummary {
-  return { open: 0, running: 0, awaiting: 0, failed: 0, doneToday: 0, current: null };
+  return {
+    open: 0,
+    running: 0,
+    awaiting: 0,
+    failed: 0,
+    doneToday: 0,
+    current: null,
+    retryable: null
+  };
 }
 
 export async function getTeamTasks(orgId: string): Promise<TeamTaskMap> {
   const supabase = await createClient();
 
+  // Full set (no sampling) so per-agent totals stay exact; only the small
+  // columns are selected. A SQL GROUP BY rollup is the scale follow-up.
   const { data, error } = await supabase
     .from('tasks')
     .select('id, agent_slug, title, status, priority, updated_at')
     .eq('org_id', orgId)
     .not('agent_slug', 'is', null)
     .order('priority', { ascending: false })
-    .order('updated_at', { ascending: false })
-    .limit(500);
+    .order('updated_at', { ascending: false });
 
   if (error || !data) return {};
 
+  // UTC day boundary so `doneToday` doesn't drift with the server timezone.
   const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  startOfDay.setUTCHours(0, 0, 0, 0);
   const dayMs = startOfDay.getTime();
 
   const map: TeamTaskMap = {};
@@ -70,6 +82,7 @@ export async function getTeamTasks(orgId: string): Promise<TeamTaskMap> {
     }
     if (rt === 'failed') {
       s.failed += 1;
+      if (!s.retryable) s.retryable = { id: row.id, title: row.title };
       continue;
     }
     // open work

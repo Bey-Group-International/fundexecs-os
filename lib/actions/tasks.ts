@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { TEAM_ROSTER } from '@/lib/team';
-import type { TaskRuntime } from '@/lib/queries/dashboard/team-tasks';
+import { normalizeTaskStatus, type TaskRuntime } from '@/lib/queries/dashboard/team-tasks';
 
 /* ============================================================================
  * lib/actions/tasks.ts — write paths for the Team-tasks board (Phase 1).
@@ -67,6 +67,16 @@ export async function assignTask(input: AssignTaskInput): Promise<TaskActionResu
 
 export type UpdateTaskStatusResult = { ok: true } | { ok: false; error: string };
 
+/** Legal lifecycle moves (normalized status → allowed targets). */
+const ALLOWED_TRANSITIONS: Record<TaskRuntime, readonly TaskRuntime[]> = {
+  queued: ['running', 'blocked', 'failed'],
+  blocked: ['running', 'queued', 'failed'],
+  awaiting: ['running', 'failed'],
+  running: ['done', 'awaiting', 'blocked', 'failed'],
+  failed: ['queued', 'running'],
+  done: []
+};
+
 export async function updateTaskStatus(input: {
   id: string;
   status: TaskRuntime;
@@ -80,12 +90,37 @@ export async function updateTaskStatus(input: {
   if (!org) return { ok: false, error: 'No active organization.' };
 
   const supabase = await createClient();
-  const { error } = await supabase
+
+  // Read the current row first so we can validate the transition and make the
+  // write conditional (optimistic concurrency).
+  const { data: existing, error: readError } = await supabase
+    .from('tasks')
+    .select('status')
+    .eq('id', input.id)
+    .eq('org_id', org.orgId)
+    .maybeSingle();
+
+  if (readError) return { ok: false, error: readError.message };
+  if (!existing) return { ok: false, error: 'Task not found.' };
+
+  const from = normalizeTaskStatus(existing.status);
+  if (from === input.status) return { ok: true }; // already there — no-op
+  if (!ALLOWED_TRANSITIONS[from].includes(input.status)) {
+    return { ok: false, error: `Can't move a ${from} task to ${input.status}.` };
+  }
+
+  // Conditional update on the exact current status; verify a row actually moved.
+  const { data: updated, error } = await supabase
     .from('tasks')
     .update({ status: input.status })
     .eq('id', input.id)
-    .eq('org_id', org.orgId);
+    .eq('org_id', org.orgId)
+    .eq('status', existing.status)
+    .select('id');
 
   if (error) return { ok: false, error: error.message };
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: 'The task changed — refresh and try again.' };
+  }
   return { ok: true };
 }
