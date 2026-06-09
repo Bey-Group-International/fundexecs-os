@@ -191,14 +191,17 @@ function ProposalCard({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [pendingDecision, setPendingDecision] = useState<'approved' | 'rejected' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function decide(decision: 'approved' | 'rejected') {
     start(async () => {
       setError(null);
+      setPendingDecision(decision);
       const res = await decideTaskRun({ runId: proposal.runId, decision });
       if (res.ok) router.refresh();
       else setError(res.error);
+      setPendingDecision(null);
     });
   }
 
@@ -224,7 +227,7 @@ function ProposalCard({
           disabled={pending}
           className="inline-flex flex-none items-center gap-1 rounded-lg bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-2.5 py-1 text-[10.5px] font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
         >
-          {pending ? (
+          {pending && pendingDecision === 'approved' ? (
             <Loader2 size={11} className="animate-spin" aria-hidden />
           ) : (
             <Check size={11} strokeWidth={2.4} aria-hidden />
@@ -237,7 +240,11 @@ function ProposalCard({
           disabled={pending}
           className="inline-flex flex-none items-center gap-1 rounded-lg border border-hairline bg-bg-1 px-2.5 py-1 text-[10.5px] font-medium text-fg-2 transition hover:bg-surface-2 disabled:opacity-60"
         >
-          <X size={11} strokeWidth={2} aria-hidden />
+          {pending && pendingDecision === 'rejected' ? (
+            <Loader2 size={11} className="animate-spin" aria-hidden />
+          ) : (
+            <X size={11} strokeWidth={2} aria-hidden />
+          )}
           Reject
         </button>
       </div>
