@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpRight,
   ChevronDown,
@@ -235,7 +235,7 @@ export function ReadinessView({
           <SectionTitle eyebrow="Then" title="Next moves, by value unlocked" className="mb-3" />
           <ol className="flex flex-col gap-2">
             {ranked
-              .filter((r) => r !== topMove)
+              .filter((r) => r !== topMove && r.gap > 0)
               .map((r, i) => (
                 <MoveRow key={r.dimension} move={r} rank={i + 2} target={target} />
               ))}
@@ -544,6 +544,19 @@ function ExploreModel({
     () => breakdown.some((d) => draft[d.dimension] !== d.score),
     [draft, breakdown]
   );
+
+  // Adopt a fresh baseline when the live breakdown changes (e.g. a re-render
+  // with new data), but never overwrite in-progress slider edits: compare the
+  // current draft against the *previous* baseline via a functional update.
+  const prevBaseline = useRef(liveScores);
+  useEffect(() => {
+    const prev = prevBaseline.current;
+    prevBaseline.current = liveScores;
+    setDraft((current) => {
+      const userEdited = (Object.keys(current) as Dimension[]).some((k) => current[k] !== prev[k]);
+      return userEdited ? current : liveScores;
+    });
+  }, [liveScores]);
 
   const sim = useMemo(() => {
     const simBreakdown: ReadinessDimensionScore[] = breakdown.map((d) => ({

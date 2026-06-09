@@ -193,6 +193,18 @@ test('trajectory projected capital tracks the score against the target', () => {
   }
 });
 
+test('trajectory normalizes hostile options to safe defaults', () => {
+  const breakdown = ALL(50);
+  // Negative / NaN weeks must still yield at least week 0.
+  assert.ok(projectTrajectory(breakdown, 0, { weeks: -3 }).points.length >= 1);
+  assert.ok(projectTrajectory(breakdown, 0, { weeks: Number.NaN }).points.length > 1);
+  // Negative pace must never project a regression.
+  const traj = projectTrajectory(breakdown, 0, { pacePerWeek: -10 });
+  for (let i = 1; i < traj.points.length; i++) {
+    assert.ok(traj.points[i].score >= traj.points[i - 1].score);
+  }
+});
+
 test('INSTITUTIONAL_BAR is a sane 0–100 threshold', () => {
   assert.ok(INSTITUTIONAL_BAR > 0 && INSTITUTIONAL_BAR <= 100);
 });

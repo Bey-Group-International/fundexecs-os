@@ -341,8 +341,13 @@ export function projectTrajectory(
   target: number,
   opts: { weeks?: number; pacePerWeek?: number } = {}
 ): ReadinessTrajectory {
-  const weeks = opts.weeks ?? TRAJECTORY_WEEKS;
-  const pacePerWeek = opts.pacePerWeek ?? TRAJECTORY_PACE;
+  // Normalize: a negative/NaN horizon would yield an empty curve (the chart and
+  // caption assume at least week 0), and a negative pace would project the
+  // regressions the "pts/week" copy contradicts.
+  const rawWeeks = opts.weeks ?? TRAJECTORY_WEEKS;
+  const rawPace = opts.pacePerWeek ?? TRAJECTORY_PACE;
+  const weeks = Number.isFinite(rawWeeks) ? Math.max(0, Math.floor(rawWeeks)) : TRAJECTORY_WEEKS;
+  const pacePerWeek = Number.isFinite(rawPace) ? Math.max(0, rawPace) : TRAJECTORY_PACE;
 
   const byDim = Object.fromEntries(
     breakdown.map((d) => [d.dimension, clamp100(d.score)])
