@@ -76,7 +76,7 @@ export function buildRailSignals(data: DashboardData, memberType?: MemberType | 
   // Readiness — the score is shown; the cluster rollup reads the capital locked
   // behind it (target × readiness-gap), so Build's headline is "$ you can't yet
   // credibly raise."
-  badges['/profile?view=readiness'] = {
+  badges['/readiness'] = {
     value: `${data.readinessScore}`,
     tone: data.readinessScore >= 70 ? 'success' : data.readinessScore >= 40 ? 'azure' : 'warning',
     hint:
