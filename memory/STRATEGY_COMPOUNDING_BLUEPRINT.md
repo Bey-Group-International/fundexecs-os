@@ -77,10 +77,33 @@ lifecycle engine via `getDashboardData` — no migration.
 - `app/strategy/page.tsx` composes `getStrategyData` + `getDashboardData` and
   derives the next stage from `LIFECYCLE_STAGES`.
 
-### Phase 2b — Real signals in, gate-unlock writeback (data layer)
+### Phase 2b — Real signals in, gate-unlock writeback (data layer) 🟡 migration written, not applied
 
 Implements **#1 (Earn drafts)** + the cascade + completion-writeback parts of
 **#2** (the migration-dependent half of Phase 2).
+
+**Shipped (committed, awaiting `supabase db push`):**
+
+- `supabase/migrations/20260609150000_strategy_objective_compounding.sql` —
+  additive columns on `governance_objectives`: `category`, `capital_weight`,
+  `source`, `source_signal_id` (FK → `market_signals`), `parent_objective_id`
+  (self-FK), `lifecycle_stage`, `approved_at`; guarded check constraints + FK
+  indexes + a partial index for the pending-drafts inbox. All nullable/defaulted
+  — no backfill, existing rows valid.
+- `lib/supabase/database.types.ts` — hand-updated to the post-migration shape so
+  the action layer typechecks.
+- `lib/actions/strategy.ts` — `createObjective` carries the new fields **opt-in
+  only** (legacy manual insert byte-for-byte unchanged → safe pre-migration);
+  new `approveDraftObjective` stamps `approved_at`.
+
+**Pending (after the migration is applied):**
+
+- Regenerate `database.types.ts` from the live DB to replace the hand-edit.
+- `getStrategyData`: select the new columns, derive real `pct` from lifecycle
+  gates / linked trust layers (retire `statusPct`), expose draft state.
+- Earn/specialist drafting job (signals + stage → `status` draft objectives).
+- Cascade on completion + gate-unlock writeback; draft-approval UI on
+  `/strategy`.
 
 - Extend `governance_objectives` (additive migration): `category text`
   (`'capital' | 'governance' | 'compliance' | 'execution'`), `capital_weight
