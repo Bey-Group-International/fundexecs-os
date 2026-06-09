@@ -12,16 +12,7 @@ import {
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
-import {
-  ArrowRight,
-  ChevronDown,
-  Compass,
-  Gauge,
-  MoreHorizontal,
-  RefreshCw,
-  Sparkles,
-  X
-} from 'lucide-react';
+import { ArrowRight, Compass, Gauge, MoreHorizontal, RefreshCw, Sparkles, X } from 'lucide-react';
 import { Badge, type BadgeTone } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { createClient } from '@/lib/supabase/client';
@@ -542,15 +533,21 @@ function NavGroup({
           type="button"
           onClick={onToggle}
           aria-label={`${expanded ? 'Collapse' : 'Expand'} ${group.label}`}
-          className="flex-none rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
+          className="flex h-5 w-5 flex-none items-center justify-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-1"
         >
           <motion.span
-            className="block"
-            animate={{ rotate: expanded ? 0 : -90 }}
+            className={cn(
+              'block rounded-full transition-colors',
+              expanded
+                ? emphasized
+                  ? 'h-2 w-2 bg-gold-1'
+                  : 'h-2 w-2 bg-azure-1'
+                : 'h-1.5 w-1.5 bg-fg-5/50'
+            )}
+            animate={{ scale: expanded ? 1 : 0.85 }}
             transition={FX_SPRING}
-          >
-            <ChevronDown size={14} strokeWidth={2} aria-hidden className="flex-none text-fg-5" />
-          </motion.span>
+            aria-hidden
+          />
         </button>
       </div>
 
@@ -720,10 +717,10 @@ function NavItem({
 }
 
 /**
- * NavParent — a third-tier group (e.g. Capital → Equity/Debt/Hybrid). Now that
- * the cluster "more" menu surfaces every option, the inline version is flat: a
- * small parent label with its child links shown directly beneath it — no expand
- * chevron, no dot bullets.
+ * NavParent — a third-tier group (e.g. Capital → Equity/Debt/Hybrid). Rendered
+ * as an open dot sub-tree: a quiet parent label with its child links shown
+ * beneath on a hairline connector, each marked by a state dot — no expand
+ * chevron (the dot structure carries it).
  */
 function NavParent({
   item,
@@ -743,12 +740,12 @@ function NavParent({
 
   return (
     <li>
-      {/* Parent label — a quiet heading; children render flat beneath it. */}
+      {/* Parent label — quiet heading; children render as a dotted sub-tree. */}
       <div className="flex items-center gap-3 px-2.5 pb-0.5 pt-1.5 text-fg-4" title={item.hint}>
         <Icon size={16} strokeWidth={1.9} aria-hidden />
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{item.label}</span>
       </div>
-      <ul className="flex flex-col gap-0.5">
+      <ul className="ml-[18px] flex flex-col gap-0.5 border-l border-hairline pl-1.5">
         {children.map((sub, j) => {
           const subKey = `${groupKey}:${index}:${j}`;
           const active = activeKey === subKey;
@@ -758,8 +755,9 @@ function NavParent({
               {isSoon || !sub.href ? (
                 <div
                   title={sub.hint}
-                  className="flex items-center gap-2 rounded-[10px] py-1.5 pl-[38px] pr-2.5 text-[12px] text-fg-5"
+                  className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[11px] text-fg-5"
                 >
+                  <span className="h-1 w-1 flex-none rounded-full bg-fg-5/60" aria-hidden />
                   <span className="min-w-0 flex-1 truncate">{sub.label}</span>
                   <span className="text-[9px] font-semibold uppercase tracking-[0.06em]">soon</span>
                 </div>
@@ -771,10 +769,17 @@ function NavParent({
                   title={sub.hint}
                   data-testid={`rail-sublink-${slug(item.label)}-${slug(sub.label)}`}
                   className={cn(
-                    'flex items-center rounded-[10px] py-1.5 pl-[38px] pr-2.5 text-[12px] transition-[background] hover:bg-surface-1',
+                    'flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[11px] transition-[background] hover:bg-surface-1',
                     active ? 'bg-[var(--azure-soft)] font-medium text-fg-1' : 'text-fg-3'
                   )}
                 >
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 flex-none rounded-full',
+                      active ? 'bg-azure-1' : 'bg-fg-5/60'
+                    )}
+                    aria-hidden
+                  />
                   <span className="min-w-0 flex-1 truncate">{sub.label}</span>
                 </Link>
               )}
@@ -847,9 +852,17 @@ function MomentumSpine({
         >
           {readinessScore}
         </Badge>
-        <motion.span animate={{ rotate: expanded ? 0 : -90 }} transition={FX_SPRING}>
-          <ChevronDown size={14} strokeWidth={2} aria-hidden className="flex-none text-fg-5" />
-        </motion.span>
+        <span className="flex h-5 w-5 flex-none items-center justify-center">
+          <motion.span
+            className={cn(
+              'block rounded-full transition-colors',
+              expanded ? 'h-2 w-2 bg-azure-1' : 'h-1.5 w-1.5 bg-fg-5/50'
+            )}
+            animate={{ scale: expanded ? 1 : 0.85 }}
+            transition={FX_SPRING}
+            aria-hidden
+          />
+        </span>
       </button>
 
       <AnimatePresence initial={false}>
