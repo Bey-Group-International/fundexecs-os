@@ -43,10 +43,13 @@ const FIRST_ACTION: Record<MemberType, { label: string; href: string }> = {
 import {
   answersToProfileInput,
   completionPct,
+  computeLadder,
+  nextGapIndex,
   seedAnswers,
   splitTags,
   type Answers
 } from './profile-mapping';
+import { ProfileLadder } from '@/components/profile/ProfileLadder';
 import { MemberTypePicker } from './MemberTypePicker';
 import { LiveProfilePanel } from './LiveProfilePanel';
 import { Recommendations } from './Recommendations';
@@ -565,6 +568,8 @@ export function ProofOfTruthFlow({
               </div>
             </div>
 
+            <ProfileLadder ladder={computeLadder(memberType, answers)} className="mb-4" />
+
             <div className="rounded-xl border border-hairline bg-surface-1 px-4 py-1">
               {questions.map((q) => {
                 const value = answers[q.id] ?? '';
@@ -621,11 +626,16 @@ export function ProofOfTruthFlow({
 
   const isLast = index === questions.length - 1;
   const canAdvance = isApproved || !!question.optional;
+  // The readiness ladder + the next field that still needs work (the wizard
+  // loop): jump straight to the highest open rung instead of paging linearly.
+  const ladder = computeLadder(memberType, answers);
+  const nextGap = nextGapIndex(memberType, answers, index);
 
   return (
     <Shell step="profile" pct={pct}>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
         <Card className="flex flex-col gap-5">
+          <ProfileLadder ladder={ladder} variant="compact" />
           <div>
             <div className="mb-1.5 flex items-center justify-between text-[11.5px] text-fg-4">
               <span>
@@ -709,14 +719,26 @@ export function ProofOfTruthFlow({
                   Skip
                 </Button>
               )}
-              <Button
-                variant="primary"
-                iconRight={isLast ? Check : ArrowRight}
-                disabled={!canAdvance}
-                onClick={goNext}
-              >
-                {isLast ? 'Review' : 'Next'}
-              </Button>
+              {/* Wizard loop: jump to the next open field, or close out to Review
+                  once every required field reads strong. */}
+              {isApproved && nextGap >= 0 && nextGap !== index ? (
+                <Button variant="gold" iconRight={Zap} onClick={() => setIndex(nextGap)}>
+                  Next gap
+                </Button>
+              ) : isApproved && nextGap === -1 ? (
+                <Button variant="primary" iconRight={Check} onClick={() => setStage('review')}>
+                  Review
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  iconRight={isLast ? Check : ArrowRight}
+                  disabled={!canAdvance}
+                  onClick={goNext}
+                >
+                  {isLast ? 'Review' : 'Next'}
+                </Button>
+              )}
             </div>
           </div>
         </Card>
