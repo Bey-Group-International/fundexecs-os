@@ -67,7 +67,13 @@ begin
   values (v_org, p_task_id, v_agent, p_action, coalesce(p_steps, '[]'::jsonb), 'proposed', v_uid)
   returning id into v_run_id;
 
-  update public.tasks set status = 'awaiting' where id = p_task_id;
+  -- Optimistic guard: only move the task if it's still the status we validated,
+  -- so a concurrent change isn't clobbered (the whole function rolls back).
+  update public.tasks set status = 'awaiting'
+   where id = p_task_id and status = v_status;
+  if not found then
+    raise exception 'Task status changed; refresh and retry.';
+  end if;
 
   insert into public.trust_events (org_id, actor_id, entity_type, entity_id, action, metadata)
   values (
@@ -135,6 +141,11 @@ begin
 
   v_next := case when p_decision = 'approved' then 'running' else 'blocked' end;
   update public.tasks set status = v_next where id = v_task and status = 'awaiting';
+  -- If the task left 'awaiting' concurrently, abort so the decision + audit
+  -- aren't recorded against a task that didn't actually transition.
+  if not found then
+    raise exception 'Task is no longer awaiting approval; decision aborted.';
+  end if;
 
   insert into public.trust_events (org_id, actor_id, entity_type, entity_id, action, metadata)
   values (
