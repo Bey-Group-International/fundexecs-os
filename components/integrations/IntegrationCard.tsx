@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -18,6 +18,7 @@ import {
 import { Avatar, Badge, Button, Card, Select } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { PROVIDER_META, syncedLabel, type IntegrationView } from '@/lib/integrations/catalog';
+import { SYNC_FREQUENCY_OPTIONS, DEFAULT_SYNC_FREQUENCY } from '@/lib/integrations/sync-frequency';
 
 /* ============================================================================
  * IntegrationCard — a single provider card with live management controls.
@@ -30,22 +31,12 @@ import { PROVIDER_META, syncedLabel, type IntegrationView } from '@/lib/integrat
  * • comingSoon                → "Request access" (catalogued, not yet wired)
  *
  * Connect/sync/disconnect hit the existing /api/integrations/:provider routes.
- * The sync-frequency control is a per-device preference (localStorage); it does
- * not yet change server scheduling, which is why it's labelled as a preference.
+ * The sync-frequency control persists to the connection row via
+ * /api/integrations/:provider/frequency, so the cadence is durable and
+ * cross-device (a future scheduler reads it server-side).
  * ========================================================================= */
 
 type Msg = { tone: 'ok' | 'error' | 'muted'; text: string } | null;
-
-const FREQ_OPTIONS = [
-  { value: 'realtime', label: 'Real-time' },
-  { value: 'hourly', label: 'Every hour' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'manual', label: 'Manual only' }
-];
-
-function freqKey(provider: string) {
-  return `fx.integration.${provider}.freq`;
-}
 
 export function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const router = useRouter();
@@ -56,39 +47,58 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const available = conn.available;
   const isApiKey = meta.connect === 'api_key';
 
-  const [busy, setBusy] = useState<null | 'connect' | 'sync' | 'disconnect'>(null);
+  const [busy, setBusy] = useState<null | 'connect' | 'sync' | 'disconnect' | 'request'>(null);
   const [msg, setMsg] = useState<Msg>(null);
   const [expanded, setExpanded] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const [requested, setRequested] = useState(false);
-  const [freq, setFreq] = useState('realtime');
+  const [requested, setRequested] = useState(conn.requested);
+  // Seed from the persisted per-connection cadence (falls back to the default).
+  const [freq, setFreq] = useState(conn.sync_frequency ?? DEFAULT_SYNC_FREQUENCY);
+  const [freqSaving, setFreqSaving] = useState(false);
 
-  // Load the saved per-device sync-frequency preference when the panel opens
-  // (kept out of an effect so we never set state synchronously on mount).
-  const loadFreq = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const saved = window.localStorage.getItem(freqKey(conn.provider));
-      if (saved) setFreq(saved);
-    } catch {
-      /* ignore */
-    }
-  }, [conn.provider]);
-
-  function toggleManage() {
-    const willOpen = !expanded;
-    setExpanded(willOpen);
-    if (willOpen) loadFreq();
+  // Re-sync prop-derived state when the server sends fresh values (e.g. after
+  // router.refresh()); otherwise the card keeps showing stale workspace data.
+  // React's "adjust state during render off a previous prop" pattern — no effect.
+  const [prevRequested, setPrevRequested] = useState(conn.requested);
+  if (conn.requested !== prevRequested) {
+    setPrevRequested(conn.requested);
+    setRequested(conn.requested);
+  }
+  const [prevSyncFrequency, setPrevSyncFrequency] = useState(conn.sync_frequency);
+  if (conn.sync_frequency !== prevSyncFrequency) {
+    setPrevSyncFrequency(conn.sync_frequency);
+    // Skip while a save is in flight so the server echo can't clobber the
+    // optimistic cadence the user just picked.
+    if (!freqSaving) setFreq(conn.sync_frequency ?? DEFAULT_SYNC_FREQUENCY);
   }
 
-  function onFreqChange(value: string) {
+  function toggleManage() {
+    setExpanded((open) => !open);
+  }
+
+  async function onFreqChange(value: string) {
+    const previous = freq;
     setFreq(value);
+    setFreqSaving(true);
+    setMsg(null);
     try {
-      window.localStorage.setItem(freqKey(conn.provider), value);
-    } catch {
-      /* ignore */
+      const res = await fetch(`/api/integrations/${conn.provider}/frequency`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ frequency: value })
+      });
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !data?.ok) {
+        setFreq(previous);
+        setMsg({ tone: 'error', text: data?.error ?? `Could not save (${res.status})` });
+      }
+    } catch (err) {
+      setFreq(previous);
+      setMsg({ tone: 'error', text: err instanceof Error ? err.message : 'Could not save' });
+    } finally {
+      setFreqSaving(false);
     }
   }
 
@@ -148,6 +158,29 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
       }
     } catch (err) {
       setMsg({ tone: 'error', text: err instanceof Error ? err.message : 'Sync failed' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleRequestAccess() {
+    setBusy('request');
+    setMsg(null);
+    try {
+      const res = await fetch('/api/integrations/request-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: conn.provider })
+      });
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !data?.ok) {
+        setMsg({ tone: 'error', text: data?.error ?? `Request failed (${res.status})` });
+        return;
+      }
+      setRequested(true);
+      setMsg({ tone: 'ok', text: "Requested — we'll email you when it's ready" });
+    } catch (err) {
+      setMsg({ tone: 'error', text: err instanceof Error ? err.message : 'Request failed' });
     } finally {
       setBusy(null);
     }
@@ -267,11 +300,11 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
             <Button
               variant="secondary"
               size="sm"
-              icon={requested ? Check : Sparkles}
-              disabled={requested}
-              onClick={() => setRequested(true)}
+              icon={busy === 'request' ? RefreshCw : requested ? Check : Sparkles}
+              disabled={requested || busy !== null}
+              onClick={handleRequestAccess}
             >
-              {requested ? 'Requested' : 'Request access'}
+              {busy === 'request' ? 'Requesting…' : requested ? 'Requested' : 'Request access'}
             </Button>
           ) : connected ? (
             <>
@@ -352,10 +385,11 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
 
           <Select
             label="Sync frequency"
-            hint="Preference saved on this device"
+            hint={freqSaving ? 'Saving…' : 'Saved to your workspace'}
             value={freq}
+            disabled={freqSaving}
             onChange={(e) => onFreqChange(e.target.value)}
-            options={FREQ_OPTIONS}
+            options={[...SYNC_FREQUENCY_OPTIONS]}
           />
 
           <div className="flex items-center gap-2 border-t border-hairline pt-3">
