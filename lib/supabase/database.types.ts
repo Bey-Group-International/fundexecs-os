@@ -2939,6 +2939,98 @@ export type Database = {
         }
         Relationships: []
       }
+      earn_workflow_steps: {
+        Row: {
+          created_at: string
+          id: string
+          ordinal: number
+          result: Json | null
+          specialist_slug: string | null
+          status: string
+          title: string
+          updated_at: string
+          workflow_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ordinal?: number
+          result?: Json | null
+          specialist_slug?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          workflow_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ordinal?: number
+          result?: Json | null
+          specialist_slug?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "earn_workflow_steps_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "earn_workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      earn_workflows: {
+        Row: {
+          created_at: string
+          created_by: string
+          current_step: number
+          id: string
+          kind: string
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          current_step?: number
+          id?: string
+          kind: string
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          current_step?: number
+          id?: string
+          kind?: string
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "earn_workflows_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "earn_workflows_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_profiles: {
         Row: {
           bio: string | null
