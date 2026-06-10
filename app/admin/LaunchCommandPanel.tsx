@@ -35,6 +35,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { Badge, Card, ProgressBar, SectionTitle, type BadgeTone } from '@/components/ui';
+import type { LaunchTrend } from '@/lib/queries/admin-snapshots';
 
 /** A tab the panel can jump to via an attention item or quick action.
  *  'access' is the unified pipeline tab (invites + share links + applications). */
@@ -256,6 +257,104 @@ function buildAttention(s: LaunchSnapshot): AttentionItem[] {
     });
   }
   return items;
+}
+
+/* ---- Momentum (day-over-day deltas from launch snapshots) ---------------- */
+
+/** Compact "+3" / "±0" / "−2" delta with a tone that matches its direction. */
+function DeltaValue({ value }: { value: number }) {
+  const tone: BadgeTone = value > 0 ? 'success' : value < 0 ? 'warning' : 'neutral';
+  const text = value > 0 ? `+${value.toLocaleString()}` : value < 0 ? value.toLocaleString() : '±0';
+  return (
+    <span className="text-[18px] font-semibold tabular-nums" style={{ color: TONE_VAR[tone] }}>
+      {text}
+    </span>
+  );
+}
+
+/** Tiny inline sparkline of the members series — enough to show direction. */
+function MemberSparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const w = 96;
+  const h = 24;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const span = Math.max(1, max - min);
+  const points = values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * (w - 2) + 1;
+      const y = h - 2 - ((v - min) / span) * (h - 4);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  return (
+    <svg width={w} height={h} aria-hidden className="flex-none">
+      <polyline
+        points={points}
+        fill="none"
+        stroke="var(--azure-1)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * The compounding view: how the launch moved since the last snapshot day.
+ * Renders deltas once at least one prior-day snapshot exists; before that it
+ * states honestly that the trend starts today. Renders nothing when the
+ * snapshot history isn't available at all (e.g. migration not applied).
+ */
+function MomentumStrip({ trend }: { trend: LaunchTrend }) {
+  const sinceLabel = trend.sinceDate
+    ? new Date(`${trend.sinceDate}T00:00:00Z`).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'UTC'
+      })
+    : null;
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <SectionTitle
+          eyebrow="Compounding"
+          title="Momentum"
+          className="mb-3"
+          action={
+            sinceLabel ? <span className="text-[11px] text-fg-5">vs {sinceLabel}</span> : undefined
+          }
+        />
+        <MemberSparkline values={trend.series.map((p) => p.members)} />
+      </div>
+      {trend.deltas ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: 'Members', value: trend.deltas.members },
+            { label: 'Invites accepted', value: trend.deltas.invitesAccepted },
+            { label: 'Approved', value: trend.deltas.applicationsApproved },
+            { label: 'Credits earned', value: trend.deltas.creditsEarned }
+          ].map((d) => (
+            <div
+              key={d.label}
+              className="rounded-xl border border-hairline bg-surface-1 px-3 py-2.5"
+            >
+              <DeltaValue value={d.value} />
+              <div className="mt-0.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-fg-4">
+                {d.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-hairline bg-surface-1 p-3.5 text-[12px] text-fg-4">
+          First snapshot recorded today — day-over-day momentum starts building from tomorrow.
+        </div>
+      )}
+    </Card>
+  );
 }
 
 /* ---- Sub-components ------------------------------------------------------ */
@@ -517,10 +616,13 @@ function GateGrid({
 
 export function LaunchCommandPanel({
   snapshot,
+  trend = null,
   visibleTabs,
   onJump
 }: {
   snapshot: LaunchSnapshot;
+  /** Day-over-day momentum (deltas + series) from the launch snapshots. */
+  trend?: LaunchTrend | null;
   /** Tabs the host actually shows — gates/attention items only deep-link to
    *  these. When omitted, every tab is assumed jumpable. */
   visibleTabs?: LaunchTab[];
@@ -548,6 +650,7 @@ export function LaunchCommandPanel({
           actions: snapshot.recentActions
         }}
       />
+      {trend ? <MomentumStrip trend={trend} /> : null}
       <FunnelStrip stages={stages} />
       <div className="grid items-start gap-[18px] lg:grid-cols-2">
         <AttentionQueue items={attention} canJump={canJump} onJump={onJump} />

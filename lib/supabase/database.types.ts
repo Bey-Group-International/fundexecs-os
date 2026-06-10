@@ -62,6 +62,59 @@ export type Database = {
           },
         ]
       }
+      admin_launch_snapshots: {
+        Row: {
+          applications: number
+          applications_approved: number
+          created_at: string
+          credits_earned: number
+          id: string
+          invites_accepted: number
+          invites_sent: number
+          members: number
+          org_id: string
+          referred_count: number
+          snapshot_date: string
+          updated_at: string
+        }
+        Insert: {
+          applications?: number
+          applications_approved?: number
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          invites_accepted?: number
+          invites_sent?: number
+          members?: number
+          org_id: string
+          referred_count?: number
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Update: {
+          applications?: number
+          applications_approved?: number
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          invites_accepted?: number
+          invites_sent?: number
+          members?: number
+          org_id?: string
+          referred_count?: number
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_launch_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_brains: {
         Row: {
           created_at: string
@@ -3773,6 +3826,19 @@ export type Database = {
       generate_signal_matches: { Args: { _org_id: string }; Returns: number }
       get_admin_metrics: { Args: { _org_id: string }; Returns: Json }
       is_platform_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      upsert_admin_launch_snapshot: {
+        Args: {
+          _org_id: string
+          _members?: number
+          _invites_sent?: number
+          _invites_accepted?: number
+          _applications?: number
+          _applications_approved?: number
+          _referred_count?: number
+          _credits_earned?: number
+        }
+        Returns: undefined
+      }
       get_audit_trail: {
         Args: { _limit?: number; _org_id: string }
         Returns: {

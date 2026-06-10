@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 
 /** One referred org and how much its referrer has earned from it so far. */
 export interface ReferralRow {
@@ -31,6 +32,38 @@ const EMPTY: ReferralOverview = {
   rows: [],
   earningsBySource: {}
 };
+
+/** One configured commission level: tier 1 = the direct referrer, tier 2 = the
+ *  referrer's referrer, … Rates are basis points (1000 = 10%). */
+export interface ReferralTier {
+  tier: number;
+  rateBps: number;
+}
+
+/** What the payout engine grants when no tiers can be read — the documented
+ *  direct rate, so the UI copy never claims a rate the DB doesn't back. */
+const FALLBACK_TIERS: ReferralTier[] = [{ tier: 1, rateBps: 1000 }];
+
+/**
+ * Read the configured commission ladder from `referral_tiers` (the same table
+ * `grant_referral_commission` pays from), so the Referrals panel shows the
+ * rates that are actually granted instead of hardcoded copy. RLS: readable by
+ * any authenticated user (rates aren't secret). Falls back to the documented
+ * direct 10% on any failure.
+ */
+export async function getReferralTiers(): Promise<ReferralTier[]> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('referral_tiers')
+      .select('tier, rate_bps')
+      .order('tier', { ascending: true });
+    if (error || !data || data.length === 0) return FALLBACK_TIERS;
+    return data.map((t) => ({ tier: t.tier, rateBps: t.rate_bps }));
+  } catch {
+    return FALLBACK_TIERS;
+  }
+}
 
 /**
  * Resolve the referral + commission picture for `orgId` acting as the referrer.

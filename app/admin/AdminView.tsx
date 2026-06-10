@@ -50,7 +50,8 @@ import type { AdminMetrics, TrustLayerKey } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import type { BetaApplication } from '@/lib/queries/beta-applications';
-import type { ReferralOverview } from '@/lib/queries/referrals';
+import type { ReferralOverview, ReferralTier } from '@/lib/queries/referrals';
+import type { LaunchTrend } from '@/lib/queries/admin-snapshots';
 import { AccessPanel } from './AccessPanel';
 import { ReferralsPanel } from './ReferralsPanel';
 import { LaunchCommandPanel, type LaunchSnapshot, type LaunchTab } from './LaunchCommandPanel';
@@ -918,6 +919,8 @@ export function AdminView({
   applications,
   metrics,
   referralOverview,
+  referralTiers = [],
+  launchTrend = null,
   viewerRole
 }: {
   /** 'platform' = Bey Group team (full portal + actions); 'org' = org
@@ -929,6 +932,10 @@ export function AdminView({
   applications: BetaApplication[];
   metrics: AdminMetrics | null;
   referralOverview: ReferralOverview | null;
+  /** Configured commission ladder for the Referrals panel (tier → rate). */
+  referralTiers?: ReferralTier[];
+  /** Day-over-day launch momentum (deltas + series) for the Overview. */
+  launchTrend?: LaunchTrend | null;
   viewerRole: OrgMemberRole | null;
 }) {
   // Org owners/admins manage their OWN team — roles, approve/archive, and email
@@ -1173,6 +1180,7 @@ export function AdminView({
       {tab === 'overview' && (
         <LaunchCommandPanel
           snapshot={launchSnapshot}
+          trend={launchTrend}
           visibleTabs={launchVisibleTabs}
           onJump={(t: LaunchTab) => setTab(t)}
         />
@@ -1203,7 +1211,7 @@ export function AdminView({
           scope={isOrg ? 'org' : 'platform'}
         />
       )}
-      {tab === 'referrals' && <ReferralsPanel overview={referralOverview} />}
+      {tab === 'referrals' && <ReferralsPanel overview={referralOverview} tiers={referralTiers} />}
       {tab === 'activity' && <ActivityPanel actions={data.actions} notifications={notifications} />}
       {tab === 'trust' && <TrustPanel metrics={metrics} />}
       {tab === 'knowledge' && <KnowledgePanel metrics={metrics} />}
