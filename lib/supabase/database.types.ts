@@ -1855,6 +1855,118 @@ export type Database = {
           },
         ]
       }
+      meeting_findings: {
+        Row: {
+          agent: string
+          citations: Json
+          created_at: string
+          detail: string | null
+          id: string
+          org_id: string
+          run_id: string
+          score: number | null
+          summary: string
+        }
+        Insert: {
+          agent: string
+          citations?: Json
+          created_at?: string
+          detail?: string | null
+          id?: string
+          org_id: string
+          run_id: string
+          score?: number | null
+          summary: string
+        }
+        Update: {
+          agent?: string
+          citations?: Json
+          created_at?: string
+          detail?: string | null
+          id?: string
+          org_id?: string
+          run_id?: string
+          score?: number | null
+          summary?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_findings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_findings_run_id_org_id_fkey"
+            columns: ["run_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_runs"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      meeting_runs: {
+        Row: {
+          commitment_probability: number | null
+          contact_name: string | null
+          created_at: string
+          created_by: string
+          deal_id: string | null
+          id: string
+          org_id: string
+          sentiment: string | null
+          status: string
+          summary: string | null
+        }
+        Insert: {
+          commitment_probability?: number | null
+          contact_name?: string | null
+          created_at?: string
+          created_by: string
+          deal_id?: string | null
+          id?: string
+          org_id: string
+          sentiment?: string | null
+          status?: string
+          summary?: string | null
+        }
+        Update: {
+          commitment_probability?: number | null
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string
+          deal_id?: string | null
+          id?: string
+          org_id?: string
+          sentiment?: string | null
+          status?: string
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_runs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_runs_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_runs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       evidence: {
         Row: {
           ai_validated_at: string | null

@@ -4,7 +4,8 @@ import {
   scoreMetric,
   scoreTone,
   type HubHeadline,
-  type HubPanel
+  type HubPanel,
+  type HubTone
 } from '@/lib/loop-hub';
 
 /**
@@ -13,7 +14,8 @@ import {
  * Run is the analysis that decides. Its panels mirror the rail cluster:
  * Diligence (capital awaiting a decision, in dollars), the two AI-first
  * actions (Stress Test, Aggregation Strategy — click-to-Earn, no surface
- * yet), and the Action Plan (today's operating loop as a 0–100 completion).
+ * yet), the Action Plan (today's operating loop as a 0–100 completion),
+ * and the Meeting Copilot (latest commitment-probability from meeting analysis).
  * The headline is the capital waiting on a decision — Run's whole job.
  *
  * The Earn prompts are canonical here and imported by the rail
@@ -42,6 +44,11 @@ export interface RunWorkspaceInputs {
   dailyDone: number;
   /** Total daily-command items today. */
   dailyTotal: number;
+  /**
+   * Latest meeting_runs commitment_probability (0–100), or null when no run
+   * exists yet. Drives the Meeting Copilot panel tone and metric.
+   */
+  latestCommitmentProbability?: number | null;
 }
 
 /** 0–100 completion of today's action plan (0 when nothing is queued). */
@@ -51,9 +58,75 @@ export function dailyCompletion(done: number, total: number): number {
   return Math.max(0, Math.min(100, Math.round((safeDone / total) * 100)));
 }
 
-/** Derive the four Run panels, in rail order. */
+/**
+ * Clamp a raw value to 0–100, rounding to the nearest integer. Returns null
+ * for non-finite or null/undefined input. Note: `Number(null)` is 0 in JS,
+ * so null must be short-circuited before the numeric conversion.
+ * Mirrors `clampCommitment` in the meeting-copilot utils; inlined here
+ * because workspace.ts is a pure, client-safe module that cannot import
+ * server-only modules.
+ */
+function clampCommitment(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+/**
+ * Map a 0–100 commitment-probability score to a hub tone.
+ * < 30  → danger (cold meeting, real risk)
+ * 30–69 → azure  (warm but uncommitted)
+ * ≥ 70  → success (strong signal, press for close)
+ */
+function commitmentTone(score: number): 'danger' | 'azure' | 'success' {
+  if (score < 30) return 'danger';
+  if (score < 70) return 'azure';
+  return 'success';
+}
+
+/**
+ * Derive the Meeting Copilot panel tone and metric label from the latest
+ * commitment-probability score. Returns a neutral "no runs yet" state when
+ * no score is available.
+ */
+function meetingCopilotPanel(latestCommitmentProbability: number | null | undefined): {
+  metric: HubPanel['metric'];
+  tone: HubTone;
+  hint: string;
+} {
+  const raw = latestCommitmentProbability ?? null;
+  const clamped = clampCommitment(raw);
+  if (clamped === null) {
+    return {
+      metric: null,
+      tone: 'neutral',
+      hint: 'Meeting analysis — run the copilot on your next transcript.'
+    };
+  }
+  const tone: HubTone = commitmentTone(clamped);
+  const label =
+    tone === 'danger'
+      ? 'Cold — low commitment signal'
+      : tone === 'success'
+        ? 'Hot — strong commitment signal'
+        : 'Warm — commitment building';
+  return {
+    metric: scoreMetric(label, clamped),
+    tone,
+    hint:
+      tone === 'danger'
+        ? 'Meeting Copilot — latest meeting ran cold. Revisit objections and follow up.'
+        : tone === 'success'
+          ? 'Meeting Copilot — strong commitment signal. Move to close.'
+          : 'Meeting Copilot — momentum building. Address open items to advance.'
+  };
+}
+
+/** Derive the five Run panels, in rail order. */
 export function deriveRunPanels(inputs: RunWorkspaceInputs): HubPanel[] {
   const completion = dailyCompletion(inputs.dailyDone, inputs.dailyTotal);
+  const copilot = meetingCopilotPanel(inputs.latestCommitmentProbability);
   return [
     {
       key: 'diligence',
@@ -89,6 +162,14 @@ export function deriveRunPanels(inputs: RunWorkspaceInputs): HubPanel[] {
       metric: null,
       tone: 'neutral',
       hint: 'Synergistic roll-up logic — where the deals compound.'
+    },
+    {
+      key: 'meeting-copilot',
+      label: 'Meeting Copilot',
+      href: '/meetings',
+      metric: copilot.metric,
+      tone: copilot.tone,
+      hint: copilot.hint
     }
   ];
 }
