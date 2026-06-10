@@ -13,7 +13,9 @@ import {
   FinalCta
 } from '@/components/landing/Sections';
 import { RequestAccessProvider } from '@/components/landing/RequestAccessContext';
+import { ScrollDepth } from '@/components/landing/ScrollDepth';
 import { TeamConstellation } from '@/components/landing/TeamConstellation';
+import { TrustScaffold } from '@/components/landing/TrustScaffold';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { WelcomeBanner } from '@/components/beta/WelcomeBanner';
 
@@ -128,7 +130,9 @@ export default function HomePage() {
           <FinalCta />
         </main>
 
+        <TrustScaffold />
         <Footer />
+        <ScrollDepth />
       </div>
     </RequestAccessProvider>
   );
