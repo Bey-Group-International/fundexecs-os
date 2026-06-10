@@ -37,7 +37,10 @@ export async function loadSourceWorkspace(orgId: string): Promise<SourceWorkspac
       committed: dashboard.raiseProgress.committed,
       softCircled: dashboard.raiseProgress.softCircled,
       coveragePct: dashboard.raiseProgress.coveragePct
-    }
+    },
+    // Target Scout panel: no pipeline table this increment — calm null state
+    // until a scout session runs (count is carried client-side for now).
+    targets: null
   };
   const panels = deriveSourcePanels(inputs);
 

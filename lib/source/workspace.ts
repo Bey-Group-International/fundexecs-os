@@ -34,9 +34,15 @@ export interface SourceWorkspaceInputs {
   raiseGap: SourceStake;
   /** Raise rollup. */
   raise: { target: number; committed: number; softCircled: number; coveragePct: number };
+  /**
+   * Acquisition/investment targets scouted so far (count only; amounts not
+   * tracked this increment — pipeline adoption is a later increment).
+   * Omit or pass null to render the panel in its calm "coming soon" state.
+   */
+  targets?: { count: number } | null;
 }
 
-/** Derive the three Source panels, in rail order. */
+/** Derive the Source panels, in rail order (Deals, LPs, Capital, Targets). */
 export function deriveSourcePanels(inputs: SourceWorkspaceInputs): HubPanel[] {
   const coverage = inputs.raise.coveragePct;
   return [
@@ -66,6 +72,21 @@ export function deriveSourcePanels(inputs: SourceWorkspaceInputs): HubPanel[] {
       metric: scoreMetric('Raise coverage', coverage),
       tone: scoreTone(coverage),
       hint: 'Search & shape the raise — committed + soft-circled vs target.'
+    },
+    {
+      // Target Scout — LLM-proposed acquisition/investment targets scored
+      // against the fund mandate. Null metric renders the calm "soon" state
+      // until the operator runs a scout session.
+      key: 'targets',
+      label: 'Targets',
+      earnPrompt:
+        'Scout acquisition targets that match our fund mandate and score each against our thesis.',
+      metric:
+        inputs.targets && inputs.targets.count > 0
+          ? moneyMetric('Targets scouted', 0, inputs.targets.count)
+          : null,
+      tone: 'azure',
+      hint: 'AI-scouted acquisition targets scored against your mandate — run a search to start.'
     }
   ];
 }
