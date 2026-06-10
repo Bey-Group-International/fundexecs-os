@@ -20,6 +20,8 @@ export interface AdminActivity {
   targetType: string | null;
   actor: string;
   time: string;
+  /** ISO created_at — the keyset cursor for paging further back in the log. */
+  at: string;
 }
 
 export interface AdminBrain {
@@ -39,7 +41,8 @@ export interface AdminData {
 
 const EMPTY: AdminData = { members: [], pendingCount: 0, actions: [], brains: [] };
 
-function relativeTime(iso: string): string {
+/** Compact relative timestamp ("now", "5m", "3h", "2d") for audit rows. */
+export function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '';
   const diff = Math.max(0, Date.now() - then);
@@ -105,7 +108,8 @@ export async function getAdminData(orgId: string): Promise<AdminData> {
     actionType: a.action_type,
     targetType: a.target_type,
     actor: a.actor?.full_name ?? 'System',
-    time: relativeTime(a.created_at)
+    time: relativeTime(a.created_at),
+    at: a.created_at
   }));
 
   type BrainSel = Pick<BrainRow, 'id' | 'slug' | 'name' | 'description' | 'is_global'>;

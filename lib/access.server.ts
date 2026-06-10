@@ -1,20 +1,35 @@
 import 'server-only';
+import { cache } from 'react';
 import { getAuthUser } from '@/lib/queries/auth';
 import { isPlatformAdmin, canManageOrg, canGrantOwnerRole } from '@/lib/access';
 import { createClient } from '@/lib/supabase/server';
 
 /**
- * Server-side platform-admin gate. True when the signed-in user is on the Bey
- * Group team (`@beygroupintl.com`). Platform-wide actions (beta invites & links,
- * which mint auth users and touch referrals) are reserved for this group,
- * independent of org role. Kept server-only (it reads the auth session) and
- * separate from the isomorphic `isPlatformAdmin` in `lib/access.ts`, which the
- * client UI imports.
+ * Server-side platform-admin gate — defense in depth, two factors:
+ *
+ *  1. the signed-in email is on the Bey Group domain (`@beygroupintl.com`), and
+ *  2. the email is on the explicit `platform_admins` allowlist, checked via the
+ *     `is_platform_admin` RPC (SECURITY DEFINER; reads the caller's own JWT, so
+ *     no email argument can probe anyone else's status).
+ *
+ * Platform-wide actions (beta invites & links, which mint auth users and touch
+ * referrals) are reserved for this group, independent of org role. Rollout
+ * fail-safe: if the RPC is unavailable (allowlist migration not applied yet),
+ * the gate falls back to the domain-only rule — never weaker than the
+ * pre-allowlist behavior. Memoized per request via React cache.
  */
-export async function requirePlatformAdmin(): Promise<boolean> {
+export const requirePlatformAdmin = cache(async (): Promise<boolean> => {
   const user = await getAuthUser();
-  return isPlatformAdmin(user?.email);
-}
+  if (!isPlatformAdmin(user?.email)) return false;
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc('is_platform_admin');
+    if (error) return true; // RPC missing pre-migration — domain factor already passed.
+    return data === true;
+  } catch {
+    return true;
+  }
+});
 
 /**
  * Org-scoped management gate. True when the signed-in user may administer the
@@ -30,7 +45,7 @@ export async function requireOrgManager(orgId: string): Promise<boolean> {
   if (!orgId) return false;
   const user = await getAuthUser();
   if (!user) return false;
-  if (isPlatformAdmin(user.email)) return true;
+  if (await requirePlatformAdmin()) return true;
 
   const supabase = await createClient();
   const { data } = await supabase
@@ -54,7 +69,7 @@ export async function requireOrgOwner(orgId: string): Promise<boolean> {
   if (!orgId) return false;
   const user = await getAuthUser();
   if (!user) return false;
-  if (isPlatformAdmin(user.email)) return true;
+  if (await requirePlatformAdmin()) return true;
 
   const supabase = await createClient();
   const { data } = await supabase

@@ -6,17 +6,17 @@ import { createClient } from '@/lib/supabase/server';
  *
  * The Admin portal's Knowledge + Chain-of-Trust panels used to render fabricated
  * numbers ("15 / 15 embeddings", "pgvector Live", layer coverage 100/70/35/0).
- * This loader is the typed contract the UI binds to instead. It ships an HONEST
- * placeholder body today — `placeholder: true`, real values only where free
- * (the `ai_brains` catalogue count) — so the UI renders a clear "reference /
- * coming soon" state rather than faking progress.
+ * This loader is the typed contract the UI binds to instead.
  *
- * ── CONTRACT (Codex backend swaps the body, not the shape — see issue #115) ──
- * Real wiring sources `brains.embedded` from embedding coverage, `vector` from
- * the pgvector knowledge-chunks store, `intake` from the embedding/intake queue,
- * and `trust.layerCoverage` aggregated across the org's deal Chain-of-Trust
- * rows; it sets `placeholder: false`. Always resolves (never throws); RLS-scoped;
- * degrades to zeros + `placeholder: true` on error so the page never breaks.
+ * The real backend is LIVE: the `get_admin_metrics` RPC (migration
+ * 20260607110000) sources `brains.embedded` from embedding coverage, `vector`
+ * from the pgvector knowledge-chunks store, `intake` from the embedding/intake
+ * queue, and `trust.layerCoverage` aggregated across the org's deal
+ * Chain-of-Trust rows, and returns `placeholder: false`. The normalization
+ * below is the safety net: always resolves (never throws); RLS/member-scoped;
+ * any RPC error (including a database that predates the migration) degrades to
+ * zeros + `placeholder: true` so the UI shows an honest "reference / coming
+ * soon" state rather than breaking or faking progress.
  * ========================================================================= */
 
 export type VectorStatus = 'live' | 'degraded' | 'unknown';
