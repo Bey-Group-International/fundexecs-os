@@ -85,10 +85,12 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
     entity_type: input.entityType,
     entity_id: input.entityId,
     action: LOOP_ACTION,
+    // Caller metadata first, system fields last — `source`/`layer` are
+    // ledger-controlled and must win over anything the caller carried.
     metadata: {
+      ...(input.metadata ?? {}),
       source: input.source,
-      layer: layerKey,
-      ...(input.metadata ?? {})
+      layer: layerKey
     }
   });
   if (markerErr) {

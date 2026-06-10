@@ -75,7 +75,8 @@ export async function createDeal(input: CreateDealInput): Promise<DealActionResu
     eventType: LOOP_EVENT_TYPES.dealCreated,
     entityType: 'deal',
     entityId: (data as DealRow).id,
-    metadata: { amount: input.amount ?? 0, stage: insert.stage ?? 'sourcing' }
+    // Null means "unsized", not $0 — consumers can tell the two apart.
+    metadata: { amount: input.amount ?? null, stage: insert.stage ?? 'sourcing' }
   });
 
   return { ok: true, deal: data as DealRow };
@@ -166,7 +167,8 @@ export async function updateDealStage(
     eventType: LOOP_EVENT_TYPES.dealStage,
     entityType: 'deal',
     entityId: dealId,
-    metadata: { stage, amount: row.amount ?? 0 }
+    // Null means "unsized", not $0 — consumers can tell the two apart.
+    metadata: { stage, amount: row.amount ?? null }
   });
 
   // Close the loop: a closed deal is proof of work — feed it back into the
@@ -178,7 +180,7 @@ export async function updateDealStage(
         source: 'deal_closed',
         entityType: 'deal',
         entityId: dealId,
-        metadata: { name: row.name, amount: row.amount ?? 0 }
+        metadata: { name: row.name, amount: row.amount ?? null }
       });
     } catch {
       // Never block the stage change on the flywheel write.

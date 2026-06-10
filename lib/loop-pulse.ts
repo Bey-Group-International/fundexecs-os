@@ -42,26 +42,31 @@ export interface VerbPulse {
 export const PULSE_WINDOW_DAYS = 30;
 const DAY_MS = 86_400_000;
 
+/** Parse an ISO timestamp; malformed input reads as 0 (excluded everywhere). */
 function parseTime(iso: string): number {
   const t = new Date(iso).getTime();
   return Number.isNaN(t) ? 0 : t;
 }
 
+/** True when the row falls inside the pulse window (and not in the future). */
 function inWindow(row: LoopEventRow, nowMs: number): boolean {
   const t = parseTime(row.createdAt);
   return t > 0 && nowMs - t <= PULSE_WINDOW_DAYS * DAY_MS && t <= nowMs;
 }
 
+/** Read a positive finite number from event metadata; anything else is 0. */
 function metaNumber(metadata: Record<string, unknown>, key: string): number {
   const v = Number(metadata[key]);
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
+/** Read a non-empty string from event metadata; anything else is null. */
 function metaString(metadata: Record<string, unknown>, key: string): string | null {
   const v = metadata[key];
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
 
+/** Median of a list; null when empty (so callers can omit the clause). */
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -69,6 +74,7 @@ function median(values: number[]): number | null {
   return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+/** Pluralize a counted noun for headlines. */
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
