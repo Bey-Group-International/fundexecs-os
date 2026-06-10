@@ -14,6 +14,7 @@
  */
 export const EARN_NAV_DESTINATIONS = [
   '/command-center',
+  '/build',
   '/pipeline',
   '/capital-stack',
   '/profile',

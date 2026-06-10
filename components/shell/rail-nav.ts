@@ -122,6 +122,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
     },
     items: [
       {
+        href: '/build',
+        label: 'Build Hub',
+        icon: Hammer,
+        live: true,
+        hint: 'The verb on one surface — record strength, focus, next move'
+      },
+      {
         href: '/profile',
         label: 'Profile',
         icon: IdCard,
