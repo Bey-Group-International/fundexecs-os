@@ -5,6 +5,24 @@ import { isPlatformAdmin, canManageOrg, canGrantOwnerRole } from '@/lib/access';
 import { createClient } from '@/lib/supabase/server';
 
 /**
+ * True only when the error means "the `is_platform_admin` function does not
+ * exist yet" — the one rollout window (allowlist migration not applied) where
+ * falling back to the domain-only rule is intended. PGRST202 is PostgREST's
+ * "function not found"; 42883 is Postgres `undefined_function`. Every other
+ * failure (network, timeout, permissions) must fail closed so a transient
+ * outage can never re-enable the weaker domain-only gate.
+ */
+function isRpcMissingError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === 'PGRST202' || error.code === '42883') return true;
+  const msg = (error.message ?? '').toLowerCase();
+  return (
+    msg.includes('is_platform_admin') &&
+    (msg.includes('could not find') || msg.includes('does not exist') || msg.includes('not found'))
+  );
+}
+
+/**
  * Server-side platform-admin gate — defense in depth, two factors:
  *
  *  1. the signed-in email is on the Bey Group domain (`@beygroupintl.com`), and
@@ -14,9 +32,9 @@ import { createClient } from '@/lib/supabase/server';
  *
  * Platform-wide actions (beta invites & links, which mint auth users and touch
  * referrals) are reserved for this group, independent of org role. Rollout
- * fail-safe: if the RPC is unavailable (allowlist migration not applied yet),
- * the gate falls back to the domain-only rule — never weaker than the
- * pre-allowlist behavior. Memoized per request via React cache.
+ * fail-safe: ONLY when the RPC does not exist yet (allowlist migration not
+ * applied) does the gate fall back to the domain-only rule; any other failure
+ * fails closed. Memoized per request via React cache.
  */
 export const requirePlatformAdmin = cache(async (): Promise<boolean> => {
   const user = await getAuthUser();
@@ -24,10 +42,10 @@ export const requirePlatformAdmin = cache(async (): Promise<boolean> => {
   try {
     const supabase = await createClient();
     const { data, error } = await supabase.rpc('is_platform_admin');
-    if (error) return true; // RPC missing pre-migration — domain factor already passed.
+    if (error) return isRpcMissingError(error);
     return data === true;
   } catch {
-    return true;
+    return false;
   }
 });
 
