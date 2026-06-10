@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import { Card } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
@@ -165,10 +166,18 @@ function SpecialistCard({ member }: { member: TeamMember }) {
   );
 }
 
+/** How many specialist cards show before the "Show all" expansion. */
+const COLLAPSED_COUNT = 6;
+
 export function TeamConstellation() {
   const reduce = useReducedMotion();
   const earn = getCOO();
   const specialists = getSpecialists();
+  // Fifteen cards make a very long scroll (especially on mobile, where they
+  // stack one-up and push the closing CTA far down) — collapse to the first
+  // six with an accessible "Show all" toggle. All content stays reachable.
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? specialists : specialists.slice(0, COLLAPSED_COUNT);
 
   return (
     <section id="team" className="py-16 sm:py-24" aria-labelledby="team-heading">
@@ -220,14 +229,38 @@ export function TeamConstellation() {
           </Reveal>
         </div>
 
-        {/* Accessible specialist grid */}
-        <Stagger className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {specialists.map((m) => (
-            <StaggerItem key={m.slug} className="h-full">
-              <SpecialistCard member={m} />
-            </StaggerItem>
-          ))}
-        </Stagger>
+        {/* Accessible specialist grid — collapsed to six until expanded */}
+        <div id="specialists-grid">
+          <Stagger
+            key={showAll ? 'all' : 'collapsed'}
+            className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            {visible.map((m) => (
+              <StaggerItem key={m.slug} className="h-full">
+                <SpecialistCard member={m} />
+              </StaggerItem>
+            ))}
+          </Stagger>
+        </div>
+        {specialists.length > COLLAPSED_COUNT && (
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              aria-expanded={showAll}
+              aria-controls="specialists-grid"
+              className="inline-flex items-center gap-2 rounded-xl border border-hairline bg-surface-1 px-5 py-2.5 text-[13px] font-medium text-fg-2 transition hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
+            >
+              {showAll ? 'Show fewer' : `Show all ${specialists.length} specialists`}
+              <ChevronDown
+                size={15}
+                strokeWidth={1.9}
+                aria-hidden
+                className={showAll ? 'rotate-180 transition-transform' : 'transition-transform'}
+              />
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

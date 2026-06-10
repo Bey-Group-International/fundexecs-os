@@ -1,16 +1,33 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, Check, TrendingUp } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Reveal } from '@/components/landing/Motion';
 
 /* ============================================================================
- * ProductPreview — a faux Earn workspace that "comes alive" as it scrolls into
- * view: Earn streams a reply, KPI bars fill, and pipeline rows deal in. No real
- * data; it's an animated illustration of the product. Static under
- * reduced-motion.
+ * ProductPreview — the "See it in motion" #preview section. Renders a real
+ * demo video when one is available (see DEMO_VIDEO_SRC below); until then, a
+ * faux Earn workspace that "comes alive" as it scrolls into view — Earn
+ * streams a reply, KPI bars fill, pipeline rows deal in — and replays on a
+ * loop while on screen, so the section actually moves. No real data; it's an
+ * animated illustration of the product. Static under reduced-motion.
  * ========================================================================= */
+
+/**
+ * Demo asset slot.
+ *
+ * TODO(team): when a real command-center screen recording exists, drop it in
+ * `public/` (e.g. `/demo/command-center.mp4`, H.264, ~30s, no audio needed)
+ * and set this to its path. It renders muted/looping/autoplaying inside the
+ * window chrome in place of the animated mock; under `prefers-reduced-motion`
+ * it does not autoplay and shows controls instead.
+ */
+const DEMO_VIDEO_SRC: string | null = null;
+
+/** How long one mock "take" plays before it replays (ms). */
+const MOCK_LOOP_MS = 9000;
 
 const EASE = [0.22, 0.61, 0.36, 1] as const;
 
@@ -170,6 +187,32 @@ function MetricsPanel({ reduce }: { reduce: boolean | null }) {
 
 export function ProductPreview() {
   const reduce = useReducedMotion();
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [inView, setInView] = useState(false);
+  // Remount key for the mock panels — bumping it replays their entrance/stream
+  // animations, turning the one-shot scroll reveal into a loop.
+  const [take, setTake] = useState(0);
+
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) setInView(entry.isIntersecting);
+      },
+      { threshold: 0.3 }
+    );
+    io.observe(node);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    // Replay only while visible, only for the mock, never under reduced motion.
+    if (reduce || DEMO_VIDEO_SRC || !inView) return;
+    const timer = setInterval(() => setTake((t) => t + 1), MOCK_LOOP_MS);
+    return () => clearInterval(timer);
+  }, [reduce, inView]);
+
   return (
     <section id="preview" className="py-16 sm:py-24" aria-labelledby="preview-heading">
       <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
@@ -222,9 +265,25 @@ export function ProductPreview() {
                 </span>
               </div>
 
-              <div className="grid sm:grid-cols-2">
-                <ChatPanel reduce={reduce} />
-                <MetricsPanel reduce={reduce} />
+              <div ref={frameRef}>
+                {DEMO_VIDEO_SRC ? (
+                  <video
+                    src={DEMO_VIDEO_SRC}
+                    className="block w-full"
+                    muted
+                    loop
+                    playsInline
+                    autoPlay={!reduce}
+                    controls={Boolean(reduce)}
+                    preload="metadata"
+                    aria-label="FundExecs command center demo"
+                  />
+                ) : (
+                  <div key={take} className="grid sm:grid-cols-2">
+                    <ChatPanel reduce={reduce} />
+                    <MetricsPanel reduce={reduce} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
