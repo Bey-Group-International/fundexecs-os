@@ -17,7 +17,7 @@ import {
  * notification), change THIS function only.
  *
  * Today it persists to `public.access_requests`
- * (supabase/migrations/20260610140000_access_requests.sql) via the
+ * (supabase/migrations/20260610160000_access_requests.sql) via the
  * service-role admin client — the homepage is unauthenticated and the table
  * has no anon grants, mirroring the raise_interests public-write pattern
  * (lib/actions/raise-interest.ts).
