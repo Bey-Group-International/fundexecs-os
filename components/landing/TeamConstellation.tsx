@@ -230,22 +230,25 @@ export function TeamConstellation() {
         </div>
 
         {/* Accessible specialist grid — collapsed to six until expanded */}
-        <Stagger
-          key={showAll ? 'all' : 'collapsed'}
-          className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-        >
-          {visible.map((m) => (
-            <StaggerItem key={m.slug} className="h-full">
-              <SpecialistCard member={m} />
-            </StaggerItem>
-          ))}
-        </Stagger>
+        <div id="specialists-grid">
+          <Stagger
+            key={showAll ? 'all' : 'collapsed'}
+            className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            {visible.map((m) => (
+              <StaggerItem key={m.slug} className="h-full">
+                <SpecialistCard member={m} />
+              </StaggerItem>
+            ))}
+          </Stagger>
+        </div>
         {specialists.length > COLLAPSED_COUNT && (
           <div className="mt-6 flex justify-center">
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}
               aria-expanded={showAll}
+              aria-controls="specialists-grid"
               className="inline-flex items-center gap-2 rounded-xl border border-hairline bg-surface-1 px-5 py-2.5 text-[13px] font-medium text-fg-2 transition hover:bg-surface-2 hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
             >
               {showAll ? 'Show fewer' : `Show all ${specialists.length} specialists`}

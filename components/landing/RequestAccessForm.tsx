@@ -6,7 +6,7 @@ import { Input, Select } from '@/components/ui';
 import { PRIMARY_CTA } from '@/components/landing/cta';
 import { track } from '@/lib/landing/analytics';
 import { submitAccessRequest } from '@/lib/actions/access-request';
-import { RAISING_RANGES } from '@/lib/landing/access-request';
+import { RAISING_RANGES, type RaisingRange } from '@/lib/landing/access-request';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -30,7 +30,7 @@ export function RequestAccessForm({ source = 'landing' }: { source?: string }) {
   const [fullName, setFullName] = useState('');
   const [firm, setFirm] = useState('');
   const [roleTitle, setRoleTitle] = useState('');
-  const [raisingRange, setRaisingRange] = useState('');
+  const [raisingRange, setRaisingRange] = useState<RaisingRange | ''>('');
   const [referralCode, setReferralCode] = useState('');
 
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldName, string>>>({});
@@ -61,7 +61,7 @@ export function RequestAccessForm({ source = 'landing' }: { source?: string }) {
 
     const errors = validate();
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0 || !raisingRange) return;
 
     setSubmitting(true);
     try {
@@ -197,7 +197,7 @@ export function RequestAccessForm({ source = 'landing' }: { source?: string }) {
           label="What are you raising / current AUM"
           required
           value={raisingRange}
-          onChange={(e) => setRaisingRange(e.target.value)}
+          onChange={(e) => setRaisingRange(e.target.value as RaisingRange | '')}
           onFocus={onFirstInteraction}
           placeholder="Select a range"
           options={RAISING_RANGES.map((r) => ({ value: r.value, label: r.label }))}

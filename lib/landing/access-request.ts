@@ -24,7 +24,7 @@ export interface AccessRequestInput {
   fullName: string;
   firm: string;
   roleTitle: string;
-  raisingRange: string;
+  raisingRange: RaisingRange;
   /** Optional invite or referral code. */
   referralCode?: string | null;
   /** Where on the page the flow was opened ('landing-hero', 'landing-nav', …). */

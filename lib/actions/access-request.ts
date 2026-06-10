@@ -1,5 +1,6 @@
 'use server';
 
+import { headers } from 'next/headers';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   RAISING_RANGES,
@@ -63,20 +64,38 @@ export async function submitAccessRequest(input: AccessRequestInput): Promise<Ac
 
   const admin = createAdminClient();
 
-  // Throttle this public, unauthenticated write so a bot can't spam the lead
-  // table. Keyed by email; reuses the generic service-role rate-limiter.
-  // Fail-open on infra error so a limiter blip never blocks a real prospect.
+  // Resolve the caller's IP so throttling has a server-observed dimension —
+  // an email-only key could be evaded by rotating addresses, or abused to
+  // burn a real address's quota.
+  let ip = 'unknown';
   try {
-    const { data: allowed } = await admin.rpc('beta_ask_rate_check', {
-      _key: `access_request:${email}`,
-      _window_seconds: 3600,
-      _max: 5
-    });
-    if (allowed === false) {
-      return { ok: false, error: 'Too many submissions. Please try again later.' };
-    }
+    const h = await headers();
+    ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() || h.get('x-real-ip')?.trim() || 'unknown';
   } catch {
-    /* fail-open: never block a legitimate submission on a limiter error */
+    /* headers unavailable (e.g. unit context) — fall through to email-only */
+  }
+
+  // Throttle this public, unauthenticated write so a bot can't spam the lead
+  // table: a tight per-email bucket plus a wider per-IP bucket, reusing the
+  // generic service-role rate-limiter. Fail-open on infra error so a limiter
+  // blip never blocks a real prospect.
+  const buckets = [
+    { key: `access_request:email:${email}`, max: 5 },
+    { key: `access_request:ip:${ip}`, max: 20 }
+  ];
+  for (const bucket of buckets) {
+    try {
+      const { data: allowed } = await admin.rpc('beta_ask_rate_check', {
+        _key: bucket.key,
+        _window_seconds: 3600,
+        _max: bucket.max
+      });
+      if (allowed === false) {
+        return { ok: false, error: 'Too many submissions. Please try again later.' };
+      }
+    } catch {
+      /* fail-open: never block a legitimate submission on a limiter error */
+    }
   }
 
   const { error: insertErr } = await admin.from('access_requests').insert({

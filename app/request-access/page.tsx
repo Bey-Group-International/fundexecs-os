@@ -18,7 +18,20 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false }
 };
 
-export default function RequestAccessPage() {
+/** Keep attribution values boring: short, lowercase slug or the page default. */
+function sanitizeSource(raw: string | undefined): string {
+  if (typeof raw === 'string' && /^[a-z0-9-]{1,64}$/.test(raw)) return raw;
+  return 'request-access-page';
+}
+
+export default async function RequestAccessPage({
+  searchParams
+}: {
+  searchParams: Promise<{ source?: string }>;
+}) {
+  // CTA attribution forwarded by the modal-less fallback in
+  // RequestAccessContext (?source=landing-hero etc.).
+  const source = sanitizeSource((await searchParams).source);
   return (
     <div className="flex min-h-screen flex-col bg-bg-0 text-fg-1">
       <header className="border-b border-hairline">
@@ -57,7 +70,7 @@ export default function RequestAccessPage() {
             </p>
           </div>
           <div className="rounded-2xl border border-hairline bg-bg-1 p-5 shadow-[var(--shadow-lg)] sm:p-6">
-            <RequestAccessForm source="request-access-page" />
+            <RequestAccessForm source={source} />
           </div>
         </div>
       </main>

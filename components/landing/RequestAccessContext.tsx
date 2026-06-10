@@ -42,14 +42,17 @@ export function RequestAccessProvider({ children }: { children: ReactNode }) {
 /**
  * useRequestAccess — returns the modal opener. Falls back to a no-op-safe
  * navigation to /request-access when rendered outside the provider, so a CTA
- * never silently does nothing.
+ * never silently does nothing. The source rides along as a query param so the
+ * standalone page preserves CTA attribution (see app/request-access/page.tsx).
  */
 export function useRequestAccess(): RequestAccessContextValue {
   const ctx = useContext(RequestAccessContext);
   if (ctx) return ctx;
   return {
-    open: () => {
-      if (typeof window !== 'undefined') window.location.assign('/request-access');
+    open: (source: string) => {
+      if (typeof window !== 'undefined') {
+        window.location.assign(`/request-access?source=${encodeURIComponent(source)}`);
+      }
     }
   };
 }
