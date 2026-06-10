@@ -15,11 +15,11 @@ const INPUTS: RunWorkspaceInputs = {
   dailyTotal: 4
 };
 
-test('derives the four Run panels in rail order', () => {
+test('derives the five Run panels in rail order', () => {
   const panels = deriveRunPanels(INPUTS);
   assert.deepEqual(
     panels.map((p) => p.key),
-    ['diligence', 'stress-test', 'action-plan', 'aggregation']
+    ['diligence', 'stress-test', 'action-plan', 'aggregation', 'meeting-copilot']
   );
   // The AI-first actions carry the canonical Earn prompts and no metric.
   assert.equal(panels[1].earnPrompt, RUN_EARN_PROMPTS.stressTest);
@@ -27,6 +27,9 @@ test('derives the four Run panels in rail order', () => {
   assert.equal(panels[3].earnPrompt, RUN_EARN_PROMPTS.aggregation);
   // The action plan reads as today's completion (1/4 → 25).
   assert.deepEqual(panels[2].metric, { kind: 'score', label: "Today's actions", value: 25 });
+  // Meeting Copilot: no runs yet → neutral with null metric.
+  assert.equal(panels[4].tone, 'neutral');
+  assert.equal(panels[4].metric, null);
 });
 
 test('dailyCompletion clamps and degrades to 0 without a queue', () => {
