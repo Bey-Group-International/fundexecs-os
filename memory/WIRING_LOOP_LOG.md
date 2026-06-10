@@ -39,10 +39,11 @@ Real gaps below.
       `lib/queries/gamification.ts`. Wire to real `xp_events` aggregation +
       achievement/quest tables; flip the flag once live. Components:
       `components/dashboard/AchievementGrid.tsx`, `QuestProgressCard.tsx`.
-- [ ] **Siderail — Execute sub-items** (Pre-Acquisition / Post-Acquisition /
-      Exit). `RailSubItem` only supports `href` today; wiring these to Earn needs
-      `earnPrompt` on `RailSubItem` + handling in both renderers (note: the inline
-      rail drops `children` entirely — pre-existing inconsistency to resolve too).
+- [x] **Siderail — Execute** is now a click-to-Earn action (was a 3-row "soon"
+      sub-group that did nothing and was dropped entirely by the inline rail).
+      Collapsed to one Earn action spanning pre-acquisition → exit, matching
+      Formation. Stage-specific split (3 distinct Earn actions) would need
+      `RailSubItem.earnPrompt` + renderer support — deferred as optional polish.
 - [ ] **Admin/account — Multi-account "Add account"** disabled.
       `components/shell/account/AccountMenu.tsx:420-442`. Larger (auth linking +
       workspace switcher) — scope before building; split if needed.
@@ -69,3 +70,10 @@ Real gaps below.
   `ClusterMenuEntry`) already handle Earn items, so it lights up in expanded and
   collapsed rail. Verified `get_admin_metrics` RPC already exists/wired (not a
   gap; recon overcounted). Gate: ✅ tsc ✅ lint ✅ format ✅ build.
+- **2026-06-10 ~03:30 CDT** — Siderail "Execute" wired as a click-to-Earn action.
+  It was an expandable sub-group of three dead "soon" rows (Pre-/Post-Acquisition,
+  Exit) that the focused/inline rail dropped entirely (only the collapsed popover
+  showed them, non-functional). Collapsed to a single Earn action spanning the
+  deal lifecycle, mirroring Formation — zero renderer risk (both renderers already
+  handle earnPrompt). No "soon" rows remain in the rail registry. Gate: ✅ tsc
+  ✅ lint ✅ format ✅ build.
