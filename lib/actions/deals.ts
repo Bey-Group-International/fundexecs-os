@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { awardTrustXp } from '@/lib/actions/xp';
 import { recordLoopClose } from '@/lib/actions/loop';
+import { DEAL_STAGE_VERB, LOOP_EVENT_TYPES } from '@/lib/loop-events';
+import { emitLoopEvent } from '@/lib/loop-events.server';
 import type { Database } from '@/lib/supabase/database.types';
 
 type DealRow = Database['public']['Tables']['deals']['Row'];
@@ -64,6 +66,18 @@ export async function createDeal(input: CreateDealInput): Promise<DealActionResu
 
   const { data, error } = await supabase.from('deals').insert(insert).select('*').single();
   if (error || !data) return { ok: false, error: error?.message ?? 'Insert failed.' };
+
+  // Instrument Source doing its job: a new deal entered the funnel. Best-effort
+  // (emitLoopEvent never throws) — feeds the Source hub's pulse.
+  await emitLoopEvent({
+    orgId: org.orgId,
+    verb: 'source',
+    eventType: LOOP_EVENT_TYPES.dealCreated,
+    entityType: 'deal',
+    entityId: (data as DealRow).id,
+    metadata: { amount: input.amount ?? 0, stage: insert.stage ?? 'sourcing' }
+  });
+
   return { ok: true, deal: data as DealRow };
 }
 
@@ -141,22 +155,37 @@ export async function updateDealStage(
     // XP rewards are best-effort; never block the parent action.
   }
 
+  // Instrument the funnel's heartbeat: every stage move lands on the per-verb
+  // loop_events stream (Source for top-of-funnel, Run for diligence/IC, Drive
+  // for the close-out stages). Best-effort — feeds the hubs' pulses, including
+  // Run's decision velocity (time from entering diligence to the decision).
+  const row = data as DealRow;
+  await emitLoopEvent({
+    orgId: row.org_id,
+    verb: DEAL_STAGE_VERB[stage] ?? 'source',
+    eventType: LOOP_EVENT_TYPES.dealStage,
+    entityType: 'deal',
+    entityId: dealId,
+    metadata: { stage, amount: row.amount ?? 0 }
+  });
+
   // Close the loop: a closed deal is proof of work — feed it back into the
-  // member record so readiness rises. Idempotent + best-effort.
+  // member record so readiness rises. Idempotent + best-effort. The amount
+  // rides along so the Drive pulse can read dollars closed from the stream.
   if (stage === 'closed') {
     try {
       await recordLoopClose({
         source: 'deal_closed',
         entityType: 'deal',
         entityId: dealId,
-        metadata: { name: (data as DealRow).name }
+        metadata: { name: row.name, amount: row.amount ?? 0 }
       });
     } catch {
       // Never block the stage change on the flywheel write.
     }
   }
 
-  return { ok: true, deal: data as DealRow };
+  return { ok: true, deal: row };
 }
 
 /**

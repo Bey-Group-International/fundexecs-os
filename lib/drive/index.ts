@@ -2,6 +2,7 @@ import 'server-only';
 import type { DashboardData, DashboardAction } from '@/lib/queries/dashboard';
 import type { LoopChain } from '@/lib/loop-chain';
 import type { HubHeadline, HubPanel } from '@/lib/loop-hub';
+import type { VerbPulse } from '@/lib/loop-pulse';
 import { loadVerbHubCommon } from '@/lib/loop-hub.server';
 import { deriveDrivePanels, driveHeadline, rankDriveFocus } from './workspace';
 
@@ -17,6 +18,8 @@ export interface DriveWorkspace {
   headline: HubHeadline;
   /** The panel needing the operator first (slipping close, else materials). */
   focusKey: string | null;
+  /** The verb's recent outcomes from loop_events (null = calm zero-state). */
+  pulse: VerbPulse | null;
   chain: LoopChain;
   nextBestAction: DashboardAction | null;
   dashboard: DashboardData;
@@ -24,7 +27,7 @@ export interface DriveWorkspace {
 
 /** Load everything the `/drive` hub renders, in one composed call. */
 export async function loadDriveWorkspace(orgId: string): Promise<DriveWorkspace> {
-  const { dashboard, chain } = await loadVerbHubCommon(orgId);
+  const { dashboard, chain, pulse } = await loadVerbHubCommon(orgId, 'drive');
 
   const inputs = {
     nearClose: dashboard.valueAtStake.nearClose,
@@ -39,6 +42,7 @@ export async function loadDriveWorkspace(orgId: string): Promise<DriveWorkspace>
     panels,
     headline: driveHeadline(inputs),
     focusKey: rankDriveFocus(panels, inputs),
+    pulse,
     chain,
     nextBestAction: dashboard.nextBestAction,
     dashboard
