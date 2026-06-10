@@ -2,6 +2,7 @@ import 'server-only';
 import type { DashboardData, DashboardAction } from '@/lib/queries/dashboard';
 import type { LoopChain } from '@/lib/loop-chain';
 import type { HubHeadline, HubPanel } from '@/lib/loop-hub';
+import type { VerbPulse } from '@/lib/loop-pulse';
 import { loadVerbHubCommon } from '@/lib/loop-hub.server';
 import { deriveSourcePanels, rankSourceFocus, sourceHeadline } from './workspace';
 
@@ -17,6 +18,8 @@ export interface SourceWorkspace {
   headline: HubHeadline;
   /** The panel needing the operator first (stale stake, else the LP gap). */
   focusKey: string | null;
+  /** The verb's recent outcomes from loop_events (null = calm zero-state). */
+  pulse: VerbPulse | null;
   chain: LoopChain;
   nextBestAction: DashboardAction | null;
   dashboard: DashboardData;
@@ -24,7 +27,7 @@ export interface SourceWorkspace {
 
 /** Load everything the `/source` hub renders, in one composed call. */
 export async function loadSourceWorkspace(orgId: string): Promise<SourceWorkspace> {
-  const { dashboard, chain } = await loadVerbHubCommon(orgId);
+  const { dashboard, chain, pulse } = await loadVerbHubCommon(orgId, 'source');
 
   const inputs = {
     deals: dashboard.valueAtStake.deals,
@@ -42,6 +45,7 @@ export async function loadSourceWorkspace(orgId: string): Promise<SourceWorkspac
     panels,
     headline: sourceHeadline(inputs),
     focusKey: rankSourceFocus(panels, inputs),
+    pulse,
     chain,
     nextBestAction: dashboard.nextBestAction,
     dashboard

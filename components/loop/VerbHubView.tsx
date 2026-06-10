@@ -4,6 +4,7 @@ import { Badge, Card, ProgressBar, SectionTitle } from '@/components/ui';
 import { compactMoney } from '@/lib/format';
 import { LINK_STATE_LABEL, type LoopChain, type LoopVerb } from '@/lib/loop-chain';
 import type { HubHeadline, HubMetric, HubPanel } from '@/lib/loop-hub';
+import type { VerbPulse } from '@/lib/loop-pulse';
 import { EarnPanelTrigger } from './EarnPanelTrigger';
 
 /**
@@ -39,6 +40,8 @@ export interface VerbHubViewProps {
   /** One-sentence "what this verb is for" hero line. */
   description: string;
   headline: HubHeadline;
+  /** The verb's recent outcomes (loop_events pulse); null renders nothing. */
+  pulse: VerbPulse | null;
   chain: LoopChain;
   nextBestAction: HubAction | null;
   panels: HubPanel[];
@@ -167,6 +170,7 @@ export function VerbHubView({
   eyebrow,
   description,
   headline,
+  pulse,
   chain,
   nextBestAction,
   panels,
@@ -197,6 +201,11 @@ export function VerbHubView({
               )}
               <span className="text-[12px] text-fg-3">{chain.handoff}</span>
             </div>
+            {pulse && (
+              <p className="mt-2 text-[12px] text-fg-3" data-testid={`${verb}-hub-pulse`}>
+                <span className="font-semibold text-fg-2">{pulse.headline}</span> · {pulse.detail}
+              </p>
+            )}
           </div>
           <HeadlineMetric headline={headline} />
         </div>
