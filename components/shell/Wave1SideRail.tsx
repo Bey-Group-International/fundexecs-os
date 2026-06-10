@@ -268,6 +268,13 @@ export function Wave1SideRail({
   const activeKey = resolveActiveKey(pathname, fullPath);
   const activeGroupKey = findActiveGroupKey(activeKey);
 
+  // The one cluster that expands inline (one-click links): the cluster owning
+  // the active route, else the current stage's primary cluster. Everyone else
+  // stays a calm pop-out row.
+  const focusedKey: RailGroupKey | null =
+    activeGroupKey ??
+    (signals?.currentStage ? (STAGE_TO_GROUP_KEYS[signals.currentStage][0] ?? null) : null);
+
   const overrides = useSyncExternalStore(
     subscribeRailCollapse,
     getRailCollapseSnapshot,
@@ -340,6 +347,12 @@ export function Wave1SideRail({
             onClick={onClose}
           />
 
+          {/* Source-of-Truth — the credibility anchor, pinned under Command
+              Center so it's always visible (not buried in a cluster). */}
+          {sourceOfTruthSummary ? (
+            <div data-testid="rail-source-of-truth">{sourceOfTruthSummary}</div>
+          ) : null}
+
           {/* The operating spine — readiness/loop meter + next-best-action. */}
           {signals?.momentum ? (
             <MomentumSpine
@@ -361,10 +374,13 @@ export function Wave1SideRail({
               <NavGroup
                 key={group.key}
                 group={group}
+                expanded={focusedKey === group.key}
                 active={activeGroupKey === group.key}
                 emphasized={emphasizedGroups.has(group.key)}
                 rollup={computeGroupRollup(group, signals?.badges)}
                 chainState={chainState}
+                activeKey={activeKey}
+                badges={signals?.badges}
                 onLinkClick={onClose}
               />
             );
@@ -433,23 +449,37 @@ function PinnedLink({
 
 interface NavGroupProps {
   group: RailNavGroup;
+  /** The focused cluster expands its items inline as one-click links. */
+  expanded: boolean;
   /** Whether the active route lives in this cluster (highlights the row). */
   active: boolean;
   emphasized: boolean;
   rollup: GroupRollup | null;
   /** This cluster's position in the loop chain (Phase 4), if a chain is live. */
   chainState?: LinkState;
+  activeKey: string | null;
+  badges?: Record<string, RailSignal>;
   onLinkClick: () => void;
 }
 
 /**
- * NavGroup — one loop cluster as a single row that pops out its full option
- * menu. There's no inline drop-down: clicking the row opens a fixed-positioned
- * menu beside the rail listing every option (links + the Earn action), so each
- * cluster has exactly one access pattern. Closes on outside-click / Escape /
- * scroll.
+ * NavGroup — one loop cluster. The focused cluster (where you are in the loop,
+ * or the current stage's verb) expands its items inline as one-click links;
+ * every other cluster stays a single row that pops out its full menu. So the
+ * place you're working is fast and the rest stays calm — one access pattern per
+ * cluster, never both at once.
  */
-function NavGroup({ group, active, emphasized, rollup, chainState, onLinkClick }: NavGroupProps) {
+function NavGroup({
+  group,
+  expanded,
+  active,
+  emphasized,
+  rollup,
+  chainState,
+  activeKey,
+  badges,
+  onLinkClick
+}: NavGroupProps) {
   const GroupIcon = group.icon;
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -476,6 +506,72 @@ function NavGroup({ group, active, emphasized, rollup, chainState, onLinkClick }
     };
   }, [open]);
 
+  // Focused cluster — inline one-click items (no pop-out, so there's never both).
+  if (expanded) {
+    return (
+      <section
+        data-testid={`rail-group-${group.key}`}
+        data-state="expanded"
+        className={cn(
+          'overflow-hidden rounded-[12px] border bg-bg-1',
+          emphasized ? 'border-[var(--azure-line)]' : 'border-hairline'
+        )}
+      >
+        <div
+          className={cn(
+            'flex items-center gap-2 px-2.5 pb-1 pt-2',
+            emphasized ? 'text-gold-1' : 'text-fg-4'
+          )}
+        >
+          <GroupIcon size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
+          <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.06em]">
+            {group.label}
+          </span>
+          {chainState ? <ChainPip state={chainState} /> : null}
+          {rollup ? (
+            <Badge
+              tone={rollup.tone}
+              className="px-1.5 py-0.5 text-[10px] tabular-nums"
+              title={`${group.label} — ${rollup.label} at stake`}
+            >
+              {rollup.label}
+            </Badge>
+          ) : null}
+        </div>
+        <ul className="flex flex-col gap-0.5 px-1.5 pb-1.5">
+          {group.items.map((item, i) => (
+            <InlineNavItem
+              key={`${group.key}:${i}`}
+              item={item}
+              groupKey={group.key}
+              index={i}
+              activeKey={activeKey}
+              badges={badges}
+              onLinkClick={onLinkClick}
+            />
+          ))}
+          {group.launcher ? (
+            <li>
+              <button
+                type="button"
+                onClick={() => {
+                  openEarn(group.launcher!.prompt);
+                  onLinkClick();
+                }}
+                title={group.launcher.label}
+                data-testid={`rail-launcher-${group.key}`}
+                className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-left text-[12px] font-medium text-gold-1 transition-[background] hover:bg-[var(--gold-soft)]"
+              >
+                <Sparkles size={15} strokeWidth={1.9} aria-hidden className="flex-none" />
+                <span className="min-w-0 flex-1 truncate">{group.launcher.label}</span>
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      </section>
+    );
+  }
+
   function toggle() {
     const r = btnRef.current?.getBoundingClientRect();
     if (r) setPos({ top: r.top, left: r.right + 8 });
@@ -485,6 +581,7 @@ function NavGroup({ group, active, emphasized, rollup, chainState, onLinkClick }
     setOpen(false);
   }
 
+  // Other clusters — a single row that pops out the full menu.
   return (
     <>
       <button
@@ -575,6 +672,94 @@ function NavGroup({ group, active, emphasized, rollup, chainState, onLinkClick }
         ) : null}
       </AnimatePresence>
     </>
+  );
+}
+
+/**
+ * InlineNavItem — one one-click row inside the focused cluster: a route link
+ * (with active highlight + optional value badge), an Earn-action button, or a
+ * muted "soon" row for surfaces not yet built.
+ */
+function InlineNavItem({
+  item,
+  groupKey,
+  index,
+  activeKey,
+  badges,
+  onLinkClick
+}: {
+  item: RailNavItem;
+  groupKey: RailGroupKey;
+  index: number;
+  activeKey: string | null;
+  badges?: Record<string, RailSignal>;
+  onLinkClick: () => void;
+}) {
+  const Icon = item.icon;
+
+  if (item.earnPrompt) {
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={() => {
+            openEarn(item.earnPrompt as string);
+            onLinkClick();
+          }}
+          title={item.hint}
+          className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-left text-[12px] font-medium text-fg-3 transition-[background] hover:bg-surface-1"
+        >
+          <Icon size={15} strokeWidth={1.9} aria-hidden className="flex-none text-gold-1" />
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          <Sparkles size={11} strokeWidth={2} aria-hidden className="flex-none text-gold-1/70" />
+        </button>
+      </li>
+    );
+  }
+
+  if (!item.href) {
+    return (
+      <li>
+        <div
+          title={item.hint}
+          className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-[12px] text-fg-5"
+        >
+          <Icon size={15} strokeWidth={1.9} aria-hidden className="flex-none" />
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          <span className="text-[9px] font-semibold uppercase tracking-[0.06em]">soon</span>
+        </div>
+      </li>
+    );
+  }
+
+  const active = activeKey === `${groupKey}:${index}`;
+  const signal = badges?.[item.href] ?? badges?.[baseHref(item.href)];
+  return (
+    <li>
+      <Link
+        href={item.href}
+        onClick={onLinkClick}
+        aria-current={active ? 'page' : undefined}
+        title={item.hint}
+        data-testid={`rail-link-${baseHref(item.href).replace(/^\//, '') || 'root'}`}
+        className={cn(
+          'flex items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-medium transition-[background]',
+          active ? 'bg-[var(--azure-soft)] text-fg-1' : 'text-fg-3 hover:bg-surface-1'
+        )}
+      >
+        <Icon size={15} strokeWidth={1.9} aria-hidden className="flex-none" />
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        {signal ? (
+          <Badge
+            tone={signal.tone ?? 'azure'}
+            className="px-1.5 py-0.5 text-[10px] tabular-nums"
+            title={signal.hint}
+          >
+            {signal.value}
+          </Badge>
+        ) : null}
+      </Link>
+    </li>
   );
 }
 
