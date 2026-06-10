@@ -7,6 +7,10 @@ import {
   type HubPanel,
   type HubTone
 } from '@/lib/loop-hub';
+// Commitment helpers live in the meeting-copilot utils — a pure, dependency-free
+// module safe to import from this client-reachable workspace. Single source of
+// truth so the panel tone can't drift from the orchestrator's scoring.
+import { clampCommitment, commitmentTone } from '@/lib/meeting-copilot/utils';
 
 /**
  * lib/run/workspace.ts — the RUN verb's hub model (pure).
@@ -56,33 +60,6 @@ export function dailyCompletion(done: number, total: number): number {
   if (!Number.isFinite(total) || total <= 0) return 0;
   const safeDone = Number.isFinite(done) && done > 0 ? done : 0;
   return Math.max(0, Math.min(100, Math.round((safeDone / total) * 100)));
-}
-
-/**
- * Clamp a raw value to 0–100, rounding to the nearest integer. Returns null
- * for non-finite or null/undefined input. Note: `Number(null)` is 0 in JS,
- * so null must be short-circuited before the numeric conversion.
- * Mirrors `clampCommitment` in the meeting-copilot utils; inlined here
- * because workspace.ts is a pure, client-safe module that cannot import
- * server-only modules.
- */
-function clampCommitment(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return null;
-  return Math.max(0, Math.min(100, Math.round(n)));
-}
-
-/**
- * Map a 0–100 commitment-probability score to a hub tone.
- * < 30  → danger (cold meeting, real risk)
- * 30–69 → azure  (warm but uncommitted)
- * ≥ 70  → success (strong signal, press for close)
- */
-function commitmentTone(score: number): 'danger' | 'azure' | 'success' {
-  if (score < 30) return 'danger';
-  if (score < 70) return 'azure';
-  return 'success';
 }
 
 /**

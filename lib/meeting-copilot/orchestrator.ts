@@ -186,10 +186,12 @@ async function runSynthesis(
 export async function runMeetingCopilot(
   input: RunMeetingCopilotInput
 ): Promise<RunMeetingCopilotResult> {
-  const admin = createAdminClient();
   let runId: string | null = null;
 
   try {
+    // Created inside the guard so a missing-env throw is caught and returned as
+    // a typed error rather than escaping runMeetingCopilot's contract.
+    const admin = createAdminClient();
     // Insert the run row so we have an id for metering and findings.
     const { data: run, error: insertErr } = await admin
       .from('meeting_runs')
@@ -208,8 +210,28 @@ export async function runMeetingCopilot(
     }
     runId = run.id;
 
-    // Meter the action up-front. Infra failures fail open so a misconfig can't
-    // take the product offline; a genuine insufficient balance fails closed.
+    // Ensure ANTHROPIC_API_KEY is present BEFORE metering — never debit credits
+    // for a run that can't execute.
+    if (!process.env.ANTHROPIC_API_KEY) {
+      log.warn('meeting_copilot_no_api_key', { orgId: input.orgId, runId });
+      await admin
+        .from('meeting_runs')
+        .update({
+          status: 'error',
+          summary: 'AI service temporarily unavailable — no API key configured.'
+        })
+        .eq('id', runId);
+      return {
+        runId,
+        status: 'error',
+        commitmentProbability: null,
+        sentiment: null,
+        error: 'missing_api_key'
+      };
+    }
+
+    // Meter the action. Infra failures fail open so a misconfig can't take the
+    // product offline; a genuine insufficient balance fails closed.
     const meter = await meterAction(input.orgId, 'meeting_copilot', runId);
     if (!meter.ok) {
       // Mark the run error so the row doesn't linger as queued.
@@ -230,26 +252,11 @@ export async function runMeetingCopilot(
       };
     }
 
-    // Ensure ANTHROPIC_API_KEY is present before doing any AI work.
-    if (!process.env.ANTHROPIC_API_KEY) {
-      log.warn('meeting_copilot_no_api_key', { orgId: input.orgId, runId });
-      await admin
-        .from('meeting_runs')
-        .update({
-          status: 'error',
-          summary: 'AI service temporarily unavailable — no API key configured.'
-        })
-        .eq('id', runId);
-      return {
-        runId,
-        status: 'error',
-        commitmentProbability: null,
-        sentiment: null,
-        error: 'missing_api_key'
-      };
-    }
-
-    await admin.from('meeting_runs').update({ status: 'running' }).eq('id', runId);
+    const { error: runningErr } = await admin
+      .from('meeting_runs')
+      .update({ status: 'running' })
+      .eq('id', runId);
+    if (runningErr) throw new Error(`Failed to mark run running: ${runningErr.message}`);
     const anthropic = new Anthropic();
 
     // Three analysts in parallel — each reads the transcript independently.
@@ -288,8 +295,9 @@ export async function runMeetingCopilot(
       citations: synthesis.top_objections.map((o) => ({ objection: o }))
     });
 
-    // Update the run row with the final outputs.
-    await admin
+    // Update the run row with the final outputs — checked so the returned
+    // 'complete' status can't diverge from a silently-failed DB write.
+    const { error: completeErr } = await admin
       .from('meeting_runs')
       .update({
         status: 'complete',
@@ -298,6 +306,7 @@ export async function runMeetingCopilot(
         summary: synthesis.summary.slice(0, 500)
       })
       .eq('id', runId);
+    if (completeErr) throw new Error(`Failed to finalize run: ${completeErr.message}`);
 
     // Best-effort loop event — never let telemetry block the return.
     void emitLoopEvent({
@@ -324,13 +333,19 @@ export async function runMeetingCopilot(
     const message = err instanceof Error ? err.message : 'Unknown meeting copilot error';
     log.error('meeting_copilot_run_failed', { runId, orgId: input.orgId, error: err });
 
-    // Mark the run as error if we have a row id.
+    // Mark the run as error if we have a row id. A fresh admin client is used
+    // because the one in `try` is out of scope here (and may have failed to
+    // construct); this whole block is best-effort.
     if (runId) {
-      await admin
-        .from('meeting_runs')
-        .update({ status: 'error', summary: `Meeting analysis failed: ${message}`.slice(0, 500) })
-        .eq('id', runId)
-        .then(undefined, () => {});
+      try {
+        await createAdminClient()
+          .from('meeting_runs')
+          .update({ status: 'error', summary: `Meeting analysis failed: ${message}`.slice(0, 500) })
+          .eq('id', runId)
+          .then(undefined, () => {});
+      } catch {
+        // Nothing more we can do — the error is already logged above.
+      }
     }
 
     return {

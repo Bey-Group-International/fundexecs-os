@@ -29,6 +29,12 @@ export async function POST(req: NextRequest) {
   if (!query)
     return NextResponse.json({ error: 'Describe your fund mandate or thesis.' }, { status: 400 });
 
+  // Don't debit credits when the AI provider isn't configured — discoverTargets
+  // would return configured:false without doing any work.
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json({ configured: false, candidates: [] });
+  }
+
   // Meter before the LLM call — fail-open on infra, fail-closed on insufficient.
   const meter = await meterAction(org.orgId, 'target_discovery');
   if (!meter.ok && meter.reason === 'insufficient') {

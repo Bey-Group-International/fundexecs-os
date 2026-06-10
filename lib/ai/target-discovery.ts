@@ -112,6 +112,7 @@ function sanitize(raw: unknown): ScoutedTarget[] {
   if (!Array.isArray(raw)) return [];
   const out: ScoutedTarget[] = [];
   for (const r of raw as Record<string, unknown>[]) {
+    if (!r || typeof r !== 'object') continue;
     const companyName = typeof r.companyName === 'string' ? r.companyName.trim() : '';
     if (!companyName) continue;
     out.push({

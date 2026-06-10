@@ -92,14 +92,12 @@ create table if not exists public.earn_workflow_steps (
   ordinal         int  not null default 0,
   -- Operator-visible step label.
   title           text not null check (char_length(title) between 1 and 512),
-  -- Canonical specialist slug from TEAM_ROSTER; null = COO handles it.
+  -- Canonical specialist slug from TEAM_ROSTER (null = COO handles it). The
+  -- valid set is enforced in the application layer (lib/workflows/engine.ts
+  -- against TEAM_ROSTER) rather than a hardcoded DB whitelist, so the roster
+  -- can evolve without a schema migration. Light sanity bound only.
   specialist_slug text check (
-    specialist_slug is null or specialist_slug in (
-      'earnest-fundmaker', 'master-workflow', 'automater', 'executive-advisor',
-      'rainmaker', 'deal-sourcer', 'capital-connector', 'legal-admin',
-      'pr-director', 'seo-disruptor', 'lead-generator', 'event-curator',
-      'investor-relations', 'capital-raiser', 'workflow-instructor'
-    )
+    specialist_slug is null or char_length(specialist_slug) between 1 and 64
   ),
   -- Step lifecycle: mirrors WorkflowStepStatus in lib/workflows/types.ts.
   status          text not null default 'pending'
