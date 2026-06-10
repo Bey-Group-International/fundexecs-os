@@ -11,7 +11,6 @@ import { MajorAlertsCard } from './MajorAlertsCard';
 import { ExecutionScoreCard } from './ExecutionScoreCard';
 import { NextBestActionCard } from './NextBestActionCard';
 import { DailyCommandList } from './DailyCommandList';
-import { ActivityFeedCard } from './ActivityFeedCard';
 import { LaunchBriefCard } from './LaunchBriefCard';
 import { MarkVisited } from './MarkVisited';
 import { DashboardShell, RevealGroup, RevealItem } from './command';
@@ -22,13 +21,20 @@ import { TeamTasks } from './command/TeamTasks';
 import { EarnCoinIncentive, RegenerateButton } from './command/GameBits';
 
 /* ============================================================================
- * LifecycleDashboard — the Command Center, composed in one fixed operator
- * order (unified for every member type; member type only flavors the hero
- * copy). Top-to-bottom:
- *   Hero → Action queue → Daily Brief → Execution score (gamified) →
- *   4 metric boxes → Next best action + Daily command →
- *   Activity feed (tabbed) → Team tasks → Recent activity.
- * Ambient signals (since-away, risk-desk popovers) ride in the DashboardShell.
+ * LifecycleDashboard — the Command Center, composed for decision velocity.
+ * One operator order (unified for every member type; member type only flavors
+ * the hero copy):
+ *
+ *   Hero
+ *   FOCAL "now"      — blocking alerts + the single next best action + its
+ *                      Earn-coin reward (the one move, never duplicated).
+ *   Two columns (lg) — left: the day plan (Daily Brief + command checklist);
+ *                      right: the desk working (Team tasks) + metrics + score.
+ *   Activity         — one tabbed feed (the only activity surface).
+ *
+ * The focal move, alerts triage, and the desk all sit above the fold on
+ * desktop; ambient signals (since-away, risk-desk popovers) ride in the
+ * DashboardShell.
  * ========================================================================= */
 
 /** Earn coins credited for completing the highlighted next move. */
@@ -79,15 +85,6 @@ const HERO_COPY: Record<MemberType | 'default', HeroCopy> = {
   }
 };
 
-/** A small, consistent eyebrow above each horizontal section. */
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-4">
-      {children}
-    </p>
-  );
-}
-
 export interface LifecycleDashboardProps {
   displayName: string;
   memberType: MemberType | null;
@@ -112,12 +109,6 @@ export function LifecycleDashboard({
   const copy = HERO_COPY[memberType ?? 'default'];
   const firstName = displayName.split(' ')[0] || displayName || 'there';
   const currentStage: LifecycleStage = data.stage;
-
-  // Daily Brief draws on today's ranked moves (dedup top-action into the loop).
-  const briefActions = [
-    ...(data.nextBestAction ? [data.nextBestAction] : []),
-    ...data.dailyCommand
-  ].filter((a, i, arr) => arr.findIndex((x) => x.id === a.id) === i);
 
   return (
     <DashboardShell
@@ -180,63 +171,52 @@ export function LifecycleDashboard({
           </Card>
         </RevealItem>
 
-        {/* 1 · Action queue */}
-        <RevealItem>
-          <MajorAlertsCard alerts={data.majorAlerts} />
-        </RevealItem>
-
-        {/* 2 · Daily Brief */}
-        <RevealItem>
-          <DailyBrief briefing={data.briefing} actions={briefActions} alerts={data.majorAlerts} />
-        </RevealItem>
-
-        {/* 3 · Execution score — gamified, Earn-coin incentivized */}
+        {/* FOCAL "now" — blocking alerts, the single next move, and its reward.
+            One unmistakable action; never re-listed below. */}
         <RevealItem>
           <div className="flex flex-col gap-[14px]">
-            <EarnCoinIncentive
-              reward={NEXT_MOVE_REWARD}
-              streak={data.executionScore.streak}
-              nextHref={data.nextBestAction?.href ?? null}
-              nextLabel={data.nextBestAction?.cta ?? 'Open the desk'}
-            />
-            <ExecutionScoreCard execution={data.executionScore} />
-          </div>
-        </RevealItem>
-
-        {/* 4 · Four metric boxes (readiness + live counts) */}
-        <RevealItem>
-          <CommandMetrics metrics={metrics} readinessScore={data.readinessScore} />
-        </RevealItem>
-
-        {/* 5 · Next best action + Daily command (side by side) */}
-        <RevealItem>
-          <div className="grid gap-[14px] lg:grid-cols-2">
+            <MajorAlertsCard alerts={data.majorAlerts} />
             <div className="relative">
               <div className="absolute right-4 top-4 z-10">
                 <RegenerateButton />
               </div>
               <NextBestActionCard action={data.nextBestAction} />
             </div>
-            <DailyCommandList actions={data.dailyCommand} />
+            <EarnCoinIncentive
+              reward={NEXT_MOVE_REWARD}
+              streak={data.executionScore.streak}
+              nextHref={data.nextBestAction?.href ?? null}
+              nextLabel={data.nextBestAction?.cta ?? 'Open the desk'}
+            />
           </div>
         </RevealItem>
 
-        {/* 6 · Activity feed (tabbed) */}
+        {/* Two columns — left: the day plan · right: the desk working + progress.
+            Keeps the one move and the desk both above the fold on desktop. */}
+        <RevealItem>
+          <div className="grid items-start gap-[14px] lg:grid-cols-2">
+            {/* The day plan */}
+            <div className="flex flex-col gap-[14px]">
+              <DailyBrief
+                briefing={data.briefing}
+                actions={data.dailyCommand}
+                alerts={data.majorAlerts}
+              />
+              <DailyCommandList actions={data.dailyCommand} />
+            </div>
+
+            {/* The desk + progress */}
+            <div className="flex flex-col gap-[14px]">
+              <TeamTasks team={data.agentTeam} taskSummaries={teamTasks} />
+              <CommandMetrics metrics={metrics} readinessScore={data.readinessScore} />
+              <ExecutionScoreCard execution={data.executionScore} />
+            </div>
+          </div>
+        </RevealItem>
+
+        {/* Activity — the single tabbed feed (no duplicate recent-activity list). */}
         <RevealItem>
           <ActivityTabs items={data.activityFeed} />
-        </RevealItem>
-
-        {/* 7 · Team tasks */}
-        <RevealItem>
-          <TeamTasks team={data.agentTeam} taskSummaries={teamTasks} />
-        </RevealItem>
-
-        {/* 8 · Recent activity */}
-        <RevealItem>
-          <div>
-            <SectionLabel>Recent activity</SectionLabel>
-            <ActivityFeedCard items={data.activityFeed.slice(0, 6)} />
-          </div>
         </RevealItem>
       </RevealGroup>
     </DashboardShell>
