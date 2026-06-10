@@ -28,6 +28,12 @@ Real gaps below.
       `integration_connections.sync_frequency` (+ check constraint),
       `POST /api/integrations/:provider/frequency`, threaded through the query →
       `IntegrationView` → card (seeded from server, optimistic save w/ revert).
+- [x] **Siderail — Formation** is now a click-to-Earn action (was a dead "soon"
+      row). Added `earnPrompt` to the Build cluster's Formation item; both rail
+      renderers already handle Earn items. `components/shell/rail-nav.ts:160`.
+- [ ] **Admin metrics** — NOT a gap. The `get_admin_metrics` RPC exists
+      (migration `20260607110000`) and is fully wired; `placeholder:true` is only
+      a defensive fallback on RPC error. Left as-is.
 - [ ] **Dashboard — Gamification** achievements/quests return hardcoded
       placeholders (`GAMIFICATION_IS_PLACEHOLDER = true`).
       `lib/queries/gamification.ts`. Wire to real `xp_events` aggregation +
@@ -38,11 +44,10 @@ Real gaps below.
       `placeholder: true` on error). Verify/implement the RPC migration so
       knowledge-embedding coverage + pgvector status render live.
       `app/admin/AdminView.tsx:850-909`.
-- [ ] **Siderail — Formation route.** `components/shell/rail-nav.ts:160`
-      (`live: false`, no href). Build `/formation` (entity & fund formation) +
-      loader, flip `live: true`.
 - [ ] **Siderail — Execute sub-items** (Pre-Acquisition / Post-Acquisition /
-      Exit). `components/shell/rail-nav.ts:235-237`. Build routes + loaders.
+      Exit). `RailSubItem` only supports `href` today; wiring these to Earn needs
+      `earnPrompt` on `RailSubItem` + handling in both renderers (note: the inline
+      rail drops `children` entirely — pre-existing inconsistency to resolve too).
 - [ ] **Admin/account — Multi-account "Add account"** disabled.
       `components/shell/account/AccountMenu.tsx:420-442`. Larger (auth linking +
       workspace switcher) — scope before building; split if needed.
@@ -63,3 +68,9 @@ Real gaps below.
   cadence), `ProviderConnection.sync_frequency` + `IntegrationView.sync_frequency`
   threaded through `mergeConnections`, card seeds from server and saves
   optimistically with revert-on-failure. Gate: ✅ tsc ✅ lint ✅ format ✅ build.
+- **2026-06-10 ~02:55 CDT** — Siderail "Formation" wired as a click-to-Earn
+  action (was a dead "soon" row with no behavior). Added an `earnPrompt` to the
+  Build cluster's Formation item — both rail renderers (`InlineNavItem`,
+  `ClusterMenuEntry`) already handle Earn items, so it lights up in expanded and
+  collapsed rail. Verified `get_admin_metrics` RPC already exists/wired (not a
+  gap; recon overcounted). Gate: ✅ tsc ✅ lint ✅ format ✅ build.

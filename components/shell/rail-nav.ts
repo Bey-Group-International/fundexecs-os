@@ -39,8 +39,8 @@ import { RUN_EARN_PROMPTS } from '@/lib/run/workspace';
  * Each verb is a stage you move through; each carries one Earn action launcher
  * (the verb, made one-tap). Existing surfaces are folded in only where they
  * drive that stage — no buttons for the sake of buttons. Net-new AI concepts
- * (Stress Test, Aggregation Strategy) are click-to-Earn actions; surfaces not
- * yet built (Formation, Execute) are flagged "soon".
+ * (Stress Test, Aggregation Strategy, Formation) are click-to-Earn actions;
+ * surfaces not yet built (Execute) are flagged "soon".
  *
  * Scope guardrail: UI metadata only. Must not import from `lib/queries/*`,
  * `lib/supabase/*`, or any loader.
@@ -157,7 +157,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         live: true,
         hint: 'Proof, layer by layer'
       },
-      { label: 'Formation', icon: Building2, live: false, hint: 'Entity & fund formation' }
+      {
+        label: 'Formation',
+        icon: Building2,
+        earnPrompt:
+          'Help me with entity & fund formation — recommend the structure (entity type, jurisdiction, fund vehicle) that fits my plan, then lay out the steps, filings, and documents to stand it up.',
+        hint: 'Entity & fund formation (Earn)'
+      }
     ]
   },
   {
