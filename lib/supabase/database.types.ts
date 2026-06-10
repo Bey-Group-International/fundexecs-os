@@ -2759,6 +2759,57 @@ export type Database = {
           },
         ]
       }
+      loop_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          event_type: string
+          id: string
+          metadata: Json
+          org_id: string
+          verb: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json
+          org_id: string
+          verb: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json
+          org_id?: string
+          verb?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loop_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loop_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_signals: {
         Row: {
           captured_at: string
@@ -3750,6 +3801,17 @@ export type Database = {
       }
       upsert_trust_posture_snapshot: {
         Args: { _coverage_pct?: number; _iri: number; _org_id: string }
+        Returns: undefined
+      }
+      log_loop_event: {
+        Args: {
+          _entity_id?: string
+          _entity_type?: string
+          _event_type: string
+          _metadata?: Json
+          _org_id: string
+          _verb: string
+        }
         Returns: undefined
       }
       claim_beta_link: {

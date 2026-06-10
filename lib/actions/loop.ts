@@ -11,6 +11,8 @@ import {
   applyLoopContribution,
   type LoopCloseSource
 } from '@/lib/loop-close';
+import { LOOP_EVENT_TYPES, LOOP_SOURCE_VERB } from '@/lib/loop-events';
+import { emitLoopEvent } from '@/lib/loop-events.server';
 
 /* ============================================================================
  * lib/actions/loop.ts — "close the loop" (Drive → Build flywheel).
@@ -184,6 +186,18 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
       }
     }
   }
+
+  // Instrument the close on the per-verb loop_events stream (best-effort —
+  // emitLoopEvent never throws). The ledger above is the idempotency guarantee;
+  // this is the analyzable record of the verb doing its job.
+  await emitLoopEvent({
+    orgId: org.orgId,
+    verb: LOOP_SOURCE_VERB[input.source],
+    eventType: LOOP_EVENT_TYPES.loopClosed,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    metadata: { source: input.source, layer: layerKey, credited }
+  });
 
   revalidatePath('/', 'layout');
   return { ok: true, credited };
