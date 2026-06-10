@@ -33,7 +33,8 @@ import { PlanCreditsSection } from './PlanCreditsSection';
 import { AdminView } from '@/app/admin/AdminView';
 import type { AdminData } from '@/lib/queries/admin';
 import type { AdminMetrics } from '@/lib/queries/admin-metrics';
-import type { ReferralOverview } from '@/lib/queries/referrals';
+import type { ReferralOverview, ReferralTier } from '@/lib/queries/referrals';
+import type { LaunchTrend } from '@/lib/queries/admin-snapshots';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import type { BetaApplication } from '@/lib/queries/beta-applications';
@@ -84,6 +85,10 @@ interface SettingsViewProps {
   adminMetrics: AdminMetrics | null;
   /** Referral + commission picture for the Admin Referrals panel + invite badges. */
   referralOverview: ReferralOverview | null;
+  /** Configured commission ladder (tier → rate) for the Referrals panel copy. */
+  referralTiers: ReferralTier[];
+  /** Day-over-day launch momentum (deltas + series) for the Admin Overview. */
+  launchTrend: LaunchTrend | null;
   /** The viewing admin's own role — gates owner-only role changes. */
   viewerRole: OrgMemberRole | null;
   /** Current plan/seat/status for the Plan & credits section. */
@@ -602,6 +607,8 @@ export function SettingsView({
   applications,
   adminMetrics,
   referralOverview,
+  referralTiers,
+  launchTrend,
   viewerRole,
   subscription,
   creditBalance,
@@ -792,6 +799,8 @@ export function SettingsView({
               applications={applications}
               metrics={adminMetrics}
               referralOverview={referralOverview}
+              referralTiers={referralTiers}
+              launchTrend={launchTrend}
               viewerRole={viewerRole}
             />
           )}
