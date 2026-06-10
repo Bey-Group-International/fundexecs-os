@@ -10,6 +10,12 @@
  *
  * Pure + isomorphic (no server-only imports) so it can gate both server actions
  * and client UI from one source of truth.
+ *
+ * NOTE: the domain match below is the cheap FIRST factor only. The server gate
+ * (`requirePlatformAdmin` in lib/access.server.ts) additionally requires the
+ * email to be on the explicit `platform_admins` allowlist, so a stray account
+ * on the domain does not get the portal. Client UI may use this function alone
+ * as a display hint; anything that acts must go through the server gate.
  */
 export const PLATFORM_ADMIN_DOMAIN = '@beygroupintl.com';
 

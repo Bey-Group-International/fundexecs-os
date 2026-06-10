@@ -3225,6 +3225,24 @@ export type Database = {
           },
         ]
       }
+      platform_admins: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          email: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          email: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          email?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -3816,6 +3834,7 @@ export type Database = {
       generate_lp_matches: { Args: { _org_id: string }; Returns: number }
       generate_signal_matches: { Args: { _org_id: string }; Returns: number }
       get_admin_metrics: { Args: { _org_id: string }; Returns: Json }
+      is_platform_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
       get_audit_trail: {
         Args: { _limit?: number; _org_id: string }
         Returns: {
