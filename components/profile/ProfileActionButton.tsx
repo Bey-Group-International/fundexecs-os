@@ -371,6 +371,7 @@ export function ProfileActionButton({
  * Inline mini progress ring (compact variant)
  * ------------------------------------------------------------------------- */
 
+/** Inline 14px completeness ring shown inside the button label. */
 function MiniRing({
   score,
   color,

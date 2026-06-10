@@ -354,10 +354,13 @@ export function ProofOfTruthFlow({
     fetchRecommendations(question, memberType, dislikedByQuestion[question.id] ?? []);
   }
 
+  /**
+   * Approve a value into the record. Momentum: surface what this answer earned
+   * (+N% on the record) and count it into the session chain, so each approval
+   * pulls toward the next gap.
+   */
   function approveValue(value: string) {
     if (!question || !memberType) return;
-    // Momentum: surface what this answer earned (+N% on the record) and count
-    // it into the session chain, so each approval pulls toward the next gap.
     const wasApproved = (answers[question.id] ?? '').trim().length > 0;
     const delta =
       completionPct(memberType, { ...answers, [question.id]: value }) -
