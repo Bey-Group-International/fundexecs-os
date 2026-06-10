@@ -183,6 +183,45 @@ export function ChainOfTrust() {
   );
 }
 
+// ── Mid-page CTA ─────────────────────────────────────────────────────────────
+
+/**
+ * MidPageCta — a compact request-access band placed right after the Chain of
+ * Trust section, where buyer skepticism resolves, so the long scroll always
+ * has a nearby conversion point.
+ */
+export function MidPageCta() {
+  const { open: openRequestAccess } = useRequestAccess();
+  return (
+    <section className="pb-16 sm:pb-24" aria-labelledby="midcta-heading">
+      <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
+        <Reveal>
+          <Card className="flex flex-col items-center gap-6 p-7 text-center sm:flex-row sm:justify-between sm:p-8 sm:text-left">
+            <div className="max-w-xl">
+              <h2 id="midcta-heading" className="text-xl font-semibold tracking-[-0.02em] text-fg-1 sm:text-2xl">
+                Proof you can stand behind. A desk with your name on it.
+              </h2>
+              <p className="mt-2 text-[13px] leading-6 text-fg-3">
+                Invite-only. We&rsquo;re onboarding a limited cohort this quarter.
+              </p>
+            </div>
+            <Magnetic className="flex-none">
+              <button
+                type="button"
+                onClick={() => openRequestAccess('landing-mid-page')}
+                className={PRIMARY_CTA}
+              >
+                Request access
+                <ArrowRight size={17} strokeWidth={2} aria-hidden />
+              </button>
+            </Magnetic>
+          </Card>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
 // ── How it works ─────────────────────────────────────────────────────────────
 
 const STEPS = [

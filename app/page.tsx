@@ -5,7 +5,13 @@ import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
 import { ActivityTicker } from '@/components/landing/ActivityTicker';
 import { Hero } from '@/components/landing/Hero';
 import { ProductPreview } from '@/components/landing/ProductPreview';
-import { ValueProps, ChainOfTrust, HowItWorks, FinalCta } from '@/components/landing/Sections';
+import {
+  ValueProps,
+  ChainOfTrust,
+  MidPageCta,
+  HowItWorks,
+  FinalCta
+} from '@/components/landing/Sections';
 import { RequestAccessProvider } from '@/components/landing/RequestAccessContext';
 import { TeamConstellation } from '@/components/landing/TeamConstellation';
 import { EarnCoin } from '@/components/screens/EarnCoin';
@@ -117,6 +123,7 @@ export default function HomePage() {
           <ValueProps />
           <TeamConstellation />
           <ChainOfTrust />
+          <MidPageCta />
           <HowItWorks />
           <FinalCta />
         </main>
