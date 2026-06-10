@@ -51,11 +51,29 @@ export default async function BuildPage() {
   }
 
   const [workspace, memberProfile, wallet, fundProfile] = await Promise.all([
-    loadBuildWorkspace(org.orgId),
-    getMemberProfile(),
+    loadBuildWorkspace(org.orgId).catch((err) => {
+      console.error('[BuildPage] Failed to load build workspace:', err);
+      return null;
+    }),
+    getMemberProfile().catch(() => null),
     getCreditWallet(org.orgId).catch(() => null),
     getFundProfile(org.orgId).catch(() => null)
   ]);
+
+  if (!workspace) {
+    return (
+      <AppShell title="Build" subtitle="Establish the record" identity={identity} wallet={wallet}>
+        <Card className="p-8 text-center">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+            Build hub unavailable
+          </p>
+          <p className="mt-2 text-[13px] text-fg-2">
+            We couldn&apos;t load your record right now. Refresh in a moment.
+          </p>
+        </Card>
+      </AppShell>
+    );
+  }
 
   const navSignals = buildRailSignals(workspace.dashboard, memberProfile?.memberType ?? null);
 

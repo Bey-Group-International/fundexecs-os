@@ -1,5 +1,6 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/supabase/database.types';
 import type { LoopVerb } from '@/lib/loop-chain';
 
 /**
@@ -18,7 +19,8 @@ export interface LoopEventInput {
   eventType: string;
   entityType?: string;
   entityId?: string;
-  metadata?: Record<string, unknown>;
+  /** JSON-serializable context for the event row. */
+  metadata?: Json;
 }
 
 /** Emit one loop event. Best-effort: failures are logged, never surfaced. */
@@ -31,7 +33,7 @@ export async function emitLoopEvent(input: LoopEventInput): Promise<void> {
       _event_type: input.eventType,
       _entity_type: input.entityType ?? undefined,
       _entity_id: input.entityId ?? undefined,
-      _metadata: (input.metadata ?? {}) as never
+      _metadata: input.metadata ?? {}
     });
     if (error) {
       console.warn('[loop-events] emit failed:', error.message);
