@@ -1,12 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { ArrowRight, Gauge, ShieldCheck, Radar, type LucideIcon } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { Card } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Reveal, Stagger, StaggerItem, Magnetic } from '@/components/landing/Motion';
 import { PRIMARY_CTA } from '@/components/landing/cta';
+import { useRequestAccess } from '@/components/landing/RequestAccessContext';
 
 /* ============================================================================
  * components/landing/Sections.tsx — the animated content sections below the
@@ -100,6 +100,37 @@ export function ValueProps() {
 
 // ── Chain of Trust ───────────────────────────────────────────────────────────
 
+/**
+ * A single worked proof chain, rendered under the four abstract layer cards.
+ * Illustrative sample only — realistic in shape, clearly labelled as not a
+ * real transaction. Do not replace with real deal data without legal review.
+ */
+const TRUST_EXAMPLE = [
+  {
+    layer: 'Proof of Truth',
+    color: 'var(--proof-truth)',
+    detail:
+      'Target’s trailing revenue traced to audited statements and bank data — 3 sources cited inline.'
+  },
+  {
+    layer: 'Proof of Concept',
+    color: 'var(--proof-concept)',
+    detail:
+      'Thesis memo logged: on-mandate B2B infrastructure deal, mid-market check size, documented fit logic.'
+  },
+  {
+    layer: 'Proof of Execution',
+    color: 'var(--proof-execution)',
+    detail:
+      'Diligence checklist completed and IC approval recorded — every task and approver time-stamped.'
+  },
+  {
+    layer: 'Proof of Work',
+    color: 'var(--proof-work)',
+    detail: 'Signed term sheet and closing confirmation archived to the deal’s auditable record.'
+  }
+];
+
 const TRUST_LAYERS = [
   {
     name: 'Proof of Truth',
@@ -178,6 +209,85 @@ export function ChainOfTrust() {
             </StaggerItem>
           ))}
         </Stagger>
+
+        {/* One concrete chain, end to end — so the four layers aren't abstract. */}
+        <Reveal className="mt-8">
+          <Card className="p-6 sm:p-7">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[15px] font-semibold text-fg-1">
+                One chain, end to end — a single deal&rsquo;s proof record
+              </h3>
+              <span className="rounded-full border border-hairline bg-surface-1 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+                Illustrative sample
+              </span>
+            </div>
+            <ol className="mt-5 flex flex-col gap-4">
+              {TRUST_EXAMPLE.map((step, i) => (
+                <li key={step.layer} className="flex gap-3.5">
+                  <span className="flex flex-col items-center" aria-hidden>
+                    <span
+                      className="mt-1 h-2.5 w-2.5 flex-none rounded-full"
+                      style={{ backgroundColor: step.color, boxShadow: `0 0 10px ${step.color}` }}
+                    />
+                    {i < TRUST_EXAMPLE.length - 1 && (
+                      <span className="mt-1.5 w-px flex-1 bg-hairline" />
+                    )}
+                  </span>
+                  <div className="pb-1">
+                    <p className="text-[12.5px] font-semibold text-fg-1">{step.layer}</p>
+                    <p className="mt-0.5 text-[12.5px] leading-6 text-fg-3">{step.detail}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-4 text-[11px] leading-relaxed text-fg-5">
+              Illustrative sample shown to demonstrate the proof structure — not a real transaction,
+              offer, or solicitation.
+            </p>
+          </Card>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+// ── Mid-page CTA ─────────────────────────────────────────────────────────────
+
+/**
+ * MidPageCta — a compact request-access band placed right after the Chain of
+ * Trust section, where buyer skepticism resolves, so the long scroll always
+ * has a nearby conversion point.
+ */
+export function MidPageCta() {
+  const { open: openRequestAccess } = useRequestAccess();
+  return (
+    <section className="pb-16 sm:pb-24" aria-labelledby="midcta-heading">
+      <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
+        <Reveal>
+          <Card className="flex flex-col items-center gap-6 p-7 text-center sm:flex-row sm:justify-between sm:p-8 sm:text-left">
+            <div className="max-w-xl">
+              <h2
+                id="midcta-heading"
+                className="text-xl font-semibold tracking-[-0.02em] text-fg-1 sm:text-2xl"
+              >
+                Proof you can stand behind. A desk with your name on it.
+              </h2>
+              <p className="mt-2 text-[13px] leading-6 text-fg-3">
+                Invite-only. We&rsquo;re onboarding a limited cohort this quarter.
+              </p>
+            </div>
+            <Magnetic className="flex-none">
+              <button
+                type="button"
+                onClick={() => openRequestAccess('landing-mid-page')}
+                className={PRIMARY_CTA}
+              >
+                Request access
+                <ArrowRight size={17} strokeWidth={2} aria-hidden />
+              </button>
+            </Magnetic>
+          </Card>
+        </Reveal>
       </div>
     </section>
   );
@@ -266,6 +376,7 @@ export function HowItWorks() {
 // ── Final CTA ────────────────────────────────────────────────────────────────
 
 export function FinalCta() {
+  const { open: openRequestAccess } = useRequestAccess();
   return (
     <section
       className="relative overflow-hidden py-20 sm:py-28"
@@ -297,13 +408,17 @@ export function FinalCta() {
         </p>
         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Magnetic>
-            <Link href="/login" className={PRIMARY_CTA}>
-              Claim your desk
+            <button
+              type="button"
+              onClick={() => openRequestAccess('landing-final-cta')}
+              className={PRIMARY_CTA}
+            >
+              Request access
               <ArrowRight size={17} strokeWidth={2} aria-hidden />
-            </Link>
+            </button>
           </Magnetic>
           <span className="text-[12.5px] text-fg-5">
-            Invite-only beta · no card, no setup, no risk
+            Invite-only. We&rsquo;re onboarding a limited cohort this quarter.
           </span>
         </div>
       </Reveal>

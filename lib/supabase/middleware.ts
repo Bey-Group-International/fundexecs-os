@@ -139,6 +139,7 @@ export async function updateSession(request: NextRequest) {
   const isPublic =
     pathname === '/' ||
     pathname === '/login' ||
+    pathname === '/request-access' ||
     pathname === '/privacy' ||
     pathname === '/terms' ||
     pathname.startsWith('/p/') ||

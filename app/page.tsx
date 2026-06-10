@@ -5,8 +5,17 @@ import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
 import { ActivityTicker } from '@/components/landing/ActivityTicker';
 import { Hero } from '@/components/landing/Hero';
 import { ProductPreview } from '@/components/landing/ProductPreview';
-import { ValueProps, ChainOfTrust, HowItWorks, FinalCta } from '@/components/landing/Sections';
+import {
+  ValueProps,
+  ChainOfTrust,
+  MidPageCta,
+  HowItWorks,
+  FinalCta
+} from '@/components/landing/Sections';
+import { RequestAccessProvider } from '@/components/landing/RequestAccessContext';
+import { ScrollDepth } from '@/components/landing/ScrollDepth';
 import { TeamConstellation } from '@/components/landing/TeamConstellation';
+import { TrustScaffold } from '@/components/landing/TrustScaffold';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { WelcomeBanner } from '@/components/beta/WelcomeBanner';
 
@@ -72,10 +81,10 @@ function Footer() {
               Sign in
             </Link>
             <Link
-              href="/login"
+              href="/request-access"
               className="rounded-md text-[13px] text-gold-1 transition hover:text-gold-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
             >
-              Get started
+              Request access
             </Link>
           </nav>
         </div>
@@ -97,29 +106,34 @@ function Footer() {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-bg-0 text-fg-1">
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-xl focus:bg-gold-1 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#070b14]"
-      >
-        Skip to content
-      </a>
+    <RequestAccessProvider>
+      <div className="min-h-screen bg-bg-0 text-fg-1">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-xl focus:bg-gold-1 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#070b14]"
+        >
+          Skip to content
+        </a>
 
-      <LandingNav />
+        <LandingNav />
 
-      <main id="main">
-        <WelcomeBanner />
-        <Hero />
-        <ActivityTicker />
-        <ProductPreview />
-        <ValueProps />
-        <TeamConstellation />
-        <ChainOfTrust />
-        <HowItWorks />
-        <FinalCta />
-      </main>
+        <main id="main">
+          <WelcomeBanner />
+          <Hero />
+          <ActivityTicker />
+          <ProductPreview />
+          <ValueProps />
+          <TeamConstellation />
+          <ChainOfTrust />
+          <MidPageCta />
+          <HowItWorks />
+          <FinalCta />
+        </main>
 
-      <Footer />
-    </div>
+        <TrustScaffold />
+        <Footer />
+        <ScrollDepth />
+      </div>
+    </RequestAccessProvider>
   );
 }

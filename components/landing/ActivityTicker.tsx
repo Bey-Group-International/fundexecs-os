@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { EarnCoin } from '@/components/screens/EarnCoin';
-import { getChainOfTrustActivity, type ActivityEntry } from '@/lib/landing/activity';
+import { ACTIVITY_SEED, getChainOfTrustActivity, type ActivityEntry } from '@/lib/landing/activity';
 
 /** One pill in the scrolling marquee. */
 function TickerPill({ entry }: { entry: ActivityEntry }) {
@@ -56,14 +56,16 @@ function ActivityCard({ entry }: { entry: ActivityEntry }) {
  *   row with no auto-scroll instead of the duplicated, animated track.
  * - "View all activity" toggles a responsive grid of every entry.
  *
- * Data comes from `getChainOfTrustActivity()`. To satisfy the repo's
+ * Data comes from `getChainOfTrustActivity()`. The ticker renders the bundled
+ * `ACTIVITY_SEED` from the first paint — a "live" feed that opens empty or
+ * with a loading shimmer on the first screen damages trust — and swaps in the
+ * live feed if/when one resolves. To satisfy the repo's
  * `react-hooks/set-state-in-effect` rule, state is only ever set inside the
  * async `.then` continuation — never synchronously in the effect body
  * (mirrors `components/ui/AnimatedNumber.tsx`).
  */
 export function ActivityTicker() {
-  const [entries, setEntries] = useState<ActivityEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<ActivityEntry[]>(ACTIVITY_SEED);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [inView, setInView] = useState(true);
   const [showAll, setShowAll] = useState(false);
@@ -82,7 +84,6 @@ export function ActivityTicker() {
     getChainOfTrustActivity().then((data) => {
       if (!active) return;
       setEntries(data);
-      setLoading(false);
     });
 
     return () => {
@@ -144,12 +145,7 @@ export function ActivityTicker() {
         role="region"
         aria-label="Recent anonymized platform activity"
       >
-        {loading ? (
-          <div className="flex items-center gap-2 px-5 py-1 text-[12.5px] text-fg-4 sm:px-8">
-            <EarnCoin size={20} />
-            Loading activity…
-          </div>
-        ) : reduceMotion ? (
+        {reduceMotion ? (
           // Reduced motion: static, wrapping row — no auto-scroll.
           <div className="flex flex-wrap items-center gap-3 px-5 sm:px-8">
             {entries.map((e, i) => (
