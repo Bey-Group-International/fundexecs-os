@@ -625,6 +625,45 @@ export type Database = {
           },
         ]
       }
+      access_requests: {
+        Row: {
+          created_at: string
+          email: string
+          firm: string
+          full_name: string
+          id: string
+          raising_range: string
+          referral_code: string | null
+          role_title: string
+          source: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          firm: string
+          full_name: string
+          id?: string
+          raising_range: string
+          referral_code?: string | null
+          role_title: string
+          source?: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          firm?: string
+          full_name?: string
+          id?: string
+          raising_range?: string
+          referral_code?: string | null
+          role_title?: string
+          source?: string
+          status?: string
+        }
+        Relationships: []
+      }
       raise_interests: {
         Row: {
           accredited: boolean | null

@@ -6,6 +6,7 @@ import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { NAV_CTA } from '@/components/landing/cta';
+import { useRequestAccess } from '@/components/landing/RequestAccessContext';
 
 /**
  * LandingNav — the public marketing nav. Sticky; gains a subtle backdrop blur
@@ -15,6 +16,7 @@ import { NAV_CTA } from '@/components/landing/cta';
  */
 export function LandingNav() {
   const [scrolled, setScrolled] = useState(false);
+  const { open: openRequestAccess } = useRequestAccess();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -57,10 +59,14 @@ export function LandingNav() {
           >
             Sign in
           </Link>
-          <Link href="/login" className={NAV_CTA}>
-            Get started
+          <button
+            type="button"
+            onClick={() => openRequestAccess('landing-nav')}
+            className={NAV_CTA}
+          >
+            Request access
             <ArrowRight size={15} strokeWidth={1.9} aria-hidden />
-          </Link>
+          </button>
         </div>
       </nav>
     </header>
