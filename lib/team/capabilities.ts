@@ -166,6 +166,6 @@ export function proposalForTask(slug: string, taskTitle: string): TaskProposal {
   const title = taskTitle.trim() || 'this task';
   return {
     action: cap.action,
-    steps: cap.steps.map((s) => s.replace('{task}', title))
+    steps: cap.steps.map((s) => s.replaceAll('{task}', title))
   };
 }

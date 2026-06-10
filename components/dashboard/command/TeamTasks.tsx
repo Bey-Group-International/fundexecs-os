@@ -418,7 +418,7 @@ function AgentCard({
         {current ? (
           current.status === 'queued' || current.status === 'blocked' ? (
             <RunButton taskId={current.id} />
-          ) : current.status === 'awaiting' && current.proposal ? null : (
+          ) : current.status === 'awaiting' ? null : (
             <TaskControl taskId={current.id} status={current.status} />
           )
         ) : summary?.retryable ? (
@@ -435,8 +435,16 @@ function AgentCard({
         ) : null}
       </div>
 
-      {current?.status === 'awaiting' && current.proposal ? (
-        <ProposalCard proposal={current.proposal} agentName={member.name} />
+      {current?.status === 'awaiting' ? (
+        current.proposal ? (
+          <ProposalCard proposal={current.proposal} agentName={member.name} />
+        ) : (
+          // Brief window between the task moving to 'awaiting' and the proposal
+          // attaching — show a placeholder, never a bare Approve without steps.
+          <p className="ml-[46px] mt-1 text-[11px] text-fg-4" aria-live="polite">
+            Preparing the plan…
+          </p>
+        )
       ) : null}
 
       {composing ? <AssignComposer slug={agent.slug} onClose={() => setComposing(false)} /> : null}
