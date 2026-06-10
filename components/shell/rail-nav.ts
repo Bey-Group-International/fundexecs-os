@@ -30,6 +30,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import type { LifecycleStage } from '@/lib/lifecycle';
+import { RUN_EARN_PROMPTS } from '@/lib/run/workspace';
 
 /* ----------------------------------------------------------------------------
  * Rail navigation registry — the single source of truth for the side rail.
@@ -172,6 +173,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
     },
     items: [
       {
+        href: '/source',
+        label: 'Source Hub',
+        icon: Radar,
+        live: true,
+        hint: 'The verb on one surface — capital in motion, focus, next move'
+      },
+      {
         href: '/deal-desk?view=sourcing',
         label: 'Deals',
         icon: Briefcase,
@@ -207,6 +215,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
     },
     items: [
       {
+        href: '/run',
+        label: 'Run Hub',
+        icon: Play,
+        live: true,
+        hint: 'The verb on one surface — capital awaiting a decision, next move'
+      },
+      {
         href: '/ic-memos',
         label: 'Diligence',
         icon: FileSearch,
@@ -216,8 +231,7 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
       {
         label: 'Stress Test',
         icon: Activity,
-        earnPrompt:
-          'Run a stress test on my current deals and raise — model downside scenarios and tell me where it breaks.',
+        earnPrompt: RUN_EARN_PROMPTS.stressTest,
         hint: 'Scenario & downside analysis (Earn)'
       },
       {
@@ -230,8 +244,7 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
       {
         label: 'Aggregation Strategy',
         icon: Workflow,
-        earnPrompt:
-          'Propose an aggregation strategy across my deals — where are the synergies, and how do they compound?',
+        earnPrompt: RUN_EARN_PROMPTS.aggregation,
         hint: 'Synergistic roll-up logic (Earn)'
       }
     ]
@@ -248,6 +261,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         'Help me drive to close — what materials, signatures, and steps stand between here and a closed deal?'
     },
     items: [
+      {
+        href: '/drive',
+        label: 'Drive Hub',
+        icon: Rocket,
+        live: true,
+        hint: 'The verb on one surface — close progress, focus, next move'
+      },
       {
         href: '/materials',
         label: 'Materials Studio',
