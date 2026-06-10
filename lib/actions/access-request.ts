@@ -33,6 +33,11 @@ const CODE_MAX = 64;
 const SOURCE_MAX = 64;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Attribution slugs only ('landing-hero', 'request-access-page', …) — the
+// action is publicly callable, so a forged request must not be able to persist
+// arbitrary attribution strings. Mirrors sanitizeSource in
+// app/request-access/page.tsx.
+const SOURCE_RE = /^[a-z0-9-]{1,64}$/;
 
 const RANGE_VALUES = new Set<string>(RAISING_RANGES.map((r) => r.value));
 
@@ -50,7 +55,8 @@ export async function submitAccessRequest(input: AccessRequestInput): Promise<Ac
   const firm = clean(input.firm, FIELD_MAX);
   const roleTitle = clean(input.roleTitle, FIELD_MAX);
   const referralCode = clean(input.referralCode, CODE_MAX);
-  const source = clean(input.source, SOURCE_MAX) ?? 'landing';
+  const rawSource = clean(input.source, SOURCE_MAX);
+  const source = rawSource && SOURCE_RE.test(rawSource) ? rawSource : 'landing';
 
   if (!email || !EMAIL_RE.test(email)) {
     return { ok: false, error: 'Please add a valid work email.' };
@@ -67,10 +73,10 @@ export async function submitAccessRequest(input: AccessRequestInput): Promise<Ac
   // Resolve the caller's IP so throttling has a server-observed dimension —
   // an email-only key could be evaded by rotating addresses, or abused to
   // burn a real address's quota.
-  let ip = 'unknown';
+  let ip: string | null = null;
   try {
     const h = await headers();
-    ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() || h.get('x-real-ip')?.trim() || 'unknown';
+    ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() || h.get('x-real-ip')?.trim() || null;
   } catch {
     /* headers unavailable (e.g. unit context) — fall through to email-only */
   }
@@ -78,11 +84,13 @@ export async function submitAccessRequest(input: AccessRequestInput): Promise<Ac
   // Throttle this public, unauthenticated write so a bot can't spam the lead
   // table: a tight per-email bucket plus a wider per-IP bucket, reusing the
   // generic service-role rate-limiter. Fail-open on infra error so a limiter
-  // blip never blocks a real prospect.
-  const buckets = [
-    { key: `access_request:email:${email}`, max: 5 },
-    { key: `access_request:ip:${ip}`, max: 20 }
-  ];
+  // blip never blocks a real prospect. The IP bucket only applies when a real
+  // client IP resolved — keying it on a placeholder would make one shared
+  // global bucket that rate-limits every visitor at once.
+  const buckets = [{ key: `access_request:email:${email}`, max: 5 }];
+  if (ip) {
+    buckets.push({ key: `access_request:ip:${ip}`, max: 20 });
+  }
   for (const bucket of buckets) {
     try {
       const { data: allowed } = await admin.rpc('beta_ask_rate_check', {
