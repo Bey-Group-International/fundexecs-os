@@ -15,7 +15,12 @@ import {
   loadReadinessHistory,
   captureReadinessSnapshot
 } from '@/lib/queries/dashboard/readiness-history';
-import { computeCompoundReadiness, computeReadinessValue, rankByValue } from '@/lib/readiness';
+import {
+  computeCompoundReadiness,
+  computeReadinessValue,
+  projectTrajectory,
+  rankByValue
+} from '@/lib/readiness';
 import { ReadinessView } from '@/components/readiness/ReadinessView';
 
 export const metadata: Metadata = {
@@ -75,6 +80,8 @@ export default async function ReadinessPage() {
   const target = dashboard.raiseProgress.target;
   const value = computeReadinessValue(compound, target);
   const ranked = rankByValue(compound, value);
+  // Forward projection of steady execution — the compounding curve over time.
+  const trajectory = projectTrajectory(dashboard.readinessBreakdown, target);
 
   // Persist today's snapshot (idempotent per day) before reading the trend, so a
   // brand-new org sees at least its first point. Both are best-effort.
@@ -103,6 +110,7 @@ export default async function ReadinessPage() {
         value={value}
         ranked={ranked}
         history={history}
+        trajectory={trajectory}
         target={target}
         lockedByReadiness={dashboard.valueAtStake.lockedByReadiness}
       />

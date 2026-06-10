@@ -15,10 +15,21 @@ import { getAdminData, type AdminData } from '@/lib/queries/admin';
 import { getAdminMetrics, type AdminMetrics } from '@/lib/queries/admin-metrics';
 import { getBetaInvites, type BetaInvite } from '@/lib/queries/beta-invites';
 import { getBetaLinks, type BetaLinkWithStatus } from '@/lib/queries/beta-links';
-import { getReferralOverview, type ReferralOverview } from '@/lib/queries/referrals';
+import {
+  getReferralOverview,
+  getReferralTiers,
+  type ReferralOverview,
+  type ReferralTier
+} from '@/lib/queries/referrals';
+import {
+  captureAdminLaunchSnapshot,
+  getAdminLaunchTrend,
+  type LaunchCounts,
+  type LaunchTrend
+} from '@/lib/queries/admin-snapshots';
 import { getBetaApplications, type BetaApplication } from '@/lib/queries/beta-applications';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
-import { isPlatformAdmin } from '@/lib/access';
+import { requirePlatformAdmin } from '@/lib/access.server';
 import { ProfileRailSummary } from '@/components/profile';
 import type { Database } from '@/lib/supabase/database.types';
 import { SettingsView } from './SettingsView';
@@ -123,21 +134,27 @@ export default async function SettingsPage() {
   let applications: BetaApplication[] = [];
   let adminMetrics: AdminMetrics | null = null;
   let referralOverview: ReferralOverview | null = null;
+  let referralTiers: ReferralTier[] = [];
+  let launchTrend: LaunchTrend | null = null;
   let viewerRole: OrgMemberRole | null = null;
-  if (org && user && isPlatformAdmin(user.email)) {
+  // Hardened gate (domain + allowlist) so the rendered portal always matches
+  // what the server actions will actually permit.
+  if (org && user && (await requirePlatformAdmin())) {
     const ad = await getAdminData(org.orgId).catch(() => null);
     const me = ad?.members.find((m) => m.userId === user.id);
     viewerRole = me?.role ?? null;
     adminScope = 'platform';
     if (ad) {
       adminData = ad;
-      [invites, adminMetrics, betaLinks, applications, referralOverview] = await Promise.all([
-        getBetaInvites(org.orgId).catch(() => []),
-        getAdminMetrics(org.orgId).catch(() => null),
-        getBetaLinks(org.orgId).catch(() => []),
-        getBetaApplications(org.orgId).catch(() => []),
-        getReferralOverview(org.orgId).catch(() => null)
-      ]);
+      [invites, adminMetrics, betaLinks, applications, referralOverview, referralTiers] =
+        await Promise.all([
+          getBetaInvites(org.orgId).catch(() => []),
+          getAdminMetrics(org.orgId).catch(() => null),
+          getBetaLinks(org.orgId).catch(() => []),
+          getBetaApplications(org.orgId).catch(() => []),
+          getReferralOverview(org.orgId).catch(() => null),
+          getReferralTiers().catch(() => [])
+        ]);
     }
   } else if (org && user && (orgTeam.viewerRole === 'owner' || orgTeam.viewerRole === 'admin')) {
     // Org owner/admin — org-scoped admin subset. All reads stay RLS-bounded to
@@ -153,6 +170,23 @@ export default async function SettingsPage() {
         getBetaLinks(org.orgId).catch(() => [])
       ]);
     }
+  }
+
+  // Compound the launch picture: persist today's counts (idempotent per org
+  // per day) and read back the trend, so the Overview shows deltas + momentum
+  // instead of only point-in-time numbers. Both calls are best-effort.
+  if (org && adminData) {
+    const liveCounts: LaunchCounts = {
+      members: adminData.members.length,
+      invitesSent: invites.length,
+      invitesAccepted: invites.filter((i) => i.status === 'accepted').length,
+      applications: applications.length,
+      applicationsApproved: applications.filter((a) => a.review === 'approved').length,
+      referredCount: referralOverview?.referredCount ?? 0,
+      creditsEarned: referralOverview?.totalEarned ?? 0
+    };
+    await captureAdminLaunchSnapshot(org.orgId, liveCounts);
+    launchTrend = await getAdminLaunchTrend(org.orgId, liveCounts).catch(() => null);
   }
 
   const navSignals = dashboard
@@ -202,6 +236,8 @@ export default async function SettingsPage() {
         applications={applications}
         adminMetrics={adminMetrics}
         referralOverview={referralOverview}
+        referralTiers={referralTiers}
+        launchTrend={launchTrend}
         viewerRole={viewerRole}
         subscription={subscriptionView}
         creditBalance={wallet?.balance ?? 0}

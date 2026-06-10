@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useCardState } from '@/lib/ui/useCardState';
 import { approveMember, archiveMember, setMemberRole } from '@/lib/actions/admin';
 import { inviteBetaUser } from '@/lib/actions/beta-invites';
+import { loadAdminActivity } from '@/lib/actions/admin-activity';
+import type { ActivityCursor, ActivityTargetType } from '@/lib/queries/admin-activity';
 import {
   Users,
   UserPlus,
@@ -43,15 +45,14 @@ import {
 } from '@/components/ui';
 import { TEAM_ROSTER, TeamAvatar } from '@/lib/team';
 import { cn } from '@/lib/utils';
-import type { AdminData, AdminMember } from '@/lib/queries/admin';
+import type { AdminActivity, AdminData, AdminMember } from '@/lib/queries/admin';
 import type { AdminMetrics, TrustLayerKey } from '@/lib/queries/admin-metrics';
 import type { BetaInvite } from '@/lib/queries/beta-invites';
 import type { BetaLinkWithStatus } from '@/lib/queries/beta-links';
 import type { BetaApplication } from '@/lib/queries/beta-applications';
-import type { ReferralOverview } from '@/lib/queries/referrals';
-import { BetaInvitesPanel } from './BetaInvitesPanel';
-import { BetaLinksPanel } from './BetaLinksPanel';
-import { ApplicationsPanel } from './ApplicationsPanel';
+import type { ReferralOverview, ReferralTier } from '@/lib/queries/referrals';
+import type { LaunchTrend } from '@/lib/queries/admin-snapshots';
+import { AccessPanel } from './AccessPanel';
 import { ReferralsPanel } from './ReferralsPanel';
 import { LaunchCommandPanel, type LaunchSnapshot, type LaunchTab } from './LaunchCommandPanel';
 
@@ -121,15 +122,7 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-type Tab =
-  | 'overview'
-  | 'users'
-  | 'applications'
-  | 'invites'
-  | 'referrals'
-  | 'activity'
-  | 'trust'
-  | 'knowledge';
+type Tab = 'overview' | 'users' | 'access' | 'referrals' | 'activity' | 'trust' | 'knowledge';
 
 /* ---- Stat tile (bold: tone disc + accent rail) -------------------------- */
 
@@ -282,10 +275,9 @@ function InviteMemberPanel({
     if (pending || !email.trim()) return;
     setPending(true);
     setError(null);
-    // Capture the intended role on the invite note until acceptance wires the
-    // org_members row at that role (backend task #115).
-    const composedNote = [`role: ${role}`, note.trim()].filter(Boolean).join(' · ');
-    const res = await inviteBetaUser(email, composedNote);
+    // The role is granted on acceptance — the accept_beta_invite RPC writes it
+    // onto the new member's org_members row.
+    const res = await inviteBetaUser(email, note.trim() || undefined, role);
     setPending(false);
     if (!res.ok) {
       setError(res.error);
@@ -580,7 +572,7 @@ function UsersPanel({
   );
 }
 
-/* ---- Activity panel (real notifications) -------------------------------- */
+/* ---- Activity panel (full paginated audit log + real notifications) ----- */
 
 interface NoteItem {
   title: string;
@@ -588,41 +580,147 @@ interface NoteItem {
   tone: BadgeTone;
 }
 
+const ACTIVITY_FILTERS: Array<{ id: 'all' | ActivityTargetType; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'org_member', label: 'Members' },
+  { id: 'beta_invite', label: 'Invites' },
+  { id: 'beta_link', label: 'Links & applications' }
+];
+
+/** The server ships this many rows with the page (getAdminData's limit); a
+ *  full first page means there may be older history to load. */
+const INITIAL_ACTIVITY_PAGE = 10;
+
 function ActivityPanel({
   actions,
   notifications
 }: {
+  /** The newest rows, server-rendered with the page. */
   actions: AdminData['actions'];
   notifications: NoteItem[];
 }) {
+  const initialCursor: ActivityCursor | null =
+    actions.length >= INITIAL_ACTIVITY_PAGE
+      ? { at: actions[actions.length - 1].at, id: actions[actions.length - 1].id }
+      : null;
+
+  const [filter, setFilter] = useState<'all' | ActivityTargetType>('all');
+  const [items, setItems] = useState<AdminActivity[]>(actions);
+  const [cursor, setCursor] = useState<ActivityCursor | null>(initialCursor);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function applyFilter(next: 'all' | ActivityTargetType) {
+    if (next === filter || pending) return;
+    setFilter(next);
+    setError(null);
+    if (next === 'all') {
+      // The unfiltered head is already on the client — no round trip.
+      setItems(actions);
+      setCursor(initialCursor);
+      return;
+    }
+    setPending(true);
+    const res = await loadAdminActivity({ targetType: next });
+    setPending(false);
+    if (!res.ok) {
+      setError(res.error);
+      setItems([]);
+      setCursor(null);
+      return;
+    }
+    setItems(res.page.items);
+    setCursor(res.page.nextCursor);
+  }
+
+  async function loadMore() {
+    if (!cursor || pending) return;
+    setPending(true);
+    setError(null);
+    const res = await loadAdminActivity({
+      cursor,
+      targetType: filter === 'all' ? null : filter
+    });
+    setPending(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setItems((prev) => [...prev, ...res.page.items]);
+    setCursor(res.page.nextCursor);
+  }
+
   return (
     <div className="grid items-start gap-[18px] lg:grid-cols-[1fr_320px]">
-      <Card className="p-2">
-        <div className="grid grid-cols-[1.6fr_1fr_1fr_0.6fr] gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-          <span>Action</span>
-          <span>Target</span>
-          <span>Actor</span>
-          <span className="text-right">When</span>
-        </div>
-        <div className="h-px bg-hairline" />
-        {actions.length === 0 ? (
-          <div className="p-10 text-center text-[13px] text-fg-5">No recent admin activity.</div>
-        ) : (
-          actions.map((a) => (
-            <div
-              key={a.id}
-              className="grid grid-cols-[1.6fr_1fr_1fr_0.6fr] items-center gap-2 border-b border-hairline-faint px-3 py-2.5 last:border-b-0"
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {ACTIVITY_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => void applyFilter(f.id)}
+              aria-pressed={filter === f.id}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[11.5px] font-medium transition',
+                filter === f.id
+                  ? 'border-[var(--azure-line)] bg-[var(--azure-soft)] text-azure-1'
+                  : 'border-hairline bg-surface-1 text-fg-3 hover:text-fg-1'
+              )}
             >
-              <span className="truncate text-[12.5px] font-medium text-fg-1">{a.actionType}</span>
-              <span className="truncate text-xs text-fg-3">{a.targetType ?? '—'}</span>
-              <span className="truncate text-xs text-fg-2">{a.actor}</span>
-              <span className="text-right font-mono text-[11px] tabular-nums text-fg-5">
-                {a.time}
-              </span>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <Card className="p-2">
+          <div className="grid grid-cols-[1.6fr_1fr_1fr_0.6fr] gap-2 px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+            <span>Action</span>
+            <span>Target</span>
+            <span>Actor</span>
+            <span className="text-right">When</span>
+          </div>
+          <div className="h-px bg-hairline" />
+          {items.length === 0 ? (
+            <div className="p-10 text-center text-[13px] text-fg-5">
+              {pending ? 'Loading…' : 'No matching admin activity.'}
             </div>
-          ))
-        )}
-      </Card>
+          ) : (
+            items.map((a) => (
+              <div
+                key={a.id}
+                className="grid grid-cols-[1.6fr_1fr_1fr_0.6fr] items-center gap-2 border-b border-hairline-faint px-3 py-2.5 last:border-b-0"
+              >
+                <span className="truncate text-[12.5px] font-medium text-fg-1">{a.actionType}</span>
+                <span className="truncate text-xs text-fg-3">{a.targetType ?? '—'}</span>
+                <span className="truncate text-xs text-fg-2">{a.actor}</span>
+                <span
+                  className="text-right font-mono text-[11px] tabular-nums text-fg-5"
+                  title={new Date(a.at).toLocaleString()}
+                >
+                  {a.time}
+                </span>
+              </div>
+            ))
+          )}
+          {error ? <p className="px-3 py-2 text-[12px] text-danger">{error}</p> : null}
+          <div className="flex items-center justify-center border-t border-hairline-faint px-3 py-2">
+            {cursor ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void loadMore()}
+                disabled={pending}
+              >
+                {pending ? 'Loading…' : 'Load older activity'}
+              </Button>
+            ) : (
+              <span className="py-1 text-[11px] text-fg-5">
+                {items.length ? 'End of the audit log.' : ''}
+              </span>
+            )}
+          </div>
+        </Card>
+      </div>
 
       <Card>
         <SectionTitle
@@ -821,6 +919,8 @@ export function AdminView({
   applications,
   metrics,
   referralOverview,
+  referralTiers = [],
+  launchTrend = null,
   viewerRole
 }: {
   /** 'platform' = Bey Group team (full portal + actions); 'org' = org
@@ -832,6 +932,10 @@ export function AdminView({
   applications: BetaApplication[];
   metrics: AdminMetrics | null;
   referralOverview: ReferralOverview | null;
+  /** Configured commission ladder for the Referrals panel (tier → rate). */
+  referralTiers?: ReferralTier[];
+  /** Day-over-day launch momentum (deltas + series) for the Overview. */
+  launchTrend?: LaunchTrend | null;
   viewerRole: OrgMemberRole | null;
 }) {
   // Org owners/admins manage their OWN team — roles, approve/archive, and email
@@ -1020,20 +1124,21 @@ export function AdminView({
     { id: 'overview' as const, label: 'Overview', icon: LayoutDashboard },
     { id: 'users' as const, label: isOrg ? 'Team' : 'Users & roles', icon: Users },
     {
-      id: 'applications' as const,
-      label: 'Applications',
+      // The unified access pipeline: email invites + share links + the
+      // application inbox, one funnel instead of three tabs.
+      id: 'access' as const,
+      label: isOrg ? 'Invites' : 'Access',
       icon: Inbox,
       // Surface the count of applications awaiting review across tabs, so an
       // admin on another tab still sees there's a queue. Hidden at zero.
       count: pendingApplications || undefined
     },
-    { id: 'invites' as const, label: isOrg ? 'Invites' : 'Beta invites', icon: Mail },
     { id: 'referrals' as const, label: 'Referrals', icon: Coins },
     { id: 'activity' as const, label: 'Activity', icon: Activity },
     { id: 'trust' as const, label: 'Chain of trust', icon: ShieldCheck },
     { id: 'knowledge' as const, label: 'Knowledge base', icon: BrainCircuit }
   ];
-  const ORG_VISIBLE: Tab[] = ['overview', 'users', 'invites', 'activity'];
+  const ORG_VISIBLE: Tab[] = ['overview', 'users', 'access', 'activity'];
   const tabs = isOrg ? allTabs.filter((t) => ORG_VISIBLE.includes(t.id)) : allTabs;
   // Jump targets the Overview panel may deep-link to (everything except the
   // overview tab itself), bounded to the tabs actually visible in this scope.
@@ -1065,7 +1170,7 @@ export function AdminView({
         </div>
       )}
 
-      {/* The platform scope has 8 tabs — too many for the settings column. Scroll
+      {/* The platform scope has 7 tabs — too many for the settings column. Scroll
           the strip horizontally (body uses overflow-x: clip, so an unwrapped
           strip would clip the last tabs out of reach) instead of squeeze-wrapping. */}
       <div className="no-scrollbar -mx-1 overflow-x-auto px-1">
@@ -1075,6 +1180,7 @@ export function AdminView({
       {tab === 'overview' && (
         <LaunchCommandPanel
           snapshot={launchSnapshot}
+          trend={launchTrend}
           visibleTabs={launchVisibleTabs}
           onJump={(t: LaunchTab) => setTab(t)}
         />
@@ -1096,17 +1202,16 @@ export function AdminView({
           onRole={changeRole}
         />
       )}
-      {tab === 'applications' && <ApplicationsPanel applications={applications} />}
-      {tab === 'invites' && (
-        <div className="flex flex-col gap-[18px]">
-          <BetaInvitesPanel invites={invites} earnings={referralOverview?.earningsBySource ?? {}} />
-          {/* Mass shareable links + referral mechanics stay platform-only. */}
-          {!isOrg && (
-            <BetaLinksPanel links={betaLinks} earnings={referralOverview?.earningsBySource ?? {}} />
-          )}
-        </div>
+      {tab === 'access' && (
+        <AccessPanel
+          invites={invites}
+          links={betaLinks}
+          applications={applications}
+          earnings={referralOverview?.earningsBySource ?? {}}
+          scope={isOrg ? 'org' : 'platform'}
+        />
       )}
-      {tab === 'referrals' && <ReferralsPanel overview={referralOverview} />}
+      {tab === 'referrals' && <ReferralsPanel overview={referralOverview} tiers={referralTiers} />}
       {tab === 'activity' && <ActivityPanel actions={data.actions} notifications={notifications} />}
       {tab === 'trust' && <TrustPanel metrics={metrics} />}
       {tab === 'knowledge' && <KnowledgePanel metrics={metrics} />}
