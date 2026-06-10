@@ -26,7 +26,6 @@ import {
   AudioLines,
   type LucideIcon
 } from 'lucide-react';
-import type { ProviderConnection } from '@/lib/queries/integrations';
 
 /* ============================================================================
  * lib/integrations/catalog.ts — the static provider catalog + view helpers,
@@ -74,7 +73,18 @@ export type Provider =
   | 'read_ai'
   | 'otter';
 
-export type ConnectionStatus = ProviderConnection['status'];
+// Pure merge core (provider order, availability, view mapping) lives in a
+// separate, icon-free module so it's unit-testable. Re-exported here so existing
+// `@/lib/integrations/catalog` import sites are unchanged. Types are also
+// imported locally below since this module's own helpers reference IntegrationView.
+import type { ConnectionStatus, IntegrationView } from './providers';
+export {
+  PROVIDER_ORDER,
+  PROVIDER_COMING_SOON,
+  providerAvailable,
+  mergeConnections
+} from './providers';
+export type { ConnectionStatus, IntegrationView };
 
 /** Top-level grouping used for the category tabs + section headers. */
 export type IntegrationGroup =
@@ -138,8 +148,6 @@ export interface ProviderMeta {
   group: IntegrationGroup;
   /** Connect mechanism. 'request' = catalogued, not yet wired. */
   connect: ConnectKind;
-  /** Catalogued but not yet wired — renders "Request access". */
-  comingSoon?: boolean;
 }
 
 /** Known integrations we surface, with display metadata. */
@@ -175,8 +183,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Inbox,
     category: 'Email',
     group: 'email_calendar',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
 
   // ── Collaboration ─────────────────────────────────────────────────────
@@ -210,8 +217,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Users,
     category: 'Meetings',
     group: 'collaboration',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
 
   // ── Files & storage ───────────────────────────────────────────────────
@@ -245,8 +251,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: CloudUpload,
     category: 'Files',
     group: 'files',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   dropbox: {
     name: 'Dropbox',
@@ -254,8 +259,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Package,
     category: 'Files',
     group: 'files',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   box: {
     name: 'Box',
@@ -263,8 +267,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Box,
     category: 'Files',
     group: 'files',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   docsend: {
     name: 'DocSend',
@@ -272,8 +275,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Share2,
     category: 'Document tracking',
     group: 'files',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
 
   // ── CRM & outreach ────────────────────────────────────────────────────
@@ -283,8 +285,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Target,
     category: 'CRM',
     group: 'crm',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   salesforce: {
     name: 'Salesforce',
@@ -292,8 +293,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Cloud,
     category: 'CRM',
     group: 'crm',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   apollo: {
     name: 'Apollo',
@@ -311,8 +311,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: PenTool,
     category: 'E-signature',
     group: 'esign_captable',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   carta: {
     name: 'Carta',
@@ -320,8 +319,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: PieChart,
     category: 'Cap table',
     group: 'esign_captable',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
 
   // ── Knowledge & notes ─────────────────────────────────────────────────
@@ -331,8 +329,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: NotebookPen,
     category: 'Knowledge',
     group: 'knowledge',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   airtable: {
     name: 'Airtable',
@@ -340,8 +337,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Table2,
     category: 'Knowledge',
     group: 'knowledge',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   granola: {
     name: 'Granola',
@@ -349,8 +345,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Mic,
     category: 'Meeting notes',
     group: 'knowledge',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   read_ai: {
     name: 'Read AI',
@@ -358,8 +353,7 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: Sparkles,
     category: 'Meeting notes',
     group: 'knowledge',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   },
   otter: {
     name: 'Otter',
@@ -367,79 +361,9 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
     icon: AudioLines,
     category: 'Transcripts',
     group: 'knowledge',
-    connect: 'request',
-    comingSoon: true
+    connect: 'request'
   }
 };
-
-export const PROVIDER_ORDER: Provider[] = [
-  // Email & calendar
-  'gmail',
-  'google_calendar',
-  'calendly',
-  'outlook',
-  // Collaboration
-  'slack',
-  'zoom',
-  'google_meet',
-  'microsoft_teams',
-  // Files & storage
-  'google_drive',
-  'google_docs',
-  'google_slides',
-  'onedrive',
-  'dropbox',
-  'box',
-  'docsend',
-  // CRM & outreach
-  'hubspot',
-  'salesforce',
-  'apollo',
-  // E-sign & cap table
-  'docusign',
-  'carta',
-  // Knowledge & notes
-  'notion',
-  'airtable',
-  'granola',
-  'read_ai',
-  'otter'
-];
-
-export interface IntegrationView {
-  provider: Provider;
-  status: ConnectionStatus;
-  external_account: string | null;
-  last_synced_at: string | null;
-  available: boolean;
-}
-
-/**
- * A provider is "available" (shows a live Connect/Sync control) when it has a
- * real connect path wired. Catalogued-but-not-yet-wired providers
- * (`comingSoon`) surface "Request access" instead. Wired providers that still
- * need server-side credentials (Slack/Calendly/Zoom OAuth client id + secret,
- * the Google Workspace file scopes) surface a clear error on connect until
- * those are set — they remain "available" here.
- */
-export function providerAvailable(provider: Provider): boolean {
-  return !PROVIDER_META[provider].comingSoon;
-}
-
-/** Merge DB rows with the static catalog so every known provider renders. */
-export function mergeConnections(rows: ProviderConnection[]): IntegrationView[] {
-  const byProvider = new Map(rows.map((r) => [r.provider, r]));
-  return PROVIDER_ORDER.map((provider) => {
-    const row = byProvider.get(provider);
-    return {
-      provider,
-      status: row?.status ?? 'disconnected',
-      external_account: row?.external_account ?? null,
-      last_synced_at: row?.last_synced_at ?? null,
-      available: providerAvailable(provider)
-    };
-  });
-}
 
 export interface IntegrationGroupView {
   group: IntegrationGroupMeta;

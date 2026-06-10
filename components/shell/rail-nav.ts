@@ -39,8 +39,9 @@ import { RUN_EARN_PROMPTS } from '@/lib/run/workspace';
  * Each verb is a stage you move through; each carries one Earn action launcher
  * (the verb, made one-tap). Existing surfaces are folded in only where they
  * drive that stage — no buttons for the sake of buttons. Net-new AI concepts
- * (Stress Test, Aggregation Strategy) are click-to-Earn actions; surfaces not
- * yet built (Formation, Execute) are flagged "soon".
+ * (Stress Test, Aggregation Strategy, Formation, Execute) are click-to-Earn
+ * actions — no dead "soon" rows remain in the registry, though the renderer
+ * still supports them (and expandable `children`) for future surfaces.
  *
  * Scope guardrail: UI metadata only. Must not import from `lib/queries/*`,
  * `lib/supabase/*`, or any loader.
@@ -157,7 +158,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         live: true,
         hint: 'Proof, layer by layer'
       },
-      { label: 'Formation', icon: Building2, live: false, hint: 'Entity & fund formation' }
+      {
+        label: 'Formation',
+        icon: Building2,
+        earnPrompt:
+          'Help me with entity & fund formation — recommend the structure (entity type, jurisdiction, fund vehicle) that fits my plan, then lay out the steps, filings, and documents to stand it up.',
+        hint: 'Entity & fund formation (Earn)'
+      }
     ]
   },
   {
@@ -292,12 +299,9 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
       {
         label: 'Execute',
         icon: Target,
-        hint: 'Pre-acquisition → exit',
-        children: [
-          { label: 'Pre-Acquisition', live: false },
-          { label: 'Post-Acquisition', live: false },
-          { label: 'Exit', live: false }
-        ]
+        earnPrompt:
+          'Walk me through executing this deal across its lifecycle — pre-acquisition (close steps, signatures, conditions), post-acquisition (integration, 100-day plan, governance), and exit (timing, paths, value drivers). What should I line up at each stage?',
+        hint: 'Pre-acquisition → exit (Earn)'
       }
     ]
   }

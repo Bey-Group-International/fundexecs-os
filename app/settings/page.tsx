@@ -6,7 +6,10 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { getMemberProfile } from '@/lib/queries/member-profile';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getOrgSubscription, type OrgSubscription } from '@/lib/queries/subscription';
-import { getIntegrationConnections } from '@/lib/queries/integrations';
+import {
+  getIntegrationConnections,
+  getIntegrationAccessRequests
+} from '@/lib/queries/integrations';
 import { mergeConnections, type IntegrationView } from '@/lib/integrations/catalog';
 import { getOrgTeam, type OrgTeam } from '@/lib/queries/org-members';
 import { getFundProfile } from '@/lib/queries/fund-profile';
@@ -83,7 +86,12 @@ export default async function SettingsPage() {
 
   const integrations: IntegrationView[] =
     org && user
-      ? mergeConnections(await getIntegrationConnections(org.orgId, user.id).catch(() => []))
+      ? mergeConnections(
+          ...(await Promise.all([
+            getIntegrationConnections(org.orgId, user.id).catch(() => []),
+            getIntegrationAccessRequests(org.orgId, user.id).catch(() => [])
+          ]))
+        )
       : mergeConnections([]);
 
   let fullName: string | null = null;

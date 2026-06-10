@@ -2334,6 +2334,44 @@ export type Database = {
           },
         ]
       }
+      integration_access_requests: {
+        Row: {
+          created_at: string
+          id: string
+          org_id: string
+          provider: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_id: string
+          provider: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_id?: string
+          provider?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_access_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_connections: {
         Row: {
           created_at: string
@@ -2345,6 +2383,7 @@ export type Database = {
           provider: string
           scopes: string[]
           status: string
+          sync_frequency: string
           updated_at: string
           user_id: string
         }
@@ -2358,6 +2397,7 @@ export type Database = {
           provider: string
           scopes?: string[]
           status?: string
+          sync_frequency?: string
           updated_at?: string
           user_id: string
         }
@@ -2371,6 +2411,7 @@ export type Database = {
           provider?: string
           scopes?: string[]
           status?: string
+          sync_frequency?: string
           updated_at?: string
           user_id?: string
         }
