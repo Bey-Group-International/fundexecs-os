@@ -13,6 +13,7 @@ import {
 } from '@/lib/loop-close';
 import { LOOP_EVENT_TYPES, LOOP_SOURCE_VERB } from '@/lib/loop-events';
 import { emitLoopEvent } from '@/lib/loop-events.server';
+import type { Json } from '@/lib/supabase/database.types';
 
 /* ============================================================================
  * lib/actions/loop.ts — "close the loop" (Drive → Build flywheel).
@@ -37,7 +38,7 @@ export interface RecordLoopCloseInput {
   entityType: 'deal' | 'diligence_run' | 'capital_commitment';
   entityId: string;
   /** Extra context for the ledger row (conviction, amount, name, …). */
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, Json | undefined>;
 }
 
 export type RecordLoopCloseResult = { ok: true; credited: boolean } | { ok: false; error: string };
@@ -84,10 +85,12 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
     entity_type: input.entityType,
     entity_id: input.entityId,
     action: LOOP_ACTION,
+    // Caller metadata first, system fields last — `source`/`layer` are
+    // ledger-controlled and must win over anything the caller carried.
     metadata: {
+      ...(input.metadata ?? {}),
       source: input.source,
-      layer: layerKey,
-      ...(input.metadata ?? {})
+      layer: layerKey
     }
   });
   if (markerErr) {
@@ -189,14 +192,15 @@ export async function recordLoopClose(input: RecordLoopCloseInput): Promise<Reco
 
   // Instrument the close on the per-verb loop_events stream (best-effort —
   // emitLoopEvent never throws). The ledger above is the idempotency guarantee;
-  // this is the analyzable record of the verb doing its job.
+  // this is the analyzable record of the verb doing its job. The caller's
+  // metadata rides along so the pulses can read amount/dealId downstream.
   await emitLoopEvent({
     orgId: org.orgId,
     verb: LOOP_SOURCE_VERB[input.source],
     eventType: LOOP_EVENT_TYPES.loopClosed,
     entityType: input.entityType,
     entityId: input.entityId,
-    metadata: { source: input.source, layer: layerKey, credited }
+    metadata: { ...(input.metadata ?? {}), source: input.source, layer: layerKey, credited }
   });
 
   revalidatePath('/', 'layout');

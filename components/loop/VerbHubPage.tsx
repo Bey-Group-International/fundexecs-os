@@ -10,6 +10,7 @@ import { buildRailSignals } from '@/lib/dashboard-rail-signals';
 import type { DashboardData, DashboardAction } from '@/lib/queries/dashboard';
 import type { LoopChain, LoopVerb } from '@/lib/loop-chain';
 import type { HubHeadline, HubPanel } from '@/lib/loop-hub';
+import type { VerbPulse } from '@/lib/loop-pulse';
 import { ProfileRailSummary } from '@/components/profile';
 import { VerbHubView } from './VerbHubView';
 
@@ -28,6 +29,7 @@ export interface VerbHubWorkspace {
   panels: HubPanel[];
   headline: HubHeadline;
   focusKey: string | null;
+  pulse: VerbPulse | null;
   chain: LoopChain;
   nextBestAction: DashboardAction | null;
   dashboard: DashboardData;
@@ -120,6 +122,7 @@ export async function VerbHubPage<W extends VerbHubWorkspace>({
         eyebrow={eyebrow}
         description={describe(workspace)}
         headline={workspace.headline}
+        pulse={workspace.pulse}
         chain={workspace.chain}
         nextBestAction={workspace.nextBestAction}
         panels={workspace.panels}

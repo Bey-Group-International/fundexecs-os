@@ -7,8 +7,9 @@ import type { LoopCloseSource } from '@/lib/loop-close';
  * The `loop_events` stream records the operating loop as data: which verb
  * fired, what event, against which entity. This module is the shared
  * vocabulary — verb attribution for execution events and the well-known event
- * names — kept pure (no IO) so both the emitter and future readers agree on
- * one spelling. The writer lives in `lib/loop-events.server.ts`.
+ * names — kept pure (no IO) so both the emitter and readers agree on one
+ * spelling. The writer lives in `lib/loop-events.server.ts`; the pulse
+ * aggregation that reads the stream lives in `lib/loop-pulse.ts`.
  */
 
 /**
@@ -26,6 +27,10 @@ export const LOOP_SOURCE_VERB: Record<LoopCloseSource, LoopVerb> = {
 export const LOOP_EVENT_TYPES = {
   /** An execution event closed the loop (mirrors the trust_events ledger). */
   loopClosed: 'loop_closed',
+  /** A new deal entered the funnel (Source doing its job). */
+  dealCreated: 'deal_created',
+  /** A deal moved stage — the funnel's heartbeat, attributed per verb. */
+  dealStage: 'deal_stage',
   /** A meeting transcript was analyzed by the Meeting Copilot (RUN verb). */
   meetingAnalyzed: 'meeting_analyzed',
   /** A target was scouted/scored into the pipeline (SOURCE verb). */
@@ -35,3 +40,24 @@ export const LOOP_EVENT_TYPES = {
 } as const;
 
 export type LoopEventType = (typeof LOOP_EVENT_TYPES)[keyof typeof LOOP_EVENT_TYPES];
+
+/**
+ * Which verb owns each deal stage's movement — the funnel mapped onto the
+ * loop. Top-of-funnel stages are Source finding fit; diligence/IC are Run
+ * deciding; the close-out stages are Drive executing.
+ */
+export const DEAL_STAGE_VERB: Record<string, LoopVerb> = {
+  sourcing: 'source',
+  screening: 'source',
+  visitor: 'source',
+  prospect: 'source',
+  qualified: 'source',
+  meeting: 'source',
+  diligence: 'run',
+  ic: 'run',
+  'soft-circle': 'drive',
+  execution: 'drive',
+  closing: 'drive',
+  committed: 'drive',
+  closed: 'drive'
+};

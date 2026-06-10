@@ -1,6 +1,6 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { ArrowRight, Compass, Minus, X } from 'lucide-react';
@@ -9,12 +9,17 @@ import { FX_SPRING } from '@/components/dashboard/command/motion';
 import type { RailMomentum } from '@/components/shell/Wave1SideRail';
 import { LINK_STATE_LABEL, type LinkState, type LoopLink } from '@/lib/loop-chain';
 import {
+  autoEngageGuided,
   getGuidedServerSnapshot,
   getGuidedSnapshot,
   setGuidedCollapsed,
   setGuidedOn,
   subscribeGuided
 } from './guided-storage';
+
+/** Below this institutional-readiness score, guided mode auto-surfaces (as the
+ *  calm docked pill) for operators who haven't set their own preference yet. */
+const LOW_READINESS = 50;
 
 /* ----------------------------------------------------------------------------
  * GuidedMode (Phase 5) — the hand-on-the-wheel walkthrough.
@@ -286,6 +291,13 @@ function DockedPill({ momentum }: { momentum: RailMomentum }) {
  */
 export function GuidedMode({ momentum }: { momentum?: RailMomentum }) {
   const state = useSyncExternalStore(subscribeGuided, getGuidedSnapshot, getGuidedServerSnapshot);
+
+  // Low-readiness / new operators get guided auto-surfaced (as the calm pill);
+  // no-op once they've engaged or dismissed it themselves.
+  const lowReadiness = !!momentum && momentum.readinessScore < LOW_READINESS;
+  useEffect(() => {
+    if (lowReadiness) autoEngageGuided();
+  }, [lowReadiness]);
 
   const active = state.on && !!momentum?.chain;
 

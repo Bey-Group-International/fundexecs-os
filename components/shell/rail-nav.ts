@@ -181,7 +181,7 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
       },
       {
         href: '/deal-desk?view=sourcing',
-        label: 'Deals',
+        label: 'Deal Flow',
         icon: Briefcase,
         live: true,
         hint: 'Screen incoming deal flow'

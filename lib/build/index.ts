@@ -2,6 +2,7 @@ import 'server-only';
 import type { DashboardData, DashboardAction } from '@/lib/queries/dashboard';
 import type { LoopChain } from '@/lib/loop-chain';
 import { scoreMetric, type HubHeadline, type HubPanel } from '@/lib/loop-hub';
+import type { VerbPulse } from '@/lib/loop-pulse';
 import { loadVerbHubCommon } from '@/lib/loop-hub.server';
 import { buildRecordStrength, deriveBuildPanels, rankBuildFocus } from './workspace';
 
@@ -24,6 +25,8 @@ export interface BuildWorkspace {
   /** Capital locked behind the readiness gap (dollars). */
   lockedByReadiness: number;
   /** The loop chain — Build's place in Build → Source → Run → Drive. */
+  /** The verb's recent outcomes from loop_events (null = calm zero-state). */
+  pulse: VerbPulse | null;
   chain: LoopChain;
   /** Earn's single highest-leverage move right now. */
   nextBestAction: DashboardAction | null;
@@ -33,7 +36,7 @@ export interface BuildWorkspace {
 
 /** Load everything the `/build` hub renders, in one composed call. */
 export async function loadBuildWorkspace(orgId: string): Promise<BuildWorkspace> {
-  const { dashboard, chain } = await loadVerbHubCommon(orgId);
+  const { dashboard, chain, pulse } = await loadVerbHubCommon(orgId, 'build');
 
   const buildPanels = deriveBuildPanels({
     profileCompleteness: dashboard.fundProfile.completenessScore,
@@ -63,6 +66,7 @@ export async function loadBuildWorkspace(orgId: string): Promise<BuildWorkspace>
     },
     focusKey: rankBuildFocus(buildPanels)?.key ?? null,
     lockedByReadiness: dashboard.valueAtStake.lockedByReadiness,
+    pulse,
     chain,
     nextBestAction: dashboard.nextBestAction,
     dashboard
