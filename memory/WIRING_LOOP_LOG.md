@@ -77,3 +77,26 @@ Real gaps below.
   deal lifecycle, mirroring Formation — zero renderer risk (both renderers already
   handle earnPrompt). No "soon" rows remain in the rail registry. Gate: ✅ tsc
   ✅ lint ✅ format ✅ build.
+- **2026-06-10 ~04:05 CDT** — Polish/QA: unified the sync-frequency source of
+  truth. Extracted `lib/integrations/sync-frequency.ts` (pure, icon-free:
+  `SYNC_FREQUENCIES`, `SYNC_FREQUENCY_OPTIONS`, `DEFAULT_SYNC_FREQUENCY`,
+  `isSyncFrequency`, `toSyncFrequency`) so the route validation, the card
+  selector, and the DB check constraint can't drift; route + card now import it
+  (removed their duplicate local copies). Added `sync-frequency.test.ts`
+  (155 unit tests pass). NB: tried a catalog merge-logic test first but
+  `catalog.ts` imports lucide-react, which breaks under the `--conditions=
+  react-server` test runner (`react.createContext`), so catalog isn't unit-
+  testable without splitting UI-icon metadata from pure logic — logged as
+  optional future refactor. Gate: ✅ tsc ✅ lint ✅ format ✅ build ✅ unit(155).
+
+## Note for the user (remaining backlog needs a product call)
+
+The two items left are full feature builds, not wiring gaps, and are
+architecturally significant — flagging rather than barreling through unattended:
+- **Gamification (dashboard)** — needs the Phase-2 backend (achievements,
+  achievements_earned, quests, quests_progress, xp_events tables + a rules
+  engine), then flip `GAMIFICATION_IS_PLACEHOLDER`. The UI is honest "not
+  started" today. Want this built for real, or left as scaffold?
+- **Multi-account "Add account" (account menu)** — needs secondary-login auth
+  linking + an account switcher + per-account workspace persistence. Scope/UX
+  decision needed before building.

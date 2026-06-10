@@ -3,13 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getProvider } from '@/lib/integrations/registry';
 import { getConnectedIntegrationConnection, getFirstOrgId } from '@/lib/integrations/connections';
-
-const ALLOWED_FREQUENCIES = ['realtime', 'hourly', 'daily', 'manual'] as const;
-type Frequency = (typeof ALLOWED_FREQUENCIES)[number];
-
-function isFrequency(value: unknown): value is Frequency {
-  return typeof value === 'string' && (ALLOWED_FREQUENCIES as readonly string[]).includes(value);
-}
+import { isSyncFrequency } from '@/lib/integrations/sync-frequency';
 
 /**
  * POST /api/integrations/:provider/frequency
@@ -28,7 +22,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ provider: 
   }
 
   const body = (await req.json().catch(() => null)) as { frequency?: unknown } | null;
-  if (!isFrequency(body?.frequency)) {
+  if (!isSyncFrequency(body?.frequency)) {
     return NextResponse.json({ error: 'Invalid sync frequency' }, { status: 400 });
   }
 

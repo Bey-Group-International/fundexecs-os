@@ -18,6 +18,7 @@ import {
 import { Avatar, Badge, Button, Card, Select } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { PROVIDER_META, syncedLabel, type IntegrationView } from '@/lib/integrations/catalog';
+import { SYNC_FREQUENCY_OPTIONS, DEFAULT_SYNC_FREQUENCY } from '@/lib/integrations/sync-frequency';
 
 /* ============================================================================
  * IntegrationCard — a single provider card with live management controls.
@@ -37,13 +38,6 @@ import { PROVIDER_META, syncedLabel, type IntegrationView } from '@/lib/integrat
 
 type Msg = { tone: 'ok' | 'error' | 'muted'; text: string } | null;
 
-const FREQ_OPTIONS = [
-  { value: 'realtime', label: 'Real-time' },
-  { value: 'hourly', label: 'Every hour' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'manual', label: 'Manual only' }
-];
-
 export function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const router = useRouter();
   const meta = PROVIDER_META[conn.provider];
@@ -60,8 +54,8 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const [apiKey, setApiKey] = useState('');
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [requested, setRequested] = useState(conn.requested);
-  // Seed from the persisted per-connection cadence (falls back to realtime).
-  const [freq, setFreq] = useState(conn.sync_frequency ?? 'realtime');
+  // Seed from the persisted per-connection cadence (falls back to the default).
+  const [freq, setFreq] = useState(conn.sync_frequency ?? DEFAULT_SYNC_FREQUENCY);
   const [freqSaving, setFreqSaving] = useState(false);
 
   function toggleManage() {
@@ -379,7 +373,7 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
             value={freq}
             disabled={freqSaving}
             onChange={(e) => onFreqChange(e.target.value)}
-            options={FREQ_OPTIONS}
+            options={[...SYNC_FREQUENCY_OPTIONS]}
           />
 
           <div className="flex items-center gap-2 border-t border-hairline pt-3">
