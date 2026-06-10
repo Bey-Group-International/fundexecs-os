@@ -25,11 +25,11 @@ const INPUTS: SourceWorkspaceInputs = {
   raise: { target: 10_000_000, committed: 4_000_000, softCircled: 1_000_000, coveragePct: 50 }
 };
 
-test('derives the three Source panels in rail order with their metrics', () => {
+test('derives the four Source panels in rail order with their metrics', () => {
   const panels = deriveSourcePanels(INPUTS);
   assert.deepEqual(
     panels.map((p) => p.key),
-    ['deals', 'lps', 'capital']
+    ['deals', 'lps', 'capital', 'targets']
   );
   assert.deepEqual(panels[0].metric, {
     kind: 'money',
@@ -46,6 +46,9 @@ test('derives the three Source panels in rail order with their metrics', () => {
   // Capital reads as raise coverage (committed + soft vs target).
   assert.deepEqual(panels[2].metric, { kind: 'score', label: 'Raise coverage', value: 50 });
   assert.equal(panels[2].tone, 'azure');
+  // Targets renders its calm "coming soon" state (null metric) until a scout runs.
+  assert.equal(panels[3].metric, null);
+  assert.equal(panels[3].tone, 'azure');
 });
 
 test('stale deal flow surfaces in the hint and carries the stake tone', () => {
