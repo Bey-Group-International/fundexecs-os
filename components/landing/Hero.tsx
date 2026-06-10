@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react';
 import { Badge } from '@/components/ui';
@@ -9,6 +8,7 @@ import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
 import { HeroStats } from '@/components/landing/HeroStats';
 import { Magnetic } from '@/components/landing/Motion';
 import { PRIMARY_CTA, SECONDARY_CTA } from '@/components/landing/cta';
+import { useRequestAccess } from '@/components/landing/RequestAccessContext';
 import { getCOO } from '@/lib/team';
 
 /**
@@ -20,6 +20,7 @@ import { getCOO } from '@/lib/team';
 export function Hero() {
   const earn = getCOO();
   const reduce = useReducedMotion();
+  const { open: openRequestAccess } = useRequestAccess();
 
   // Normalized pointer position (-0.5..0.5) across the hero, spring-smoothed.
   const px = useMotionValue(0);
@@ -128,10 +129,14 @@ export function Hero() {
             className="mt-9 flex flex-wrap items-center gap-4"
           >
             <Magnetic>
-              <Link href="/login" className={PRIMARY_CTA}>
-                Claim your desk
+              <button
+                type="button"
+                onClick={() => openRequestAccess('landing-hero')}
+                className={PRIMARY_CTA}
+              >
+                Request access
                 <ArrowRight size={17} strokeWidth={2} aria-hidden />
-              </Link>
+              </button>
             </Magnetic>
             <SmoothScrollLink targetId="preview" className={SECONDARY_CTA}>
               <Sparkles size={16} strokeWidth={2} aria-hidden />
@@ -140,7 +145,8 @@ export function Hero() {
           </motion.div>
 
           <p className="mt-4 text-[12.5px] text-fg-5">
-            Invite-only private beta · <span className="text-fg-3">no card, no setup, no risk</span>
+            Invite-only.{' '}
+            <span className="text-fg-3">We&rsquo;re onboarding a limited cohort this quarter.</span>
           </p>
 
           <HeroStats />

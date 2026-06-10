@@ -1,12 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { ArrowRight, Gauge, ShieldCheck, Radar, type LucideIcon } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { Card } from '@/components/ui';
 import { EarnCoin } from '@/components/screens/EarnCoin';
 import { Reveal, Stagger, StaggerItem, Magnetic } from '@/components/landing/Motion';
 import { PRIMARY_CTA } from '@/components/landing/cta';
+import { useRequestAccess } from '@/components/landing/RequestAccessContext';
 
 /* ============================================================================
  * components/landing/Sections.tsx — the animated content sections below the
@@ -266,6 +266,7 @@ export function HowItWorks() {
 // ── Final CTA ────────────────────────────────────────────────────────────────
 
 export function FinalCta() {
+  const { open: openRequestAccess } = useRequestAccess();
   return (
     <section
       className="relative overflow-hidden py-20 sm:py-28"
@@ -297,13 +298,17 @@ export function FinalCta() {
         </p>
         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Magnetic>
-            <Link href="/login" className={PRIMARY_CTA}>
-              Claim your desk
+            <button
+              type="button"
+              onClick={() => openRequestAccess('landing-final-cta')}
+              className={PRIMARY_CTA}
+            >
+              Request access
               <ArrowRight size={17} strokeWidth={2} aria-hidden />
-            </Link>
+            </button>
           </Magnetic>
           <span className="text-[12.5px] text-fg-5">
-            Invite-only beta · no card, no setup, no risk
+            Invite-only. We&rsquo;re onboarding a limited cohort this quarter.
           </span>
         </div>
       </Reveal>
