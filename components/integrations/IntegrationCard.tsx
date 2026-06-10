@@ -56,13 +56,13 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const available = conn.available;
   const isApiKey = meta.connect === 'api_key';
 
-  const [busy, setBusy] = useState<null | 'connect' | 'sync' | 'disconnect'>(null);
+  const [busy, setBusy] = useState<null | 'connect' | 'sync' | 'disconnect' | 'request'>(null);
   const [msg, setMsg] = useState<Msg>(null);
   const [expanded, setExpanded] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const [requested, setRequested] = useState(false);
+  const [requested, setRequested] = useState(conn.requested);
   const [freq, setFreq] = useState('realtime');
 
   // Load the saved per-device sync-frequency preference when the panel opens
@@ -148,6 +148,29 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
       }
     } catch (err) {
       setMsg({ tone: 'error', text: err instanceof Error ? err.message : 'Sync failed' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleRequestAccess() {
+    setBusy('request');
+    setMsg(null);
+    try {
+      const res = await fetch('/api/integrations/request-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: conn.provider })
+      });
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !data?.ok) {
+        setMsg({ tone: 'error', text: data?.error ?? `Request failed (${res.status})` });
+        return;
+      }
+      setRequested(true);
+      setMsg({ tone: 'ok', text: "Requested — we'll email you when it's ready" });
+    } catch (err) {
+      setMsg({ tone: 'error', text: err instanceof Error ? err.message : 'Request failed' });
     } finally {
       setBusy(null);
     }
@@ -267,11 +290,11 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
             <Button
               variant="secondary"
               size="sm"
-              icon={requested ? Check : Sparkles}
-              disabled={requested}
-              onClick={() => setRequested(true)}
+              icon={busy === 'request' ? RefreshCw : requested ? Check : Sparkles}
+              disabled={requested || busy !== null}
+              onClick={handleRequestAccess}
             >
-              {requested ? 'Requested' : 'Request access'}
+              {busy === 'request' ? 'Requesting…' : requested ? 'Requested' : 'Request access'}
             </Button>
           ) : connected ? (
             <>

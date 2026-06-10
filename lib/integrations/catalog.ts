@@ -412,6 +412,8 @@ export interface IntegrationView {
   external_account: string | null;
   last_synced_at: string | null;
   available: boolean;
+  /** True when the member has already requested early access (comingSoon only). */
+  requested: boolean;
 }
 
 /**
@@ -426,9 +428,17 @@ export function providerAvailable(provider: Provider): boolean {
   return !PROVIDER_META[provider].comingSoon;
 }
 
-/** Merge DB rows with the static catalog so every known provider renders. */
-export function mergeConnections(rows: ProviderConnection[]): IntegrationView[] {
+/**
+ * Merge DB rows with the static catalog so every known provider renders.
+ * `requestedProviders` marks which comingSoon providers the member has already
+ * requested early access for, so the card shows a durable "Requested" state.
+ */
+export function mergeConnections(
+  rows: ProviderConnection[],
+  requestedProviders: Iterable<string> = []
+): IntegrationView[] {
   const byProvider = new Map(rows.map((r) => [r.provider, r]));
+  const requested = new Set(requestedProviders);
   return PROVIDER_ORDER.map((provider) => {
     const row = byProvider.get(provider);
     return {
@@ -436,7 +446,8 @@ export function mergeConnections(rows: ProviderConnection[]): IntegrationView[] 
       status: row?.status ?? 'disconnected',
       external_account: row?.external_account ?? null,
       last_synced_at: row?.last_synced_at ?? null,
-      available: providerAvailable(provider)
+      available: providerAvailable(provider),
+      requested: requested.has(provider)
     };
   });
 }

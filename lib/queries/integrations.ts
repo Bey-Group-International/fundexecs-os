@@ -48,3 +48,26 @@ function normalizeStatus(status: string): ProviderConnection['status'] {
   if (status === 'error' || status === 'needs_attention') return 'error';
   return 'disconnected';
 }
+
+/**
+ * Provider keys the member has already requested early access for (the
+ * catalogued-but-not-yet-wired "coming soon" providers). RLS-scoped via the
+ * server client; query errors degrade to an empty array so the cards still
+ * render their default "Request access" affordance.
+ */
+export async function getIntegrationAccessRequests(
+  orgId: string,
+  userId: string
+): Promise<string[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('integration_access_requests')
+    .select('provider')
+    .eq('org_id', orgId)
+    .eq('user_id', userId);
+
+  if (error || !data) return [];
+
+  return (data as { provider: string }[]).map((r) => r.provider);
+}

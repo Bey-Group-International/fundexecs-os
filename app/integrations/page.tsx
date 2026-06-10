@@ -4,7 +4,10 @@ import { getShellIdentity } from '@/lib/queries/identity';
 import { Card } from '@/components/ui';
 import { IntegrationsPanel } from '@/components/integrations/IntegrationsPanel';
 import { getActiveOrg } from '@/lib/queries/org';
-import { getIntegrationConnections } from '@/lib/queries/integrations';
+import {
+  getIntegrationConnections,
+  getIntegrationAccessRequests
+} from '@/lib/queries/integrations';
 import { mergeConnections } from '@/lib/integrations/catalog';
 
 export const metadata: Metadata = { title: 'Integrations' };
@@ -28,8 +31,11 @@ export default async function IntegrationsPage() {
     );
   }
 
-  const rows = await getIntegrationConnections(org.orgId, org.userId);
-  const connections = mergeConnections(rows);
+  const [rows, requested] = await Promise.all([
+    getIntegrationConnections(org.orgId, org.userId),
+    getIntegrationAccessRequests(org.orgId, org.userId)
+  ]);
+  const connections = mergeConnections(rows, requested);
 
   return (
     <AppShell
