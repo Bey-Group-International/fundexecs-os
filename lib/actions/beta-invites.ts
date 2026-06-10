@@ -6,7 +6,7 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { requireOrgManager, requireOrgOwner } from '@/lib/access.server';
 import { getSiteURL } from '@/lib/site-url';
 import { sendInviteEmail } from '@/lib/email/send';
-import { parseInviteRole } from '@/lib/invites';
+import { parseInviteRole, type InviteRole } from '@/lib/invites';
 import type { Json } from '@/lib/supabase/database.types';
 
 /** How the invite link reached the user. 'resend' = our Resend email, 'supabase'
@@ -172,15 +172,29 @@ async function deliverInviteEmail(opts: {
   return 'none';
 }
 
+const INVITE_ROLES: ReadonlySet<string> = new Set(['owner', 'admin', 'member']);
+
 /**
  * Invite a beta user by email. Mints a magic link, records (or refreshes) the
  * tracked invite row, emails the link to the invitee, and returns the link as a
  * copyable fallback.
+ *
+ * The granted-on-acceptance role comes from `roleInput` when provided (the
+ * portal's role selector); otherwise a legacy `role: X` prefix on the note is
+ * honored via `parseInviteRole`. Acceptance applies it to the new member's
+ * `org_members` row (the `accept_beta_invite` RPC).
  */
-export async function inviteBetaUser(emailInput: string, note?: string): Promise<InviteResult> {
+export async function inviteBetaUser(
+  emailInput: string,
+  note?: string,
+  roleInput?: InviteRole
+): Promise<InviteResult> {
   const email = emailInput.trim().toLowerCase();
   if (!email) return { ok: false, error: 'Email is required.' };
   if (!EMAIL_RE.test(email)) return { ok: false, error: 'Enter a valid email address.' };
+  if (roleInput !== undefined && !INVITE_ROLES.has(roleInput)) {
+    return { ok: false, error: 'Invalid invite role.' };
+  }
 
   const org = await getActiveOrg();
   if (!org) return { ok: false, error: 'No active organization.' };
@@ -190,7 +204,8 @@ export async function inviteBetaUser(emailInput: string, note?: string): Promise
 
   const supabase = await createClient();
   const now = new Date().toISOString();
-  const invite = parseInviteRole(note);
+  const parsed = parseInviteRole(note);
+  const invite = roleInput ? { role: roleInput, note: note?.trim() || null } : parsed;
   // Privilege-escalation guard: only an org owner (or platform admin) may invite
   // a new OWNER. Mirrors the owner-only promotion rule in setMemberRole, so an
   // org admin can't escalate by minting an owner invite.

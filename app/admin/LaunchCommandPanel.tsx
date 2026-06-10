@@ -36,15 +36,9 @@ import {
 } from 'lucide-react';
 import { Badge, Card, ProgressBar, SectionTitle, type BadgeTone } from '@/components/ui';
 
-/** A tab the panel can jump to via an attention item or quick action. */
-export type LaunchTab =
-  | 'users'
-  | 'applications'
-  | 'invites'
-  | 'referrals'
-  | 'activity'
-  | 'trust'
-  | 'knowledge';
+/** A tab the panel can jump to via an attention item or quick action.
+ *  'access' is the unified pipeline tab (invites + share links + applications). */
+export type LaunchTab = 'users' | 'access' | 'referrals' | 'activity' | 'trust' | 'knowledge';
 
 /** The fully-derived launch picture — computed by the parent from live props. */
 export interface LaunchSnapshot {
@@ -124,7 +118,7 @@ function buildGates(s: LaunchSnapshot): Gate[] {
       : 'No invites sent or links claimed yet',
     state: reach > 0 ? 'done' : 'todo',
     icon: Mail,
-    tab: 'invites'
+    tab: 'access'
   });
 
   gates.push({
@@ -136,7 +130,7 @@ function buildGates(s: LaunchSnapshot): Gate[] {
         : 'No applications yet',
     state: s.pendingApplications > 0 ? 'attention' : s.applications > 0 ? 'done' : 'todo',
     icon: Inbox,
-    tab: 'applications'
+    tab: 'access'
   });
 
   gates.push({
@@ -157,7 +151,7 @@ function buildGates(s: LaunchSnapshot): Gate[] {
       : 'No active beta links',
     state: s.activeLinks > 0 ? 'done' : 'todo',
     icon: Coins,
-    tab: 'invites'
+    tab: 'access'
   });
 
   gates.push({
@@ -247,7 +241,7 @@ function buildAttention(s: LaunchSnapshot): AttentionItem[] {
       detail: 'Triage the inbox so claimants can be activated.',
       tone: 'warning',
       cta: 'Review applications',
-      tab: 'applications',
+      tab: 'access',
       icon: Inbox
     });
   }
@@ -257,7 +251,7 @@ function buildAttention(s: LaunchSnapshot): AttentionItem[] {
       detail: 'Resend or follow up so seats convert.',
       tone: 'gold',
       cta: 'Open invites',
-      tab: 'invites',
+      tab: 'access',
       icon: Mail
     });
   }

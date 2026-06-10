@@ -18,7 +18,7 @@ import { getBetaLinks, type BetaLinkWithStatus } from '@/lib/queries/beta-links'
 import { getReferralOverview, type ReferralOverview } from '@/lib/queries/referrals';
 import { getBetaApplications, type BetaApplication } from '@/lib/queries/beta-applications';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
-import { isPlatformAdmin } from '@/lib/access';
+import { requirePlatformAdmin } from '@/lib/access.server';
 import { ProfileRailSummary } from '@/components/profile';
 import type { Database } from '@/lib/supabase/database.types';
 import { SettingsView } from './SettingsView';
@@ -124,7 +124,9 @@ export default async function SettingsPage() {
   let adminMetrics: AdminMetrics | null = null;
   let referralOverview: ReferralOverview | null = null;
   let viewerRole: OrgMemberRole | null = null;
-  if (org && user && isPlatformAdmin(user.email)) {
+  // Hardened gate (domain + allowlist) so the rendered portal always matches
+  // what the server actions will actually permit.
+  if (org && user && (await requirePlatformAdmin())) {
     const ad = await getAdminData(org.orgId).catch(() => null);
     const me = ad?.members.find((m) => m.userId === user.id);
     viewerRole = me?.role ?? null;
