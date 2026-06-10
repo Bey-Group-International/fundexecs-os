@@ -15,14 +15,17 @@ export type EventContext = Record<string, unknown>;
 
 const sentryEnabled = !!process.env.NEXT_PUBLIC_SENTRY_DSN;
 
+/** Emit one product event: a structured log line + a Sentry breadcrumb. */
 export function trackEvent(name: string, context?: EventContext): void {
   try {
+    // Context spreads in the middle (mirrors log.ts) so callers can never
+    // clobber the authoritative level/event/timestamp fields.
     console.log(
       JSON.stringify({
         level: 'info',
+        ...context,
         event: name,
-        timestamp: new Date().toISOString(),
-        ...context
+        timestamp: new Date().toISOString()
       })
     );
   } catch {

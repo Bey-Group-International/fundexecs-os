@@ -95,9 +95,11 @@ export function ProfileActionButton({
     setDrawerOpen(true);
   }, []);
 
-  // Primary action is mixed by state: review-in-place at 100%, else resume into
-  // onboarding focused on the #1 ranked gap (gaps arrive pre-sorted by tier →
-  // impact → missing-first), so every resume lands on the next-best question.
+  /**
+   * Primary action, mixed by state: review-in-place at 100%, else resume into
+   * onboarding focused on the #1 ranked gap (gaps arrive pre-sorted by tier →
+   * impact → missing-first), so every resume lands on the next-best question.
+   */
   function onPrimary() {
     if (isReview) {
       openReview();
