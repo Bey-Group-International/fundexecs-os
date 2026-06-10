@@ -3754,6 +3754,83 @@ export type Database = {
           },
         ]
       }
+      task_runs: {
+        Row: {
+          action: string
+          agent_slug: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: string
+          org_id: string
+          proposed_by: string | null
+          status: string
+          steps: Json
+          task_id: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          agent_slug: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          org_id: string
+          proposed_by?: string | null
+          status?: string
+          steps?: Json
+          task_id: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          agent_slug?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          org_id?: string
+          proposed_by?: string | null
+          status?: string
+          steps?: Json
+          task_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_runs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_runs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_runs_proposed_by_fkey"
+            columns: ["proposed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_runs_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           agent_slug: string | null
@@ -3989,6 +4066,14 @@ export type Database = {
       accept_beta_invite: {
         Args: { _email: string; _invite_id?: string; _user_id: string }
         Returns: Json
+      }
+      propose_task_run: {
+        Args: { p_action: string; p_steps: Json; p_task_id: string }
+        Returns: string
+      }
+      decide_task_run: {
+        Args: { p_decision: string; p_note: string; p_run_id: string }
+        Returns: undefined
       }
       upsert_org_posture_snapshot: {
         Args: {
