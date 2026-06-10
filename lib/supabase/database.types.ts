@@ -2232,6 +2232,7 @@ export type Database = {
           provider: string
           scopes: string[]
           status: string
+          sync_frequency: string
           updated_at: string
           user_id: string
         }
@@ -2245,6 +2246,7 @@ export type Database = {
           provider: string
           scopes?: string[]
           status?: string
+          sync_frequency?: string
           updated_at?: string
           user_id: string
         }
@@ -2258,6 +2260,7 @@ export type Database = {
           provider?: string
           scopes?: string[]
           status?: string
+          sync_frequency?: string
           updated_at?: string
           user_id?: string
         }

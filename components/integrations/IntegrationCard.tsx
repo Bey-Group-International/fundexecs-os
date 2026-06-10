@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -30,8 +30,9 @@ import { PROVIDER_META, syncedLabel, type IntegrationView } from '@/lib/integrat
  * • comingSoon                → "Request access" (catalogued, not yet wired)
  *
  * Connect/sync/disconnect hit the existing /api/integrations/:provider routes.
- * The sync-frequency control is a per-device preference (localStorage); it does
- * not yet change server scheduling, which is why it's labelled as a preference.
+ * The sync-frequency control persists to the connection row via
+ * /api/integrations/:provider/frequency, so the cadence is durable and
+ * cross-device (a future scheduler reads it server-side).
  * ========================================================================= */
 
 type Msg = { tone: 'ok' | 'error' | 'muted'; text: string } | null;
@@ -42,10 +43,6 @@ const FREQ_OPTIONS = [
   { value: 'daily', label: 'Daily' },
   { value: 'manual', label: 'Manual only' }
 ];
-
-function freqKey(provider: string) {
-  return `fx.integration.${provider}.freq`;
-}
 
 export function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const router = useRouter();
@@ -63,32 +60,35 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const [apiKey, setApiKey] = useState('');
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [requested, setRequested] = useState(conn.requested);
-  const [freq, setFreq] = useState('realtime');
-
-  // Load the saved per-device sync-frequency preference when the panel opens
-  // (kept out of an effect so we never set state synchronously on mount).
-  const loadFreq = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const saved = window.localStorage.getItem(freqKey(conn.provider));
-      if (saved) setFreq(saved);
-    } catch {
-      /* ignore */
-    }
-  }, [conn.provider]);
+  // Seed from the persisted per-connection cadence (falls back to realtime).
+  const [freq, setFreq] = useState(conn.sync_frequency ?? 'realtime');
+  const [freqSaving, setFreqSaving] = useState(false);
 
   function toggleManage() {
-    const willOpen = !expanded;
-    setExpanded(willOpen);
-    if (willOpen) loadFreq();
+    setExpanded((open) => !open);
   }
 
-  function onFreqChange(value: string) {
+  async function onFreqChange(value: string) {
+    const previous = freq;
     setFreq(value);
+    setFreqSaving(true);
+    setMsg(null);
     try {
-      window.localStorage.setItem(freqKey(conn.provider), value);
-    } catch {
-      /* ignore */
+      const res = await fetch(`/api/integrations/${conn.provider}/frequency`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ frequency: value })
+      });
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !data?.ok) {
+        setFreq(previous);
+        setMsg({ tone: 'error', text: data?.error ?? `Could not save (${res.status})` });
+      }
+    } catch (err) {
+      setFreq(previous);
+      setMsg({ tone: 'error', text: err instanceof Error ? err.message : 'Could not save' });
+    } finally {
+      setFreqSaving(false);
     }
   }
 
@@ -375,8 +375,9 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
 
           <Select
             label="Sync frequency"
-            hint="Preference saved on this device"
+            hint={freqSaving ? 'Saving…' : 'Saved to your workspace'}
             value={freq}
+            disabled={freqSaving}
             onChange={(e) => onFreqChange(e.target.value)}
             options={FREQ_OPTIONS}
           />

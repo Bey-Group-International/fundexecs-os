@@ -414,6 +414,8 @@ export interface IntegrationView {
   available: boolean;
   /** True when the member has already requested early access (comingSoon only). */
   requested: boolean;
+  /** Persisted per-connection sync cadence; null until a row exists. */
+  sync_frequency: string | null;
 }
 
 /**
@@ -447,7 +449,8 @@ export function mergeConnections(
       external_account: row?.external_account ?? null,
       last_synced_at: row?.last_synced_at ?? null,
       available: providerAvailable(provider),
-      requested: requested.has(provider)
+      requested: requested.has(provider),
+      sync_frequency: row?.sync_frequency ?? null
     };
   });
 }

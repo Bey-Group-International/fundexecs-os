@@ -24,10 +24,10 @@ Real gaps below.
 - [x] **User portal — Integrations "Request access"** persists. Button now POSTs
       to `/api/integrations/request-access`, upserts `integration_access_requests`,
       and the card shows a durable "Requested" state across reloads.
-- [ ] **User portal — Integration sync-frequency** is device-local
-      (`localStorage`). Add `sync_frequency` to `integration_connections`, persist
-      it server-side (extend the manage panel / a small route), read it back into
-      `IntegrationView`. `components/integrations/IntegrationCard.tsx:86`.
+- [x] **User portal — Integration sync-frequency** persists server-side. Added
+      `integration_connections.sync_frequency` (+ check constraint),
+      `POST /api/integrations/:provider/frequency`, threaded through the query →
+      `IntegrationView` → card (seeded from server, optimistic save w/ revert).
 - [ ] **Dashboard — Gamification** achievements/quests return hardcoded
       placeholders (`GAMIFICATION_IS_PLACEHOLDER = true`).
       `lib/queries/gamification.ts`. Wire to real `xp_events` aggregation +
@@ -55,3 +55,11 @@ Real gaps below.
   query, `POST /api/integrations/request-access` (idempotent upsert, validates
   comingSoon), `IntegrationView.requested` + `mergeConnections(rows, requested)`,
   and seeded the card from server state. Gate: ✅ tsc ✅ lint ✅ format ✅ build.
+  CI on #301: all checks green (typecheck/lint/build, Playwright, CodeQL).
+- **2026-06-10 ~02:20 CDT** — Integration sync-frequency now persists to the
+  connection row instead of localStorage. Migration
+  `20260610150000_integration_sync_frequency.sql` (column + check constraint),
+  `POST /api/integrations/:provider/frequency` (auth + connected check, validates
+  cadence), `ProviderConnection.sync_frequency` + `IntegrationView.sync_frequency`
+  threaded through `mergeConnections`, card seeds from server and saves
+  optimistically with revert-on-failure. Gate: ✅ tsc ✅ lint ✅ format ✅ build.

@@ -8,6 +8,7 @@ export interface ProviderConnection {
   status: 'connected' | 'disconnected' | 'error';
   external_account: string | null;
   last_synced_at: string | null;
+  sync_frequency: string | null;
 }
 
 /**
@@ -24,7 +25,7 @@ export async function getIntegrationConnections(
 
   const { data, error } = await supabase
     .from('integration_connections')
-    .select('provider, status, external_account, last_synced_at')
+    .select('provider, status, external_account, last_synced_at, sync_frequency')
     .eq('org_id', orgId)
     .eq('user_id', userId);
 
@@ -33,13 +34,14 @@ export async function getIntegrationConnections(
   return (
     data as Pick<
       IntegrationConnectionRow,
-      'provider' | 'status' | 'external_account' | 'last_synced_at'
+      'provider' | 'status' | 'external_account' | 'last_synced_at' | 'sync_frequency'
     >[]
   ).map((c) => ({
     provider: c.provider,
     status: normalizeStatus(c.status),
     external_account: c.external_account,
-    last_synced_at: c.last_synced_at
+    last_synced_at: c.last_synced_at,
+    sync_frequency: c.sync_frequency
   }));
 }
 
