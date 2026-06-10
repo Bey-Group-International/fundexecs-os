@@ -25,7 +25,13 @@ export const LOOP_SOURCE_VERB: Record<LoopCloseSource, LoopVerb> = {
 /** Well-known event names on the stream. Keep additions short + snake_case. */
 export const LOOP_EVENT_TYPES = {
   /** An execution event closed the loop (mirrors the trust_events ledger). */
-  loopClosed: 'loop_closed'
+  loopClosed: 'loop_closed',
+  /** A meeting transcript was analyzed by the Meeting Copilot (RUN verb). */
+  meetingAnalyzed: 'meeting_analyzed',
+  /** A target was scouted/scored into the pipeline (SOURCE verb). */
+  targetScouted: 'target_scouted',
+  /** A gated Earn workflow advanced a step (RUN verb). */
+  workflowAdvanced: 'workflow_advanced'
 } as const;
 
 export type LoopEventType = (typeof LOOP_EVENT_TYPES)[keyof typeof LOOP_EVENT_TYPES];
