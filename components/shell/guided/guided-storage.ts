@@ -17,10 +17,13 @@ export interface GuidedState {
   on: boolean;
   /** Whether the focus card is minimized to the docked pill. */
   collapsed: boolean;
+  /** Whether the operator has explicitly toggled guided mode. Once true, the
+   *  low-readiness auto-engage never fires (we don't re-open what they closed). */
+  userSet: boolean;
 }
 
 /** Stable default — same identity every read so SSR/initial render is stable. */
-const DEFAULT: GuidedState = { on: false, collapsed: false };
+const DEFAULT: GuidedState = { on: false, collapsed: false, userSet: false };
 
 let cache: GuidedState | null = null;
 const listeners = new Set<() => void>();
@@ -33,7 +36,8 @@ function parse(raw: string | null): GuidedState {
     const obj = parsed as Record<string, unknown>;
     return {
       on: typeof obj.on === 'boolean' ? obj.on : false,
-      collapsed: typeof obj.collapsed === 'boolean' ? obj.collapsed : false
+      collapsed: typeof obj.collapsed === 'boolean' ? obj.collapsed : false,
+      userSet: typeof obj.userSet === 'boolean' ? obj.userSet : false
     };
   } catch {
     return DEFAULT;
@@ -93,14 +97,26 @@ function write(next: GuidedState): void {
   for (const listener of listeners) listener();
 }
 
-/** Engage or disengage guided mode. Engaging always opens the focus card. */
+/** Engage or disengage guided mode (an explicit operator action). Engaging
+ *  always opens the focus card; either way it marks the choice as user-set. */
 export function setGuidedOn(on: boolean): void {
-  write(on ? { on: true, collapsed: false } : DEFAULT);
+  write({ on, collapsed: false, userSet: true });
 }
 
 /** Minimize the focus card to the pill (or restore it). */
 export function setGuidedCollapsed(collapsed: boolean): void {
   const cur = getGuidedSnapshot();
   if (!cur.on) return;
-  write({ on: true, collapsed });
+  write({ on: true, collapsed, userSet: true });
+}
+
+/**
+ * Auto-surface guided mode for a low-readiness / new operator — as the calm
+ * docked pill, not the blocking card. No-op once the operator has set guided
+ * themselves, or if it's already engaged, so we never re-open what they closed.
+ */
+export function autoEngageGuided(): void {
+  const cur = getGuidedSnapshot();
+  if (cur.userSet || cur.on) return;
+  write({ on: true, collapsed: true, userSet: false });
 }
