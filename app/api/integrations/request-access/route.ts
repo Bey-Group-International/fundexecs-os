@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getFirstOrgId } from '@/lib/integrations/connections';
-import { PROVIDER_META } from '@/lib/integrations/catalog';
+import { PROVIDER_META, providerAvailable } from '@/lib/integrations/catalog';
+import type { Provider } from '@/lib/integrations/catalog';
 
 /**
  * POST /api/integrations/request-access
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     );
   }
   // Only "coming soon" providers take requests; wired ones connect directly.
-  if (!meta.comingSoon) {
+  if (providerAvailable(provider as Provider)) {
     return NextResponse.json(
       { error: `${meta.name} is already available — connect it directly.` },
       { status: 400 }

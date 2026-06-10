@@ -85,7 +85,7 @@ Real gaps below.
   (removed their duplicate local copies). Added `sync-frequency.test.ts`
   (155 unit tests pass). NB: tried a catalog merge-logic test first but
   `catalog.ts` imports lucide-react, which breaks under the `--conditions=
-  react-server` test runner (`react.createContext`), so catalog isn't unit-
+react-server` test runner (`react.createContext`), so catalog isn't unit-
   testable without splitting UI-icon metadata from pure logic — logged as
   optional future refactor. Gate: ✅ tsc ✅ lint ✅ format ✅ build ✅ unit(155).
 
@@ -93,6 +93,7 @@ Real gaps below.
 
 The two items left are full feature builds, not wiring gaps, and are
 architecturally significant — flagging rather than barreling through unattended:
+
 - **Gamification (dashboard)** — needs the Phase-2 backend (achievements,
   achievements_earned, quests, quests_progress, xp_events tables + a rules
   engine), then flip `GAMIFICATION_IS_PLACEHOLDER`. The UI is honest "not
@@ -100,3 +101,17 @@ architecturally significant — flagging rather than barreling through unattende
 - **Multi-account "Add account" (account menu)** — needs secondary-login auth
   linking + an account switcher + per-account workspace persistence. Scope/UX
   decision needed before building.
+
+- **2026-06-10 ~04:40 CDT** — Refactor for testability: split the integrations
+  catalog into a pure, icon-free core (`lib/integrations/providers.ts`:
+  `PROVIDER_ORDER`, `PROVIDER_COMING_SOON` as the single availability source,
+  `providerAvailable`, `mergeConnections`, `IntegrationView`/`ConnectionStatus`).
+  `catalog.ts` re-exports them so every import site is unchanged; removed the
+  per-entry `comingSoon` flags (now derived from the pure map) and the
+  request-access route now uses `providerAvailable`. Added `providers.test.ts`
+  (8 cases; 163 unit tests total). This unblocks unit-testing the core wiring
+  that `catalog.ts` couldn't (lucide-react trips react.createContext under the
+  react-server test runner). Also formatted the prior log note (the iter-5 commit
+  appended it after its format check, so that commit's CI format:check would have
+  failed; PR head is clean again here). Gate: ✅ tsc ✅ lint ✅ format ✅ build
+  ✅ unit(163).
