@@ -39,11 +39,6 @@ Real gaps below.
       `lib/queries/gamification.ts`. Wire to real `xp_events` aggregation +
       achievement/quest tables; flip the flag once live. Components:
       `components/dashboard/AchievementGrid.tsx`, `QuestProgressCard.tsx`.
-- [ ] **Admin portal — Platform metrics** show placeholder zeros when
-      `get_admin_metrics` RPC is missing. `lib/queries/admin-metrics.ts` (returns
-      `placeholder: true` on error). Verify/implement the RPC migration so
-      knowledge-embedding coverage + pgvector status render live.
-      `app/admin/AdminView.tsx:850-909`.
 - [ ] **Siderail — Execute sub-items** (Pre-Acquisition / Post-Acquisition /
       Exit). `RailSubItem` only supports `href` today; wiring these to Earn needs
       `earnPrompt` on `RailSubItem` + handling in both renderers (note: the inline
