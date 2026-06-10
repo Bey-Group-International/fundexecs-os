@@ -2,7 +2,20 @@
 
 import { Coins, Users, TrendingUp, type LucideIcon } from 'lucide-react';
 import { Badge, Card, SectionTitle, type BadgeTone } from '@/components/ui';
-import type { ReferralOverview, ReferralRow } from '@/lib/queries/referrals';
+import type { ReferralOverview, ReferralRow, ReferralTier } from '@/lib/queries/referrals';
+
+/** Render a basis-point rate as a compact percentage ("10%", "7.5%"). */
+function pct(rateBps: number): string {
+  const p = rateBps / 100;
+  return `${Number.isInteger(p) ? p : p.toFixed(1)}%`;
+}
+
+/** Tier 1 is the direct referrer; deeper tiers are the referrer's upline. */
+function tierLabel(tier: number): string {
+  if (tier === 1) return 'Direct';
+  if (tier === 2) return '2nd level';
+  return `Level ${tier}`;
+}
 
 /** How each referral source reads in the table — link, per-email invite, or a
  *  user's own peer referral. */
@@ -43,11 +56,23 @@ function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
  * Admin Referrals panel — the affiliate picture for this org as a referrer.
  * Surfaces total commission earned, who was brought in, and per-referral
  * earnings. Credits are granted automatically by the Stripe webhook; this is the
- * visible ledger.
+ * visible ledger. The commission rates come from the `referral_tiers` config
+ * (the same table the payout engine grants from), so the copy can never drift
+ * from what's actually paid.
  */
-export function ReferralsPanel({ overview }: { overview: ReferralOverview | null }) {
+export function ReferralsPanel({
+  overview,
+  tiers = []
+}: {
+  overview: ReferralOverview | null;
+  /** Configured commission ladder, tier 1 first. Empty falls back to 10%. */
+  tiers?: ReferralTier[];
+}) {
   const data = overview ?? { totalEarned: 0, referredCount: 0, rows: [], earningsBySource: {} };
   const earning = data.rows.filter((r) => r.creditsEarned > 0).length;
+  const ladder = tiers.length > 0 ? tiers : [{ tier: 1, rateBps: 1000 }];
+  const directRate = pct(ladder[0].rateBps);
+  const ladderLabel = ladder.map((t) => `${tierLabel(t.tier)} ${pct(t.rateBps)}`).join(' · ');
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -56,12 +81,26 @@ export function ReferralsPanel({ overview }: { overview: ReferralOverview | null
           eyebrow="Affiliate"
           title="Referral earnings"
           className="mb-3"
-          action={<span className="text-[11px] text-fg-5">10% of referred purchases</span>}
+          action={<span className="text-[11px] text-fg-5">{ladderLabel}</span>}
         />
         <p className="mb-4 max-w-prose text-[12.5px] leading-relaxed text-fg-3">
           When someone you invited builds their own workspace and buys Earn credits, you earn{' '}
-          <span className="font-medium text-fg-2">10% of those credits</span> — automatically, on
-          every purchase. Here&apos;s who you&apos;ve brought in and what they&apos;ve earned you.
+          <span className="font-medium text-fg-2">{directRate} of those credits</span> —
+          automatically, on every purchase.
+          {ladder.length > 1 ? (
+            <>
+              {' '}
+              When the people THEY bring in buy credits, you earn again
+              {ladder.slice(1).map((t) => (
+                <span key={t.tier} className="font-medium text-fg-2">
+                  {' '}
+                  ({pct(t.rateBps)} at {tierLabel(t.tier).toLowerCase()})
+                </span>
+              ))}
+              — your network compounds.
+            </>
+          ) : null}{' '}
+          Here&apos;s who you&apos;ve brought in and what they&apos;ve earned you.
         </p>
         <div className="grid grid-cols-3 gap-3">
           <Stat icon={Coins} label="Credits earned" value={data.totalEarned.toLocaleString()} />

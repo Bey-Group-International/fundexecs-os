@@ -62,6 +62,59 @@ export type Database = {
           },
         ]
       }
+      admin_launch_snapshots: {
+        Row: {
+          applications: number
+          applications_approved: number
+          created_at: string
+          credits_earned: number
+          id: string
+          invites_accepted: number
+          invites_sent: number
+          members: number
+          org_id: string
+          referred_count: number
+          snapshot_date: string
+          updated_at: string
+        }
+        Insert: {
+          applications?: number
+          applications_approved?: number
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          invites_accepted?: number
+          invites_sent?: number
+          members?: number
+          org_id: string
+          referred_count?: number
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Update: {
+          applications?: number
+          applications_approved?: number
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          invites_accepted?: number
+          invites_sent?: number
+          members?: number
+          org_id?: string
+          referred_count?: number
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_launch_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_brains: {
         Row: {
           created_at: string
@@ -2706,6 +2759,57 @@ export type Database = {
           },
         ]
       }
+      loop_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          event_type: string
+          id: string
+          metadata: Json
+          org_id: string
+          verb: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json
+          org_id: string
+          verb: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json
+          org_id?: string
+          verb?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loop_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loop_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_signals: {
         Row: {
           captured_at: string
@@ -3174,6 +3278,24 @@ export type Database = {
           },
         ]
       }
+      platform_admins: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          email: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          email: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          email?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -3539,6 +3661,44 @@ export type Database = {
           },
         ]
       }
+      trust_posture_snapshots: {
+        Row: {
+          coverage_pct: number
+          created_at: string
+          id: string
+          iri: number
+          org_id: string
+          snapshot_date: string
+          updated_at: string
+        }
+        Insert: {
+          coverage_pct?: number
+          created_at?: string
+          id?: string
+          iri: number
+          org_id: string
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Update: {
+          coverage_pct?: number
+          created_at?: string
+          id?: string
+          iri?: number
+          org_id?: string
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trust_posture_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       warm_introductions: {
         Row: {
           connector_contact_id: string | null
@@ -3639,6 +3799,21 @@ export type Database = {
         }
         Returns: undefined
       }
+      upsert_trust_posture_snapshot: {
+        Args: { _coverage_pct?: number; _iri: number; _org_id: string }
+        Returns: undefined
+      }
+      log_loop_event: {
+        Args: {
+          _entity_id?: string
+          _entity_type?: string
+          _event_type: string
+          _metadata?: Json
+          _org_id: string
+          _verb: string
+        }
+        Returns: undefined
+      }
       claim_beta_link: {
         Args: { _email: string; _token: string; _user_id: string }
         Returns: { ok: boolean; error_reason: string }[]
@@ -3712,6 +3887,20 @@ export type Database = {
       generate_lp_matches: { Args: { _org_id: string }; Returns: number }
       generate_signal_matches: { Args: { _org_id: string }; Returns: number }
       get_admin_metrics: { Args: { _org_id: string }; Returns: Json }
+      is_platform_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      upsert_admin_launch_snapshot: {
+        Args: {
+          _org_id: string
+          _members?: number
+          _invites_sent?: number
+          _invites_accepted?: number
+          _applications?: number
+          _applications_approved?: number
+          _referred_count?: number
+          _credits_earned?: number
+        }
+        Returns: undefined
+      }
       get_audit_trail: {
         Args: { _limit?: number; _org_id: string }
         Returns: {

@@ -1,20 +1,53 @@
 import 'server-only';
+import { cache } from 'react';
 import { getAuthUser } from '@/lib/queries/auth';
 import { isPlatformAdmin, canManageOrg, canGrantOwnerRole } from '@/lib/access';
 import { createClient } from '@/lib/supabase/server';
 
 /**
- * Server-side platform-admin gate. True when the signed-in user is on the Bey
- * Group team (`@beygroupintl.com`). Platform-wide actions (beta invites & links,
- * which mint auth users and touch referrals) are reserved for this group,
- * independent of org role. Kept server-only (it reads the auth session) and
- * separate from the isomorphic `isPlatformAdmin` in `lib/access.ts`, which the
- * client UI imports.
+ * True only when the error means "the `is_platform_admin` function does not
+ * exist yet" — the one rollout window (allowlist migration not applied) where
+ * falling back to the domain-only rule is intended. PGRST202 is PostgREST's
+ * "function not found"; 42883 is Postgres `undefined_function`. Every other
+ * failure (network, timeout, permissions) must fail closed so a transient
+ * outage can never re-enable the weaker domain-only gate.
  */
-export async function requirePlatformAdmin(): Promise<boolean> {
-  const user = await getAuthUser();
-  return isPlatformAdmin(user?.email);
+function isRpcMissingError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === 'PGRST202' || error.code === '42883') return true;
+  const msg = (error.message ?? '').toLowerCase();
+  return (
+    msg.includes('is_platform_admin') &&
+    (msg.includes('could not find') || msg.includes('does not exist') || msg.includes('not found'))
+  );
 }
+
+/**
+ * Server-side platform-admin gate — defense in depth, two factors:
+ *
+ *  1. the signed-in email is on the Bey Group domain (`@beygroupintl.com`), and
+ *  2. the email is on the explicit `platform_admins` allowlist, checked via the
+ *     `is_platform_admin` RPC (SECURITY DEFINER; reads the caller's own JWT, so
+ *     no email argument can probe anyone else's status).
+ *
+ * Platform-wide actions (beta invites & links, which mint auth users and touch
+ * referrals) are reserved for this group, independent of org role. Rollout
+ * fail-safe: ONLY when the RPC does not exist yet (allowlist migration not
+ * applied) does the gate fall back to the domain-only rule; any other failure
+ * fails closed. Memoized per request via React cache.
+ */
+export const requirePlatformAdmin = cache(async (): Promise<boolean> => {
+  const user = await getAuthUser();
+  if (!isPlatformAdmin(user?.email)) return false;
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc('is_platform_admin');
+    if (error) return isRpcMissingError(error);
+    return data === true;
+  } catch {
+    return false;
+  }
+});
 
 /**
  * Org-scoped management gate. True when the signed-in user may administer the
@@ -30,7 +63,7 @@ export async function requireOrgManager(orgId: string): Promise<boolean> {
   if (!orgId) return false;
   const user = await getAuthUser();
   if (!user) return false;
-  if (isPlatformAdmin(user.email)) return true;
+  if (await requirePlatformAdmin()) return true;
 
   const supabase = await createClient();
   const { data } = await supabase
@@ -54,7 +87,7 @@ export async function requireOrgOwner(orgId: string): Promise<boolean> {
   if (!orgId) return false;
   const user = await getAuthUser();
   if (!user) return false;
-  if (isPlatformAdmin(user.email)) return true;
+  if (await requirePlatformAdmin()) return true;
 
   const supabase = await createClient();
   const { data } = await supabase
