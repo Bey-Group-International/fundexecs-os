@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TEAM_ROSTER } from '../team/roster';
 
 /* ----------------------------------------------------------------------------
  * Target-discovery pure-logic suite.
@@ -15,7 +14,26 @@ import { TEAM_ROSTER } from '../team/roster';
 
 // ── Replica of the pure helpers from target-discovery.ts (no I/O) ──────────
 
-const SPECIALIST_SLUGS = TEAM_ROSTER.filter((m) => !m.chief).map((m) => m.slug);
+// The 14 non-chief specialist slugs — a mirror of TEAM_ROSTER minus the COO
+// (`earnest-fundmaker`). Hardcoded rather than imported because the roster
+// module pulls `lucide-react`, which the react-server test runner can't load;
+// keep this list in sync with lib/team/roster.ts.
+const SPECIALIST_SLUGS = [
+  'master-workflow',
+  'automater',
+  'executive-advisor',
+  'rainmaker',
+  'deal-sourcer',
+  'capital-connector',
+  'legal-admin',
+  'pr-director',
+  'seo-disruptor',
+  'lead-generator',
+  'event-curator',
+  'investor-relations',
+  'capital-raiser',
+  'workflow-instructor'
+];
 
 function clampFit(n: unknown): number {
   const v = typeof n === 'number' && Number.isFinite(n) ? Math.round(n) : 0;
