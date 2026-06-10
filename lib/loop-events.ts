@@ -30,7 +30,13 @@ export const LOOP_EVENT_TYPES = {
   /** A new deal entered the funnel (Source doing its job). */
   dealCreated: 'deal_created',
   /** A deal moved stage — the funnel's heartbeat, attributed per verb. */
-  dealStage: 'deal_stage'
+  dealStage: 'deal_stage',
+  /** A meeting transcript was analyzed by the Meeting Copilot (RUN verb). */
+  meetingAnalyzed: 'meeting_analyzed',
+  /** A target was scouted/scored into the pipeline (SOURCE verb). */
+  targetScouted: 'target_scouted',
+  /** A gated Earn workflow advanced a step (RUN verb). */
+  workflowAdvanced: 'workflow_advanced'
 } as const;
 
 export type LoopEventType = (typeof LOOP_EVENT_TYPES)[keyof typeof LOOP_EVENT_TYPES];
