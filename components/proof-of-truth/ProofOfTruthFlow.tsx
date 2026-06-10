@@ -21,6 +21,7 @@ import { MEMBER_TYPE_LABELS, type MemberType } from '@/lib/member-types';
 import { getQuestionSet, type ProfileQuestion } from '@/lib/proof-of-truth/questions';
 import type { ProfileRecommendation } from '@/lib/proof-of-truth/earn-profile';
 import type { MemberProfile } from '@/lib/queries/member-profile';
+import { trackEvent } from '@/lib/observability/events';
 import { awardTrustXp } from '@/lib/actions/xp';
 import {
   saveMemberDraft,
@@ -165,6 +166,11 @@ export function ProofOfTruthFlow({
   // They stay open gaps on the record — skipping never drops them, it parks them
   // so the wizard stops re-serving them and can drive on to the rest.
   const [skipped, setSkipped] = useState<string[]>([]);
+  // Momentum: the score delta the last approval earned, shown inline so each
+  // answer visibly compounds into the record before the next gap is offered.
+  const [lastGain, setLastGain] = useState<{ id: string; delta: number } | null>(null);
+  // Gaps newly closed this session — the chain length the resume funnel measures.
+  const closedThisSession = useRef(0);
 
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(null);
   // Token guards against a stale fetch resolving onto the wrong question.
@@ -334,6 +340,13 @@ export function ProofOfTruthFlow({
     };
   }, [index, memberType]);
 
+  // Funnel: record each question served while answering, so gap-opened →
+  // gap-closed conversion is measurable per question.
+  const servedQuestionId = stage === 'qa' ? question?.id : undefined;
+  useEffect(() => {
+    if (servedQuestionId) trackEvent('profile_gap_opened', { questionId: servedQuestionId });
+  }, [servedQuestionId]);
+
   // --- recommendation actions ---
 
   function requestRecommendations() {
@@ -342,8 +355,21 @@ export function ProofOfTruthFlow({
   }
 
   function approveValue(value: string) {
-    if (!question) return;
+    if (!question || !memberType) return;
+    // Momentum: surface what this answer earned (+N% on the record) and count
+    // it into the session chain, so each approval pulls toward the next gap.
+    const wasApproved = (answers[question.id] ?? '').trim().length > 0;
+    const delta =
+      completionPct(memberType, { ...answers, [question.id]: value }) -
+      completionPct(memberType, answers);
     commitAnswer(question.id, value);
+    setLastGain(delta > 0 ? { id: question.id, delta } : null);
+    if (!wasApproved) closedThisSession.current += 1;
+    trackEvent('profile_gap_closed', {
+      questionId: question.id,
+      delta,
+      chainLength: closedThisSession.current
+    });
     // Answering clears any deferral on this question.
     if (skipped.includes(question.id)) {
       setSkipped((prev) => prev.filter((id) => id !== question.id));
@@ -464,6 +490,10 @@ export function ProofOfTruthFlow({
       entityId: profile.userId || 'member_profile'
     }).catch(() => null);
     setAwardedXp(xp);
+    trackEvent('profile_published', {
+      score: completionPct(memberType, answers),
+      chainLength: closedThisSession.current
+    });
     setCelebration({
       kind: 'badge',
       title: 'Profile verified',
@@ -775,7 +805,14 @@ export function ProofOfTruthFlow({
               {isApproved ? (
                 <span className="inline-flex items-center gap-1 text-[11.5px] text-gold-1">
                   <Check size={13} strokeWidth={2.2} aria-hidden />
-                  Approved — in your profile
+                  {lastGain && lastGain.id === question.id ? (
+                    <>
+                      <span className="font-semibold tabular-nums">+{lastGain.delta}%</span> on the
+                      record — approved
+                    </>
+                  ) : (
+                    'Approved — in your profile'
+                  )}
                 </span>
               ) : (
                 <span className="text-[11.5px] text-fg-4">
@@ -805,7 +842,7 @@ export function ProofOfTruthFlow({
                 </Button>
               ) : deferredTarget >= 0 ? (
                 <Button variant="gold" iconRight={Zap} onClick={() => goToNextGap(skipped)}>
-                  Next gap
+                  Next: {questions[deferredTarget].label}
                 </Button>
               ) : (
                 <Button variant="primary" iconRight={Check} onClick={() => setStage('review')}>

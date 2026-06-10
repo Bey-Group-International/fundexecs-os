@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui';
 import { Drawer } from '@/components/drawers/Drawer';
 import { cn } from '@/lib/utils';
 import { MEMBER_TYPE_LABELS } from '@/lib/member-types';
+import { trackEvent } from '@/lib/observability/events';
 import { createProfileShareLink } from '@/lib/actions/profile-share';
 import type { FundProfile, ProfileSection } from '@/lib/queries/fund-profile';
 
@@ -55,8 +56,11 @@ export interface ProfileActionButtonProps {
  *
  * State-aware: the primary label tracks completeness (Start → Resume → Review),
  * and the primary action is mixed by state — at 100% it opens an in-place
- * read-only review Drawer; below 100% it routes into the onboarding editor to
- * keep building. A split caret opens a menu of context-aware quick actions:
+ * read-only review Drawer; below 100% it routes into the onboarding editor
+ * focused on the #1 ranked gap (`?focus=`), so every resume lands on the
+ * highest-leverage open question. The hero variant carries a progress ring and
+ * a "Next: <gap>" sublabel so the button says what one click buys before it's
+ * clicked. A split caret opens a menu of context-aware quick actions:
  * review on the record, jump to the top open gaps (deep-linked into onboarding),
  * edit in onboarding, and copy a revocable public share link (/p/&lt;token&gt;).
  *
@@ -83,6 +87,7 @@ export function ProfileActionButton({
   const tone = toneForScore(score);
   const label = primaryLabel(score);
   const topGaps = profile.gaps.slice(0, 3);
+  const nextGap = topGaps[0] ?? null;
   const isReview = score >= 100;
 
   const openReview = useCallback(() => {
@@ -90,11 +95,17 @@ export function ProfileActionButton({
     setDrawerOpen(true);
   }, []);
 
-  // Primary action is mixed by state: review-in-place at 100%, else keep building.
-  const onPrimary = useCallback(() => {
-    if (isReview) openReview();
-    else router.push(ONBOARDING);
-  }, [isReview, openReview, router]);
+  // Primary action is mixed by state: review-in-place at 100%, else resume into
+  // onboarding focused on the #1 ranked gap (gaps arrive pre-sorted by tier →
+  // impact → missing-first), so every resume lands on the next-best question.
+  function onPrimary() {
+    if (isReview) {
+      openReview();
+      return;
+    }
+    trackEvent('profile_resume_click', { score, nextGap: nextGap?.field ?? null });
+    router.push(nextGap ? gapHref(nextGap.field) : ONBOARDING);
+  }
 
   // Mint (or reuse) the public share link and copy it. Reactive state feeds the
   // menu label so the click resolves to a clear "Link copied" / error inline.
@@ -195,7 +206,13 @@ export function ProfileActionButton({
               : 'rounded-l-lg border border-r-0 border-hairline bg-bg-1 px-2.5 py-1.5 text-[11.5px] text-fg-1 hover:bg-surface-1'
           )}
         >
-          {!hero ? <MiniRing score={score} color={tone.color} /> : null}
+          {hero ? (
+            !isReview ? (
+              <MiniRing score={score} color="#fff" track="rgba(255,255,255,0.35)" />
+            ) : null
+          ) : (
+            <MiniRing score={score} color={tone.color} />
+          )}
           {label}
           {isReview ? (
             <ShieldCheck size={hero ? 13 : 12} strokeWidth={2} aria-hidden />
@@ -234,6 +251,18 @@ export function ProfileActionButton({
           />
         </button>
       </div>
+
+      {/* Pre-click signal: what one click buys (hero, in-progress only). */}
+      {hero && !isReview ? (
+        <p className="mt-1.5 text-[11px] text-fg-4" data-testid="profile-action-next-hint">
+          {nextGap ? (
+            <>
+              Next: <span className="font-medium text-fg-3">{nextGap.label}</span> ·{' '}
+            </>
+          ) : null}
+          {score}% on the record
+        </p>
+      ) : null}
 
       {/* Action menu */}
       {menuOpen ? (
@@ -340,12 +369,21 @@ export function ProfileActionButton({
  * Inline mini progress ring (compact variant)
  * ------------------------------------------------------------------------- */
 
-function MiniRing({ score, color }: { score: number; color: string }) {
+function MiniRing({
+  score,
+  color,
+  track = 'var(--surface-2)'
+}: {
+  score: number;
+  color: string;
+  /** Track stroke — overridable so the ring reads on the gradient hero CTA. */
+  track?: string;
+}) {
   const c = 2 * Math.PI * 7;
   const offset = c - (Math.max(0, Math.min(100, score)) / 100) * c;
   return (
     <svg viewBox="0 0 18 18" className="h-[14px] w-[14px] flex-none -rotate-90" aria-hidden>
-      <circle cx="9" cy="9" r="7" fill="none" stroke="var(--surface-2)" strokeWidth="2.5" />
+      <circle cx="9" cy="9" r="7" fill="none" stroke={track} strokeWidth="2.5" />
       <circle
         cx="9"
         cy="9"
