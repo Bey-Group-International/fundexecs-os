@@ -109,17 +109,20 @@ const TRUST_EXAMPLE = [
   {
     layer: 'Proof of Truth',
     color: 'var(--proof-truth)',
-    detail: 'Target’s trailing revenue traced to audited statements and bank data — 3 sources cited inline.'
+    detail:
+      'Target’s trailing revenue traced to audited statements and bank data — 3 sources cited inline.'
   },
   {
     layer: 'Proof of Concept',
     color: 'var(--proof-concept)',
-    detail: 'Thesis memo logged: on-mandate B2B infrastructure deal, mid-market check size, documented fit logic.'
+    detail:
+      'Thesis memo logged: on-mandate B2B infrastructure deal, mid-market check size, documented fit logic.'
   },
   {
     layer: 'Proof of Execution',
     color: 'var(--proof-execution)',
-    detail: 'Diligence checklist completed and IC approval recorded — every task and approver time-stamped.'
+    detail:
+      'Diligence checklist completed and IC approval recorded — every task and approver time-stamped.'
   },
   {
     layer: 'Proof of Work',
@@ -238,8 +241,8 @@ export function ChainOfTrust() {
               ))}
             </ol>
             <p className="mt-4 text-[11px] leading-relaxed text-fg-5">
-              Illustrative sample shown to demonstrate the proof structure — not a real
-              transaction, offer, or solicitation.
+              Illustrative sample shown to demonstrate the proof structure — not a real transaction,
+              offer, or solicitation.
             </p>
           </Card>
         </Reveal>
@@ -263,7 +266,10 @@ export function MidPageCta() {
         <Reveal>
           <Card className="flex flex-col items-center gap-6 p-7 text-center sm:flex-row sm:justify-between sm:p-8 sm:text-left">
             <div className="max-w-xl">
-              <h2 id="midcta-heading" className="text-xl font-semibold tracking-[-0.02em] text-fg-1 sm:text-2xl">
+              <h2
+                id="midcta-heading"
+                className="text-xl font-semibold tracking-[-0.02em] text-fg-1 sm:text-2xl"
+              >
                 Proof you can stand behind. A desk with your name on it.
               </h2>
               <p className="mt-2 text-[13px] leading-6 text-fg-3">

@@ -27,7 +27,12 @@ export function TrustScaffold() {
       <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-5 sm:flex-row sm:items-center sm:justify-center sm:gap-10 sm:px-8">
         {SECURITY_LINE && (
           <p className="flex items-center gap-2.5 text-[12.5px] leading-6 text-fg-3">
-            <ShieldCheck size={16} strokeWidth={1.9} className="flex-none text-gold-1" aria-hidden />
+            <ShieldCheck
+              size={16}
+              strokeWidth={1.9}
+              className="flex-none text-gold-1"
+              aria-hidden
+            />
             {SECURITY_LINE}
           </p>
         )}

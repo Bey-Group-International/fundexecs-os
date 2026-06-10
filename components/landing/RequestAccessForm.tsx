@@ -96,8 +96,8 @@ export function RequestAccessForm({ source = 'landing' }: { source?: string }) {
         </span>
         <h3 className="mt-4 text-lg font-semibold text-fg-1">You&rsquo;re on the list.</h3>
         <p className="mt-2 max-w-sm text-[13.5px] leading-6 text-fg-3">
-          We onboard in small cohorts and review every request personally. Keep an eye on your
-          inbox — we&rsquo;ll reach out when your desk is ready.
+          We onboard in small cohorts and review every request personally. Keep an eye on your inbox
+          — we&rsquo;ll reach out when your desk is ready.
         </p>
       </div>
     );
@@ -221,12 +221,19 @@ export function RequestAccessForm({ source = 'landing' }: { source?: string }) {
       />
 
       {submitError && (
-        <p className="rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2.5 text-[12.5px] text-danger" role="alert">
+        <p
+          className="rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2.5 text-[12.5px] text-danger"
+          role="alert"
+        >
           {submitError}
         </p>
       )}
 
-      <button type="submit" disabled={submitting} className={`${PRIMARY_CTA} w-full disabled:opacity-60`}>
+      <button
+        type="submit"
+        disabled={submitting}
+        className={`${PRIMARY_CTA} w-full disabled:opacity-60`}
+      >
         {submitting ? 'Submitting…' : 'Request access'}
         {!submitting && <ArrowRight size={17} strokeWidth={2} aria-hidden />}
       </button>
