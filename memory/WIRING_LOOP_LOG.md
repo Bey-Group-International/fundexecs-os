@@ -115,3 +115,11 @@ architecturally significant — flagging rather than barreling through unattende
   appended it after its format check, so that commit's CI format:check would have
   failed; PR head is clean again here). Gate: ✅ tsc ✅ lint ✅ format ✅ build
   ✅ unit(163).
+
+- **2026-06-10 ~05:15 CDT** — Documented the session in `CHANGE_REPORT.md`
+  (the user-facing changelog reviewers read): a "2026-06-10 Overnight
+  automation session — full-wiring sweep" entry summarizing the six shipped
+  changes + the two deferred feature builds. Confirmed iteration-6 head CI fully
+  green (typecheck/lint/build, Playwright, CodeQL). Docs-only; format + lint
+  green. NB: clean low-risk wiring backlog is now exhausted — remaining items
+  (gamification, multi-account) await a product decision.
