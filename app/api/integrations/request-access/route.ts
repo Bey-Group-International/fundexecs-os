@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getFirstOrgId } from '@/lib/integrations/connections';
+import { getActiveOrg } from '@/lib/queries/org';
 import { PROVIDER_META, providerAvailable } from '@/lib/integrations/catalog';
 import type { Provider } from '@/lib/integrations/catalog';
 
@@ -40,12 +40,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  const admin = createAdminClient();
-  const orgId = await getFirstOrgId(admin, user.id);
-  if (!orgId) {
+  // Persist under the workspace the member is actually viewing. getActiveOrg
+  // honors the active-org cookie (re-validating membership), matching how the
+  // integrations UI reads — getFirstOrgId could land the row in a different org
+  // for a multi-org member, making the request look "lost".
+  const activeOrg = await getActiveOrg();
+  if (!activeOrg) {
     return NextResponse.json({ error: 'No organization for user' }, { status: 400 });
   }
+  const orgId = activeOrg.orgId;
 
+  const admin = createAdminClient();
   const { error } = await admin.from('integration_access_requests').upsert(
     {
       org_id: orgId,

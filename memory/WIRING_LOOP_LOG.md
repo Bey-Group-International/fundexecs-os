@@ -4,7 +4,7 @@
 > last UI-only / placeholder surfaces to real backends. Cadence + gate mirror the
 > 2026-06-06 overnight sweep: **format → typecheck → lint → build green before
 > every commit**. Branch: `claude/full-wiring-portal-features-wybfvl` → one
-> accumulating draft PR. Window: from 2026-06-10 ~01:30 CDT to 09:00 CST.
+> accumulating draft PR. Window: from 2026-06-10 ~01:30 CDT to 09:00 CDT.
 >
 > **Each iteration:** read this file → pick the top unchecked backlog item →
 > implement a complete vertical slice (UI ↔ server action/route ↔ table) →
@@ -51,7 +51,7 @@ Real gaps below.
 ## Log
 
 - **2026-06-10 ~01:45 CDT** — Integrations "Request access" wired end-to-end.
-  Added migration `20260610140000_integration_access_requests.sql` (org+user+
+  Added migration `20260610170000_integration_access_requests.sql` (org+user+
   provider, RLS read for members, service-role writes), `getIntegrationAccessRequests`
   query, `POST /api/integrations/request-access` (idempotent upsert, validates
   comingSoon), `IntegrationView.requested` + `mergeConnections(rows, requested)`,
@@ -59,7 +59,7 @@ Real gaps below.
   CI on #301: all checks green (typecheck/lint/build, Playwright, CodeQL).
 - **2026-06-10 ~02:20 CDT** — Integration sync-frequency now persists to the
   connection row instead of localStorage. Migration
-  `20260610150000_integration_sync_frequency.sql` (column + check constraint),
+  `20260610180000_integration_sync_frequency.sql` (column + check constraint),
   `POST /api/integrations/:provider/frequency` (auth + connected check, validates
   cadence), `ProviderConnection.sync_frequency` + `IntegrationView.sync_frequency`
   threaded through `mergeConnections`, card seeds from server and saves

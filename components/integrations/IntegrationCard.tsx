@@ -58,6 +58,22 @@ export function IntegrationCard({ conn }: { conn: IntegrationView }) {
   const [freq, setFreq] = useState(conn.sync_frequency ?? DEFAULT_SYNC_FREQUENCY);
   const [freqSaving, setFreqSaving] = useState(false);
 
+  // Re-sync prop-derived state when the server sends fresh values (e.g. after
+  // router.refresh()); otherwise the card keeps showing stale workspace data.
+  // React's "adjust state during render off a previous prop" pattern — no effect.
+  const [prevRequested, setPrevRequested] = useState(conn.requested);
+  if (conn.requested !== prevRequested) {
+    setPrevRequested(conn.requested);
+    setRequested(conn.requested);
+  }
+  const [prevSyncFrequency, setPrevSyncFrequency] = useState(conn.sync_frequency);
+  if (conn.sync_frequency !== prevSyncFrequency) {
+    setPrevSyncFrequency(conn.sync_frequency);
+    // Skip while a save is in flight so the server echo can't clobber the
+    // optimistic cadence the user just picked.
+    if (!freqSaving) setFreq(conn.sync_frequency ?? DEFAULT_SYNC_FREQUENCY);
+  }
+
   function toggleManage() {
     setExpanded((open) => !open);
   }

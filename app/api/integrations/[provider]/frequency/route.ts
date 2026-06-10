@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getProvider } from '@/lib/integrations/registry';
-import { getConnectedIntegrationConnection, getFirstOrgId } from '@/lib/integrations/connections';
+import { getConnectedIntegrationConnection } from '@/lib/integrations/connections';
+import { getActiveOrg } from '@/lib/queries/org';
 import { isSyncFrequency } from '@/lib/integrations/sync-frequency';
 
 /**
@@ -34,12 +35,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ provider: 
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  const admin = createAdminClient();
-  const orgId = await getFirstOrgId(admin, user.id);
-  if (!orgId) {
+  // Scope the cadence write to the workspace the member is actually viewing.
+  // getActiveOrg honors the active-org cookie (re-validating membership), so a
+  // multi-org member can't save the preference onto — or get "Connect first"
+  // for — the wrong org's connection, which getFirstOrgId risked.
+  const activeOrg = await getActiveOrg();
+  if (!activeOrg) {
     return NextResponse.json({ error: 'No organization for user' }, { status: 400 });
   }
+  const orgId = activeOrg.orgId;
 
+  const admin = createAdminClient();
   const connection = await getConnectedIntegrationConnection({
     admin,
     orgId,
