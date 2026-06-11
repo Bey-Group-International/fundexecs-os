@@ -39,7 +39,7 @@ export default async function FormationPage() {
   if (data.mgmtco === 'Management, LLC') data.mgmtco = `${firm} Management, LLC`;
 
   return (
-    <div className="fx-rise mx-auto max-w-[920px]">
+    <div className="fx-rise">
       <FormationFlow
         firm={firm}
         sizeLabel={sizeLabel}

@@ -1,9 +1,10 @@
-import type { Metadata } from 'next';
-import { HubPage } from '@/components/hubs/HubPage';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Build' };
-
-/** BUILD — stand it up: formation, governance, materials, profile & brand. */
+/**
+ * BUILD — the hub opens on its first tab, the prototype's default. The hub
+ * chrome (hero, stats, tabs, Earn note) lives in layout.tsx and wraps every
+ * /build/* module.
+ */
 export default function BuildHubPage() {
-  return <HubPage id="build" />;
+  redirect('/build/formation');
 }

@@ -21,8 +21,8 @@ export interface ShellHub {
   href: string;
   /** 0–100 readiness. */
   pct: number;
-  /** The hub's modules, shown under the active rail entry. */
-  modules: { label: string; icon: string }[];
+  /** The hub's modules, shown under the active rail entry. Linked when live. */
+  modules: { label: string; icon: string; href?: string }[];
 }
 
 export interface AppShellProps {
@@ -163,15 +163,32 @@ export function AppShell({
                 </div>
                 {on && (
                   <div className="flex flex-col gap-0.5 pb-2 pl-10 pt-1.5">
-                    {hub.modules.map((mod) => (
-                      <span
-                        key={mod.label}
-                        className="flex items-center gap-2 py-1 text-[12px] text-fg-4"
-                      >
-                        <MandateIcon name={mod.icon} size={13} strokeWidth={1.9} aria-hidden />
-                        {mod.label}
-                      </span>
-                    ))}
+                    {hub.modules.map((mod) => {
+                      const modPath = mod.href?.split('?')[0];
+                      const modOn = !!modPath && pathname.startsWith(modPath);
+                      return mod.href ? (
+                        <Link
+                          key={mod.label}
+                          href={mod.href}
+                          aria-current={modOn ? 'page' : undefined}
+                          className={cn(
+                            'flex items-center gap-2 py-1 text-[12px] transition hover:translate-x-0.5 motion-reduce:transform-none',
+                            modOn ? 'font-medium text-fg-1' : 'text-fg-4 hover:text-fg-2'
+                          )}
+                        >
+                          <MandateIcon name={mod.icon} size={13} strokeWidth={1.9} aria-hidden />
+                          {mod.label}
+                        </Link>
+                      ) : (
+                        <span
+                          key={mod.label}
+                          className="flex items-center gap-2 py-1 text-[12px] text-fg-4"
+                        >
+                          <MandateIcon name={mod.icon} size={13} strokeWidth={1.9} aria-hidden />
+                          {mod.label}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
