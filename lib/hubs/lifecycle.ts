@@ -63,6 +63,8 @@ export interface HubModule {
   icon: string;
   /** Who owns it / what it covers — honest attribution, never fake counts. */
   meta: string;
+  /** Deep link once the module's interior is live; absent = "online next". */
+  href?: string;
 }
 
 export interface HubContent {
@@ -77,7 +79,12 @@ const FUND_HUBS: HubContentMap = {
   build: {
     blurb: 'Your fund, structured and ready to show.',
     modules: [
-      { label: 'Fund formation', icon: 'landmark', meta: 'Adrian · copiloted filings' },
+      {
+        label: 'Fund formation',
+        icon: 'landmark',
+        meta: 'Adrian · copiloted filings',
+        href: '/build/formation'
+      },
       { label: 'Structure & governance', icon: 'scale', meta: 'Bodies & policies' },
       { label: 'Materials & data room', icon: 'folder-lock', meta: 'Deck, one-pager, PPM' },
       { label: 'Profile & brand', icon: 'id-card', meta: 'Sienna · how you show up' }
