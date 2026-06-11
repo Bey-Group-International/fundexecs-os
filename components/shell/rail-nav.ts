@@ -17,6 +17,7 @@ import {
   // Run
   Play,
   FileSearch,
+  Microscope,
   Activity,
   Scale,
   Workflow,
@@ -249,6 +250,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         icon: FileSearch,
         live: true,
         hint: 'Memos & decisions'
+      },
+      {
+        href: '/run/diligence',
+        label: 'Diligence Desk',
+        icon: Microscope,
+        live: true,
+        hint: 'Multi-agent diligence verdict per deal — copiloted'
       },
       {
         label: 'Stress Test',
