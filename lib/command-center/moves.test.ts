@@ -74,6 +74,22 @@ test('a raising desk with momentum gets the keep-it-moving move', () => {
   assert.equal(raise!.primary.href, '/execute/closings');
 });
 
+test('keep-raise-moving never fires without real capital in motion', () => {
+  const moves = deriveMoves(
+    state({
+      activeDealsCount: 2,
+      capitalInMotion: 0,
+      hotRelationshipsCount: 3,
+      topWarmConnections: [{ id: 'c1', name: 'A', company: null, status: 'hot' }],
+      objective: 'raise'
+    })
+  );
+  assert.equal(
+    moves.find((m) => m.id === 'keep-raise-moving'),
+    undefined
+  );
+});
+
 test('the plan is capped at four moves', () => {
   const moves = deriveMoves(state({ objective: 'raise' }));
   assert.ok(moves.length <= 4);
@@ -85,7 +101,7 @@ test('signals reframe only real rows — an empty desk has none', () => {
     state({
       recentDeals: [
         { id: 'd1', name: 'Helios', amount: 4_000_000 },
-        { id: 'd2', name: 'Aster', amount: null },
+        { id: 'd2', name: 'Aster', amount: 0 },
         { id: 'd3', name: 'Cut', amount: 1 }
       ],
       topWarmConnections: [
@@ -97,6 +113,8 @@ test('signals reframe only real rows — an empty desk has none', () => {
   assert.equal(sigs.length, 4);
   assert.match(sigs[0].label, /Helios/);
   assert.match(sigs[0].label, /\$4\.0M|\$4M/);
+  // An explicit zero amount still renders (only null hides the figure).
+  assert.match(sigs[1].label, /Aster is on the desk · \$0/);
   assert.equal(sigs[2].tone, 'gold');
   assert.ok(sigs.every((s) => s.href.startsWith('/source/')));
 });

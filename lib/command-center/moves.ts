@@ -124,6 +124,7 @@ export function deriveMoves(state: DeskState): DeskMove[] {
 
   if (
     state.activeDealsCount > 0 &&
+    state.capitalInMotion > 0 &&
     (state.objective === 'raise' || state.objective === 'launch') &&
     state.hotRelationshipsCount > 0
   ) {
@@ -197,7 +198,7 @@ export function deriveSignals(state: DeskState): DeskSignal[] {
       id: `deal-${deal.id}`,
       icon: 'radar',
       tone: 'azure',
-      label: `${deal.name} is on the desk${deal.amount ? ` · ${compactMoney(deal.amount)}` : ''}`,
+      label: `${deal.name} is on the desk${deal.amount != null ? ` · ${compactMoney(deal.amount)}` : ''}`,
       cta: 'Open the pipeline',
       href: '/source/pipeline'
     });
