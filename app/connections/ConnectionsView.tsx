@@ -256,6 +256,49 @@ export interface ConnectionsViewProps {
   intros: WarmIntroRow[];
 }
 
+/** The warmth thermometer — the network split cold→warm→hot as one stacked
+ * bar, the LP-capital-map signal the prototype leads with. Pure read over the
+ * rows; renders nothing for an empty book. */
+function WarmthThermometer({ rows }: { rows: ConnectionRow[] }) {
+  const total = rows.length;
+  if (total === 0) return null;
+  const hot = rows.filter((r) => normalizeStatus(r.status) === 'hot').length;
+  const warm = rows.filter((r) => normalizeStatus(r.status) === 'warm').length;
+  const cold = total - hot - warm;
+  const segs: Array<{ n: number; color: string; label: RelationshipStatus }> = [
+    { n: hot, color: STATUS_COLOR.hot, label: 'hot' },
+    { n: warm, color: STATUS_COLOR.warm, label: 'warm' },
+    { n: cold, color: STATUS_COLOR.cold, label: 'cold' }
+  ];
+  return (
+    <Card className="p-4">
+      <SectionTitle eyebrow="Network warmth" title="The book, by temperature" className="mb-3" />
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-1">
+        {segs.map((s) =>
+          s.n > 0 ? (
+            <div
+              key={s.label}
+              className="h-full transition-[width] duration-500 ease-out"
+              style={{ width: `${(s.n / total) * 100}%`, background: s.color }}
+              title={`${s.n} ${STATUS_META[s.label].label}`}
+              aria-hidden
+            />
+          ) : null
+        )}
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-[11.5px] text-fg-3">
+        {segs.map((s) => (
+          <span key={s.label} className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ background: s.color }} aria-hidden />
+            <span className="font-semibold tabular-nums text-fg-1">{s.n}</span>
+            {STATUS_META[s.label].label}
+          </span>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
   const searchParams = useSearchParams();
   // The top-nav search routes here as `/connections?q=…`; seed the in-page
@@ -353,6 +396,24 @@ export function ConnectionsView({ rows, intros }: ConnectionsViewProps) {
 
   return (
     <div className="flex flex-col gap-[18px]">
+      {/* Module header — icon tile + title, matching the loop hub interiors. */}
+      <div className="flex items-center gap-3">
+        <span
+          className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]"
+          aria-hidden
+        >
+          <Users size={21} strokeWidth={1.9} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+            Relationship intelligence
+          </p>
+          <h1 className="text-[20px] font-semibold tracking-[-0.015em] text-fg-1">Connections</h1>
+        </div>
+      </div>
+
+      <WarmthThermometer rows={rows} />
+
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {kpis.map((k) => (
           <KpiCard key={k.label} kpi={k} />
