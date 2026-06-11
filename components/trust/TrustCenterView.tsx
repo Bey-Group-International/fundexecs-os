@@ -638,19 +638,6 @@ function ApprovalRow({
   );
 }
 
-/** Relative "Nh ago" label for an ISO timestamp. */
-function timeAgo(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return '';
-  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (s < 60) return 'just now';
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
-
 /**
  * RecentEarnActions — the closed approve loop, on the record. Each approved
  * Earn action (logged to `trust_events`) reads as a settled line with a link to
@@ -678,7 +665,7 @@ function RecentEarnActions({ actions }: { actions: RecentEarnAction[] }) {
                 aria-hidden
               />
               <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg-1">{a.label}</span>
-              <span className="flex-none text-[11px] text-fg-5">{timeAgo(a.at)}</span>
+              <span className="flex-none text-[11px] text-fg-5">{fmtTime(a.at)}</span>
               {a.href ? (
                 <Link
                   href={a.href}
