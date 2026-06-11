@@ -43,6 +43,8 @@ export type MeteredAction =
   // Heavier owned compute (multi-agent / long context).
   | 'diligence_run'
   | 'lp_discovery'
+  | 'target_discovery'
+  | 'workflow_step'
   // Paid third-party integrations (real vendor cost) — plan-gated below.
   | 'apollo_enrich'
   | 'meeting_copilot'
@@ -57,6 +59,8 @@ export const ACTION_COST: Record<MeteredAction, number> = {
   outreach_generate: 3,
   deck_review: 5,
   lp_discovery: 8,
+  target_discovery: 8,
+  workflow_step: 2,
   diligence_run: 25,
   apollo_enrich: 5,
   meeting_copilot: 10,

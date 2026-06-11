@@ -15,8 +15,8 @@ const FIELD_CLASSES =
   'w-full rounded-xl border border-hairline bg-surface-2 text-sm text-fg-1 placeholder:text-fg-4 outline-none transition focus:border-[var(--accent-line)] focus:shadow-[0_0_0_3px_var(--accent-soft)]';
 
 /**
- * Input — the `Field` text-input pattern: optional label, leading Lucide icon,
- * focus ring, and hint text. Forwards the ref to the underlying input.
+ * Input — a labelled text input with an optional leading Lucide icon, focus
+ * ring, and hint text. Forwards the ref to the underlying input.
  */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { label, hint, icon: Icon, className, id, ...props },

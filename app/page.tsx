@@ -1,125 +1,95 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
-import { LandingNav } from '@/components/landing/LandingNav';
-import { SmoothScrollLink } from '@/components/landing/SmoothScrollLink';
-import { ActivityTicker } from '@/components/landing/ActivityTicker';
-import { Hero } from '@/components/landing/Hero';
-import { ProductPreview } from '@/components/landing/ProductPreview';
-import { ValueProps, ChainOfTrust, HowItWorks, FinalCta } from '@/components/landing/Sections';
-import { TeamConstellation } from '@/components/landing/TeamConstellation';
-import { EarnCoin } from '@/components/screens/EarnCoin';
-import { WelcomeBanner } from '@/components/beta/WelcomeBanner';
+import { ArrowRight, Lock } from 'lucide-react';
+import { AuroraBackdrop } from '@/components/ui/AuroraBackdrop';
+import { Badge } from '@/components/ui/Badge';
+import { EarnCoin } from '@/components/ui/EarnCoin';
 
-export const metadata: Metadata = {
-  title: 'Unified intelligence layer for private market operators',
-  description:
-    'FundExecs is an AI executive team — fifteen specialists led by Earnest Fundmaker, the Chief Operating Officer — that sources deals, raises capital, runs diligence, and drives to signed close for fund managers and dealmakers.'
-};
+const PROOF_STATS = [
+  ['$500M+', 'raises supported'],
+  ['15', 'AI specialists'],
+  ['4-layer', 'Chain of Trust']
+] as const;
 
-function Footer() {
-  return (
-    <footer className="border-t border-hairline bg-bg-1 py-14">
-      <div className="mx-auto max-w-[1180px] px-5 sm:px-8">
-        <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
-          <div className="max-w-sm">
-            <div className="mb-4 flex items-center gap-2.5">
-              <EarnCoin size={24} />
-              <span className="text-base font-semibold tracking-[-0.02em] text-fg-1">
-                FundExecs <span className="font-medium text-fg-4">OS</span>
-              </span>
-            </div>
-            <p className="text-[12.5px] leading-6 text-fg-4">
-              An AI executive team for the full capital lifecycle — capital formation, sourcing,
-              diligence, packaging, and closing.
-            </p>
-          </div>
-
-          <nav className="flex flex-wrap gap-x-10 gap-y-3" aria-label="Footer">
-            <SmoothScrollLink
-              targetId="preview"
-              className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-            >
-              Product
-            </SmoothScrollLink>
-            <SmoothScrollLink
-              targetId="team"
-              className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-            >
-              The Team
-            </SmoothScrollLink>
-            <SmoothScrollLink
-              targetId="how-heading"
-              className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-            >
-              How it works
-            </SmoothScrollLink>
-            <Link
-              href="/privacy"
-              className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-            >
-              Privacy
-            </Link>
-            <Link
-              href="/terms"
-              className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-            >
-              Terms
-            </Link>
-            <Link
-              href="/login"
-              className="rounded-md text-[13px] text-fg-3 transition hover:text-fg-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/login"
-              className="rounded-md text-[13px] text-gold-1 transition hover:text-gold-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-1"
-            >
-              Get started
-            </Link>
-          </nav>
-        </div>
-
-        <div className="mt-12 space-y-3 border-t border-hairline pt-8">
-          <p className="max-w-3xl text-[11.5px] leading-relaxed text-fg-5">
-            Activity shown on this page is anonymized for confidentiality and is presented to
-            illustrate platform momentum. It is not an offer or solicitation.
-          </p>
-          <p className="text-[11.5px] text-fg-5">
-            FundExecs OS by FundExecs Technologies · © 2026 FundExecs Technologies. All rights
-            reserved. Not an offer or solicitation.
-          </p>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
+/**
+ * Landing — the simplified onboarding flow's entry screen. One promise
+ * ("set the mandate, the team does the rest"), one CTA into the invite-only
+ * sign-in. Ported from the onboarding prototype's `Landing`, restyled to the
+ * app's tokens.
+ */
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-bg-0 text-fg-1">
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-xl focus:bg-gold-1 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#070b14]"
-      >
-        Skip to content
-      </a>
+    <main className="relative flex min-h-dvh flex-col overflow-hidden bg-bg-0 text-fg-1">
+      <AuroraBackdrop />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: 'radial-gradient(46% 38% at 50% 30%, rgba(247,201,72,0.07), transparent 70%)'
+        }}
+      />
 
-      <LandingNav />
+      <header className="relative z-10 flex items-center justify-between px-[clamp(20px,5vw,52px)] py-5">
+        <div className="flex items-center gap-2.5">
+          <EarnCoin size={30} />
+          <span className="text-[16px] font-semibold tracking-[-0.02em]">
+            FundExecs <span className="font-medium text-fg-4">OS</span>
+          </span>
+        </div>
+        <Link
+          href="/login"
+          className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-2 text-[13px] text-fg-3 transition hover:bg-surface-2 hover:text-fg-1"
+        >
+          Sign in
+        </Link>
+      </header>
 
-      <main id="main">
-        <WelcomeBanner />
-        <Hero />
-        <ActivityTicker />
-        <ProductPreview />
-        <ValueProps />
-        <TeamConstellation />
-        <ChainOfTrust />
-        <HowItWorks />
-        <FinalCta />
-      </main>
+      <div className="relative z-10 mx-auto flex w-full max-w-[920px] flex-1 flex-col items-center justify-center px-[clamp(20px,5vw,52px)] pb-14 pt-6 text-center">
+        <Badge tone="azure" dot pulse className="mb-6">
+          Invite-only private beta
+        </Badge>
+        <h1 className="text-[clamp(34px,6vw,60px)] font-semibold leading-[1.04] tracking-[-0.03em]">
+          Set the mandate.
+          <br />
+          Your AI executive team <span className="text-gold-1">does the rest.</span>
+        </h1>
+        <p className="mt-6 max-w-[620px] text-[clamp(14px,1.6vw,17px)] leading-relaxed text-fg-3">
+          Fifteen specialists, led by Earn, launch the fund, raise the capital, source the deals,
+          and drive every engagement to a signed close. You set direction and approve — they
+          execute. From a student-led first fund to a $500M raise.
+        </p>
 
-      <Footer />
-    </div>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 rounded-xl bg-[linear-gradient(135deg,#F7C948,#E5A823)] px-6 py-3 text-[14.5px] font-semibold text-[#070b14] shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_20px_-8px_rgba(247,201,72,0.55)] transition hover:brightness-105"
+          >
+            Claim your desk
+            <ArrowRight size={16} strokeWidth={2.2} aria-hidden />
+          </Link>
+          <span className="inline-flex items-center gap-1.5 text-[12.5px] text-fg-4">
+            <Lock size={14} strokeWidth={1.9} aria-hidden /> By referral · no card, no setup
+          </span>
+        </div>
+
+        <div className="mt-12 flex flex-wrap justify-center gap-[clamp(24px,5vw,48px)]">
+          {PROOF_STATS.map(([value, label]) => (
+            <div key={label}>
+              <div className="text-[28px] font-semibold tracking-[-0.02em] [font-feature-settings:'tnum']">
+                {value}
+              </div>
+              <div className="mt-1 text-[12px] text-fg-4">{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <footer className="relative z-10 flex items-center justify-center gap-2.5 pb-8 text-[12px] text-fg-4">
+        <EarnCoin size={22} />
+        <span>
+          <b className="font-semibold text-fg-2">Earn</b> — Chief Operating Officer of your live AI
+          executive team.
+        </span>
+      </footer>
+    </main>
   );
 }

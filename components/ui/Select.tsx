@@ -25,8 +25,8 @@ const FIELD_CLASSES =
   'w-full appearance-none cursor-pointer rounded-xl border border-hairline bg-surface-2 px-3 py-2.5 pr-9 text-sm text-fg-1 outline-none transition focus:border-[var(--accent-line)] focus:shadow-[0_0_0_3px_var(--accent-soft)]';
 
 /**
- * Select — the `Field` dropdown pattern: optional label, focus ring, hint, and
- * a trailing chevron. Native `<select>` styled to match the dark canvas.
+ * Select — a labelled dropdown with focus ring, hint, and a trailing chevron.
+ * Native `<select>` styled to match the dark canvas.
  */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   { label, hint, options, placeholder, className, id, ...props },

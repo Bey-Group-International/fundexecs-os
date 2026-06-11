@@ -62,6 +62,59 @@ export type Database = {
           },
         ]
       }
+      admin_launch_snapshots: {
+        Row: {
+          applications: number
+          applications_approved: number
+          created_at: string
+          credits_earned: number
+          id: string
+          invites_accepted: number
+          invites_sent: number
+          members: number
+          org_id: string
+          referred_count: number
+          snapshot_date: string
+          updated_at: string
+        }
+        Insert: {
+          applications?: number
+          applications_approved?: number
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          invites_accepted?: number
+          invites_sent?: number
+          members?: number
+          org_id: string
+          referred_count?: number
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Update: {
+          applications?: number
+          applications_approved?: number
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          invites_accepted?: number
+          invites_sent?: number
+          members?: number
+          org_id?: string
+          referred_count?: number
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_launch_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_brains: {
         Row: {
           created_at: string
@@ -571,6 +624,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      access_requests: {
+        Row: {
+          created_at: string
+          email: string
+          firm: string
+          full_name: string
+          id: string
+          raising_range: string
+          referral_code: string | null
+          role_title: string
+          source: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          firm: string
+          full_name: string
+          id?: string
+          raising_range: string
+          referral_code?: string | null
+          role_title: string
+          source?: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          firm?: string
+          full_name?: string
+          id?: string
+          raising_range?: string
+          referral_code?: string | null
+          role_title?: string
+          source?: string
+          status?: string
+        }
+        Relationships: []
       }
       raise_interests: {
         Row: {
@@ -1802,6 +1894,118 @@ export type Database = {
           },
         ]
       }
+      meeting_findings: {
+        Row: {
+          agent: string
+          citations: Json
+          created_at: string
+          detail: string | null
+          id: string
+          org_id: string
+          run_id: string
+          score: number | null
+          summary: string
+        }
+        Insert: {
+          agent: string
+          citations?: Json
+          created_at?: string
+          detail?: string | null
+          id?: string
+          org_id: string
+          run_id: string
+          score?: number | null
+          summary: string
+        }
+        Update: {
+          agent?: string
+          citations?: Json
+          created_at?: string
+          detail?: string | null
+          id?: string
+          org_id?: string
+          run_id?: string
+          score?: number | null
+          summary?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_findings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_findings_run_id_org_id_fkey"
+            columns: ["run_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_runs"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      meeting_runs: {
+        Row: {
+          commitment_probability: number | null
+          contact_name: string | null
+          created_at: string
+          created_by: string
+          deal_id: string | null
+          id: string
+          org_id: string
+          sentiment: string | null
+          status: string
+          summary: string | null
+        }
+        Insert: {
+          commitment_probability?: number | null
+          contact_name?: string | null
+          created_at?: string
+          created_by: string
+          deal_id?: string | null
+          id?: string
+          org_id: string
+          sentiment?: string | null
+          status?: string
+          summary?: string | null
+        }
+        Update: {
+          commitment_probability?: number | null
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string
+          deal_id?: string | null
+          id?: string
+          org_id?: string
+          sentiment?: string | null
+          status?: string
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_runs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_runs_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_runs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       evidence: {
         Row: {
           ai_validated_at: string | null
@@ -2130,6 +2334,44 @@ export type Database = {
           },
         ]
       }
+      integration_access_requests: {
+        Row: {
+          created_at: string
+          id: string
+          org_id: string
+          provider: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_id: string
+          provider: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_id?: string
+          provider?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_access_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_connections: {
         Row: {
           created_at: string
@@ -2141,6 +2383,7 @@ export type Database = {
           provider: string
           scopes: string[]
           status: string
+          sync_frequency: string
           updated_at: string
           user_id: string
         }
@@ -2154,6 +2397,7 @@ export type Database = {
           provider: string
           scopes?: string[]
           status?: string
+          sync_frequency?: string
           updated_at?: string
           user_id: string
         }
@@ -2167,6 +2411,7 @@ export type Database = {
           provider?: string
           scopes?: string[]
           status?: string
+          sync_frequency?: string
           updated_at?: string
           user_id?: string
         }
@@ -2706,6 +2951,57 @@ export type Database = {
           },
         ]
       }
+      loop_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          event_type: string
+          id: string
+          metadata: Json
+          org_id: string
+          verb: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json
+          org_id: string
+          verb: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json
+          org_id?: string
+          verb?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loop_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loop_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_signals: {
         Row: {
           captured_at: string
@@ -2750,6 +3046,144 @@ export type Database = {
           source_external_id?: string | null
         }
         Relationships: []
+      }
+      formation_steps: {
+        Row: {
+          created_at: string
+          filed_at: string
+          filed_by: string | null
+          id: string
+          kind: string
+          org_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          filed_at?: string
+          filed_by?: string | null
+          id?: string
+          kind: string
+          org_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          filed_at?: string
+          filed_by?: string | null
+          id?: string
+          kind?: string
+          org_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formation_steps_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fund_formations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data: Json
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_formations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mandates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          experience: string | null
+          firm: string | null
+          geo: string | null
+          investor_group: string
+          investor_role: string | null
+          objective: string | null
+          org_id: string
+          principal: string | null
+          sectors: string[]
+          size: string | null
+          stage: string | null
+          standing: string | null
+          updated_at: string
+          vehicle: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          experience?: string | null
+          firm?: string | null
+          geo?: string | null
+          investor_group?: string
+          investor_role?: string | null
+          objective?: string | null
+          org_id: string
+          principal?: string | null
+          sectors?: string[]
+          size?: string | null
+          stage?: string | null
+          standing?: string | null
+          updated_at?: string
+          vehicle?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          experience?: string | null
+          firm?: string | null
+          geo?: string | null
+          investor_group?: string
+          investor_role?: string | null
+          objective?: string | null
+          org_id?: string
+          principal?: string | null
+          sectors?: string[]
+          size?: string | null
+          stage?: string | null
+          standing?: string | null
+          updated_at?: string
+          vehicle?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mandates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       matches: {
         Row: {
@@ -2834,6 +3268,98 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      earn_workflow_steps: {
+        Row: {
+          created_at: string
+          id: string
+          ordinal: number
+          result: Json | null
+          specialist_slug: string | null
+          status: string
+          title: string
+          updated_at: string
+          workflow_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ordinal?: number
+          result?: Json | null
+          specialist_slug?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          workflow_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ordinal?: number
+          result?: Json | null
+          specialist_slug?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "earn_workflow_steps_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "earn_workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      earn_workflows: {
+        Row: {
+          created_at: string
+          created_by: string
+          current_step: number
+          id: string
+          kind: string
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          current_step?: number
+          id?: string
+          kind: string
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          current_step?: number
+          id?: string
+          kind?: string
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "earn_workflows_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "earn_workflows_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       member_profiles: {
         Row: {
@@ -3174,6 +3700,24 @@ export type Database = {
           },
         ]
       }
+      platform_admins: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          email: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          email: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          email?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -3428,6 +3972,83 @@ export type Database = {
           },
         ]
       }
+      task_runs: {
+        Row: {
+          action: string
+          agent_slug: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: string
+          org_id: string
+          proposed_by: string | null
+          status: string
+          steps: Json
+          task_id: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          agent_slug: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          org_id: string
+          proposed_by?: string | null
+          status?: string
+          steps?: Json
+          task_id: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          agent_slug?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          org_id?: string
+          proposed_by?: string | null
+          status?: string
+          steps?: Json
+          task_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_runs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_runs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_runs_proposed_by_fkey"
+            columns: ["proposed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_runs_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           agent_slug: string | null
@@ -3539,6 +4160,44 @@ export type Database = {
           },
         ]
       }
+      trust_posture_snapshots: {
+        Row: {
+          coverage_pct: number
+          created_at: string
+          id: string
+          iri: number
+          org_id: string
+          snapshot_date: string
+          updated_at: string
+        }
+        Insert: {
+          coverage_pct?: number
+          created_at?: string
+          id?: string
+          iri: number
+          org_id: string
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Update: {
+          coverage_pct?: number
+          created_at?: string
+          id?: string
+          iri?: number
+          org_id?: string
+          snapshot_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trust_posture_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       warm_introductions: {
         Row: {
           connector_contact_id: string | null
@@ -3613,92 +4272,6 @@ export type Database = {
             columns: ["target_contact_id"]
             isOneToOne: false
             referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      fund_formations: {
-        Row: {
-          created_at: string
-          id: string
-          org_id: string
-          status: string
-          story: Json | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          org_id: string
-          status?: string
-          story?: Json | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          org_id?: string
-          status?: string
-          story?: Json | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "fund_formations_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: true
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      formation_steps: {
-        Row: {
-          created_at: string
-          data: Json | null
-          formation_id: string
-          id: string
-          kind: string
-          org_id: string
-          seq: number
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          data?: Json | null
-          formation_id: string
-          id?: string
-          kind: string
-          org_id: string
-          seq: number
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          data?: Json | null
-          formation_id?: string
-          id?: string
-          kind?: string
-          org_id?: string
-          seq?: number
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "formation_steps_formation_id_org_id_fkey"
-            columns: ["formation_id", "org_id"]
-            isOneToOne: false
-            referencedRelation: "fund_formations"
-            referencedColumns: ["id", "org_id"]
-          },
-          {
-            foreignKeyName: "formation_steps_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -4250,6 +4823,14 @@ export type Database = {
         Args: { _email: string; _invite_id?: string; _user_id: string }
         Returns: Json
       }
+      propose_task_run: {
+        Args: { p_action: string; p_steps: Json; p_task_id: string }
+        Returns: string
+      }
+      decide_task_run: {
+        Args: { p_decision: string; p_note: string; p_run_id: string }
+        Returns: undefined
+      }
       upsert_org_posture_snapshot: {
         Args: {
           _capital?: number
@@ -4260,6 +4841,21 @@ export type Database = {
           _member_type?: string
           _org_id: string
           _stage?: string
+        }
+        Returns: undefined
+      }
+      upsert_trust_posture_snapshot: {
+        Args: { _coverage_pct?: number; _iri: number; _org_id: string }
+        Returns: undefined
+      }
+      log_loop_event: {
+        Args: {
+          _entity_id?: string
+          _entity_type?: string
+          _event_type: string
+          _metadata?: Json
+          _org_id: string
+          _verb: string
         }
         Returns: undefined
       }
@@ -4336,6 +4932,20 @@ export type Database = {
       generate_lp_matches: { Args: { _org_id: string }; Returns: number }
       generate_signal_matches: { Args: { _org_id: string }; Returns: number }
       get_admin_metrics: { Args: { _org_id: string }; Returns: Json }
+      is_platform_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      upsert_admin_launch_snapshot: {
+        Args: {
+          _org_id: string
+          _members?: number
+          _invites_sent?: number
+          _invites_accepted?: number
+          _applications?: number
+          _applications_approved?: number
+          _referred_count?: number
+          _credits_earned?: number
+        }
+        Returns: undefined
+      }
       get_audit_trail: {
         Args: { _limit?: number; _org_id: string }
         Returns: {

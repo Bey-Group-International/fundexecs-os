@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
-import type { LpQuestionDraft } from '@/components/lp-room/types';
+import type { LpQuestionDraft } from '@/lib/lp-room/types';
 
 const SIGNED_URL_TTL_SECONDS = 5 * 60;
 

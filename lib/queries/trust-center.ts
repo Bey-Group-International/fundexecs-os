@@ -129,6 +129,17 @@ export interface CapitalPosture {
   coveredDeals: number;
 }
 
+/** A recent Earn action that was approved & executed — surfaced "on the record". */
+export interface RecentEarnAction {
+  id: string;
+  /** Human label, e.g. "Added Helios to the pipeline". */
+  label: string;
+  /** ISO timestamp. */
+  at: string;
+  /** Where to view what the action produced, when applicable. */
+  href: string | null;
+}
+
 export interface TrustCenterData {
   empty: boolean;
   /** Institutional Readiness Index — capital-weighted org posture, 0–100. */
@@ -142,7 +153,11 @@ export interface TrustCenterData {
   approvals: ApprovalQueueItem[];
   checklist: ChecklistItem[];
   nextActions: NextAction[];
+  /** Recent approved Earn actions, newest first — the closed approve loop, on the record. */
+  recentEarnActions: RecentEarnAction[];
   capital: CapitalPosture;
+  /** IRI movement over time — delta vs the last snapshot + a short trend line. */
+  trend: { delta: number | null; points: number[]; sinceLabel: string | null };
   recordCount: number;
   pendingCount: number;
   viewer: { id: string; canApprove: boolean };
@@ -162,6 +177,7 @@ function emptyData(viewerId: string, canApprove: boolean): TrustCenterData {
     approvals: [],
     checklist: [],
     nextActions: [],
+    recentEarnActions: [],
     capital: {
       pipelineValue: 0,
       capitalDeployed: 0,
@@ -171,6 +187,7 @@ function emptyData(viewerId: string, canApprove: boolean): TrustCenterData {
       activeDeals: 0,
       coveredDeals: 0
     },
+    trend: { delta: null, points: [], sinceLabel: null },
     recordCount: 0,
     pendingCount: 0,
     viewer: { id: viewerId, canApprove },
@@ -214,14 +231,42 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
 
   // Records + deals/allocations in parallel — the two halves of the join
   // between proof posture and strategic capital.
-  const [{ data: recsRaw }, { data: dealsRaw }, { data: allocRaw }] = await Promise.all([
-    supabase
-      .from('chain_of_trust_records')
-      .select('id, entity_type, entity_id, current_layer, status, created_at')
-      .eq('org_id', orgId),
-    supabase.from('deals').select('id, name, amount, status').eq('org_id', orgId),
-    supabase.from('allocations').select('amount, status').eq('org_id', orgId)
-  ]);
+  const [{ data: recsRaw }, { data: dealsRaw }, { data: allocRaw }, { data: earnEventsRaw }] =
+    await Promise.all([
+      supabase
+        .from('chain_of_trust_records')
+        .select('id, entity_type, entity_id, current_layer, status, created_at')
+        .eq('org_id', orgId),
+      supabase.from('deals').select('id, name, amount, status').eq('org_id', orgId),
+      supabase.from('allocations').select('amount, status').eq('org_id', orgId),
+      // Approved Earn actions, newest first — the closed approve loop on the record.
+      supabase
+        .from('trust_events')
+        .select('id, action, entity_type, entity_id, metadata, created_at')
+        .eq('org_id', orgId)
+        .like('action', 'earn\\_%')
+        .order('created_at', { ascending: false })
+        .limit(8)
+    ]);
+
+  const recentEarnActions: RecentEarnAction[] = (
+    (earnEventsRaw ?? []) as {
+      id: string;
+      action: string;
+      entity_type: string | null;
+      entity_id: string | null;
+      metadata: unknown;
+      created_at: string;
+    }[]
+  ).map((e) => ({
+    id: e.id,
+    label: earnActionLabel(
+      e.action,
+      (e.metadata && typeof e.metadata === 'object' ? e.metadata : {}) as Record<string, unknown>
+    ),
+    at: e.created_at,
+    href: earnActionHref(e.entity_type ?? '', e.entity_id)
+  }));
 
   const records = (recsRaw ?? []) as {
     id: string;
@@ -593,6 +638,32 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
 
   const pendingCount = approvals.length;
 
+  // ---- Posture trend (compounding signal). Best-effort: the snapshot table
+  // may lag the migration, so a failure just leaves the trend empty. The
+  // current reading is appended as the latest point; the delta compares it to
+  // the most recent snapshot from a prior day. ----
+  let trend: TrustCenterData['trend'] = { delta: null, points: [], sinceLabel: null };
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: snaps } = await supabase
+      .from('trust_posture_snapshots')
+      .select('iri, snapshot_date')
+      .eq('org_id', orgId)
+      .order('snapshot_date', { ascending: false })
+      .limit(14);
+    const rows = (snaps ?? []) as { iri: number; snapshot_date: string }[];
+    const prior = rows.filter((r) => r.snapshot_date < today);
+    const points = [...prior].reverse().map((r) => Math.round(Number(r.iri) || 0));
+    points.push(iri);
+    trend = {
+      delta: prior.length ? iri - Math.round(Number(prior[0].iri) || 0) : null,
+      points: points.slice(-12),
+      sinceLabel: prior[0]?.snapshot_date ?? null
+    };
+  } catch {
+    // trend stays empty
+  }
+
   return {
     empty: false,
     iri,
@@ -603,12 +674,38 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
     approvals,
     checklist,
     nextActions: nextActions.slice(0, 4),
+    recentEarnActions,
     capital,
+    trend,
     recordCount: summaries.length,
     pendingCount,
     viewer: { id: viewerId, canApprove },
     generatedAt: new Date().toISOString()
   };
+}
+
+/** A human label for an approved Earn action (from its `trust_events` row). */
+function earnActionLabel(action: string, meta: Record<string, unknown>): string {
+  const dealName = typeof meta.dealName === 'string' ? meta.dealName.trim() : '';
+  if (action === 'earn_create_deal_approved') {
+    return dealName ? `Added ${dealName} to the pipeline` : 'Added a deal to the pipeline';
+  }
+  if (action === 'earn_run_diligence_approved') {
+    return 'Ran the diligence committee';
+  }
+  // Generic: strip the `earn_` prefix + `_approved` suffix, then title-case.
+  return action
+    .replace(/^earn_/, '')
+    .replace(/_approved$/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Where to view what an approved Earn action produced, when applicable. */
+function earnActionHref(entityType: string, entityId: string | null): string | null {
+  if (entityType === 'deal') return '/pipeline';
+  if (entityType === 'diligence_run' && entityId) return `/diligence/${entityId}`;
+  return null;
 }
 
 /** Compact money formatter shared with the view (server-computed strings). */
@@ -619,4 +716,32 @@ function fmtMoney(n: number): string {
   if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `$${Math.round(n / 1_000)}K`;
   return `$${Math.round(n)}`;
+}
+
+/**
+ * Persist today's Trust Center posture (idempotent per org per day) via the
+ * SECURITY DEFINER upsert RPC. Called from the /trust page render — mirroring
+ * capturePostureSnapshot on /strategy — so the trend builds passively with no
+ * cron and no extra query: it reuses the IRI + coverage already computed for
+ * the page. Values come from the server, never the client. Best-effort: a
+ * failed snapshot must never break the page.
+ */
+export async function captureTrustSnapshot(input: {
+  orgId: string;
+  iri: number;
+  coveragePct: number;
+}): Promise<void> {
+  try {
+    const supabase = await createClient();
+    const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+    await supabase.rpc('upsert_trust_posture_snapshot', {
+      _org_id: input.orgId,
+      _iri: clamp(input.iri),
+      _coverage_pct: clamp(input.coveragePct)
+    });
+  } catch (err) {
+    // Best-effort telemetry; never surface a failure. Warn so a migration/RPC/
+    // auth failure stays diagnosable.
+    console.warn('[captureTrustSnapshot] failed to persist posture snapshot:', err);
+  }
 }

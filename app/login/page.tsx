@@ -1,285 +1,37 @@
-'use client';
+import type { Metadata } from 'next';
+import { AuroraBackdrop } from '@/components/ui/AuroraBackdrop';
+import { LoginCard } from './LoginCard';
 
-import { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
-import { getSiteURL } from '@/lib/site-url';
-import { signInWithPasswordAction } from './actions';
-import { requestPasswordReset } from '@/lib/actions/account-security';
-import { EarnCoin } from '@/components/screens/EarnCoin';
-import { Badge } from '@/components/ui';
-import { getCOO } from '@/lib/team';
+export const metadata: Metadata = { title: 'Sign in' };
 
-export default function LoginPage() {
-  const searchParams = useSearchParams();
-  // Only allow same-origin relative paths to avoid open-redirects.
-  const requestedRedirect = searchParams.get('redirectedFrom');
+/**
+ * Sign in — the simplified flow's single entry gate (the prototype's Invite +
+ * Sign-in screens merged onto one card). Reads search params server-side so the
+ * client card needs no Suspense boundary around `useSearchParams`.
+ */
+export default async function LoginPage({
+  searchParams
+}: {
+  searchParams: Promise<{ redirectedFrom?: string; error?: string; error_description?: string }>;
+}) {
+  const params = await searchParams;
+  const requested = params.redirectedFrom ?? '';
+  // Only allow same-origin relative paths to avoid open redirects.
   const redirectedFrom =
-    requestedRedirect && requestedRedirect.startsWith('/') && !requestedRedirect.startsWith('//')
-      ? requestedRedirect
-      : '/command-center';
-  const oauthError = searchParams.get('error_description') || searchParams.get('error');
-  const earn = getCOO();
-
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
-
-    if (mode === 'signin') {
-      // Sign in on the SERVER so the session is written to server-readable
-      // cookies (same path as the Google callback). On success the action
-      // redirects; only errors return here.
-      const result = await signInWithPasswordAction(redirectedFrom, email, password);
-      if (result?.error) {
-        setMessage(result.error);
-        setLoading(false);
-      }
-      return;
-    }
-
-    const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: `${getSiteURL()}/auth/callback` }
-    });
-    if (error) {
-      setMessage(error.message);
-      setLoading(false);
-      return;
-    }
-    setMessage('Check your email to confirm your account, then sign in.');
-    setMode('signin');
-    setLoading(false);
-  }
-
-  async function handleForgotPassword() {
-    if (!email.trim()) {
-      setMessage('Enter your email above, then tap “Forgot password?”.');
-      return;
-    }
-    setLoading(true);
-    setMessage(null);
-    await requestPasswordReset(email);
-    setLoading(false);
-    setMessage('If an account exists for that email, a reset link is on its way.');
-  }
-
-  function handleGoogleSignIn() {
-    setLoading(true);
-    setMessage(null);
-    // Initiate Google OAuth server-side so the PKCE code-verifier is written as a
-    // server-readable cookie. The browser-side flow stranded the verifier,
-    // causing "PKCE code verifier not found" at /auth/callback.
-    window.location.assign(`/api/auth/google?next=${encodeURIComponent(redirectedFrom)}`);
-  }
+    requested.startsWith('/') && !requested.startsWith('//') ? requested : '/command-center';
+  const oauthError = params.error_description || params.error || null;
 
   return (
-    <main className="grid min-h-screen bg-bg-0 text-fg-1 lg:grid-cols-2">
-      {/* Value panel (left) — mirrors the landing hero's identity + messaging. */}
-      <section
-        className="relative hidden flex-col justify-between overflow-hidden border-r border-hairline px-12 py-10 lg:flex"
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-bg-0 px-6 py-12 text-fg-1">
+      <AuroraBackdrop />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
         style={{
-          background:
-            'radial-gradient(60% 50% at 80% 15%, rgba(247,201,72,0.12), transparent 70%), radial-gradient(55% 55% at 0% 90%, rgba(37,99,235,0.12), transparent 70%), linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%)'
+          background: 'radial-gradient(40% 36% at 50% 24%, rgba(247,201,72,0.1), transparent 70%)'
         }}
-      >
-        <div className="flex items-center gap-2.5">
-          <EarnCoin size={28} />
-          <span className="text-[15px] font-semibold tracking-[-0.02em]">
-            FundExecs <span className="font-medium text-fg-4">OS</span>
-          </span>
-        </div>
-
-        <div className="max-w-md">
-          <Badge tone="gold" dot pulse className="mb-6">
-            Led by Earn, your live AI guide
-          </Badge>
-          <h1 className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-fg-1">
-            Unified intelligence layer for{' '}
-            <span className="text-gold-1">private market operators</span>
-          </h1>
-          <p className="mt-5 max-w-sm text-[14px] leading-7 text-fg-3">
-            A fifteen-strong executive team — led by Earn — working as one to optimize your
-            workflows, accelerate your decisions, and elevate your capacity to execute like an
-            institution.
-          </p>
-        </div>
-
-        {/* Earn identity — same treatment as the landing hero. */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-none">
-            <div
-              className="pointer-events-none absolute inset-0 -z-10"
-              style={{
-                background: 'radial-gradient(circle, rgba(247,201,72,0.4), transparent 65%)',
-                filter: 'blur(22px)'
-              }}
-              aria-hidden
-            />
-            <EarnCoin size={52} glow online />
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-              Meet Earn
-            </p>
-            <p className="mt-1 text-[14px] font-semibold text-fg-1">
-              {earn.name} &ldquo;Earn&rdquo;
-            </p>
-            <p className="mt-0.5 text-[12px] text-fg-4">{earn.position} · your live AI guide</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Form card (right) */}
-      <section className="flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md">
-          <div className="rounded-2xl border border-hairline bg-surface-1 p-7 shadow-[var(--shadow-lg)]">
-            <h2 className="text-[18px] font-semibold tracking-tight">
-              {mode === 'signin' ? 'Sign in to FundExecs OS' : 'Create your account'}
-            </h2>
-            <p className="mt-1 text-[12.5px] text-fg-4">
-              Your private-market command center · invite-only private beta.
-            </p>
-
-            {oauthError && (
-              <p className="mt-4 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-danger">
-                {oauthError}. Please try again.
-              </p>
-            )}
-
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-              className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-xl border border-hairline bg-surface-2 px-4 py-2.5 text-[13.5px] font-medium transition hover:bg-surface-3 disabled:opacity-60"
-            >
-              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 18 18">
-                <path
-                  fill="#4285F4"
-                  d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z"
-                />
-              </svg>
-              Continue with Google
-            </button>
-
-            <div className="my-5 flex items-center gap-3 text-[10.5px] uppercase tracking-[0.11em] text-fg-5">
-              <span className="h-px flex-1 bg-[var(--border)]" />
-              or continue with email
-              <span className="h-px flex-1 bg-[var(--border)]" />
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="text-[12px] font-medium text-fg-3">
-                  Email
-                </label>
-                <div className="relative mt-1.5">
-                  <Mail
-                    size={15}
-                    strokeWidth={1.9}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-5"
-                    aria-hidden
-                  />
-                  <input
-                    id="email"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@fund.com"
-                    className="w-full rounded-xl border border-hairline bg-surface-2 py-2.5 pl-9 pr-3 text-[13.5px] text-fg-1 placeholder:text-fg-5 focus:border-[var(--accent)] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="password" className="text-[12px] font-medium text-fg-3">
-                  Password
-                </label>
-                <div className="relative mt-1.5">
-                  <Lock
-                    size={15}
-                    strokeWidth={1.9}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-5"
-                    aria-hidden
-                  />
-                  <input
-                    id="password"
-                    type="password"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full rounded-xl border border-hairline bg-surface-2 py-2.5 pl-9 pr-3 text-[13.5px] text-fg-1 placeholder:text-fg-5 focus:border-[var(--accent)] focus:outline-none"
-                  />
-                </div>
-                {mode === 'signin' && (
-                  <div className="mt-1.5 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleForgotPassword}
-                      disabled={loading}
-                      className="text-[11.5px] text-fg-4 transition hover:text-fg-2 disabled:opacity-60"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {message && <p className="text-[12.5px] text-gold-1">{message}</p>}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#3B74F0,#2152D8)] px-4 py-2.5 text-[13.5px] font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_18px_-8px_rgba(37,99,235,0.55)] transition hover:brightness-110 disabled:opacity-60"
-              >
-                {loading ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Sign up'}
-                {!loading && <ArrowRight size={15} strokeWidth={2} aria-hidden />}
-              </button>
-            </form>
-
-            <button
-              type="button"
-              onClick={() => {
-                setMode(mode === 'signin' ? 'signup' : 'signin');
-                setMessage(null);
-              }}
-              className="mt-5 w-full text-center text-[12.5px] text-fg-4 transition hover:text-fg-2"
-            >
-              {mode === 'signin'
-                ? "Don't have an account? Sign up"
-                : 'Already have an account? Sign in'}
-            </button>
-          </div>
-
-          <p className="mt-5 text-center text-[11px] text-fg-5">
-            Secured by Supabase Auth · SOC 2 · Row-Level Security
-          </p>
-        </div>
-      </section>
+      />
+      <LoginCard redirectedFrom={redirectedFrom} oauthError={oauthError} />
     </main>
   );
 }

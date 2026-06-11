@@ -12,6 +12,49 @@ concrete **new features / components / functions** added.
 
 ---
 
+## 2026-06-10
+
+### Overnight automation session — full-wiring sweep _(Claude · autonomous)_
+
+A timed, hands-off loop (one focused, CI-verified change per ~30 min;
+format → typecheck → lint → build green before every commit) on
+`claude/full-wiring-portal-features-wybfvl` (PR #301). Goal: close the last
+UI-only / placeholder surfaces across dashboard, siderail, earn modal, executive
+team, admin, and user portal. Recon found the **earn modal** and **executive
+team** already fully wired, and the admin platform-metrics RPC already live — so
+the real gaps were narrower than expected. Running backlog/log in
+`memory/WIRING_LOOP_LOG.md`.
+
+- **Integrations "Request access" persists (user portal).** The ~17 catalogued
+  "coming soon" providers had a button that only flipped local React state.
+  **Added:** migration `integration_access_requests` (org+user+provider, RLS
+  read for members, service-role writes), `getIntegrationAccessRequests`,
+  `POST /api/integrations/request-access` (idempotent, validates the provider is
+  coming-soon), `IntegrationView.requested` threaded through `mergeConnections` +
+  both loaders; the card seeds "Requested" from server state.
+- **Integration sync-frequency persists (user portal).** The Manage-panel
+  cadence selector was localStorage-only. **Added:** migration
+  `integration_connections.sync_frequency` (+ check constraint),
+  `POST /api/integrations/:provider/frequency`, threaded through the query →
+  `IntegrationView` → card (server-seeded, optimistic save w/ revert).
+- **Siderail Formation + Execute activated.** Both were dead "soon" rows (Execute
+  was a 3-row sub-group the inline rail dropped entirely). Wired each as a
+  click-to-Earn action, matching the rail's existing pattern (Stress Test,
+  Aggregation Strategy). No "soon" rows remain in the rail registry.
+- **Sync-frequency source of truth unified + tested.** Extracted
+  `lib/integrations/sync-frequency.ts` (pure: set, options, default, guards)
+  shared by the route, the card, and the DB constraint, with a unit test.
+- **Integrations catalog split for testability.** Extracted the pure, icon-free
+  merge core (`lib/integrations/providers.ts`: `PROVIDER_ORDER`,
+  `PROVIDER_COMING_SOON`, `providerAvailable`, `mergeConnections`,
+  `IntegrationView`); `catalog.ts` re-exports it so no import site changes.
+  `mergeConnections`/`providerAvailable` are now unit-tested (163 unit tests
+  total) — they previously couldn't be, since `catalog.ts` imports lucide-react,
+  which trips `react.createContext` under the `react-server` test runner.
+- **Deferred (need a product call):** gamification achievements/quests (Phase-2
+  backend — tables + rules engine before flipping `GAMIFICATION_IS_PLACEHOLDER`)
+  and multi-account "Add account" (secondary-login auth linking + switcher).
+
 ## 2026-06-06
 
 ### Overnight automation session — UX optimization sweep _(Claude · autonomous)_

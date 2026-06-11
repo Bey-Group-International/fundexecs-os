@@ -1,10 +1,62 @@
 import type { DashboardData } from '@/lib/queries/dashboard';
-import type { NavSignals, RailSignal } from '@/components/shell/Wave1SideRail';
 import type { MemberType } from '@/lib/member-types';
 import type { StakeSignal } from '@/lib/queries/dashboard/value-at-stake';
-import { lifecycleStageIndex, LIFECYCLE_STAGES } from '@/lib/lifecycle';
+import { lifecycleStageIndex, LIFECYCLE_STAGES, type LifecycleStage } from '@/lib/lifecycle';
 import { compactMoney } from '@/lib/format';
-import { buildLoopChain } from '@/lib/loop-chain';
+import { buildLoopChain, type LoopChain } from '@/lib/loop-chain';
+import { deriveCockpit, type CockpitHub } from '@/lib/dashboard/cockpit';
+import type { BadgeTone } from '@/lib/ui-types';
+
+/* ----------------------------------------------------------------------------
+ * Rail-signal contracts — the live-signal payload the side rail consumes.
+ * Defined here (backend) so the producer stays decoupled from the component.
+ * --------------------------------------------------------------------------*/
+
+/** Live-signal payload the rail accepts — keyed by item `href`. */
+export interface RailSignal {
+  /** Pre-formatted value (e.g. "12", "78%", "$4.2M"). */
+  value: string | number;
+  tone?: BadgeTone;
+  /** Hover hint on the badge. */
+  hint?: string;
+  /** Raw dollars-at-risk for the cluster rollup to sum (when the badge is a $
+   *  figure). Display-only badges omit this so they don't inflate the total. */
+  amount?: number;
+}
+
+/** Condensed operating meter pinned under Command Center on the rail spine. */
+export interface RailMomentum {
+  /** 0–100 progress through the loop. */
+  loopProgress: number;
+  /** 0–100 institutional-readiness score. */
+  readinessScore: number;
+  /** Current stage label, e.g. "Convert LPs". */
+  stageLabel: string;
+  /** 0-based stage ordinal. */
+  stageIndex: number;
+  /** Total stages in the loop. */
+  stageCount: number;
+  /** The single highest-leverage move, when one exists. */
+  nextBestAction?: {
+    title: string;
+    cta: string;
+    href: string;
+  };
+  /** The loop as a chain — Build → Source → Run → Drive. */
+  chain?: LoopChain;
+}
+
+/** The side rail's full live-signal payload. */
+export interface NavSignals {
+  /** Current lifecycle stage — drives stage-aware emphasis. */
+  currentStage?: LifecycleStage;
+  /** Per-href signal badges. */
+  badges?: Record<string, RailSignal>;
+  /** Condensed readiness/loop meter + next-best-action for the rail spine. */
+  momentum?: RailMomentum;
+  /** Per-verb readiness for the loop clusters (Build/Source/Run/Drive). */
+  hubs?: CockpitHub[];
+}
 
 /**
  * The capital metric reads differently by operator type: GPs *raise* capital,
@@ -147,6 +199,9 @@ export function buildRailSignals(data: DashboardData, memberType?: MemberType | 
   return {
     currentStage: data.stage,
     badges,
+    // Per-verb readiness for the loop clusters — the same cockpit model the
+    // Command Center home leads with, so rail and home agree.
+    hubs: deriveCockpit(data),
     // The condensed operating spine — readiness/loop meter + next-best-action.
     // Same engine output as the Command Center hero, surfaced on the rail.
     momentum: {

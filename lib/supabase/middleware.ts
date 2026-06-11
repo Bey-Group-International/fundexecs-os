@@ -139,6 +139,7 @@ export async function updateSession(request: NextRequest) {
   const isPublic =
     pathname === '/' ||
     pathname === '/login' ||
+    pathname === '/request-access' ||
     pathname === '/privacy' ||
     pathname === '/terms' ||
     pathname.startsWith('/p/') ||
@@ -161,12 +162,14 @@ export async function updateSession(request: NextRequest) {
     '/admin',
     '/ask-earn',
     '/audit',
+    '/build',
     '/cap-table',
     '/capital-stack',
     '/command-center',
     '/connections',
     '/dashboard',
     '/diligence',
+    '/execute',
     '/inbox-intelligence',
     '/integrations',
     '/knowledge',
@@ -179,7 +182,9 @@ export async function updateSession(request: NextRequest) {
     '/pipeline',
     '/profile',
     '/referrals',
+    '/run',
     '/settings',
+    '/source',
     '/strategy'
   ];
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p));

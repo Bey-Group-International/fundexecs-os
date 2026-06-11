@@ -1,49 +1,49 @@
-import type { HTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
-export interface ProgressBarProps extends Omit<HTMLAttributes<HTMLDivElement>, 'color'> {
-  /** Completion percentage, 0–100. Clamped to that range. */
+export interface ProgressBarProps {
+  /** 0–100; values outside the range are clamped. */
   value: number;
-  /** Track height in pixels. Defaults to 6. */
+  /** Track height in pixels. */
   height?: number;
-  /** Fill color. Accepts any CSS color; defaults to the gold accent token. */
-  color?: string;
-  /** A CSS background (e.g. a gradient) that overrides `color` for the fill. */
-  gradient?: string;
-  /** Accessible name for the bar. Provide a useful default at every call
-   * site (e.g. 'Warmth score'). Without it, axe flags the bar as
-   * unnamed (aria-progressbar-name). */
-  ariaLabel?: string;
+  /** Fill style: gold gradient (readiness) or flat accent/neutral. */
+  tone?: 'gold' | 'accent' | 'neutral';
+  className?: string;
+  /** Accessible label; omit to render decorative (aria-hidden). */
+  label?: string;
 }
 
-/**
- * ProgressBar — an animated fill bar. Defaults to the gold reward color and a
- * white-alpha track; the fill width animates on value change.
- */
+const FILLS: Record<NonNullable<ProgressBarProps['tone']>, string> = {
+  gold: 'bg-[linear-gradient(90deg,#F7C948,#E5A823)]',
+  accent: 'bg-accent',
+  neutral: 'bg-fg-5'
+};
+
+/** Hairline progress track — the prototype's readiness fill. Width-only motion. */
 export function ProgressBar({
   value,
-  height = 6,
-  color = 'var(--gold-1)',
-  gradient,
+  height = 4,
+  tone = 'gold',
   className,
-  ariaLabel,
-  ...props
+  label
 }: ProgressBarProps) {
-  const clamped = Math.max(0, Math.min(100, value));
+  const pct = Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
   return (
     <div
-      role="progressbar"
-      aria-valuenow={clamped}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-label={ariaLabel ?? 'Progress'}
-      className={cn('w-full overflow-hidden rounded-full bg-white/[0.08]', className)}
+      className={cn('w-full overflow-hidden rounded-full bg-surface-2', className)}
       style={{ height }}
-      {...props}
+      {...(label
+        ? {
+            role: 'progressbar',
+            'aria-label': label,
+            'aria-valuenow': pct,
+            'aria-valuemin': 0,
+            'aria-valuemax': 100
+          }
+        : { 'aria-hidden': true })}
     >
       <div
-        className="h-full rounded-full transition-[width] duration-500 ease-out"
-        style={{ width: `${clamped}%`, background: gradient ?? color }}
+        className={cn('h-full rounded-full transition-[width] duration-300', FILLS[tone])}
+        style={{ width: `${pct}%` }}
       />
     </div>
   );
