@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { getSiteURL } from '@/lib/site-url';
 import type { Database } from '@/lib/supabase/database.types';
 import { authCookieDomain } from '@/lib/supabase/cookie-domain';
+import { supabaseAnonKey, supabaseUrl } from '@/lib/supabase/env';
 
 /**
  * Server-initiated Google sign-in.
@@ -28,19 +29,23 @@ export async function GET(request: NextRequest) {
 
   const cookieStore = await cookies();
   const pending: { name: string; value: string; options: CookieOptions }[] = [];
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookieOptions: { domain: authCookieDomain() },
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (toSet) => {
-          for (const cookie of toSet) pending.push(cookie);
-        }
+  const url = supabaseUrl();
+  const anonKey = supabaseAnonKey();
+  if (!url || !anonKey) {
+    // Misconfigured deployment — send the user somewhere calm, never a 500.
+    const login = new URL('/login', request.url);
+    login.searchParams.set('error', 'Sign-in is temporarily unavailable.');
+    return NextResponse.redirect(login);
+  }
+  const supabase = createServerClient<Database>(url, anonKey, {
+    cookieOptions: { domain: authCookieDomain() },
+    cookies: {
+      getAll: () => cookieStore.getAll(),
+      setAll: (toSet) => {
+        for (const cookie of toSet) pending.push(cookie);
       }
     }
-  );
+  });
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',

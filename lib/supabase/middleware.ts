@@ -1,6 +1,10 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from './database.types';
+import {
+  supabaseAnonKey as resolveSupabaseAnonKey,
+  supabaseUrl as resolveSupabaseUrl
+} from './env';
 
 /**
  * Refreshes the Supabase auth session on every request and keeps the
@@ -25,8 +29,8 @@ export async function updateSession(request: NextRequest) {
   // proxy runs on all routes. Skip the auth refresh instead so public pages
   // still render. Protected routes simply won't see a session until the env is
   // configured.
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = resolveSupabaseUrl();
+  const supabaseKey = resolveSupabaseAnonKey();
   if (!supabaseUrl || !supabaseKey) {
     return supabaseResponse;
   }

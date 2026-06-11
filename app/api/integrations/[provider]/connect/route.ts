@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getSiteURL } from '@/lib/site-url';
 import type { Database } from '@/lib/supabase/database.types';
 import { authCookieDomain } from '@/lib/supabase/cookie-domain';
+import { supabaseAnonKey, supabaseUrl } from '@/lib/supabase/env';
 import {
   API_KEY_PROVIDERS,
   GOOGLE_PROVIDERS,
@@ -68,19 +69,20 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ provide
     // to set and apply them to the redirect response we return.
     const cookieStore = await cookies();
     const pending: { name: string; value: string; options: CookieOptions }[] = [];
-    const oauthClient = createServerClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookieOptions: { domain: authCookieDomain() },
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: (toSet) => {
-            for (const cookie of toSet) pending.push(cookie);
-          }
+    const url = supabaseUrl();
+    const anonKey = supabaseAnonKey();
+    if (!url || !anonKey) {
+      return redirectToIntegrations(request, 'Google connect is temporarily unavailable.');
+    }
+    const oauthClient = createServerClient<Database>(url, anonKey, {
+      cookieOptions: { domain: authCookieDomain() },
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: (toSet) => {
+          for (const cookie of toSet) pending.push(cookie);
         }
       }
-    );
+    });
 
     const { data, error } = await oauthClient.auth.signInWithOAuth({
       provider: 'google',
