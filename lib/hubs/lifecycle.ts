@@ -143,9 +143,24 @@ const FUND_HUBS: HubContentMap = {
         meta: 'Marcus · 7-agent verdicts',
         href: '/run/diligence'
       },
-      { label: 'Workflows & tasks', icon: 'list-checks', meta: 'Sterling · sequenced' },
-      { label: 'Compliance', icon: 'shield-check', meta: 'Adrian · counsel in the loop' },
-      { label: 'IR & reporting', icon: 'users', meta: 'Eleanor · LP cadence' }
+      {
+        label: 'Workflows & tasks',
+        icon: 'list-checks',
+        meta: 'Sterling · sequenced',
+        href: '/run/workflows'
+      },
+      {
+        label: 'Compliance',
+        icon: 'shield-check',
+        meta: 'Adrian · counsel in the loop',
+        href: '/run/compliance'
+      },
+      {
+        label: 'IR & reporting',
+        icon: 'users',
+        meta: 'Eleanor · LP cadence',
+        href: '/run/ir'
+      }
     ]
   },
   execute: {
@@ -188,7 +203,12 @@ const CAPITAL_HUBS: HubContentMap = {
     modules: [
       { label: 'Diligence', icon: 'cpu', meta: 'Theodore · GP screening' },
       { label: 'Portfolio monitoring', icon: 'activity', meta: 'NAV & pacing' },
-      { label: 'Reporting & K-1s', icon: 'file-text', meta: 'Eleanor · tracked' },
+      {
+        label: 'Reporting & K-1s',
+        icon: 'file-text',
+        meta: 'Eleanor · tracked',
+        href: '/run/ir'
+      },
       { label: 'Knowledge', icon: 'brain-circuit', meta: 'The 15 brains' }
     ]
   },
@@ -236,8 +256,18 @@ const SERVICE_HUBS: HubContentMap = {
     blurb: 'Run engagements and stay compliant.',
     modules: [
       { label: 'Engagements', icon: 'briefcase', meta: 'Active client work' },
-      { label: 'Workflows & tasks', icon: 'list-checks', meta: 'Sterling · sequenced' },
-      { label: 'Compliance', icon: 'shield-check', meta: 'Adrian · counsel in the loop' },
+      {
+        label: 'Workflows & tasks',
+        icon: 'list-checks',
+        meta: 'Sterling · sequenced',
+        href: '/run/workflows'
+      },
+      {
+        label: 'Compliance',
+        icon: 'shield-check',
+        meta: 'Adrian · counsel in the loop',
+        href: '/run/compliance'
+      },
       { label: 'Knowledge', icon: 'brain-circuit', meta: 'The 15 brains' }
     ]
   },
