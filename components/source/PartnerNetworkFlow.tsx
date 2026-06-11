@@ -23,11 +23,16 @@ const STAGE_META: Record<BenchStage, { label: string; tone: BadgeTone }> = {
   engaged: { label: 'Engaged', tone: 'success' }
 };
 
+/** Intro-request statuses that count as "in motion" (see the migration's
+ *  vocabulary: requested | accepted | declined | introduced). A declined
+ *  request falls back to Suggested so the intro can be re-requested. */
+const INTRO_IN_FLIGHT = new Set(['requested', 'accepted', 'introduced']);
+
 /** Derive a provider's bench stage from its real status + intro requests. */
 function benchStage(p: ServiceProvider, introStatus: Record<string, string>): BenchStage {
   const s = (p.status || '').toLowerCase();
   if (/(active|engaged|retained)/.test(s)) return 'engaged';
-  if (introStatus[p.id]) return 'requested';
+  if (INTRO_IN_FLIGHT.has((introStatus[p.id] || '').toLowerCase())) return 'requested';
   return 'suggested';
 }
 
