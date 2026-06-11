@@ -109,7 +109,12 @@ const FUND_HUBS: HubContentMap = {
     blurb: 'The team finds your deals, capital and partners.',
     modules: [
       { label: 'Deal pipeline', icon: 'trending-up', meta: 'Marcus · on-thesis flow' },
-      { label: 'LP & capital targets', icon: 'handshake', meta: 'Sloane · fit + warmth' },
+      {
+        label: 'LP & capital targets',
+        icon: 'handshake',
+        meta: 'Sloane · fit + warmth',
+        href: '/source/capital-map'
+      },
       { label: 'Partners & providers', icon: 'briefcase', meta: 'The vetted bench' },
       { label: 'Lead engine', icon: 'filter', meta: 'Camille · demand for portcos' }
     ]
