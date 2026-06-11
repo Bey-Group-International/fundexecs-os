@@ -3193,6 +3193,66 @@ export type Database = {
           },
         ]
       }
+      leads: {
+        Row: {
+          created_at: string
+          deal_id: string | null
+          est_value: number | null
+          id: string
+          intent: number | null
+          name: string
+          org_id: string
+          segment: string | null
+          signal: string | null
+          source: string | null
+          stage: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deal_id?: string | null
+          est_value?: number | null
+          id?: string
+          intent?: number | null
+          name: string
+          org_id: string
+          segment?: string | null
+          signal?: string | null
+          source?: string | null
+          stage?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deal_id?: string | null
+          est_value?: number | null
+          id?: string
+          intent?: number | null
+          name?: string
+          org_id?: string
+          segment?: string | null
+          signal?: string | null
+          source?: string | null
+          stage?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mandates: {
         Row: {
           created_at: string
