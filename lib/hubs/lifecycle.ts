@@ -120,7 +120,12 @@ const FUND_HUBS: HubContentMap = {
         meta: 'Sloane · fit + warmth',
         href: '/source/capital-map'
       },
-      { label: 'Partners & providers', icon: 'briefcase', meta: 'The vetted bench' },
+      {
+        label: 'Partners & providers',
+        icon: 'briefcase',
+        meta: 'The vetted bench',
+        href: '/source/partners'
+      },
       { label: 'Lead engine', icon: 'filter', meta: 'Camille · demand for portcos' }
     ]
   },
