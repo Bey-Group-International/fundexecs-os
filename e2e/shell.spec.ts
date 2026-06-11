@@ -56,5 +56,5 @@ test('settings renders and switches sections', async ({ page }) => {
   await expect(page.getByText('Email & calendar')).toBeVisible();
 
   await page.getByRole('tab', { name: 'Workspace' }).click();
-  await expect(page.getByText(/Organization/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Organization' })).toBeVisible();
 });

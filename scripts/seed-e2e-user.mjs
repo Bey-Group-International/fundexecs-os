@@ -21,14 +21,28 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Forgive the common paste shapes: surrounding whitespace, a missing
+// https:// scheme (bare project hostname), a trailing slash. Keep in sync
+// with the identical normalization in playwright.config.ts — both consumers
+// of the URL secrets accept the same shapes.
+const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+const url = rawUrl
+  ? (/^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`).replace(/\/+$/, '')
+  : undefined;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 const email = process.env.E2E_TEST_EMAIL?.trim()?.toLowerCase();
 const password = process.env.E2E_TEST_PASSWORD;
 
 if (!url || url.includes('placeholder') || !serviceKey || !email || !password) {
   console.error(
     'Missing env. Required: NEXT_PUBLIC_SUPABASE_URL (real), SUPABASE_SERVICE_ROLE_KEY, E2E_TEST_EMAIL, E2E_TEST_PASSWORD.'
+  );
+  process.exit(1);
+}
+if (password !== password.trim()) {
+  // Don't silently seed a password the login form would never reproduce.
+  console.error(
+    'E2E_TEST_PASSWORD has leading/trailing whitespace — re-paste the secret without it.'
   );
   process.exit(1);
 }

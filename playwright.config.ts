@@ -17,6 +17,21 @@ const PORT = Number(process.env.PORT ?? 3100);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 const reuseExistingServer = !process.env.CI;
 
+/**
+ * Forgive the common secret paste shapes — surrounding whitespace, a missing
+ * https:// scheme (bare project hostname), a trailing slash. Keep in sync with
+ * the identical normalization in scripts/seed-e2e-user.mjs, so the seeder and
+ * the CI webServer accept the same `E2E_SUPABASE_URL` shapes.
+ */
+function normalizeSupabaseUrl(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return withScheme.replace(/\/+$/, '');
+}
+const supabaseUrl =
+  normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL) ?? 'https://placeholder.supabase.co';
+
 export default defineConfig({
   testDir: './e2e',
   // Fail the build on CI if test.only is committed by accident.
@@ -53,8 +68,7 @@ export default defineConfig({
           // Placeholder Supabase env: the app build and public pages are
           // resilient when these are absent or dummy. The auth happy-path test
           // is env-gated separately and skips without real E2E_TEST_* creds.
-          NEXT_PUBLIC_SUPABASE_URL:
-            process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
+          NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
           NEXT_PUBLIC_SUPABASE_ANON_KEY:
             process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'placeholder-anon-key',
           PORT: String(PORT)
