@@ -26,7 +26,7 @@ import {
   Palette,
   ClipboardCheck,
   PieChart,
-  Target,
+  FileSignature,
   // Shared
   Sparkles,
   type LucideIcon
@@ -320,11 +320,11 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         hint: 'Ownership & dilution'
       },
       {
+        href: '/drive/execute',
         label: 'Execute',
-        icon: Target,
-        earnPrompt:
-          'Walk me through executing this deal across its lifecycle — pre-acquisition (close steps, signatures, conditions), post-acquisition (integration, 100-day plan, governance), and exit (timing, paths, value drivers). What should I line up at each stage?',
-        hint: 'Pre-acquisition → exit (Earn)'
+        icon: FileSignature,
+        live: true,
+        hint: 'Closings — the signature room, step by step'
       }
     ]
   }
