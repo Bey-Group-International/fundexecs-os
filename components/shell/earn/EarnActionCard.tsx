@@ -104,36 +104,69 @@ export function EarnActionCard({
     }
   }
 
+  // Status line mirrors the onboarding prototype's ActionRunner staging:
+  // draft ready → Earn is working… → applied.
+  const status =
+    state === 'running'
+      ? 'Earn is working…'
+      : state === 'done'
+        ? 'Applied'
+        : state === 'error'
+          ? 'Couldn’t complete'
+          : 'Draft ready for your review';
+
   return (
     <div
-      className="rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] p-3"
+      className="overflow-hidden rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)]"
       data-testid={`earn-action-${action.name}`}
     >
-      <div className="flex items-start gap-2">
-        <Sparkles size={14} strokeWidth={2} className="mt-0.5 flex-none text-gold-1" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-gold-1">
-            Earn can do this
-          </p>
-          <p className="mt-0.5 text-[12.5px] text-fg-1">{describe(action)}</p>
+      {/* Header — Earn + staged status */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <Sparkles size={14} strokeWidth={2} className="flex-none text-gold-1" aria-hidden />
+        <p className="flex-1 text-[10px] font-semibold uppercase tracking-[0.11em] text-gold-1">
+          Earn drafted an action
+        </p>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1 text-[10.5px] font-medium',
+            state === 'done' ? 'text-success' : state === 'error' ? 'text-danger' : 'text-gold-1'
+          )}
+        >
+          {state === 'running' ? (
+            <Loader2 size={11} strokeWidth={2.2} className="animate-spin" aria-hidden />
+          ) : state === 'done' ? (
+            <Check size={11} strokeWidth={2.4} aria-hidden />
+          ) : null}
+          {status}
+        </span>
+      </div>
 
-          {state === 'done' ? (
-            <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-success">
-              <Check size={13} strokeWidth={2.2} aria-hidden />
-              {result.message ?? 'Done.'}
-              {result.href ? (
-                <Link
-                  href={result.href}
-                  className="ml-1 inline-flex items-center gap-1 font-semibold text-azure-1 hover:underline"
-                >
-                  View
-                  <ArrowUpRight size={11} strokeWidth={2} aria-hidden />
-                </Link>
-              ) : null}
+      {/* Draft — what Earn will do, framed as a reviewable draft */}
+      <div className="border-t border-[var(--gold-line)] bg-bg-1 px-3 py-2.5">
+        <p className="text-[12.5px] text-fg-1">{describe(action)}</p>
+
+        {state === 'done' ? (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-success">
+            <Check size={13} strokeWidth={2.2} aria-hidden />
+            {result.message ?? 'Done.'}
+            {result.href ? (
+              <Link
+                href={result.href}
+                className="ml-1 inline-flex items-center gap-1 font-semibold text-azure-1 hover:underline"
+              >
+                View
+                <ArrowUpRight size={11} strokeWidth={2} aria-hidden />
+              </Link>
+            ) : null}
+          </p>
+        ) : state === 'error' ? (
+          <p className="mt-1.5 text-[12px] text-danger">{result.error}</p>
+        ) : (
+          <>
+            <p className="mt-2 flex items-center gap-1.5 text-[10.5px] text-fg-4">
+              <Check size={11} strokeWidth={2} className="flex-none text-fg-4" aria-hidden />
+              Nothing runs until you approve.
             </p>
-          ) : state === 'error' ? (
-            <p className="mt-1.5 text-[12px] text-danger">{result.error}</p>
-          ) : (
             <div className="mt-2 flex items-center gap-2">
               <button
                 type="button"
@@ -148,7 +181,7 @@ export function EarnActionCard({
                 ) : (
                   <Check size={12} strokeWidth={2.4} aria-hidden />
                 )}
-                {state === 'running' ? 'Working…' : 'Confirm'}
+                {state === 'running' ? 'Working…' : 'Approve & run'}
               </button>
               <button
                 type="button"
@@ -160,8 +193,8 @@ export function EarnActionCard({
                 Dismiss
               </button>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
