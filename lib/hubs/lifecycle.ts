@@ -146,7 +146,12 @@ const FUND_HUBS: HubContentMap = {
   execute: {
     blurb: 'Drive every engagement to a signed close.',
     modules: [
-      { label: 'Closings', icon: 'file-signature', meta: 'Step-gated to signature' },
+      {
+        label: 'Closings',
+        icon: 'file-signature',
+        meta: 'Step-gated to signature',
+        href: '/execute/closings'
+      },
       { label: 'Signatures & wires', icon: 'banknote', meta: 'Sign, wire, account' },
       { label: 'Capital calls', icon: 'receipt', meta: 'Drawdowns & distributions' },
       { label: 'Chain of Trust', icon: 'git-branch', meta: 'The 4-layer proof record' }
@@ -185,7 +190,12 @@ const CAPITAL_HUBS: HubContentMap = {
   execute: {
     blurb: 'Commit, subscribe and fund — on the record.',
     modules: [
-      { label: 'Commitments', icon: 'file-signature', meta: 'Soft-circle to signed' },
+      {
+        label: 'Commitments',
+        icon: 'file-signature',
+        meta: 'Soft-circle to signed',
+        href: '/execute/closings'
+      },
       { label: 'Subscriptions & wires', icon: 'banknote', meta: 'Sign, wire, account' },
       { label: 'Capital calls', icon: 'receipt', meta: 'Drawdowns to fund' },
       { label: 'Chain of Trust', icon: 'git-branch', meta: 'The 4-layer proof record' }
