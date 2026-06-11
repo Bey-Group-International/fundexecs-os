@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Check, Loader2, Sparkles, X } from 'lucide-react';
+import { ArrowUpRight, Check, Loader2, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { executeEarnAction } from '@/lib/actions/earn-actions';
 
@@ -146,19 +146,25 @@ export function EarnActionCard({
         <p className="text-[12.5px] text-fg-1">{describe(action)}</p>
 
         {state === 'done' ? (
-          <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-success">
-            <Check size={13} strokeWidth={2.2} aria-hidden />
-            {result.message ?? 'Done.'}
-            {result.href ? (
-              <Link
-                href={result.href}
-                className="ml-1 inline-flex items-center gap-1 font-semibold text-azure-1 hover:underline"
-              >
-                View
-                <ArrowUpRight size={11} strokeWidth={2} aria-hidden />
-              </Link>
-            ) : null}
-          </p>
+          <>
+            <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-success">
+              <Check size={13} strokeWidth={2.2} aria-hidden />
+              {result.message ?? 'Done.'}
+              {result.href ? (
+                <Link
+                  href={result.href}
+                  className="ml-1 inline-flex items-center gap-1 font-semibold text-azure-1 hover:underline"
+                >
+                  View
+                  <ArrowUpRight size={11} strokeWidth={2} aria-hidden />
+                </Link>
+              ) : null}
+            </p>
+            <p className="mt-1 flex items-center gap-1.5 text-[10.5px] text-fg-4">
+              <ShieldCheck size={11} strokeWidth={2} className="flex-none" aria-hidden />
+              Logged to your record.
+            </p>
+          </>
         ) : state === 'error' ? (
           <p className="mt-1.5 text-[12px] text-danger">{result.error}</p>
         ) : (
