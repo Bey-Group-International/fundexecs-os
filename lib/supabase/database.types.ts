@@ -3047,6 +3047,71 @@ export type Database = {
         }
         Relationships: []
       }
+      mandates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          experience: string | null
+          firm: string | null
+          geo: string | null
+          investor_group: string
+          investor_role: string | null
+          objective: string | null
+          org_id: string
+          principal: string | null
+          sectors: string[]
+          size: string | null
+          stage: string | null
+          standing: string | null
+          updated_at: string
+          vehicle: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          experience?: string | null
+          firm?: string | null
+          geo?: string | null
+          investor_group?: string
+          investor_role?: string | null
+          objective?: string | null
+          org_id: string
+          principal?: string | null
+          sectors?: string[]
+          size?: string | null
+          stage?: string | null
+          standing?: string | null
+          updated_at?: string
+          vehicle?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          experience?: string | null
+          firm?: string | null
+          geo?: string | null
+          investor_group?: string
+          investor_role?: string | null
+          objective?: string | null
+          org_id?: string
+          principal?: string | null
+          sectors?: string[]
+          size?: string | null
+          stage?: string | null
+          standing?: string | null
+          updated_at?: string
+          vehicle?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mandates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matches: {
         Row: {
           acted_at: string | null
