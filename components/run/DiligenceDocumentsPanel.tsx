@@ -21,6 +21,7 @@ import {
   requestDiligenceUpload,
   runDiligenceForDeal
 } from '@/lib/actions/diligence';
+import type { DiligenceDocumentKind } from '@/lib/diligence';
 import type { DiligenceDocumentView } from '@/lib/queries/diligence';
 import { cn } from '@/lib/utils';
 
@@ -58,7 +59,7 @@ export function DiligenceDocumentsPanel({
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [kind, setKind] = useState('other');
+  const [kind, setKind] = useState<DiligenceDocumentKind>('other');
   const [stage, setStage] = useState<UploadStage>('idle');
   const [error, setError] = useState<string | null>(null);
   const [justIndexed, setJustIndexed] = useState<string | null>(null);
@@ -73,7 +74,7 @@ export function DiligenceDocumentsPanel({
         runId,
         fileName: file.name,
         mimeType: file.type || 'application/octet-stream',
-        kind: kind as never
+        kind
       });
       if (!minted.ok) {
         setError(minted.error);
@@ -102,12 +103,14 @@ export function DiligenceDocumentsPanel({
           ingested.chunkCount === 1 ? '' : 's'
         })`
       );
+      // Clear the picker only on success — a failed attempt keeps the file
+      // selected so the user can simply retry.
+      if (fileRef.current) fileRef.current.value = '';
       router.refresh();
     } catch {
       setError('Upload failed — check your connection and try again.');
     } finally {
       setStage('idle');
-      if (fileRef.current) fileRef.current.value = '';
     }
   }
 
@@ -177,7 +180,7 @@ export function DiligenceDocumentsPanel({
           label="Document type"
           options={KIND_OPTIONS}
           value={kind}
-          onChange={(e) => setKind(e.target.value)}
+          onChange={(e) => setKind(e.target.value as DiligenceDocumentKind)}
           disabled={busy}
           className="w-[150px] py-2 text-[12.5px]"
         />
