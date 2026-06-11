@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight, Hammer, Play, Radar, Rocket, Sparkles, type LucideIcon } from 'lucide-react';
 import { Badge, Card, ProgressBar, SectionTitle } from '@/components/ui';
+import { EarnCoin } from '@/components/screens/EarnCoin';
 import { compactMoney } from '@/lib/format';
 import { LINK_STATE_LABEL, type LoopChain, type LoopVerb } from '@/lib/loop-chain';
 import type { HubHeadline, HubMetric, HubPanel } from '@/lib/loop-hub';
@@ -25,6 +26,24 @@ const VERB_ICONS: Record<LoopVerb, LucideIcon> = {
   drive: Rocket
 };
 
+const VERB_LABEL: Record<LoopVerb, string> = {
+  build: 'Build',
+  source: 'Source',
+  run: 'Run',
+  drive: 'Drive'
+};
+
+/** The verb-scoped prompt the gold "Ask Earn" nudge seeds into the dock. */
+const VERB_EARN_PROMPT: Record<LoopVerb, string> = {
+  build:
+    'Advance my Build — tighten the record, sharpen the approach (structure, story, narrative), and close the readiness gaps. What moves the needle most?',
+  source:
+    'Source new deals and capital that fit my thesis and match them against my record. Show the strongest fits and why.',
+  run: 'Run diligence and my action plan — what needs my decision next, and what can you prepare for my approval?',
+  drive:
+    'Drive my live deals to close — what is the next step on each, and what can you draft for my approval?'
+};
+
 /** The shape of Earn's next best action the hub needs (UI subset). */
 export interface HubAction {
   title: string;
@@ -40,6 +59,8 @@ export interface VerbHubViewProps {
   /** One-sentence "what this verb is for" hero line. */
   description: string;
   headline: HubHeadline;
+  /** 0–100 verb readiness (cockpit model) — the hero's "% ready" + bar. */
+  readyPct: number;
   /** The verb's recent outcomes (loop_events pulse); null renders nothing. */
   pulse: VerbPulse | null;
   chain: LoopChain;
@@ -51,39 +72,22 @@ export interface VerbHubViewProps {
   panelsTitle: string;
 }
 
-/** The hero's big number: score as N/100 + bar, money as compact dollars. */
-function HeadlineMetric({ headline }: { headline: HubHeadline }) {
+/** The verb's headline as a compact inline stat (score N/100 or compact $). */
+function HeadlineStat({ headline }: { headline: HubHeadline }) {
   const m = headline.metric;
+  if (m.kind === 'score') {
+    return (
+      <span>
+        <span className="font-semibold text-fg-2">{m.value}/100</span>{' '}
+        {headline.label.toLowerCase()}
+      </span>
+    );
+  }
   return (
-    <div className="min-w-[160px]">
-      <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
-        {headline.label}
-      </p>
-      {m.kind === 'score' ? (
-        <>
-          <p className="mt-1 text-[28px] font-semibold tracking-[-0.02em] text-fg-1">
-            {m.value}
-            <span className="text-[14px] font-normal text-fg-4">/100</span>
-          </p>
-          <ProgressBar value={m.value} ariaLabel={headline.label} className="mt-2" />
-        </>
-      ) : (
-        <>
-          <p className="mt-1 text-[28px] font-semibold tracking-[-0.02em] text-fg-1">
-            {compactMoney(m.amount)}
-          </p>
-          <p className="mt-1 text-[12px] text-fg-3">
-            {m.label}
-            {m.count > 0 && (
-              <>
-                {' '}
-                · {m.count} item{m.count === 1 ? '' : 's'}
-              </>
-            )}
-          </p>
-        </>
-      )}
-    </div>
+    <span>
+      <span className="font-semibold text-fg-2">{compactMoney(m.amount)}</span> {m.label}
+      {m.count > 0 ? ` · ${m.count}` : ''}
+    </span>
   );
 }
 
@@ -170,6 +174,7 @@ export function VerbHubView({
   eyebrow,
   description,
   headline,
+  readyPct,
   pulse,
   chain,
   nextBestAction,
@@ -178,37 +183,65 @@ export function VerbHubView({
   panelsTitle
 }: VerbHubViewProps) {
   const Icon = VERB_ICONS[verb];
+  const verbLabel = VERB_LABEL[verb];
   const verbLink = chain.links.find((l) => l.verb === verb);
+  const ready = Number.isFinite(readyPct) ? Math.max(0, Math.min(100, Math.round(readyPct))) : 0;
 
   return (
     <div className="flex flex-col gap-[18px]" data-testid={`${verb}-hub`}>
-      {/* ── Hero: the verb's headline + its place in the chain ────────────── */}
+      {/* ── Hero: the verb, its readiness, and its place in the chain ──────── */}
       <Card className="p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <Icon size={16} className="text-gold-1" aria-hidden />
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
-                {eyebrow}
-              </p>
-            </div>
-            <p className="mt-2 max-w-xl text-[13px] text-fg-2">{description}</p>
-            <div className="mt-3 flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          <span
+            className="flex h-[46px] w-[46px] flex-none items-center justify-center rounded-[13px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]"
+            aria-hidden
+          >
+            <Icon size={23} strokeWidth={1.9} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+              {eyebrow}
+            </p>
+            <div className="mt-0.5 flex items-center gap-2">
+              <h1 className="text-[20px] font-semibold tracking-[-0.015em] text-fg-1">
+                {verbLabel}
+              </h1>
               {verbLink && (
                 <Badge tone={verbLink.state === 'active' ? 'gold' : 'neutral'} dot>
                   {LINK_STATE_LABEL[verbLink.state]}
                 </Badge>
               )}
-              <span className="text-[12px] text-fg-3">{chain.handoff}</span>
             </div>
-            {pulse && (
-              <p className="mt-2 text-[12px] text-fg-3" data-testid={`${verb}-hub-pulse`}>
-                <span className="font-semibold text-fg-2">{pulse.headline}</span> · {pulse.detail}
-              </p>
-            )}
           </div>
-          <HeadlineMetric headline={headline} />
+          <div className="flex-none text-right">
+            <div className="text-[22px] font-semibold tabular-nums tracking-[-0.02em] text-gold-1">
+              {ready}%
+            </div>
+            <div className="text-[10.5px] text-fg-5">ready</div>
+          </div>
         </div>
+
+        <ProgressBar
+          value={ready}
+          gradient="linear-gradient(90deg,#F7C948,#E5A823)"
+          height={6}
+          ariaLabel={`${verbLabel} readiness`}
+          className="mt-4"
+        />
+
+        <p className="mt-3 max-w-2xl text-[13px] text-fg-2">{description}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-fg-3">
+          <HeadlineStat headline={headline} />
+          <span className="text-fg-5" aria-hidden>
+            ·
+          </span>
+          <span>{chain.handoff}</span>
+        </div>
+        {pulse && (
+          <p className="mt-2 text-[12px] text-fg-3" data-testid={`${verb}-hub-pulse`}>
+            <span className="font-semibold text-fg-2">{pulse.headline}</span> · {pulse.detail}
+          </p>
+        )}
       </Card>
 
       {/* ── Next best action — the verb, activated ────────────────────────── */}
@@ -231,9 +264,9 @@ export function VerbHubView({
         </Card>
       )}
 
-      {/* ── The verb's subsections, summarized in place ───────────────────── */}
+      {/* ── The verb's subsections — what the team manages here ───────────── */}
       <div>
-        <SectionTitle eyebrow="The verb, in panels" title={panelsTitle} />
+        <SectionTitle eyebrow="What the team manages here" title={panelsTitle} />
         <div className="grid gap-[14px] sm:grid-cols-2">
           {panels.map((panel) => {
             const card = <PanelCard panel={panel} focused={focusKey === panel.key} />;
@@ -255,6 +288,24 @@ export function VerbHubView({
           })}
         </div>
       </div>
+
+      {/* ── Earn nudge — the verb keeps moving in the background ───────────── */}
+      <EarnPanelTrigger prompt={VERB_EARN_PROMPT[verb]}>
+        <Card
+          clickable
+          className="flex items-center gap-3 border-[var(--gold-line)] bg-[var(--gold-soft)] p-4"
+        >
+          <EarnCoin size={26} className="flex-none" />
+          <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-fg-2">
+            <span className="font-semibold text-gold-1">Earn:</span> I keep {verbLabel} moving in
+            the background. Tap any module and I&rsquo;ll do the work — you approve.
+          </p>
+          <span className="inline-flex flex-none items-center gap-1.5 rounded-full border border-[var(--gold-line)] px-3.5 py-2 text-[12.5px] font-semibold text-gold-1">
+            <Sparkles size={14} aria-hidden />
+            Ask Earn
+          </span>
+        </Card>
+      </EarnPanelTrigger>
     </div>
   );
 }

@@ -414,6 +414,12 @@ export function Wave1SideRail({
  * Subcomponents
  * --------------------------------------------------------------------------*/
 
+/** Clamp a readiness % to 0–100, treating non-finite input as 0 so the UI
+ *  never renders "NaN%"/"Infinity%" or a `width: NaN%` bar. */
+function safePct(pct: number): number {
+  return Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+}
+
 /** Inline verb readiness — the current-stage "NOW" pill + the readiness %. */
 function HubReadout({ hub }: { hub: CockpitHub }) {
   return (
@@ -427,14 +433,14 @@ function HubReadout({ hub }: { hub: CockpitHub }) {
           Now
         </span>
       ) : null}
-      <span className="text-[10px] font-semibold tabular-nums text-fg-4">{hub.pct}%</span>
+      <span className="text-[10px] font-semibold tabular-nums text-fg-4">{safePct(hub.pct)}%</span>
     </span>
   );
 }
 
 /** The thin verb-readiness bar under a focused cluster header. */
 function HubBar({ pct, current }: { pct: number; current: boolean }) {
-  const clamped = Math.max(0, Math.min(100, pct));
+  const clamped = safePct(pct);
   return (
     <div className="mx-2.5 mb-1.5 h-[3px] overflow-hidden rounded-full bg-hairline" aria-hidden>
       <div
