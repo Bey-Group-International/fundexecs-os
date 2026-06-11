@@ -8,6 +8,7 @@ import type { CreditWallet } from '@/lib/queries/credit-wallet';
 import { CreditWalletGauge } from './CreditWalletGauge';
 import { NotificationsBell } from './NotificationsBell';
 import { TopNavAccountMenu } from './account/TopNavAccountMenu';
+import { LoopSpine } from '@/components/dashboard/command/LoopSpine';
 
 /** Topbar theme toggle — flips `data-theme`, persists to localStorage('fx-theme').
  *  Icon is driven by `data-theme` via CSS (no React state) so there's no
@@ -112,7 +113,13 @@ export function Wave1TopNav({ title, subtitle, identity, onMenu, wallet }: Wave1
         <div className="truncate text-[15px] font-semibold tracking-[-0.015em] text-fg-1">
           {title}
         </div>
-        {subtitle ? <div className="truncate text-xs text-fg-4">{subtitle}</div> : null}
+        {subtitle ? (
+          <div className="truncate text-xs text-fg-4">{subtitle}</div>
+        ) : (
+          // No subtitle → reinforce the operating model, like the prototype's
+          // Command Center header (hidden on small screens to keep room).
+          <LoopSpine className="mt-0.5 hidden md:flex" />
+        )}
       </div>
 
       {/* ⌘K command / search — hidden until lg so the title/subtitle keep room

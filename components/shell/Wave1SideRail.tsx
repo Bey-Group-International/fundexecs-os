@@ -19,6 +19,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { ShellIdentity } from '@/lib/queries/identity';
 import { AccountMenu } from './account/AccountMenu';
 import type { LifecycleStage } from '@/lib/lifecycle';
+import type { CockpitHub, HubKey } from '@/lib/dashboard/cockpit';
 import { LINK_STATE_LABEL, type LinkState, type LoopChain, type LoopLink } from '@/lib/loop-chain';
 import { cn } from '@/lib/utils';
 import { compactMoney } from '@/lib/format';
@@ -110,6 +111,12 @@ export interface NavSignals {
   badges?: Record<string, RailSignal>;
   /** Condensed readiness/loop meter + next-best-action for the rail spine. */
   momentum?: RailMomentum;
+  /**
+   * Per-verb readiness for the loop clusters (Build/Source/Run/Drive) — the
+   * same cockpit model the Command Center home leads with, so each rail cluster
+   * shows its readiness % + inline bar and the current stage's verb reads "NOW".
+   */
+  hubs?: CockpitHub[];
 }
 
 export interface Wave1SideRailProps {
@@ -363,6 +370,12 @@ export function Wave1SideRail({
             />
           ) : null}
 
+          {/* Lifecycle — the loop, with each verb's live readiness (mirrors the
+              Command Center cockpit). */}
+          <div className="px-2.5 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-fg-5">
+            Lifecycle
+          </div>
+
           {RAIL_GROUPS.map((group) => {
             // The chain verbs share the cluster keys, so a link maps 1:1 to a
             // group. When closing (Drive active), Build is the wrap target.
@@ -370,6 +383,7 @@ export function Wave1SideRail({
             const link = chain?.links.find((l) => l.verb === group.key);
             const chainState: LinkState | undefined =
               link && chain?.closing && group.key === 'build' ? 'on_deck' : link?.state;
+            const hub = signals?.hubs?.find((h) => h.key === (group.key as HubKey));
             return (
               <NavGroup
                 key={group.key}
@@ -379,6 +393,7 @@ export function Wave1SideRail({
                 emphasized={emphasizedGroups.has(group.key)}
                 rollup={computeGroupRollup(group, signals?.badges)}
                 chainState={chainState}
+                hub={hub}
                 activeKey={activeKey}
                 badges={signals?.badges}
                 onLinkClick={onClose}
@@ -398,6 +413,37 @@ export function Wave1SideRail({
 /* ----------------------------------------------------------------------------
  * Subcomponents
  * --------------------------------------------------------------------------*/
+
+/** Inline verb readiness — the current-stage "NOW" pill + the readiness %. */
+function HubReadout({ hub }: { hub: CockpitHub }) {
+  return (
+    <span className="flex flex-none items-center gap-1.5">
+      {hub.isCurrent ? (
+        <span className="inline-flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.08em] text-gold-1">
+          <span
+            className="h-1.5 w-1.5 rounded-full bg-gold-1 motion-safe:animate-pulse"
+            aria-hidden
+          />
+          Now
+        </span>
+      ) : null}
+      <span className="text-[10px] font-semibold tabular-nums text-fg-4">{hub.pct}%</span>
+    </span>
+  );
+}
+
+/** The thin verb-readiness bar under a focused cluster header. */
+function HubBar({ pct, current }: { pct: number; current: boolean }) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  return (
+    <div className="mx-2.5 mb-1.5 h-[3px] overflow-hidden rounded-full bg-hairline" aria-hidden>
+      <div
+        className="h-full rounded-full"
+        style={{ width: `${clamped}%`, background: current ? 'var(--accent)' : 'var(--gold-1)' }}
+      />
+    </div>
+  );
+}
 
 function PinnedLink({
   item,
@@ -457,6 +503,8 @@ interface NavGroupProps {
   rollup: GroupRollup | null;
   /** This cluster's position in the loop chain (Phase 4), if a chain is live. */
   chainState?: LinkState;
+  /** This verb's cockpit readiness (% + current-stage "NOW"), if available. */
+  hub?: CockpitHub;
   activeKey: string | null;
   badges?: Record<string, RailSignal>;
   onLinkClick: () => void;
@@ -476,6 +524,7 @@ function NavGroup({
   emphasized,
   rollup,
   chainState,
+  hub,
   activeKey,
   badges,
   onLinkClick
@@ -527,6 +576,7 @@ function NavGroup({
           <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.06em]">
             {group.label}
           </span>
+          {hub ? <HubReadout hub={hub} /> : null}
           {chainState ? <ChainPip state={chainState} /> : null}
           {rollup ? (
             <Badge
@@ -538,6 +588,7 @@ function NavGroup({
             </Badge>
           ) : null}
         </div>
+        {hub ? <HubBar pct={hub.pct} current={hub.isCurrent} /> : null}
         <ul className="flex flex-col gap-0.5 px-1.5 pb-1.5">
           {group.items.map((item, i) => (
             <InlineNavItem
@@ -606,6 +657,7 @@ function NavGroup({
         <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.06em]">
           {group.label}
         </span>
+        {hub ? <HubReadout hub={hub} /> : null}
         {chainState ? <ChainPip state={chainState} /> : null}
         {rollup ? (
           <Badge

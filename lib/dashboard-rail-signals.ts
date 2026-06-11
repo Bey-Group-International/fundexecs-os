@@ -5,6 +5,7 @@ import type { StakeSignal } from '@/lib/queries/dashboard/value-at-stake';
 import { lifecycleStageIndex, LIFECYCLE_STAGES } from '@/lib/lifecycle';
 import { compactMoney } from '@/lib/format';
 import { buildLoopChain } from '@/lib/loop-chain';
+import { deriveCockpit } from '@/lib/dashboard/cockpit';
 
 /**
  * The capital metric reads differently by operator type: GPs *raise* capital,
@@ -147,6 +148,9 @@ export function buildRailSignals(data: DashboardData, memberType?: MemberType | 
   return {
     currentStage: data.stage,
     badges,
+    // Per-verb readiness for the loop clusters — the same cockpit model the
+    // Command Center home leads with, so rail and home agree.
+    hubs: deriveCockpit(data),
     // The condensed operating spine — readiness/loop meter + next-best-action.
     // Same engine output as the Command Center hero, surfaced on the rail.
     momentum: {
