@@ -63,7 +63,7 @@ export function LifecycleCockpit({ readinessBreakdown, stage }: LifecycleCockpit
                 {h.isCurrent && (
                   <span className="inline-flex items-center gap-1 text-[8.5px] font-bold uppercase tracking-[0.08em] text-gold-1">
                     <span
-                      className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-1"
+                      className="h-1.5 w-1.5 rounded-full bg-gold-1 motion-safe:animate-pulse"
                       aria-hidden
                     />
                     Now
