@@ -9,7 +9,7 @@
  * surfaces here. Pure (no React, no IO) so it unit-tests cleanly.
  */
 
-import type { BadgeTone } from '@/components/ui';
+import type { BadgeTone } from '@/lib/ui-types';
 
 /** A diligence workstream's run status. */
 export type DDStatus = 'clear' | 'caution' | 'flag' | 'pending';

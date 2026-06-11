@@ -10,7 +10,7 @@
  * it unit-tests cleanly.
  */
 
-import type { BadgeTone } from '@/components/ui';
+import type { BadgeTone } from '@/lib/ui-types';
 
 /** An execution step's status. `signed`/`wired` are both terminal ("done"). */
 export type EXStepStatus = 'pending' | 'ready' | 'signed' | 'wired';

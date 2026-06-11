@@ -20,7 +20,7 @@ import type {
   LpUpdate,
   LpUpdateAttachment,
   LpUpdateLifecycle
-} from '@/components/lp-room/types';
+} from '@/lib/lp-room/types';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
 type CapitalStackRow = Database['public']['Functions']['capital_stack_summary']['Returns'][number];
