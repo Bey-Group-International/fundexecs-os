@@ -291,8 +291,12 @@ export function buildSteps(id: string): string[] {
   ];
 }
 
-/** A short, token-like link suffix (illustrative). */
+/** A short, token-like link suffix (illustrative). Each segment is exactly 4
+ *  base-36 chars (zero-padded) so the shape is stable for any rng value. */
 export function linkToken(rand: () => number = Math.random): string {
-  const seg = () => rand().toString(36).slice(2, 6);
+  const seg = () =>
+    Math.floor(rand() * 36 ** 4)
+      .toString(36)
+      .padStart(4, '0');
   return `${seg()}-${seg()}`;
 }

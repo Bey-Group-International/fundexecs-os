@@ -58,10 +58,14 @@ test('buildSteps ends by placing the doc in its folder', () => {
   assert.match(steps[steps.length - 1], /Fund Overview/);
 });
 
-test('linkToken is deterministic under a seeded rng and shaped a-z0-9', () => {
-  let i = 0;
+test('linkToken is deterministic under a seeded rng, with two 4-char segments', () => {
   const seq = [0.123456, 0.789012, 0.345678, 0.901234];
-  const rng = () => seq[i++ % seq.length];
-  const tok = linkToken(rng);
-  assert.match(tok, /^[a-z0-9]+-[a-z0-9]+$/);
+  const seeded = () => {
+    let i = 0;
+    return () => seq[i++ % seq.length];
+  };
+  const tok = linkToken(seeded());
+  // Same seed → same token (determinism), and a stable 4-4 base-36 shape.
+  assert.equal(linkToken(seeded()), tok);
+  assert.match(tok, /^[a-z0-9]{4}-[a-z0-9]{4}$/);
 });

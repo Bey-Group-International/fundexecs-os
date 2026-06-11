@@ -432,6 +432,15 @@ function VettingGate({
   const [nda, setNda] = useState(false);
   const ready = name && pfirm && email && accredited && nda;
 
+  // Dialog ergonomics: Escape closes the gate.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <>
       <div
@@ -439,7 +448,12 @@ function VettingGate({
         className="fixed inset-0 z-[60] bg-[rgba(3,6,12,0.7)] backdrop-blur-[3px]"
         aria-hidden
       />
-      <div className="fixed left-1/2 top-1/2 z-[61] max-h-[88vh] w-[440px] max-w-[94vw] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[20px] border border-[var(--border-strong)] bg-bg-2 shadow-[0_40px_90px_-30px_rgba(0,0,0,0.7)]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Verify access to ${docName}`}
+        className="fixed left-1/2 top-1/2 z-[61] max-h-[88vh] w-[440px] max-w-[94vw] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[20px] border border-[var(--border-strong)] bg-bg-2 shadow-[0_40px_90px_-30px_rgba(0,0,0,0.7)]"
+      >
         {step === 'verify' ? (
           <div className="p-6">
             <div className="mb-1 flex items-center gap-2.5">
@@ -776,7 +790,7 @@ export function DataRoomFlow({ firm }: DataRoomFlowProps) {
                     </Badge>
                     <span className="flex-1" />
                     {ready ? (
-                      <Button variant="ghost" size="sm" icon={Eye}>
+                      <Button variant="ghost" size="sm" icon={Eye} onClick={() => setOpenMat(id)}>
                         Open
                       </Button>
                     ) : (
