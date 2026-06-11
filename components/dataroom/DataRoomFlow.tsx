@@ -1,6 +1,6 @@
 'use client';
 
-import { createElement, useEffect, useState, type ReactNode } from 'react';
+import { createElement, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   Activity,
@@ -409,6 +409,9 @@ function MaterialBuilder({
 
 /* ── the recipient vetting gate ──────────────────────────────────────────── */
 
+const VETTING_FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 function VettingGate({
   docName,
   firm,
@@ -432,13 +435,48 @@ function VettingGate({
   const [nda, setNda] = useState(false);
   const ready = name && pfirm && email && accredited && nda;
 
-  // Dialog ergonomics: Escape closes the gate.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  // Full dialog ergonomics: move focus into the gate on open, trap Tab within
+  // it, close on Escape, lock background scroll, and restore focus to the
+  // opener on close. Mirrors components/landing/RequestAccessModal.tsx.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+    openerRef.current = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    panel?.querySelector<HTMLElement>(VETTING_FOCUSABLE)?.focus();
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !panel) return;
+      // Trap focus: cycle within the dialog's focusable controls.
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(VETTING_FOCUSABLE));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !panel.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      document.body.style.overflow = prevOverflow;
+      openerRef.current?.focus?.();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
   return (
@@ -449,6 +487,7 @@ function VettingGate({
         aria-hidden
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={`Verify access to ${docName}`}
