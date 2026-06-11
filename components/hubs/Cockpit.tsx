@@ -28,7 +28,7 @@ export function Cockpit({ pct, center }: { pct: Record<HubId, number>; center: H
               key={hub.id}
               href={hub.href}
               className={cn(
-                'rounded-xl border px-3 py-3 transition hover:bg-surface-2',
+                'rounded-xl border px-3 py-3 transition hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-[0_14px_30px_-16px_rgba(0,0,0,0.5)] motion-reduce:transform-none',
                 isCenter
                   ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
                   : 'border-hairline bg-surface-1'
