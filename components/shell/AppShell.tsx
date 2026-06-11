@@ -85,8 +85,13 @@ export function AppShell({
   const pathname = usePathname();
   const [earnOpen, setEarnOpen] = useState(false);
   const activeHub = hubs.find((h) => pathname.startsWith(h.href));
-  const isHome = !activeHub;
-  const title = activeHub?.label ?? 'Command Center';
+  const utility = pathname.startsWith('/notifications')
+    ? 'Notifications'
+    : pathname.startsWith('/settings')
+      ? 'Settings'
+      : null;
+  const isHome = !activeHub && !utility;
+  const title = activeHub?.label ?? utility ?? 'Command Center';
 
   return (
     <div className="flex min-h-dvh bg-bg-0 text-fg-1">
@@ -200,13 +205,19 @@ export function AppShell({
               </span>
             )}
           </Link>
-          <span className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium text-fg-5">
+          <Link
+            href="/settings"
+            className={cn(
+              'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium transition',
+              pathname.startsWith('/settings')
+                ? 'bg-[linear-gradient(90deg,var(--accent-soft),var(--surface-1))] text-fg-1'
+                : 'text-fg-3 hover:bg-surface-1 hover:text-fg-1'
+            )}
+            aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
+          >
             <Settings size={17} strokeWidth={1.9} aria-hidden />
             <span className="flex-1">Settings</span>
-            <span className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-fg-5">
-              Soon
-            </span>
-          </span>
+          </Link>
         </nav>
 
         <div className="m-3 flex items-center gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
