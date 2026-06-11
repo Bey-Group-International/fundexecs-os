@@ -1,10 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from './database.types';
-import {
-  supabaseAnonKey as resolveSupabaseAnonKey,
-  supabaseUrl as resolveSupabaseUrl
-} from './env';
 
 /**
  * Refreshes the Supabase auth session on every request and keeps the
@@ -29,8 +25,12 @@ export async function updateSession(request: NextRequest) {
   // proxy runs on all routes. Skip the auth refresh instead so public pages
   // still render. Protected routes simply won't see a session until the env is
   // configured.
-  const supabaseUrl = resolveSupabaseUrl();
-  const supabaseKey = resolveSupabaseAnonKey();
+  // Direct property reads ONLY — the edge bundler inlines statically
+  // referenced env vars; enumerating process.env here crashed the exported
+  // proxy function in production (every route 500'd). Node runtimes get the
+  // tolerant resolver in lib/supabase/env.ts; the edge stays literal.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseKey) {
     return supabaseResponse;
   }
