@@ -7,6 +7,7 @@ import { getMemberProfile } from '@/lib/queries/member-profile';
 import { getCreditWallet } from '@/lib/queries/credit-wallet';
 import { getFundProfile } from '@/lib/queries/fund-profile';
 import { buildRailSignals } from '@/lib/dashboard-rail-signals';
+import { deriveCockpit } from '@/lib/dashboard/cockpit';
 import type { DashboardData, DashboardAction } from '@/lib/queries/dashboard';
 import type { LoopChain, LoopVerb } from '@/lib/loop-chain';
 import type { HubHeadline, HubPanel } from '@/lib/loop-hub';
@@ -107,6 +108,9 @@ export async function VerbHubPage<W extends VerbHubWorkspace>({
   }
 
   const navSignals = buildRailSignals(workspace.dashboard, memberProfile?.memberType ?? null);
+  // Per-verb readiness from the cockpit model — the same number the rail and
+  // Command Center show for this verb, so the hub header agrees with both.
+  const readyPct = deriveCockpit(workspace.dashboard).find((h) => h.key === verb)?.pct ?? 0;
 
   return (
     <AppShell
@@ -122,6 +126,7 @@ export async function VerbHubPage<W extends VerbHubWorkspace>({
         eyebrow={eyebrow}
         description={describe(workspace)}
         headline={workspace.headline}
+        readyPct={readyPct}
         pulse={workspace.pulse}
         chain={workspace.chain}
         nextBestAction={workspace.nextBestAction}
