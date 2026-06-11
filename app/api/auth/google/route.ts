@@ -13,10 +13,12 @@ import { authCookieDomain } from '@/lib/supabase/cookie-domain';
  * "PKCE code verifier not found". Initiating the flow server-side lets us write
  * the verifier cookie via `Set-Cookie` on the redirect response — the same
  * mechanism the integration connect route uses successfully.
+ *
+ * Identity only — no Gmail/Calendar scopes here. Requesting restricted scopes
+ * at sign-in put Google's "unverified app" wall in front of every user; those
+ * scopes belong to the Settings → Integrations connect flow, which asks for
+ * them only when a member actually connects Gmail/Calendar.
  */
-const GOOGLE_SIGNIN_SCOPES =
-  'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.metadata';
-
 export async function GET(request: NextRequest) {
   const requested = new URL(request.url).searchParams.get('next');
   const next =
@@ -43,9 +45,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${getSiteURL()}/auth/callback?next=${encodeURIComponent(next)}`,
-      scopes: GOOGLE_SIGNIN_SCOPES,
-      queryParams: { access_type: 'offline', prompt: 'consent' }
+      redirectTo: `${getSiteURL()}/auth/callback?next=${encodeURIComponent(next)}`
     }
   });
 
