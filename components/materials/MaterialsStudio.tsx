@@ -416,7 +416,15 @@ export function MaterialsStudio({ data }: { data: MaterialsStudioData }) {
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6" data-testid="materials-studio">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <SectionTitle eyebrow="Capital Materials" title="Materials Studio" className="mb-0" />
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]"
+            aria-hidden
+          >
+            <FolderTree size={21} strokeWidth={1.9} />
+          </span>
+          <SectionTitle eyebrow="Capital Materials" title="Materials Studio" className="mb-0" />
+        </div>
         <div className="grid grid-cols-4 gap-2 text-center">
           {[
             ['Total', data.stats.total],
