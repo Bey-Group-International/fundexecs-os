@@ -198,10 +198,20 @@ const CAPITAL_HUBS: HubContentMap = {
   build: {
     blurb: 'Your mandate and allocation policy, set up.',
     modules: [
-      { label: 'Mandate & criteria', icon: 'target', meta: 'Theodore · framed' },
+      {
+        label: 'Mandate & criteria',
+        icon: 'target',
+        meta: 'Theodore · framed',
+        href: '/onboarding?edit=1'
+      },
       { label: 'Allocation policy', icon: 'pie-chart', meta: 'Risk & pacing' },
       { label: 'Diligence checklist', icon: 'list-checks', meta: 'The GP screen' },
-      { label: 'Your profile', icon: 'id-card', meta: 'Confidential by default' }
+      {
+        label: 'Your profile',
+        icon: 'id-card',
+        meta: 'Confidential by default',
+        href: '/settings'
+      }
     ]
   },
   source: {
@@ -210,13 +220,18 @@ const CAPITAL_HUBS: HubContentMap = {
       { label: 'Fund opportunities', icon: 'landmark', meta: 'Marcus · matched to mandate' },
       { label: 'Direct & co-invest deals', icon: 'radar', meta: 'On-thesis flow' },
       { label: 'GP relationships', icon: 'handshake', meta: 'Mapped & scored' },
-      { label: 'Network', icon: 'users', meta: 'Warm paths in' }
+      { label: 'Network', icon: 'users', meta: 'Warm paths in', href: '/source/partners' }
     ]
   },
   run: {
     blurb: 'Monitor the portfolio and stay reported.',
     modules: [
-      { label: 'Diligence', icon: 'cpu', meta: 'Theodore · GP screening' },
+      {
+        label: 'Diligence',
+        icon: 'cpu',
+        meta: 'Theodore · GP screening',
+        href: '/run/diligence'
+      },
       { label: 'Portfolio monitoring', icon: 'activity', meta: 'NAV & pacing' },
       {
         label: 'Reporting & K-1s',
@@ -236,9 +251,24 @@ const CAPITAL_HUBS: HubContentMap = {
         meta: 'Soft-circle to signed',
         href: '/execute/closings'
       },
-      { label: 'Subscriptions & wires', icon: 'banknote', meta: 'Sign, wire, account' },
-      { label: 'Capital calls', icon: 'receipt', meta: 'Drawdowns to fund' },
-      { label: 'Chain of Trust', icon: 'git-branch', meta: 'The 4-layer proof record' }
+      {
+        label: 'Subscriptions & wires',
+        icon: 'banknote',
+        meta: 'Sign, wire, account',
+        href: '/execute/wires'
+      },
+      {
+        label: 'Capital calls',
+        icon: 'receipt',
+        meta: 'Drawdowns to fund',
+        href: '/execute/capital'
+      },
+      {
+        label: 'Chain of Trust',
+        icon: 'git-branch',
+        meta: 'The 4-layer proof record',
+        href: '/execute/chain-of-trust'
+      }
     ]
   }
 };
@@ -247,18 +277,43 @@ const SERVICE_HUBS: HubContentMap = {
   build: {
     blurb: 'Your practice, packaged to win mandates.',
     modules: [
-      { label: 'Practice profile', icon: 'id-card', meta: 'Positioned to your market' },
+      {
+        label: 'Practice profile',
+        icon: 'id-card',
+        meta: 'Positioned to your market',
+        href: '/settings?tab=workspace'
+      },
       { label: 'Service offerings', icon: 'briefcase', meta: 'Scoped & priced' },
-      { label: 'Materials & case studies', icon: 'folder-lock', meta: 'Sienna · proof of work' },
-      { label: 'Brand presence', icon: 'globe', meta: 'Noah · organic visibility' }
+      {
+        label: 'Materials & case studies',
+        icon: 'folder-lock',
+        meta: 'Sienna · proof of work',
+        href: '/build/data-room'
+      },
+      {
+        label: 'Brand presence',
+        icon: 'globe',
+        meta: 'Noah · organic visibility',
+        href: '/build/brand'
+      }
     ]
   },
   source: {
     blurb: 'The team fills your funnel with the right work.',
     modules: [
-      { label: 'Client pipeline', icon: 'trending-up', meta: 'Vivian · qualified leads' },
+      {
+        label: 'Client pipeline',
+        icon: 'trending-up',
+        meta: 'Vivian · qualified leads',
+        href: '/source/pipeline'
+      },
       { label: 'Deal flow', icon: 'radar', meta: 'From the network' },
-      { label: 'Referral partners', icon: 'handshake', meta: 'Mapped & warmed' },
+      {
+        label: 'Referral partners',
+        icon: 'handshake',
+        meta: 'Mapped & warmed',
+        href: '/source/partners'
+      },
       {
         label: 'Lead engine',
         icon: 'filter',
@@ -270,7 +325,12 @@ const SERVICE_HUBS: HubContentMap = {
   run: {
     blurb: 'Run engagements and stay compliant.',
     modules: [
-      { label: 'Engagements', icon: 'briefcase', meta: 'Active client work' },
+      {
+        label: 'Engagements',
+        icon: 'briefcase',
+        meta: 'Active client work',
+        href: '/execute/closings'
+      },
       {
         label: 'Workflows & tasks',
         icon: 'list-checks',
@@ -289,10 +349,25 @@ const SERVICE_HUBS: HubContentMap = {
   execute: {
     blurb: 'Win the mandate and get paid.',
     modules: [
-      { label: 'Mandates won', icon: 'circle-check-big', meta: 'Signed engagements' },
-      { label: 'Agreements & signatures', icon: 'file-signature', meta: 'Sign & countersign' },
+      {
+        label: 'Mandates won',
+        icon: 'circle-check-big',
+        meta: 'Signed engagements',
+        href: '/execute/closings'
+      },
+      {
+        label: 'Agreements & signatures',
+        icon: 'file-signature',
+        meta: 'Sign & countersign',
+        href: '/execute/wires'
+      },
       { label: 'Invoicing', icon: 'receipt', meta: 'Billed & collected' },
-      { label: 'Chain of Trust', icon: 'git-branch', meta: 'The 4-layer proof record' }
+      {
+        label: 'Chain of Trust',
+        icon: 'git-branch',
+        meta: 'The 4-layer proof record',
+        href: '/execute/chain-of-trust'
+      }
     ]
   }
 };
