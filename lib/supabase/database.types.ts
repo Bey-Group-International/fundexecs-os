@@ -3617,6 +3617,630 @@ export type Database = {
           },
         ]
       }
+      fund_formations: {
+        Row: {
+          created_at: string
+          id: string
+          org_id: string
+          status: string
+          story: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_id: string
+          status?: string
+          story?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_id?: string
+          status?: string
+          story?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_formations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      formation_steps: {
+        Row: {
+          created_at: string
+          data: Json | null
+          formation_id: string
+          id: string
+          kind: string
+          org_id: string
+          seq: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          formation_id: string
+          id?: string
+          kind: string
+          org_id: string
+          seq: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          formation_id?: string
+          id?: string
+          kind?: string
+          org_id?: string
+          seq?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formation_steps_formation_id_org_id_fkey"
+            columns: ["formation_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "fund_formations"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "formation_steps_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      governance_bodies: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          members: Json
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          members?: Json
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          members?: Json
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "governance_bodies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      policies: {
+        Row: {
+          body: Json | null
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          body?: Json | null
+          created_at?: string
+          id?: string
+          kind: string
+          name: string
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          body?: Json | null
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_room_links: {
+        Row: {
+          created_at: string
+          document_id: string | null
+          expires_at: string | null
+          id: string
+          org_id: string
+          token: string
+          updated_at: string
+          vetting: string
+        }
+        Insert: {
+          created_at?: string
+          document_id?: string | null
+          expires_at?: string | null
+          id?: string
+          org_id: string
+          token: string
+          updated_at?: string
+          vetting?: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string | null
+          expires_at?: string | null
+          id?: string
+          org_id?: string
+          token?: string
+          updated_at?: string
+          vetting?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_room_links_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "lp_room_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_room_links_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_room_views: {
+        Row: {
+          created_at: string
+          id: string
+          link_id: string
+          org_id: string
+          updated_at: string
+          verified_at: string | null
+          viewer: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          link_id: string
+          org_id: string
+          updated_at?: string
+          verified_at?: string | null
+          viewer: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          link_id?: string
+          org_id?: string
+          updated_at?: string
+          verified_at?: string | null
+          viewer?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_room_views_link_id_org_id_fkey"
+            columns: ["link_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "data_room_links"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "data_room_views_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      closings: {
+        Row: {
+          amount: number | null
+          counterparty: string | null
+          created_at: string
+          id: string
+          kind: string
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          counterparty?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          counterparty?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      closing_steps: {
+        Row: {
+          closing_id: string
+          created_at: string
+          id: string
+          name: string
+          org_id: string
+          seq: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          closing_id: string
+          created_at?: string
+          id?: string
+          name: string
+          org_id: string
+          seq: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          closing_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          org_id?: string
+          seq?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closing_steps_closing_id_org_id_fkey"
+            columns: ["closing_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "closings"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "closing_steps_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      capital_calls: {
+        Row: {
+          created_at: string
+          due_at: string | null
+          id: string
+          org_id: string
+          pct: number | null
+          status: string
+          total: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          org_id: string
+          pct?: number | null
+          status?: string
+          total?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          org_id?: string
+          pct?: number | null
+          status?: string
+          total?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_calls_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_lp_status: {
+        Row: {
+          call_id: string
+          created_at: string
+          id: string
+          lp_ref: string
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          call_id: string
+          created_at?: string
+          id?: string
+          lp_ref: string
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          call_id?: string
+          created_at?: string
+          id?: string
+          lp_ref?: string
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_lp_status_call_id_org_id_fkey"
+            columns: ["call_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "capital_calls"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "call_lp_status_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflows: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          org_id: string
+          stream: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          org_id: string
+          stream: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          org_id?: string
+          stream?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflows_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_tasks: {
+        Row: {
+          created_at: string
+          id: string
+          org_id: string
+          status: string
+          subtasks: Json
+          updated_at: string
+          workflow_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_id: string
+          status?: string
+          subtasks?: Json
+          updated_at?: string
+          workflow_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_id?: string
+          status?: string
+          subtasks?: Json
+          updated_at?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_tasks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_tasks_workflow_id_org_id_fkey"
+            columns: ["workflow_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      automations: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          last_run_at: string | null
+          on_event: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          on_event: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          on_event?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      compliance_items: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          org_id: string
+          severity: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          org_id: string
+          severity: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          severity?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compliance_items_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ir_items: {
+        Row: {
+          cat: string
+          created_at: string
+          due_at: string | null
+          id: string
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cat: string
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          cat?: string
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ir_items_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
