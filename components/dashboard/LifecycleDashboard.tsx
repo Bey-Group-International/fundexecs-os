@@ -9,32 +9,33 @@ import type { TeamTaskMap } from '@/lib/queries/dashboard/team-tasks';
 import type { FundProfile } from '@/lib/queries/fund-profile';
 import { MajorAlertsCard } from './MajorAlertsCard';
 import { ExecutionScoreCard } from './ExecutionScoreCard';
-import { NextBestActionCard } from './NextBestActionCard';
 import { DailyCommandList } from './DailyCommandList';
 import { LaunchBriefCard } from './LaunchBriefCard';
 import { MarkVisited } from './MarkVisited';
 import { DashboardShell, RevealGroup, RevealItem } from './command';
 import { CommandMetrics } from './command/CommandMetrics';
-import { DailyBrief } from './command/DailyBrief';
 import { ActivityTabs } from './command/ActivityTabs';
 import { TeamTasks } from './command/TeamTasks';
-import { EarnCoinIncentive, RegenerateButton } from './command/GameBits';
+import { RegenerateButton } from './command/GameBits';
+import { LoopSpine } from './command/LoopSpine';
+import { LifecycleCockpit } from './command/LifecycleCockpit';
+import { RightNowCard } from './command/RightNowCard';
+import { SignalStrip } from './command/SignalStrip';
 
 /* ============================================================================
- * LifecycleDashboard — the Command Center, composed for decision velocity.
- * One operator order (unified for every member type; member type only flavors
- * the hero copy):
+ * LifecycleDashboard — the Command Center, in the onboarding prototype's
+ * information architecture: the loop, made legible. Unified for every member
+ * type (member type only flavors the hero copy):
  *
- *   Hero
- *   FOCAL "now"      — blocking alerts + the single next best action + its
- *                      Earn-coin reward (the one move, never duplicated).
- *   Two columns (lg) — left: the day plan (Daily Brief + command checklist);
- *                      right: the desk working (Team tasks) + metrics + score.
+ *   Hero + LoopSpine — slim greeting + "set the mandate → team works → approve".
+ *   Cockpit          — the four loop verbs as a tappable readiness grid; the
+ *                      current stage's verb marked "NOW" (mirrors the rail).
+ *   Right now        — blocking alerts, then the single highest-impact move as
+ *                      Earn's gold hero (prepared → you approve), with reward.
+ *   Worked overnight — proactive "since you last looked" signals.
+ *   Then, in order   — the ranked daily queue.
+ *   The desk         — team tasks + metrics + execution score.
  *   Activity         — one tabbed feed (the only activity surface).
- *
- * The focal move, alerts triage, and the desk all sit above the fold on
- * desktop; ambient signals (since-away, risk-desk popovers) ride in the
- * DashboardShell.
  * ========================================================================= */
 
 /** Earn coins credited for completing the highlighted next move. */
@@ -109,6 +110,8 @@ export function LifecycleDashboard({
   const copy = HERO_COPY[memberType ?? 'default'];
   const firstName = displayName.split(' ')[0] || displayName || 'there';
   const currentStage: LifecycleStage = data.stage;
+  const showSignals =
+    !data.sinceLastVisit.isFirstVisit && data.sinceLastVisit.highlights.length > 0;
 
   return (
     <DashboardShell
@@ -133,7 +136,7 @@ export function LifecycleDashboard({
         data-member-type={memberType ?? 'unknown'}
         data-stage={currentStage}
       >
-        {/* Hero — slim greeting + Earn presence */}
+        {/* Hero — slim greeting + Earn presence + the loop spine */}
         <RevealItem>
           <Card className="relative overflow-hidden p-5">
             <div
@@ -156,8 +159,9 @@ export function LifecycleDashboard({
                   {copy.greeting(firstName)}
                 </h1>
                 <p className="mt-0.5 max-w-[64ch] text-[12.5px] text-fg-3">{copy.summary}</p>
-                <div className="mt-2.5">
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
                   <ProfileActionButton variant="compact" profile={fundProfile} />
+                  <LoopSpine />
                 </div>
               </div>
               <div className="hidden flex-none flex-col items-center gap-1.5 sm:flex">
@@ -171,41 +175,37 @@ export function LifecycleDashboard({
           </Card>
         </RevealItem>
 
-        {/* FOCAL "now" — blocking alerts, the single next move, and its reward.
-            One unmistakable action; never re-listed below. */}
+        {/* Cockpit — the loop as a tappable readiness grid; mirrors the rail. */}
+        <RevealItem>
+          <LifecycleCockpit readinessBreakdown={data.readinessBreakdown} stage={currentStage} />
+        </RevealItem>
+
+        {/* Right now — blocking alerts, then the single highest-impact move as
+            Earn's gold hero. One unmistakable action; never re-listed below. */}
         <RevealItem>
           <div className="flex flex-col gap-[14px]">
             <MajorAlertsCard alerts={data.majorAlerts} />
-            <div className="relative">
-              <div className="absolute right-4 top-4 z-10">
-                <RegenerateButton />
-              </div>
-              <NextBestActionCard action={data.nextBestAction} />
-            </div>
-            <EarnCoinIncentive
+            <RightNowCard
+              action={data.nextBestAction}
               reward={NEXT_MOVE_REWARD}
-              streak={data.executionScore.streak}
-              nextHref={data.nextBestAction?.href ?? null}
-              nextLabel={data.nextBestAction?.cta ?? 'Open the desk'}
+              control={<RegenerateButton />}
             />
           </div>
         </RevealItem>
 
-        {/* Two columns — left: the day plan · right: the desk working + progress.
-            Keeps the one move and the desk both above the fold on desktop. */}
+        {/* Worked overnight — proactive signals since you last looked. */}
+        {showSignals ? (
+          <RevealItem>
+            <SignalStrip since={data.sinceLastVisit} />
+          </RevealItem>
+        ) : null}
+
+        {/* Then, in order — the ranked queue · the desk working + progress. */}
         <RevealItem>
           <div className="grid items-start gap-[14px] lg:grid-cols-2">
-            {/* The day plan */}
             <div className="flex flex-col gap-[14px]">
-              <DailyBrief
-                briefing={data.briefing}
-                actions={data.dailyCommand}
-                alerts={data.majorAlerts}
-              />
               <DailyCommandList actions={data.dailyCommand} />
             </div>
-
-            {/* The desk + progress */}
             <div className="flex flex-col gap-[14px]">
               <TeamTasks team={data.agentTeam} taskSummaries={teamTasks} />
               <CommandMetrics metrics={metrics} readinessScore={data.readinessScore} />
