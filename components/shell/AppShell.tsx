@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Award, Bell, LayoutDashboard, LogOut, Settings, Sparkles } from 'lucide-react';
+import { EarnDock } from '@/components/earn/EarnDock';
 import { Badge } from '@/components/ui/Badge';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { MandateIcon } from '@/components/ui/MandateIcon';
@@ -78,6 +80,7 @@ export function AppShell({
   children
 }: AppShellProps) {
   const pathname = usePathname();
+  const [earnOpen, setEarnOpen] = useState(false);
   const activeHub = hubs.find((h) => pathname.startsWith(h.href));
   const isHome = !activeHub;
   const title = activeHub?.label ?? 'Command Center';
@@ -168,9 +171,16 @@ export function AppShell({
           })}
 
           <div className="mx-1 my-3 h-px bg-[var(--border)]" aria-hidden />
+          <button
+            type="button"
+            onClick={() => setEarnOpen(true)}
+            className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[13.5px] font-medium text-fg-3 transition hover:bg-surface-1 hover:text-fg-1"
+          >
+            <Sparkles size={17} strokeWidth={1.9} className="text-gold-1" aria-hidden />
+            <span className="flex-1">Ask Earn</span>
+          </button>
           {(
             [
-              { label: 'Ask Earn', icon: Sparkles },
               { label: 'Notifications', icon: Bell },
               { label: 'Settings', icon: Settings }
             ] as const
@@ -222,6 +232,14 @@ export function AppShell({
             </div>
           </div>
           <span className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setEarnOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-1.5 text-[12.5px] font-semibold text-gold-1 transition hover:brightness-110"
+          >
+            <Sparkles size={14} aria-hidden />
+            Ask Earn
+          </button>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-1 text-[12.5px] font-semibold text-gold-1">
             <Award size={14} aria-hidden />
             Level {level}
@@ -279,6 +297,8 @@ export function AppShell({
           })}
         </nav>
       </div>
+
+      <EarnDock open={earnOpen} onClose={() => setEarnOpen(false)} />
     </div>
   );
 }

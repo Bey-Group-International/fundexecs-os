@@ -96,7 +96,7 @@ test('EARN_NAV_DESTINATIONS are all absolute in-app paths and include core surfa
     assert.match(dest, /^\/[a-z-]/, `destination must be an absolute path: ${dest}`);
   }
   const all: readonly string[] = EARN_NAV_DESTINATIONS;
-  for (const core of ['/pipeline', '/command-center', '/diligence']) {
+  for (const core of ['/source/pipeline', '/command-center', '/run/diligence']) {
     assert.ok(all.includes(core), `missing core destination: ${core}`);
   }
 });
