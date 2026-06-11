@@ -32,52 +32,58 @@ export async function getPublicDataRoom(token: string): Promise<PublicDataRoom |
   const clean = (token ?? '').trim();
   if (!clean || clean.length > 64) return null;
 
-  const admin = createAdminClient();
-  const { data: link } = await admin
-    .from('data_room_links')
-    .select('id, org_id, label, vetting, expires_at')
-    .eq('token', clean)
-    .maybeSingle();
-  if (!link || !link.label) return null;
-
-  const expired = !!link.expires_at && Date.parse(link.expires_at) < Date.now();
-
-  const { data: org } = await admin
-    .from('organizations')
-    .select('name')
-    .eq('id', link.org_id)
-    .maybeSingle();
-
-  // The link's label names one material in the room's vocabulary.
-  const materialId = MAT_DOCS.find((d) => MAT_LABEL[d] === link.label) ?? null;
-  let material: PublicDataRoom['material'] = null;
-  if (materialId && !expired) {
-    const { data: row } = await admin
-      .from('capital_materials')
-      .select('title, status, spec, last_generated_at')
-      .eq('org_id', link.org_id)
-      .eq('kind', MATERIAL_DB_KIND[materialId])
-      .eq('status', 'ready')
-      .order('updated_at', { ascending: false })
-      .limit(1)
+  // Degrade to "no room" on any infra failure (e.g. service-role env missing
+  // on a preview deployment) — a public link must never 500.
+  try {
+    const admin = createAdminClient();
+    const { data: link } = await admin
+      .from('data_room_links')
+      .select('id, org_id, label, vetting, expires_at')
+      .eq('token', clean)
       .maybeSingle();
-    if (row) {
-      material = {
-        materialId,
-        title: row.title || link.label,
-        spec: sanitizeMaterialSpec(materialId, row.spec),
-        preparedAt: row.last_generated_at
-      };
-    }
-  }
+    if (!link || !link.label) return null;
 
-  return {
-    linkId: link.id,
-    orgId: link.org_id,
-    label: link.label,
-    vetting: link.vetting,
-    expired,
-    firm: org?.name ?? 'The manager',
-    material
-  };
+    const expired = !!link.expires_at && Date.parse(link.expires_at) < Date.now();
+
+    const { data: org } = await admin
+      .from('organizations')
+      .select('name')
+      .eq('id', link.org_id)
+      .maybeSingle();
+
+    // The link's label names one material in the room's vocabulary.
+    const materialId = MAT_DOCS.find((d) => MAT_LABEL[d] === link.label) ?? null;
+    let material: PublicDataRoom['material'] = null;
+    if (materialId && !expired) {
+      const { data: row } = await admin
+        .from('capital_materials')
+        .select('title, status, spec, last_generated_at')
+        .eq('org_id', link.org_id)
+        .eq('kind', MATERIAL_DB_KIND[materialId])
+        .eq('status', 'ready')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (row) {
+        material = {
+          materialId,
+          title: row.title || link.label,
+          spec: sanitizeMaterialSpec(materialId, row.spec),
+          preparedAt: row.last_generated_at
+        };
+      }
+    }
+
+    return {
+      linkId: link.id,
+      orgId: link.org_id,
+      label: link.label,
+      vetting: link.vetting,
+      expired,
+      firm: org?.name ?? 'The manager',
+      material
+    };
+  } catch {
+    return null;
+  }
 }
