@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Building2,
   FolderLock,
+  Megaphone,
   // Source
   Radar,
   Briefcase,
@@ -180,6 +181,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         icon: FolderLock,
         live: true,
         hint: 'Investor materials + secure data room — copiloted'
+      },
+      {
+        href: '/build/brand',
+        label: 'Brand',
+        icon: Megaphone,
+        live: true,
+        hint: 'GP profile, firm brand & presence — copiloted'
       }
     ]
   },
