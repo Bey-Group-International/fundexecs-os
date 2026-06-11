@@ -1,3 +1,4 @@
+import { IdCard } from 'lucide-react';
 import { Badge, Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { MEMBER_TYPE_LABELS } from '@/lib/member-types';
@@ -61,38 +62,46 @@ export function ProfileHero({ profile, className }: ProfileHeroProps) {
       />
 
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
-            Source of Truth · documented as it forms
-          </p>
-          <h1 className="mt-1 text-[24px] font-semibold tracking-[-0.02em] text-fg-1 sm:text-[28px]">
-            {profile.fundName}
-          </h1>
-          <p className="mt-0.5 text-[12.5px] text-fg-3">
-            {owner}
-            {profile.fundTier ? ` · ${profile.fundTier}` : null}
-          </p>
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            className="mt-0.5 flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]"
+            aria-hidden
+          >
+            <IdCard size={21} strokeWidth={1.9} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold-1">
+              Source of Truth · documented as it forms
+            </p>
+            <h1 className="mt-1 text-[24px] font-semibold tracking-[-0.02em] text-fg-1 sm:text-[28px]">
+              {profile.fundName}
+            </h1>
+            <p className="mt-0.5 text-[12.5px] text-fg-3">
+              {owner}
+              {profile.fundTier ? ` · ${profile.fundTier}` : null}
+            </p>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge tone="azure" dot className="text-[10.5px]">
-              On the record
-            </Badge>
-            <Badge tone="gold" className="text-[10.5px]">
-              {memberLabel}
-            </Badge>
-            {profile.focusAreas.slice(0, 3).map((fa) => (
-              <span
-                key={fa}
-                className="rounded-full border border-hairline bg-surface-1 px-2 py-0.5 text-[10.5px] text-fg-3"
-              >
-                {fa}
-              </span>
-            ))}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge tone="azure" dot className="text-[10.5px]">
+                On the record
+              </Badge>
+              <Badge tone="gold" className="text-[10.5px]">
+                {memberLabel}
+              </Badge>
+              {profile.focusAreas.slice(0, 3).map((fa) => (
+                <span
+                  key={fa}
+                  className="rounded-full border border-hairline bg-surface-1 px-2 py-0.5 text-[10.5px] text-fg-3"
+                >
+                  {fa}
+                </span>
+              ))}
+            </div>
+
+            <p className="mt-3 max-w-[60ch] text-[12px] text-fg-3">{blurb}</p>
+
+            <ProfileActionButton variant="hero" profile={profile} className="mt-4" />
           </div>
-
-          <p className="mt-3 max-w-[60ch] text-[12px] text-fg-3">{blurb}</p>
-
-          <ProfileActionButton variant="hero" profile={profile} className="mt-4" />
         </div>
 
         {/* Completeness ring */}
