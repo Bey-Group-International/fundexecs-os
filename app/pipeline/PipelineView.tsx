@@ -151,6 +151,44 @@ function NextMove({
   );
 }
 
+/** The conversion funnel — formation stages as tapering bars (deal count +
+ * value per stage), so the book reads as a funnel narrowing toward close. Pure
+ * read over the stages already loaded; mirrors the prototype's pipeline view. */
+function StageFunnel({ stages }: { stages: PipelineStage[] }) {
+  const maxCount = Math.max(1, ...stages.map((s) => s.deals.length));
+  return (
+    <Card className="p-4">
+      <SectionTitle eyebrow="Conversion · by stage" title="The funnel" className="mb-3" />
+      <div className="flex flex-col gap-1.5">
+        {stages.map((s) => {
+          const count = s.deals.length;
+          const value = s.deals.reduce((sum, d) => sum + (d.amount ?? 0), 0);
+          const widthPct = Math.max(6, Math.round((count / maxCount) * 100));
+          return (
+            <div key={s.key} className="flex items-center gap-3">
+              <span className="w-[110px] flex-none truncate text-[12px] text-fg-3">{s.label}</span>
+              <div className="relative h-7 flex-1 overflow-hidden rounded-lg bg-surface-1">
+                <div
+                  className="absolute inset-y-0 left-0 rounded-lg bg-[linear-gradient(90deg,var(--accent-soft),var(--accent-line))] transition-[width] duration-500 ease-out"
+                  style={{ width: `${widthPct}%` }}
+                  aria-hidden
+                />
+                <div className="relative flex h-full items-center gap-1.5 px-2.5 text-[11.5px]">
+                  <span className="font-semibold tabular-nums text-fg-1">{count}</span>
+                  <span className="text-fg-4">{count === 1 ? 'deal' : 'deals'}</span>
+                </div>
+              </div>
+              <span className="w-16 flex-none text-right text-[11.5px] tabular-nums text-fg-3">
+                {value > 0 ? formatCurrency(value) : '—'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 /** The capital-formation stage board: deals in draggable columns by stage, with
  * optimistic moves and a click-through to the deal detail drawer. */
 function FormationBoard({
@@ -469,21 +507,29 @@ export function PipelineView({
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <SectionTitle
-        eyebrow="The book · capital formation"
-        title="Pipeline"
-        className="mb-0"
-        action={
-          <Button
-            variant="primary"
-            icon={Plus}
-            onClick={() => setNewDealOpen(true)}
-            data-testid="pipeline-add"
-          >
-            Add to pipeline
-          </Button>
-        }
-      />
+      {/* Module header — icon tile + title, matching the loop hub interiors. */}
+      <div className="flex items-center gap-3">
+        <span
+          className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]"
+          aria-hidden
+        >
+          <TrendingUp size={21} strokeWidth={1.9} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+            The book · capital formation
+          </p>
+          <h1 className="text-[20px] font-semibold tracking-[-0.015em] text-fg-1">Pipeline</h1>
+        </div>
+        <Button
+          variant="primary"
+          icon={Plus}
+          onClick={() => setNewDealOpen(true)}
+          data-testid="pipeline-add"
+        >
+          Add to pipeline
+        </Button>
+      </div>
 
       <EarnBand data={data} />
 
@@ -531,12 +577,15 @@ export function PipelineView({
       />
 
       {tab === 'formation' && (
-        <FormationBoard
-          stages={displayStages}
-          onSelectDeal={(d) => setActiveDealId(d.id)}
-          onMoveDeal={moveDeal}
-          pendingDealId={pendingDealId}
-        />
+        <>
+          <StageFunnel stages={displayStages} />
+          <FormationBoard
+            stages={displayStages}
+            onSelectDeal={(d) => setActiveDealId(d.id)}
+            onMoveDeal={moveDeal}
+            pendingDealId={pendingDealId}
+          />
+        </>
       )}
       {tab === 'lpmap' && <LpPipelineBoard data={lpData} />}
       {tab === 'flow' && <DealFlow data={data} />}
