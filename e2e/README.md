@@ -14,6 +14,21 @@ Two layers, by what they need:
 
 ## Arming the authed suite in CI
 
+No local tooling needed — both steps happen in the browser:
+
+1. **Add five GitHub Actions secrets** (repo → Settings → Secrets and
+   variables → Actions): `E2E_SUPABASE_URL`, `E2E_SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `E2E_TEST_EMAIL`, `E2E_TEST_PASSWORD`.
+   The URL and keys are in Supabase → Project Settings → API; pick any
+   dedicated email + a generated password for the test user.
+2. **Run the seeding workflow**: repo → Actions → **Seed e2e user** →
+   Run workflow. Idempotent — re-running resets the password and repairs
+   rows. From the next PR on, the authed specs run automatically.
+
+---
+
+The same can be done from a terminal instead, if you prefer:
+
 1. **Seed the test user** (once, idempotent — re-running repairs/resets):
 
    ```bash
