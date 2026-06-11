@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck,
@@ -38,6 +39,7 @@ import type {
   ApprovalQueueItem,
   NextAction,
   ChecklistItem,
+  RecentEarnAction,
   TrustTierKey
 } from '@/lib/queries/trust-center';
 
@@ -636,6 +638,64 @@ function ApprovalRow({
   );
 }
 
+/** Relative "Nh ago" label for an ISO timestamp. */
+function timeAgo(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return '';
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+/**
+ * RecentEarnActions — the closed approve loop, on the record. Each approved
+ * Earn action (logged to `trust_events`) reads as a settled line with a link to
+ * what it produced. Renders nothing until the operator has approved one.
+ */
+function RecentEarnActions({ actions }: { actions: RecentEarnAction[] }) {
+  return (
+    <div className="print:hidden">
+      <SectionTitle
+        eyebrow="The approve loop, closed"
+        title="Recent Earn actions"
+        className="mb-3"
+      />
+      <Card className="p-3">
+        <ul className="flex flex-col gap-1.5">
+          {actions.map((a) => (
+            <li
+              key={a.id}
+              className="flex items-center gap-3 rounded-lg border border-hairline bg-surface-1 px-3 py-2"
+            >
+              <ShieldCheck
+                size={14}
+                strokeWidth={2}
+                className="flex-none text-success"
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg-1">{a.label}</span>
+              <span className="flex-none text-[11px] text-fg-5">{timeAgo(a.at)}</span>
+              {a.href ? (
+                <Link
+                  href={a.href}
+                  className="inline-flex flex-none items-center gap-1 text-[11.5px] font-semibold text-azure-1 hover:underline"
+                >
+                  View
+                  <ArrowUpRight size={11} strokeWidth={2} aria-hidden />
+                </Link>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
 function ApprovalsQueue({
   approvals,
   canApprove,
@@ -874,6 +934,10 @@ export function TrustCenterView({ data }: { data: TrustCenterData }) {
       </div>
 
       {moreMoves.length > 0 ? <NextActions actions={moreMoves} /> : null}
+
+      {data.recentEarnActions.length > 0 ? (
+        <RecentEarnActions actions={data.recentEarnActions} />
+      ) : null}
 
       {/* Records */}
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">

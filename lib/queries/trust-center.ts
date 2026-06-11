@@ -129,6 +129,17 @@ export interface CapitalPosture {
   coveredDeals: number;
 }
 
+/** A recent Earn action that was approved & executed — surfaced "on the record". */
+export interface RecentEarnAction {
+  id: string;
+  /** Human label, e.g. "Added Helios to the pipeline". */
+  label: string;
+  /** ISO timestamp. */
+  at: string;
+  /** Where to view what the action produced, when applicable. */
+  href: string | null;
+}
+
 export interface TrustCenterData {
   empty: boolean;
   /** Institutional Readiness Index — capital-weighted org posture, 0–100. */
@@ -142,6 +153,8 @@ export interface TrustCenterData {
   approvals: ApprovalQueueItem[];
   checklist: ChecklistItem[];
   nextActions: NextAction[];
+  /** Recent approved Earn actions, newest first — the closed approve loop, on the record. */
+  recentEarnActions: RecentEarnAction[];
   capital: CapitalPosture;
   /** IRI movement over time — delta vs the last snapshot + a short trend line. */
   trend: { delta: number | null; points: number[]; sinceLabel: string | null };
@@ -164,6 +177,7 @@ function emptyData(viewerId: string, canApprove: boolean): TrustCenterData {
     approvals: [],
     checklist: [],
     nextActions: [],
+    recentEarnActions: [],
     capital: {
       pipelineValue: 0,
       capitalDeployed: 0,
@@ -217,14 +231,42 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
 
   // Records + deals/allocations in parallel — the two halves of the join
   // between proof posture and strategic capital.
-  const [{ data: recsRaw }, { data: dealsRaw }, { data: allocRaw }] = await Promise.all([
-    supabase
-      .from('chain_of_trust_records')
-      .select('id, entity_type, entity_id, current_layer, status, created_at')
-      .eq('org_id', orgId),
-    supabase.from('deals').select('id, name, amount, status').eq('org_id', orgId),
-    supabase.from('allocations').select('amount, status').eq('org_id', orgId)
-  ]);
+  const [{ data: recsRaw }, { data: dealsRaw }, { data: allocRaw }, { data: earnEventsRaw }] =
+    await Promise.all([
+      supabase
+        .from('chain_of_trust_records')
+        .select('id, entity_type, entity_id, current_layer, status, created_at')
+        .eq('org_id', orgId),
+      supabase.from('deals').select('id, name, amount, status').eq('org_id', orgId),
+      supabase.from('allocations').select('amount, status').eq('org_id', orgId),
+      // Approved Earn actions, newest first — the closed approve loop on the record.
+      supabase
+        .from('trust_events')
+        .select('id, action, entity_type, entity_id, metadata, created_at')
+        .eq('org_id', orgId)
+        .like('action', 'earn\\_%')
+        .order('created_at', { ascending: false })
+        .limit(8)
+    ]);
+
+  const recentEarnActions: RecentEarnAction[] = (
+    (earnEventsRaw ?? []) as {
+      id: string;
+      action: string;
+      entity_type: string | null;
+      entity_id: string | null;
+      metadata: unknown;
+      created_at: string;
+    }[]
+  ).map((e) => ({
+    id: e.id,
+    label: earnActionLabel(
+      e.action,
+      (e.metadata && typeof e.metadata === 'object' ? e.metadata : {}) as Record<string, unknown>
+    ),
+    at: e.created_at,
+    href: earnActionHref(e.entity_type ?? '', e.entity_id)
+  }));
 
   const records = (recsRaw ?? []) as {
     id: string;
@@ -632,6 +674,7 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
     approvals,
     checklist,
     nextActions: nextActions.slice(0, 4),
+    recentEarnActions,
     capital,
     trend,
     recordCount: summaries.length,
@@ -639,6 +682,30 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
     viewer: { id: viewerId, canApprove },
     generatedAt: new Date().toISOString()
   };
+}
+
+/** A human label for an approved Earn action (from its `trust_events` row). */
+function earnActionLabel(action: string, meta: Record<string, unknown>): string {
+  const dealName = typeof meta.dealName === 'string' ? meta.dealName.trim() : '';
+  if (action === 'earn_create_deal_approved') {
+    return dealName ? `Added ${dealName} to the pipeline` : 'Added a deal to the pipeline';
+  }
+  if (action === 'earn_run_diligence_approved') {
+    return 'Ran the diligence committee';
+  }
+  // Generic: strip the `earn_` prefix + `_approved` suffix, then title-case.
+  return action
+    .replace(/^earn_/, '')
+    .replace(/_approved$/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Where to view what an approved Earn action produced, when applicable. */
+function earnActionHref(entityType: string, entityId: string | null): string | null {
+  if (entityType === 'deal') return '/pipeline';
+  if (entityType === 'diligence_run' && entityId) return `/diligence/${entityId}`;
+  return null;
 }
 
 /** Compact money formatter shared with the view (server-computed strings). */
