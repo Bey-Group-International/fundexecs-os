@@ -85,9 +85,24 @@ const FUND_HUBS: HubContentMap = {
         meta: 'Adrian · copiloted filings',
         href: '/build/formation'
       },
-      { label: 'Structure & governance', icon: 'scale', meta: 'Bodies & policies' },
-      { label: 'Materials & data room', icon: 'folder-lock', meta: 'Deck, one-pager, PPM' },
-      { label: 'Profile & brand', icon: 'id-card', meta: 'Sienna · how you show up' }
+      {
+        label: 'Structure & governance',
+        icon: 'scale',
+        meta: 'Bodies & policies',
+        href: '/build/governance'
+      },
+      {
+        label: 'Materials & data room',
+        icon: 'folder-lock',
+        meta: 'Deck, one-pager, PPM',
+        href: '/build/data-room'
+      },
+      {
+        label: 'Profile & brand',
+        icon: 'id-card',
+        meta: 'Sienna · how you show up',
+        href: '/build/brand'
+      }
     ]
   },
   source: {

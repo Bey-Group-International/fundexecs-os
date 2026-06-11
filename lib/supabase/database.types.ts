@@ -828,6 +828,38 @@ export type Database = {
           },
         ]
       }
+      brand_studio: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data: Json
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_studio_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brain_routing_rules: {
         Row: {
           brain_id: string
@@ -1042,6 +1074,7 @@ export type Database = {
           kind: string
           last_generated_at: string | null
           org_id: string
+          spec: Json | null
           status: string
           title: string
           updated_at: string
@@ -1054,6 +1087,7 @@ export type Database = {
           kind?: string
           last_generated_at?: string | null
           org_id: string
+          spec?: Json | null
           status?: string
           title: string
           updated_at?: string
@@ -1066,6 +1100,7 @@ export type Database = {
           kind?: string
           last_generated_at?: string | null
           org_id?: string
+          spec?: Json | null
           status?: string
           title?: string
           updated_at?: string
@@ -3120,6 +3155,44 @@ export type Database = {
           },
         ]
       }
+      governance_policies: {
+        Row: {
+          adopted_at: string
+          adopted_by: string | null
+          created_at: string
+          decisions: Json
+          id: string
+          org_id: string
+          policy_id: string
+        }
+        Insert: {
+          adopted_at?: string
+          adopted_by?: string | null
+          created_at?: string
+          decisions?: Json
+          id?: string
+          org_id: string
+          policy_id: string
+        }
+        Update: {
+          adopted_at?: string
+          adopted_by?: string | null
+          created_at?: string
+          decisions?: Json
+          id?: string
+          org_id?: string
+          policy_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "governance_policies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mandates: {
         Row: {
           created_at: string
@@ -4284,6 +4357,7 @@ export type Database = {
           members: Json
           org_id: string
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           created_at?: string
@@ -4292,6 +4366,7 @@ export type Database = {
           members?: Json
           org_id: string
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           created_at?: string
@@ -4300,6 +4375,7 @@ export type Database = {
           members?: Json
           org_id?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -4358,6 +4434,7 @@ export type Database = {
           document_id: string | null
           expires_at: string | null
           id: string
+          label: string | null
           org_id: string
           token: string
           updated_at: string
@@ -4368,6 +4445,7 @@ export type Database = {
           document_id?: string | null
           expires_at?: string | null
           id?: string
+          label?: string | null
           org_id: string
           token: string
           updated_at?: string
@@ -4378,6 +4456,7 @@ export type Database = {
           document_id?: string | null
           expires_at?: string | null
           id?: string
+          label?: string | null
           org_id?: string
           token?: string
           updated_at?: string
