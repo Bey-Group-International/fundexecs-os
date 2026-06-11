@@ -18,8 +18,15 @@
 function resolveBySuffix(suffix: string): string | undefined {
   const exact = process.env[suffix];
   if (exact) return exact;
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value && key.endsWith(`_${suffix}`)) return value;
+  // Enumeration is Node-only territory — the edge runtime inlines statically
+  // referenced vars and can reject dynamic access. Never let the fallback
+  // scan take a runtime down.
+  try {
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value && key.endsWith(`_${suffix}`)) return value;
+    }
+  } catch {
+    // Fall through — exact-name miss with no scannable env.
   }
   return undefined;
 }
