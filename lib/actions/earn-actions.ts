@@ -75,9 +75,13 @@ export async function executeEarnAction(
         amount
       }
     );
-    revalidatePath('/pipeline');
+    revalidatePath('/source/pipeline');
     revalidatePath('/command-center');
-    return { ok: true, message: `Created “${res.deal.name}” in your pipeline.`, href: '/pipeline' };
+    return {
+      ok: true,
+      message: `Created “${res.deal.name}” in your pipeline.`,
+      href: '/source/pipeline'
+    };
   }
 
   if (name === 'run_diligence') {
@@ -85,7 +89,8 @@ export async function executeEarnAction(
     if (!dealId) {
       return {
         ok: false,
-        error: 'I need the specific deal. Open it in your Pipeline, then ask me to run diligence.'
+        error:
+          'I need the specific deal. Open it on your Deal Pipeline, then ask me to run diligence.'
       };
     }
     const res = await earnReviewDeal({ orgId: org.orgId, createdBy: user.id, dealId });
@@ -102,13 +107,13 @@ export async function executeEarnAction(
       return {
         ok: true,
         message: `The committee finished${conviction}. Memo posted.`,
-        href: `/diligence/${res.runId}`
+        href: `/run/diligence/${res.runId}`
       };
     }
     return {
       ok: true,
       message: 'Diligence run started — review what came back.',
-      href: `/diligence/${res.runId}`
+      href: `/run/diligence/${res.runId}`
     };
   }
 

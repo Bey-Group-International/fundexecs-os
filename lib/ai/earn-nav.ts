@@ -15,20 +15,22 @@
 export const EARN_NAV_DESTINATIONS = [
   '/command-center',
   '/build',
+  '/build/formation',
+  '/build/governance',
+  '/build/data-room',
+  '/build/brand',
   '/source',
+  '/source/capital-map',
+  '/source/pipeline',
+  '/source/partners',
+  '/source/leads',
   '/run',
-  '/drive',
-  '/pipeline',
-  '/capital-stack',
-  '/profile',
-  '/trust',
-  '/materials',
-  '/partners',
-  '/match-inbox',
-  '/diligence',
-  '/audit',
-  '/integrations',
-  '/settings'
+  '/run/diligence',
+  '/run/workflows',
+  '/run/compliance',
+  '/run/ir',
+  '/execute',
+  '/execute/closings'
 ] as const;
 
 export type EarnNavDestination = (typeof EARN_NAV_DESTINATIONS)[number];
