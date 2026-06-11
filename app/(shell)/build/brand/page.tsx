@@ -34,7 +34,7 @@ export default async function BuildBrandPage() {
   );
 
   return (
-    <div className="fx-rise mx-auto max-w-[920px]">
+    <div className="fx-rise">
       <BrandStudioFlow
         firm={mandate?.firm ?? 'Your fund'}
         principal={mandate?.principal ?? 'Managing Partner'}

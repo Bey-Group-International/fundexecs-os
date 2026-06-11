@@ -25,7 +25,7 @@ export default async function BuildDataRoomPage() {
   const [mandate, room] = await Promise.all([getMandate(org.orgId), getDataRoomState(org.orgId)]);
 
   return (
-    <div className="fx-rise mx-auto max-w-[920px]">
+    <div className="fx-rise">
       <DataRoomFlow
         firm={mandate?.firm ?? 'Your fund'}
         initialStages={room.stages}

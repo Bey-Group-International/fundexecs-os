@@ -40,7 +40,7 @@ export default async function BuildGovernancePage() {
       : formation.data.mgmtco;
 
   return (
-    <div className="fx-rise mx-auto max-w-[920px]">
+    <div className="fx-rise">
       <GovernanceFlow
         firm={firm}
         principal={principal}

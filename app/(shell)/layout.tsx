@@ -36,7 +36,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       icon: meta.icon,
       href: meta.href,
       pct: rail.pct[meta.id],
-      modules: content.modules.map(({ label, icon }) => ({ label, icon }))
+      modules: content.modules.map(({ label, icon, href }) => ({ label, icon, href }))
     };
   });
 
