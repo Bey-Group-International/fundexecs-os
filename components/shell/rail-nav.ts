@@ -164,6 +164,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         icon: Building2,
         live: true,
         hint: 'Entity & fund formation — copiloted'
+      },
+      {
+        href: '/build/governance',
+        label: 'Governance',
+        icon: Scale,
+        live: true,
+        hint: 'Structure, bodies & policies — copiloted'
       }
     ]
   },
