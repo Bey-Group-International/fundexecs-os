@@ -45,7 +45,9 @@ export async function signIn(page: Page, target?: string): Promise<void> {
 
   await Promise.all([
     page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 20_000 }),
-    page.getByRole('button', { name: /^sign in$/i }).click()
+    // The sign-in submit reads "Continue" (post-fresh-start copy); accept the
+    // old wording too so a copy change doesn't strand the authed suite.
+    page.getByRole('button', { name: /^(continue|sign in)$/i }).click()
   ]);
 
   // If a specific target was requested but the app routed elsewhere

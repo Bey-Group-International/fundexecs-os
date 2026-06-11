@@ -64,5 +64,7 @@ test('the login form is reachable and labeled', async ({ page }) => {
   // relies on (getByLabel breaks the moment labels detach from inputs).
   await expect(page.getByLabel('Email')).toBeVisible();
   await expect(page.getByLabel('Password')).toBeVisible();
-  await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
+  // The submit reads "Continue" in sign-in mode; accept either copy so a
+  // wording tweak doesn't fail the suite while a missing button still does.
+  await expect(page.getByRole('button', { name: /^(continue|sign in)$/i })).toBeVisible();
 });
