@@ -50,6 +50,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       principal={mandate?.principal ?? identity?.name ?? 'Operator'}
       principalSub={`Level ${level} · ${role}`}
       level={level}
+      unreadCount={identity?.unreadCount ?? 0}
       hubs={hubs}
       center={rail.center}
       signOut={signOutAction}
