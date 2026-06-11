@@ -30,7 +30,14 @@ export async function verifyDataRoomViewer(input: {
   if (!name) return { ok: false, error: 'Enter your name.' };
   if (!EMAIL_RE.test(email)) return { ok: false, error: 'Enter a valid email.' };
 
-  const admin = createAdminClient();
+  // Degrade to a calm error on infra failure (e.g. service-role env missing)
+  // — an anonymous viewer must never see a 500.
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { ok: false, error: 'This room is temporarily unavailable — try again shortly.' };
+  }
   const { data: link } = await admin
     .from('data_room_links')
     .select('id, org_id, vetting, expires_at')
