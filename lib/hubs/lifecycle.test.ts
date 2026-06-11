@@ -76,3 +76,47 @@ test('hub meta and content stay aligned for every hub and member type', () => {
     }
   }
 });
+
+/* ── module hrefs ──────────────────────────────────────────────────────── */
+
+test('every linked module across all personas points at a live route', () => {
+  // The app's registered interior routes (path part only — query allowed).
+  const LIVE = new Set([
+    '/build/formation',
+    '/build/governance',
+    '/build/data-room',
+    '/build/brand',
+    '/source/capital-map',
+    '/source/pipeline',
+    '/source/partners',
+    '/source/leads',
+    '/run/diligence',
+    '/run/workflows',
+    '/run/compliance',
+    '/run/ir',
+    '/execute/closings',
+    '/execute/wires',
+    '/execute/capital',
+    '/execute/chain-of-trust',
+    '/settings',
+    '/onboarding'
+  ]);
+  const groups = ['fund', 'capital', 'service'] as const;
+  for (const group of groups) {
+    for (const id of HUB_IDS) {
+      for (const mod of hubContent(group, id).modules) {
+        if (!mod.href) continue;
+        const path = mod.href.split('?')[0];
+        assert.ok(LIVE.has(path), `${group}/${id} "${mod.label}" links dead route ${mod.href}`);
+      }
+    }
+  }
+});
+
+test('the fund persona has no unlinked modules left', () => {
+  for (const id of HUB_IDS) {
+    for (const mod of hubContent('fund', id).modules) {
+      assert.ok(mod.href, `fund/${id} "${mod.label}" has no href`);
+    }
+  }
+});
