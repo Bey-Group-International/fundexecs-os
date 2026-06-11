@@ -12,6 +12,12 @@ name: Seed e2e user
 on:
   workflow_dispatch:
 
+# Least privilege: the job only reads the repo to run the seeder script; the
+# GITHUB_TOKEN never needs write access. Supabase access comes solely from
+# the explicit secrets on the Seed step.
+permissions:
+  contents: read
+
 jobs:
   seed:
     name: Seed the e2e test user
@@ -19,6 +25,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # The token isn't needed after checkout — don't leave it in git config.
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v6

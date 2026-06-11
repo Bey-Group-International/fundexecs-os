@@ -23,7 +23,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const email = process.env.E2E_TEST_EMAIL?.trim().toLowerCase();
+const email = process.env.E2E_TEST_EMAIL?.trim()?.toLowerCase();
 const password = process.env.E2E_TEST_PASSWORD;
 
 if (!url || url.includes('placeholder') || !serviceKey || !email || !password) {
