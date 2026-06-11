@@ -13,7 +13,8 @@
     "test:unit": "node --conditions=react-server --import tsx --test 'lib/**/*.test.ts'",
     "test:e2e": "playwright test",
     "seed:test-users": "node --env-file=.env.local scripts/provision-test-users.cjs",
-    "wave1:complete-test-onboarding": "node --env-file=.env.local scripts/wave1-complete-test-onboarding.cjs"
+    "wave1:complete-test-onboarding": "node --env-file=.env.local scripts/wave1-complete-test-onboarding.cjs",
+    "seed:e2e": "node scripts/seed-e2e-user.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
