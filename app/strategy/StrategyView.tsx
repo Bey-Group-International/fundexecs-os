@@ -6,6 +6,7 @@ import { useCardState } from '@/lib/ui/useCardState';
 import {
   Plus,
   Calendar,
+  Compass,
   User,
   CircleDashed,
   Sparkles,
@@ -321,11 +322,19 @@ export function StrategyView({ initialObjectives }: { initialObjectives: Strateg
   return (
     <div className="flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <SectionTitle
-          eyebrow="Operating cadence"
-          title="100 / 30 / 10 Strategy Plan"
-          className="mb-0"
-        />
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]"
+            aria-hidden
+          >
+            <Compass size={21} strokeWidth={1.9} />
+          </span>
+          <SectionTitle
+            eyebrow="Operating cadence"
+            title="100 / 30 / 10 Strategy Plan"
+            className="mb-0"
+          />
+        </div>
         <div className="flex items-center gap-2.5">
           <SegTabs
             active={tier}
