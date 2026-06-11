@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowRight, Bell, Check, CheckCheck, Loader2, X } from 'lucide-react';
+import { ArrowRight, Bell, Check, CheckCheck, Loader2, TriangleAlert, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -20,16 +20,22 @@ export function NotificationsList({ items: initialItems }: { items: Notification
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
   const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const unread = items.filter((i) => !i.read).length;
 
   async function run(id: string, fn: () => Promise<{ ok: boolean }>, apply: () => void) {
     setPending(id);
+    setError(null);
     try {
       const res = await fn();
       if (res.ok) {
         apply();
         router.refresh();
+      } else {
+        setError('Could not update the notification — try again.');
       }
+    } catch {
+      setError('Could not update the notification — check your connection and try again.');
     } finally {
       setPending(null);
     }
@@ -65,6 +71,13 @@ export function NotificationsList({ items: initialItems }: { items: Notification
           </Button>
         )}
       </Card>
+
+      {error && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[12.5px] text-danger">
+          <TriangleAlert size={15} aria-hidden />
+          {error}
+        </div>
+      )}
 
       {items.length === 0 ? (
         <Card className="p-8 text-center">
