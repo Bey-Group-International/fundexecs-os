@@ -33,6 +33,8 @@ export interface AppShellProps {
   /** Secondary line under the principal (e.g. "Level 2 · Operator"). */
   principalSub: string;
   level: number;
+  /** Unread notifications for the bell badge. */
+  unreadCount: number;
   hubs: ShellHub[];
   /** The operator's center-of-gravity hub (the rail's NOW marker). */
   center: HubId;
@@ -74,6 +76,7 @@ export function AppShell({
   principal,
   principalSub,
   level,
+  unreadCount,
   hubs,
   center,
   signOut,
@@ -179,23 +182,31 @@ export function AppShell({
             <Sparkles size={17} strokeWidth={1.9} className="text-gold-1" aria-hidden />
             <span className="flex-1">Ask Earn</span>
           </button>
-          {(
-            [
-              { label: 'Notifications', icon: Bell },
-              { label: 'Settings', icon: Settings }
-            ] as const
-          ).map(({ label, icon: Icon }) => (
-            <span
-              key={label}
-              className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium text-fg-5"
-            >
-              <Icon size={17} strokeWidth={1.9} aria-hidden />
-              <span className="flex-1">{label}</span>
-              <span className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-fg-5">
-                Soon
+          <Link
+            href="/notifications"
+            className={cn(
+              'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium transition',
+              pathname.startsWith('/notifications')
+                ? 'bg-[linear-gradient(90deg,var(--accent-soft),var(--surface-1))] text-fg-1'
+                : 'text-fg-3 hover:bg-surface-1 hover:text-fg-1'
+            )}
+            aria-current={pathname.startsWith('/notifications') ? 'page' : undefined}
+          >
+            <Bell size={17} strokeWidth={1.9} aria-hidden />
+            <span className="flex-1">Notifications</span>
+            {unreadCount > 0 && (
+              <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white [font-feature-settings:'tnum']">
+                {unreadCount > 9 ? '9+' : unreadCount}
               </span>
+            )}
+          </Link>
+          <span className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium text-fg-5">
+            <Settings size={17} strokeWidth={1.9} aria-hidden />
+            <span className="flex-1">Settings</span>
+            <span className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-fg-5">
+              Soon
             </span>
-          ))}
+          </span>
         </nav>
 
         <div className="m-3 flex items-center gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
@@ -232,6 +243,18 @@ export function AppShell({
             </div>
           </div>
           <span className="flex-1" />
+          <Link
+            href="/notifications"
+            aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-hairline bg-surface-1 text-fg-3 transition hover:bg-surface-2 hover:text-fg-1"
+          >
+            <Bell size={16} strokeWidth={1.9} aria-hidden />
+            {unreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </Link>
           <button
             type="button"
             onClick={() => setEarnOpen(true)}
