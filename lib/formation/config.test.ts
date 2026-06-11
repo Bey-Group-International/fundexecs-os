@@ -77,7 +77,7 @@ test('fileSteps always ends by logging to the record, and prepends undecided wor
   for (const kind of KINDS) {
     const steps = fileSteps(kind, FORMATION_D0);
     assert.ok(steps.length >= 2);
-    assert.equal(steps[steps.length - 1], 'Logging to your Chain of Trust');
+    assert.equal(steps[steps.length - 1], 'Saving to your fund record');
   }
   const withUndecided = fileSteps('structure', { ...FORMATION_D0, entity: 'Undecided' });
   assert.match(withUndecided[0], /Finalizing 1 undecided item\b/);

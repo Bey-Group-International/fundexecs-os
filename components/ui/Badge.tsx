@@ -1,11 +1,14 @@
 import { cn } from '@/lib/utils';
 
-export type BadgeTone = 'gold' | 'azure' | 'success' | 'neutral';
+export type BadgeTone = 'gold' | 'azure' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
 const TONES: Record<BadgeTone, string> = {
   gold: 'border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1',
   azure: 'border-[var(--azure-line)] bg-[var(--azure-soft)] text-azure-1',
   success: 'border-[var(--success-line)] bg-[var(--success-soft)] text-success',
+  warning: 'border-[var(--warning-line)] bg-[var(--warning-soft)] text-warning',
+  danger: 'border-[var(--danger-line)] bg-[var(--danger-soft)] text-danger',
+  info: 'border-[var(--info-line)] bg-[var(--info-soft)] text-info',
   neutral: 'border-hairline bg-surface-2 text-fg-3'
 };
 

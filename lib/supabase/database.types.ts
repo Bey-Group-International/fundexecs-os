@@ -3047,6 +3047,79 @@ export type Database = {
         }
         Relationships: []
       }
+      formation_steps: {
+        Row: {
+          created_at: string
+          filed_at: string
+          filed_by: string | null
+          id: string
+          kind: string
+          org_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          filed_at?: string
+          filed_by?: string | null
+          id?: string
+          kind: string
+          org_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          filed_at?: string
+          filed_by?: string | null
+          id?: string
+          kind?: string
+          org_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formation_steps_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fund_formations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data: Json
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          org_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_formations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mandates: {
         Row: {
           created_at: string

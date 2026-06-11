@@ -390,7 +390,7 @@ export function fileSteps(kind: FormationKind, d: FormationData): string[] {
     undec > 0
       ? [`Finalizing ${undec} undecided item${undec > 1 ? 's' : ''} to the standard`, ...base[kind]]
       : [...base[kind]];
-  arr.push('Logging to your Chain of Trust');
+  arr.push('Saving to your fund record');
   return arr;
 }
 
