@@ -404,6 +404,22 @@ export function CapTableView({ data }: CapTableViewProps) {
 
   return (
     <div className="space-y-8">
+      {/* Module header — icon tile + title, matching the loop hub interiors. */}
+      <div className="flex items-center gap-3">
+        <span
+          className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]"
+          aria-hidden
+        >
+          <PieChart size={21} strokeWidth={1.9} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-fg-4">
+            Capital · ownership
+          </p>
+          <h1 className="text-[20px] font-semibold tracking-[-0.015em] text-fg-1">Cap Table</h1>
+        </div>
+      </div>
+
       {/* KPI tiles */}
       <section aria-label="Cap table summary">
         <SectionTitle eyebrow="Ownership" title="Summary" />
