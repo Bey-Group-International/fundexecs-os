@@ -126,7 +126,12 @@ const FUND_HUBS: HubContentMap = {
         meta: 'The vetted bench',
         href: '/source/partners'
       },
-      { label: 'Lead engine', icon: 'filter', meta: 'Camille · demand for portcos' }
+      {
+        label: 'Lead engine',
+        icon: 'filter',
+        meta: 'Camille · demand for portcos',
+        href: '/source/leads'
+      }
     ]
   },
   run: {
@@ -219,7 +224,12 @@ const SERVICE_HUBS: HubContentMap = {
       { label: 'Client pipeline', icon: 'trending-up', meta: 'Vivian · qualified leads' },
       { label: 'Deal flow', icon: 'radar', meta: 'From the network' },
       { label: 'Referral partners', icon: 'handshake', meta: 'Mapped & warmed' },
-      { label: 'Lead engine', icon: 'filter', meta: 'Camille · top of funnel' }
+      {
+        label: 'Lead engine',
+        icon: 'filter',
+        meta: 'Camille · top of funnel',
+        href: '/source/leads'
+      }
     ]
   },
   run: {
