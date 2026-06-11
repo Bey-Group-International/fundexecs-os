@@ -215,3 +215,38 @@ export async function getDiligenceRun(runId: string): Promise<DiligenceRunDetail
     synthesis
   };
 }
+
+/** One uploaded diligence document, with how much of it is indexed. */
+export interface DiligenceDocumentView {
+  id: string;
+  fileName: string;
+  kind: string;
+  createdAt: string;
+  /** Embedded passages — 0 means uploaded but not (yet) indexed. */
+  chunkCount: number;
+}
+
+/**
+ * List a run's uploaded documents with their indexed-chunk counts. RLS-scoped
+ * (members read their org's documents/chunks); degrades to empty on failure.
+ */
+export async function getDiligenceDocuments(runId: string): Promise<DiligenceDocumentView[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('diligence_documents')
+    .select('id, file_name, kind, created_at, diligence_chunks(count)')
+    .eq('run_id', runId)
+    .order('created_at', { ascending: true });
+  if (error || !data) return [];
+
+  return data.map((d) => {
+    const counts = d.diligence_chunks as unknown as { count: number }[] | null;
+    return {
+      id: d.id,
+      fileName: d.file_name,
+      kind: d.kind,
+      createdAt: d.created_at,
+      chunkCount: counts?.[0]?.count ?? 0
+    };
+  });
+}
