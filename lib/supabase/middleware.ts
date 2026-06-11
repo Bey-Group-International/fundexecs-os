@@ -143,6 +143,7 @@ export async function updateSession(request: NextRequest) {
     pathname === '/privacy' ||
     pathname === '/terms' ||
     pathname.startsWith('/p/') ||
+    pathname.startsWith('/dr/') ||
     pathname.startsWith('/auth/');
   // API routes return JSON and enforce their own auth (RLS + 401/403); they must
   // never receive the onboarding HTML redirect, which a `fetch()` would silently
