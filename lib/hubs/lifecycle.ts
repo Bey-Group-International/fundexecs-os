@@ -132,7 +132,12 @@ const FUND_HUBS: HubContentMap = {
   run: {
     blurb: 'Operate the systems that move work forward.',
     modules: [
-      { label: 'Diligence', icon: 'cpu', meta: 'Marcus · 7-agent verdicts' },
+      {
+        label: 'Diligence',
+        icon: 'cpu',
+        meta: 'Marcus · 7-agent verdicts',
+        href: '/run/diligence'
+      },
       { label: 'Workflows & tasks', icon: 'list-checks', meta: 'Sterling · sequenced' },
       { label: 'Compliance', icon: 'shield-check', meta: 'Adrian · counsel in the loop' },
       { label: 'IR & reporting', icon: 'users', meta: 'Eleanor · LP cadence' }

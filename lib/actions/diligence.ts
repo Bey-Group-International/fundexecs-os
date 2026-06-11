@@ -59,9 +59,9 @@ export async function runDiligenceForDeal(dealId: string): Promise<RunDiligenceA
       }
     }
 
-    revalidatePath('/diligence');
-    revalidatePath(`/diligence/${result.runId}`);
-    revalidatePath('/pipeline');
+    revalidatePath('/run/diligence');
+    revalidatePath(`/run/diligence/${result.runId}`);
+    revalidatePath('/source/pipeline');
 
     return {
       ok: true,
