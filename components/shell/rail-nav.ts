@@ -159,11 +159,11 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         hint: 'Proof, layer by layer'
       },
       {
+        href: '/formation',
         label: 'Formation',
         icon: Building2,
-        earnPrompt:
-          'Help me with entity & fund formation — recommend the structure (entity type, jurisdiction, fund vehicle) that fits my plan, then lay out the steps, filings, and documents to stand it up.',
-        hint: 'Entity & fund formation (Earn)'
+        live: true,
+        hint: 'Entity & fund formation — copiloted'
       }
     ]
   },
