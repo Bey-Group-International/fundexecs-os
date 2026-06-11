@@ -31,9 +31,24 @@ function resolveBySuffix(suffix: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Forgive the common paste shapes — surrounding whitespace, a missing
+ * https:// scheme (bare hostname), a trailing slash. The malformed-URL
+ * variant of this misconfiguration 500'd /login in production; the same
+ * normalization already guards the e2e seeder and playwright.config.ts.
+ */
+function normalizeUrl(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return withScheme.replace(/\/+$/, '');
+}
+
 /** The Supabase project URL, for server runtimes (Node + edge). */
 export function supabaseUrl(): string | undefined {
-  return resolveBySuffix('NEXT_PUBLIC_SUPABASE_URL') ?? resolveBySuffix('SUPABASE_URL');
+  return normalizeUrl(
+    resolveBySuffix('NEXT_PUBLIC_SUPABASE_URL') ?? resolveBySuffix('SUPABASE_URL')
+  );
 }
 
 /** The Supabase anon/publishable key, for server runtimes (Node + edge). */
