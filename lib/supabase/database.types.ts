@@ -4678,6 +4678,8 @@ export type Database = {
           created_at: string
           due_at: string | null
           id: string
+          kind: string
+          label: string | null
           org_id: string
           pct: number | null
           status: string
@@ -4688,6 +4690,8 @@ export type Database = {
           created_at?: string
           due_at?: string | null
           id?: string
+          kind?: string
+          label?: string | null
           org_id: string
           pct?: number | null
           status?: string
@@ -4698,6 +4702,8 @@ export type Database = {
           created_at?: string
           due_at?: string | null
           id?: string
+          kind?: string
+          label?: string | null
           org_id?: string
           pct?: number | null
           status?: string
@@ -4752,6 +4758,117 @@ export type Database = {
           },
           {
             foreignKeyName: "call_lp_status_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signatures: {
+        Row: {
+          closing_id: string | null
+          created_at: string
+          document: string
+          id: string
+          org_id: string
+          signed_at: string | null
+          signer: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          closing_id?: string | null
+          created_at?: string
+          document: string
+          id?: string
+          org_id: string
+          signed_at?: string | null
+          signer: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          closing_id?: string | null
+          created_at?: string
+          document?: string
+          id?: string
+          org_id?: string
+          signed_at?: string | null
+          signer?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signatures_closing_id_fkey"
+            columns: ["closing_id"]
+            isOneToOne: false
+            referencedRelation: "closings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signatures_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wires: {
+        Row: {
+          amount: number
+          closing_id: string | null
+          counterparty: string
+          created_at: string
+          currency: string
+          direction: string
+          id: string
+          org_id: string
+          reference: string | null
+          settled_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          closing_id?: string | null
+          counterparty: string
+          created_at?: string
+          currency?: string
+          direction: string
+          id?: string
+          org_id: string
+          reference?: string | null
+          settled_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          closing_id?: string | null
+          counterparty?: string
+          created_at?: string
+          currency?: string
+          direction?: string
+          id?: string
+          org_id?: string
+          reference?: string | null
+          settled_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wires_closing_id_fkey"
+            columns: ["closing_id"]
+            isOneToOne: false
+            referencedRelation: "closings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wires_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"

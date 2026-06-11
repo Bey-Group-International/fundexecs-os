@@ -172,9 +172,24 @@ const FUND_HUBS: HubContentMap = {
         meta: 'Step-gated to signature',
         href: '/execute/closings'
       },
-      { label: 'Signatures & wires', icon: 'banknote', meta: 'Sign, wire, account' },
-      { label: 'Capital calls', icon: 'receipt', meta: 'Drawdowns & distributions' },
-      { label: 'Chain of Trust', icon: 'git-branch', meta: 'The 4-layer proof record' }
+      {
+        label: 'Signatures & wires',
+        icon: 'banknote',
+        meta: 'Sign, wire, account',
+        href: '/execute/wires'
+      },
+      {
+        label: 'Capital calls',
+        icon: 'receipt',
+        meta: 'Drawdowns & distributions',
+        href: '/execute/capital'
+      },
+      {
+        label: 'Chain of Trust',
+        icon: 'git-branch',
+        meta: 'The 4-layer proof record',
+        href: '/execute/chain-of-trust'
+      }
     ]
   }
 };
