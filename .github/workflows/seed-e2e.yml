@@ -1,0 +1,47 @@
+name: Seed e2e user
+
+# Manual, browser-triggered seeding of the dedicated e2e test user — no local
+# tooling needed. Add the secrets below, then Actions → "Seed e2e user" →
+# Run workflow. Idempotent: re-running resets the password and repairs rows.
+#
+# Required repository secrets:
+#   E2E_SUPABASE_URL           the Supabase project URL
+#   SUPABASE_SERVICE_ROLE_KEY  the service-role key (server-side only)
+#   E2E_TEST_EMAIL             the test user's email
+#   E2E_TEST_PASSWORD          the test user's password
+on:
+  workflow_dispatch:
+
+# Least privilege: the job only reads the repo to run the seeder script; the
+# GITHUB_TOKEN never needs write access. Supabase access comes solely from
+# the explicit secrets on the Seed step.
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    name: Seed the e2e test user
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # The token isn't needed after checkout — don't leave it in git config.
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # The seeder only needs @supabase/supabase-js — skip the full install.
+      - name: Install supabase-js
+        run: npm install --no-save @supabase/supabase-js
+
+      - name: Seed
+        run: node scripts/seed-e2e-user.mjs
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
+          E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}

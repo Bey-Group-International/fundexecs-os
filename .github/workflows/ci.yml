@@ -80,13 +80,15 @@ jobs:
     name: Playwright e2e smoke
     runs-on: ubuntu-latest
     env:
-      # Public placeholders so the build inside Playwright's webServer can
-      # statically analyze pages that import the Supabase client. Real values
-      # come from Vercel; the app is resilient when these are placeholders.
-      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
-      # Optional GitHub secrets. When set, the auth happy-path test runs;
-      # otherwise it self-skips and the suite still passes.
+      # Real Supabase env when the E2E_SUPABASE_* secrets are set (which arms
+      # the authed shell tour against the seeded test user); public
+      # placeholders otherwise — the app is resilient to placeholders and the
+      # authed specs self-skip, so the suite passes either way.
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
+      # Optional GitHub secrets. When set (with real Supabase env above), the
+      # authed e2e specs run; otherwise they self-skip and the suite still
+      # passes. Seed the user once with `npm run seed:e2e` — see e2e/README.md.
       E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
       E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
     steps:
