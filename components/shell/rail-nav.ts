@@ -8,6 +8,7 @@ import {
   Gauge,
   ShieldCheck,
   Building2,
+  FolderLock,
   // Source
   Radar,
   Briefcase,
@@ -171,6 +172,13 @@ export const RAIL_GROUPS: readonly RailNavGroup[] = [
         icon: Scale,
         live: true,
         hint: 'Structure, bodies & policies — copiloted'
+      },
+      {
+        href: '/build/data-room',
+        label: 'Data Room',
+        icon: FolderLock,
+        live: true,
+        hint: 'Investor materials + secure data room — copiloted'
       }
     ]
   },
