@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
-import type { TrustLayer } from '@/components/shell/trust/emit-trust';
+import type { TrustLayerKey as TrustLayer } from '@/lib/queries/trust';
 
 export interface AwardTrustXpInput {
   /** Which Chain-of-Trust layer the completion advances (sets the reward). */

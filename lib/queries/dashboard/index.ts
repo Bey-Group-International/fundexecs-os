@@ -5,7 +5,26 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import type { MemberType } from '@/lib/member-types';
 import { MEMBER_TYPE_LABELS } from '@/lib/member-types';
-import type { ChainOfTrustStanding } from '@/components/dashboard/ChainOfTrustStrip';
+
+/** Chain-of-Trust standing surfaced on dashboard heroes. Backend contract — the
+ *  visual strip consumes this shape. */
+export interface ChainOfTrustStanding {
+  /** Whether the member has any chain_of_trust record yet. */
+  hasRecord: boolean;
+  /** Per-layer completion percentage (0–100). All four are independent. */
+  truth: number;
+  concept: number;
+  execution: number;
+  work: number;
+  /** Current layer the record sits in (informational — colors the active dot). */
+  currentLayer?: 'intent' | 'formation' | 'execution' | 'work';
+  /** Record id used to deep-link the drawer when one exists. */
+  recordId?: string | null;
+  /** Member profile id used to start a record when none exists yet. */
+  memberProfileId?: string | null;
+  /** Display name used to seed the new chain's title. */
+  memberDisplayName?: string | null;
+}
 
 type S = SupabaseClient<Database>;
 
