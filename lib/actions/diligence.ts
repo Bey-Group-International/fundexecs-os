@@ -4,9 +4,11 @@ import { revalidatePath } from 'next/cache';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getAuthUser } from '@/lib/queries/auth';
 import { recordLoopClose } from '@/lib/actions/loop';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
   earnReviewDeal,
   createDiligenceDocumentUpload,
+  ingestDiligenceDocument,
   type CreateDiligenceDocumentUploadResult,
   type DiligenceDocumentKind
 } from '@/lib/diligence';
@@ -111,6 +113,45 @@ export async function requestDiligenceUpload(input: {
     return { ok: true, upload };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not create upload.';
+    return { ok: false, error: message };
+  }
+}
+
+export type IngestUploadActionResult =
+  | { ok: true; chunkCount: number }
+  | { ok: false; error: string };
+
+/**
+ * Index an uploaded diligence document (extract → chunk → embed → store).
+ * Called by the upload UI right after the file lands in storage. The document
+ * is re-verified against the caller's active org before the trusted
+ * (service-role) ingest runs — possession of a document id is not enough.
+ */
+export async function ingestDiligenceUpload(documentId: string): Promise<IngestUploadActionResult> {
+  if (!documentId) return { ok: false, error: 'Missing document id.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+
+  const user = await getAuthUser();
+  if (!user) return { ok: false, error: 'Not authenticated.' };
+
+  const admin = createAdminClient();
+  const { data: document } = await admin
+    .from('diligence_documents')
+    .select('id, org_id, run_id')
+    .eq('id', documentId)
+    .maybeSingle();
+  if (!document || document.org_id !== org.orgId) {
+    return { ok: false, error: 'Document not found.' };
+  }
+
+  try {
+    const result = await ingestDiligenceDocument(documentId);
+    revalidatePath(`/run/diligence/${document.run_id}`);
+    return { ok: true, chunkCount: result.chunkCount };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Could not index the document.';
     return { ok: false, error: message };
   }
 }
