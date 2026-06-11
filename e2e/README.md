@@ -24,6 +24,18 @@ Two layers, by what they need:
    npm run seed:e2e
    ```
 
+   On Windows (PowerShell) — run from the repo folder, not system32; the
+   `VAR=value command` prefix above is bash-only:
+
+   ```powershell
+   cd C:\path\to\fundexecs-os
+   $env:NEXT_PUBLIC_SUPABASE_URL  = "https://<project>.supabase.co"
+   $env:SUPABASE_SERVICE_ROLE_KEY = "<service-role-key>"
+   $env:E2E_TEST_EMAIL            = "e2e@yourdomain.com"
+   $env:E2E_TEST_PASSWORD         = "<strong-password>"
+   npm run seed:e2e
+   ```
+
    This creates a confirmed auth user shaped like a finished onboarding
    (profile, `member_profiles` complete, owner of an active org) so the
    middleware never bounces the suite.
@@ -44,11 +56,26 @@ Two layers, by what they need:
 ## Running locally
 
 ```bash
+npm install                  # first time
+npx playwright install chromium   # first time — the test browser
 npm run test:e2e                         # managed build + prod server
 PLAYWRIGHT_BASE_URL=http://localhost:3000 npm run test:e2e   # reuse a running server
 ```
 
 Export the same four env vars locally to include the authed specs.
+
+On Windows (PowerShell):
+
+```powershell
+cd C:\path\to\fundexecs-os
+npm install                       # first time
+npx playwright install chromium   # first time
+npm run test:e2e
+
+# reuse an already-running server:
+$env:PLAYWRIGHT_BASE_URL = "http://localhost:3000"
+npm run test:e2e
+```
 
 > The seeded account is a real login for your project — use a dedicated
 > address, a generated password, and treat the secrets like any credential.
