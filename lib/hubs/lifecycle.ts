@@ -108,7 +108,12 @@ const FUND_HUBS: HubContentMap = {
   source: {
     blurb: 'The team finds your deals, capital and partners.',
     modules: [
-      { label: 'Deal pipeline', icon: 'trending-up', meta: 'Marcus · on-thesis flow' },
+      {
+        label: 'Deal pipeline',
+        icon: 'trending-up',
+        meta: 'Marcus · on-thesis flow',
+        href: '/source/pipeline'
+      },
       {
         label: 'LP & capital targets',
         icon: 'handshake',
