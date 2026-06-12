@@ -63,10 +63,19 @@ export const getWorkflows = cache(async (orgId: string): Promise<WorkflowGroup[]
   const byWorkflow = new Map<string, TaskView[]>();
   for (const t of tasks ?? []) {
     if (!byWorkflow.has(t.workflow_id)) byWorkflow.set(t.workflow_id, []);
-    const subs = parseSubtasks(t.subtasks);
+    const raw = Array.isArray(t.subtasks) ? t.subtasks : [];
+    const subs = parseSubtasks(raw);
     // Pre-anatomy rows kept the task name as the only subtasks entry; honor
-    // that shape as a fallback rather than rendering a bogus checklist.
-    const legacyNameHolder = !t.name && subs.length === 1;
+    // that shape as a fallback rather than rendering a bogus checklist. Match
+    // the migration's backfill guard: a lone entry with no `done` key.
+    const first = raw[0];
+    const legacyNameHolder =
+      !t.name &&
+      raw.length === 1 &&
+      subs.length === 1 &&
+      typeof first === 'object' &&
+      first !== null &&
+      !('done' in first);
     byWorkflow.get(t.workflow_id)!.push({
       id: t.id,
       name: t.name ?? (legacyNameHolder ? subs[0].name : 'Task'),

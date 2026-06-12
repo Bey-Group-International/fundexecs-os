@@ -99,13 +99,16 @@ export async function advanceWorkflowTask(input: {
     );
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('workflow_tasks')
     .update(patch)
     .eq('id', task.id)
     .eq('org_id', org.orgId)
-    .eq('status', task.status);
+    .eq('status', task.status)
+    .select('id')
+    .maybeSingle();
   if (error) return { ok: false, error: error.message };
+  if (!updated) return { ok: false, error: 'The step just advanced. Refresh and try again.' };
 
   revalidatePath('/run/workflows');
   return { ok: true };
@@ -126,24 +129,14 @@ export async function setWorkflowAutomation(input: {
   if (!org) return { ok: false, error: 'No active workspace.' };
 
   const supabase = await createClient();
-  const { data: existing } = await supabase
+  // Atomic against the unique (org_id, on_event) key — never touches
+  // last_run_at, so no fake run history can appear.
+  const { error } = await supabase
     .from('automations')
-    .select('id')
-    .eq('org_id', org.orgId)
-    .eq('on_event', input.key)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { error } = existing
-    ? await supabase
-        .from('automations')
-        .update({ enabled: input.enabled })
-        .eq('id', existing.id)
-        .eq('org_id', org.orgId)
-    : await supabase
-        .from('automations')
-        .insert({ org_id: org.orgId, on_event: input.key, enabled: input.enabled });
+    .upsert(
+      { org_id: org.orgId, on_event: input.key, enabled: input.enabled },
+      { onConflict: 'org_id,on_event' }
+    );
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/run/workflows');

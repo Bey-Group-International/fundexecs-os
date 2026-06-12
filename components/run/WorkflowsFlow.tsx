@@ -401,12 +401,17 @@ export function WorkflowsFlow({
     const prev = autoState[key];
     const enabled = !(prev?.enabled ?? false);
     setAutoState((s) => ({ ...s, [key]: { enabled, lastRunAt: prev?.lastRunAt ?? null } }));
-    const res = await setWorkflowAutomation({ key, enabled });
-    if (!res.ok) {
-      setAutoState((s) => ({ ...s, [key]: prev ?? { enabled: false, lastRunAt: null } }));
-      setToast(res.error);
-    } else {
+    try {
+      const res = await setWorkflowAutomation({ key, enabled });
+      if (!res.ok) {
+        setAutoState((s) => ({ ...s, [key]: prev ?? { enabled: false, lastRunAt: null } }));
+        setToast(res.error);
+        return;
+      }
       router.refresh();
+    } catch {
+      setAutoState((s) => ({ ...s, [key]: prev ?? { enabled: false, lastRunAt: null } }));
+      setToast('Could not update the automation. Try again.');
     }
   }
 
