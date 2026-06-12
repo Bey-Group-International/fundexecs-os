@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Building2,
   CheckCircle2,
+  DollarSign,
   FileSearch,
   HandCoins,
   ShieldCheck,
@@ -16,7 +18,8 @@ import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
-import { updateDealStage } from '@/lib/actions/deals';
+import { Field } from '@/components/ui/Field';
+import { createDeal, updateDealStage } from '@/lib/actions/deals';
 import { compactMoney } from '@/lib/format';
 import type { PipelineDeal, PipelineStage } from '@/lib/queries/pipeline';
 import { cn } from '@/lib/utils';
@@ -140,22 +143,17 @@ function fitColor(f: number): string {
   return f >= 85 ? 'var(--success)' : f >= 75 ? 'var(--gold-1)' : 'var(--fg-3)';
 }
 
-/* ── the deal detail drawer ──────────────────────────────────────────────── */
+/* ── modal focus management (drawer + dialog) ────────────────────────────── */
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-function DealDrawer({
-  deal,
-  stages,
-  onClose,
-  onRun
-}: {
-  deal: PipelineDeal;
-  stages: PipelineStage[];
-  onClose: () => void;
-  onRun: (deal: PipelineDeal) => void;
-}) {
+/**
+ * Trap focus inside a modal panel: focus the first focusable on mount, cycle
+ * Tab/Shift+Tab, close on Escape, lock body scroll, and restore focus to the
+ * opener on unmount.
+ */
+function useModalFocus(onClose: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -192,6 +190,24 @@ function DealDrawer({
       openerRef.current?.focus?.();
     };
   }, [onClose]);
+
+  return panelRef;
+}
+
+/* ── the deal detail drawer ──────────────────────────────────────────────── */
+
+function DealDrawer({
+  deal,
+  stages,
+  onClose,
+  onRun
+}: {
+  deal: PipelineDeal;
+  stages: PipelineStage[];
+  onClose: () => void;
+  onRun: (deal: PipelineDeal) => void;
+}) {
+  const panelRef = useModalFocus(onClose);
 
   const stageKeys = stages.map((s) => s.key);
   const at = stageKeys.indexOf(deal.stage);
@@ -240,7 +256,7 @@ function DealDrawer({
               </div>
             </div>
             <div className="rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
-              <div className="text-[10px] text-fg-5">Fit</div>
+              <div className="text-[10px] text-fg-5">Score</div>
               <div
                 className="mt-1 text-[16px] font-semibold [font-feature-settings:'tnum']"
                 style={{ color: fitColor(deal.fit) }}
@@ -256,6 +272,18 @@ function DealDrawer({
               >
                 {stageLabel}
               </Badge>
+            </div>
+          </div>
+
+          {/* thesis read — the prototype's "Thesis" card, from the real score */}
+          <div>
+            <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+              Thesis
+            </div>
+            <div className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-2">
+              Marcus scored this a <b style={{ color: fitColor(deal.fit) }}>{deal.fit}</b> against
+              your mandate — stage advancement, logged allocations, and size relative to the rest of
+              your pipeline.
             </div>
           </div>
 
@@ -343,6 +371,91 @@ function DealDrawer({
   );
 }
 
+/* ── "Source more deals" — a real deal, logged through the approve loop ──── */
+
+function AddDealDialog({
+  onClose,
+  onSubmit
+}: {
+  onClose: () => void;
+  onSubmit: (name: string, amount: number | null) => void;
+}) {
+  const panelRef = useModalFocus(onClose);
+  const [name, setName] = useState('');
+  const [amountRaw, setAmountRaw] = useState('');
+
+  function submit() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    // Keep digits and the decimal point ("$1,500,000.00" → 1500000), then
+    // round to whole dollars — the deals table stores integers.
+    const parsed = Number.parseFloat(amountRaw.replace(/[^0-9.]/g, ''));
+    onSubmit(trimmed, Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null);
+  }
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        className="fixed inset-0 z-[60] bg-[rgba(3,6,12,0.64)] backdrop-blur-[3px]"
+        aria-hidden
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Source a deal"
+        className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[94vw] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--border-strong)] bg-bg-2 p-5 shadow-[var(--shadow-lg)]"
+      >
+        <div className="mb-1 flex items-center gap-2.5">
+          <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
+            <Building2 size={16} aria-hidden />
+          </span>
+          <h2 className="text-[14.5px] font-semibold text-fg-1">Source a deal</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="ml-auto flex h-[30px] w-[30px] items-center justify-center rounded-lg text-fg-4 hover:bg-surface-1"
+          >
+            <X size={17} aria-hidden />
+          </button>
+        </div>
+        <p className="mb-4 text-[12px] leading-relaxed text-fg-4">
+          Name the company and Earn logs it on your pipeline — Marcus scores it against your mandate
+          on arrival.
+        </p>
+        <div className="flex flex-col gap-3">
+          <Field
+            label="Company"
+            value={name}
+            onChange={setName}
+            icon={Building2}
+            placeholder="e.g. Northwind Logistics"
+            required
+          />
+          <Field
+            label="Deal size"
+            value={amountRaw}
+            onChange={setAmountRaw}
+            icon={DollarSign}
+            placeholder="25000000"
+            hint="Optional — in dollars."
+          />
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="gold" size="sm" icon={Sparkles} disabled={!name.trim()} onClick={submit}>
+            Source with Earn
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 /* ── the pipeline ────────────────────────────────────────────────────────── */
 
 export interface DealPipelineFlowProps {
@@ -356,10 +469,20 @@ export function DealPipelineFlow({
   pipelineValue,
   committed
 }: DealPipelineFlowProps) {
+  const router = useRouter();
   const [stages, setStages] = useState(initialStages);
   const [openId, setOpenId] = useState<string | null>(null);
   const [running, setRunning] = useState<PipelineDeal | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [sourcing, setSourcing] = useState<{ name: string; amount: number | null } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Server refreshes (after a create) re-seed the board.
+  const [seededFrom, setSeededFrom] = useState(initialStages);
+  if (seededFrom !== initialStages) {
+    setSeededFrom(initialStages);
+    setStages(initialStages);
+  }
 
   useEffect(() => {
     if (!toast) return;
@@ -388,23 +511,29 @@ export function DealPipelineFlow({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* hero */}
-      <Card className="p-5">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
-            <TrendingUp size={22} strokeWidth={1.9} aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-[19px] font-semibold tracking-[-0.015em] text-fg-1">
-              Deal pipeline
-            </h1>
-            <p className="mt-0.5 text-[12.5px] text-fg-3">
-              Sourced and scored by Marcus — every advance drafted by Earn, executed on your
-              approval.
-            </p>
+      {/* the prototype's DealPipeline panel — tiles, funnel and cards in one frame */}
+      <Card className="p-[18px]">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
+              <TrendingUp size={16} strokeWidth={1.9} aria-hidden />
+            </span>
+            <div>
+              <div className="mb-px text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                Sourced &amp; scored by Marcus · tap a deal to open
+              </div>
+              <h2 className="text-[14.5px] font-semibold tracking-[-0.01em] text-fg-1">
+                Deal pipeline
+              </h2>
+            </div>
           </div>
+          <Button variant="ghost" size="sm" icon={Sparkles} onClick={() => setAdding(true)}>
+            Source more deals
+          </Button>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2.5">
+
+        {/* pipeline summary */}
+        <div className="mb-4 grid grid-cols-3 gap-2.5">
           <div className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3">
             <div className="text-[11px] text-fg-4">In pipeline</div>
             <div className="mt-1.5 text-[21px] font-semibold text-azure-1 [font-feature-settings:'tnum']">
@@ -420,93 +549,95 @@ export function DealPipelineFlow({
             <div className="mt-0.5 text-[10.5px] text-fg-5">total deal size</div>
           </div>
           <div className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3">
-            <div className="text-[11px] text-fg-4">Committed</div>
+            <div className="text-[11px] text-fg-4">At close</div>
             <div className="mt-1.5 text-[21px] font-semibold text-success [font-feature-settings:'tnum']">
               {compactMoney(committed)}
             </div>
-            <div className="mt-0.5 text-[10.5px] text-fg-5">signed or closed</div>
+            <div className="mt-0.5 text-[10.5px] text-fg-5">ready to sign</div>
           </div>
         </div>
-      </Card>
 
-      {/* stage funnel */}
-      <div className="grid grid-cols-4 gap-2 lg:grid-cols-8">
-        {stages.map((s) => (
-          <div
-            key={s.key}
-            className="rounded-xl border border-hairline bg-surface-1 px-2.5 py-2"
-            style={{ borderTopWidth: 2, borderTopColor: STAGE_BAR[s.key] ?? 'var(--fg-4)' }}
-          >
-            <div className="truncate text-[10px] text-fg-4">{s.label}</div>
-            <div className="mt-0.5 text-[16px] font-semibold [font-feature-settings:'tnum']">
-              {s.deals.length}
+        {/* stage funnel */}
+        <div className="mb-4 grid grid-cols-4 gap-2 lg:grid-cols-8">
+          {stages.map((s) => (
+            <div
+              key={s.key}
+              className="rounded-xl border border-hairline bg-surface-1 px-2.5 py-2"
+              style={{ borderTopWidth: 2, borderTopColor: STAGE_BAR[s.key] ?? 'var(--fg-4)' }}
+            >
+              <div className="truncate text-[10px] text-fg-4">{s.label}</div>
+              <div className="mt-0.5 text-[16px] font-semibold [font-feature-settings:'tnum']">
+                {s.deals.length}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* deal cards */}
-      {deals.length === 0 ? (
-        <Card className="p-8 text-center">
-          <TrendingUp size={22} className="mx-auto text-fg-4" aria-hidden />
-          <h2 className="mt-3 text-[15px] font-semibold text-fg-1">Nothing in the pipeline yet</h2>
-          <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-fg-4">
-            Marcus scores every deal that lands against your mandate — the strongest surface here
-            first, and every advance routes through your approval.
-          </p>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-          {deals
-            .slice()
-            .sort(
-              (a, b) => stageKeys.indexOf(b.stage) - stageKeys.indexOf(a.stage) || b.fit - a.fit
-            )
-            .map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => setOpenId(d.id)}
-                className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-left transition hover:bg-surface-2"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
-                    <Building2 size={16} aria-hidden />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
-                    <div className="truncate text-[10.5px] text-fg-5">{d.note}</div>
-                  </div>
-                  <Badge
-                    tone={STAGE_TONE[d.stage] ?? 'neutral'}
-                    className="px-2 py-0.5 text-[9.5px]"
-                  >
-                    {stages.find((s) => s.key === d.stage)?.label ?? d.stage}
-                  </Badge>
-                </div>
-                <div className="mt-2.5 flex items-center gap-3.5 text-[11px] text-fg-4">
-                  <span>
-                    Size{' '}
-                    <b className="font-mono text-fg-2 [font-feature-settings:'tnum']">
-                      {d.amount ? compactMoney(d.amount) : '—'}
-                    </b>
-                  </span>
-                  <span>
-                    Fit <b style={{ color: fitColor(d.fit) }}>{d.fit}</b>
-                  </span>
-                </div>
-              </button>
-            ))}
+          ))}
         </div>
-      )}
 
-      {/* Earn's standing note */}
-      <Card className="flex items-center gap-3 border-[var(--gold-line)] bg-[var(--gold-soft)] p-4">
-        <EarnCoin size={26} className="flex-none" />
-        <p className="flex-1 text-[12.5px] leading-relaxed text-fg-2">
-          <b className="text-gold-1">Earn:</b> Tap a deal and I&apos;ll draft the next advance —
-          qualification through close. Nothing moves until you approve.
-        </p>
+        {/* deal cards */}
+        {deals.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <TrendingUp size={22} className="mx-auto text-fg-4" aria-hidden />
+            <h3 className="mt-3 text-[15px] font-semibold text-fg-1">
+              Nothing in the pipeline yet
+            </h3>
+            <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-fg-4">
+              Marcus scores every deal that lands against your mandate — the strongest surface here
+              first, and every advance routes through your approval.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Sparkles}
+              className="mt-4"
+              onClick={() => setAdding(true)}
+            >
+              Source your first deal
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {deals
+              .slice()
+              .sort(
+                (a, b) => stageKeys.indexOf(b.stage) - stageKeys.indexOf(a.stage) || b.fit - a.fit
+              )
+              .map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setOpenId(d.id)}
+                  className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-left transition hover:bg-surface-2"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
+                      <Building2 size={16} aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
+                      <div className="truncate text-[10.5px] text-fg-5">{d.note}</div>
+                    </div>
+                    <Badge
+                      tone={STAGE_TONE[d.stage] ?? 'neutral'}
+                      className="px-2 py-0.5 text-[9.5px]"
+                    >
+                      {stages.find((s) => s.key === d.stage)?.label ?? d.stage}
+                    </Badge>
+                  </div>
+                  <div className="mt-2.5 flex items-center gap-3.5 text-[11px] text-fg-4">
+                    <span>
+                      Size{' '}
+                      <b className="font-mono text-fg-2 [font-feature-settings:'tnum']">
+                        {d.amount ? compactMoney(d.amount) : '—'}
+                      </b>
+                    </span>
+                    <span>
+                      Score <b style={{ color: fitColor(d.fit) }}>{d.fit}</b>
+                    </span>
+                  </div>
+                </button>
+              ))}
+          </div>
+        )}
       </Card>
 
       {openDeal && (
@@ -517,6 +648,45 @@ export function DealPipelineFlow({
           onRun={(d) => {
             setOpenId(null);
             setRunning(d);
+          }}
+        />
+      )}
+
+      {adding && (
+        <AddDealDialog
+          onClose={() => setAdding(false)}
+          onSubmit={(name, amount) => {
+            setAdding(false);
+            setSourcing({ name, amount });
+          }}
+        />
+      )}
+
+      {sourcing && (
+        <ActionRunner
+          title={`Source ${sourcing.name}`}
+          steps={[
+            'Log the deal on your pipeline',
+            'Score it against your mandate',
+            'Stage it for qualification',
+            'Prepare for your approval'
+          ]}
+          draftTitle={`New deal · ${sourcing.name}`}
+          draft={`${sourcing.name} joins your pipeline${
+            sourcing.amount ? ` at ${compactMoney(sourcing.amount)}` : ''
+          } — Marcus scores it on arrival and it stages for qualification. Approve to log it; every advance from here routes through you.`}
+          onApprove={async () => {
+            const res = await createDeal({
+              name: sourcing.name,
+              stage: 'prospect',
+              amount: sourcing.amount
+            });
+            return res.ok ? { ok: true } : { ok: false, error: res.error };
+          }}
+          onClose={() => setSourcing(null)}
+          onApplied={() => {
+            setToast(`${sourcing.name} added to your pipeline`);
+            router.refresh();
           }}
         />
       )}
