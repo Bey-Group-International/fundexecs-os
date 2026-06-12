@@ -143,22 +143,17 @@ function fitColor(f: number): string {
   return f >= 85 ? 'var(--success)' : f >= 75 ? 'var(--gold-1)' : 'var(--fg-3)';
 }
 
-/* ── the deal detail drawer ──────────────────────────────────────────────── */
+/* ── modal focus management (drawer + dialog) ────────────────────────────── */
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-function DealDrawer({
-  deal,
-  stages,
-  onClose,
-  onRun
-}: {
-  deal: PipelineDeal;
-  stages: PipelineStage[];
-  onClose: () => void;
-  onRun: (deal: PipelineDeal) => void;
-}) {
+/**
+ * Trap focus inside a modal panel: focus the first focusable on mount, cycle
+ * Tab/Shift+Tab, close on Escape, lock body scroll, and restore focus to the
+ * opener on unmount.
+ */
+function useModalFocus(onClose: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -195,6 +190,24 @@ function DealDrawer({
       openerRef.current?.focus?.();
     };
   }, [onClose]);
+
+  return panelRef;
+}
+
+/* ── the deal detail drawer ──────────────────────────────────────────────── */
+
+function DealDrawer({
+  deal,
+  stages,
+  onClose,
+  onRun
+}: {
+  deal: PipelineDeal;
+  stages: PipelineStage[];
+  onClose: () => void;
+  onRun: (deal: PipelineDeal) => void;
+}) {
+  const panelRef = useModalFocus(onClose);
 
   const stageKeys = stages.map((s) => s.key);
   const at = stageKeys.indexOf(deal.stage);
@@ -367,14 +380,17 @@ function AddDealDialog({
   onClose: () => void;
   onSubmit: (name: string, amount: number | null) => void;
 }) {
+  const panelRef = useModalFocus(onClose);
   const [name, setName] = useState('');
   const [amountRaw, setAmountRaw] = useState('');
 
   function submit() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const digits = amountRaw.replace(/[^0-9]/g, '');
-    onSubmit(trimmed, digits ? Number(digits) : null);
+    // Keep digits and the decimal point ("$1,500,000.00" → 1500000), then
+    // round to whole dollars — the deals table stores integers.
+    const parsed = Number.parseFloat(amountRaw.replace(/[^0-9.]/g, ''));
+    onSubmit(trimmed, Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null);
   }
 
   return (
@@ -385,6 +401,7 @@ function AddDealDialog({
         aria-hidden
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Source a deal"
