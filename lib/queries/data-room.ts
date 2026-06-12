@@ -60,7 +60,9 @@ export const getDataRoomState = cache(async (orgId: string): Promise<DataRoomSta
         'id, label, material_kind, token, vetting, expires_at, created_at, data_room_views ( viewer, viewer_email, verified_at )'
       )
       .eq('org_id', orgId)
-      .order('created_at', { ascending: true })
+      // Newest-first so the reducer can pick the most recent live link per
+      // material (the read side must not assume one live row per material).
+      .order('created_at', { ascending: false })
   ]);
 
   const stages: DataRoomState['stages'] = Object.fromEntries(
@@ -97,9 +99,10 @@ export const getDataRoomState = cache(async (orgId: string): Promise<DataRoomSta
       MAT_DOCS.find((d) => MAT_LABEL[d] === row.label);
     if (!id) continue;
     const expired = !!row.expires_at && Date.parse(row.expires_at) < now;
-    // A live link always wins the slot; an expired one only fills a gap so
-    // its view history stays visible until a fresh link replaces it.
-    if (!linkMap[id] || linkMap[id].expired) {
+    // Rows arrive newest-first: the first live row per material wins (the most
+    // recent live link); an expired row only fills a gap until a live one is
+    // seen — so the operator never surfaces a stale share URL.
+    if (!linkMap[id] || (linkMap[id].expired && !expired)) {
       linkMap[id] = {
         token: row.token,
         vetting: row.vetting === 'nda' ? 'Accredited + NDA' : row.vetting,

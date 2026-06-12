@@ -93,8 +93,14 @@ export function sanitizeViewerName(raw: unknown): string {
     .slice(0, 120);
 }
 
-/** Viewer-supplied email, normalized as the dedupe key. */
+/** Viewer-supplied email, normalized as the dedupe key. Control characters are
+ *  stripped so visually identical emails can't slip past EMAIL_RE as distinct
+ *  `(link_id, viewer_email)` rows and bypass the dedupe/cap. */
 export function normalizeViewerEmail(raw: unknown): string {
   if (typeof raw !== 'string') return '';
-  return raw.trim().toLowerCase().slice(0, 200);
+  return raw
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim()
+    .toLowerCase()
+    .slice(0, 200);
 }

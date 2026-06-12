@@ -34,7 +34,6 @@ import {
   MAT_LABEL,
   MAT_META,
   MAT_TONE,
-  expiryTimestamp,
   type MaterialStage,
   type MaterialValue
 } from '@/lib/dataroom/config';
@@ -135,7 +134,10 @@ export function DataRoomFlow({
             [id]: {
               token: res.token!,
               vetting: 'Accredited + NDA',
-              expiresAt: expiryTimestamp(expiry),
+              // Use the expiry the server actually persisted — regenerating an
+              // already-live link returns its existing token/expiry unchanged,
+              // so we must not synthesize it from the requested preset.
+              expiresAt: res.expiresAt ?? null,
               expired: false,
               viewers: p[id]?.viewers ?? [],
               previews: []

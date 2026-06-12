@@ -18,7 +18,9 @@ import { MATERIAL_DB_KIND, isMaterialId, sanitizeMaterialSpec } from './persiste
  * fake ever lands in `data_room_views`.
  */
 
-export type DataRoomActionResult = { ok: true; token?: string } | { ok: false; error: string };
+export type DataRoomActionResult =
+  | { ok: true; token?: string; expiresAt?: string | null }
+  | { ok: false; error: string };
 
 /** Mark a material built ("Ready") with the operator's spec. Idempotent. */
 export async function buildMaterial(id: string, spec: unknown): Promise<DataRoomActionResult> {
@@ -83,19 +85,19 @@ export async function generateMaterialLink(
 
   const { data: existing } = await supabase
     .from('data_room_links')
-    .select('token')
+    .select('token, expires_at')
     .eq('org_id', org.orgId)
     .eq('material_kind', kind)
     .or(live)
     .limit(1)
     .maybeSingle();
-  if (existing) return { ok: true, token: existing.token };
+  if (existing) return { ok: true, token: existing.token, expiresAt: existing.expires_at };
 
   // Rows from before the material_kind column matched by label — adopt the
   // kind so the next lookup is structural.
   const { data: legacy } = await supabase
     .from('data_room_links')
-    .select('id, token')
+    .select('id, token, expires_at')
     .eq('org_id', org.orgId)
     .is('material_kind', null)
     .eq('label', label)
@@ -103,24 +105,32 @@ export async function generateMaterialLink(
     .limit(1)
     .maybeSingle();
   if (legacy) {
-    await supabase.from('data_room_links').update({ material_kind: kind }).eq('id', legacy.id);
-    return { ok: true, token: legacy.token };
+    // If the kind upgrade fails the row stays structurally untracked, and
+    // revokeMaterialLink() (which filters on material_kind) could never reach
+    // it — surface the error instead of handing back an unrevocable token.
+    const { error: upgradeError } = await supabase
+      .from('data_room_links')
+      .update({ material_kind: kind })
+      .eq('id', legacy.id);
+    if (upgradeError) return { ok: false, error: upgradeError.message };
+    return { ok: true, token: legacy.token, expiresAt: legacy.expires_at };
   }
 
   // 128-bit token: possession of the URL is the access credential.
   const token = randomBytes(16).toString('base64url');
+  const expiresAt = expiryTimestamp(expiry ?? '');
   const { error } = await supabase.from('data_room_links').insert({
     org_id: org.orgId,
     label,
     material_kind: kind,
     token,
     vetting: 'nda',
-    expires_at: expiryTimestamp(expiry ?? '')
+    expires_at: expiresAt
   });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/build/data-room');
-  return { ok: true, token };
+  return { ok: true, token, expiresAt };
 }
 
 /** Kill a material's live share link(s) now. The public route already honors

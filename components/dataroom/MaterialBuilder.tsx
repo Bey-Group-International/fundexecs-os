@@ -61,12 +61,19 @@ export function MaterialBuilder({
   const [saveError, setSaveError] = useState<string | null>(null);
   const steps = buildSteps(id);
 
-  const set = (k: string, v: MaterialValue) => setD((p) => ({ ...p, [k]: v }));
-  const toggle = (k: string, v: string) =>
+  // Any manual edit means the spec no longer matches Earn's recommendation, so
+  // the "Recommendation applied" state must clear.
+  const set = (k: string, v: MaterialValue) => {
+    setApplied(false);
+    setD((p) => ({ ...p, [k]: v }));
+  };
+  const toggle = (k: string, v: string) => {
+    setApplied(false);
     setD((p) => {
       const cur = (p[k] as string[]) ?? [];
       return { ...p, [k]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] };
     });
+  };
 
   useEffect(() => {
     if (phase !== 'building') return;
@@ -160,9 +167,20 @@ export function MaterialBuilder({
             Go back &amp; edit
           </Button>
           {alreadyReady ? (
-            <Button variant="outline" iconRight={Check} onClick={onBack}>
-              Close
-            </Button>
+            <div className="flex items-center gap-2.5">
+              <Button
+                variant="gold"
+                icon={saving ? Loader2 : undefined}
+                iconRight={saving ? undefined : Check}
+                disabled={saving}
+                onClick={() => void addToRoom()}
+              >
+                {saving ? 'Saving…' : 'Save & rebuild'}
+              </Button>
+              <Button variant="outline" onClick={onBack}>
+                Close
+              </Button>
+            </div>
           ) : (
             <Button
               variant="gold"

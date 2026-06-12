@@ -43,65 +43,71 @@ export async function verifyDataRoomViewer(input: {
   } catch {
     return { ok: false, error: 'This room is temporarily unavailable — try again shortly.' };
   }
-  const { data: link } = await admin
-    .from('data_room_links')
-    .select('id, org_id, vetting, expires_at')
-    .eq('token', token)
-    .maybeSingle();
-  if (!link) return { ok: false, error: 'This link is not valid.' };
-  if (link.expires_at && Date.parse(link.expires_at) < Date.now()) {
-    return { ok: false, error: 'This link has expired — ask the manager for a fresh one.' };
-  }
-  if (link.vetting !== 'open' && !input.attested) {
-    return { ok: false, error: 'Confirm the attestation to continue.' };
-  }
-
-  const now = new Date().toISOString();
-  const row = {
-    viewer: `${name} · ${email}`,
-    viewer_email: email,
-    verified_at: now
-  };
-
-  // One row per (link, email): a returning viewer refreshes their record.
-  const { data: prior } = await admin
-    .from('data_room_views')
-    .select('id')
-    .eq('link_id', link.id)
-    .eq('viewer_email', email)
-    .maybeSingle();
-
-  if (prior) {
-    const { error } = await admin.from('data_room_views').update(row).eq('id', prior.id);
-    if (error) return { ok: false, error: 'Could not record your access — try again.' };
-  } else {
-    const { count } = await admin
-      .from('data_room_views')
-      .select('id', { count: 'exact', head: true })
-      .eq('link_id', link.id);
-    if ((count ?? 0) >= VIEWS_PER_LINK_CAP) {
-      return {
-        ok: false,
-        error: 'This link has reached its access limit — ask the manager for a fresh one.'
-      };
+  // Any rejected admin query (not just the client construction) must degrade to
+  // the calm error — the anonymous /dr/[token] viewer must never see a 500.
+  try {
+    const { data: link } = await admin
+      .from('data_room_links')
+      .select('id, org_id, vetting, expires_at')
+      .eq('token', token)
+      .maybeSingle();
+    if (!link) return { ok: false, error: 'This link is not valid.' };
+    if (link.expires_at && Date.parse(link.expires_at) < Date.now()) {
+      return { ok: false, error: 'This link has expired — ask the manager for a fresh one.' };
     }
-    const { error } = await admin
-      .from('data_room_views')
-      .insert({ org_id: link.org_id, link_id: link.id, ...row });
-    // 23505 = a concurrent verification of the same email won the race —
-    // their row stands; this viewer is still in.
-    if (error && error.code !== '23505') {
-      return { ok: false, error: 'Could not record your access — try again.' };
+    if (link.vetting !== 'open' && !input.attested) {
+      return { ok: false, error: 'Confirm the attestation to continue.' };
     }
+
+    const now = new Date().toISOString();
+    const row = {
+      viewer: `${name} · ${email}`,
+      viewer_email: email,
+      verified_at: now
+    };
+
+    // One row per (link, email): a returning viewer refreshes their record.
+    const { data: prior } = await admin
+      .from('data_room_views')
+      .select('id')
+      .eq('link_id', link.id)
+      .eq('viewer_email', email)
+      .maybeSingle();
+
+    if (prior) {
+      const { error } = await admin.from('data_room_views').update(row).eq('id', prior.id);
+      if (error) return { ok: false, error: 'Could not record your access — try again.' };
+    } else {
+      const { count } = await admin
+        .from('data_room_views')
+        .select('id', { count: 'exact', head: true })
+        .eq('link_id', link.id);
+      if ((count ?? 0) >= VIEWS_PER_LINK_CAP) {
+        return {
+          ok: false,
+          error: 'This link has reached its access limit — ask the manager for a fresh one.'
+        };
+      }
+      const { error } = await admin
+        .from('data_room_views')
+        .insert({ org_id: link.org_id, link_id: link.id, ...row });
+      // 23505 = a concurrent verification of the same email won the race —
+      // their row stands; this viewer is still in.
+      if (error && error.code !== '23505') {
+        return { ok: false, error: 'Could not record your access — try again.' };
+      }
+    }
+
+    (await cookies()).set(`fx_dr_${link.id}`, encodeURIComponent(name), {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/dr',
+      maxAge: 60 * 60 * 24 * VIEW_COOKIE_DAYS
+    });
+
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'This room is temporarily unavailable — try again shortly.' };
   }
-
-  (await cookies()).set(`fx_dr_${link.id}`, encodeURIComponent(name), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/dr',
-    maxAge: 60 * 60 * 24 * VIEW_COOKIE_DAYS
-  });
-
-  return { ok: true };
 }
