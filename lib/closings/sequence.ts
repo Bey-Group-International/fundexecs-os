@@ -39,8 +39,19 @@ export interface ClosingStepSpec {
   action: string;
   /** Money-movement steps read "Wired" when done; the rest read "Signed". */
   wire?: boolean;
+  /**
+   * Signature steps can be sent for e-signature (the DocuSign slice). The
+   * send is an attestation aid — the operator still executes/attests the step
+   * separately; sending an envelope never marks the step done on its own.
+   */
+  sign?: boolean;
   /** Earn's visible run steps when executing this step. */
   run: string[];
+}
+
+/** A step is e-signable when its spec opts in and it isn't a money-movement step. */
+export function isSignatureStep(spec: ClosingStepSpec | undefined): boolean {
+  return Boolean(spec?.sign) && !spec?.wire;
 }
 
 /** The standard execution sequence per closing kind (seq = index + 1). */
@@ -54,6 +65,7 @@ export const STEP_SEQUENCE: Record<ClosingKind, readonly ClosingStepSpec[]> = {
       detail:
         'The full execution set — purchase agreement, disclosure schedules and signature pages — assembled and verified against the committed terms.',
       action: 'Assemble pack',
+      sign: true,
       run: ['Assemble the signature pack', 'Verify signatories', 'Stage for countersign']
     },
     {
@@ -107,6 +119,7 @@ export const STEP_SEQUENCE: Record<ClosingKind, readonly ClosingStepSpec[]> = {
       detail:
         'The subscription agreement personalized to the LP and their committed amount, sent for signature.',
       action: 'Send pack',
+      sign: true,
       run: [
         'Personalize the subscription pack',
         'Verify the commitment amount',
@@ -131,6 +144,7 @@ export const STEP_SEQUENCE: Record<ClosingKind, readonly ClosingStepSpec[]> = {
       detail:
         'LP signature confirmed, GP countersign executed, fully executed copies distributed. Signatures are recorded as attestations — executed outside FundExecs OS.',
       action: 'Countersign',
+      sign: true,
       run: ['Confirm the LP signature', 'Countersign as GP', 'Distribute executed copies']
     },
     {
@@ -163,6 +177,7 @@ export const STEP_SEQUENCE: Record<ClosingKind, readonly ClosingStepSpec[]> = {
       drives: 'Scope and fees on paper',
       detail: 'The engagement letter drafted with confirmed scope and fees, sent for signature.',
       action: 'Send letter',
+      sign: true,
       run: ['Draft the engagement letter', 'Confirm scope and fees', 'Send for signature']
     },
     {
@@ -173,6 +188,7 @@ export const STEP_SEQUENCE: Record<ClosingKind, readonly ClosingStepSpec[]> = {
       detail:
         'Counterparty signature confirmed and countersigned; executed copies distributed. Signatures are recorded as attestations — executed outside FundExecs OS.',
       action: 'Countersign',
+      sign: true,
       run: ['Confirm the signature', 'Countersign', 'Distribute executed copies']
     },
     {
