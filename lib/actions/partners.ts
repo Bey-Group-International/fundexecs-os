@@ -12,6 +12,8 @@ export type PartnerActionResult = { ok: true; id: string } | { ok: false; error:
 export interface AddServiceProviderInput {
   name: string;
   category?: string;
+  /** 'active' = already engaged; 'prospect' = on the bench as Suggested. */
+  status?: 'active' | 'prospect';
 }
 
 /**
@@ -34,13 +36,49 @@ export async function addServiceProvider(
       org_id: org.orgId,
       name,
       category: input.category?.trim() || 'general',
-      status: 'active'
+      status: input.status ?? 'active'
     })
     .select('id')
     .single();
 
   if (error || !data) return { ok: false, error: error?.message ?? 'Could not add partner.' };
   return { ok: true, id: data.id };
+}
+
+export type EngagePartnerResult =
+  | { ok: true; id: string; status: string }
+  | { ok: false; error: string };
+
+/**
+ * "Engage" on the Partner Network bench: advance the requester's open intro
+ * request for a service provider exactly one step (requested | accepted →
+ * introduced). The WHERE clause is the server-side stage gate — without an
+ * open request (or with one already introduced/declined) nothing matches and
+ * the advance is refused, so a provider can never skip Suggested → Engaged.
+ */
+export async function engagePartner(input: { partnerId: string }): Promise<EngagePartnerResult> {
+  if (!input.partnerId) return { ok: false, error: 'Missing partner.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('partner_intro_requests')
+    .update({ status: 'introduced' })
+    .eq('org_id', org.orgId)
+    .eq('requester_id', org.userId)
+    .eq('partner_type', 'service_provider')
+    .eq('partner_id', input.partnerId)
+    .in('status', ['requested', 'accepted'])
+    .select('id, status');
+
+  if (error) return { ok: false, error: error.message };
+  const row = data?.[0];
+  if (!row) {
+    return { ok: false, error: 'No open intro request to engage — request the intro first.' };
+  }
+  return { ok: true, id: row.id, status: row.status };
 }
 
 export type PartnerType = 'service_provider' | 'capital_provider';
