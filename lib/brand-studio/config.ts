@@ -100,6 +100,27 @@ export const BRAND_BUILD: Record<string, BrandBuildCfg> = {
   }
 };
 
+/** Per-asset stage in the studio: To do → Produced → Live. */
+export type BrandStage = 'todo' | 'produced' | 'live';
+
+export const BRAND_STAGES: Record<BrandStage, string> = {
+  todo: 'To do',
+  produced: 'Produced',
+  live: 'Live'
+};
+
+/** Badge tone per stage (mirrors the governance grid's tones). */
+export const BRAND_TONE: Record<BrandStage, 'neutral' | 'gold' | 'success'> = {
+  todo: 'neutral',
+  produced: 'gold',
+  live: 'success'
+};
+
+/** Published wins; a produced-but-unpublished spec reads Produced; else To do. */
+export function brandStage(live: boolean, produced: boolean): BrandStage {
+  return live ? 'live' : produced ? 'produced' : 'todo';
+}
+
 export const BRAND_ITEM_NAME: Record<string, string> = {
   bio: 'Professional bio',
   brandkit: 'Brand kit',

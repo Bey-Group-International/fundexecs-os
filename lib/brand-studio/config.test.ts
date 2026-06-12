@@ -3,13 +3,27 @@ import assert from 'node:assert/strict';
 import {
   BRAND_BUILD,
   BRAND_ITEM_NAME,
+  BRAND_STAGES,
+  BRAND_TONE,
   PALETTES,
   brandDefaults,
   brandRows,
+  brandStage,
   buildSteps,
   paletteFor,
   type BrandBuildCfg
 } from './config';
+
+test('brand stage progression: To do → Produced → Live, published wins', () => {
+  assert.equal(brandStage(false, false), 'todo');
+  assert.equal(brandStage(false, true), 'produced');
+  assert.equal(brandStage(true, false), 'live');
+  assert.equal(brandStage(true, true), 'live');
+  for (const stage of ['todo', 'produced', 'live'] as const) {
+    assert.ok(BRAND_STAGES[stage], `${stage} has a label`);
+    assert.ok(BRAND_TONE[stage], `${stage} has a tone`);
+  }
+});
 
 test('every brand builder recommendation uses valid options for its decisions', () => {
   for (const [id, cfg] of Object.entries(BRAND_BUILD)) {

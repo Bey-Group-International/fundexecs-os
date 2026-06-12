@@ -31,7 +31,9 @@ import { MandateIcon } from '@/components/ui/MandateIcon';
 import { AuroraBackdrop } from '@/components/ui/AuroraBackdrop';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Chip } from '@/components/ui/Chip';
 import { EarnCoin } from '@/components/ui/EarnCoin';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 import { Field } from '@/components/ui/Field';
 
 const STEPS = ['Profile', 'Mandate', 'Thesis', 'Review'] as const;
@@ -109,33 +111,6 @@ function ChoiceCard({
   );
 }
 
-function Chip({
-  label,
-  selected,
-  onClick
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13px] font-medium transition',
-        selected
-          ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-fg-1'
-          : 'border-hairline bg-surface-1 text-fg-3 hover:bg-surface-2'
-      )}
-    >
-      {selected && <Check size={12} aria-hidden />}
-      {label}
-    </button>
-  );
-}
-
 /** Who acts on this step — teaches "the team does the work". */
 function ActsOn({ ids, text }: { ids: string[]; text: string }) {
   return (
@@ -166,16 +141,6 @@ function ActsOn({ ids, text }: { ids: string[]; text: string }) {
         </div>
         <span className="flex-1 text-[12px] leading-relaxed text-fg-3">{text}</span>
       </div>
-    </div>
-  );
-}
-
-function Eyebrow({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn('text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4', className)}
-    >
-      {children}
     </div>
   );
 }
@@ -403,6 +368,7 @@ export function MandateWizard({ initialName, onBrief }: MandateWizardProps) {
               <div className="flex flex-wrap gap-2">
                 {group.roles.map((r) => (
                   <Chip
+                    size="lg"
                     key={r}
                     label={r}
                     selected={mandate.investorRole === r}
@@ -424,6 +390,7 @@ export function MandateWizard({ initialName, onBrief }: MandateWizardProps) {
                   <div className="flex flex-wrap gap-2">
                     {EXPERIENCE.map((e) => (
                       <Chip
+                        size="lg"
                         key={e}
                         label={e}
                         selected={mandate.experience === e}
@@ -437,6 +404,7 @@ export function MandateWizard({ initialName, onBrief }: MandateWizardProps) {
                   <div className="flex flex-wrap gap-2">
                     {STANDING.map((s) => (
                       <Chip
+                        size="lg"
                         key={s}
                         label={s}
                         selected={mandate.standing === s}
@@ -544,6 +512,7 @@ export function MandateWizard({ initialName, onBrief }: MandateWizardProps) {
               <div className="flex flex-wrap gap-2">
                 {SECTORS.map((s) => (
                   <Chip
+                    size="lg"
                     key={s}
                     label={s}
                     selected={mandate.sectors.includes(s)}
@@ -556,6 +525,7 @@ export function MandateWizard({ initialName, onBrief }: MandateWizardProps) {
               <div className="flex flex-wrap gap-2">
                 {STAGES.map((s) => (
                   <Chip
+                    size="lg"
                     key={s}
                     label={s}
                     selected={mandate.stage === s}
@@ -568,6 +538,7 @@ export function MandateWizard({ initialName, onBrief }: MandateWizardProps) {
               <div className="flex flex-wrap gap-2">
                 {GEOS.map((g) => (
                   <Chip
+                    size="lg"
                     key={g}
                     label={g}
                     selected={mandate.geo === g}
