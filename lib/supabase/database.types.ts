@@ -14,6 +14,97 @@ export type Database = {
   }
   public: {
     Tables: {
+      anchor_batches: {
+        Row: {
+          anchored_at: string
+          chain_id: string | null
+          created_at: string
+          id: string
+          leaf_count: number
+          merkle_root: string
+          provider: string
+          tx_hash: string | null
+        }
+        Insert: {
+          anchored_at?: string
+          chain_id?: string | null
+          created_at?: string
+          id?: string
+          leaf_count: number
+          merkle_root: string
+          provider?: string
+          tx_hash?: string | null
+        }
+        Update: {
+          anchored_at?: string
+          chain_id?: string | null
+          created_at?: string
+          id?: string
+          leaf_count?: number
+          merkle_root?: string
+          provider?: string
+          tx_hash?: string | null
+        }
+        Relationships: []
+      }
+      anchor_leaves: {
+        Row: {
+          batch_id: string | null
+          created_at: string
+          id: string
+          leaf_hash: string
+          leaf_index: number | null
+          org_id: string
+          payload_version: number
+          salt: string
+          trust_event_id: string
+        }
+        Insert: {
+          batch_id?: string | null
+          created_at?: string
+          id?: string
+          leaf_hash: string
+          leaf_index?: number | null
+          org_id: string
+          payload_version?: number
+          salt: string
+          trust_event_id: string
+        }
+        Update: {
+          batch_id?: string | null
+          created_at?: string
+          id?: string
+          leaf_hash?: string
+          leaf_index?: number | null
+          org_id?: string
+          payload_version?: number
+          salt?: string
+          trust_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "anchor_leaves_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "anchor_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "anchor_leaves_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "anchor_leaves_trust_event_id_fkey"
+            columns: ["trust_event_id"]
+            isOneToOne: true
+            referencedRelation: "trust_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_actions: {
         Row: {
           action_type: string
@@ -5281,6 +5372,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      enqueue_anchor_leaf: {
+        Args: {
+          _leaf_hash: string
+          _org_id: string
+          _payload_version?: number
+          _salt: string
+          _trust_event_id: string
+        }
+        Returns: string
+      }
+      commit_anchor_batch: {
+        Args: {
+          _chain_id?: string
+          _leaf_ids: string[]
+          _merkle_root: string
+          _provider?: string
+          _tx_hash?: string
+        }
+        Returns: string
+      }
       file_formation_step: {
         Args: {
           _data: Json

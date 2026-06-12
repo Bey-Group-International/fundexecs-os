@@ -7,6 +7,8 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { awardTrustXp } from '@/lib/actions/xp';
 import { getTrustRecord, type TrustRecord } from '@/lib/queries/trust';
 import { aiValidateEvidence as runAiValidation } from '@/lib/ai/trust-validate';
+import { enqueueAnchor } from '@/lib/anchor/anchor.server';
+import { ANCHOR_PAYLOAD_VERSION } from '@/lib/anchor/merkle';
 
 const TRUST_BUCKET = 'trust-evidence';
 
@@ -458,19 +460,44 @@ export async function approveEvidence(input: ApproveInput): Promise<ApproveResul
     }
   }
 
-  // Audit row.
+  // Audit row + tamper-evident anchor (both best-effort, never-block).
   try {
-    await supabase.from('trust_events').insert({
-      org_id: evRow.org_id,
-      actor_id: org.userId,
-      entity_type: 'evidence',
-      entity_id: input.evidenceId,
-      action: input.decision === 'approved' ? 'evidence_approved' : 'evidence_rejected',
-      metadata: {
-        layer_advanced: layerAdvanced,
-        rejection_reason: input.rejectionReason ?? null
-      }
-    });
+    const action = input.decision === 'approved' ? 'evidence_approved' : 'evidence_rejected';
+    const metadata = {
+      layer_advanced: layerAdvanced,
+      rejection_reason: input.rejectionReason ?? null
+    };
+    const { data: eventRow } = await supabase
+      .from('trust_events')
+      .insert({
+        org_id: evRow.org_id,
+        actor_id: org.userId,
+        entity_type: 'evidence',
+        entity_id: input.evidenceId,
+        action,
+        metadata
+      })
+      .select('id, created_at')
+      .single();
+
+    if (eventRow) {
+      // Commit the approval into the internal tamper-evident trust ledger.
+      await enqueueAnchor({
+        trustEventId: eventRow.id,
+        orgId: evRow.org_id,
+        payload: {
+          v: ANCHOR_PAYLOAD_VERSION,
+          trustEventId: eventRow.id,
+          orgId: evRow.org_id,
+          actorId: org.userId,
+          entityType: 'evidence',
+          entityId: input.evidenceId,
+          action,
+          metadata,
+          createdAt: eventRow.created_at
+        }
+      });
+    }
   } catch {
     // best-effort
   }
