@@ -1,19 +1,29 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Landmark, ShieldCheck, Sparkles, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import {
+  Building2,
+  CheckCircle2,
+  DollarSign,
+  Landmark,
+  ShieldCheck,
+  Sparkles,
+  X
+} from 'lucide-react';
 import { ActionRunner } from '@/components/earn/ActionRunner';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
-import { updateLpStage } from '@/lib/actions/lp-pipeline';
+import { Field } from '@/components/ui/Field';
+import { adoptLp } from '@/lib/actions/lp-pipeline';
+import { advanceLpStage } from '@/lib/pipeline/actions';
 import { compactMoney } from '@/lib/format';
-import { LP_STAGES, type LpEntry, type LpStageKey } from '@/lib/pipeline/lp-stages';
-import { cn } from '@/lib/utils';
+import { LP_STAGES, lpValue, type LpEntry, type LpStageKey } from '@/lib/pipeline/lp-stages';
 
-/* ── stage vocabulary (the prototype's, over the real canonical stages) ──── */
+/* ── stage vocabulary (the prototype's LP_STAGE_TONE over canonical keys) ── */
 
 const STAGE_TONE: Record<LpStageKey, BadgeTone> = {
   prospect: 'neutral',
@@ -29,80 +39,58 @@ const STAGE_BAR: Record<LpStageKey, string> = {
   committed: 'var(--success)'
 };
 
-/** Earn's next move per stage: label + the stage the approve advances to. */
-const NEXT_MOVE: Record<
-  Exclude<LpStageKey, 'committed'>,
-  { label: string; to: LpStageKey; steps: string[]; draft: (name: string) => string }
-> = {
-  prospect: {
-    label: 'Draft the intro',
-    to: 'contacted',
-    steps: [
-      'Pull their stated focus and your fund story',
-      'Personalize the introduction',
-      'Attach your one-pager',
-      'Prepare for your approval'
-    ],
-    draft: (name) =>
-      `A personalized introduction to ${name}, written from your fund story and their stated focus, with your one-pager attached and a focused 20-minute call proposed. Approving moves them to Contacted on your map.`
-  },
-  contacted: {
-    label: 'Send the follow-up',
-    to: 'soft_circled',
-    steps: [
-      'Review the conversation so far',
-      'Draft the follow-up with the soft-circle ask',
-      'Cross-check your raise terms',
-      'Prepare for your approval'
-    ],
-    draft: (name) =>
-      `A follow-up to ${name} that moves the conversation to a soft-circle ask — restating the thesis they responded to and proposing an allocation range. Approving moves them to Soft-circle on your map.`
-  },
-  soft_circled: {
-    label: 'Lock the allocation',
-    to: 'committed',
-    steps: [
-      'Confirm the soft-circled amount',
-      'Prepare the commitment summary',
-      'Stage the subscription pack',
-      'Prepare for your approval'
-    ],
-    draft: (name) =>
-      `The commitment summary for ${name} — soft-circled amount confirmed and the subscription pack staged from your formation documents. Approving marks them Committed on your map.`
-  }
+/** The prototype's LP_NEXT — Earn's next move per stage. */
+const NEXT_MOVE: Record<Exclude<LpStageKey, 'committed'>, { label: string; to: LpStageKey }> = {
+  prospect: { label: 'Draft intro', to: 'contacted' },
+  contacted: { label: 'Send follow-up', to: 'soft_circled' },
+  soft_circled: { label: 'Lock allocation', to: 'committed' }
 };
+
+/** The prototype's runLp choreography, per move. */
+function moveSteps(act: string): string[] {
+  return [
+    'Pull engagement + fit signals',
+    `Draft the ${act.toLowerCase()}`,
+    'Attach your one-pager + track record',
+    'Prepare for your approval'
+  ];
+}
+
+function moveDraft(lp: LpEntry, act: string): string {
+  const fitPart = lp.fit != null ? `, fit ${lp.fit}` : '';
+  return `Earn drafted a personalized ${act.toLowerCase()} for ${lp.name} (${lpType(lp)}${fitPart}). Approve to send and advance them to the next stage — nothing leaves FundExecs OS until you confirm.`;
+}
 
 function fitColor(f: number): string {
   return f >= 85 ? 'var(--success)' : f >= 75 ? 'var(--gold-1)' : 'var(--fg-3)';
 }
 
+function lpType(lp: LpEntry): string {
+  return lp.capitalTypes.length ? lp.capitalTypes.join(' · ') : 'Capital provider';
+}
+
 function checkLabel(lp: LpEntry): string {
-  if (lp.checkSizeMin != null && lp.checkSizeMax != null)
+  if (lp.checkSizeMin != null && lp.checkSizeMax != null && lp.checkSizeMin !== lp.checkSizeMax)
     return `${compactMoney(lp.checkSizeMin)}–${compactMoney(lp.checkSizeMax)}`;
   const one = lp.checkSizeMax ?? lp.checkSizeMin;
   return one != null ? compactMoney(one) : '—';
 }
 
-function lpValue(lp: LpEntry): number {
-  if (lp.checkSizeMin != null && lp.checkSizeMax != null)
-    return Math.round((lp.checkSizeMin + lp.checkSizeMax) / 2);
-  return lp.checkSizeMax ?? lp.checkSizeMin ?? 0;
+function lpVal(lp: LpEntry): number {
+  return lpValue(lp.checkSizeMin, lp.checkSizeMax);
 }
 
-/* ── the LP detail drawer ────────────────────────────────────────────────── */
+/* ── modal focus management (drawer + dialog) ────────────────────────────── */
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-function LpDrawer({
-  lp,
-  onClose,
-  onRun
-}: {
-  lp: LpEntry;
-  onClose: () => void;
-  onRun: (lp: LpEntry) => void;
-}) {
+/**
+ * Trap focus inside a modal panel: focus the first focusable on mount, cycle
+ * Tab/Shift+Tab, close on Escape, lock body scroll, and restore focus to the
+ * opener on unmount.
+ */
+function useModalFocus(onClose: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -140,8 +128,31 @@ function LpDrawer({
     };
   }, [onClose]);
 
+  return panelRef;
+}
+
+/* ── the LP detail drawer ────────────────────────────────────────────────── */
+
+function LpDrawer({
+  lp,
+  onClose,
+  onRun
+}: {
+  lp: LpEntry;
+  onClose: () => void;
+  onRun: (lp: LpEntry) => void;
+}) {
+  const panelRef = useModalFocus(onClose);
+
   const move = lp.stage !== 'committed' ? NEXT_MOVE[lp.stage] : null;
   const stageLabel = LP_STAGES.find((s) => s.key === lp.stage)?.label ?? lp.stage;
+  const rationale = lp.fitRationale ?? lp.description;
+  const metaPairs = [
+    ['Source', lp.source],
+    ['Last touch', lp.lastTouch],
+    ['Specialist', lp.assignedSpecialist],
+    ['First touch', lp.firstTouchNote]
+  ].filter((pair): pair is [string, string] => Boolean(pair[1]));
 
   return (
     <>
@@ -162,7 +173,8 @@ function LpDrawer({
           <div className="min-w-0 flex-1">
             <div className="text-[15.5px] font-semibold text-fg-1">{lp.name}</div>
             <div className="text-[11.5px] text-fg-4">
-              {lp.capitalTypes.length ? lp.capitalTypes.join(' · ') : 'Capital provider'}
+              {lpType(lp)}
+              {lp.warmth ? ` · ${lp.warmth} lead` : ''}
             </div>
           </div>
           <button
@@ -184,12 +196,12 @@ function LpDrawer({
               </div>
             </div>
             <div className="rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
-              <div className="text-[10px] text-fg-5">Fit</div>
+              <div className="text-[10px] text-fg-5">Fit score</div>
               <div
                 className="mt-1 text-[16px] font-semibold [font-feature-settings:'tnum']"
-                style={{ color: fitColor(lp.fit) }}
+                style={{ color: lp.fit != null ? fitColor(lp.fit) : 'var(--fg-5)' }}
               >
-                {lp.fit}
+                {lp.fit ?? '—'}
               </div>
             </div>
             <div className="rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
@@ -200,33 +212,32 @@ function LpDrawer({
             </div>
           </div>
 
-          {(lp.fitRationale || lp.description) && (
+          {(rationale || lp.fit != null) && (
             <div>
               <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
                 Why they fit
               </div>
               <div className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-2">
-                {lp.fitRationale ?? lp.description}
+                {rationale ? rationale.replace(/\.?\s*$/, '') : null}
+                {rationale && lp.fit != null ? '. ' : null}
+                {lp.fit != null
+                  ? `Sloane scored this a ${lp.fit} on thesis alignment, check size and warmth.`
+                  : null}
               </div>
             </div>
           )}
 
-          <div className="flex gap-5 text-[11.5px] text-fg-4">
-            {lp.assignedSpecialist && (
-              <span>
-                <b className="text-fg-2">Specialist</b>
-                <br />
-                {lp.assignedSpecialist}
-              </span>
-            )}
-            {lp.firstTouchNote && (
-              <span className="min-w-0 flex-1">
-                <b className="text-fg-2">First touch</b>
-                <br />
-                <span className="line-clamp-2">{lp.firstTouchNote}</span>
-              </span>
-            )}
-          </div>
+          {metaPairs.length > 0 && (
+            <div className="flex flex-wrap gap-x-5 gap-y-2.5 text-[11.5px] text-fg-4">
+              {metaPairs.map(([label, value]) => (
+                <span key={label} className="min-w-0 max-w-full">
+                  <b className="text-fg-2">{label}</b>
+                  <br />
+                  <span className="line-clamp-2">{value}</span>
+                </span>
+              ))}
+            </div>
+          )}
 
           {move ? (
             <div className="rounded-[13px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-4 py-3.5">
@@ -253,9 +264,109 @@ function LpDrawer({
           ) : (
             <div className="flex items-center gap-2.5 rounded-[13px] border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3.5 text-[13px] font-semibold text-success">
               <CheckCircle2 size={17} aria-hidden />
-              Committed · {checkLabel(lp)} on your map
+              Committed · {checkLabel(lp)} closed
             </div>
           )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── "Build more targets" — a real target, logged through the approve loop ── */
+
+function AddTargetDialog({
+  noun,
+  onClose,
+  onSubmit
+}: {
+  noun: string;
+  onClose: () => void;
+  onSubmit: (name: string, type: string | null, check: number | null) => void;
+}) {
+  const panelRef = useModalFocus(onClose);
+  const [name, setName] = useState('');
+  const [type, setType] = useState('');
+  const [checkRaw, setCheckRaw] = useState('');
+
+  function submit() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    // Keep digits and the decimal point ("$10,000,000.00" → 10000000), then
+    // round to whole dollars — check sizes are stored as integers.
+    const parsed = Number.parseFloat(checkRaw.replace(/[^0-9.]/g, ''));
+    onSubmit(
+      trimmed,
+      type.trim() || null,
+      Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null
+    );
+  }
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        className="fixed inset-0 z-[60] bg-[rgba(3,6,12,0.64)] backdrop-blur-[3px]"
+        aria-hidden
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add a target"
+        className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[94vw] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--border-strong)] bg-bg-2 p-5 shadow-[var(--shadow-lg)]"
+      >
+        <div className="mb-1 flex items-center gap-2.5">
+          <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
+            <Landmark size={16} aria-hidden />
+          </span>
+          <h2 className="text-[14.5px] font-semibold text-fg-1">Add a target</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="ml-auto flex h-[30px] w-[30px] items-center justify-center rounded-lg text-fg-4 hover:bg-surface-1"
+          >
+            <X size={17} aria-hidden />
+          </button>
+        </div>
+        <p className="mb-4 text-[12px] leading-relaxed text-fg-4">
+          Name the {noun === 'LP' ? 'investor' : noun} and Earn logs them on your map — Sloane
+          scores the fit against your mandate, and every outreach move routes through your approval.
+        </p>
+        <div className="flex flex-col gap-3">
+          <Field
+            label="Name"
+            value={name}
+            onChange={setName}
+            icon={Building2}
+            placeholder="e.g. Granite Endowment"
+            required
+          />
+          <Field
+            label="Type"
+            value={type}
+            onChange={setType}
+            icon={Landmark}
+            placeholder="e.g. Family office"
+            hint="Optional."
+          />
+          <Field
+            label="Check size"
+            value={checkRaw}
+            onChange={setCheckRaw}
+            icon={DollarSign}
+            placeholder="10000000"
+            hint="Optional — in dollars."
+          />
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="gold" size="sm" icon={Sparkles} disabled={!name.trim()} onClick={submit}>
+            Add with Earn
+          </Button>
         </div>
       </div>
     </>
@@ -267,24 +378,46 @@ function LpDrawer({
 export interface CapitalMapFlowProps {
   /** Flattened LP entries from `getLpPipeline`. */
   lps: LpEntry[];
-  /** Raise target in dollars, from the mandate (0 = not set). */
+  /** Raise target in dollars, from the org's real raise target (0 = not set). */
   target: number;
   committedValue: number;
   softCircledValue: number;
+  /** The persona's tab title (`SRC_TITLE`) — "LP Capital Map" for funds. */
+  title: string;
+  /** The persona's noun (`SRC_NOUN`) — "LP" for funds. */
+  noun: string;
 }
 
 export function CapitalMapFlow({
   lps: initialLps,
   target,
   committedValue,
-  softCircledValue
+  softCircledValue,
+  title,
+  noun
 }: CapitalMapFlowProps) {
+  const router = useRouter();
   const [lps, setLps] = useState(initialLps);
   const [committed, setCommitted] = useState(committedValue);
   const [soft, setSoft] = useState(softCircledValue);
   const [openId, setOpenId] = useState<string | null>(null);
   const [running, setRunning] = useState<LpEntry | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [sourcing, setSourcing] = useState<{
+    name: string;
+    type: string | null;
+    check: number | null;
+  } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Server refreshes (after a create) re-seed the board and the roll-ups.
+  const [seededFrom, setSeededFrom] = useState(initialLps);
+  if (seededFrom !== initialLps) {
+    setSeededFrom(initialLps);
+    setLps(initialLps);
+    setCommitted(committedValue);
+    setSoft(softCircledValue);
+  }
 
   useEffect(() => {
     if (!toast) return;
@@ -298,14 +431,15 @@ export function CapitalMapFlow({
   const pctS = target > 0 ? Math.min(100 - pctC, Math.round((soft / target) * 100)) : 0;
   const pipelineValue = lps
     .filter((l) => l.stage === 'prospect' || l.stage === 'contacted')
-    .reduce((s, l) => s + lpValue(l), 0);
+    .reduce((s, l) => s + lpVal(l), 0);
 
   const openLp = openId ? (lps.find((l) => l.id === openId) ?? null) : null;
   const move = running && running.stage !== 'committed' ? NEXT_MOVE[running.stage] : null;
+  const article = noun === 'LP' ? 'an LP' : `a ${noun}`;
 
   function applyAdvance(lp: LpEntry, to: LpStageKey) {
     setLps((prev) => prev.map((l) => (l.id === lp.id ? { ...l, stage: to } : l)));
-    const v = lpValue(lp);
+    const v = lpVal(lp);
     if (to === 'soft_circled') setSoft((s) => s + v);
     if (to === 'committed') {
       setSoft((s) => Math.max(0, s - (lp.stage === 'soft_circled' ? v : 0)));
@@ -317,29 +451,27 @@ export function CapitalMapFlow({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* hero */}
-      <Card className="p-5">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
-            <Landmark size={22} strokeWidth={1.9} aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-[19px] font-semibold tracking-[-0.015em] text-fg-1">
-              LP Capital Map
-            </h1>
-            <p className="mt-0.5 text-[12.5px] text-fg-3">
-              Fit-scored and ranked by Sloane — every move drafted by Earn, executed on your
-              approval.
-            </p>
+      {/* the prototype's LpCapitalMap panel — thermometer, funnel and cards in one frame */}
+      <Card className="p-[18px]">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
+              <Landmark size={16} strokeWidth={1.9} aria-hidden />
+            </span>
+            <div>
+              <div className="mb-px text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                Fit-scored &amp; ranked by Sloane · tap {article} to open
+              </div>
+              <h2 className="text-[14.5px] font-semibold tracking-[-0.01em] text-fg-1">{title}</h2>
+            </div>
           </div>
-          <div className="flex-none text-right">
-            <div className="text-[22px] font-semibold tabular-nums text-gold-1">{lps.length}</div>
-            <div className="text-[10.5px] text-fg-5">LPs mapped</div>
-          </div>
+          <Button variant="ghost" size="sm" icon={Sparkles} onClick={() => setAdding(true)}>
+            Build more targets
+          </Button>
         </div>
 
         {/* raise thermometer */}
-        <div className="mt-4">
+        <div className="mb-4">
           <div className="mb-1.5 flex items-baseline justify-between">
             <span className="text-[12px] text-fg-3">
               <b className="text-fg-1">{compactMoney(committed)}</b> committed{' '}
@@ -379,94 +511,98 @@ export function CapitalMapFlow({
               : ''}
           </div>
         </div>
-      </Card>
 
-      {/* stage funnel */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        {LP_STAGES.map((s) => {
-          const items = byStage(s.key);
-          const amt = items.reduce((sum, l) => sum + lpValue(l), 0);
-          return (
-            <div
-              key={s.key}
-              className="rounded-xl border border-hairline bg-surface-1 px-3 py-2.5"
-              style={{ borderTopWidth: 2, borderTopColor: STAGE_BAR[s.key] }}
-            >
-              <div className="truncate text-[10.5px] text-fg-4">{s.label}</div>
-              <div className="mt-1 flex items-baseline gap-1.5">
-                <span className="text-[18px] font-semibold [font-feature-settings:'tnum']">
-                  {items.length}
-                </span>
-                <span className="text-[10.5px] text-fg-5">· {compactMoney(amt)}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* LP cards */}
-      {lps.length === 0 ? (
-        <Card className="p-8 text-center">
-          <Landmark size={22} className="mx-auto text-fg-4" aria-hidden />
-          <h2 className="mt-3 text-[15px] font-semibold text-fg-1">No LPs on the map yet</h2>
-          <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-fg-4">
-            Sloane builds the target list from your mandate — LPs land here fit-scored and ranked,
-            and every outreach move routes through your approval.
-          </p>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-          {lps
-            .slice()
-            .sort(
-              (a, b) => stageOrder.indexOf(b.stage) - stageOrder.indexOf(a.stage) || b.fit - a.fit
-            )
-            .map((l) => (
-              <button
-                key={l.id}
-                type="button"
-                onClick={() => setOpenId(l.id)}
-                className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-left transition hover:bg-surface-2"
+        {/* stage funnel */}
+        <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          {LP_STAGES.map((s) => {
+            const items = byStage(s.key);
+            const amt = items.reduce((sum, l) => sum + lpVal(l), 0);
+            return (
+              <div
+                key={s.key}
+                className="rounded-xl border border-hairline bg-surface-1 px-3 py-2.5"
+                style={{ borderTopWidth: 2, borderTopColor: STAGE_BAR[s.key] }}
               >
-                <div className="flex items-center gap-2.5">
-                  <Avatar
-                    name={l.name}
-                    size={32}
-                    tone={l.stage === 'committed' ? 'gold' : 'azure'}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-semibold text-fg-1">{l.name}</div>
-                    <div className="truncate text-[10.5px] text-fg-5">
-                      {l.capitalTypes.length ? l.capitalTypes.join(' · ') : 'Capital provider'}
-                    </div>
-                  </div>
-                  <Badge tone={STAGE_TONE[l.stage]} className="px-2 py-0.5 text-[9.5px]">
-                    {LP_STAGES.find((s) => s.key === l.stage)?.label}
-                  </Badge>
-                </div>
-                <div className="mt-2.5 flex items-center gap-3.5 text-[11px] text-fg-4">
-                  <span>
-                    Check{' '}
-                    <b className="font-mono text-fg-2 [font-feature-settings:'tnum']">
-                      {checkLabel(l)}
-                    </b>
+                <div className="truncate text-[10.5px] text-fg-4">{s.label}</div>
+                <div className="mt-1 flex items-baseline gap-1.5">
+                  <span className="text-[18px] font-semibold [font-feature-settings:'tnum']">
+                    {items.length}
                   </span>
-                  <span>
-                    Fit <b style={{ color: fitColor(l.fit) }}>{l.fit}</b>
-                  </span>
+                  <span className="text-[10.5px] text-fg-5">· {compactMoney(amt)}</span>
                 </div>
-              </button>
-            ))}
+              </div>
+            );
+          })}
         </div>
-      )}
 
-      {/* Earn's standing note */}
-      <Card className="flex items-center gap-3 border-[var(--gold-line)] bg-[var(--gold-soft)] p-4">
-        <EarnCoin size={26} className="flex-none" />
-        <p className="flex-1 text-[12.5px] leading-relaxed text-fg-2">
-          <b className="text-gold-1">Earn:</b> Tap an LP and I&apos;ll draft the next move — intro,
-          follow-up, or the allocation lock. Nothing reaches an LP until you approve.
-        </p>
+        {/* LP cards */}
+        {lps.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <Landmark size={22} className="mx-auto text-fg-4" aria-hidden />
+            <h3 className="mt-3 text-[15px] font-semibold text-fg-1">No {noun}s on the map yet</h3>
+            <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-fg-4">
+              Sloane builds the target list from your mandate — {noun}s land here fit-scored and
+              ranked, and every outreach move routes through your approval.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Sparkles}
+              className="mt-4"
+              onClick={() => setAdding(true)}
+            >
+              Add your first target
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {lps
+              .slice()
+              .sort(
+                (a, b) =>
+                  stageOrder.indexOf(b.stage) - stageOrder.indexOf(a.stage) ||
+                  (b.fit ?? -1) - (a.fit ?? -1) ||
+                  lpVal(b) - lpVal(a)
+              )
+              .map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => setOpenId(l.id)}
+                  className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-left transition hover:bg-surface-2"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Avatar
+                      name={l.name}
+                      size={32}
+                      tone={l.stage === 'committed' ? 'gold' : 'azure'}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] font-semibold text-fg-1">{l.name}</div>
+                      <div className="truncate text-[10.5px] text-fg-5">{lpType(l)}</div>
+                    </div>
+                    <Badge tone={STAGE_TONE[l.stage]} className="px-2 py-0.5 text-[9.5px]">
+                      {LP_STAGES.find((s) => s.key === l.stage)?.label}
+                    </Badge>
+                  </div>
+                  <div className="mt-2.5 flex items-center gap-3.5 text-[11px] text-fg-4">
+                    <span>
+                      Check{' '}
+                      <b className="font-mono text-fg-2 [font-feature-settings:'tnum']">
+                        {checkLabel(l)}
+                      </b>
+                    </span>
+                    {l.fit != null && (
+                      <span>
+                        Fit <b style={{ color: fitColor(l.fit) }}>{l.fit}</b>
+                      </span>
+                    )}
+                    {l.warmth && <span>{l.warmth}</span>}
+                  </div>
+                </button>
+              ))}
+          </div>
+        )}
       </Card>
 
       {openLp && (
@@ -480,13 +616,56 @@ export function CapitalMapFlow({
         />
       )}
 
+      {adding && (
+        <AddTargetDialog
+          noun={noun}
+          onClose={() => setAdding(false)}
+          onSubmit={(name, type, check) => {
+            setAdding(false);
+            setSourcing({ name, type, check });
+          }}
+        />
+      )}
+
+      {sourcing && (
+        <ActionRunner
+          title={`Add ${sourcing.name}`}
+          steps={[
+            'Log them on your capital map',
+            'Score the fit against your mandate',
+            'Stage the first-touch note',
+            'Prepare for your approval'
+          ]}
+          draftTitle={`New target · ${sourcing.name}`}
+          draft={`${sourcing.name} joins your map${
+            sourcing.check ? ` at ${compactMoney(sourcing.check)}` : ''
+          }${
+            sourcing.type ? ` (${sourcing.type})` : ''
+          } — Sloane scores the fit on arrival and Earn stages the intro. Approve to log them; every move from here routes through you.`}
+          onApprove={async () => {
+            const res = await adoptLp({
+              name: sourcing.name,
+              capitalTypes: sourcing.type ? [sourcing.type] : [],
+              checkSizeMin: sourcing.check,
+              checkSizeMax: sourcing.check
+            });
+            return res.ok ? { ok: true } : { ok: false, error: res.error };
+          }}
+          onClose={() => setSourcing(null)}
+          onApplied={() => {
+            setToast(`${sourcing.name} added to your map`);
+            router.refresh();
+          }}
+        />
+      )}
+
       {running && move && (
         <ActionRunner
           title={`${move.label} — ${running.name}`}
-          steps={move.steps}
-          draftTitle={`${move.label} · ${running.name}`}
-          draft={move.draft(running.name)}
-          onApprove={() => updateLpStage({ id: running.id, stage: move.to })}
+          steps={moveSteps(move.label)}
+          draftTitle={`${move.label} — ${running.name}`}
+          draft={moveDraft(running, move.label)}
+          onApprove={() => advanceLpStage({ id: running.id })}
           onClose={() => setRunning(null)}
           onApplied={() => applyAdvance(running, move.to)}
         />
