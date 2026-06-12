@@ -1,20 +1,23 @@
 /**
  * lib/wires/vocabulary.ts — the Signatures & wires room's pure vocabulary.
  *
- * Signatures are a tracking ledger (out → signed/declined); wires are a
- * strictly staged instruction ledger (instructed → sent → settled, one
- * stage at a time). Pure so the server actions and the UI can never
- * disagree on what advances next. This is a record of instructions and
- * confirmations the operator approves — e-sign/banking rails attach
+ * Signatures are attestations on a tracking ledger (awaiting → partial →
+ * signed/declined); wires are record-keeping + attestation on an
+ * instruction ledger with the prototype's statuses — outbound wires sit
+ * `staged` until released, inbound wires sit `expected` until receipt is
+ * confirmed, and each clears in exactly one transition. Pure so the
+ * server actions and the UI can never disagree on what advances next.
+ * No money moves through FundExecs OS — e-sign/banking rails attach
  * later without changing the vocabulary.
  */
 
 /* ── Signatures ───────────────────────────────────────────────────────── */
 
-export type SignatureStatus = 'out_for_signature' | 'signed' | 'declined';
+export type SignatureStatus = 'out_for_signature' | 'partial' | 'signed' | 'declined';
 
 export const SIGNATURE_STATUSES: readonly SignatureStatus[] = [
   'out_for_signature',
+  'partial',
   'signed',
   'declined'
 ];
@@ -25,37 +28,24 @@ export function isSignatureStatus(s: string): s is SignatureStatus {
 
 export const SIGNATURE_STATUS_LABEL: Record<SignatureStatus, string> = {
   out_for_signature: 'Awaiting',
+  partial: 'Partial',
   signed: 'Signed',
   declined: 'Declined'
 };
 
-/** Badge tones per status — the prototype's SIG_STATUS palette. */
-export const SIGNATURE_STATUS_TONE: Record<SignatureStatus, 'warning' | 'success' | 'danger'> = {
-  out_for_signature: 'warning',
-  signed: 'success',
-  declined: 'danger'
-};
-
-/** A signature resolves exactly once: out → signed | declined. */
+/** A signature resolves exactly once: awaiting/partial → signed | declined. */
 export function canResolveSignature(status: string): boolean {
+  return status === 'out_for_signature' || status === 'partial';
+}
+
+/** Partial is reachable only from awaiting — some signers in, not all. */
+export function canMarkSignaturePartial(status: string): boolean {
   return status === 'out_for_signature';
 }
 
-export interface SignatureLike {
-  status: string;
-}
-
-export interface SignatureSummary {
-  signed: number;
-  total: number;
-  awaiting: number;
-}
-
-/** The summary tile's numbers — signed over total, with what's still out. */
-export function signatureSummary(sigs: readonly SignatureLike[]): SignatureSummary {
-  const signed = sigs.filter((s) => s.status === 'signed').length;
-  const awaiting = sigs.filter((s) => s.status === 'out_for_signature').length;
-  return { signed, total: sigs.length, awaiting };
+/** Chase targets partial documents — the outstanding countersigners. */
+export function canChaseSignature(status: string): boolean {
+  return status === 'partial';
 }
 
 /* ── Wires ────────────────────────────────────────────────────────────── */
@@ -71,48 +61,38 @@ export const WIRE_DIRECTION_LABEL: Record<WireDirection, string> = {
   out: 'Outgoing'
 };
 
-export type WireStatus = 'instructed' | 'sent' | 'settled';
+export type WireStatus = 'staged' | 'expected' | 'cleared';
 
-/** The strict stage order — a wire advances one stage at a time. */
-export const WIRE_SEQUENCE: readonly WireStatus[] = ['instructed', 'sent', 'settled'];
+export const WIRE_STATUSES: readonly WireStatus[] = ['staged', 'expected', 'cleared'];
 
 export function isWireStatus(s: string): s is WireStatus {
-  return (WIRE_SEQUENCE as readonly string[]).includes(s);
+  return (WIRE_STATUSES as readonly string[]).includes(s);
 }
 
 export const WIRE_STATUS_LABEL: Record<WireStatus, string> = {
-  instructed: 'Staged',
-  sent: 'Sent',
-  settled: 'Settled'
+  staged: 'Staged',
+  expected: 'Expected',
+  cleared: 'Cleared'
 };
 
-/** Badge tones per status — the prototype's WIRE_STATUS palette. */
-export const WIRE_STATUS_TONE: Record<WireStatus, 'gold' | 'azure' | 'success'> = {
-  instructed: 'gold',
-  sent: 'azure',
-  settled: 'success'
-};
-
-/** The only legal next stage for a wire, or null when terminal/unknown. */
-export function nextWireStatus(status: string): WireStatus | null {
-  const i = (WIRE_SEQUENCE as readonly string[]).indexOf(status);
-  if (i < 0 || i === WIRE_SEQUENCE.length - 1) return null;
-  return WIRE_SEQUENCE[i + 1];
+/** The status a freshly staged wire starts in, by direction. */
+export function stagedWireStatus(direction: WireDirection): WireStatus {
+  return direction === 'out' ? 'staged' : 'expected';
 }
 
 /**
- * The per-row action, per the prototype's board: gold **Release** moves a
- * staged outbound wire; everything else that can advance is a secondary
- * **Confirm** (matching inbound funds, or confirming an outbound landed).
- * Null when the wire is terminal.
+ * The only legal next status — staged → cleared (release), expected →
+ * cleared (confirm) — or null when terminal/unknown.
  */
-export function wireAction(
-  direction: string,
-  status: string
-): { label: 'Release' | 'Confirm'; gold: boolean } | null {
-  if (!nextWireStatus(status)) return null;
-  if (direction === 'out' && status === 'instructed') return { label: 'Release', gold: true };
-  return { label: 'Confirm', gold: false };
+export function nextWireStatus(status: string): WireStatus | null {
+  return status === 'staged' || status === 'expected' ? 'cleared' : null;
+}
+
+/** The operator's verb that clears a wire from this status, or null. */
+export function clearWireVerb(status: string): 'release' | 'confirm' | null {
+  if (status === 'staged') return 'release';
+  if (status === 'expected') return 'confirm';
+  return null;
 }
 
 export interface WireLike {
@@ -122,53 +102,44 @@ export interface WireLike {
 }
 
 export interface WireTotals {
-  /** Settled incoming minus settled outgoing — what's actually accounted. */
+  /** Cleared incoming minus cleared outgoing — what's actually accounted. */
   accounted: number;
-  settledIn: number;
-  settledOut: number;
-  /** Sum still moving (instructed or sent), both directions. */
+  clearedIn: number;
+  clearedOut: number;
+  /** Sum still moving (staged or expected), both directions. */
   inFlight: number;
+  /** Count of outbound wires sitting staged, awaiting release. */
+  outboundStaged: number;
+  /** Sum of every outbound wire on the ledger, any status. */
+  outboundTotal: number;
+  /** Sum of inbound wires still expected. */
+  inboundExpected: number;
 }
 
-/** Derive ledger totals from settled wires only — nothing is presumed. */
+/** Derive ledger totals — cleared wires account, nothing is presumed. */
 export function wireTotals(wires: readonly WireLike[]): WireTotals {
-  let settledIn = 0;
-  let settledOut = 0;
-  let inFlight = 0;
+  const totals: WireTotals = {
+    accounted: 0,
+    clearedIn: 0,
+    clearedOut: 0,
+    inFlight: 0,
+    outboundStaged: 0,
+    outboundTotal: 0,
+    inboundExpected: 0
+  };
   for (const w of wires) {
     if (!Number.isFinite(w.amount) || w.amount <= 0) continue;
-    if (w.status === 'settled') {
-      if (w.direction === 'in') settledIn += w.amount;
-      else if (w.direction === 'out') settledOut += w.amount;
-    } else if (isWireStatus(w.status)) {
-      inFlight += w.amount;
+    if (!isWireStatus(w.status) || !isWireDirection(w.direction)) continue;
+    if (w.direction === 'out') totals.outboundTotal += w.amount;
+    if (w.status === 'cleared') {
+      if (w.direction === 'in') totals.clearedIn += w.amount;
+      else totals.clearedOut += w.amount;
+    } else {
+      totals.inFlight += w.amount;
+      if (w.status === 'staged' && w.direction === 'out') totals.outboundStaged += 1;
+      if (w.status === 'expected' && w.direction === 'in') totals.inboundExpected += w.amount;
     }
   }
-  return { accounted: settledIn - settledOut, settledIn, settledOut, inFlight };
-}
-
-export interface WireBoard {
-  /** Outbound wires staged and not yet released. */
-  outStaged: number;
-  /** Every outbound dollar on the ledger, settled or not. */
-  outTotal: number;
-  /** Inbound dollars still expected (anything not settled). */
-  inExpected: number;
-}
-
-/** The summary strip's wire numbers — the prototype's outbound/inbound tiles. */
-export function wireBoard(wires: readonly WireLike[]): WireBoard {
-  let outStaged = 0;
-  let outTotal = 0;
-  let inExpected = 0;
-  for (const w of wires) {
-    if (!isWireStatus(w.status) || !Number.isFinite(w.amount) || w.amount <= 0) continue;
-    if (w.direction === 'out') {
-      outTotal += w.amount;
-      if (w.status === 'instructed') outStaged += 1;
-    } else if (w.direction === 'in' && w.status !== 'settled') {
-      inExpected += w.amount;
-    }
-  }
-  return { outStaged, outTotal, inExpected };
+  totals.accounted = totals.clearedIn - totals.clearedOut;
+  return totals;
 }

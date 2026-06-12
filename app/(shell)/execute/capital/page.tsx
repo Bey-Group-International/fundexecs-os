@@ -13,8 +13,11 @@ export const metadata: Metadata = {
 /**
  * Capital calls — the Execute hub's drawdown/distribution tracker over the
  * Wave-2 `capital_calls` / `call_lp_status` tables (member writes added by
- * 20260611280000). Issuing draws against the Capital Map's committed LPs;
- * a fully funded call settles and feeds the flywheel (`recordLoopClose`).
+ * 20260611280000; line amounts + chase records by 20260612220000). Issuing
+ * draws against the Capital Map's committed LPs pro-rata to their real
+ * commitments; the Distributions view merges the LP Room's `distributions`
+ * ledger with call-sourced distributions; a fully funded call settles and
+ * feeds the flywheel (`recordLoopClose`).
  */
 export default async function ExecuteCapitalPage() {
   const org = await getActiveOrg();
@@ -24,7 +27,13 @@ export default async function ExecuteCapitalPage() {
 
   return (
     <div className="fx-rise mx-auto max-w-[920px]">
-      <CapitalCallsFlow calls={data.calls} committedLps={data.committedLps} />
+      <CapitalCallsFlow
+        calls={data.calls}
+        committedLps={data.committedLps}
+        summary={data.summary}
+        distributions={data.distributions}
+        distributedTotal={data.distributedTotal}
+      />
     </div>
   );
 }
