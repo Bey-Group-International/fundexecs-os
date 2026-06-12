@@ -12,10 +12,12 @@ export const metadata: Metadata = {
 
 /**
  * Partner Network — the Source hub's vetted bench, on real data: service
- * providers from `getPartnersData` with bench stage derived from the
- * provider's status + tracked `partner_intro_requests`. "Request intro" runs
- * the approve loop over the existing idempotent `requestPartnerIntro` action.
- * Capital partners stay on the LP Capital Map (one home per relationship).
+ * providers from `getPartnersData` with the Suggested → Contacted → Engaged
+ * ladder derived from the provider's status + tracked
+ * `partner_intro_requests` (see `lib/partners/bench.ts`). Every advance —
+ * "Request intro", then "Engage" — runs the approve loop over a real server
+ * action. Capital partners stay on the LP Capital Map (one home per
+ * relationship).
  */
 export default async function SourcePartnersPage() {
   const org = await getActiveOrg();
@@ -25,7 +27,11 @@ export default async function SourcePartnersPage() {
 
   return (
     <div className="fx-rise mx-auto max-w-[920px]">
-      <PartnerNetworkFlow providers={data.serviceProviders} introStatus={data.introStatus} />
+      <PartnerNetworkFlow
+        providers={data.serviceProviders}
+        introStatus={data.introStatus}
+        introActivity={data.introActivity}
+      />
     </div>
   );
 }

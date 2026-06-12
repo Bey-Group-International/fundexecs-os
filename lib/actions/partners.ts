@@ -12,6 +12,8 @@ export type PartnerActionResult = { ok: true; id: string } | { ok: false; error:
 export interface AddServiceProviderInput {
   name: string;
   category?: string;
+  /** 'active' = already engaged; 'prospect' = on the bench as Suggested. */
+  status?: 'active' | 'prospect';
 }
 
 /**
@@ -34,13 +36,67 @@ export async function addServiceProvider(
       org_id: org.orgId,
       name,
       category: input.category?.trim() || 'general',
-      status: 'active'
+      status: input.status ?? 'active'
     })
     .select('id')
     .single();
 
   if (error || !data) return { ok: false, error: error?.message ?? 'Could not add partner.' };
   return { ok: true, id: data.id };
+}
+
+export type EngagePartnerResult =
+  | { ok: true; id: string; status: string }
+  | { ok: false; error: string };
+
+/**
+ * "Engage" on the Partner Network bench: advance the requester's open intro
+ * request for a service provider exactly one step (requested | accepted →
+ * introduced). The WHERE clause is the server-side stage gate — without an
+ * open request (or with one already introduced/declined) nothing matches and
+ * the advance is refused, so a provider can never skip Suggested → Engaged.
+ */
+export async function engagePartner(input: { partnerId: string }): Promise<EngagePartnerResult> {
+  if (!input.partnerId) return { ok: false, error: 'Missing partner.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+
+  const supabase = await createClient();
+
+  // Pick exactly one open request (requested | accepted) to advance — never a
+  // blanket update, so a single Engage approval can't promote several rows.
+  const { data: open, error: readError } = await supabase
+    .from('partner_intro_requests')
+    .select('id')
+    .eq('org_id', org.orgId)
+    .eq('requester_id', org.userId)
+    .eq('partner_type', 'service_provider')
+    .eq('partner_id', input.partnerId)
+    .in('status', ['requested', 'accepted'])
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (readError) return { ok: false, error: readError.message };
+  if (!open) {
+    return { ok: false, error: 'No open intro request to engage — request the intro first.' };
+  }
+
+  // Advance that one row, re-checking the open status to lose cleanly to a
+  // concurrent advance rather than double-introducing.
+  const { data, error } = await supabase
+    .from('partner_intro_requests')
+    .update({ status: 'introduced' })
+    .eq('id', open.id)
+    .in('status', ['requested', 'accepted'])
+    .select('id, status');
+
+  if (error) return { ok: false, error: error.message };
+  const row = data?.[0];
+  if (!row) {
+    return { ok: false, error: 'No open intro request to engage — request the intro first.' };
+  }
+  return { ok: true, id: row.id, status: row.status };
 }
 
 export type PartnerType = 'service_provider' | 'capital_provider';
@@ -77,15 +133,19 @@ export async function requestPartnerIntro(
 
   const supabase = await createClient();
 
-  // Re-usable filter for the open request that uniquely identifies this
-  // (org, requester, partner_type, partner) — mirrors the partial unique index.
+  // The open request for this (org, requester, partner_type, partner).
+  // 'requested' and 'accepted' are the single OPEN state — reuse either rather
+  // than minting a second open row beside an accepted one (which would let one
+  // Engage approval advance multiple records).
   const openRequestMatch = (q: ReturnType<typeof openSelect>) =>
     q
       .eq('org_id', org.orgId)
       .eq('requester_id', org.userId)
       .eq('partner_type', input.partnerType)
       .eq('partner_id', input.partnerId)
-      .eq('status', 'requested');
+      .in('status', ['requested', 'accepted'])
+      .order('created_at', { ascending: true })
+      .limit(1);
 
   function openSelect() {
     return supabase.from('partner_intro_requests').select('id, status');

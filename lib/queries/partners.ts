@@ -47,6 +47,8 @@ export interface PartnersData {
   facets: PartnerFacets;
   /** Intro request status keyed by partner id, for the current user/org. */
   introStatus: IntroStatusMap;
+  /** Most recent intro-request activity (updated_at ISO) keyed by partner id. */
+  introActivity: Record<string, string>;
   empty: boolean;
 }
 
@@ -70,9 +72,9 @@ export async function getPartnersData(orgId: string): Promise<PartnersData> {
 
     supabase
       .from('partner_intro_requests')
-      .select('partner_id, status')
+      .select('partner_id, status, updated_at')
       .eq('org_id', orgId)
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
   ]);
 
   const serviceProviders: ServiceProvider[] = (spResult.data ?? []).map((r) => ({
@@ -106,11 +108,13 @@ export async function getPartnersData(orgId: string): Promise<PartnersData> {
   }
   const capitalTypes = Array.from(capitalTypesSet).sort();
 
-  // Build intro status map (most-recent request per partner).
+  // Build intro status + activity maps (most-recent request per partner).
   const introStatus: IntroStatusMap = {};
+  const introActivity: Record<string, string> = {};
   for (const row of introResult.data ?? []) {
     if (!introStatus[row.partner_id]) {
       introStatus[row.partner_id] = row.status;
+      introActivity[row.partner_id] = row.updated_at;
     }
   }
 
@@ -120,6 +124,7 @@ export async function getPartnersData(orgId: string): Promise<PartnersData> {
     capitalProviders,
     facets: { categories, capitalTypes },
     introStatus,
+    introActivity,
     empty
   };
 }
