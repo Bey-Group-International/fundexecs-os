@@ -46,9 +46,20 @@ Fidelity notes specific to this tab:
 - Config and persistence are split (`lib/dataroom/config.ts` pure +
   `lib/dataroom/{persistence,actions}.ts`); extend configs there with unit
   tests, never inline.
+- Persistence map: materials + operator spec → `capital_materials` (kinds
+  via `MATERIAL_DB_KIND`), share links → `data_room_links` (joined to their
+  material by `material_kind`, label is display-only), recipient views →
+  `data_room_views` (written only by the public route).
 - Every count (materials ready, views, links) must be real; the prototype's
   seeded prospects/invitees become honest empty-state copy or real rows.
-- Keep all mutations behind the ActionRunner approve loop.
+- The live surface already exceeds the prototype on share links: the chip is
+  the REAL `{host}/dr/{token}` URL (click to open) with a Copy button, and
+  viewer rows show name + email from logged views. Keep that — don't regress
+  to the prototype's decorative `fundexecs.com` chip.
+- The flow is split across `DataRoomFlow.tsx` / `MaterialBuilder.tsx` /
+  `VettingGate.tsx` / `shared.tsx`; keep the split rather than re-inlining.
+- Keep all mutations behind the ActionRunner approve loop, and keep
+  `e2e/public-data-room.spec.ts` green.
 
 Definition of done, gates, and PR format: per the playbook. Open a draft PR
 titled `Build tab — Materials & data room: prototype parity`.

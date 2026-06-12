@@ -261,6 +261,32 @@ export const MAT_TONE: Record<MaterialStage, 'neutral' | 'success'> = {
   Ready: 'success'
 };
 
+/** The expiry choices an operator picks from when generating a share link. */
+export interface LinkExpiryPreset {
+  id: string;
+  label: string;
+  days: number | null;
+}
+
+export const LINK_EXPIRY_PRESETS: readonly LinkExpiryPreset[] = [
+  { id: '30d', label: 'Expires in 30 days', days: 30 },
+  { id: '90d', label: 'Expires in 90 days', days: 90 },
+  { id: 'never', label: 'No expiry', days: null }
+];
+
+export const DEFAULT_LINK_EXPIRY = '30d';
+
+/** Resolve a preset id to the link's `expires_at` (null = no expiry).
+ *  Unknown ids fall back to the default preset — never to "never". */
+export function expiryTimestamp(presetId: string, now: Date = new Date()): string | null {
+  const preset =
+    LINK_EXPIRY_PRESETS.find((p) => p.id === presetId) ??
+    LINK_EXPIRY_PRESETS.find((p) => p.id === DEFAULT_LINK_EXPIRY)!;
+  return preset.days === null
+    ? null
+    : new Date(now.getTime() + preset.days * 86_400_000).toISOString();
+}
+
 /** A fresh, editable copy of a material's recommended decisions. */
 export function materialDefaults(cfg: MaterialBuildCfg): Record<string, MaterialValue> {
   const out: Record<string, MaterialValue> = {};

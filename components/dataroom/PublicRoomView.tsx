@@ -196,7 +196,7 @@ export function PublicRoomView({
           </p>
         </div>
         <Badge tone="success" className="flex-none" dot>
-          Verified · {viewerName}
+          Access logged · {viewerName}
         </Badge>
       </Card>
 

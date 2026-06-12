@@ -1,7 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { MAT_DOCS, MAT_LABEL, type MaterialValue } from './config';
-import { MATERIAL_DB_KIND, sanitizeMaterialSpec } from './persistence';
+import { MATERIAL_DB_KIND, materialIdForDbKind, sanitizeMaterialSpec } from './persistence';
 
 /**
  * lib/dataroom/public.ts — the read side of the public `/dr/[token]` route.
@@ -38,7 +38,7 @@ export async function getPublicDataRoom(token: string): Promise<PublicDataRoom |
     const admin = createAdminClient();
     const { data: link } = await admin
       .from('data_room_links')
-      .select('id, org_id, label, vetting, expires_at')
+      .select('id, org_id, label, material_kind, vetting, expires_at')
       .eq('token', clean)
       .maybeSingle();
     if (!link || !link.label) return null;
@@ -51,8 +51,12 @@ export async function getPublicDataRoom(token: string): Promise<PublicDataRoom |
       .eq('id', link.org_id)
       .maybeSingle();
 
-    // The link's label names one material in the room's vocabulary.
-    const materialId = MAT_DOCS.find((d) => MAT_LABEL[d] === link.label) ?? null;
+    // The kind column is the structural join; label matching covers rows
+    // from before the column existed.
+    const materialId =
+      (link.material_kind ? materialIdForDbKind(link.material_kind) : null) ??
+      MAT_DOCS.find((d) => MAT_LABEL[d] === link.label) ??
+      null;
     let material: PublicDataRoom['material'] = null;
     if (materialId && !expired) {
       const { data: row } = await admin
