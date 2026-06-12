@@ -7,7 +7,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY!);
+/** Lazily-initialised Resend client — avoids module-level throw on missing key */
+function getResend() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) throw new Error('RESEND_API_KEY is not set');
+  return new Resend(key);
+}
+
 const FROM = 'FundExecs OS <noreply@fundexecs.com>';
 
 /** Escape HTML special chars to prevent XSS in email templates */
@@ -41,8 +47,8 @@ function tierBadgeHtml(tier: string) {
     early_access: '#60a5fa',
     waitlist: '#94a3b8',
   };
-  const c = colors[tier] || colors.waitlist;
-  const label = escapeHtml(TIER_LABELS[tier] || tier);
+  const c = colors[tier] ?? colors.waitlist;
+  const label = escapeHtml(TIER_LABELS[tier] ?? tier);
   return `<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#070b14;background:${c}">${label}</span>`;
 }
 
@@ -53,7 +59,6 @@ function confirmationHtml(data: {
   airdropEligible: boolean;
 }) {
   const { name, position, tier, airdropEligible } = data;
-  // Sanitize user-supplied values before interpolating into HTML
   const safeName = escapeHtml(name);
   const positionStr =
     position === 1 ? 'first in line' : `#${position.toLocaleString()} on the waitlist`;
@@ -64,23 +69,18 @@ function confirmationHtml(data: {
 <body style="margin:0;padding:0;background:#070b14;font-family:-apple-system,BlinkMacSystemFont,'Geist',sans-serif;color:#fff">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;padding:40px 24px">
     <tr><td>
-      <!-- Logo -->
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px">
         <div style="width:40px;height:40px;border-radius:50%;background:#F7C948;display:flex;align-items:center;justify-content:center">
           <span style="font-size:22px;font-weight:700;color:#070b14">$</span>
         </div>
         <span style="font-size:18px;font-weight:600;letter-spacing:-0.02em">FundExecs <span style="color:#64748b;font-weight:500">OS</span></span>
       </div>
-
-      <!-- Hero -->
       <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;margin:0 0 12px">
         You're ${positionStr}${airdropEligible ? ' 🎉' : ''}.
       </h1>
       <p style="font-size:15px;line-height:1.6;color:#94a3b8;margin:0 0 24px">
         ${safeName ? `${safeName}, welcome` : 'Welcome'} to FundExecs OS — the AI-native command center for private-market operators. Your desk is reserved.
       </p>
-
-      <!-- Tier card -->
       <div style="background:#0e1526;border:1px solid #1e2d45;border-radius:16px;padding:20px 22px;margin-bottom:24px">
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Your access tier</div>
         ${tierBadgeHtml(tier)}
@@ -94,8 +94,6 @@ function confirmationHtml(data: {
             : ''
         }
       </div>
-
-      <!-- What's next -->
       <div style="background:#0e1526;border:1px solid #1e2d45;border-radius:16px;padding:20px 22px;margin-bottom:32px">
         <div style="font-size:13px;font-weight:600;margin-bottom:14px">What happens next</div>
         ${[
@@ -123,8 +121,6 @@ function confirmationHtml(data: {
           )
           .join('')}
       </div>
-
-      <!-- Footer -->
       <div style="font-size:11px;color:#475569;line-height:1.6;text-align:center">
         FundExecs OS · Bey Group International<br>
         <a href="https://fundexecs.com/unsubscribe" style="color:#475569">Unsubscribe</a> ·
@@ -196,7 +192,6 @@ export async function POST(req: NextRequest) {
 
     if (insertError) throw insertError;
 
-    // Send confirmation email (fire-and-forget — don't block response)
     const emailHtml = confirmationHtml({
       name: name?.trim() || '',
       position: row.position,
@@ -204,20 +199,22 @@ export async function POST(req: NextRequest) {
       airdropEligible: row.airdrop_eligible,
     });
 
-    resend.emails
-      .send({
-        from: FROM,
-        to: [email],
-        subject: `You're ${row.position === 1 ? 'first' : `#${row.position}`} on the FundExecs OS waitlist`,
-        html: emailHtml,
-      })
-      .then(() =>
-        supabase
+    const subject = `You're ${row.position === 1 ? 'first' : `#${row.position}`} on the FundExecs OS waitlist`;
+
+    // Fire-and-forget confirmation email — does NOT block the response.
+    // Both the send and the follow-up DB update are awaited inside the void
+    // async IIFE so neither is silently dropped.
+    void (async () => {
+      try {
+        await getResend().emails.send({ from: FROM, to: [email], subject, html: emailHtml });
+        await supabase
           .from('waitlist_signups')
           .update({ confirmation_sent_at: new Date().toISOString() })
-          .eq('id', row.id),
-      )
-      .catch(console.error);
+          .eq('id', row.id);
+      } catch (e) {
+        console.error('[/api/waitlist] confirmation email failed', e);
+      }
+    })();
 
     return NextResponse.json({
       success: true,

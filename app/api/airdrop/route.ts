@@ -39,7 +39,6 @@ export async function GET(req: NextRequest) {
   const email = searchParams.get('email')?.toLowerCase().trim();
   if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 });
 
-  // Check waitlist
   const { data: ws } = await supabase
     .from('waitlist_signups')
     .select('id, position, tier, airdrop_eligible, airdrop_claimed')
@@ -47,7 +46,7 @@ export async function GET(req: NextRequest) {
     .single();
 
   if (ws) {
-    const claimed = await supabase
+    const { data: claimData } = await supabase
       .from('airdrop_claims')
       .select('claimed_at, access_type')
       .eq('email', email)
@@ -59,9 +58,9 @@ export async function GET(req: NextRequest) {
       position: ws.position,
       tier: ws.tier,
       eligible: ws.airdrop_eligible,
-      claimed: !!claimed.data,
-      claimedAt: claimed.data?.claimed_at ?? null,
-      accessType: claimed.data?.access_type ?? null,
+      claimed: !!claimData,
+      claimedAt: claimData?.claimed_at ?? null,
+      accessType: claimData?.access_type ?? null,
     });
   }
 
@@ -92,7 +91,7 @@ export async function POST(req: NextRequest) {
     // Get waitlist row
     const { data: ws, error: wsErr } = await supabase
       .from('waitlist_signups')
-      .select('id, tier, airdrop_eligible, airdrop_claimed')
+      .select('id, tier, airdrop_eligible')
       .eq('email', normalized)
       .single();
 
@@ -100,12 +99,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email not found on waitlist.' }, { status: 404 });
     }
     if (!ws.airdrop_eligible) {
-      return NextResponse.json({ error: 'Not eligible for airdrop at this tier.' }, { status: 403 });
+      return NextResponse.json(
+        { error: 'Not eligible for airdrop at this tier.' },
+        { status: 403 },
+      );
     }
 
-    // Atomic upsert: insert-or-ignore into airdrop_claims (unique on email)
-    // then update waitlist_signups — both in the same operation window.
-    // Returns the row whether new or existing.
+    // Pre-check: read existing claim BEFORE upsert so alreadyClaimed is accurate
+    // regardless of concurrent requests racing on the same email.
+    const { data: existingClaim } = await supabase
+      .from('airdrop_claims')
+      .select('id')
+      .eq('email', normalized)
+      .maybeSingle();
+
+    const alreadyClaimed = existingClaim !== null;
+
+    // Atomic upsert: insert-or-update into airdrop_claims (unique on email)
     const { data: claim, error: claimErr } = await supabase
       .from('airdrop_claims')
       .upsert(
@@ -122,19 +132,17 @@ export async function POST(req: NextRequest) {
 
     if (claimErr) throw claimErr;
 
-    // Mark waitlist row as claimed — treat update errors as non-fatal
-    // (the claim record is the source of truth)
-    const { error: updateErr } = await supabase
-      .from('waitlist_signups')
-      .update({ airdrop_claimed: true })
-      .eq('id', ws.id);
+    // Mark waitlist row as claimed only on first claim — non-fatal if it fails
+    if (!alreadyClaimed) {
+      const { error: updateErr } = await supabase
+        .from('waitlist_signups')
+        .update({ airdrop_claimed: true })
+        .eq('id', ws.id);
 
-    if (updateErr) {
-      console.error('[/api/airdrop] waitlist update failed (non-fatal)', updateErr);
+      if (updateErr) {
+        console.error('[/api/airdrop] waitlist update failed (non-fatal)', updateErr);
+      }
     }
-
-    // If the claim row already existed before this request, surface alreadyClaimed
-    const alreadyClaimed = ws.airdrop_claimed;
 
     return NextResponse.json({
       success: true,
