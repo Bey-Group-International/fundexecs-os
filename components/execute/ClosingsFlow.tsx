@@ -1,59 +1,324 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Building2,
   Check,
   CheckCircle2,
+  CircleCheckBig,
   FileSignature,
+  FileText,
   Landmark,
-  Lock,
+  PenLine,
+  Send,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 import { ActionRunner } from '@/components/earn/ActionRunner';
-import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
-import { ProgressBar } from '@/components/ui/ProgressBar';
-import { executeClosingStep, openClosing } from '@/lib/closings/actions';
+import { executeClosingStep, openClosing, requestStepSignature } from '@/lib/closings/actions';
 import {
   CLOSING_KIND_LABEL,
+  STEP_DISPLAY,
   STEP_SEQUENCE,
   isClosingKind,
+  isSignatureStep,
   isStepDone,
   nextExecutableSeq,
-  type ClosingKind
+  stepDisplayStatus,
+  type ClosingKind,
+  type ClosingStepSpec
 } from '@/lib/closings/sequence';
+import { ENVELOPE_DISPLAY, isValidEmail, mapEnvelopeStatus } from '@/lib/closings/docusign';
 import { compactMoney } from '@/lib/format';
-import type { ClosingCandidate, ClosingView } from '@/lib/queries/closings';
+import type { ClosingCandidate, ClosingStepView, ClosingView } from '@/lib/queries/closings';
 import { cn } from '@/lib/utils';
-
-const KIND_TONE: Record<string, BadgeTone> = {
-  deal: 'azure',
-  lp_commitment: 'gold',
-  engagement: 'info'
-};
 
 type RunnerState =
   | { type: 'open'; candidate: ClosingCandidate }
-  | { type: 'step'; closing: ClosingView; seq: number; name: string; run: string[] };
+  | { type: 'step'; closing: ClosingView; step: ClosingStepView; spec?: ClosingStepSpec }
+  | {
+      type: 'sign';
+      closing: ClosingView;
+      step: ClosingStepView;
+      spec?: ClosingStepSpec;
+      signerName: string;
+      signerEmail: string;
+    };
+
+function specFor(closing: ClosingView, seq: number): ClosingStepSpec | undefined {
+  return isClosingKind(closing.kind)
+    ? STEP_SEQUENCE[closing.kind as ClosingKind][seq - 1]
+    : undefined;
+}
+
+/* ── modal focus management (mirrors the house drawer pattern) ───────────── */
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function useModalFocus(onClose: () => void) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    openerRef.current = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    panel?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !panel) return;
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !panel.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      document.body.style.overflow = prevOverflow;
+      openerRef.current?.focus?.();
+    };
+  }, [onClose]);
+
+  return panelRef;
+}
+
+/* ── the step drawer ─────────────────────────────────────────────────────── */
+
+function StepDrawer({
+  closing,
+  step,
+  isNext,
+  onClose,
+  onExecute,
+  onSendSignature
+}: {
+  closing: ClosingView;
+  step: ClosingStepView;
+  isNext: boolean;
+  onClose: () => void;
+  onExecute: (step: ClosingStepView) => void;
+  onSendSignature: (step: ClosingStepView, signerName: string, signerEmail: string) => void;
+}) {
+  const panelRef = useModalFocus(onClose);
+  const spec = specFor(closing, step.seq);
+  const display = stepDisplayStatus(step.status, isNext, spec?.wire);
+  const chip = STEP_DISPLAY[display];
+  const done = isStepDone(step.status);
+  const signable = isSignatureStep(spec) && !done && closing.status === 'open';
+  const envelope = step.signature ? mapEnvelopeStatus(step.signature.status) : null;
+
+  const [signerName, setSignerName] = useState('');
+  const [signerEmail, setSignerEmail] = useState(step.signature?.signerEmail ?? '');
+  const canSend = signerName.trim().length > 0 && isValidEmail(signerEmail);
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        className="fixed inset-0 z-[60] bg-[rgba(3,6,12,0.64)] backdrop-blur-[3px]"
+        aria-hidden
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={step.name}
+        className="fixed bottom-0 right-0 top-0 z-[61] w-[440px] max-w-[94vw] overflow-y-auto border-l border-[var(--border-strong)] bg-bg-2 shadow-[-30px_0_80px_-30px_rgba(0,0,0,0.7)]"
+      >
+        <div className="flex items-center gap-3 border-b border-hairline px-5 py-4">
+          <span className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[11px] border border-hairline bg-surface-2 text-fg-2">
+            <FileSignature size={20} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[15.5px] font-semibold text-fg-1">{step.name}</div>
+            <div className="text-[11.5px] text-fg-4">
+              Step {step.seq} of {closing.progress.total}
+              {spec ? ` · ${spec.who}` : ''}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-[30px] w-[30px] items-center justify-center rounded-lg text-fg-4 hover:bg-surface-1"
+          >
+            <X size={17} aria-hidden />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4 p-5">
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
+              <div className="text-[10px] text-fg-5">Status</div>
+              <Badge tone={chip.tone} className="mt-1.5 px-2 py-0.5 text-[9.5px]">
+                {chip.label}
+              </Badge>
+            </div>
+            <div className="rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
+              <div className="text-[10px] text-fg-5">Party</div>
+              <div className="mt-1 text-[13px] font-semibold text-fg-2">{spec?.party ?? '—'}</div>
+            </div>
+            <div className="rounded-xl border border-hairline bg-surface-1 px-3 py-2.5">
+              <div className="text-[10px] text-fg-5">Prepared by</div>
+              <div className="mt-1 truncate text-[12px] font-semibold text-fg-2">
+                {spec?.who ?? '—'}
+              </div>
+            </div>
+          </div>
+
+          {spec ? (
+            <div>
+              <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                What this step does
+              </div>
+              <div className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-2">
+                {spec.detail}
+              </div>
+              <div className="mt-2 flex items-center gap-1.5 text-[11.5px] text-fg-4">
+                <CircleCheckBig size={13} className="text-gold-1" aria-hidden />
+                {spec.drives}
+              </div>
+            </div>
+          ) : null}
+
+          {/* e-signature — send the signature step out via DocuSign */}
+          {envelope ? (
+            <div className="rounded-[13px] border border-hairline bg-surface-1 px-4 py-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-[12px] font-semibold text-fg-2">
+                  <Send size={14} className="text-fg-4" aria-hidden />
+                  DocuSign envelope
+                </div>
+                <Badge tone={ENVELOPE_DISPLAY[envelope].tone} className="px-2 py-0.5 text-[9.5px]">
+                  {ENVELOPE_DISPLAY[envelope].label}
+                </Badge>
+              </div>
+              {step.signature?.signerEmail ? (
+                <div className="mt-1.5 truncate text-[11px] text-fg-5">
+                  Sent to {step.signature.signerEmail}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {signable ? (
+            <div className="rounded-[13px] border border-[var(--azure-line)] bg-[var(--azure-soft)] px-4 py-3.5">
+              <div className="mb-1 flex items-center gap-2 text-[12.5px] font-semibold text-fg-1">
+                <Send size={14} className="text-[var(--azure)]" aria-hidden />
+                Send for signature
+              </div>
+              <p className="mb-3 text-[11.5px] leading-relaxed text-fg-3">
+                Sends a real DocuSign envelope to the signer. Signing happens on DocuSign — this
+                doesn&apos;t execute the step; you still approve and attest it here once it&apos;s
+                signed. Nothing sends until you approve.
+              </p>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="text"
+                  value={signerName}
+                  onChange={(e) => setSignerName(e.target.value)}
+                  placeholder="Signer name"
+                  aria-label="Signer name"
+                  className="w-full rounded-lg border border-hairline bg-surface-1 px-3 py-2 text-[12.5px] text-fg-1 outline-none placeholder:text-fg-5 focus:border-[var(--azure-line)]"
+                />
+                <input
+                  type="email"
+                  value={signerEmail}
+                  onChange={(e) => setSignerEmail(e.target.value)}
+                  placeholder="signer@email.com"
+                  aria-label="Signer email"
+                  className="w-full rounded-lg border border-hairline bg-surface-1 px-3 py-2 text-[12.5px] text-fg-1 outline-none placeholder:text-fg-5 focus:border-[var(--azure-line)]"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Send}
+                  disabled={!canSend}
+                  className="w-full"
+                  onClick={() => onSendSignature(step, signerName.trim(), signerEmail.trim())}
+                >
+                  {envelope ? 'Resend for signature' : 'Send for signature'}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {done ? (
+            <div className="flex items-center gap-2.5 rounded-[13px] border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3.5 text-[13px] font-semibold text-success">
+              <CheckCircle2 size={17} aria-hidden />
+              Executed · logged to Chain of Trust
+            </div>
+          ) : isNext ? (
+            <div className="rounded-[13px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-4 py-3.5">
+              <div className="mb-2 flex items-center gap-2">
+                <EarnCoin size={24} />
+                <span className="text-[12.5px] font-semibold text-gold-1">Ready to execute</span>
+              </div>
+              <div className="mb-3 text-[12px] leading-relaxed text-fg-2">
+                This step is ready. {spec?.action ?? 'Execute'} — nothing executes until you
+                approve, and it&apos;s logged the moment you do.
+              </div>
+              <Button
+                variant="gold"
+                size="sm"
+                icon={PenLine}
+                className="w-full"
+                onClick={() => onExecute(step)}
+              >
+                {spec?.action ?? 'Execute'}
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-[13px] border border-hairline bg-surface-1 px-4 py-3.5 text-[12px] leading-relaxed text-fg-4">
+              Executes after step {step.seq - 1} — the sequence is strict, so nothing gets skipped.
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── the closings center ─────────────────────────────────────────────────── */
 
 export function ClosingsFlow({
   closings,
-  candidates
+  candidates,
+  firm
 }: {
   closings: ClosingView[];
   candidates: ClosingCandidate[];
+  firm: string | null;
 }) {
   const router = useRouter();
   const [runner, setRunner] = useState<RunnerState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(
-    closings.find((c) => c.status === 'open')?.id ?? null
+  const [selectedId, setSelectedId] = useState<string | null>(
+    closings.find((c) => c.status === 'open')?.id ?? closings[0]?.id ?? null
   );
+  const [openStepId, setOpenStepId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -61,34 +326,290 @@ export function ClosingsFlow({
     return () => clearTimeout(t);
   }, [toast]);
 
-  const open = closings.filter((c) => c.status === 'open');
-  const atClose = open.reduce((s, c) => s + (c.amount ?? 0), 0);
+  const selected = closings.find((c) => c.id === selectedId) ?? closings[0] ?? null;
+  const gate = selected ? nextExecutableSeq(selected.steps) : null;
+  const nextStep = selected && gate != null ? selected.steps.find((s) => s.seq === gate) : null;
+  const nextSpec = selected && nextStep ? specFor(selected, nextStep.seq) : undefined;
+  const closed = selected ? selected.progress.complete : false;
+  const kindLabel =
+    selected && isClosingKind(selected.kind) ? CLOSING_KIND_LABEL[selected.kind] : selected?.kind;
+  const openStep =
+    selected && openStepId ? (selected.steps.find((s) => s.id === openStepId) ?? null) : null;
+
+  function executeStep(closing: ClosingView, step: ClosingStepView) {
+    setOpenStepId(null);
+    setRunner({ type: 'step', closing, step, spec: specFor(closing, step.seq) });
+  }
+
+  function sendSignature(
+    closing: ClosingView,
+    step: ClosingStepView,
+    signerName: string,
+    signerEmail: string
+  ) {
+    setOpenStepId(null);
+    setRunner({
+      type: 'sign',
+      closing,
+      step,
+      spec: specFor(closing, step.seq),
+      signerName,
+      signerEmail
+    });
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      {/* hero */}
-      <Card className="p-5">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
-            <FileSignature size={22} strokeWidth={1.9} aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-[19px] font-semibold tracking-[-0.015em] text-fg-1">Closings</h1>
-            <p className="mt-0.5 text-[12.5px] text-fg-3">
-              Commitment to close, step-gated — each step executes in order, on your approval, and
-              the close lands on your record.
-            </p>
-          </div>
-          <div className="flex-none text-right">
-            <div className="text-[22px] font-semibold tabular-nums text-gold-1">
-              {atClose > 0 ? compactMoney(atClose) : open.length}
-            </div>
-            <div className="text-[10.5px] text-fg-5">
-              {atClose > 0 ? 'in motion' : 'open closings'}
+      {/* the prototype's Closings panel — switcher, progress, ladder in one frame */}
+      {selected ? (
+        <Card className="p-[18px]">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
+                <FileSignature size={16} strokeWidth={1.9} aria-hidden />
+              </span>
+              <div>
+                <div className="mb-px text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                  {selected.counterparty ?? kindLabel} · {kindLabel}
+                  {selected.amount ? ` · ${compactMoney(selected.amount)}` : ''}
+                </div>
+                <h2 className="text-[14.5px] font-semibold tracking-[-0.01em] text-fg-1">
+                  Closings
+                </h2>
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
+
+          {/* closing switcher — one chip per real room */}
+          {closings.length > 1 ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {closings.map((c) => {
+                const on = c.id === selected.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedId(c.id);
+                      setOpenStepId(null);
+                    }}
+                    className={cn(
+                      'flex items-center gap-2.5 rounded-[11px] border px-3 py-2 text-left transition',
+                      on
+                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
+                        : 'border-hairline bg-surface-1 hover:bg-surface-2'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex h-7 w-7 flex-none items-center justify-center rounded-lg',
+                        on
+                          ? 'bg-[var(--accent)] text-white'
+                          : 'border border-hairline bg-surface-2 text-fg-3'
+                      )}
+                    >
+                      {c.kind === 'deal' ? (
+                        <Building2 size={15} aria-hidden />
+                      ) : (
+                        <Landmark size={15} aria-hidden />
+                      )}
+                    </span>
+                    <span>
+                      <span
+                        className={cn(
+                          'block text-[12.5px] font-semibold',
+                          on ? 'text-fg-1' : 'text-fg-2'
+                        )}
+                      >
+                        {c.counterparty ??
+                          (isClosingKind(c.kind) ? CLOSING_KIND_LABEL[c.kind] : c.kind)}
+                      </span>
+                      <span className="block text-[10px] text-fg-5">
+                        {c.progress.done}/{c.progress.total} executed
+                        {c.amount ? ` · ${compactMoney(c.amount)}` : ''}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {/* progress header */}
+          <div className="mb-4 flex flex-wrap gap-3">
+            <div className="min-w-[280px] flex-[2] rounded-xl border border-hairline bg-surface-1 px-4 py-3.5">
+              <div className="mb-2.5 flex flex-wrap items-center gap-2.5">
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-bold',
+                    closed
+                      ? 'border border-[var(--success-line)] bg-[var(--success-soft)] text-success'
+                      : 'border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1'
+                  )}
+                >
+                  {closed ? (
+                    <CircleCheckBig size={14} aria-hidden />
+                  ) : (
+                    <PenLine size={14} aria-hidden />
+                  )}
+                  {closed
+                    ? 'Closed & funded'
+                    : `${selected.progress.total - selected.progress.done} steps to close`}
+                </span>
+                <span className="text-[11.5px] text-fg-3">
+                  <b className="text-fg-1">
+                    {selected.progress.done}/{selected.progress.total}
+                  </b>{' '}
+                  steps executed
+                </span>
+              </div>
+              <div
+                className="w-full overflow-hidden rounded-full bg-surface-2"
+                style={{ height: 7 }}
+                role="progressbar"
+                aria-label="Closing progress"
+                aria-valuenow={selected.progress.pct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className="h-full rounded-full transition-[width] duration-300"
+                  style={{
+                    width: `${selected.progress.pct}%`,
+                    background: 'var(--success)'
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col justify-center gap-2">
+              <Button
+                variant={closed ? 'secondary' : 'gold'}
+                size="sm"
+                icon={closed ? CheckCircle2 : PenLine}
+                disabled={closed || !nextStep}
+                onClick={() => nextStep && executeStep(selected, nextStep)}
+              >
+                {closed ? 'Closed' : (nextSpec?.action ?? 'Execute next')}
+              </Button>
+              <Link href="/build/data-room">
+                <Button variant="ghost" size="sm" icon={FileText} className="w-full">
+                  Closing binder
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* the step ladder */}
+          <div className="flex flex-col">
+            {selected.steps.map((s, i) => {
+              const done = isStepDone(s.status);
+              const isNext = gate === s.seq && selected.status === 'open';
+              const spec = specFor(selected, s.seq);
+              const display = stepDisplayStatus(s.status, isNext, spec?.wire);
+              const chip = STEP_DISPLAY[display];
+              return (
+                <div key={s.id} className="flex gap-3">
+                  {/* timeline spine */}
+                  <div className="flex w-7 flex-none flex-col items-center">
+                    <span
+                      className={cn(
+                        'flex h-7 w-7 flex-none items-center justify-center rounded-full border text-[10px] font-bold',
+                        done
+                          ? 'border-[var(--success-line)] bg-[var(--success-soft)] text-success'
+                          : isNext
+                            ? 'border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1'
+                            : 'border-hairline bg-surface-2 text-fg-5'
+                      )}
+                    >
+                      {done ? <Check size={13} strokeWidth={2.4} aria-hidden /> : s.seq}
+                    </span>
+                    {i < selected.steps.length - 1 ? (
+                      <span
+                        className={cn(
+                          'w-[2px] flex-1',
+                          done ? 'bg-[var(--success-line)]' : 'bg-[var(--border-faint)]'
+                        )}
+                        style={{ minHeight: 14 }}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </div>
+                  {/* step row */}
+                  <button
+                    type="button"
+                    onClick={() => setOpenStepId(s.id)}
+                    className={cn(
+                      'mb-2 flex min-w-0 flex-1 items-center gap-3 rounded-[11px] border px-3.5 py-2.5 text-left transition hover:bg-surface-2',
+                      isNext
+                        ? 'border-[var(--gold-line)] bg-[var(--gold-soft)]'
+                        : 'border-[var(--border-faint)] bg-surface-1'
+                    )}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            'truncate text-[12.5px]',
+                            done ? 'text-fg-3' : isNext ? 'font-semibold text-fg-1' : 'text-fg-4'
+                          )}
+                        >
+                          {s.name}
+                        </span>
+                        <Badge tone={chip.tone} className="flex-none px-2 py-0.5 text-[9px]">
+                          {chip.label}
+                        </Badge>
+                      </span>
+                      {spec ? (
+                        <span className="mt-0.5 block truncate text-[10.5px] text-fg-5">
+                          {spec.who} · {spec.party} · {spec.drives}
+                        </span>
+                      ) : null}
+                    </span>
+                    {isNext && spec ? (
+                      <Button
+                        variant="gold"
+                        size="sm"
+                        icon={Sparkles}
+                        className="flex-none"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          executeStep(selected, s);
+                        }}
+                      >
+                        {spec.action}
+                      </Button>
+                    ) : null}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* the closed celebration */}
+          {closed ? (
+            <div className="mt-3 rounded-[13px] border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3.5">
+              <div className="flex items-center gap-2.5 text-[13.5px] font-semibold text-success">
+                <CircleCheckBig size={18} aria-hidden />
+                Closed &amp; funded
+              </div>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-fg-3">
+                {selected.amount ? `${compactMoney(selected.amount)} funded · ` : ''}signed, wired
+                and logged to your Chain of Trust.
+                {selected.kind === 'deal' && firm ? ` ${firm} now owns it.` : ''}
+              </p>
+            </div>
+          ) : null}
+        </Card>
+      ) : (
+        <Card className="p-8 text-center">
+          <FileSignature size={22} className="mx-auto text-fg-4" aria-hidden />
+          <h2 className="mt-3 text-[15px] font-semibold text-fg-1">Nothing at close yet</h2>
+          <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-fg-4">
+            Drive a deal to Committed or lock an LP allocation on your Capital Map — it lands here
+            as a signature room, step-gated to a funded close.
+          </p>
+        </Card>
+      )}
 
       {/* open a closing */}
       {candidates.length > 0 && (
@@ -140,152 +661,6 @@ export function ClosingsFlow({
         </Card>
       )}
 
-      {/* the closings */}
-      {closings.length === 0 ? (
-        <Card className="p-8 text-center">
-          <FileSignature size={22} className="mx-auto text-fg-4" aria-hidden />
-          <h2 className="mt-3 text-[15px] font-semibold text-fg-1">Nothing at close yet</h2>
-          <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-fg-4">
-            Drive a deal to Committed or lock an LP allocation on your Capital Map — it lands here
-            as a signature room, step-gated to a funded close.
-          </p>
-        </Card>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          {closings.map((c) => {
-            const expanded = openId === c.id;
-            const gate = nextExecutableSeq(c.steps);
-            const kindLabel = isClosingKind(c.kind) ? CLOSING_KIND_LABEL[c.kind] : c.kind;
-            return (
-              <Card key={c.id} className="p-0">
-                <button
-                  type="button"
-                  onClick={() => setOpenId(expanded ? null : c.id)}
-                  aria-expanded={expanded}
-                  className="flex w-full items-center gap-3 px-[18px] py-4 text-left"
-                >
-                  <span
-                    className={cn(
-                      'flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border',
-                      c.status === 'closed'
-                        ? 'border-[var(--success-line)] bg-[var(--success-soft)] text-success'
-                        : 'border-hairline bg-surface-2 text-fg-3'
-                    )}
-                  >
-                    {c.status === 'closed' ? (
-                      <CheckCircle2 size={17} aria-hidden />
-                    ) : (
-                      <FileSignature size={17} aria-hidden />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13.5px] font-semibold text-fg-1">
-                      {c.counterparty ?? kindLabel}
-                    </div>
-                    <div className="mt-0.5 text-[10.5px] text-fg-5">
-                      {kindLabel}
-                      {c.amount ? ` · ${compactMoney(c.amount)}` : ''} · {c.progress.done}/
-                      {c.progress.total} steps
-                    </div>
-                  </div>
-                  <Badge tone={KIND_TONE[c.kind] ?? 'neutral'} className="px-2 py-0.5 text-[9.5px]">
-                    {c.status === 'closed' ? 'Closed' : 'Open'}
-                  </Badge>
-                  <div className="w-24 flex-none">
-                    <ProgressBar
-                      value={c.progress.pct}
-                      height={5}
-                      label={`${c.counterparty ?? kindLabel} progress`}
-                    />
-                  </div>
-                </button>
-
-                {expanded && (
-                  <div className="border-t border-[var(--border-faint)] px-[18px] py-4">
-                    {c.progress.complete ? (
-                      <div className="mb-3 flex items-center gap-2.5 rounded-[13px] border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3 text-[13px] font-semibold text-success">
-                        <CheckCircle2 size={17} aria-hidden />
-                        Closed{c.amount ? ` & funded · ${compactMoney(c.amount)}` : ''} — on your
-                        record
-                      </div>
-                    ) : null}
-                    <div className="flex flex-col gap-1">
-                      {c.steps.map((s) => {
-                        const done = isStepDone(s.status);
-                        const isNext = gate === s.seq && c.status === 'open';
-                        const spec = isClosingKind(c.kind)
-                          ? STEP_SEQUENCE[c.kind as ClosingKind][s.seq - 1]
-                          : undefined;
-                        return (
-                          <div
-                            key={s.id}
-                            className={cn(
-                              'flex items-center gap-3 rounded-[11px] border px-3 py-2.5',
-                              isNext
-                                ? 'border-[var(--gold-line)] bg-[var(--gold-soft)]'
-                                : 'border-[var(--border-faint)] bg-surface-1'
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                'flex h-6 w-6 flex-none items-center justify-center rounded-full border text-[10px] font-bold',
-                                done
-                                  ? 'border-[var(--success-line)] bg-[var(--success-soft)] text-success'
-                                  : isNext
-                                    ? 'border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1'
-                                    : 'border-hairline bg-surface-2 text-fg-5'
-                              )}
-                            >
-                              {done ? <Check size={12} strokeWidth={2.4} aria-hidden /> : s.seq}
-                            </span>
-                            <span
-                              className={cn(
-                                'min-w-0 flex-1 truncate text-[12.5px]',
-                                done
-                                  ? 'text-fg-3'
-                                  : isNext
-                                    ? 'font-semibold text-fg-1'
-                                    : 'text-fg-5'
-                              )}
-                            >
-                              {s.name}
-                            </span>
-                            {done ? (
-                              <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-success">
-                                Done
-                              </span>
-                            ) : isNext ? (
-                              <Button
-                                variant="gold"
-                                size="sm"
-                                icon={Sparkles}
-                                onClick={() =>
-                                  setRunner({
-                                    type: 'step',
-                                    closing: c,
-                                    seq: s.seq,
-                                    name: s.name,
-                                    run: spec?.run ?? ['Execute the step', 'Verify', 'Record']
-                                  })
-                                }
-                              >
-                                Execute
-                              </Button>
-                            ) : (
-                              <Lock size={13} className="text-fg-5" aria-hidden />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
       {/* Earn's standing note */}
       <Card className="flex items-center gap-3 border-[var(--gold-line)] bg-[var(--gold-soft)] p-4">
         <EarnCoin size={26} className="flex-none" />
@@ -295,6 +670,17 @@ export function ClosingsFlow({
           moment it lands.
         </p>
       </Card>
+
+      {selected && openStep && (
+        <StepDrawer
+          closing={selected}
+          step={openStep}
+          isNext={gate === openStep.seq && selected.status === 'open'}
+          onClose={() => setOpenStepId(null)}
+          onExecute={(s) => executeStep(selected, s)}
+          onSendSignature={(s, name, email) => sendSignature(selected, s, name, email)}
+        />
+      )}
 
       {runner?.type === 'open' && (
         <ActionRunner
@@ -330,25 +716,59 @@ export function ClosingsFlow({
 
       {runner?.type === 'step' && (
         <ActionRunner
-          title={`${runner.name} — ${runner.closing.counterparty ?? 'closing'}`}
-          steps={[...runner.run, 'Prepare for your approval']}
-          draftTitle={runner.name}
-          draft={`Step ${runner.seq} of ${runner.closing.progress.total} for ${runner.closing.counterparty ?? 'this closing'} — ${runner.name.toLowerCase()}. Approving executes it and arms the next step; the final step closes the room and logs the close to your record.`}
+          title={`${runner.spec?.action ?? runner.step.name} — ${runner.closing.counterparty ?? 'closing'}`}
+          steps={[
+            'Pull the execution package',
+            runner.spec?.action ?? runner.step.name,
+            'Capture signatures / confirmations',
+            'Log to Chain of Trust'
+          ]}
+          draftTitle={runner.step.name}
+          draft={`${runner.spec?.who ?? 'Earn'} prepared this step. ${runner.spec?.detail ?? ''} Approve to execute — every action is recorded to your 4-layer proof.`}
           approveLabel="Approve & execute"
           onApprove={async () => {
             const res = await executeClosingStep({
               closingId: runner.closing.id,
-              seq: runner.seq
+              seq: runner.step.seq
             });
             return res.ok ? { ok: true } : { ok: false, error: res.error };
           }}
           onClose={() => setRunner(null)}
           onApplied={() => {
             setToast(
-              runner.seq === runner.closing.progress.total
+              runner.step.seq === runner.closing.progress.total
                 ? `${runner.closing.counterparty ?? 'Closing'} — closed & recorded`
-                : `${runner.name} — executed`
+                : `${runner.step.name} — executed`
             );
+            router.refresh();
+          }}
+        />
+      )}
+
+      {runner?.type === 'sign' && (
+        <ActionRunner
+          title={`Send for signature — ${runner.step.name}`}
+          steps={[
+            'Assemble the document package',
+            'Prepare the DocuSign envelope',
+            `Address it to ${runner.signerName}`,
+            'Prepare for your approval'
+          ]}
+          draftTitle={`DocuSign envelope · ${runner.closing.counterparty ?? 'closing'}`}
+          draft={`A DocuSign envelope for "${runner.step.name}" addressed to ${runner.signerName} (${runner.signerEmail}). Approving sends a real envelope for e-signature. Signing happens on DocuSign — this does not execute the step; you still approve and attest it here once it's signed.`}
+          approveLabel="Approve & send"
+          onApprove={async () => {
+            const res = await requestStepSignature({
+              closingId: runner.closing.id,
+              seq: runner.step.seq,
+              signerName: runner.signerName,
+              signerEmail: runner.signerEmail
+            });
+            return res.ok ? { ok: true } : { ok: false, error: res.error };
+          }}
+          onClose={() => setRunner(null)}
+          onApplied={() => {
+            setToast(`Sent for signature — ${runner.signerEmail}`);
             router.refresh();
           }}
         />
