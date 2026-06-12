@@ -4862,7 +4862,9 @@ export type Database = {
       }
       call_lp_status: {
         Row: {
+          amount: number | null
           call_id: string
+          chased_at: string | null
           created_at: string
           id: string
           lp_ref: string
@@ -4871,7 +4873,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          amount?: number | null
           call_id: string
+          chased_at?: string | null
           created_at?: string
           id?: string
           lp_ref: string
@@ -4880,7 +4884,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          amount?: number | null
           call_id?: string
+          chased_at?: string | null
           created_at?: string
           id?: string
           lp_ref?: string
