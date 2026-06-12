@@ -72,42 +72,225 @@ export const WORKFLOW_BASELINE: readonly BaselineWorkflow[] = [
 export const COMPLIANCE_SEVERITIES = ['high', 'medium', 'low'] as const;
 export type ComplianceSeverity = (typeof COMPLIANCE_SEVERITIES)[number];
 
-export const COMPLIANCE_STATUSES = ['open', 'resolved'] as const;
+export const COMPLIANCE_STATUSES = ['open', 'upcoming', 'resolved'] as const;
 export type ComplianceStatus = (typeof COMPLIANCE_STATUSES)[number];
 
-export interface BaselineComplianceItem {
-  category: string;
-  severity: ComplianceSeverity;
-  /** What "resolved" means for this item — shown in the runner draft. */
-  note: string;
+/** Open and upcoming items can be worked; resolved is terminal. */
+export function isComplianceResolvable(s: string): boolean {
+  return s === 'open' || s === 'upcoming';
 }
 
-/** Adrian's compliance baseline — the posture every emerging manager owes. */
+/** The prototype's CO_CATS — the posture board's filter chips. */
+export const COMPLIANCE_CATEGORIES = [
+  'Regulatory',
+  'Investor',
+  'Internal',
+  'Data & Cyber'
+] as const;
+export type ComplianceCategory = (typeof COMPLIANCE_CATEGORIES)[number];
+
+/**
+ * Map a stored category to one of the four board categories. New rows store
+ * the canonical value; legacy rows stored the obligation itself ('Reg D /
+ * Form D', 'Accreditation records', …) and are bucketed by keyword.
+ */
+export function normalizeComplianceCategory(raw: string): ComplianceCategory {
+  const exact = COMPLIANCE_CATEGORIES.find((c) => c.toLowerCase() === raw.trim().toLowerCase());
+  if (exact) return exact;
+  const r = raw.toLowerCase();
+  if (/(privacy|data|cyber|soc\s?2)/.test(r)) return 'Data & Cyber';
+  if (/(reg\s?d|form\s|filing|blue sky|sec\b|regulat)/.test(r)) return 'Regulatory';
+  if (/(accredit|kyc|aml|investor|subscription|lp\b)/.test(r)) return 'Investor';
+  return 'Internal';
+}
+
+export interface CompliancePosture {
+  label: 'Action required' | 'Items open' | 'On track' | 'Fully compliant';
+  tone: 'danger' | 'warning' | 'info' | 'success';
+}
+
+/**
+ * The prototype's posture ladder, computed from real items: high-severity
+ * open → Action required; open → Items open; upcoming → On track; otherwise
+ * Fully compliant.
+ */
+export function compliancePosture(
+  items: ReadonlyArray<{ status: string; severity: string }>
+): CompliancePosture {
+  const open = items.filter((i) => i.status === 'open');
+  if (open.some((i) => i.severity === 'high')) return { label: 'Action required', tone: 'danger' };
+  if (open.length > 0) return { label: 'Items open', tone: 'warning' };
+  if (items.some((i) => i.status === 'upcoming')) return { label: 'On track', tone: 'info' };
+  return { label: 'Fully compliant', tone: 'success' };
+}
+
+export interface BaselineComplianceItem {
+  /** The obligation itself ('Form D filing', 'LP KYC / AML clearance', …). */
+  name: string;
+  category: ComplianceCategory;
+  severity: ComplianceSeverity;
+  /** Honest starting state — the baseline never seeds anything as resolved. */
+  status: Extract<ComplianceStatus, 'open' | 'upcoming'>;
+  /** Owning specialist (first name from the roster). */
+  owner: string;
+  /** Rule-derived due framing — never a fabricated countdown. */
+  due: string;
+  /** Why it matters — the drives-line under the row. */
+  drives: string;
+  /** Earn's action verb for the resolve loop. */
+  action: string;
+  detail: string;
+  checklist: readonly string[];
+}
+
+/**
+ * Adrian's compliance baseline — the posture every emerging manager owes,
+ * spanning all four categories. Every item seeds open or upcoming; nothing
+ * is ever pre-marked resolved (no fake filing is ever marked done).
+ */
 export const COMPLIANCE_BASELINE: readonly BaselineComplianceItem[] = [
   {
-    category: 'Reg D / Form D',
+    name: 'LP KYC / AML clearance',
+    category: 'Investor',
     severity: 'high',
-    note: 'File within 15 days of first sale; keep the exemption posture current.'
+    status: 'open',
+    owner: 'Adrian',
+    due: 'Before capital is accepted',
+    drives: 'Commitments cannot close until every subscribing LP clears',
+    action: 'Stand up the checks',
+    detail:
+      'Every subscribing LP needs identity and source-of-funds verification before their capital is accepted into the fund.',
+    checklist: ['Identity verification', 'Source-of-funds review', 'Sanctions screening']
   },
   {
-    category: 'Accreditation records',
+    name: 'Form D filing',
+    category: 'Regulatory',
     severity: 'high',
-    note: 'Evidence on file for every LP, matched to the exemption.'
+    status: 'open',
+    owner: 'Adrian',
+    due: 'Within 15 days of first sale',
+    drives: 'Keeps the raise SEC-compliant',
+    action: 'Prepare the filing',
+    detail:
+      'Form D is due within 15 days of the first sale — and an amendment whenever the offering amount or investor count materially changes.',
+    checklist: ['Offering size', 'Investor count', 'EDGAR filing']
   },
   {
-    category: 'Advertising & solicitation',
+    name: 'Accreditation records',
+    category: 'Investor',
+    severity: 'high',
+    status: 'open',
+    owner: 'Adrian',
+    due: 'Evidence on file per LP',
+    drives: 'Protects the exemption on every commitment',
+    action: 'Collect the evidence',
+    detail:
+      'Accreditation evidence must be on file for every LP, matched to the exemption you are relying on (506(b) vs 506(c)).',
+    checklist: ['Verification method per LP', 'Evidence on file', 'Exemption match']
+  },
+  {
+    name: 'AML program & officer',
+    category: 'Investor',
     severity: 'medium',
-    note: 'Marketing reviewed against the 506(b)/(c) line before anything ships.'
+    status: 'open',
+    owner: 'Adrian',
+    due: 'Before institutional capital',
+    drives: 'Lets you accept institutional capital',
+    action: 'Adopt the program',
+    detail:
+      'A written AML program with a designated officer and ongoing sanctions screening is table stakes for institutional LPs.',
+    checklist: ['Written program', 'Designated officer', 'OFAC screening']
   },
   {
-    category: 'Books & records',
+    name: 'Marketing & comms review',
+    category: 'Internal',
     severity: 'medium',
-    note: 'Ledgers, minutes and side letters retained and retrievable.'
+    status: 'open',
+    owner: 'Sienna',
+    due: 'Before anything ships',
+    drives: 'Keeps the raise within the Marketing Rule',
+    action: 'Review the materials',
+    detail:
+      'Every LP-facing material needs compliance review under the Marketing Rule — and against the 506(b)/(c) solicitation line — before it goes out.',
+    checklist: ['Pitch deck', 'One-pager & track record', 'Web & social presence']
   },
   {
-    category: 'Privacy & data handling',
+    name: 'Form ADV annual update',
+    category: 'Regulatory',
+    severity: 'medium',
+    status: 'upcoming',
+    owner: 'Adrian',
+    due: 'Within 90 days of fiscal year-end',
+    drives: 'Maintains adviser registration',
+    action: 'Draft the update',
+    detail:
+      'The annual Form ADV update is due within 90 days of fiscal year-end — AUM, brochure and disclosures need refreshing.',
+    checklist: ['AUM update', 'Brochure (Part 2A)', 'Disclosure review']
+  },
+  {
+    name: 'Annual compliance review',
+    category: 'Internal',
+    severity: 'medium',
+    status: 'upcoming',
+    owner: 'Adrian',
+    due: 'Annually under Rule 206(4)-7',
+    drives: 'ODD-ready for institutions',
+    action: 'Schedule the review',
+    detail:
+      'The annual review of the compliance program under Rule 206(4)-7 must be performed and documented — institutional ODD asks for it.',
+    checklist: ['Policy review', 'Testing', 'Findings memo']
+  },
+  {
+    name: 'Personal trading attestations',
+    category: 'Internal',
     severity: 'low',
-    note: 'LP PII scoped, access-controlled, and disclosed in the subscription docs.'
+    status: 'upcoming',
+    owner: 'Adrian',
+    due: 'Quarterly',
+    drives: 'Required under the Code of Ethics before each close',
+    action: 'Send the attestations',
+    detail:
+      'Quarterly personal-trading attestations under the Code of Ethics keep the team clean ahead of every close.',
+    checklist: ['Code of Ethics adopted', 'Quarterly attestations', 'Exception log']
+  },
+  {
+    name: 'Blue sky (state) filings',
+    category: 'Regulatory',
+    severity: 'low',
+    status: 'upcoming',
+    owner: 'Adrian',
+    due: 'Per state, after first sale',
+    drives: 'State-level offering compliance',
+    action: 'Map the states',
+    detail:
+      'State notice filings are due in the states where your LPs reside, generally within 15 days of the first sale in that state.',
+    checklist: ['LP state map', 'Notice filings', 'Fee schedule']
+  },
+  {
+    name: 'SOC 2 / cybersecurity',
+    category: 'Data & Cyber',
+    severity: 'medium',
+    status: 'upcoming',
+    owner: 'Noah',
+    due: 'Ahead of institutional ODD',
+    drives: 'Increasingly required in ODD',
+    action: 'Close the gaps',
+    detail:
+      'Institutional LPs increasingly ask for SOC 2-aligned controls — access management, incident response and vendor risk all get tested.',
+    checklist: ['Access controls', 'Incident response plan', 'Vendor risk review']
+  },
+  {
+    name: 'Data privacy (GDPR/CCPA)',
+    category: 'Data & Cyber',
+    severity: 'low',
+    status: 'upcoming',
+    owner: 'Noah',
+    due: 'Before EU or California capital',
+    drives: 'Required for EU & California investors',
+    action: 'Refresh the policy',
+    detail:
+      'Privacy policy and data-processing terms must cover EU and California LP data, and be disclosed in the subscription docs.',
+    checklist: ['Privacy policy', 'DPA template', 'Data map']
   }
 ] as const;
 

@@ -7,6 +7,7 @@ import {
   COMPLIANCE_BASELINE,
   IR_BASELINE,
   WORKFLOW_BASELINE,
+  isComplianceResolvable,
   isTaskStatus,
   nextTaskStatus,
   type TaskStatus
@@ -110,7 +111,14 @@ export async function seedCompliance(): Promise<RunOpsActionResult> {
       org_id: org.orgId,
       category: i.category,
       severity: i.severity,
-      status: 'open'
+      status: i.status,
+      name: i.name,
+      owner_name: i.owner,
+      due_label: i.due,
+      drives: i.drives,
+      detail: i.detail,
+      action_label: i.action,
+      checklist: [...i.checklist]
     }))
   );
   if (error) return { ok: false, error: error.message };
@@ -120,7 +128,7 @@ export async function seedCompliance(): Promise<RunOpsActionResult> {
   return { ok: true, created: COMPLIANCE_BASELINE.length };
 }
 
-/** Resolve one open compliance item. */
+/** Resolve one open or upcoming compliance item. */
 export async function resolveComplianceItem(itemId: string): Promise<RunOpsActionResult> {
   if (!itemId) return { ok: false, error: 'Missing item.' };
 
@@ -135,7 +143,8 @@ export async function resolveComplianceItem(itemId: string): Promise<RunOpsActio
     .eq('org_id', org.orgId)
     .maybeSingle();
   if (!item) return { ok: false, error: 'Item not found.' };
-  if (item.status !== 'open') return { ok: false, error: 'This item is already resolved.' };
+  if (!isComplianceResolvable(item.status))
+    return { ok: false, error: 'This item is already resolved.' };
 
   const { error } = await supabase
     .from('compliance_items')

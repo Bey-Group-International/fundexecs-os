@@ -5066,28 +5066,49 @@ export type Database = {
       }
       compliance_items: {
         Row: {
+          action_label: string | null
           category: string
+          checklist: Json
           created_at: string
+          detail: string | null
+          drives: string | null
+          due_label: string | null
           id: string
+          name: string | null
           org_id: string
+          owner_name: string | null
           severity: string
           status: string
           updated_at: string
         }
         Insert: {
+          action_label?: string | null
           category: string
+          checklist?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id: string
+          owner_name?: string | null
           severity: string
           status?: string
           updated_at?: string
         }
         Update: {
+          action_label?: string | null
           category?: string
+          checklist?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id?: string
+          owner_name?: string | null
           severity?: string
           status?: string
           updated_at?: string

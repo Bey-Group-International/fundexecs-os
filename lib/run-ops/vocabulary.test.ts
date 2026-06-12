@@ -2,17 +2,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   COMPLIANCE_BASELINE,
+  COMPLIANCE_CATEGORIES,
   COMPLIANCE_SEVERITIES,
   IR_BASELINE,
   IR_CATS,
   TASK_MOVE,
   TASK_STATUSES,
   WORKFLOW_BASELINE,
+  compliancePosture,
   irAction,
   irSentiment,
+  isComplianceResolvable,
   isIrCategory,
   isTaskStatus,
-  nextTaskStatus
+  nextTaskStatus,
+  normalizeComplianceCategory
 } from './vocabulary';
 
 test('task statuses advance strictly in order and terminate at done', () => {
@@ -34,13 +38,76 @@ test('the workflow baseline is non-trivial and well-formed', () => {
   }
 });
 
-test('the compliance baseline covers severities with honest notes', () => {
-  assert.ok(COMPLIANCE_BASELINE.length >= 4);
+test('the compliance baseline is rich, honest, and never pre-resolved', () => {
+  assert.ok(COMPLIANCE_BASELINE.length >= 8);
   for (const item of COMPLIANCE_BASELINE) {
+    assert.ok(item.name.trim().length > 0);
     assert.ok((COMPLIANCE_SEVERITIES as readonly string[]).includes(item.severity));
-    assert.ok(item.note.length > 20);
+    assert.ok((COMPLIANCE_CATEGORIES as readonly string[]).includes(item.category));
+    // No fake filing is ever marked done — every seed starts workable.
+    assert.ok(isComplianceResolvable(item.status));
+    assert.ok(item.owner.trim().length > 0);
+    assert.ok(item.due.trim().length > 0);
+    assert.ok(item.drives.length > 10);
+    assert.ok(item.action.trim().length > 0);
+    assert.ok(item.detail.length > 20);
+    assert.ok(item.checklist.length >= 2);
   }
   assert.ok(COMPLIANCE_BASELINE.some((i) => i.severity === 'high'));
+  // All four board categories are represented.
+  for (const cat of COMPLIANCE_CATEGORIES) {
+    assert.ok(COMPLIANCE_BASELINE.some((i) => i.category === cat));
+  }
+});
+
+test('only open and upcoming compliance items are resolvable', () => {
+  assert.ok(isComplianceResolvable('open'));
+  assert.ok(isComplianceResolvable('upcoming'));
+  assert.equal(isComplianceResolvable('resolved'), false);
+  assert.equal(isComplianceResolvable('done'), false);
+});
+
+test('the posture ladder ranks high-open over open over upcoming over clear', () => {
+  assert.deepEqual(
+    compliancePosture([
+      { status: 'open', severity: 'high' },
+      { status: 'open', severity: 'low' }
+    ]),
+    { label: 'Action required', tone: 'danger' }
+  );
+  assert.deepEqual(
+    compliancePosture([
+      { status: 'open', severity: 'low' },
+      { status: 'upcoming', severity: 'medium' }
+    ]),
+    { label: 'Items open', tone: 'warning' }
+  );
+  assert.deepEqual(
+    compliancePosture([
+      { status: 'upcoming', severity: 'high' },
+      { status: 'resolved', severity: 'high' }
+    ]),
+    { label: 'On track', tone: 'info' }
+  );
+  assert.deepEqual(compliancePosture([{ status: 'resolved', severity: 'high' }]), {
+    label: 'Fully compliant',
+    tone: 'success'
+  });
+  assert.deepEqual(compliancePosture([]), { label: 'Fully compliant', tone: 'success' });
+});
+
+test('legacy category labels bucket into the four board categories', () => {
+  // Canonical values pass through, case-insensitively.
+  assert.equal(normalizeComplianceCategory('Regulatory'), 'Regulatory');
+  assert.equal(normalizeComplianceCategory('data & cyber'), 'Data & Cyber');
+  // The original five-item baseline's obligation-as-category rows.
+  assert.equal(normalizeComplianceCategory('Reg D / Form D'), 'Regulatory');
+  assert.equal(normalizeComplianceCategory('Accreditation records'), 'Investor');
+  assert.equal(normalizeComplianceCategory('Advertising & solicitation'), 'Internal');
+  assert.equal(normalizeComplianceCategory('Books & records'), 'Internal');
+  assert.equal(normalizeComplianceCategory('Privacy & data handling'), 'Data & Cyber');
+  // Unknowns land in Internal rather than throwing.
+  assert.equal(normalizeComplianceCategory('Something else'), 'Internal');
 });
 
 test('the IR baseline has future-dated deliverables with full anatomy', () => {
