@@ -3164,6 +3164,7 @@ export type Database = {
           id: string
           org_id: string
           policy_id: string
+          status: string
         }
         Insert: {
           adopted_at?: string
@@ -3173,6 +3174,7 @@ export type Database = {
           id?: string
           org_id: string
           policy_id: string
+          status?: string
         }
         Update: {
           adopted_at?: string
@@ -3182,6 +3184,7 @@ export type Database = {
           id?: string
           org_id?: string
           policy_id?: string
+          status?: string
         }
         Relationships: [
           {

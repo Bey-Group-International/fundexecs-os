@@ -46,6 +46,7 @@ export default async function BuildGovernancePage() {
         principal={principal}
         structure={{ entity, gp, mgmtco }}
         initialAdopted={governance.adopted}
+        initialDrafts={governance.drafts}
         initialBodies={governance.bodies}
       />
     </div>

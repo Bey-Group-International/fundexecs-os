@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { GOV_POLICIES } from './config';
 import {
   GOV_BODY_KINDS,
+  persistableGovMembers,
   policyById,
   sanitizeGovMembers,
-  sanitizePolicyDecisions
+  sanitizePolicyDecisions,
+  sanitizePolicyStatus
 } from './persistence';
 
 test('policyById resolves every config policy and rejects unknowns', () => {
@@ -66,6 +68,27 @@ test('sanitizeGovMembers bounds and types the roster', () => {
 test('sanitizeGovMembers caps roster size', () => {
   const big = Array.from({ length: 40 }, (_, i) => ({ id: `m${i}`, role: 'Member' }));
   assert.equal(sanitizeGovMembers(big).length, 12);
+});
+
+test('persistableGovMembers strips placeholders — only confirmed members write', () => {
+  const out = persistableGovMembers([
+    { id: 'a', name: 'Jane', role: 'Partner', you: true },
+    { id: 'b', name: 'Open seat', role: 'Partner', open: true },
+    { id: 'c', name: 'Forms at first close', role: 'LP representatives', pending: true },
+    { id: 'd', name: 'Standish & Cole', role: 'Fund counsel' }
+  ]);
+  assert.deepEqual(
+    out.map((m) => m.id),
+    ['a', 'd']
+  );
+  assert.deepEqual(persistableGovMembers('junk'), []);
+});
+
+test('sanitizePolicyStatus reads drafted, defaults everything else to adopted', () => {
+  assert.equal(sanitizePolicyStatus('drafted'), 'drafted');
+  assert.equal(sanitizePolicyStatus('adopted'), 'adopted');
+  assert.equal(sanitizePolicyStatus(undefined), 'adopted');
+  assert.equal(sanitizePolicyStatus('weird'), 'adopted');
 });
 
 test('body kinds match the migration check constraint', () => {
