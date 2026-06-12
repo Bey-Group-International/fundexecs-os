@@ -42,6 +42,23 @@ function sec(
 
 const NOT_WRITTEN = 'Not yet written — reopen this step to draft it with Earn.';
 
+/**
+ * Render a composed doc as plain text — the immutable body stored per filing
+ * in `capital_material_versions`, so every amendment leaves a readable
+ * snapshot behind. Markdown-ish: title, lede, sections, rows as label lines.
+ */
+export function renderFormationDoc(doc: FormationDoc): string {
+  const lines: string[] = [`# ${doc.title}`, doc.lede, ''];
+  for (const s of doc.sections) {
+    lines.push(`## ${s.heading}`);
+    for (const [k, v] of s.rows) lines.push(`- ${k}: ${v}`);
+    for (const p of s.paras) lines.push(p);
+    lines.push('');
+  }
+  lines.push(`> ${doc.disclaimer}`);
+  return lines.join('\n');
+}
+
 const inc = (on: boolean) => (on ? 'Included' : 'Omitted');
 const sift = (v: string) => (v.startsWith('Not sure') ? 'Earn decides — flagged for review' : v);
 

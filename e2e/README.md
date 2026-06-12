@@ -7,10 +7,17 @@ Two layers, by what they need:
   middleware's auth-gate matrix (every protected route bounces to `/login`
   with `redirectedFrom`; public routes never bounce) and the public
   `/dr/[token]` share page in its degraded states.
-- **Authed specs** (`shell.spec.ts` and the auth happy path) sign in as a
-  dedicated test user and tour the real shell: cockpit, the four hubs,
-  notifications, settings. They self-skip unless the env below is present, so
-  CI stays green without secrets.
+- **Authed specs** (`shell.spec.ts`, `formation.spec.ts` and the auth happy
+  path) sign in as a dedicated test user and tour the real shell: cockpit,
+  the four hubs, notifications, settings, and the Formation wizard. They
+  self-skip unless the env below is present, so CI stays green without
+  secrets.
+- **Mutating specs**: the Formation filing test really writes rows for the
+  seeded org (formation step, Chain of Trust record, data-room material,
+  version snapshot). It additionally requires `E2E_FORMATION_WRITES=1`, so it
+  only runs when pointed at a database that has the formation migrations
+  applied and where test writes are acceptable. Re-run safe: repeat runs
+  amend (v2, v3, …) rather than duplicate.
 
 ## Arming the authed suite in CI
 
