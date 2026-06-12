@@ -1,0 +1,513 @@
+/* ===========================================================
+   FundExecs OS — Onboarding Prototype · Fund Formation
+   A SEQUENCE of copiloted documents, done one at a time:
+   Fund entity → LPA → PPM → Subscription → Reg/Form D →
+   Bank & escrow. You drive each; Earn advises & drafts.
+   Stop and pick back up anytime — progress is held in state.
+   =========================================================== */
+
+const FORMATION_ITEMS = [
+  { id: 'story',   name: 'Your fund story',               who: 'Sienna · Comms',   kind: 'story',        doc: 'Fund narrative' },
+  { id: 'entity',  name: 'Fund entity (LP + GP)',         who: 'Adrian · Counsel', kind: 'structure',    doc: 'Certificate of Formation' },
+  { id: 'lpa',     name: 'Limited Partnership Agreement',  who: 'Adrian · Counsel', kind: 'terms',        doc: 'LPA' },
+  { id: 'ppm',     name: 'Private Placement Memorandum',   who: 'Adrian · Counsel', kind: 'ppm',          doc: 'PPM' },
+  { id: 'subdocs', name: 'Subscription documents',         who: 'Adrian · Counsel', kind: 'subscription', doc: 'Subscription pack' },
+  { id: 'regd',    name: 'Reg D / Form D filing',          who: 'Adrian · Counsel', kind: 'regulatory',   doc: 'Form D' },
+  { id: 'bank',    name: 'Bank & escrow accounts',         who: 'Sterling · CoS',   kind: 'bank',         doc: 'Accounts' },
+];
+const F_EDGES = ['Operator experience', 'Proprietary sourcing', 'Deep sector expertise', 'Strong network', 'Differentiated thesis', 'Proven track record', 'Technical / product depth', 'Founder relationships'];
+const FORMATION_D0 = {
+  storyHook: '', storyOrigin: '', storyEdges: [], storyWhyNow: '',
+  entity: 'Delaware LP', domicile: 'Delaware, USA', gp: 'GP, LLC', mgmtco: 'Management, LLC',
+  fee: 2, carry: 20, hurdle: 8, gpCommit: 2, term: 10, termsUndecided: false,
+  ppmTrack: true, ppmFee: true, ppmConflicts: true, ppmSector: true,
+  minCommit: '$250K', accredMethod: 'Self-certification (506(b))', sideLetters: false,
+  exemption: '506(b)', accred: 'Accredited investors only', erisa: false,
+  bank: 'First Republic — fund banking', escrow: 'Standish Escrow', acctType: 'Capital-call + operating',
+};
+
+const F_ENTITY_OPTS = [
+  { id: 'Delaware LP', icon: 'landmark', label: 'Delaware LP', sub: 'US standard · pass-through · LP-familiar', recommended: true },
+  { id: 'Cayman Exempted LP', icon: 'globe', label: 'Cayman Exempted LP', sub: 'Offshore · non-US & tax-exempt LPs' },
+  { id: 'Delaware LLC', icon: 'layers', label: 'Delaware LLC', sub: 'Flexible · smaller vehicles & SPVs' },
+  { id: 'Undecided', icon: 'circle-help', label: "I'm not sure yet", sub: 'Earn recommends the right structure and flags it for review' },
+];
+const F_EXEMPTION_OPTS = [
+  { id: '506(b)', icon: 'lock', label: 'Rule 506(b)', sub: 'No public solicitation · pre-existing relationships', recommended: true },
+  { id: '506(c)', icon: 'megaphone', label: 'Rule 506(c)', sub: 'Market publicly · all LPs verified accredited' },
+  { id: 'Undecided', icon: 'circle-help', label: 'Not sure yet', sub: 'Earn picks the right exemption for how you raise' },
+];
+const F_REC = {
+  story: { storyHook: 'A focused fund backing overlooked industrial operators with an unfair sourcing edge.', storyOrigin: 'Ten years operating in the sector taught me where value hides — and who the best operators trust.', storyEdges: ['Operator experience', 'Proprietary sourcing', 'Deep sector expertise'], storyWhyNow: 'A generational ownership transition is putting quality assets in play at attractive entries, and incumbents are too slow to act.' },
+  structure: { entity: 'Delaware LP', domicile: 'Delaware, USA' },
+  terms: { fee: 2, carry: 20, hurdle: 8, gpCommit: 2, term: 10, termsUndecided: true },
+  ppm: { ppmTrack: true, ppmFee: true, ppmConflicts: true, ppmSector: true },
+  subscription: { minCommit: '$250K', accredMethod: 'Self-certification (506(b))', sideLetters: false },
+  regulatory: { exemption: '506(b)', accred: 'Accredited investors only', erisa: false },
+  bank: { bank: 'First Republic — fund banking', escrow: 'Standish Escrow', acctType: 'Capital-call + operating' },
+};
+const F_REC_TEXT = {
+  story: 'This is what LPs back first — you, before the numbers. The strongest emerging-manager narratives name a real origin, one sharp edge, and a clear “why now.” Keep it honest and specific; I’ll shape it into the through-line your deck, PPM and LP conversations all inherit.',
+  structure: 'For a US fund raising chiefly from US LPs, a Delaware LP is the institutional default — clean tax pass-through, the structure LPs already know.',
+  terms: 'Market for an emerging manager: 2% management fee, 20% carry, an 8% preferred return, a 1–2% GP commitment, and a 10-year term with extensions.',
+  ppm: 'Include your track record and a worked fee example — LPs look for both. I\u2019ll draft standard risk factors plus ones specific to your thesis.',
+  subscription: 'A $250K minimum keeps your cap table clean without shutting out smaller LPs. Under 506(b), self-certification is standard.',
+  regulatory: 'Start with Rule 506(b): no general-solicitation rules to police, and you can rely on pre-existing relationships. Move to 506(c) only to market publicly.',
+  bank: 'A dedicated capital-call account plus an operating account is the clean setup. I can open both with your fund admin.',
+};
+
+function Undec() {
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: 'var(--warning)', background: 'var(--warning-soft)', border: '1px solid var(--warning-line)', borderRadius: 999, padding: '2px 9px' }}><Icon name="sparkles" size={11} />Earn will decide</span>;
+}
+function FSlider({ label, value, min, max, step = 1, unit = '', onChange, hint }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
+        <span style={{ fontSize: 12.5, color: 'var(--fg-3)', fontWeight: 500 }}>{label}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--gold-1)', fontFamily: 'var(--font-mono)' }}>{value}{unit}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(parseFloat(e.target.value))} style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }} />
+      {hint && <div style={{ fontSize: 11, color: 'var(--fg-5)', marginTop: 5 }}>{hint}</div>}
+    </div>
+  );
+}
+function FToggle({ label, sub, on, onClick }) {
+  return (
+    <button className="clickable" onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '11px 13px', borderRadius: 12, background: 'var(--surface-1)', border: '1px solid var(--border)', textAlign: 'left' }}>
+      <span style={{ width: 38, height: 22, borderRadius: 999, flex: 'none', background: on ? 'var(--accent)' : 'var(--surface-3)', position: 'relative', transition: 'background .15s' }}>
+        <span style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: 999, background: '#fff', transition: 'left .15s' }} /></span>
+      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>{sub && <div style={{ fontSize: 11, color: 'var(--fg-5)' }}>{sub}</div>}</div>
+    </button>
+  );
+}
+
+function itemUndecided(item, d) {
+  if (item.kind === 'structure') return d.entity === 'Undecided' ? 1 : 0;
+  if (item.kind === 'terms') return d.termsUndecided ? 1 : 0;
+  if (item.kind === 'regulatory') return (d.exemption === 'Undecided' ? 1 : 0) + ((d.accred || '').startsWith('Not sure') ? 1 : 0);
+  if (item.kind === 'subscription') return (d.accredMethod || '').startsWith('Not sure') ? 1 : 0;
+  if (item.kind === 'bank') return ((d.bank || '').startsWith('Not sure') ? 1 : 0) + ((d.escrow || '').startsWith('Not sure') ? 1 : 0);
+  return 0;
+}
+
+/* what each step produced — laid out for review before advancing */
+function resultRows(kind, d) {
+  const exemption = d.exemption === 'Undecided' ? 'Rule 506(b) (Earn)' : d.exemption;
+  const entity = d.entity === 'Undecided' ? 'Delaware LP (Earn)' : d.entity;
+  const sift = (v) => (v || '').startsWith('Not sure') ? 'Earn decides' : v;
+  if (kind === 'story') return [['Positioning', d.storyHook || 'Earn drafts'], ['Origin', d.storyOrigin || 'Earn drafts'], ['Your edge', (d.storyEdges && d.storyEdges.length) ? d.storyEdges.join(', ') : 'Earn drafts'], ['Why now', d.storyWhyNow || 'Earn drafts']];
+  if (kind === 'structure') return [['Fund entity', entity], ['Domicile', d.domicile], ['GP entity', d.gp], ['Management co.', d.mgmtco]];
+  if (kind === 'terms') return [['Management fee', `${d.fee}%`], ['Carried interest', `${d.carry}%`], ['Preferred return', `${d.hurdle}%`], ['GP commitment', `${d.gpCommit}%`], ['Fund term', `${d.term} years`], ...(d.termsUndecided ? [['Basis', 'Market standard (Earn)']] : [])];
+  if (kind === 'ppm') return [['Track record', d.ppmTrack ? 'Included' : 'Omitted'], ['Worked fee example', d.ppmFee ? 'Included' : 'Omitted'], ['Conflicts disclosure', d.ppmConflicts ? 'Included' : 'Omitted'], ['Sector risk factors', d.ppmSector ? 'Included' : 'Omitted']];
+  if (kind === 'subscription') return [['Minimum commitment', sift(d.minCommit)], ['Accreditation', sift(d.accredMethod)], ['Side letters', d.sideLetters ? 'Allowed' : 'Not allowed']];
+  if (kind === 'regulatory') return [['Exemption', exemption], ['Investor eligibility', sift(d.accred)], ['ERISA tracking', d.erisa ? 'On (25% limit)' : 'Off']];
+  if (kind === 'bank') return [['Fund bank', sift(d.bank)], ['Escrow agent', sift(d.escrow)], ['Account setup', d.acctType]];
+  return [];
+}
+
+/* ---------- a single copiloted document ---------- */
+function FormationItem({ item, index, total, completed, d, setD, mobile, onCompleteItem, onClose, onOpenNext, nextItem }) {
+  const [phase, setPhase] = useState('edit'); // edit | filing | done
+  const set = (k, v) => setD(p => ({ ...p, [k]: v }));
+  const setTerm = (k, v) => setD(p => ({ ...p, [k]: v, termsUndecided: false }));
+  const [applied, setApplied] = useState(false);
+  const applyRec = () => { setD(p => ({ ...p, ...F_REC[item.kind] })); setApplied(true); };
+  const undec = itemUndecided(item, d);
+
+  /* mini filing sequence */
+  const fileSteps = (() => {
+    const ent = d.entity === 'Undecided' ? 'Delaware LP' : d.entity;
+    const exm = d.exemption === 'Undecided' ? 'Rule 506(b)' : d.exemption;
+    const base = {
+      story: ['Shaping your narrative through-line', 'Drafting your positioning & origin'],
+      structure: ['Reserving the entity name', `Forming the ${ent}`],
+      terms: ['Drafting the LPA from your terms', 'Cross-checking against your mandate'],
+      ppm: ['Assembling the PPM', 'Drafting your risk factors'],
+      subscription: ['Generating subscription documents', 'Wiring up eligibility checks'],
+      regulatory: ['Preparing Form D', `Filing · ${exm}`],
+      bank: ['Opening the capital-call account', 'Opening the operating account'],
+    }[item.kind] || ['Preparing the document'];
+    const arr = undec > 0 ? [`Finalizing ${undec} undecided item${undec > 1 ? 's' : ''} to the standard`, ...base] : base.slice();
+    arr.push('Logging to your Chain of Trust');
+    return arr;
+  })();
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (phase !== 'filing') return;
+    let i = 0; const t = setInterval(() => { i += 1; setN(i); if (i >= fileSteps.length) { clearInterval(t); setTimeout(() => { setPhase('done'); onCompleteItem(item.id); }, 500); } }, 620);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  /* ----- DONE ----- */
+  if (phase === 'done') {
+    const last = !nextItem;
+    const rows = resultRows(item.kind, d);
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+        <div style={{ width: '100%', maxWidth: 560 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--success-soft)', border: '1px solid var(--success-line)' }}><Icon name="check" size={28} color="var(--success)" /></div>
+            <div className="t-h2" style={{ fontSize: 20 }}>{item.name} — filed</div>
+            <p style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 7 }}>{completed} of {total} formation steps complete. Review what was produced, then continue — or go back and edit.</p>
+          </div>
+
+          {/* results laid out */}
+          <div style={{ borderRadius: 14, border: '1px solid var(--border)', overflow: 'hidden', marginTop: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 15px', background: 'var(--surface-1)', borderBottom: '1px solid var(--border)' }}>
+              <Icon name="file-text" size={15} color="var(--gold-1)" />
+              <span style={{ fontSize: 12.5, fontWeight: 600 }}>{item.doc}</span>
+              <span style={{ flex: 1 }} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'var(--success)', fontWeight: 600 }}><Icon name="git-branch" size={12} />On the record</span>
+            </div>
+            {rows.map(([k, v], i) => (
+              <div key={k} style={{ display: 'flex', gap: 14, padding: '10px 15px', background: i % 2 ? 'transparent' : 'var(--surface-1)', borderTop: i ? '1px solid var(--border-faint)' : 'none' }}>
+                <span style={{ width: 150, flex: 'none', fontSize: 12, color: 'var(--fg-4)' }}>{k}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-1)' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 11.5, color: 'var(--fg-5)' }}>
+            <Icon name="info" size={12} />Earn drafted <b style={{ color: 'var(--fg-3)', fontWeight: 600 }}>{item.doc}</b> from these. Nothing reaches an LP until you sign.</div>
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginTop: 20 }}>
+            <Button variant="ghost" icon="pencil" onClick={() => { setPhase('edit'); setN(0); }}>Go back &amp; edit</Button>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <Button variant="outline" icon="list-checks" onClick={onClose}>Checklist</Button>
+              {nextItem
+                ? <Button variant="gold" iconRight="arrow-right" onClick={() => onOpenNext(nextItem.id)}>Continue: {nextItem.name.split(' (')[0]}</Button>
+                : <Button variant="gold" iconRight="check" onClick={onClose}>See your formed fund</Button>}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ----- FILING ----- */
+  if (phase === 'filing') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 0' }}>
+        <div style={{ width: '100%', maxWidth: 540 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 18 }}>
+            <div style={{ position: 'relative', marginBottom: 13 }}>
+              <div className="pulse-dot" style={{ position: 'absolute', inset: -10, borderRadius: '50%', background: 'radial-gradient(circle, rgba(247,201,72,0.5), transparent 70%)', filter: 'blur(8px)' }} />
+              <div style={{ position: 'relative' }}><EarnCoin size={52} /></div>
+            </div>
+            <div className="t-h2" style={{ fontSize: 19 }}>Filing {item.doc}…</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 6 }}>You approved it — the team is executing. Nothing goes to an LP until you sign.</p>
+          </div>
+          <ProgressBar value={Math.round((n / fileSteps.length) * 100)} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} />
+          <div className="card" style={{ marginTop: 14, padding: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {fileSteps.map((s, i) => i <= n && (
+              <div key={i} className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 8px' }}>
+                <span style={{ width: 22, height: 22, borderRadius: 999, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: i < n ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${i < n ? 'var(--success-line)' : 'var(--border)'}`, color: i < n ? 'var(--success)' : 'var(--fg-4)' }}>
+                  {i < n ? <Icon name="check" size={12} /> : <Icon name="loader" size={12} className="spin" />}</span>
+                <span style={{ fontSize: 13, color: i < n ? 'var(--fg-2)' : 'var(--fg-1)' }}>{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ----- EDIT (the copiloted decision) ----- */
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button className="clickable" onClick={onClose} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--fg-3)', padding: '7px 11px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface-1)' }}><Icon name="arrow-left" size={14} />Checklist</button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="t-h2" style={{ fontSize: 18 }}>{item.name}</div>
+          <div style={{ fontSize: 12, color: 'var(--fg-4)' }}>Step {index + 1} of {total} · you make the calls, Earn advises</div>
+        </div>
+        <Badge tone="azure" dot>Copiloted</Badge>
+      </div>
+      <ProgressBar value={Math.round((completed / total) * 100)} height={4} color="var(--accent)" />
+
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1fr) 300px', gap: 16, alignItems: 'start' }}>
+        <div className="card" style={{ padding: 22 }}>
+          {item.kind === 'story' && <>
+            <div className="t-h3" style={{ fontSize: 16 }}>Your fund story</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-4)', margin: '5px 0 16px' }}>LPs back the manager before the math. This is the through-line your deck, PPM and every LP conversation inherit. Rough notes are fine — Earn shapes them.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 12.5, color: 'var(--fg-3)', fontWeight: 500 }}>Your fund in one line <span style={{ color: 'var(--fg-5)', fontWeight: 400 }}>· the positioning</span></span>
+                <textarea value={d.storyHook} onChange={e => set('storyHook', e.target.value)} rows={2} placeholder="e.g. A focused fund backing overlooked industrial operators with an unfair sourcing edge."
+                  style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--fg-1)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '11px 13px', lineHeight: 1.5 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 12.5, color: 'var(--fg-3)', fontWeight: 500 }}>Origin <span style={{ color: 'var(--fg-5)', fontWeight: 400 }}>· why you, why this</span></span>
+                <textarea value={d.storyOrigin} onChange={e => set('storyOrigin', e.target.value)} rows={3} placeholder="The experience or insight that led you here. What do you see that others miss?"
+                  style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--fg-1)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '11px 13px', lineHeight: 1.5 }} />
+              </label>
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 9 }}>Your edge <span style={{ color: 'var(--fg-5)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· pick what's true</span></div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {F_EDGES.map(e => {
+                    const on = (d.storyEdges || []).includes(e);
+                    return <Chip key={e} label={e} selected={on} onClick={() => set('storyEdges', on ? d.storyEdges.filter(x => x !== e) : [...(d.storyEdges || []), e])} />;
+                  })}
+                </div>
+              </div>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 12.5, color: 'var(--fg-3)', fontWeight: 500 }}>Why now <span style={{ color: 'var(--fg-5)', fontWeight: 400 }}>· the timing</span></span>
+                <textarea value={d.storyWhyNow} onChange={e => set('storyWhyNow', e.target.value)} rows={2} placeholder="What's changed in the market that makes this the moment?"
+                  style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--fg-1)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '11px 13px', lineHeight: 1.5 }} />
+              </label>
+            </div>
+          </>}
+          {item.kind === 'structure' && <>
+            <div className="t-h3" style={{ fontSize: 16 }}>Choose your fund entity</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-4)', margin: '5px 0 16px' }}>The legal shell your capital lives in — it drives tax, reporting and who can invest.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {F_ENTITY_OPTS.map(o => <ChoiceCard key={o.id} icon={o.icon} label={o.label} sub={o.sub} recommended={o.recommended} compact selected={d.entity === o.id} onClick={() => set('entity', o.id)} />)}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginTop: 16 }}>
+              <Field label="Domicile" icon="map-pin" value={d.domicile} onChange={v => set('domicile', v)} />
+              <Field label="GP entity" icon="briefcase" value={d.gp} onChange={v => set('gp', v)} />
+              <Field label="Management company" icon="building-2" value={d.mgmtco} onChange={v => set('mgmtco', v)} />
+            </div>
+          </>}
+          {item.kind === 'terms' && <>
+            <div className="t-h3" style={{ fontSize: 16 }}>Set your LPA economics</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-4)', margin: '5px 0 14px' }}>The deal between you and your LPs, written into the LPA. Not sure? Use the market standard.</p>
+            <button className="clickable" onClick={() => { setD(p => ({ ...p, ...F_REC.terms })); }} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '11px 13px', marginBottom: 16, borderRadius: 12, background: d.termsUndecided ? 'var(--gold-soft)' : 'var(--surface-1)', border: `1px solid ${d.termsUndecided ? 'var(--gold-line)' : 'var(--border)'}` }}>
+              <Icon name={d.termsUndecided ? 'check-circle-2' : 'circle-help'} size={17} color={d.termsUndecided ? 'var(--gold-1)' : 'var(--fg-4)'} />
+              <div style={{ flex: 1 }}><div style={{ fontSize: 12.5, fontWeight: 600 }}>I'm not sure on terms yet — use the market standard</div><div style={{ fontSize: 11, color: 'var(--fg-5)' }}>{d.termsUndecided ? 'Market-standard terms applied by Earn — adjust any slider to make them yours.' : 'Earn sets fair, market terms you can change anytime.'}</div></div>
+            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, opacity: d.termsUndecided ? 0.72 : 1 }}>
+              <FSlider label="Management fee" value={d.fee} min={1} max={2.5} step={0.25} unit="%" onChange={v => setTerm('fee', v)} hint="Market: 2.0% for emerging managers" />
+              <FSlider label="Carried interest" value={d.carry} min={10} max={30} step={1} unit="%" onChange={v => setTerm('carry', v)} hint="Market: 20% above the hurdle" />
+              <FSlider label="Preferred return (hurdle)" value={d.hurdle} min={0} max={12} step={1} unit="%" onChange={v => setTerm('hurdle', v)} hint="Market: 8% before carry accrues" />
+              <FSlider label="GP commitment" value={d.gpCommit} min={1} max={5} step={0.5} unit="%" onChange={v => setTerm('gpCommit', v)} hint="Skin in the game — LPs look for 1–2%+" />
+              <FSlider label="Fund term" value={d.term} min={7} max={12} step={1} unit=" yrs" onChange={v => setTerm('term', v)} hint="Plus customary 1-year extensions" />
+            </div>
+          </>}
+          {item.kind === 'ppm' && <>
+            <div className="t-h3" style={{ fontSize: 16 }}>Shape your PPM</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-4)', margin: '5px 0 16px' }}>What goes in your offering memorandum. Earn drafts every section — you choose what to include.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <FToggle label="Include track record" sub="Realized returns LPs will ask for" on={d.ppmTrack} onClick={() => set('ppmTrack', !d.ppmTrack)} />
+              <FToggle label="Worked fee example" sub="Show fees on a sample commitment" on={d.ppmFee} onClick={() => set('ppmFee', !d.ppmFee)} />
+              <FToggle label="Conflicts of interest disclosure" sub="Standard institutional disclosure" on={d.ppmConflicts} onClick={() => set('ppmConflicts', !d.ppmConflicts)} />
+              <FToggle label="Sector-specific risk factors" sub="Tailored to your thesis" on={d.ppmSector} onClick={() => set('ppmSector', !d.ppmSector)} />
+            </div>
+          </>}
+          {item.kind === 'subscription' && <>
+            <div className="t-h3" style={{ fontSize: 16 }}>Subscription terms</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-4)', margin: '5px 0 16px' }}>How LPs commit. These set the minimum check and how you verify investors.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field label="Minimum commitment" options={['$100K', '$250K', '$500K', '$1M', 'Not sure yet — Earn decides']} value={d.minCommit} onChange={v => set('minCommit', v)} />
+              <Field label="Accreditation method" options={['Self-certification (506(b))', 'Third-party verification (506(c))', 'Not sure yet — Earn decides']} value={d.accredMethod} onChange={v => set('accredMethod', v)} />
+              <FToggle label="Allow side letters" sub="Negotiated terms for anchor LPs" on={d.sideLetters} onClick={() => set('sideLetters', !d.sideLetters)} />
+            </div>
+          </>}
+          {item.kind === 'regulatory' && <>
+            <div className="t-h3" style={{ fontSize: 16 }}>Reg D exemption &amp; Form D</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-4)', margin: '5px 0 16px' }}>How you're allowed to raise. This decides whether you can market publicly and who can invest.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {F_EXEMPTION_OPTS.map(o => <ChoiceCard key={o.id} icon={o.icon} label={o.label} sub={o.sub} recommended={o.recommended} compact selected={d.exemption === o.id} onClick={() => set('exemption', o.id)} />)}
+            </div>
+            <div style={{ marginTop: 16 }}><Field label="Investor eligibility" options={['Accredited investors only', 'Accredited + up to 35 sophisticated', 'Qualified purchasers (3(c)(7))', 'Not sure yet — Earn decides']} value={d.accred} onChange={v => set('accred', v)} /></div>
+            <div style={{ marginTop: 14 }}><FToggle label="Track ERISA / 25% benefit-plan limit" sub="Keep pension & retirement capital under the threshold" on={d.erisa} onClick={() => set('erisa', !d.erisa)} /></div>
+          </>}
+          {item.kind === 'bank' && <>
+            <div className="t-h3" style={{ fontSize: 16 }}>Bank &amp; escrow accounts</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-4)', margin: '5px 0 16px' }}>Where committed capital lands. Earn opens these with your fund admin.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field label="Fund bank" options={['First Republic — fund banking', 'SVB Private', 'Mercury — fund accounts', 'Not sure yet — Earn decides']} value={d.bank} onChange={v => set('bank', v)} />
+              <Field label="Escrow agent" options={['Standish Escrow', 'Apex Escrow Services', 'Not sure yet — Earn decides']} value={d.escrow} onChange={v => set('escrow', v)} />
+              <Field label="Account setup" options={['Capital-call + operating', 'Operating only']} value={d.acctType} onChange={v => set('acctType', v)} />
+            </div>
+          </>}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, gap: 10, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="bookmark" onClick={onClose}>Save &amp; close</Button>
+            <Button variant="gold" iconRight="file-signature" onClick={() => { setN(0); setPhase('filing'); }}>Complete &amp; file this step</Button>
+          </div>
+        </div>
+
+        {/* Earn copilot */}
+        <div className="card" style={{ padding: 17, alignSelf: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 11 }}>
+            <div style={{ position: 'relative', flex: 'none' }}><EarnCoin size={32} /><span className="pulse-dot" style={{ position: 'absolute', right: -1, bottom: -1, width: 9, height: 9, borderRadius: 999, background: 'var(--success)', border: '2px solid var(--bg-2)' }} /></div>
+            <div><div style={{ fontSize: 13, fontWeight: 600 }}>Earn</div><div style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>Your formation copilot</div></div>
+          </div>
+          <div className="t-eyebrow" style={{ marginBottom: 7, color: 'var(--gold-1)' }}>Earn recommends</div>
+          <div style={{ fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.6 }}>{F_REC_TEXT[item.kind]}</div>
+          <Button variant={applied ? 'secondary' : 'gold'} size="sm" icon={applied ? 'check' : 'sparkles'} style={{ width: '100%', marginTop: 14 }} onClick={applyRec}>{applied ? 'Recommendation applied' : "Apply Earn's recommendation"}</Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 11, color: 'var(--fg-5)' }}><Icon name="hand" size={12} />You're in control — change anything.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   FUND FORMED — the payoff once every step is filed & approved.
+   The vehicle legally exists; here's what it is and what it
+   unlocks. Hands off to the raise.
+   ============================================================ */
+/* ============================================================
+   FORMATION STORY — the narrative opening. Before any form,
+   set the scene: what forming a fund means and the arc of
+   what's ahead. Reassuring for first-timers & students.
+   ============================================================ */
+const FORMATION_ARC = [
+  { n: '01', lead: 'First, your story', icon: 'feather', text: 'The narrative LPs back — your origin, your edge, and why now. Everything else inherits it.' },
+  { n: '02', lead: 'A legal body', icon: 'landmark', text: 'Your fund becomes a real entity — the LP that holds capital and the GP that runs it.' },
+  { n: '03', lead: 'The rules', icon: 'scale', text: 'The Limited Partnership Agreement — the economics and governance between you and your LPs.' },
+  { n: '04', lead: 'The offering', icon: 'file-text', text: 'Your PPM — how the opportunity, terms and risks are presented to investors.' },
+  { n: '05', lead: 'How they commit', icon: 'pen-line', text: 'Subscription documents — the way an LP formally comes into the fund.' },
+  { n: '06', lead: 'Permission to raise', icon: 'shield-check', text: 'Your Reg D exemption and Form D filing — the regulatory green light to accept capital.' },
+  { n: '07', lead: 'Where capital lands', icon: 'banknote', text: 'Bank and escrow accounts, ready to receive committed capital.' },
+];
+function FormationStory({ mandate, onBegin }) {
+  const firm = mandate.firm || 'your fund';
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* narrative hero */}
+      <div className="card" style={{ padding: '28px 26px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(54% 80% at 84% 0%, rgba(247,201,72,0.10), transparent 70%)' }} />
+        <div style={{ position: 'relative', maxWidth: '64ch' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <EarnCoin size={30} />
+            <span className="t-eyebrow" style={{ color: 'var(--gold-1)' }}>Forming {firm}</span>
+          </div>
+          <h1 className="t-h1" style={{ fontSize: 28, lineHeight: 1.12 }}>This is where your fund becomes real.</h1>
+          <p style={{ fontSize: 14.5, color: 'var(--fg-3)', marginTop: 14, lineHeight: 1.65 }}>
+            Right now {firm} is an idea and a mandate. Over six steps it becomes a legal vehicle that can hold capital,
+            sign deals, and accept investors. You make the decisions that define it — <b style={{ color: 'var(--fg-2)' }}>Earn drafts every document,
+            explains each choice, and files nothing without your sign-off.</b>
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 16, padding: '11px 14px', borderRadius: 12, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+            <Icon name="graduation-cap" size={16} color="var(--gold-1)" />
+            <span style={{ fontSize: 12.5, color: 'var(--fg-2)' }}>No legal background needed. Unsure on any step? Choose <b>“Not sure yet”</b> and Earn decides it for you, then flags it for review.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* the arc — the journey as a narrative sequence */}
+      <Panel title="What we'll do together" eyebrow="The path to a formed fund · six steps" icon="route">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {FORMATION_ARC.map((s, i) => (
+            <div key={s.n} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: '13px 4px', borderTop: i ? '1px solid var(--border-faint)' : 'none' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 'none' }}>
+                <span style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-3)' }}><Icon name={s.icon} size={17} /></span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <span className="t-mono" style={{ fontSize: 11, color: 'var(--gold-1)' }}>{s.n}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>{s.lead}</span>
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-4)', marginTop: 3, lineHeight: 1.5 }}>{s.text}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
+          <Button variant="gold" size="lg" iconRight="arrow-right" onClick={onBegin}>Begin formation</Button>
+          <span style={{ fontSize: 11.5, color: 'var(--fg-5)', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="clock" size={13} />About 10 minutes · stop and resume anytime</span>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function FormationComplete({ mandate, d, onReview, onOpenRaise, onClose }) {
+  const firm = mandate.firm || 'Your fund';
+  const entity = d.entity === 'Undecided' ? 'Delaware LP' : d.entity;
+  const exemption = d.exemption === 'Undecided' ? 'Rule 506(b)' : d.exemption;
+  const sizeLabel = (typeof SIZES !== 'undefined' && (SIZES.find(s => s.id === mandate.size) || {}).label) || '$500M';
+  const fundId = 'FX-' + (firm.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'FUND') + '-' + '0001';
+  const formedOn = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  const onRecord = [
+    { name: 'Fund narrative', sub: 'Your positioning, origin & edge', layer: 'Proof of Truth' },
+    { name: 'Certificate of Formation', sub: `${entity} · ${d.domicile}`, layer: 'Proof of Truth' },
+    { name: 'Limited Partnership Agreement', sub: `${d.fee}% fee · ${d.carry}% carry · ${d.hurdle}% pref`, layer: 'Proof of Concept' },
+    { name: 'Private Placement Memorandum', sub: 'Offering terms & risk factors', layer: 'Proof of Concept' },
+    { name: 'Subscription documents', sub: `${d.minCommit} minimum · ${exemption}`, layer: 'Proof of Execution' },
+    { name: 'Form D', sub: `${exemption} · filed with the SEC`, layer: 'Proof of Execution' },
+    { name: 'Bank & escrow accounts', sub: `${d.bank} · capital-call ready`, layer: 'Proof of Work' },
+  ];
+
+  const unlocks = [
+    { icon: 'landmark', tone: 'gold', title: 'Open your raise', sub: `Your ${sizeLabel} vehicle can now accept commitments. Sloane's LP list is ready.`, cta: 'Start the raise', primary: true },
+    { icon: 'folder-lock', tone: 'azure', title: 'Share your data room', sub: 'Every document is in one secure, trackable room for LP diligence.' },
+    { icon: 'users', tone: 'success', title: 'Onboard LPs', sub: 'Send subscription packs and verify accreditation — fully tracked.' },
+  ];
+
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* hero */}
+      <div className="card" style={{ padding: '26px 24px', position: 'relative', overflow: 'hidden', borderColor: 'var(--gold-line)', boxShadow: '0 0 0 1px var(--gold-line), var(--shadow-lg)' }}>
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(60% 90% at 88% 0%, rgba(247,201,72,0.13), transparent 70%)' }} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ position: 'relative', flex: 'none' }}>
+            <div style={{ position: 'absolute', inset: -8, borderRadius: '50%', background: 'radial-gradient(circle, rgba(247,201,72,0.5), transparent 70%)', filter: 'blur(9px)' }} />
+            <div style={{ position: 'relative' }}><EarnCoin size={54} /></div>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Badge tone="success" style={{ marginBottom: 8 }}>Formation complete</Badge>
+            <div className="t-h1" style={{ fontSize: 26 }}>{firm} is formed.</div>
+            <p style={{ fontSize: 13.5, color: 'var(--fg-3)', marginTop: 6, maxWidth: '60ch', lineHeight: 1.55 }}>
+              Your vehicle legally exists and every document is on the record. You set the direction — the team filed it. Now you can raise.
+            </p>
+          </div>
+        </div>
+        {/* identity strip */}
+        <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, marginTop: 20, borderRadius: 13, border: '1px solid var(--border)', overflow: 'hidden' }}>
+          {[['Entity', entity], ['Domicile', d.domicile], ['Fund ID', fundId, true], ['Formed', formedOn]].map(([k, v, mono], i) => (
+            <div key={k} style={{ padding: '12px 15px', borderLeft: i ? '1px solid var(--border-faint)' : 'none', background: 'var(--surface-1)' }}>
+              <div style={{ fontSize: 10.5, color: 'var(--fg-5)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{k}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 4, fontFamily: mono ? 'var(--font-mono)' : 'inherit', color: mono ? 'var(--gold-1)' : 'var(--fg-1)' }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* on the record */}
+      <Panel title="On the record" eyebrow="7 documents · logged to your Chain of Trust" icon="git-branch"
+        action={<Button variant="ghost" size="sm" icon="folder-open" onClick={onReview}>Review documents</Button>}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 8 }}>
+          {onRecord.map((r, i) => (
+            <div key={i} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', background: 'var(--surface-1)' }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--success-soft)', border: '1px solid var(--success-line)', color: 'var(--success)' }}><Icon name="check" size={15} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--fg-5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.sub}</div>
+              </div>
+              <span style={{ fontSize: 9.5, color: 'var(--fg-4)', fontWeight: 600, letterSpacing: '0.04em', flex: 'none' }}>{r.layer.replace('Proof of ', '')}</span>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      {/* what it unlocks */}
+      <Panel title="What this unlocks" eyebrow="Your fund is investable — next in your lifecycle" icon="unlock">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
+          {unlocks.map((u, i) => (
+            <div key={i} className="card-flat" style={{ display: 'flex', flexDirection: 'column', padding: '15px 15px', background: u.primary ? 'var(--gold-soft)' : 'var(--surface-1)', border: `1px solid ${u.primary ? 'var(--gold-line)' : 'var(--border)'}` }}>
+              <span style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: TONE[u.tone].bg, color: TONE[u.tone].c, border: `1px solid ${TONE[u.tone].b}` }}><Icon name={u.icon} size={17} /></span>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 11 }}>{u.title}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--fg-4)', marginTop: 4, lineHeight: 1.5, flex: 1 }}>{u.sub}</div>
+              {u.primary && <Button variant="gold" size="sm" iconRight="arrow-right" style={{ marginTop: 12, alignSelf: 'flex-start' }} onClick={onOpenRaise}>{u.cta}</Button>}
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      {/* lifecycle handoff */}
+      <div className="card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--fg-3)' }}><Icon name="check-circle-2" size={15} color="var(--success)" />Build complete</span>
+        <Icon name="arrow-right" size={14} color="var(--fg-5)" />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)' }}><span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--gold-1)' }} />Source — your raise begins</span>
+        <span style={{ flex: 1 }} />
+        <Button variant="primary" iconRight="arrow-right" onClick={onOpenRaise}>Go to your raise</Button>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { FORMATION_ITEMS, FORMATION_D0, FormationItem, FormationStory, FormationComplete });

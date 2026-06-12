@@ -1,0 +1,288 @@
+/* ===========================================================
+   FundExecs OS — Onboarding Prototype · Data layer
+   The executive team (15), the mandate options, and the
+   workspace the team builds once you brief them.
+   =========================================================== */
+
+/* ---- The AI executive team — 1 lead (Earn) + 14 specialists ----
+   Lifted from fundexecs.com. `build` = what they do the moment
+   you brief the mandate (the "team works" payoff). ---- */
+const TEAM = [
+  { id: 'earn',    name: 'Earnest Fundmaker', short: 'Earn', title: 'Chief Operating Officer', icon: 'coin', lead: true,
+    build: 'Reads your mandate and routes the first moves to the team.' },
+  { id: 'sterling', name: 'Sterling', title: 'Chief of Staff', icon: 'list-checks',
+    build: 'Sequenced your launch into a 19-step operating plan.' },
+  { id: 'dalia',   name: 'Dalia', title: 'Head of Data Operations', icon: 'database',
+    build: 'Structured your firm into one decision-ready record.' },
+  { id: 'theodore', name: 'Theodore', title: 'Chief Strategy Advisor', icon: 'compass',
+    build: 'Pressure-tested your thesis against the institutional playbook.' },
+  { id: 'marcus',  name: 'Marcus', title: 'Head of Deal Origination', icon: 'radar',
+    build: 'Surfaced 12 on-thesis opportunities, scored to your mandate.' },
+  { id: 'priya',   name: 'Priya', title: 'Director of Capital Markets', icon: 'arrow-left-right',
+    build: 'Matched each deal to suitable LPs, co-investors and lenders.' },
+  { id: 'sloane',  name: 'Sloane', title: 'MD, Capital Formation', icon: 'landmark',
+    build: 'Drafted a 40-name institutional LP target list for the raise.' },
+  { id: 'adrian',  name: 'Adrian', title: 'General Counsel & Compliance', icon: 'scale',
+    build: 'Set your fund-formation checklist and compliance baseline.' },
+  { id: 'eleanor', name: 'Eleanor', title: 'Head of Investor Relations', icon: 'users',
+    build: 'Stood up your data room and LP reporting cadence.' },
+  { id: 'vivian',  name: 'Vivian', title: 'MD, Demand Generation', icon: 'megaphone',
+    build: 'Primed a demand engine to keep the pipeline full.' },
+  { id: 'camille', name: 'Camille', title: 'Head of Top-of-Funnel', icon: 'filter',
+    build: 'Identified the right prospects to warm first.' },
+  { id: 'sienna',  name: 'Sienna', title: 'Director of Communications', icon: 'pen-line',
+    build: 'Framed your market narrative and positioning.' },
+  { id: 'noah',    name: 'Noah', title: 'Head of Digital Presence', icon: 'globe',
+    build: 'Began building your organic visibility.' },
+  { id: 'jasper',  name: 'Jasper', title: 'Director of Private Events', icon: 'calendar-heart',
+    build: 'Lined up the rooms worth being in this quarter.' },
+  { id: 'felix',   name: 'Felix', title: 'Director of Enablement', icon: 'graduation-cap',
+    build: 'Prepared a playbook so you ramp in days, not quarters.' },
+];
+
+/* the specialists shown actively building during activation (in order) */
+const ACTIVATION = ['sterling', 'dalia', 'theodore', 'marcus', 'sloane', 'priya', 'adrian', 'eleanor'];
+
+/* ---- Investor profile (the flow starts here) ----
+   "Describe yourself": three role families across the private-market ecosystem,
+   each with specific sub-roles. ---- */
+const ROLE_GROUPS = [
+  { id: 'fund', label: 'Fund / Dealmaker', sub: 'You run capital or deals', icon: 'briefcase',
+    roles: ['General Partner', 'Fund Manager', 'Independent Sponsor', 'Dealmaker', 'Search Fund', 'Student-led fund'] },
+  { id: 'capital', label: 'Capital / Investor', sub: 'You allocate capital', icon: 'landmark',
+    roles: ['Limited Partner', 'Family Office', 'UHNWI', 'Corporate VC (CVC)', 'Endowment / Foundation', 'Fund-of-Funds'] },
+  { id: 'service', label: 'Service Provider', sub: 'You support the ecosystem', icon: 'handshake',
+    roles: ['Legal Counsel', 'CPA / Accountant', 'Broker / Placement', 'Investment Bank', 'Capital Provider', 'Advisor / Consultant'] },
+];
+const EXPERIENCE = ['New to this', 'A few deals done', 'Seasoned'];
+const STANDING = ['Accredited individual', 'Institutional', 'Building toward it'];
+const HORIZONS = ['Opportunistic', '3–5 yrs', '7–10 yrs', 'Evergreen'];
+
+/* ---- Mandate Brief options ---- */
+const OBJECTIVES = [
+  { id: 'launch', label: 'Launch a fund', sub: 'Stand up a new vehicle from zero', icon: 'rocket' },
+  { id: 'raise',  label: 'Raise capital', sub: 'Fill an existing fund or SPV', icon: 'handshake' },
+  { id: 'source', label: 'Source & invest', sub: 'Find deals and deploy', icon: 'radar' },
+  { id: 'run',    label: 'Run the full lifecycle', sub: 'Launch, raise, source, close', icon: 'infinity', recommended: true },
+];
+
+const VEHICLES = [
+  { id: 'venture', label: 'Venture fund', icon: 'sprout' },
+  { id: 'buyout',  label: 'PE / Buyout fund', icon: 'building-2' },
+  { id: 'spv',     label: 'SPV / Syndicate', icon: 'layers' },
+  { id: 'search',  label: 'Search fund / Roll-up', icon: 'search' },
+  { id: 'student', label: 'Student-managed fund', icon: 'graduation-cap', note: 'No prior experience needed' },
+];
+
+const SIZES = [
+  { id: '25', label: '$25M', sub: 'First fund' },
+  { id: '100', label: '$100M', sub: 'Emerging' },
+  { id: '500', label: '$500M', sub: 'Institutional', recommended: true },
+  { id: '1000', label: '$1B+', sub: 'Top-tier' },
+];
+
+const SECTORS = ['AI & Software', 'Industrials', 'Healthcare', 'Climate & Energy', 'Consumer', 'Fintech', 'Real Assets'];
+/* ---- Mandate step adapts to the role family chosen in the profile ---- */
+const MANDATE_BY_GROUP = {
+  fund: {
+    heading: 'What are you here to do?',
+    sub: "This is your mandate \u2014 the team's marching orders. Pick the shape of the work, the vehicle, and the size you're aiming for.",
+    objLabel: 'Objective', objectives: OBJECTIVES,
+    vehLabel: 'Vehicle', vehicles: VEHICLES,
+    sizeLabel: 'Target raise', sizes: SIZES,
+    acts: ['sterling', 'sloane', 'adrian'],
+    actsText: 'Sterling sequences the plan, Sloane sizes the LP target list, and Adrian sets the right structure for this vehicle.',
+  },
+  capital: {
+    heading: "What's your allocation mandate?",
+    sub: 'You allocate capital \u2014 so the team finds, diligences and tracks what you back. Set the shape of your portfolio.',
+    objLabel: 'Objective', objectives: [
+      { id: 'portfolio', label: 'Build a portfolio', sub: 'Commit across funds & deals', icon: 'layers', recommended: true },
+      { id: 'backfunds', label: 'Back funds', sub: 'Find & diligence GPs', icon: 'landmark' },
+      { id: 'coinvest', label: 'Source co-invests', sub: 'Direct & co-invest deals', icon: 'radar' },
+      { id: 'manage', label: 'Manage allocations', sub: 'Monitor & report', icon: 'pie-chart' },
+    ],
+    vehLabel: 'How you deploy', vehicles: [
+      { id: 'fundcommit', label: 'Fund commitments', icon: 'landmark' },
+      { id: 'direct', label: 'Direct deals', icon: 'building-2' },
+      { id: 'coinv', label: 'Co-investments', icon: 'layers' },
+      { id: 'spvsynd', label: 'SPVs / Syndicates', icon: 'users' },
+    ],
+    sizeLabel: 'Capital to deploy', sizes: [
+      { id: '5', label: '$5M', sub: 'Individual' }, { id: '50', label: '$50M', sub: 'Family office' },
+      { id: '250', label: '$250M', sub: 'Institutional', recommended: true }, { id: '1000', label: '$1B+', sub: 'Major LP' },
+    ],
+    acts: ['theodore', 'marcus', 'eleanor'],
+    actsText: 'Theodore screens fit, Marcus surfaces deals and funds that match, and Eleanor tracks every position and report.',
+  },
+  service: {
+    heading: "What's your growth mandate?",
+    sub: 'You support the ecosystem \u2014 so the team fills your pipeline and wins you mandates. Set what you want to grow.',
+    objLabel: 'Objective', objectives: [
+      { id: 'clients', label: 'Win clients & mandates', sub: 'Grow your book', icon: 'handshake', recommended: true },
+      { id: 'dealflow', label: 'Source deal flow', sub: 'Tap the network', icon: 'radar' },
+      { id: 'partner', label: 'Build partnerships', sub: 'Referrals & alliances', icon: 'briefcase' },
+      { id: 'practice', label: 'Grow my practice', sub: 'Visibility & pipeline', icon: 'trending-up' },
+    ],
+    vehLabel: 'Your practice', vehicles: [
+      { id: 'legal', label: 'Legal / Counsel', icon: 'scale' },
+      { id: 'accounting', label: 'Accounting / Tax', icon: 'calculator' },
+      { id: 'banking', label: 'Investment bank', icon: 'landmark' },
+      { id: 'capitalp', label: 'Capital provider', icon: 'banknote' },
+      { id: 'advisory', label: 'Advisory', icon: 'compass' },
+    ],
+    sizeLabel: 'Client focus', sizes: [
+      { id: 'emerging', label: 'Emerging', sub: 'New managers' }, { id: 'midmarket', label: 'Mid-market', sub: 'Funds I\u2013III', recommended: true },
+      { id: 'institutional', label: 'Institutional', sub: 'Established' }, { id: 'all', label: 'All', sub: 'Full market' },
+    ],
+    acts: ['vivian', 'camille', 'sienna'],
+    actsText: 'Vivian and Camille fill your funnel with the right prospects, and Sienna sharpens how you show up in market.',
+  },
+};
+function mandateCfg(group) { return MANDATE_BY_GROUP[group] || MANDATE_BY_GROUP.fund; }
+function groupDefaults(group) {
+  const c = mandateCfg(group);
+  return {
+    objective: (c.objectives.find(x => x.recommended) || c.objectives[0]).id,
+    vehicle: c.vehicles[0].id,
+    size: (c.sizes.find(x => x.recommended) || c.sizes[0]).id,
+  };
+}
+
+const STAGES = ['Pre-seed / Seed', 'Series A / B', 'Growth', 'Buyout / Control'];
+const GEOS = ['North America', 'Europe', 'LATAM', 'APAC', 'Global'];
+
+const DEFAULT_MANDATE = {
+  principal: '', firm: '',
+  investorGroup: 'fund', investorRole: 'General Partner', experience: 'New to this', standing: 'Building toward it', horizon: '7–10 yrs',
+  objective: 'run', vehicle: 'venture', size: '500',
+  sectors: ['AI & Software', 'Industrials'], stage: 'Series A / B', geo: 'North America',
+};
+
+/* ---- The workspace the team builds (freshly-activated state) ---- */
+const WORKSPACE = {
+  /* the single highest-impact next move */
+  rightNow: {
+    id: 'm-raise', hub: 'source', xp: 60,
+    tag: 'Start the raise', tone: 'gold', specialist: 'Sloane',
+    title: 'Open your raise with the 8 warmest LPs',
+    why: 'Sloane built a 40-name target list and ranked it by fit and warmth. The top 8 are reachable through your network this week. Momentum is highest in the first push.',
+    earnNote: 'I drafted personalized intros for all 8, attached your one-pager, and proposed call windows. Approve and the team sends, logs, and tracks every reply.',
+    primary: 'Run the raise with Earn', secondary: 'Open LP target list',
+    run: {
+      title: 'Opening your raise — 8 priority LPs',
+      steps: ['Personalize 8 intros from fit + warmth signals', 'Attach your one-pager and track record', 'Propose call windows next week', 'Log all 8 to the LP Capital Map + set reminders'],
+      draftTitle: 'Outreach batch — 8 priority LPs',
+      draft: 'Eight institutional intros drafted and matched to your $500M venture mandate — university endowments, family offices and a fund-of-funds. Each note references their stated thesis and proposes a focused 20-minute call. Nothing sends until you approve.',
+    },
+  },
+  /* what the team did overnight */
+  signals: [
+    { hub: 'source', icon: 'radar', tone: 'azure', specialist: 'Marcus', label: 'Marcus sourced 3 new on-thesis deals overnight', cta: 'Review the shortlist' },
+    { hub: 'source', icon: 'landmark', tone: 'gold', specialist: 'Sloane', label: 'Your 40-name LP target list is ranked and ready', cta: 'See the top targets' },
+    { hub: 'build', icon: 'scale', tone: 'success', specialist: 'Adrian', label: 'Fund formation checklist is 60% pre-completed', cta: 'Finish the setup' },
+  ],
+  /* ranked queue — one tap to run */
+  queue: [
+    { id: 'q-dili', hub: 'run', xp: 40, icon: 'file-search', tone: 'azure', title: 'Review the Helios diligence synthesis', sub: 'Marcus ran 5 of 7 agents — 2 items to confirm', specialist: 'Marcus', action: 'Review' },
+    { id: 'q-thesis', hub: 'build', xp: 40, icon: 'compass', tone: 'warning', title: 'Approve your investment thesis memo', sub: 'Theodore drafted it from your mandate', specialist: 'Theodore', action: 'Approve' },
+    { id: 'q-lp', hub: 'run', xp: 35, icon: 'users', tone: 'info', title: 'Publish your first LP update', sub: 'Eleanor assembled it from the workspace', specialist: 'Eleanor', action: 'Publish' },
+  ],
+};
+
+/* the live "what got built" tiles shown on the readiness card */
+function workspaceStats(m) {
+  const cfg = mandateCfg(m.investorGroup);
+  const size = (cfg.sizes.find(s => s.id === m.size) || cfg.sizes[0]).label;
+  const veh = (cfg.vehicles.find(v => v.id === m.vehicle) || {}).label || 'Fund';
+  const isCapital = m.investorGroup === 'capital';
+  return [
+    { label: isCapital ? 'Capital to deploy' : 'Raise target', value: size, sub: veh, icon: 'handshake', tone: 'gold' },
+    { label: isCapital ? 'Funds & deals matched' : 'LP targets built', value: '40', sub: 'fit-scored & ranked', icon: 'landmark', tone: 'azure' },
+    { label: 'Deals sourced', value: '12', sub: 'on-thesis, scored', icon: 'radar', tone: 'success' },
+    { label: 'Launch readiness', value: '64%', sub: 'checklist pre-filled', icon: 'shield-check', tone: 'info' },
+  ];
+}
+
+/* ---- Build / Source / Run / Execute — the lifecycle rail ----
+   Universal verbs, role-aware CONTENTS. `pct` = subtle readiness. ---- */
+const RAIL_META = [
+  { id: 'build',   label: 'Build',   icon: 'blocks',          tag: 'Stand it up' },
+  { id: 'source',  label: 'Source',  icon: 'radar',           tag: 'Find & raise' },
+  { id: 'run',     label: 'Run',     icon: 'activity',        tag: 'Operate' },
+  { id: 'execute', label: 'Execute', icon: 'circle-check-big', tag: 'Drive to close' },
+];
+const RAIL = {
+  fund: {
+    center: 'source',
+    build:   { blurb: 'Your fund, structured and ready to show.', pct: 80, items: [
+      { label: 'Fund formation', icon: 'landmark', meta: 'Adrian · checklist 64%' },
+      { label: 'Structure & governance', icon: 'scale', meta: '100/30/10 plan drafted' },
+      { label: 'Materials & data room', icon: 'folder-lock', meta: 'Deck, one-pager, PPM' },
+      { label: 'Your profile & brand', icon: 'id-card', meta: 'Sienna · in market' } ] },
+    source:  { blurb: 'The team finds your deals, capital and partners.', pct: 42, items: [
+      { label: 'Deal pipeline', icon: 'trending-up', meta: 'Marcus · 12 sourced' },
+      { label: 'LP & capital targets', icon: 'handshake', meta: 'Sloane · 40 ranked' },
+      { label: 'Partners & providers', icon: 'briefcase', meta: 'Network mapped' },
+      { label: 'Lead engine', icon: 'filter', meta: 'Camille · warming' } ] },
+    run:     { blurb: 'Operate the systems that move work forward.', pct: 28, items: [
+      { label: 'Diligence', icon: 'cpu', meta: 'Marcus · 5/7 agents' },
+      { label: 'Workflows & tasks', icon: 'list-checks', meta: 'Sterling · 19 steps' },
+      { label: 'Compliance', icon: 'shield-check', meta: 'Adrian · clean' },
+      { label: 'IR & reporting', icon: 'users', meta: 'Eleanor · Q2 due' } ] },
+    execute: { blurb: 'Drive every engagement to a signed close.', pct: 12, items: [
+      { label: 'Closings', icon: 'file-signature', meta: '1 ready to sign' },
+      { label: 'Signatures & wires', icon: 'banknote', meta: 'Pre-filled' },
+      { label: 'Capital calls', icon: 'receipt', meta: 'None pending' },
+      { label: 'Chain of Trust', icon: 'git-branch', meta: '4-layer proof' } ] },
+  },
+  capital: {
+    center: 'source',
+    build:   { blurb: 'Your mandate and allocation policy, set up.', pct: 75, items: [
+      { label: 'Mandate & criteria', icon: 'target', meta: 'Theodore · framed' },
+      { label: 'Allocation policy', icon: 'pie-chart', meta: 'Risk & pacing' },
+      { label: 'Diligence checklist', icon: 'list-checks', meta: 'GP screen ready' },
+      { label: 'Your profile', icon: 'id-card', meta: 'Confidential' } ] },
+    source:  { blurb: 'The team finds funds, deals and GPs that fit.', pct: 55, items: [
+      { label: 'Fund opportunities', icon: 'landmark', meta: 'Marcus · 18 matched' },
+      { label: 'Direct & co-invest deals', icon: 'radar', meta: '9 on-thesis' },
+      { label: 'GP relationships', icon: 'handshake', meta: 'Mapped & scored' },
+      { label: 'Network', icon: 'users', meta: 'Warm paths' } ] },
+    run:     { blurb: 'Monitor the portfolio and stay reported.', pct: 35, items: [
+      { label: 'Diligence', icon: 'cpu', meta: 'Theodore · screening' },
+      { label: 'Portfolio monitoring', icon: 'activity', meta: 'NAV & pacing' },
+      { label: 'Reporting & K-1s', icon: 'file-text', meta: 'Eleanor · tracked' },
+      { label: 'Knowledge', icon: 'brain-circuit', meta: '15 brains' } ] },
+    execute: { blurb: 'Commit, subscribe and fund — on the record.', pct: 20, items: [
+      { label: 'Commitments', icon: 'file-signature', meta: '2 in motion' },
+      { label: 'Subscriptions & wires', icon: 'banknote', meta: 'Pre-filled' },
+      { label: 'Capital calls', icon: 'receipt', meta: '1 to sign' },
+      { label: 'Chain of Trust', icon: 'git-branch', meta: '4-layer proof' } ] },
+  },
+  service: {
+    center: 'source',
+    build:   { blurb: 'Your practice, packaged to win mandates.', pct: 70, items: [
+      { label: 'Practice profile', icon: 'id-card', meta: 'Positioned' },
+      { label: 'Service offerings', icon: 'briefcase', meta: 'Scoped' },
+      { label: 'Materials & case studies', icon: 'folder-lock', meta: 'Sienna · ready' },
+      { label: 'Brand presence', icon: 'globe', meta: 'Noah · building' } ] },
+    source:  { blurb: 'The team fills your funnel with the right work.', pct: 48, items: [
+      { label: 'Client pipeline', icon: 'trending-up', meta: 'Vivian · 14 leads' },
+      { label: 'Deal flow', icon: 'radar', meta: 'From the network' },
+      { label: 'Referral partners', icon: 'handshake', meta: 'Mapped' },
+      { label: 'Lead engine', icon: 'filter', meta: 'Camille · warming' } ] },
+    run:     { blurb: 'Run engagements and stay compliant.', pct: 30, items: [
+      { label: 'Engagements', icon: 'briefcase', meta: '6 active' },
+      { label: 'Workflows & tasks', icon: 'list-checks', meta: 'Sterling · sequenced' },
+      { label: 'Compliance', icon: 'shield-check', meta: 'Adrian · clean' },
+      { label: 'Knowledge', icon: 'brain-circuit', meta: '15 brains' } ] },
+    execute: { blurb: 'Win the mandate and get paid.', pct: 15, items: [
+      { label: 'Mandates won', icon: 'circle-check-big', meta: '3 this quarter' },
+      { label: 'Agreements & signatures', icon: 'file-signature', meta: 'Pre-filled' },
+      { label: 'Invoicing', icon: 'receipt', meta: 'Automated' },
+      { label: 'Chain of Trust', icon: 'git-branch', meta: '4-layer proof' } ] },
+  },
+};
+function railFor(group) { return RAIL[group] || RAIL.fund; }
+
+Object.assign(window, { TEAM, ACTIVATION, ROLE_GROUPS, EXPERIENCE, STANDING, HORIZONS, OBJECTIVES, VEHICLES, SIZES, SECTORS, STAGES, GEOS, MANDATE_BY_GROUP, mandateCfg, groupDefaults, RAIL_META, RAIL, railFor, DEFAULT_MANDATE, WORKSPACE, workspaceStats });

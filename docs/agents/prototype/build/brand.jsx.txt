@@ -1,0 +1,742 @@
+/* ===========================================================
+   FundExecs OS — Onboarding Prototype · Your profile & brand
+   The public face of the raise — your GP profile, firm brand,
+   and digital presence, built copiloted from your fund story.
+   You decide the posture, Earn produces it.
+   =========================================================== */
+
+const BRAND_BUILD = {
+  bio: { intro: 'Your professional bio — the first thing an LP reads about you. Earn drafts it from your fund story.',
+    decisions: [
+      { key: 'voice', kind: 'radio', label: 'Position as', opts: ['Operator', 'Investor', 'Visionary'] },
+      { key: 'length', kind: 'radio', label: 'Length', opts: ['Short', 'Standard', 'Full'] },
+      { key: 'include', kind: 'multi', label: 'Highlight', opts: ['Track record', 'Operating wins', 'Education', 'Network', 'Thesis'] },
+    ],
+    rec: { voice: 'Operator', length: 'Standard', include: ['Track record', 'Operating wins', 'Thesis'] },
+    recText: 'Position as an operator — LPs back managers who\u2019ve done the work, not just allocated. Keep it standard length, leading with track record, operating wins and your thesis.' },
+  brandkit: { intro: 'Your firm\u2019s visual identity — wordmark, palette and voice. Institutional but distinct.',
+    decisions: [
+      { key: 'aesthetic', kind: 'radio', label: 'Aesthetic', opts: ['Institutional', 'Modern', 'Bold'] },
+      { key: 'palette', kind: 'radio', label: 'Palette', opts: ['Navy & gold', 'Charcoal & ivory', 'Forest & brass'] },
+      { key: 'voice', kind: 'radio', label: 'Voice', opts: ['Measured', 'Direct', 'Visionary'] },
+    ],
+    rec: { aesthetic: 'Institutional', palette: 'Navy & gold', voice: 'Measured' },
+    recText: 'Institutional with a navy-and-gold palette reads as serious capital — the register LPs trust. A measured voice ages well across a decade of letters and updates.' },
+  website: { intro: 'A clean fund site at your own domain — credibility LPs check before the first call.',
+    decisions: [
+      { key: 'type', kind: 'radio', label: 'Format', opts: ['One-pager', 'Multi-page'] },
+      { key: 'sections', kind: 'multi', label: 'Sections', opts: ['Thesis', 'Team', 'Portfolio', 'Approach', 'Contact'] },
+      { key: 'gate', kind: 'radio', label: 'Investor area', opts: ['Public + gated room', 'Public only'] },
+    ],
+    rec: { type: 'One-pager', sections: ['Thesis', 'Team', 'Approach', 'Contact'], gate: 'Public + gated room' },
+    recText: 'A one-pager is enough to start — thesis, team, approach, contact — with a gated link through to your data room. I\u2019ll deploy it to your domain and keep it in sync.' },
+};
+
+const PALETTES = {
+  'Navy & gold': ['#0f1c34', '#1f3a63', '#F7C948'],
+  'Charcoal & ivory': ['#1a1d24', '#3a3f4b', '#e8e2d4'],
+  'Forest & brass': ['#13241c', '#1f4636', '#c8a44d'],
+};
+const BK_TYPES = { 'Geist · modern': { stack: "'Geist', system-ui, sans-serif", weight: 600 }, 'Serif · classic': { stack: "'Georgia', serif", weight: 600 }, 'Grotesk · bold': { stack: "system-ui, sans-serif", weight: 700 } };
+const BK_TAGLINES = ['Backing the operators others overlook.', 'Conviction, earned on the ground.', 'Where operating insight meets capital.', 'The unfair edge, institutionalized.'];
+const BK_REC = { tagline: 'Backing the operators others overlook.', logo: 'Monogram', palette: 'Navy & gold', type: 'Geist · modern', voice: 'Measured' };
+
+/* generic copiloted brand builder (mirrors the materials / policy builders) */
+function BrandBuilder({ item, mobile, onBack, onComplete }) {
+  const cfg = BRAND_BUILD[item.id] || { intro: '', decisions: [], rec: {}, recText: '' };
+  const [d, setD] = useState(() => ({ ...cfg.rec }));
+  const [applied, setApplied] = useState(false);
+  const [phase, setPhase] = useState('edit');
+  const set = (k, v) => setD(p => ({ ...p, [k]: v }));
+  const toggle = (k, v) => setD(p => { const c = p[k] || []; return { ...p, [k]: c.includes(v) ? c.filter(x => x !== v) : [...c, v] }; });
+  const steps = ['Pull your fund story & profile', `Produce your ${item.name.toLowerCase()}`, 'Polish to institutional standard', 'Publish to your workspace'];
+  const [n, setN] = useState(0);
+  useEffect(() => { if (phase !== 'building') return; let i = 0; const t = setInterval(() => { i += 1; setN(i); if (i >= steps.length) { clearInterval(t); setTimeout(() => setPhase('done'), 420); } }, 580); return () => clearInterval(t); }, [phase]);
+  const rows = cfg.decisions.map(dec => [dec.label, Array.isArray(d[dec.key]) ? (d[dec.key].join(', ') || 'None') : d[dec.key]]);
+
+  if (phase === 'done') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+        <div style={{ width: '100%', maxWidth: 540 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 54, height: 54, borderRadius: '50%', margin: '0 auto 13px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--success-soft)', border: '1px solid var(--success-line)' }}><Icon name="check" size={26} color="var(--success)" /></div>
+            <div className="t-h2" style={{ fontSize: 19 }}>{item.name} — live</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 6 }}>Produced to your spec and published across your workspace.</p>
+          </div>
+          <div style={{ borderRadius: 13, border: '1px solid var(--border)', overflow: 'hidden', marginTop: 16 }}>
+            {rows.map(([k, v], i) => (
+              <div key={k} style={{ display: 'flex', gap: 14, padding: '10px 15px', background: i % 2 ? 'transparent' : 'var(--surface-1)', borderTop: i ? '1px solid var(--border-faint)' : 'none' }}>
+                <span style={{ width: 120, flex: 'none', fontSize: 12, color: 'var(--fg-4)' }}>{k}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-1)' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 18, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="pencil" onClick={() => { setPhase('edit'); setN(0); }}>Go back &amp; edit</Button>
+            <Button variant="gold" iconRight="check" onClick={() => onComplete(d)}>Publish &amp; finish</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (phase === 'building') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 0' }}>
+        <div style={{ width: '100%', maxWidth: 520 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ position: 'relative', marginBottom: 12 }}><div className="pulse-dot" style={{ position: 'absolute', inset: -10, borderRadius: '50%', background: 'radial-gradient(circle, rgba(247,201,72,0.5), transparent 70%)', filter: 'blur(8px)' }} /><div style={{ position: 'relative' }}><EarnCoin size={48} /></div></div>
+            <div className="t-h2" style={{ fontSize: 18 }}>Producing {item.name}…</div>
+          </div>
+          <ProgressBar value={Math.round((n / steps.length) * 100)} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} />
+          <div className="card" style={{ marginTop: 13, padding: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {steps.map((s, i) => i <= n && (
+              <div key={i} className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px' }}>
+                <span style={{ width: 22, height: 22, borderRadius: 999, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: i < n ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${i < n ? 'var(--success-line)' : 'var(--border)'}`, color: i < n ? 'var(--success)' : 'var(--fg-4)' }}>{i < n ? <Icon name="check" size={12} /> : <Icon name="loader" size={12} className="spin" />}</span>
+                <span style={{ fontSize: 13, color: i < n ? 'var(--fg-2)' : 'var(--fg-1)' }}>{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button className="clickable" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--fg-3)', padding: '7px 11px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface-1)' }}><Icon name="arrow-left" size={14} />Back</button>
+        <div style={{ flex: 1, minWidth: 0 }}><div className="t-h2" style={{ fontSize: 18 }}>{item.name}</div><div style={{ fontSize: 12, color: 'var(--fg-4)' }}>You set the direction, Earn produces it</div></div>
+        <Badge tone="azure" dot>Copiloted</Badge>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1fr) 300px', gap: 16, alignItems: 'start' }}>
+        <div className="card" style={{ padding: 22 }}>
+          <p style={{ fontSize: 12.5, color: 'var(--fg-4)', margin: '0 0 18px', lineHeight: 1.55 }}>{cfg.intro}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {cfg.decisions.map(dec => (
+              <div key={dec.key}>
+                <div className="t-eyebrow" style={{ marginBottom: 9 }}>{dec.label}{dec.kind === 'multi' && <span style={{ color: 'var(--fg-5)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}> · pick any</span>}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {dec.opts.map(o => <Chip key={o} label={o} selected={dec.kind === 'multi' ? (d[dec.key] || []).includes(o) : d[dec.key] === o} onClick={() => dec.kind === 'multi' ? toggle(dec.key, o) : set(dec.key, o)} />)}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, gap: 10, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="arrow-left" onClick={onBack}>Cancel</Button>
+            <Button variant="gold" iconRight="sparkles" onClick={() => { setN(0); setPhase('building'); }}>Produce &amp; publish</Button>
+          </div>
+        </div>
+        <div className="card" style={{ padding: 17, alignSelf: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 11 }}><div style={{ position: 'relative', flex: 'none' }}><EarnCoin size={32} /><span className="pulse-dot" style={{ position: 'absolute', right: -1, bottom: -1, width: 9, height: 9, borderRadius: 999, background: 'var(--success)', border: '2px solid var(--bg-2)' }} /></div><div><div style={{ fontSize: 13, fontWeight: 600 }}>Earn</div><div style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>Brand copilot</div></div></div>
+          <div className="t-eyebrow" style={{ marginBottom: 7, color: 'var(--gold-1)' }}>Earn recommends</div>
+          <div style={{ fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.6 }}>{cfg.recText}</div>
+          <Button variant={applied ? 'secondary' : 'gold'} size="sm" icon={applied ? 'check' : 'sparkles'} style={{ width: '100%', marginTop: 14 }} onClick={() => { setD({ ...cfg.rec }); setApplied(true); }}>{applied ? 'Recommendation applied' : "Apply Earn's recommendation"}</Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 11, color: 'var(--fg-5)' }}><Icon name="hand" size={12} />You're in control — change anything.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BrandStat({ label, value, sub, tone = 'gold' }) {
+  return (
+    <div className="card-flat" style={{ padding: '12px 14px', background: 'var(--surface-1)' }}>
+      <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>{label}</div>
+      <div className="t-metric" style={{ fontSize: 19, marginTop: 6, color: TONE[tone].c }}>{value}</div>
+      {sub && <div style={{ fontSize: 10.5, color: 'var(--fg-5)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function BrandHub({ mandate, formD = {}, pct, onBuilt, onRun, mobile }) {
+  const [view, setView] = useState('profile');
+  const [open, setOpen] = useState(null);
+  const principal = mandate.principal || 'Jordan Avery';
+  const firm = mandate.firm || 'Cedar Lane Capital';
+  const [built, setBuilt] = useState({});   // id -> chosen spec (when produced)
+  const [connected, setConnected] = useState({});
+  const [conn, setConn] = useState({});
+
+  function complete(id, spec) { setBuilt(p => ({ ...p, [id]: spec || true })); onBuilt && onBuilt(BRAND_ITEM_NAME[id] || id); setOpen(null); }
+  function connect(id, label) {
+    onRun({ id: 'brand-' + id, hub: 'build', xp: 8, title: label, apply: () => setConnected(p => ({ ...p, [id]: true })),
+      run: { title: label, steps: ['Verify the handle / domain', 'Apply your brand & bio', 'Link to your workspace', 'Prepare for your approval'], draftTitle: label, draft: `Earn set this up from your brand kit and profile. Approve to connect it and keep it in sync.` } });
+  }
+
+  if (open === 'brandkit') {
+    return <BrandKitBuilder key="brandkit" firm={firm} initial={built.brandkit && built.brandkit.tagline != null ? built.brandkit : null} mobile={mobile} onBack={() => setOpen(null)} onComplete={(spec) => complete('brandkit', spec)} />;
+  }
+  if (open === 'credentials') {
+    return <CredentialsBuilder key="credentials" principal={principal} firm={firm} initial={built.credentials && built.credentials.deals ? built.credentials : null} mobile={mobile} onBack={() => setOpen(null)} onComplete={(spec) => complete('credentials', spec)} />;
+  }
+  if (open === 'bio') {
+    return <BioBuilder key="bio" principal={principal} firm={firm} initial={built.bio && built.bio.voice ? built.bio : null} mobile={mobile} onBack={() => setOpen(null)} onComplete={(spec) => complete('bio', spec)} />;
+  }
+  if (open) {
+    const item = { id: open, name: BRAND_ITEM_NAME[open] };
+    return <BrandBuilder key={open} item={item} mobile={mobile} onBack={() => setOpen(null)} onComplete={(spec) => complete(open, spec)} />;
+  }
+
+  const palette = PALETTES[(built.brandkit && built.brandkit.palette) || 'Navy & gold'];
+  const bioBuilt = !!built.bio;
+
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="card" style={{ padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+          <span style={{ width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)' }}><Icon name="user-circle" size={22} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="t-h2" style={{ fontSize: 19 }}>Your profile &amp; brand</div>
+            <div style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 2 }}>The public face of your raise — built from your fund story.</div>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginTop: 16 }}>
+          <BrandStat label="Profile" value={bioBuilt ? 'Live' : 'Draft'} sub="GP bio & credentials" tone={bioBuilt ? 'success' : 'gold'} />
+          <BrandStat label="Firm brand" value={built.brandkit ? 'Set' : 'Pending'} sub="identity & voice" tone={built.brandkit ? 'success' : 'azure'} />
+          <BrandStat label="Web presence" value={built.website ? 'Live' : 'Pending'} sub="site & domain" tone={built.website ? 'success' : 'info'} />
+        </div>
+      </div>
+
+      <div style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2 }}>
+        <SegTabs active={view} onChange={setView} tabs={[{ id: 'profile', label: 'Profile', icon: 'id-card' }, { id: 'brand', label: 'Firm brand', icon: 'palette' }, { id: 'presence', label: 'Digital presence', icon: 'globe' }]} />
+      </div>
+
+      {view === 'profile' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* profile preview */}
+          <Panel title="Your public profile" eyebrow="How LPs first see you" icon="id-card">
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <Avatar name={principal} size={64} tone="gold" />
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 17, fontWeight: 600 }}>{principal}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--gold-1)', fontWeight: 500 }}>Managing Partner · {firm}</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 10, lineHeight: 1.6, maxWidth: '62ch' }}>
+                  {bioBuilt
+                    ? ((built.bio && built.bio.text) || `${principal} is the Managing Partner of ${firm}.`)
+                    : <span style={{ color: 'var(--fg-5)', fontStyle: 'italic' }}>Your bio will appear here once Earn drafts it from your fund story.</span>}
+                </div>
+                {built.credentials && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 11 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: 'var(--gold-1)', background: 'var(--gold-soft)', border: '1px solid var(--gold-line)', borderRadius: 999, padding: '4px 11px' }}><Icon name="trending-up" size={11} />{built.credentials.agg.count} deals · {built.credentials.agg.blended}x MOIC</span>
+                  {built.credentials.edu && <span style={{ fontSize: 11, color: 'var(--fg-2)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 11px' }}>{built.credentials.edu}</span>}
+                  {built.credentials.recognition.slice(0, 2).map(r => <span key={r} style={{ fontSize: 11, color: 'var(--fg-2)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 11px' }}>{r}</span>)}
+                </div>}
+                <div style={{ display: 'flex', gap: 7, marginTop: 12, flexWrap: 'wrap' }}>
+                  {['LinkedIn', 'X', 'Website'].map(s => (
+                    <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: connected[s.toLowerCase()] ? 'var(--success)' : 'var(--fg-4)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 10px' }}>
+                      <Icon name={connected[s.toLowerCase()] ? 'check' : 'link'} size={11} />{s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Panel>
+          <Panel title="Build your profile" eyebrow="Copiloted by Sienna" icon="user-check">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                { id: 'bio', name: 'Professional bio', sub: 'Drafted from your fund story', done: bioBuilt, copilot: true },
+                { id: 'credentials', name: 'Credentials & track record', sub: built.credentials ? `${built.credentials.agg.count} deals · ${built.credentials.agg.blended}x blended MOIC` : 'Structured & verified from your history', done: !!built.credentials, copilot: true },
+              ].map(it => (
+                <div key={it.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', background: 'var(--surface-1)' }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 8, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: it.done ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${it.done ? 'var(--success-line)' : 'var(--border)'}`, color: it.done ? 'var(--success)' : 'var(--fg-3)' }}><Icon name={it.done ? 'check' : (it.copilot ? 'sparkles' : 'link')} size={15} /></span>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 600 }}>{it.name}</div><div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{it.sub}</div></div>
+                  {it.done ? <Badge tone="success" style={{ fontSize: 9.5 }}>Done</Badge>
+                    : it.copilot ? <Button variant="secondary" size="sm" icon="sparkles" onClick={() => setOpen(it.id)}>Draft</Button>
+                    : <Button variant="secondary" size="sm" icon="plus" onClick={() => connect(it.id, `Set up ${it.name}`)}>{it.id === 'credentials' ? 'Build' : 'Connect'}</Button>}
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      ) : view === 'brand' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Panel title="Firm brand" eyebrow="Your visual identity" icon="palette"
+            action={<Button variant={built.brandkit ? 'ghost' : 'secondary'} size="sm" icon="sparkles" onClick={() => setOpen('brandkit')}>{built.brandkit ? 'Refine' : 'Build brand kit'}</Button>}>
+            {/* brand preview */}
+            <div className="card-flat" style={{ padding: '22px 20px', background: `linear-gradient(135deg, ${palette[0]}, ${palette[1]})`, border: `1px solid ${palette[2]}40`, textAlign: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11 }}>
+                <EarnCoin size={28} radius={8} />
+                <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: '#fff' }}>{firm}</div>
+              </div>
+              <div style={{ fontSize: 12.5, color: built.brandkit ? palette[2] : 'rgba(255,255,255,0.6)', marginTop: 8 }}>
+                {built.brandkit ? ((built.brandkit.tagline) || 'Backing the operators others overlook.') : 'Your tagline appears once your brand kit is built.'}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Palette</span>
+                {palette.map(c => <span key={c} style={{ width: 22, height: 22, borderRadius: 6, background: c, border: '1px solid var(--border)' }} />)}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}><b style={{ color: 'var(--fg-2)' }}>Aesthetic</b> · {(built.brandkit && built.brandkit.aesthetic) || 'Institutional'}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}><b style={{ color: 'var(--fg-2)' }}>Voice</b> · {(built.brandkit && built.brandkit.voice) || 'Measured'}</div>
+            </div>
+          </Panel>
+        </div>
+      ) : (
+        <Panel title="Digital presence" eyebrow="Where LPs check you out · Noah & Vivian" icon="globe">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 10 }}>
+            {[
+              { id: 'website', name: 'Fund website', sub: built.website ? `${firm.toLowerCase().replace(/[^a-z]/g, '')}.com · live` : 'One-pager + gated room', done: !!built.website, copilot: true, icon: 'globe' },
+              { id: 'domain', name: 'Custom domain', sub: 'Secured & verified', done: !!connected.domain, icon: 'at-sign' },
+              { id: 'company', name: 'LinkedIn company page', sub: 'On-brand, auto-updated', done: !!connected.company, icon: 'building-2' },
+              { id: 'content', name: 'Content & SEO engine', sub: 'Thought leadership cadence', done: !!connected.content, icon: 'pen-line' },
+            ].map(it => (
+              <div key={it.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px', background: 'var(--surface-1)' }}>
+                <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: it.done ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${it.done ? 'var(--success-line)' : 'var(--border)'}`, color: it.done ? 'var(--success)' : 'var(--fg-3)' }}><Icon name={it.done ? 'check' : it.icon} size={16} /></span>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 600 }}>{it.name}</div><div style={{ fontSize: 10.5, color: 'var(--fg-5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.sub}</div></div>
+                {it.done ? <Badge tone="success" style={{ fontSize: 9.5 }}>Live</Badge>
+                  : it.copilot ? <Button variant="secondary" size="sm" icon="sparkles" onClick={() => setOpen('website')}>Build</Button>
+                  : <Button variant="secondary" size="sm" icon="plus" onClick={() => connect(it.id, `Set up ${it.name}`)}>Set up</Button>}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      {(view === 'profile' || view === 'presence') && (
+        <Panel title="Connections" eyebrow="One-click integrations · keep everything in sync" icon="plug">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8 }}>
+            {CONNECTORS.map(c => {
+              const on = !!conn[c.id];
+              return (
+                <button key={c.id} className="clickable" onClick={() => setConn(p => ({ ...p, [c.id]: !p[c.id] }))}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 11, textAlign: 'left',
+                    background: on ? 'var(--success-soft)' : 'var(--surface-1)', border: `1px solid ${on ? 'var(--success-line)' : 'var(--border)'}` }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 8, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${on ? 'var(--success-line)' : 'var(--border)'}`, color: on ? 'var(--success)' : 'var(--fg-3)' }}><Icon name={c.icon} size={16} /></span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, color: on ? 'var(--success)' : 'var(--accent)', flex: 'none' }}>{on ? 'Connected' : 'Connect'}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
+
+      <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gold-soft)', borderColor: 'var(--gold-line)' }}>
+        <EarnCoin size={26} />
+        <div style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.5 }}><b style={{ color: 'var(--gold-1)' }}>Earn:</b> Your brand should say the same thing your fund story does. I produce every asset from it — you set the posture, I keep it consistent everywhere.</div>
+      </div>
+    </div>
+  );
+}
+
+const BRAND_ITEM_NAME = { bio: 'Professional bio', brandkit: 'Brand kit', website: 'Fund website', credentials: 'Credentials & track record' };
+const CONNECTORS = [
+  { id: 'linkedin', name: 'LinkedIn', icon: 'linkedin' },
+  { id: 'x', name: 'X', icon: 'twitter' },
+  { id: 'facebook', name: 'Facebook', icon: 'facebook' },
+  { id: 'instagram', name: 'Instagram', icon: 'instagram' },
+  { id: 'tiktok', name: 'TikTok', icon: 'music' },
+  { id: 'whatsapp', name: 'WhatsApp', icon: 'message-circle' },
+  { id: 'gmail', name: 'Gmail', icon: 'mail' },
+  { id: 'gmeet', name: 'Google Meet', icon: 'video' },
+  { id: 'calendar', name: 'Calendar', icon: 'calendar' },
+  { id: 'calendly', name: 'Calendly', icon: 'calendar-clock' },
+  { id: 'slack', name: 'Slack', icon: 'slack' },
+];
+
+/* compose an actual bio paragraph from the inputs + posture */
+function composeBio(d, principal, firm) {
+  const first = (principal || 'Jordan Avery').split(' ')[0];
+  const yrs = d.years || '10';
+  const prior = d.prior || 'a decade operating in the sector';
+  const win = d.win || 'three exits and a portfolio built on conviction';
+  const edu = d.edu || '';
+  const voiceOpen = {
+    Operator: `${principal} is the Managing Partner of ${firm} — an operator-turned-investor who spent ${yrs} years building in the sector before backing it.`,
+    Investor: `${principal} is the Managing Partner of ${firm}, an investor with ${yrs} years of disciplined sector focus and a track record of finding value others miss.`,
+    Visionary: `${principal} is the Managing Partner of ${firm}, building the firm to back the operators and ideas the market is only now catching up to.`,
+  }[d.voice || 'Operator'];
+  const parts = [voiceOpen];
+  if ((d.include || []).includes('Operating wins')) parts.push(`Before ${firm}, ${first} led ${prior.toLowerCase().startsWith('a ') ? prior : 'work at ' + prior} — earning the relationships and pattern-recognition that now drive the fund's edge.`);
+  if ((d.include || []).includes('Track record')) parts.push(`That work produced ${win}.`);
+  if ((d.include || []).includes('Thesis')) parts.push(`Today ${first} invests behind a focused thesis: backing overlooked operators with an unfair sourcing edge.`);
+  if ((d.include || []).includes('Network')) parts.push(`${first}'s network across the sector turns into proprietary deal flow and warm capital.`);
+  if ((d.include || []).includes('Education') && edu) parts.push(`${first} holds ${edu}.`);
+  const full = parts.join(' ');
+  if (d.length === 'Short') return parts.slice(0, 2).join(' ');
+  if (d.length === 'Full') return full + ` ${first} writes and speaks regularly on the space, and sits at the center of the conversations that shape it.`;
+  return full;
+}
+
+const BIO_REC = { voice: 'Operator', length: 'Standard', include: ['Track record', 'Operating wins', 'Thesis'], years: '10', prior: 'Head of Operations at a sector incumbent', win: 'three exits and a top-quartile angel track record', edu: 'an MBA from a top program' };
+
+/* ---- dedicated Brand kit builder (live brand board) ---- */
+function BrandKitBuilder({ firm, initial, mobile, onBack, onComplete }) {
+  const [d, setD] = useState(() => ({ tagline: '', logo: 'Monogram', palette: 'Navy & gold', type: 'Geist · modern', voice: 'Measured', ...(initial || {}) }));
+  const [applied, setApplied] = useState(false);
+  const [phase, setPhase] = useState('edit');
+  const [n, setN] = useState(0);
+  const set = (k, v) => setD(p => ({ ...p, [k]: v }));
+  const pal = PALETTES[d.palette] || PALETTES['Navy & gold'];
+  const typ = BK_TYPES[d.type] || BK_TYPES['Geist · modern'];
+  const initials = (firm || 'Cedar Lane').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const steps = ['Read your fund story & posture', 'Generate wordmark & palette', 'Set type & voice', 'Publish your brand kit'];
+  useEffect(() => { if (phase !== 'building') return; let i = 0; const t = setInterval(() => { i += 1; setN(i); if (i >= steps.length) { clearInterval(t); setTimeout(() => setPhase('done'), 420); } }, 560); return () => clearInterval(t); }, [phase]);
+
+  const Mark = ({ size = 30 }) => d.logo === 'Coin'
+    ? <EarnCoin size={size} radius={size * 0.28} />
+    : d.logo === 'Symbol'
+      ? <span style={{ width: size, height: size, borderRadius: size * 0.28, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: pal[2], color: pal[0] }}><Icon name="hexagon" size={size * 0.6} /></span>
+      : <span style={{ width: size, height: size, borderRadius: size * 0.28, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: pal[2], color: pal[0], fontWeight: 700, fontSize: size * 0.42, letterSpacing: '-0.02em' }}>{initials}</span>;
+
+  const BrandBoard = () => (
+    <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid var(--border)' }}>
+      <div style={{ padding: '26px 22px', background: `linear-gradient(135deg, ${pal[0]}, ${pal[1]})`, textAlign: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11 }}>
+          <Mark size={32} />
+          <span style={{ fontSize: 23, fontWeight: typ.weight, letterSpacing: '-0.02em', color: '#fff', fontFamily: typ.stack }}>{firm}</span>
+        </div>
+        <div style={{ fontSize: 12.5, color: pal[2], marginTop: 9, fontFamily: typ.stack }}>{d.tagline || BK_TAGLINES[0]}</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'stretch', background: 'var(--surface-1)' }}>
+        {pal.map(c => <div key={c} style={{ flex: 1, height: 30, background: c }} />)}
+      </div>
+      <div style={{ padding: '12px 15px', background: 'var(--surface-1)', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'baseline' }}>
+        <span style={{ fontSize: 18, fontWeight: typ.weight, fontFamily: typ.stack, color: 'var(--fg-1)' }}>Aa</span>
+        <span style={{ fontSize: 11, color: 'var(--fg-5)' }}>{d.type} · {d.voice} voice</span>
+      </div>
+    </div>
+  );
+
+  if (phase === 'done') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+        <div style={{ width: '100%', maxWidth: 540 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 54, height: 54, borderRadius: '50%', margin: '0 auto 13px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--success-soft)', border: '1px solid var(--success-line)' }}><Icon name="check" size={26} color="var(--success)" /></div>
+            <div className="t-h2" style={{ fontSize: 19 }}>Brand kit — live</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 6 }}>Applied across your deck, one-pager, website and data room automatically.</p>
+          </div>
+          <div style={{ marginTop: 16 }}><BrandBoard /></div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 18, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="pencil" onClick={() => { setPhase('edit'); setN(0); }}>Go back &amp; edit</Button>
+            <Button variant="gold" iconRight="check" onClick={() => onComplete({ ...d, aesthetic: d.voice === 'Visionary' ? 'Bold' : 'Institutional' })}>Publish &amp; finish</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (phase === 'building') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 0' }}>
+        <div style={{ width: '100%', maxWidth: 520 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ position: 'relative', marginBottom: 12 }}><div className="pulse-dot" style={{ position: 'absolute', inset: -10, borderRadius: '50%', background: 'radial-gradient(circle, rgba(247,201,72,0.5), transparent 70%)', filter: 'blur(8px)' }} /><div style={{ position: 'relative' }}><EarnCoin size={48} /></div></div>
+            <div className="t-h2" style={{ fontSize: 18 }}>Designing your brand kit…</div>
+          </div>
+          <ProgressBar value={Math.round((n / steps.length) * 100)} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} />
+          <div className="card" style={{ marginTop: 13, padding: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {steps.map((s, i) => i <= n && (
+              <div key={i} className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px' }}>
+                <span style={{ width: 22, height: 22, borderRadius: 999, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: i < n ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${i < n ? 'var(--success-line)' : 'var(--border)'}`, color: i < n ? 'var(--success)' : 'var(--fg-4)' }}>{i < n ? <Icon name="check" size={12} /> : <Icon name="loader" size={12} className="spin" />}</span>
+                <span style={{ fontSize: 13, color: i < n ? 'var(--fg-2)' : 'var(--fg-1)' }}>{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button className="clickable" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--fg-3)', padding: '7px 11px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface-1)' }}><Icon name="arrow-left" size={14} />Back</button>
+        <div style={{ flex: 1, minWidth: 0 }}><div className="t-h2" style={{ fontSize: 18 }}>Brand kit</div><div style={{ fontSize: 12, color: 'var(--fg-4)' }}>You set the direction, Earn designs it — preview updates live</div></div>
+        <Badge tone="azure" dot>Copiloted</Badge>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1fr) 320px', gap: 16, alignItems: 'start' }}>
+        <div className="card" style={{ padding: 22 }}>
+          <Field label="Tagline" icon="quote" value={d.tagline} onChange={v => set('tagline', v)} placeholder={BK_TAGLINES[0]} hint="Leave blank and Earn writes it from your thesis." />
+          <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Logo mark</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{['Monogram', 'Coin', 'Symbol'].map(o => <Chip key={o} label={o} selected={d.logo === o} onClick={() => set('logo', o)} />)}</div>
+          <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Palette</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {Object.keys(PALETTES).map(p => {
+              const on = d.palette === p;
+              return (
+                <button key={p} className="clickable" onClick={() => set('palette', p)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 11px', borderRadius: 999, background: on ? 'var(--accent-soft)' : 'var(--surface-1)', border: `1px solid ${on ? 'var(--accent-line)' : 'var(--border)'}` }}>
+                  <span style={{ display: 'flex' }}>{PALETTES[p].map(c => <span key={c} style={{ width: 14, height: 14, borderRadius: 4, background: c, marginLeft: -3, border: '1px solid var(--bg-1)' }} />)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: on ? 'var(--fg-1)' : 'var(--fg-3)' }}>{p}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Typeface</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{Object.keys(BK_TYPES).map(o => <Chip key={o} label={o} selected={d.type === o} onClick={() => set('type', o)} />)}</div>
+          <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Voice</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{['Measured', 'Direct', 'Visionary'].map(o => <Chip key={o} label={o} selected={d.voice === o} onClick={() => set('voice', o)} />)}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, gap: 10, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="arrow-left" onClick={onBack}>Cancel</Button>
+            <Button variant="gold" iconRight="sparkles" onClick={() => { setN(0); setPhase('building'); }}>Design &amp; publish</Button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="card" style={{ padding: 17 }}>
+            <div className="t-eyebrow" style={{ marginBottom: 11, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="eye" size={12} color="var(--gold-1)" />Live brand board</div>
+            <BrandBoard />
+          </div>
+          <div className="card" style={{ padding: 17 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><div style={{ position: 'relative', flex: 'none' }}><EarnCoin size={30} /><span className="pulse-dot" style={{ position: 'absolute', right: -1, bottom: -1, width: 9, height: 9, borderRadius: 999, background: 'var(--success)', border: '2px solid var(--bg-2)' }} /></div><div><div style={{ fontSize: 12.5, fontWeight: 600 }}>Earn</div><div style={{ fontSize: 10, color: 'var(--fg-4)' }}>Brand copilot</div></div></div>
+            <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.55 }}>Institutional navy & gold with a measured voice reads as serious capital — the register LPs trust. Leave the tagline blank and I'll write it from your thesis.</div>
+            <Button variant={applied ? 'secondary' : 'gold'} size="sm" icon={applied ? 'check' : 'sparkles'} style={{ width: '100%', marginTop: 12 }} onClick={() => { setD(p => ({ ...p, ...BK_REC })); setApplied(true); }}>{applied ? 'Recommendation applied' : "Apply Earn's recommendation"}</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BioBuilder({ principal, firm, initial, mobile, onBack, onComplete }) {
+  const [d, setD] = useState(() => ({ voice: 'Operator', length: 'Standard', include: ['Track record', 'Thesis'], years: '', prior: '', win: '', edu: '', ...(initial || {}) }));
+  const [applied, setApplied] = useState(false);
+  const [phase, setPhase] = useState('edit');
+  const set = (k, v) => setD(p => ({ ...p, [k]: v }));
+  const toggle = (v) => setD(p => ({ ...p, include: (p.include || []).includes(v) ? p.include.filter(x => x !== v) : [...(p.include || []), v] }));
+  const [n, setN] = useState(0);
+  const steps = ['Pull your fund story & inputs', 'Draft your bio', 'Tune to your posture & length', 'Publish to your profile'];
+  useEffect(() => { if (phase !== 'building') return; let i = 0; const t = setInterval(() => { i += 1; setN(i); if (i >= steps.length) { clearInterval(t); setTimeout(() => setPhase('done'), 420); } }, 560); return () => clearInterval(t); }, [phase]);
+  const preview = composeBio(d, principal, firm);
+
+  if (phase === 'done') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+        <div style={{ width: '100%', maxWidth: 560 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 54, height: 54, borderRadius: '50%', margin: '0 auto 13px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--success-soft)', border: '1px solid var(--success-line)' }}><Icon name="check" size={26} color="var(--success)" /></div>
+            <div className="t-h2" style={{ fontSize: 19 }}>Professional bio — live</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 6 }}>Published to your profile, deck and data room. It updates everywhere if you edit it.</p>
+          </div>
+          <div className="card-flat" style={{ padding: '16px 18px', marginTop: 16, background: 'var(--surface-1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 11 }}>
+              <Avatar name={principal} size={38} tone="gold" />
+              <div><div style={{ fontSize: 13.5, fontWeight: 600 }}>{principal}</div><div style={{ fontSize: 11, color: 'var(--gold-1)' }}>Managing Partner · {firm}</div></div>
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.65 }}>{preview}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 18, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="pencil" onClick={() => { setPhase('edit'); setN(0); }}>Go back &amp; edit</Button>
+            <Button variant="gold" iconRight="check" onClick={() => onComplete({ ...d, text: preview })}>Publish &amp; finish</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (phase === 'building') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 0' }}>
+        <div style={{ width: '100%', maxWidth: 520 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ position: 'relative', marginBottom: 12 }}><div className="pulse-dot" style={{ position: 'absolute', inset: -10, borderRadius: '50%', background: 'radial-gradient(circle, rgba(247,201,72,0.5), transparent 70%)', filter: 'blur(8px)' }} /><div style={{ position: 'relative' }}><EarnCoin size={48} /></div></div>
+            <div className="t-h2" style={{ fontSize: 18 }}>Writing your bio…</div>
+          </div>
+          <ProgressBar value={Math.round((n / steps.length) * 100)} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} />
+          <div className="card" style={{ marginTop: 13, padding: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {steps.map((s, i) => i <= n && (
+              <div key={i} className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px' }}>
+                <span style={{ width: 22, height: 22, borderRadius: 999, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: i < n ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${i < n ? 'var(--success-line)' : 'var(--border)'}`, color: i < n ? 'var(--success)' : 'var(--fg-4)' }}>{i < n ? <Icon name="check" size={12} /> : <Icon name="loader" size={12} className="spin" />}</span>
+                <span style={{ fontSize: 13, color: i < n ? 'var(--fg-2)' : 'var(--fg-1)' }}>{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button className="clickable" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--fg-3)', padding: '7px 11px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface-1)' }}><Icon name="arrow-left" size={14} />Back</button>
+        <div style={{ flex: 1, minWidth: 0 }}><div className="t-h2" style={{ fontSize: 18 }}>Professional bio</div><div style={{ fontSize: 12, color: 'var(--fg-4)' }}>You give the facts, Earn writes it — watch it compose live</div></div>
+        <Badge tone="azure" dot>Copiloted</Badge>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1fr) 320px', gap: 16, alignItems: 'start' }}>
+        <div className="card" style={{ padding: 22 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 11 }}>The facts <span style={{ color: 'var(--fg-5)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· leave blank and Earn fills in</span></div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12 }}>
+            <Field label="Years in the sector" icon="clock" value={d.years} onChange={v => set('years', v)} placeholder="10" />
+            <Field label="Prior role / firm" icon="briefcase" value={d.prior} onChange={v => set('prior', v)} placeholder="Head of Ops, Acme Inc." />
+            <Field label="Notable win" icon="award" value={d.win} onChange={v => set('win', v)} placeholder="3 exits, $400M created" />
+            <Field label="Education" icon="graduation-cap" value={d.edu} onChange={v => set('edu', v)} placeholder="MBA, Wharton" />
+          </div>
+          <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Position as</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{['Operator', 'Investor', 'Visionary'].map(o => <Chip key={o} label={o} selected={d.voice === o} onClick={() => set('voice', o)} />)}</div>
+          <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Highlight <span style={{ color: 'var(--fg-5)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· pick any</span></div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{['Track record', 'Operating wins', 'Thesis', 'Network', 'Education'].map(o => <Chip key={o} label={o} selected={(d.include || []).includes(o)} onClick={() => toggle(o)} />)}</div>
+          <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Length</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{['Short', 'Standard', 'Full'].map(o => <Chip key={o} label={o} selected={d.length === o} onClick={() => set('length', o)} />)}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, gap: 10, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="arrow-left" onClick={onBack}>Cancel</Button>
+            <Button variant="gold" iconRight="sparkles" onClick={() => { setN(0); setPhase('building'); }}>Write &amp; publish</Button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* live preview */}
+          <div className="card" style={{ padding: 17 }}>
+            <div className="t-eyebrow" style={{ marginBottom: 9, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="eye" size={12} color="var(--gold-1)" />Live preview</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <Avatar name={principal} size={34} tone="gold" />
+              <div><div style={{ fontSize: 12.5, fontWeight: 600 }}>{principal}</div><div style={{ fontSize: 10.5, color: 'var(--gold-1)' }}>Managing Partner · {firm}</div></div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.6 }}>{preview}</div>
+          </div>
+          <div className="card" style={{ padding: 17 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><div style={{ position: 'relative', flex: 'none' }}><EarnCoin size={30} /><span className="pulse-dot" style={{ position: 'absolute', right: -1, bottom: -1, width: 9, height: 9, borderRadius: 999, background: 'var(--success)', border: '2px solid var(--bg-2)' }} /></div><div><div style={{ fontSize: 12.5, fontWeight: 600 }}>Earn</div><div style={{ fontSize: 10, color: 'var(--fg-4)' }}>Brand copilot</div></div></div>
+            <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.55 }}>Position as an operator — LPs back people who've done the work. Leave a field blank and I'll fill it from your fund story.</div>
+            <Button variant={applied ? 'secondary' : 'gold'} size="sm" icon={applied ? 'check' : 'sparkles'} style={{ width: '100%', marginTop: 12 }} onClick={() => { setD(p => ({ ...p, ...BIO_REC })); setApplied(true); }}>{applied ? 'Recommendation applied' : "Apply Earn's recommendation"}</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- Credentials & track record (copiloted, editable) ---- */
+const TR_REC_DEALS = [
+  { company: 'Northwind Industrial', year: '2017', multiple: '4.1', status: 'Realized' },
+  { company: 'Cedar Logistics', year: '2018', multiple: '2.8', status: 'Realized' },
+  { company: 'Apex Components', year: '2020', multiple: '3.5', status: 'Realized' },
+  { company: 'Helios Robotics', year: '2022', multiple: '2.2', status: 'Unrealized' },
+];
+const TR_REC_CREDS = { edu: 'MBA, Wharton', recognition: ['Forbes 30 Under 30', '2 board seats', 'Ex-Head of Ops, sector incumbent'] };
+const TR_RECOGNITION_OPTS = ['Forbes 30 Under 30', '2 board seats', 'Ex-Head of Ops, sector incumbent', 'Published author', 'Industry award', 'Prior exit founder'];
+
+function trAgg(deals) {
+  const valid = deals.filter(d => d.company && parseFloat(d.multiple) > 0);
+  const mults = valid.map(d => parseFloat(d.multiple));
+  const realized = valid.filter(d => d.status === 'Realized').length;
+  const blended = mults.length ? (mults.reduce((a, b) => a + b, 0) / mults.length) : 0;
+  const top = mults.length ? Math.max(...mults) : 0;
+  return { count: valid.length, realized, blended: blended.toFixed(1), top: top.toFixed(1) };
+}
+
+function CredentialsBuilder({ principal, firm, initial, mobile, onBack, onComplete }) {
+  const [deals, setDeals] = useState(() => (initial && initial.deals) || [{ company: '', year: '', multiple: '', status: 'Realized' }]);
+  const [edu, setEdu] = useState((initial && initial.edu) || '');
+  const [recognition, setRecognition] = useState((initial && initial.recognition) || []);
+  const [applied, setApplied] = useState(false);
+  const [phase, setPhase] = useState('edit');
+  const [n, setN] = useState(0);
+  const agg = trAgg(deals);
+  const setDeal = (i, k, v) => setDeals(p => p.map((d, j) => j === i ? { ...d, [k]: v } : d));
+  const addDeal = () => setDeals(p => [...p, { company: '', year: '', multiple: '', status: 'Realized' }]);
+  const removeDeal = (i) => setDeals(p => p.filter((_, j) => j !== i));
+  const toggleRec = (v) => setRecognition(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
+  const applyRec = () => { setDeals(TR_REC_DEALS.map(d => ({ ...d }))); setEdu(TR_REC_CREDS.edu); setRecognition([...TR_REC_CREDS.recognition]); setApplied(true); };
+
+  const steps = ['Structure your deal history', 'Verify & compute performance', 'Format the track-record record', 'Publish to profile & data room'];
+  useEffect(() => { if (phase !== 'building') return; let i = 0; const t = setInterval(() => { i += 1; setN(i); if (i >= steps.length) { clearInterval(t); setTimeout(() => setPhase('done'), 420); } }, 560); return () => clearInterval(t); }, [phase]);
+
+  const Summary = () => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 10 }}>
+      {[['Deals', agg.count, 'azure'], ['Realized', agg.realized, 'success'], ['Blended MOIC', agg.blended + 'x', 'gold'], ['Top deal', agg.top + 'x', 'info']].map(([l, v, t]) => (
+        <div key={l} className="card-flat" style={{ padding: '11px 13px', background: 'var(--surface-1)' }}>
+          <div style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>{l}</div>
+          <div className="t-metric" style={{ fontSize: 19, marginTop: 5, color: TONE[t].c }}>{v}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (phase === 'done') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+        <div style={{ width: '100%', maxWidth: 600 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 54, height: 54, borderRadius: '50%', margin: '0 auto 13px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--success-soft)', border: '1px solid var(--success-line)' }}><Icon name="check" size={26} color="var(--success)" /></div>
+            <div className="t-h2" style={{ fontSize: 19 }}>Track record — verified</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 6 }}>Structured, computed and published to your profile, deck and data room.</p>
+          </div>
+          <div style={{ marginTop: 16 }}><Summary /></div>
+          <div style={{ borderRadius: 13, border: '1px solid var(--border)', overflow: 'hidden', marginTop: 12 }}>
+            {deals.filter(d => d.company).map((d, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 15px', background: i % 2 ? 'transparent' : 'var(--surface-1)', borderTop: i ? '1px solid var(--border-faint)' : 'none' }}>
+                <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600 }}>{d.company} <span style={{ fontWeight: 400, color: 'var(--fg-5)' }}>· {d.year}</span></span>
+                <Badge tone={d.status === 'Realized' ? 'success' : 'neutral'} style={{ fontSize: 9.5 }}>{d.status}</Badge>
+                <span className="t-mono" style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-1)' }}>{parseFloat(d.multiple).toFixed(1)}x</span>
+              </div>
+            ))}
+          </div>
+          {(edu || recognition.length > 0) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
+              {edu && <span style={{ fontSize: 11, color: 'var(--fg-2)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 11px' }}>{edu}</span>}
+              {recognition.map(r => <span key={r} style={{ fontSize: 11, color: 'var(--fg-2)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 11px' }}>{r}</span>)}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 18, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="pencil" onClick={() => { setPhase('edit'); setN(0); }}>Go back &amp; edit</Button>
+            <Button variant="gold" iconRight="check" onClick={() => onComplete({ deals, edu, recognition, agg })}>Publish &amp; finish</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (phase === 'building') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 0' }}>
+        <div style={{ width: '100%', maxWidth: 520 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ position: 'relative', marginBottom: 12 }}><div className="pulse-dot" style={{ position: 'absolute', inset: -10, borderRadius: '50%', background: 'radial-gradient(circle, rgba(247,201,72,0.5), transparent 70%)', filter: 'blur(8px)' }} /><div style={{ position: 'relative' }}><EarnCoin size={48} /></div></div>
+            <div className="t-h2" style={{ fontSize: 18 }}>Verifying your track record…</div>
+          </div>
+          <ProgressBar value={Math.round((n / steps.length) * 100)} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} />
+          <div className="card" style={{ marginTop: 13, padding: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {steps.map((s, i) => i <= n && (
+              <div key={i} className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px' }}>
+                <span style={{ width: 22, height: 22, borderRadius: 999, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: i < n ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${i < n ? 'var(--success-line)' : 'var(--border)'}`, color: i < n ? 'var(--success)' : 'var(--fg-4)' }}>{i < n ? <Icon name="check" size={12} /> : <Icon name="loader" size={12} className="spin" />}</span>
+                <span style={{ fontSize: 13, color: i < n ? 'var(--fg-2)' : 'var(--fg-1)' }}>{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button className="clickable" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--fg-3)', padding: '7px 11px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface-1)' }}><Icon name="arrow-left" size={14} />Back</button>
+        <div style={{ flex: 1, minWidth: 0 }}><div className="t-h2" style={{ fontSize: 18 }}>Credentials &amp; track record</div><div style={{ fontSize: 12, color: 'var(--fg-4)' }}>The proof LPs scrutinize most · Earn structures &amp; verifies it</div></div>
+        <Badge tone="azure" dot>Copiloted</Badge>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1fr) 300px', gap: 16, alignItems: 'start' }}>
+        <div className="card" style={{ padding: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
+            <div className="t-eyebrow">Track record <span style={{ color: 'var(--fg-5)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· your prior deals</span></div>
+            <Button variant="ghost" size="sm" icon="plus" onClick={addDeal}>Add deal</Button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {deals.map((d, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 64px 64px 96px 28px', gap: 8, alignItems: 'center' }}>
+                <input value={d.company} onChange={e => setDeal(i, 'company', e.target.value)} placeholder="Company" style={{ fontSize: 12.5, fontFamily: 'inherit', color: 'var(--fg-1)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '8px 10px' }} />
+                <input value={d.year} onChange={e => setDeal(i, 'year', e.target.value)} placeholder="Year" style={{ fontSize: 12.5, fontFamily: 'inherit', color: 'var(--fg-1)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '8px 10px', width: '100%' }} />
+                <input value={d.multiple} onChange={e => setDeal(i, 'multiple', e.target.value)} placeholder="3.2" style={{ fontSize: 12.5, fontFamily: 'var(--font-mono)', color: 'var(--gold-1)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '8px 10px', width: '100%' }} />
+                <button className="clickable" onClick={() => setDeal(i, 'status', d.status === 'Realized' ? 'Unrealized' : 'Realized')} style={{ fontSize: 10.5, fontWeight: 600, color: d.status === 'Realized' ? 'var(--success)' : 'var(--fg-4)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '8px 6px' }}>{d.status}</button>
+                <button className="clickable" onClick={() => removeDeal(i)} style={{ width: 28, height: 28, borderRadius: 8, color: 'var(--fg-5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={14} /></button>
+              </div>
+            ))}
+          </div>
+          <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Credentials</div>
+          <Field label="Education" icon="graduation-cap" value={edu} onChange={setEdu} placeholder="MBA, Wharton" />
+          <div className="t-eyebrow" style={{ margin: '16px 0 9px' }}>Recognition <span style={{ color: 'var(--fg-5)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· pick any</span></div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{TR_RECOGNITION_OPTS.map(o => <Chip key={o} label={o} selected={recognition.includes(o)} onClick={() => toggleRec(o)} />)}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, gap: 10, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="arrow-left" onClick={onBack}>Cancel</Button>
+            <Button variant="gold" iconRight="sparkles" onClick={() => { setN(0); setPhase('building'); }}>Verify &amp; publish</Button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="card" style={{ padding: 17 }}>
+            <div className="t-eyebrow" style={{ marginBottom: 11, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="trending-up" size={12} color="var(--gold-1)" />Live performance</div>
+            <Summary />
+          </div>
+          <div className="card" style={{ padding: 17 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><div style={{ position: 'relative', flex: 'none' }}><EarnCoin size={30} /><span className="pulse-dot" style={{ position: 'absolute', right: -1, bottom: -1, width: 9, height: 9, borderRadius: 999, background: 'var(--success)', border: '2px solid var(--bg-2)' }} /></div><div><div style={{ fontSize: 12.5, fontWeight: 600 }}>Earn</div><div style={{ fontSize: 10, color: 'var(--fg-4)' }}>Track-record copilot</div></div></div>
+            <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.55 }}>Net-to-LP multiples on realized deals carry the most weight. I'll verify each, compute a blended MOIC, and flag anything an LP's ODD team will question.</div>
+            <Button variant={applied ? 'secondary' : 'gold'} size="sm" icon={applied ? 'check' : 'sparkles'} style={{ width: '100%', marginTop: 12 }} onClick={applyRec}>{applied ? 'Recommendation applied' : 'Import from my history'}</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { BrandHub });
