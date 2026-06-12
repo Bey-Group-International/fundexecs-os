@@ -190,6 +190,32 @@ export async function updateDealStage(
   return { ok: true, deal: row };
 }
 
+export type DealNoteResult = { ok: true; noteId: string } | { ok: false; error: string };
+
+/**
+ * Log a member-authored note against a deal. Notes are append-only — the
+ * drawer's activity timeline renders them interleaved with the deal's
+ * loop_events history, so the record stays immutable once written.
+ */
+export async function addDealNote(dealId: string, body: string): Promise<DealNoteResult> {
+  if (!dealId) return { ok: false, error: 'Missing deal id.' };
+  const trimmed = body?.trim() ?? '';
+  if (!trimmed) return { ok: false, error: 'Note cannot be empty.' };
+  if (trimmed.length > 2000) return { ok: false, error: 'Note is too long (2000 max).' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('deal_notes')
+    .insert({ org_id: org.orgId, deal_id: dealId, author_id: org.userId, body: trimmed })
+    .select('id')
+    .single();
+  if (error || !data) return { ok: false, error: error?.message ?? 'Note insert failed.' };
+  return { ok: true, noteId: (data as { id: string }).id };
+}
+
 /**
  * Soft-delete a deal by setting status='archived'. The brief reserves hard
  * delete for explicit owner workflows; the day-to-day "delete" is archive.

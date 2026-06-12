@@ -18,6 +18,23 @@ export interface PipelineDealDiligenceRun {
   createdAt: string;
 }
 
+/** A member-authored note on the deal, for the drawer's activity timeline. */
+export interface PipelineDealNote {
+  id: string;
+  body: string;
+  createdAt: string;
+}
+
+/** A loop_events row about the deal (created / stage moves), for the timeline. */
+export interface PipelineDealEvent {
+  id: string;
+  /** loop_events event_type — 'deal_created' or 'deal_stage'. */
+  type: string;
+  /** Stage recorded on the event's metadata, when present. */
+  stage: string | null;
+  createdAt: string;
+}
+
 export interface PipelineDeal {
   id: string;
   name: string;
@@ -30,6 +47,12 @@ export interface PipelineDeal {
   allocations: PipelineDealAllocation[];
   /** Diligence runs for this deal, newest-first (empty array when none). */
   diligenceRuns: PipelineDealDiligenceRun[];
+  /** Member notes on the deal, newest-first (empty array when none). */
+  notes: PipelineDealNote[];
+  /** The deal's loop_events history (created / stage moves), newest-first. */
+  events: PipelineDealEvent[];
+  /** ISO timestamp of the row's last update — the drawer's "Last update". */
+  updatedAt: string;
   /**
    * Thesis-fit score (0–100) from real signals: how far the deal has advanced
    * through the formation stages, whether it has accepted allocations, and its
@@ -152,13 +175,16 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
 
   const { data, error } = await supabase
     .from('deals')
-    .select('id, name, stage, status, amount')
+    .select('id, name, stage, status, amount, updated_at')
     .eq('org_id', orgId)
     .order('updated_at', { ascending: false });
 
   if (error || !data) return EMPTY;
 
-  const deals = data as Pick<DealRow, 'id' | 'name' | 'stage' | 'status' | 'amount'>[];
+  const deals = data as Pick<
+    DealRow,
+    'id' | 'name' | 'stage' | 'status' | 'amount' | 'updated_at'
+  >[];
 
   // Fetch allocations for these deals in one go and index by deal_id.
   const dealIds = deals.map((d) => d.id);
@@ -212,6 +238,59 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
     }
   }
 
+  // Fetch member notes for these deals in one go and index by deal_id.
+  const notesByDeal = new Map<string, PipelineDealNote[]>();
+  if (dealIds.length > 0) {
+    const { data: notes } = await supabase
+      .from('deal_notes')
+      .select('id, deal_id, body, created_at')
+      .in('deal_id', dealIds)
+      .order('created_at', { ascending: false });
+    if (notes) {
+      for (const n of notes as Array<{
+        id: string;
+        deal_id: string;
+        body: string;
+        created_at: string;
+      }>) {
+        if (!notesByDeal.has(n.deal_id)) notesByDeal.set(n.deal_id, []);
+        notesByDeal.get(n.deal_id)!.push({ id: n.id, body: n.body, createdAt: n.created_at });
+      }
+    }
+  }
+
+  // The deals' loop_events history (created / stage moves) for the timeline.
+  const eventsByDeal = new Map<string, PipelineDealEvent[]>();
+  if (dealIds.length > 0) {
+    const { data: events } = await supabase
+      .from('loop_events')
+      .select('id, entity_id, event_type, metadata, created_at')
+      .eq('org_id', orgId)
+      .eq('entity_type', 'deal')
+      .in('entity_id', dealIds)
+      .in('event_type', ['deal_created', 'deal_stage'])
+      .order('created_at', { ascending: false });
+    if (events) {
+      for (const e of events as Array<{
+        id: string;
+        entity_id: string | null;
+        event_type: string;
+        metadata: unknown;
+        created_at: string;
+      }>) {
+        if (!e.entity_id) continue;
+        const meta = (e.metadata ?? {}) as Record<string, unknown>;
+        if (!eventsByDeal.has(e.entity_id)) eventsByDeal.set(e.entity_id, []);
+        eventsByDeal.get(e.entity_id)!.push({
+          id: e.id,
+          type: e.event_type,
+          stage: typeof meta.stage === 'string' ? meta.stage : null,
+          createdAt: e.created_at
+        });
+      }
+    }
+  }
+
   const maxAmount = deals.reduce((m, d) => Math.max(m, d.amount ?? 0), 0);
 
   const buckets = new Map<string, PipelineDeal[]>(STAGE_ORDER.map((s) => [s.key, []]));
@@ -228,6 +307,9 @@ export async function getPipelineData(orgId: string): Promise<PipelineData> {
       note: dealNote(resolvedKey, d.status),
       allocations,
       diligenceRuns: dilByDeal.get(d.id) ?? [],
+      notes: notesByDeal.get(d.id) ?? [],
+      events: eventsByDeal.get(d.id) ?? [],
+      updatedAt: d.updated_at,
       fit: computeFit(resolvedKey, d.amount, maxAmount, allocations)
     };
     buckets.get(resolvedKey)!.push(entry);
