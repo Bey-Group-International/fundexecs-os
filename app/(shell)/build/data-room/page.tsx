@@ -15,8 +15,8 @@ export const metadata: Metadata = {
  * Materials & Data Room — the Build hub's investor-facing interior: copiloted
  * material builders (persisted to `capital_materials` with the operator's
  * spec) and a live room with real vetted links (`data_room_links`). View
- * logging belongs to the future public `/dr/[token]` route — the recipient
- * gate here is a labelled preview that records nothing.
+ * logging belongs to the public `/dr/[token]` route — the recipient gate
+ * here is a labelled preview that records nothing.
  */
 export default async function BuildDataRoomPage() {
   const org = await getActiveOrg();

@@ -18,7 +18,17 @@ export interface DataRoomLinkState {
   token: string;
   vetting: string;
   /** Real, logged views from `data_room_views` (the public route writes these). */
-  viewers: { name: string; verifiedAt: string | null }[];
+  viewers: { name: string; email: string | null; verifiedAt: string | null }[];
+}
+
+/** Cap the derived feed — the room shows recency, not the full ledger. */
+const ACTIVITY_LIMIT = 30;
+
+/** `data_room_views.viewer` stores "Name · email"; split it for display. */
+function splitViewer(viewer: string): { name: string; email: string | null } {
+  const sep = viewer.lastIndexOf(' · ');
+  if (sep < 0) return { name: viewer, email: null };
+  return { name: viewer.slice(0, sep), email: viewer.slice(sep + 3) || null };
 }
 
 export interface DataRoomActivityItem {
@@ -48,7 +58,9 @@ export const getDataRoomState = cache(async (orgId: string): Promise<DataRoomSta
       .order('updated_at', { ascending: false }),
     supabase
       .from('data_room_links')
-      .select('id, label, token, vetting, created_at, data_room_views ( viewer, verified_at )')
+      .select(
+        'id, label, material_kind, token, vetting, created_at, data_room_views ( viewer, verified_at )'
+      )
       .eq('org_id', orgId)
       .order('created_at', { ascending: true })
   ]);
@@ -79,24 +91,37 @@ export const getDataRoomState = cache(async (orgId: string): Promise<DataRoomSta
 
   const linkMap: DataRoomState['links'] = {};
   for (const row of links ?? []) {
-    const id = MAT_DOCS.find((d) => MAT_LABEL[d] === row.label);
+    // The kind column is the structural join; label matching covers rows
+    // from before the column existed.
+    const id =
+      (row.material_kind ? materialIdForDbKind(row.material_kind) : null) ??
+      MAT_DOCS.find((d) => MAT_LABEL[d] === row.label);
     if (!id) continue;
     linkMap[id] = {
       token: row.token,
       vetting: row.vetting === 'nda' ? 'Accredited + NDA' : row.vetting,
       viewers: (row.data_room_views ?? []).map((v) => ({
-        name: v.viewer,
+        ...splitViewer(v.viewer),
         verifiedAt: v.verified_at
       }))
     };
     activity.push({
       who: 'You',
-      act: `generated a secure link for ${row.label}`,
+      act: `generated a secure link for ${row.label ?? MAT_LABEL[id]}`,
       at: row.created_at,
       icon: 'link'
     });
+    for (const v of row.data_room_views ?? []) {
+      if (!v.verified_at) continue;
+      activity.push({
+        who: splitViewer(v.viewer).name,
+        act: `verified and opened ${row.label ?? MAT_LABEL[id]}`,
+        at: v.verified_at,
+        icon: 'eye'
+      });
+    }
   }
 
   activity.sort((a, b) => (a.at < b.at ? 1 : -1));
-  return { stages, specs, links: linkMap, activity };
+  return { stages, specs, links: linkMap, activity: activity.slice(0, ACTIVITY_LIMIT) };
 });

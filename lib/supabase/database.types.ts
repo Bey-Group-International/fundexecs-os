@@ -4495,6 +4495,7 @@ export type Database = {
           expires_at: string | null
           id: string
           label: string | null
+          material_kind: string | null
           org_id: string
           token: string
           updated_at: string
@@ -4506,6 +4507,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           label?: string | null
+          material_kind?: string | null
           org_id: string
           token: string
           updated_at?: string
@@ -4517,6 +4519,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           label?: string | null
+          material_kind?: string | null
           org_id?: string
           token?: string
           updated_at?: string

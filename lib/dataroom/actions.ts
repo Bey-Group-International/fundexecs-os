@@ -14,8 +14,8 @@ import { MATERIAL_DB_KIND, isMaterialId, sanitizeMaterialSpec } from './persiste
  * Materials build into the existing `capital_materials` table (kinds widened
  * by migration; the operator's decisions ride along as `spec`). Link
  * generation writes a real `data_room_links` row with a server-generated
- * token — view logging stays with the future public `/dr/[token]` route, so
- * nothing fake ever lands in `data_room_views`.
+ * token — view logging stays with the public `/dr/[token]` route, so nothing
+ * fake ever lands in `data_room_views`.
  */
 
 export type DataRoomActionResult = { ok: true; token?: string } | { ok: false; error: string };
@@ -73,20 +73,37 @@ export async function generateMaterialLink(id: string): Promise<DataRoomActionRe
 
   const supabase = await createClient();
   const label = MAT_LABEL[id];
+  const kind = MATERIAL_DB_KIND[id];
 
   const { data: existing } = await supabase
     .from('data_room_links')
     .select('token')
     .eq('org_id', org.orgId)
-    .eq('label', label)
+    .eq('material_kind', kind)
     .limit(1)
     .maybeSingle();
   if (existing) return { ok: true, token: existing.token };
+
+  // Rows from before the material_kind column matched by label — adopt the
+  // kind so the next lookup is structural.
+  const { data: legacy } = await supabase
+    .from('data_room_links')
+    .select('id, token')
+    .eq('org_id', org.orgId)
+    .is('material_kind', null)
+    .eq('label', label)
+    .limit(1)
+    .maybeSingle();
+  if (legacy) {
+    await supabase.from('data_room_links').update({ material_kind: kind }).eq('id', legacy.id);
+    return { ok: true, token: legacy.token };
+  }
 
   const token = randomBytes(6).toString('base64url');
   const { error } = await supabase.from('data_room_links').insert({
     org_id: org.orgId,
     label,
+    material_kind: kind,
     token,
     vetting: 'nda'
   });
