@@ -29,7 +29,14 @@ import {
 export type FormationActionResult = { ok: true; formed: boolean } | { ok: false; error: string };
 
 export type FormationFileResult =
-  | { ok: true; formed: boolean; version: number; amended: boolean; filedAt: string }
+  | {
+      ok: true;
+      formed: boolean;
+      version: number;
+      amended: boolean;
+      filedAt: string;
+      amendedAt: string | null;
+    }
   | { ok: false; error: string };
 
 const VALID_KINDS = new Set<FormationKind>(FORMATION_ITEMS.map((i) => i.kind));
@@ -80,7 +87,7 @@ export async function fileFormationStep(
 
   const { data: stepRows, error: stepsErr } = await supabase
     .from('formation_steps')
-    .select('id, kind, version, filed_at')
+    .select('id, kind, version, filed_at, amended_at')
     .eq('org_id', org.orgId);
   if (stepsErr) return { ok: false, error: stepsErr.message };
 
@@ -138,7 +145,7 @@ export async function fileFormationStep(
   if (materialKind) {
     const spec = formationStepSpec(kind, data) as unknown as Json;
     const title = FORMATION_MATERIAL_TITLE[kind] ?? kind;
-    const { data: material } = await supabase
+    const { data: material, error: matReadErr } = await supabase
       .from('capital_materials')
       .select('id')
       .eq('org_id', org.orgId)
@@ -146,6 +153,7 @@ export async function fileFormationStep(
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (matReadErr) return { ok: false, error: matReadErr.message };
     const { error: matErr } = material
       ? await supabase
           .from('capital_materials')
@@ -236,5 +244,12 @@ export async function fileFormationStep(
   revalidatePath('/build/formation');
   revalidatePath('/build');
   revalidatePath('/command-center');
-  return { ok: true, formed, version, amended, filedAt };
+  return {
+    ok: true,
+    formed,
+    version,
+    amended,
+    filedAt,
+    amendedAt: amended ? now : (existing?.amended_at ?? null)
+  };
 }

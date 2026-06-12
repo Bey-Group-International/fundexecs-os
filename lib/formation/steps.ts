@@ -124,9 +124,40 @@ export const FORMATION_MATERIAL_TITLE: Partial<Record<FormationKind, string>> = 
  * page and the flow derive the same baseline for touched-state detection.
  */
 export function personalizeFormationData(d: FormationData, firm: string): FormationData {
+  const cleanFirm = firm.trim();
+  if (!cleanFirm) return { ...d };
   return {
     ...d,
-    gp: d.gp === 'GP, LLC' ? `${firm} GP, LLC` : d.gp,
-    mgmtco: d.mgmtco === 'Management, LLC' ? `${firm} Management, LLC` : d.mgmtco
+    gp: d.gp === 'GP, LLC' ? `${cleanFirm} GP, LLC` : d.gp,
+    mgmtco: d.mgmtco === 'Management, LLC' ? `${cleanFirm} Management, LLC` : d.mgmtco
   };
+}
+
+/**
+ * Overlay each step's persisted filed spec (its `capital_materials.spec`
+ * slice) onto a working document, so the drafted-document review renders
+ * what is actually on the record rather than unfiled edits. Steps without a
+ * snapshot (not yet filed, or the bank step which files no document) keep
+ * the working values. Type-guarded per field — a malformed spec value never
+ * displaces a well-typed one.
+ */
+export function applyFiledSpecs(
+  d: FormationData,
+  specs: Record<string, Record<string, unknown>>
+): FormationData {
+  const merged: Record<string, unknown> = { ...d };
+  for (const item of FORMATION_ITEMS) {
+    const spec = specs[item.id];
+    if (!spec || typeof spec !== 'object') continue;
+    for (const field of STEP_FIELDS[item.kind]) {
+      const v = spec[field];
+      const cur = merged[field];
+      if (Array.isArray(cur)) {
+        if (Array.isArray(v)) merged[field] = v.filter((x): x is string => typeof x === 'string');
+      } else if (typeof v === typeof cur) {
+        merged[field] = v;
+      }
+    }
+  }
+  return merged as unknown as FormationData;
 }

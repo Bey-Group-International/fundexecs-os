@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { FormationFlow } from '@/components/formation/FormationFlow';
-import { getFormationStepMeta } from '@/lib/formation/queries';
+import { getFormationFiledSpecs, getFormationStepMeta } from '@/lib/formation/queries';
 import { personalizeFormationData } from '@/lib/formation/steps';
 import { mandateCfg, type InvestorGroup } from '@/lib/onboarding/mandate';
 import { getFormationState } from '@/lib/queries/formation';
@@ -25,10 +25,11 @@ export default async function FormationPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const [mandate, formation, stepMeta] = await Promise.all([
+  const [mandate, formation, stepMeta, filedSpecs] = await Promise.all([
     getMandate(org.orgId),
     getFormationState(org.orgId),
-    getFormationStepMeta(org.orgId)
+    getFormationStepMeta(org.orgId),
+    getFormationFiledSpecs(org.orgId)
   ]);
 
   const firm = mandate?.firm ?? 'your fund';
@@ -47,6 +48,7 @@ export default async function FormationPage() {
         initialData={data}
         initialCompleted={formation.completedIds}
         initialStepMeta={stepMeta}
+        initialFiledSpecs={filedSpecs}
       />
     </div>
   );

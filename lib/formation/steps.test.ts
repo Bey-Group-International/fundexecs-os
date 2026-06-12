@@ -1,10 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FORMATION_D0, FORMATION_ITEMS, type FormationData, type FormationKind } from './config';
+import {
+  FORMATION_D0,
+  FORMATION_ITEMS,
+  fileSteps,
+  type FormationData,
+  type FormationKind
+} from './config';
 import {
   FORMATION_MATERIAL_KIND,
   FORMATION_MATERIAL_TITLE,
   STEP_FIELDS,
+  applyFiledSpecs,
   formationStepSpec,
   missingPrereqs,
   orderingError,
@@ -98,4 +105,52 @@ test('personalizeFormationData fills firm names only when untouched', () => {
   const kept = personalizeFormationData(edited, 'Acme Capital');
   assert.equal(kept.gp, 'Bespoke GP LLC');
   assert.equal(kept.mgmtco, 'Acme Capital Management, LLC');
+});
+
+test('personalizeFormationData leaves defaults alone for blank firm names', () => {
+  for (const firm of ['', '   ']) {
+    const out = personalizeFormationData(FORMATION_D0, firm);
+    assert.equal(out.gp, 'GP, LLC');
+    assert.equal(out.mgmtco, 'Management, LLC');
+  }
+  const trimmed = personalizeFormationData(FORMATION_D0, '  Acme Capital  ');
+  assert.equal(trimmed.gp, 'Acme Capital GP, LLC');
+});
+
+test('fileSteps shows the data-room line exactly for steps that file a document', () => {
+  for (const item of FORMATION_ITEMS) {
+    const steps = fileSteps(item.kind, FORMATION_D0);
+    assert.equal(
+      steps.includes('Filing to your data room'),
+      Boolean(FORMATION_MATERIAL_KIND[item.kind]),
+      `${item.kind} data-room line out of sync with FORMATION_MATERIAL_KIND`
+    );
+  }
+});
+
+test('applyFiledSpecs overlays filed slices and ignores junk', () => {
+  const working: FormationData = { ...FORMATION_D0, fee: 1.5, storyHook: 'Unfiled edit' };
+  const out = applyFiledSpecs(working, {
+    lpa: { fee: 2.5, carry: 25 },
+    story: { storyHook: 'Filed hook', storyEdges: ['Strong network', 42] },
+    unknown: { fee: 99 }
+  });
+  // Filed slices win over working edits…
+  assert.equal(out.fee, 2.5);
+  assert.equal(out.carry, 25);
+  assert.equal(out.storyHook, 'Filed hook');
+  // …array values keep only well-typed entries, junk ids change nothing…
+  assert.deepEqual(out.storyEdges, ['Strong network']);
+  // …and steps without a snapshot keep the working values.
+  assert.equal(out.hurdle, working.hurdle);
+});
+
+test('applyFiledSpecs never lets a mistyped spec value displace a typed field', () => {
+  const out = applyFiledSpecs(FORMATION_D0, {
+    lpa: { fee: 'two percent', termsUndecided: 'yes' },
+    regd: { erisa: true }
+  });
+  assert.equal(out.fee, FORMATION_D0.fee);
+  assert.equal(out.termsUndecided, FORMATION_D0.termsUndecided);
+  assert.equal(out.erisa, true);
 });

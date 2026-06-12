@@ -75,6 +75,8 @@ import {
   type FormationOption
 } from '@/lib/formation/config';
 import {
+  applyFiledSpecs,
+  formationStepSpec,
   personalizeFormationData,
   stepTouched,
   type FormationStepMeta
@@ -718,7 +720,13 @@ function FormationStep({
   const animDoneRef = useRef(false);
   const writeRef = useRef<
     | { status: 'pending' }
-    | { status: 'ok'; version: number; amended: boolean; filedAt: string }
+    | {
+        status: 'ok';
+        version: number;
+        amended: boolean;
+        filedAt: string;
+        amendedAt: string | null;
+      }
     | { status: 'err'; error: string }
   >({ status: 'pending' });
   const steps = fileSteps(item.kind, d);
@@ -738,7 +746,7 @@ function FormationStep({
       onCompleted(item.id, {
         version: w.version,
         filedAt: w.filedAt,
-        amendedAt: w.amended ? new Date().toISOString() : null
+        amendedAt: w.amendedAt
       });
     }
   }, [item.id, onCompleted]);
@@ -753,7 +761,13 @@ function FormationStep({
     fileFormationStep(item.kind, d)
       .then((res) => {
         writeRef.current = res.ok
-          ? { status: 'ok', version: res.version, amended: res.amended, filedAt: res.filedAt }
+          ? {
+              status: 'ok',
+              version: res.version,
+              amended: res.amended,
+              filedAt: res.filedAt,
+              amendedAt: res.amendedAt
+            }
           : { status: 'err', error: res.error };
         finishIfReady();
       })
@@ -1302,6 +1316,8 @@ export interface FormationFlowProps {
   initialCompleted: string[];
   /** Per-step filing metadata (version, amendments), from `getFormationStepMeta`. */
   initialStepMeta: Record<string, FormationStepMeta>;
+  /** Persisted filed snapshots per step, from `getFormationFiledSpecs`. */
+  initialFiledSpecs: Record<string, Record<string, unknown>>;
 }
 
 export function FormationFlow({
@@ -1309,7 +1325,8 @@ export function FormationFlow({
   sizeLabel,
   initialData,
   initialCompleted,
-  initialStepMeta
+  initialStepMeta,
+  initialFiledSpecs
 }: FormationFlowProps) {
   const total = FORMATION_ITEMS.length;
   const items = FORMATION_ITEMS;
@@ -1323,6 +1340,8 @@ export function FormationFlow({
   const [d, setD] = useState<FormationData>(initialData);
   const [completed, setCompleted] = useState<string[]>(initialCompleted);
   const [stepMeta, setStepMeta] = useState<Record<string, FormationStepMeta>>(initialStepMeta);
+  const [filedSpecs, setFiledSpecs] =
+    useState<Record<string, Record<string, unknown>>>(initialFiledSpecs);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [docId, setDocId] = useState<string | null>(null);
   const [docReturn, setDocReturn] = useState<'checklist' | 'complete'>('checklist');
@@ -1351,10 +1370,10 @@ export function FormationFlow({
 
   function onCompleted(id: string, meta: FormationStepMeta) {
     setCompleted((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    setStepMeta((prev) => ({
-      ...prev,
-      [id]: { ...meta, amendedAt: meta.amendedAt ?? prev[id]?.amendedAt ?? null }
-    }));
+    setStepMeta((prev) => ({ ...prev, [id]: meta }));
+    // What just filed is the new on-the-record snapshot for this step.
+    const item = items.find((i) => i.id === id);
+    if (item) setFiledSpecs((prev) => ({ ...prev, [id]: formationStepSpec(item.kind, d) }));
   }
 
   function backToChecklist() {
@@ -1389,11 +1408,15 @@ export function FormationFlow({
   if (view === 'doc' && docId) {
     const docItem = items.find((i) => i.id === docId);
     if (docItem) {
+      // Render the record, not the working draft: overlay the persisted filed
+      // snapshots so reopened-but-unfiled edits never masquerade as filed.
+      const filedData = applyFiledSpecs(d, filedSpecs);
       return (
         <FormationDocView
           item={docItem}
-          doc={composeFormationDoc(docItem.kind, d, { firm })}
+          doc={composeFormationDoc(docItem.kind, filedData, { firm })}
           meta={stepMeta[docItem.id] ?? null}
+          backLabel={docReturn === 'complete' ? 'Formed fund' : 'Checklist'}
           onBack={() => setView(docReturn)}
           onAmend={() => openItem(docItem.id)}
         />

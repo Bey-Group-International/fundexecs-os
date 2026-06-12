@@ -19,6 +19,8 @@ export interface FormationDocViewProps {
   item: FormationItem;
   doc: FormationDoc;
   meta: FormationStepMeta | null;
+  /** Where onBack returns to (the CTA labels), e.g. "Checklist" / "Formed fund". */
+  backLabel?: string;
   onBack: () => void;
   onAmend: () => void;
 }
@@ -31,12 +33,19 @@ function fmtDate(iso: string): string {
   });
 }
 
-export function FormationDocView({ item, doc, meta, onBack, onAmend }: FormationDocViewProps) {
+export function FormationDocView({
+  item,
+  doc,
+  meta,
+  backLabel = 'Checklist',
+  onBack,
+  onAmend
+}: FormationDocViewProps) {
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-4">
       <div className="flex items-center gap-3">
         <Button variant="outline" size="sm" icon={ArrowLeft} onClick={onBack}>
-          Checklist
+          {backLabel}
         </Button>
         <div className="min-w-0 flex-1">
           <h1 className="text-[18px] font-semibold tracking-[-0.015em] text-fg-1">{doc.title}</h1>
@@ -118,7 +127,7 @@ export function FormationDocView({ item, doc, meta, onBack, onAmend }: Formation
 
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <Button variant="outline" icon={ListChecks} onClick={onBack}>
-          Back to checklist
+          Back to {backLabel.toLowerCase()}
         </Button>
         <Button variant="gold" icon={Pencil} onClick={onAmend}>
           Reopen &amp; amend

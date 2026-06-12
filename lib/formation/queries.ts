@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { FORMATION_ITEMS, type FormationKind } from './config';
-import type { FormationStepMeta } from './steps';
+import { FORMATION_MATERIAL_KIND, type FormationStepMeta } from './steps';
 
 /**
  * lib/formation/queries.ts — per-step filing metadata for the flow.
@@ -34,6 +34,35 @@ export const getFormationStepMeta = cache(
         filedAt: row.filed_at,
         amendedAt: row.amended_at
       };
+    }
+    return out;
+  }
+);
+
+/**
+ * The persisted filed snapshot per step — the `capital_materials.spec` slice
+ * written when the step filed, keyed by FORMATION_ITEMS item id. The
+ * drafted-document review overlays these on the working document so "on the
+ * record" docs never show unfiled edits. Latest row per kind wins.
+ */
+export const getFormationFiledSpecs = cache(
+  async (orgId: string): Promise<Record<string, Record<string, unknown>>> => {
+    const supabase = await createClient();
+    const kinds = Object.values(FORMATION_MATERIAL_KIND);
+    const { data: materials } = await supabase
+      .from('capital_materials')
+      .select('kind, spec, updated_at')
+      .eq('org_id', orgId)
+      .in('kind', kinds)
+      .order('updated_at', { ascending: false });
+
+    const out: Record<string, Record<string, unknown>> = {};
+    const seen = new Set<string>();
+    for (const row of materials ?? []) {
+      if (seen.has(row.kind) || !row.spec || typeof row.spec !== 'object') continue;
+      seen.add(row.kind);
+      const item = FORMATION_ITEMS.find((i) => FORMATION_MATERIAL_KIND[i.kind] === row.kind);
+      if (item) out[item.id] = row.spec as Record<string, unknown>;
     }
     return out;
   }
