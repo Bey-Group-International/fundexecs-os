@@ -23,6 +23,8 @@ export interface DiligenceRunSummary {
   conviction: number | null;
   summary: string | null;
   dealId: string | null;
+  /** The deal's name, resolved for switcher chips (null when unlinked). */
+  dealName: string | null;
   createdAt: string;
   findingCount: number;
 }
@@ -38,6 +40,10 @@ export interface DiligenceAnalystFinding {
   summary: string;
   detail: string | null;
   citations: unknown[];
+  /** When the operator resolved this workstream through the approve loop. */
+  resolvedAt: string | null;
+  /** The operator's resolution note. */
+  resolution: string | null;
 }
 
 /** The Synthesis (Earn) verdict over the six analysts. */
@@ -71,6 +77,8 @@ type FindingRow = {
   summary: string;
   detail: string | null;
   citations: unknown;
+  resolved_at: string | null;
+  resolution: string | null;
 };
 
 const ANALYST_ORDER = new Map<string, number>(ANALYST_AGENTS.map((a, i) => [a, i]));
@@ -132,12 +140,23 @@ export async function getDiligenceRuns(
     }
   }
 
+  // Resolve deal names in one pass so switcher chips can label themselves.
+  const dealIds = [...new Set(runs.map((r) => r.deal_id).filter((id): id is string => !!id))];
+  const nameByDeal = new Map<string, string>();
+  if (dealIds.length > 0) {
+    const { data: dealRows } = await supabase.from('deals').select('id, name').in('id', dealIds);
+    for (const d of (dealRows ?? []) as Array<{ id: string; name: string }>) {
+      nameByDeal.set(d.id, d.name);
+    }
+  }
+
   return runs.map((r) => ({
     id: r.id,
     status: r.status,
     conviction: r.conviction,
     summary: r.summary,
     dealId: r.deal_id,
+    dealName: r.deal_id ? (nameByDeal.get(r.deal_id) ?? null) : null,
     createdAt: r.created_at,
     findingCount: countByRun.get(r.id) ?? 0
   }));
@@ -160,7 +179,7 @@ export async function getDiligenceRun(runId: string): Promise<DiligenceRunDetail
 
   const { data: findingRows } = await supabase
     .from('diligence_findings')
-    .select('agent, score, summary, detail, citations')
+    .select('agent, score, summary, detail, citations, resolved_at, resolution')
     .eq('run_id', runId);
   const findings = (findingRows ?? []) as FindingRow[];
 
@@ -176,7 +195,9 @@ export async function getDiligenceRun(runId: string): Promise<DiligenceRunDetail
         score: f.score,
         summary: f.summary,
         detail: f.detail,
-        citations: toCitationArray(f.citations)
+        citations: toCitationArray(f.citations),
+        resolvedAt: f.resolved_at,
+        resolution: f.resolution
       };
     })
     .sort((a, b) => (ANALYST_ORDER.get(a.agent) ?? 0) - (ANALYST_ORDER.get(b.agent) ?? 0));

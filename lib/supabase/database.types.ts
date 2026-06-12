@@ -1877,6 +1877,8 @@ export type Database = {
           detail: string | null
           id: string
           org_id: string
+          resolution: string | null
+          resolved_at: string | null
           run_id: string
           score: number | null
           summary: string
@@ -1888,6 +1890,8 @@ export type Database = {
           detail?: string | null
           id?: string
           org_id: string
+          resolution?: string | null
+          resolved_at?: string | null
           run_id: string
           score?: number | null
           summary: string
@@ -1899,6 +1903,8 @@ export type Database = {
           detail?: string | null
           id?: string
           org_id?: string
+          resolution?: string | null
+          resolved_at?: string | null
           run_id?: string
           score?: number | null
           summary?: string
