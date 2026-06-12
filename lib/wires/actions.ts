@@ -56,7 +56,15 @@ export async function sendSignature(input: {
   return { ok: true, id: data.id };
 }
 
-/** Record a signature's resolution — signed or declined, exactly once. */
+/**
+ * Record a signature's resolution — signed or declined, exactly once.
+ *
+ * Marking signed records the operator's ATTESTATION: the document was
+ * executed outside FundExecs OS. E-sign hook point: when the DocuSign
+ * slice lands, the envelope-completed webhook calls this same resolution
+ * path with the envelope id in tow — the vocabulary and the gate don't
+ * change, only who reports the outcome.
+ */
 export async function resolveSignature(input: {
   signatureId: string;
   outcome: 'signed' | 'declined';
@@ -88,6 +96,47 @@ export async function resolveSignature(input: {
       signed_at: input.outcome === 'signed' ? new Date().toISOString() : null,
       updated_at: new Date().toISOString()
     })
+    .eq('id', sig.id)
+    .eq('org_id', org.orgId);
+  if (error) return { ok: false, error: error.message };
+
+  if (input.outcome === 'signed') {
+    // Chain of Trust: the attestation is a real record (idempotent) — the
+    // run choreography's "Log to Chain of Trust" step, made literal.
+    await logExecutionRecord(supabase, org.orgId, 'signature', sig.id);
+  }
+
+  revalidatePath('/execute/wires');
+  revalidatePath('/execute');
+  return { ok: true, id: sig.id };
+}
+
+/**
+ * Chase an outstanding signature — records that the reminder went out
+ * (chased_at). Chasing never resolves the request; the outcome lands
+ * separately through resolveSignature.
+ */
+export async function chaseSignature(input: { signatureId: string }): Promise<WiresActionResult> {
+  if (!input.signatureId) return { ok: false, error: 'Missing signature.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active workspace.' };
+
+  const supabase = await createClient();
+  const { data: sig } = await supabase
+    .from('signatures')
+    .select('id, status')
+    .eq('id', input.signatureId)
+    .eq('org_id', org.orgId)
+    .maybeSingle();
+  if (!sig) return { ok: false, error: 'Signature not found.' };
+  if (!canResolveSignature(sig.status)) {
+    return { ok: false, error: 'This signature is already resolved — nothing to chase.' };
+  }
+
+  const { error } = await supabase
+    .from('signatures')
+    .update({ chased_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('id', sig.id)
     .eq('org_id', org.orgId);
   if (error) return { ok: false, error: error.message };
@@ -176,7 +225,47 @@ export async function advanceWire(input: { wireId: string }): Promise<WiresActio
     .eq('status', wire.status);
   if (error) return { ok: false, error: error.message };
 
+  if (next === 'settled') {
+    // Chain of Trust: a settled wire is a real record (idempotent) — the
+    // dual-control choreography's "Log to Chain of Trust" step, made literal.
+    await logExecutionRecord(supabase, org.orgId, 'wire', wire.id);
+  }
+
   revalidatePath('/execute/wires');
   revalidatePath('/execute');
   return { ok: true, id: wire.id };
+}
+
+/**
+ * The Closings tab's pattern: completing an execution act inserts an
+ * idempotent `chain_of_trust_records` row at Proof of Execution. Best
+ * effort — never blocks the act it records.
+ */
+async function logExecutionRecord(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  entityType: 'signature' | 'wire',
+  entityId: string
+): Promise<void> {
+  try {
+    const { data: existing } = await supabase
+      .from('chain_of_trust_records')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId)
+      .maybeSingle();
+    if (!existing) {
+      await supabase.from('chain_of_trust_records').insert({
+        org_id: orgId,
+        entity_type: entityType,
+        entity_id: entityId,
+        current_layer: 'Proof of Execution',
+        completion_percentage: 100,
+        status: 'active'
+      });
+    }
+  } catch {
+    // The ledger write is best-effort; the act itself already persisted.
+  }
 }

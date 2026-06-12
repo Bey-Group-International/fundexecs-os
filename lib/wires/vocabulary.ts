@@ -24,14 +24,38 @@ export function isSignatureStatus(s: string): s is SignatureStatus {
 }
 
 export const SIGNATURE_STATUS_LABEL: Record<SignatureStatus, string> = {
-  out_for_signature: 'Out for signature',
+  out_for_signature: 'Awaiting',
   signed: 'Signed',
   declined: 'Declined'
+};
+
+/** Badge tones per status — the prototype's SIG_STATUS palette. */
+export const SIGNATURE_STATUS_TONE: Record<SignatureStatus, 'warning' | 'success' | 'danger'> = {
+  out_for_signature: 'warning',
+  signed: 'success',
+  declined: 'danger'
 };
 
 /** A signature resolves exactly once: out → signed | declined. */
 export function canResolveSignature(status: string): boolean {
   return status === 'out_for_signature';
+}
+
+export interface SignatureLike {
+  status: string;
+}
+
+export interface SignatureSummary {
+  signed: number;
+  total: number;
+  awaiting: number;
+}
+
+/** The summary tile's numbers — signed over total, with what's still out. */
+export function signatureSummary(sigs: readonly SignatureLike[]): SignatureSummary {
+  const signed = sigs.filter((s) => s.status === 'signed').length;
+  const awaiting = sigs.filter((s) => s.status === 'out_for_signature').length;
+  return { signed, total: sigs.length, awaiting };
 }
 
 /* ── Wires ────────────────────────────────────────────────────────────── */
@@ -57,9 +81,16 @@ export function isWireStatus(s: string): s is WireStatus {
 }
 
 export const WIRE_STATUS_LABEL: Record<WireStatus, string> = {
-  instructed: 'Instructed',
+  instructed: 'Staged',
   sent: 'Sent',
   settled: 'Settled'
+};
+
+/** Badge tones per status — the prototype's WIRE_STATUS palette. */
+export const WIRE_STATUS_TONE: Record<WireStatus, 'gold' | 'azure' | 'success'> = {
+  instructed: 'gold',
+  sent: 'azure',
+  settled: 'success'
 };
 
 /** The only legal next stage for a wire, or null when terminal/unknown. */
@@ -67,6 +98,21 @@ export function nextWireStatus(status: string): WireStatus | null {
   const i = (WIRE_SEQUENCE as readonly string[]).indexOf(status);
   if (i < 0 || i === WIRE_SEQUENCE.length - 1) return null;
   return WIRE_SEQUENCE[i + 1];
+}
+
+/**
+ * The per-row action, per the prototype's board: gold **Release** moves a
+ * staged outbound wire; everything else that can advance is a secondary
+ * **Confirm** (matching inbound funds, or confirming an outbound landed).
+ * Null when the wire is terminal.
+ */
+export function wireAction(
+  direction: string,
+  status: string
+): { label: 'Release' | 'Confirm'; gold: boolean } | null {
+  if (!nextWireStatus(status)) return null;
+  if (direction === 'out' && status === 'instructed') return { label: 'Release', gold: true };
+  return { label: 'Confirm', gold: false };
 }
 
 export interface WireLike {
@@ -99,4 +145,30 @@ export function wireTotals(wires: readonly WireLike[]): WireTotals {
     }
   }
   return { accounted: settledIn - settledOut, settledIn, settledOut, inFlight };
+}
+
+export interface WireBoard {
+  /** Outbound wires staged and not yet released. */
+  outStaged: number;
+  /** Every outbound dollar on the ledger, settled or not. */
+  outTotal: number;
+  /** Inbound dollars still expected (anything not settled). */
+  inExpected: number;
+}
+
+/** The summary strip's wire numbers — the prototype's outbound/inbound tiles. */
+export function wireBoard(wires: readonly WireLike[]): WireBoard {
+  let outStaged = 0;
+  let outTotal = 0;
+  let inExpected = 0;
+  for (const w of wires) {
+    if (!isWireStatus(w.status) || !Number.isFinite(w.amount) || w.amount <= 0) continue;
+    if (w.direction === 'out') {
+      outTotal += w.amount;
+      if (w.status === 'instructed') outStaged += 1;
+    } else if (w.direction === 'in' && w.status !== 'settled') {
+      inExpected += w.amount;
+    }
+  }
+  return { outStaged, outTotal, inExpected };
 }

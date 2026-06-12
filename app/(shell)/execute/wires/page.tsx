@@ -25,12 +25,7 @@ export default async function ExecuteWiresPage() {
 
   return (
     <div className="fx-rise mx-auto max-w-[920px]">
-      <WiresFlow
-        signatures={data.signatures}
-        wires={data.wires}
-        totals={data.totals}
-        openClosings={data.openClosings}
-      />
+      <WiresFlow signatures={data.signatures} wires={data.wires} openClosings={data.openClosings} />
     </div>
   );
 }
