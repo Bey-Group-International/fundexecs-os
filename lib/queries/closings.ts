@@ -6,11 +6,21 @@ import { closingProgress, type ClosingProgress } from '@/lib/closings/sequence';
 /**
  * Read side of the Closings room. RLS-scoped; degrades to empty on failure.
  */
+/** A live e-signature envelope sent for a signature step (DocuSign slice). */
+export interface StepSignatureView {
+  envelopeId: string;
+  status: string;
+  signerName: string | null;
+  signerEmail: string | null;
+}
+
 export interface ClosingStepView {
   id: string;
   seq: number;
   name: string;
   status: string;
+  /** Present once a signature envelope has been sent for this step. */
+  signature?: StepSignatureView;
 }
 
 export interface ClosingView {
@@ -39,7 +49,13 @@ export interface ClosingsData {
 
 export const getClosingsData = cache(async (orgId: string): Promise<ClosingsData> => {
   const supabase = await createClient();
-  const [{ data: closings }, { data: steps }, { data: deals }, { data: lps }] = await Promise.all([
+  const [
+    { data: closings },
+    { data: steps },
+    { data: signatures },
+    { data: deals },
+    { data: lps }
+  ] = await Promise.all([
     supabase
       .from('closings')
       .select('id, kind, counterparty, amount, status, created_at')
@@ -51,6 +67,10 @@ export const getClosingsData = cache(async (orgId: string): Promise<ClosingsData
       .eq('org_id', orgId)
       .order('seq', { ascending: true }),
     supabase
+      .from('closing_step_signatures')
+      .select('step_id, envelope_id, status, signer_name, signer_email')
+      .eq('org_id', orgId),
+    supabase
       .from('deals')
       .select('id, name, amount, stage')
       .eq('org_id', orgId)
@@ -61,12 +81,26 @@ export const getClosingsData = cache(async (orgId: string): Promise<ClosingsData
       .eq('org_id', orgId)
   ]);
 
+  const sigByStep = new Map<string, StepSignatureView>();
+  for (const sig of signatures ?? []) {
+    sigByStep.set(sig.step_id, {
+      envelopeId: sig.envelope_id,
+      status: sig.status,
+      signerName: sig.signer_name,
+      signerEmail: sig.signer_email
+    });
+  }
+
   const stepsByClosing = new Map<string, ClosingStepView[]>();
   for (const s of steps ?? []) {
     if (!stepsByClosing.has(s.closing_id)) stepsByClosing.set(s.closing_id, []);
-    stepsByClosing
-      .get(s.closing_id)!
-      .push({ id: s.id, seq: s.seq, name: s.name, status: s.status });
+    stepsByClosing.get(s.closing_id)!.push({
+      id: s.id,
+      seq: s.seq,
+      name: s.name,
+      status: s.status,
+      signature: sigByStep.get(s.id)
+    });
   }
 
   const views: ClosingView[] = (closings ?? []).map((c) => {
