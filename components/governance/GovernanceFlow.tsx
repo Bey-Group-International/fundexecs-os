@@ -51,8 +51,11 @@ import {
   LEGAL_0,
   LEGAL_CANDIDATES,
   LPAC_0,
+  POL_STAGES,
+  POL_TONE,
   policyDefaults,
   policyRows,
+  policyStage,
   type GovCandidate,
   type GovMember,
   type GovPolicy,
@@ -81,7 +84,8 @@ function policyIcon(name: string): LucideIcon {
   return POLICY_ICONS[name] ?? Scale;
 }
 
-function Chip({
+/** The selectable chip primitive shared by the governance builders. */
+function GovChip({
   label,
   selected,
   onClick
@@ -155,7 +159,8 @@ function RosterPanel({
   variant,
   entityIcon,
   principal,
-  onAdd,
+  bench,
+  onAddCandidate,
   addLabel,
   setLabel,
   stats
@@ -167,12 +172,14 @@ function RosterPanel({
   variant: 'people' | 'entity';
   entityIcon?: LucideIcon;
   principal: string;
-  onAdd?: () => void;
+  /** Remaining candidate suggestions — rendered only while a seat is open. */
+  bench: GovCandidate[];
+  onAddCandidate: (cand: GovCandidate) => void;
   addLabel?: string;
   setLabel: string;
   stats: [string, string][];
 }) {
-  const hasOpen = members.some((m) => m.open);
+  const openCount = members.filter((m) => m.open).length;
   return (
     <Card className="p-[18px]">
       <PanelHeader
@@ -180,10 +187,10 @@ function RosterPanel({
         title={title}
         eyebrow={eyebrow}
         action={
-          hasOpen && onAdd ? (
-            <Button variant="secondary" size="sm" icon={UserPlus} onClick={onAdd}>
-              {addLabel ?? 'Add'}
-            </Button>
+          openCount > 0 ? (
+            <Badge tone="neutral" className="text-[9.5px]">
+              {openCount} open
+            </Badge>
           ) : (
             <Badge tone="success" className="text-[9.5px]">
               {setLabel}
@@ -249,6 +256,52 @@ function RosterPanel({
           );
         })}
       </div>
+      {openCount > 0 && bench.length > 0 && (
+        <div className="mt-3 border-t border-[var(--border-faint)] pt-3">
+          <Eyebrow className="mb-2">
+            Earn&apos;s bench · suggestions
+            <span className="font-normal normal-case tracking-normal text-fg-5">
+              {' '}
+              — nothing is added until you confirm
+            </span>
+          </Eyebrow>
+          <div className="flex flex-col gap-1.5">
+            {bench.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => onAddCandidate(c)}
+                className="group flex w-full items-center gap-2.5 rounded-[12px] border border-dashed border-hairline px-3 py-2 text-left transition hover:border-[var(--accent-line)] hover:bg-[var(--accent-soft)]"
+              >
+                {variant === 'entity' ? (
+                  <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-[8px] border border-hairline bg-surface-2 text-fg-4">
+                    {createElement(entityIcon ?? Banknote, {
+                      size: 13,
+                      strokeWidth: 1.9,
+                      'aria-hidden': true
+                    })}
+                  </span>
+                ) : (
+                  <Avatar name={c.name} size={26} tone="azure" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12px] font-semibold text-fg-2">{c.name}</div>
+                  <div className="truncate text-[10.5px] text-fg-5">
+                    {c.role} · {c.note}
+                  </div>
+                </div>
+                {c.carry && (
+                  <span className="font-mono text-[11px] font-semibold text-gold-1">{c.carry}</span>
+                )}
+                <span className="flex flex-none items-center gap-1 text-[11px] font-medium text-fg-4 transition group-hover:text-[var(--accent)]">
+                  <UserPlus size={13} aria-hidden />
+                  {addLabel ?? 'Add'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {stats.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-fg-4">
           {stats.map(([b, rest]) => (
@@ -268,21 +321,26 @@ function PolicyBuilder({
   pol,
   initial,
   alreadyAdopted,
+  startDrafted,
   onBack,
-  onAdopted
+  onAdopted,
+  onDrafted
 }: {
   pol: GovPolicy;
-  /** Persisted decisions when re-opening an adopted policy. */
+  /** Persisted decisions when re-opening an adopted policy, or the in-flight draft. */
   initial: Record<string, PolicyValue> | null;
   alreadyAdopted: boolean;
+  /** Resume a drafted-but-not-adopted policy at its preview. */
+  startDrafted: boolean;
   onBack: () => void;
   onAdopted: (id: string, decisions: Record<string, PolicyValue>) => void;
+  onDrafted: (id: string, decisions: Record<string, PolicyValue>) => void;
 }) {
   const reduced = useReducedMotion() ?? false;
   const [d, setD] = useState<Record<string, PolicyValue>>(() => initial ?? policyDefaults(pol));
   const [applied, setApplied] = useState(false);
   const [phase, setPhase] = useState<'edit' | 'building' | 'done'>(
-    alreadyAdopted ? 'done' : 'edit'
+    alreadyAdopted || startDrafted ? 'done' : 'edit'
   );
   const [n, setN] = useState(0);
   const [adopting, setAdopting] = useState(false);
@@ -481,7 +539,7 @@ function PolicyBuilder({
                 </Eyebrow>
                 <div className="flex flex-wrap gap-2">
                   {dec.opts.map((o) => (
-                    <Chip
+                    <GovChip
                       key={o}
                       label={o}
                       selected={
@@ -504,6 +562,7 @@ function PolicyBuilder({
               variant="gold"
               iconRight={Sparkles}
               onClick={() => {
+                onDrafted(pol.id, d);
                 setN(0);
                 setPhase('building');
               }}
@@ -559,8 +618,9 @@ export interface GovernanceFlowProps {
 }
 
 /**
- * Fill the first open seat in a roster from a cycling candidate bench, and
- * persist the roster. Optimistic: a failed write reverts the seat and
+ * Confirm a bench candidate into the roster's first open seat, and persist
+ * the roster. Only this operator confirmation writes a member — the bench
+ * itself is never persisted. Optimistic: a failed write reverts the seat and
  * surfaces the error through `onError`.
  */
 function useRoster(
@@ -571,23 +631,20 @@ function useRoster(
   onError: (msg: string) => void
 ) {
   const [members, setMembers] = useState<GovMember[]>(persisted ?? [...initial]);
-  const [idx, setIdx] = useState(0);
-  const add = () => {
-    const cand = candidates[idx % candidates.length];
-    if (!cand) return;
+  const bench = candidates.filter((c) => !members.some((m) => m.name === c.name));
+  const add = (cand: GovCandidate) => {
     const at = members.findIndex((m) => m.open);
     if (at < 0) return;
     const prev = members;
     const next = [...members];
     next[at] = {
-      id: `${next[at].id}-f${idx}`,
+      id: `${next[at].id}-${cand.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
       name: cand.name,
       role: cand.role,
       note: cand.note,
       carry: cand.carry
     };
     setMembers(next);
-    setIdx((i) => i + 1);
     saveGovernanceBody(kind, next)
       .then((res) => {
         if (!res.ok) {
@@ -600,7 +657,7 @@ function useRoster(
         onError(`Could not save ${kind.replace(/_/g, ' ')} — try again.`);
       });
   };
-  return { members, add };
+  return { members, bench, add };
 }
 
 export function GovernanceFlow({
@@ -614,6 +671,8 @@ export function GovernanceFlow({
   const [openPol, setOpenPol] = useState<string | null>(null);
   const [adopted, setAdopted] =
     useState<Record<string, Record<string, PolicyValue>>>(initialAdopted);
+  /** Drafted-but-not-adopted decisions, per policy — the grid's Drafting stage. */
+  const [drafts, setDrafts] = useState<Record<string, Record<string, PolicyValue>>>({});
   const [bodyError, setBodyError] = useState<string | null>(null);
 
   const fm = useRoster('fund_mgmt', FM_0, FM_CANDIDATES, initialBodies.fund_mgmt, setBodyError);
@@ -638,15 +697,24 @@ export function GovernanceFlow({
     const pol = GOV_POLICIES.find((p) => p.id === openPol);
     if (pol) {
       const existing = adopted[pol.id] ?? null;
+      const draft = drafts[pol.id] ?? null;
       return (
         <PolicyBuilder
           key={openPol}
           pol={pol}
-          initial={existing}
+          initial={existing ?? draft}
           alreadyAdopted={existing != null}
+          startDrafted={existing == null && draft != null}
           onBack={() => setOpenPol(null)}
+          onDrafted={(id, decisions) => {
+            setDrafts((prev) => ({ ...prev, [id]: decisions }));
+          }}
           onAdopted={(id, decisions) => {
             setAdopted((prev) => ({ ...prev, [id]: decisions }));
+            setDrafts((prev) => {
+              const { [id]: _done, ...rest } = prev;
+              return rest;
+            });
             setOpenPol(null);
           }}
         />
@@ -826,7 +894,8 @@ export function GovernanceFlow({
             members={fm.members}
             variant="people"
             principal={principal}
-            onAdd={fm.add}
+            bench={fm.bench}
+            onAddCandidate={fm.add}
             addLabel="Add partner"
             setLabel="Team set"
             stats={[
@@ -841,7 +910,8 @@ export function GovernanceFlow({
             members={ic.members}
             variant="people"
             principal={principal}
-            onAdd={ic.add}
+            bench={ic.bench}
+            onAddCandidate={ic.add}
             addLabel="Fill seat"
             setLabel="Quorum met"
             stats={[
@@ -857,7 +927,8 @@ export function GovernanceFlow({
             members={adv.members}
             variant="people"
             principal={principal}
-            onAdd={adv.add}
+            bench={adv.bench}
+            onAddCandidate={adv.add}
             addLabel="Add advisor"
             setLabel="Board seated"
             stats={[
@@ -899,7 +970,8 @@ export function GovernanceFlow({
             variant="entity"
             entityIcon={Banknote}
             principal={principal}
-            onAdd={cap.add}
+            bench={cap.bench}
+            onAddCandidate={cap.add}
             addLabel="Add partner"
             setLabel="Stack set"
             stats={[
@@ -915,7 +987,8 @@ export function GovernanceFlow({
             variant="entity"
             entityIcon={Scale}
             principal={principal}
-            onAdd={legal.add}
+            bench={legal.bench}
+            onAddCandidate={legal.add}
             addLabel="Add counsel"
             setLabel="Bench set"
             stats={[['Scope', '· formation, regulatory, tax, deals']]}
@@ -932,7 +1005,7 @@ export function GovernanceFlow({
           />
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {GOV_POLICIES.map((p) => {
-              const active = p.id in adopted;
+              const stage = policyStage(p.id in adopted, p.id in drafts);
               return (
                 <div
                   key={p.id}
@@ -941,12 +1014,14 @@ export function GovernanceFlow({
                   <span
                     className={cn(
                       'flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border',
-                      active
+                      stage === 'active'
                         ? 'border-[var(--success-line)] bg-[var(--success-soft)] text-success'
-                        : 'border-hairline bg-surface-2 text-fg-3'
+                        : stage === 'drafting'
+                          ? 'border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1'
+                          : 'border-hairline bg-surface-2 text-fg-3'
                     )}
                   >
-                    {createElement(active ? Check : policyIcon(p.icon), {
+                    {createElement(stage === 'active' ? Check : policyIcon(p.icon), {
                       size: 16,
                       strokeWidth: 1.9,
                       'aria-hidden': true
@@ -954,17 +1029,19 @@ export function GovernanceFlow({
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[12.5px] font-semibold text-fg-1">{p.name}</div>
-                    <div className={cn('text-[10.5px]', active ? 'text-success' : 'text-fg-5')}>
-                      {active ? 'Active' : 'Not adopted'}
-                    </div>
+                    <Badge tone={POL_TONE[stage]} className="mt-1 text-[9px]">
+                      {POL_STAGES[stage]}
+                    </Badge>
                   </div>
                   <Button
-                    variant={active ? 'ghost' : 'secondary'}
+                    variant={
+                      stage === 'active' ? 'ghost' : stage === 'drafting' ? 'gold' : 'secondary'
+                    }
                     size="sm"
-                    icon={active ? Eye : Sparkles}
+                    icon={stage === 'active' ? Eye : stage === 'drafting' ? Check : Sparkles}
                     onClick={() => setOpenPol(p.id)}
                   >
-                    {active ? 'View' : 'Draft'}
+                    {stage === 'active' ? 'View' : stage === 'drafting' ? 'Adopt' : 'Draft'}
                   </Button>
                 </div>
               );

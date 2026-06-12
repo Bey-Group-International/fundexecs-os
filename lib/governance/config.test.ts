@@ -1,9 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ADV_0,
+  ADV_CANDIDATES,
+  CAP_0,
+  CAP_CANDIDATES,
+  FM_0,
+  FM_CANDIDATES,
   GOV_POLICIES,
+  IC_CANDIDATES,
+  IC_MEMBERS_0,
+  LEGAL_0,
+  LEGAL_CANDIDATES,
+  LPAC_0,
+  POL_STAGES,
+  POL_TONE,
   policyDefaults,
   policyRows,
+  policyStage,
   type GovPolicy,
   type PolicyValue
 } from './config';
@@ -46,4 +60,52 @@ test('policyRows joins multi values and handles empty selections', () => {
   assert.deepEqual(policyRows(pol, empty), [['Include', 'None']]);
   const filled = policyRows(pol, { scope: ['Personal trading', 'Recordkeeping'] });
   assert.equal(filled[0][1], 'Personal trading, Recordkeeping');
+});
+
+test('policy stage progression: To do → Drafting → Active, adoption wins', () => {
+  assert.equal(policyStage(false, false), 'todo');
+  assert.equal(policyStage(false, true), 'drafting');
+  assert.equal(policyStage(true, false), 'active');
+  assert.equal(policyStage(true, true), 'active');
+  for (const stage of ['todo', 'drafting', 'active'] as const) {
+    assert.ok(POL_STAGES[stage], `${stage} has a label`);
+    assert.ok(POL_TONE[stage], `${stage} has a tone`);
+  }
+});
+
+test('starting rosters never present seeded people as real data', () => {
+  for (const [kind, roster] of Object.entries({
+    fund_mgmt: FM_0,
+    ic: IC_MEMBERS_0,
+    advisory: ADV_0,
+    capital_partners: CAP_0,
+    legal_counsel: LEGAL_0,
+    lpac: LPAC_0
+  })) {
+    for (const m of roster) {
+      assert.ok(
+        m.you || m.open || m.pending,
+        `${kind}: "${m.name ?? m.role}" reads as a real member before the operator confirmed anyone`
+      );
+    }
+  }
+});
+
+test('every roster with open seats has a candidate bench of suggestions', () => {
+  for (const [kind, { roster, bench }] of Object.entries({
+    fund_mgmt: { roster: FM_0, bench: FM_CANDIDATES },
+    ic: { roster: IC_MEMBERS_0, bench: IC_CANDIDATES },
+    advisory: { roster: ADV_0, bench: ADV_CANDIDATES },
+    capital_partners: { roster: CAP_0, bench: CAP_CANDIDATES },
+    legal_counsel: { roster: LEGAL_0, bench: LEGAL_CANDIDATES }
+  })) {
+    assert.ok(
+      roster.some((m) => m.open),
+      `${kind} starts with an open seat`
+    );
+    assert.ok(bench.length > 0, `${kind} has bench suggestions`);
+    for (const c of bench) {
+      assert.ok(c.name && c.role && c.note, `${kind} bench entry is fully described`);
+    }
+  }
 });
