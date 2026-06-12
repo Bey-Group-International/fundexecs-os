@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Download } from 'lucide-react';
+import { Download, FileClock } from 'lucide-react';
 import { requirePlatformAdmin } from '@/lib/access.server';
 import { getAccessApplicants } from '@/lib/queries/admin-access';
 import { EarnCoin } from '@/components/ui/EarnCoin';
@@ -36,14 +36,24 @@ export default async function AdminPage() {
               <p className="text-[11.5px] text-fg-4">Private beta access control</p>
             </div>
           </div>
-          <Link
-            href="/admin/export"
-            prefetch={false}
-            className="flex items-center gap-2 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2 text-[12.5px] text-fg-2 transition hover:bg-surface-2 hover:text-fg-1"
-          >
-            <Download size={14} aria-hidden />
-            Export CSV
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/audit/export"
+              prefetch={false}
+              className="flex items-center gap-2 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2 text-[12.5px] text-fg-2 transition hover:bg-surface-2 hover:text-fg-1"
+            >
+              <FileClock size={14} aria-hidden />
+              Audit log
+            </Link>
+            <Link
+              href="/admin/export"
+              prefetch={false}
+              className="flex items-center gap-2 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2 text-[12.5px] text-fg-2 transition hover:bg-surface-2 hover:text-fg-1"
+            >
+              <Download size={14} aria-hidden />
+              Export CSV
+            </Link>
+          </div>
         </div>
       </header>
 

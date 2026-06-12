@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requirePlatformAdmin } from '@/lib/access.server';
 import { getAuthUser } from '@/lib/queries/auth';
 import { getActiveOrg } from '@/lib/queries/org';
+import { emitOutboundEvent } from '@/lib/integrations/outbound';
 import type { Json } from '@/lib/supabase/database.types';
 
 export type AccessDecision = 'approved' | 'rejected' | 'pending';
@@ -75,6 +76,18 @@ export async function setMemberAccess(
   if (error) return { ok: false, error: error.message };
 
   await writeAccessAudit(actor.id, decision, userId);
+
+  // Push the decision to the configured CRM / webhook (never-block). Resolve the
+  // applicant's email best-effort so the destination can match the contact.
+  const targetEmail = await admin.auth.admin
+    .getUserById(userId)
+    .then((r) => r.data.user?.email ?? null)
+    .catch(() => null);
+  void emitOutboundEvent({
+    type: `access_${decision}`,
+    occurredAt: new Date().toISOString(),
+    data: { userId, email: targetEmail, decision, decidedBy: actor.email ?? actor.id }
+  });
 
   revalidatePath('/admin');
   return { ok: true };
