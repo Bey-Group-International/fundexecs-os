@@ -4913,6 +4913,7 @@ export type Database = {
       }
       signatures: {
         Row: {
+          chased_at: string | null
           closing_id: string | null
           created_at: string
           document: string
@@ -4924,6 +4925,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          chased_at?: string | null
           closing_id?: string | null
           created_at?: string
           document: string
@@ -4935,6 +4937,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          chased_at?: string | null
           closing_id?: string | null
           created_at?: string
           document?: string
