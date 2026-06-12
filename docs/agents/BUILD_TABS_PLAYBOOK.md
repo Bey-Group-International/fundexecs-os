@@ -15,6 +15,13 @@ Shared references for everyone: `prototype/build/data-layer.jsx.txt` (the
 prototype's seeds, options and copy) and `prototype/build/ui-kit.jsx.txt`
 (its visual primitives — match them with our `components/ui/*` equivalents).
 
+**Follow-on agents** (run AFTER their tab's parity PR merges, same rules,
+same territory as the parity agent):
+
+| #   | Pass                           | Prompt                                       | Prerequisite        |
+| --- | ------------------------------ | -------------------------------------------- | ------------------- |
+| 1B  | Formation checklist — buildout | `prompts/BUILD_TAB_1B_FORMATION_BUILDOUT.md` | Tab 1 parity merged |
+
 ## Branch & PR
 
 - Branch: `agent/build-<tab>` (e.g. `agent/build-formation`). Branch from
