@@ -30,16 +30,23 @@ import type { IrItemView, IrLpView, IrPerfView } from '@/lib/queries/run-ops';
 
 /* ── due/status vocabulary ───────────────────────────────────────────────── */
 
+/** Whole-day offset from now to the due date; null when undated. */
+function dueDays(iso: string | null): number | null {
+  if (!iso) return null;
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
+}
+
 function dueLabel(iso: string | null): string {
-  if (!iso) return 'No date';
-  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
+  const days = dueDays(iso);
+  if (days === null) return 'No date';
   if (days < 0) return `${-days}d overdue`;
   if (days === 0) return 'Due today';
   return `Due in ${days}d`;
 }
 
 function isOverdue(iso: string | null): boolean {
-  return iso !== null && new Date(iso).getTime() < Date.now();
+  const days = dueDays(iso);
+  return days !== null && days < 0;
 }
 
 function dueTone(item: IrItemView): BadgeTone {
@@ -276,7 +283,9 @@ export function IrFlow({ items, lps, perf }: IrFlowProps) {
 
   const sent = items.filter((i) => i.status === 'sent').length;
   const open = items.filter((i) => i.status !== 'sent');
-  const onTime = items.length > 0 ? Math.round((sent / items.length) * 100) : 0;
+  // On cadence = already sent or not yet overdue; only late items count against it.
+  const onTimeCount = items.filter((i) => i.status === 'sent' || !isOverdue(i.dueAt)).length;
+  const onTime = items.length > 0 ? Math.round((onTimeCount / items.length) * 100) : 0;
   const sentiments = lps.map((l) => ({ lp: l, sentiment: irSentiment(l.warmth) }));
   const attention = sentiments.filter((s) => s.sentiment?.tone === 'warning').length;
   const champions = sentiments.filter((s) => s.sentiment?.label === 'Champion').length;
@@ -528,6 +537,8 @@ export function IrFlow({ items, lps, perf }: IrFlowProps) {
                         tabIndex={0}
                         onClick={() => setOpenId(i.id)}
                         onKeyDown={(e) => {
+                          // Keys bubbling up from the nested send button must not open the drawer.
+                          if (e.target !== e.currentTarget) return;
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
                             setOpenId(i.id);
