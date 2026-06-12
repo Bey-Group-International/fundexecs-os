@@ -7,15 +7,16 @@ import { getActiveOrg } from '@/lib/queries/org';
 export const metadata: Metadata = {
   title: 'Signatures & wires',
   description:
-    'The instruction ledger behind every close — signatures tracked to resolution, wires advanced one stage at a time on your approval.'
+    'The signature room and money movement — signatures attested to resolution, wires released or confirmed under dual control, each logged to the Chain of Trust.'
 };
 
 /**
- * Signatures & wires — the Execute hub's instruction ledger over the new
- * `signatures` / `wires` tables (20260611280000). Signatures resolve exactly
- * once; wires advance strictly instructed → sent → settled, each stage on
- * your approval. E-sign and banking rails attach later — the record is real
- * from day one.
+ * Signatures & wires — the Execute hub's signature room and wire board over
+ * the `signatures` / `wires` tables (20260611280000 + 20260612220000).
+ * Signatures only move forward (awaiting → partial → signed | declined);
+ * wires clear exactly once by direction (staged → cleared on release,
+ * expected → cleared on confirm), each on your approval. E-sign and banking
+ * rails attach later — the record is real from day one.
  */
 export default async function ExecuteWiresPage() {
   const org = await getActiveOrg();
@@ -25,12 +26,7 @@ export default async function ExecuteWiresPage() {
 
   return (
     <div className="fx-rise mx-auto max-w-[920px]">
-      <WiresFlow
-        signatures={data.signatures}
-        wires={data.wires}
-        totals={data.totals}
-        openClosings={data.openClosings}
-      />
+      <WiresFlow signatures={data.signatures} wires={data.wires} openClosings={data.openClosings} />
     </div>
   );
 }

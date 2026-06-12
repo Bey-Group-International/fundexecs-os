@@ -1,63 +1,122 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canChaseSignature,
+  canClearWire,
   canResolveSignature,
+  canSignatureTransition,
+  initialWireStatus,
+  isSignatureStatus,
   isWireDirection,
   isWireStatus,
-  nextWireStatus,
-  WIRE_SEQUENCE,
-  wireTotals
+  signatureSummary,
+  wireClearVerb,
+  wireSummary
 } from './vocabulary';
 
 /* ----------------------------------------------------------------------------
  * Signatures & wires vocabulary regression suite.
  *
- * Locks the gates the server actions enforce: a signature resolves exactly
- * once, wires advance strictly one stage at a time, and the ledger totals
- * count settled wires only.
+ * Locks the gates the server actions enforce: a signature only moves
+ * forward (awaiting → partial → signed | declined), a wire clears exactly
+ * once by direction (staged → cleared, expected → cleared), and the board
+ * summaries count only well-formed rows.
  * --------------------------------------------------------------------------*/
 
-test('a signature resolves only from out_for_signature', () => {
+test('signature transitions only move forward', () => {
+  assert.equal(canSignatureTransition('out_for_signature', 'partial'), true);
+  assert.equal(canSignatureTransition('out_for_signature', 'signed'), true);
+  assert.equal(canSignatureTransition('out_for_signature', 'declined'), true);
+  assert.equal(canSignatureTransition('partial', 'signed'), true);
+  assert.equal(canSignatureTransition('partial', 'declined'), true);
+  assert.equal(canSignatureTransition('partial', 'partial'), false);
+  assert.equal(canSignatureTransition('partial', 'out_for_signature'), false);
+  assert.equal(canSignatureTransition('signed', 'declined'), false);
+  assert.equal(canSignatureTransition('declined', 'signed'), false);
+  assert.equal(canSignatureTransition('junk', 'signed'), false);
+});
+
+test('a signature resolves only while in motion', () => {
   assert.equal(canResolveSignature('out_for_signature'), true);
+  assert.equal(canResolveSignature('partial'), true);
   assert.equal(canResolveSignature('signed'), false);
   assert.equal(canResolveSignature('declined'), false);
   assert.equal(canResolveSignature('junk'), false);
 });
 
-test('wire stages advance strictly one at a time', () => {
-  assert.equal(nextWireStatus('instructed'), 'sent');
-  assert.equal(nextWireStatus('sent'), 'settled');
-  assert.equal(nextWireStatus('settled'), null);
-  assert.equal(nextWireStatus('junk'), null);
+test('only partial signatures get chased', () => {
+  assert.equal(canChaseSignature('partial'), true);
+  assert.equal(canChaseSignature('out_for_signature'), false);
+  assert.equal(canChaseSignature('signed'), false);
 });
 
-test('the wire sequence is the three known stages in order', () => {
-  assert.deepEqual([...WIRE_SEQUENCE], ['instructed', 'sent', 'settled']);
-  for (const s of WIRE_SEQUENCE) assert.equal(isWireStatus(s), true);
-  assert.equal(isWireStatus('bounced'), false);
+test('signature status guard knows the four stages', () => {
+  for (const s of ['out_for_signature', 'partial', 'signed', 'declined']) {
+    assert.equal(isSignatureStatus(s), true);
+  }
+  assert.equal(isSignatureStatus('countersigned'), false);
 });
 
-test('direction guard accepts only in/out', () => {
+test('signatureSummary counts signed and in-motion rows', () => {
+  const summary = signatureSummary([
+    { status: 'signed' },
+    { status: 'signed' },
+    { status: 'partial' },
+    { status: 'out_for_signature' },
+    { status: 'declined' }
+  ]);
+  assert.deepEqual(summary, { total: 5, signed: 2, awaiting: 2 });
+  assert.deepEqual(signatureSummary([]), { total: 0, signed: 0, awaiting: 0 });
+});
+
+test('a wire opens by direction — staged out, expected in', () => {
+  assert.equal(initialWireStatus('out'), 'staged');
+  assert.equal(initialWireStatus('in'), 'expected');
+});
+
+test('a wire clears exactly once', () => {
+  assert.equal(canClearWire('staged'), true);
+  assert.equal(canClearWire('expected'), true);
+  assert.equal(canClearWire('cleared'), false);
+  assert.equal(canClearWire('junk'), false);
+});
+
+test('the clear verb follows the money', () => {
+  assert.equal(wireClearVerb('out'), 'Release');
+  assert.equal(wireClearVerb('in'), 'Confirm');
+});
+
+test('status and direction guards reject strays', () => {
+  for (const s of ['staged', 'expected', 'cleared']) assert.equal(isWireStatus(s), true);
+  assert.equal(isWireStatus('settled'), false);
   assert.equal(isWireDirection('in'), true);
   assert.equal(isWireDirection('out'), true);
   assert.equal(isWireDirection('sideways'), false);
 });
 
-test('wireTotals counts settled wires only and nets directions', () => {
-  const totals = wireTotals([
-    { direction: 'in', amount: 1_000_000, status: 'settled' },
-    { direction: 'in', amount: 250_000, status: 'sent' },
-    { direction: 'out', amount: 400_000, status: 'settled' },
-    { direction: 'out', amount: 50_000, status: 'instructed' },
-    { direction: 'in', amount: -5, status: 'settled' },
-    { direction: 'in', amount: 99, status: 'junk' }
+test('wireSummary counts only well-formed rows', () => {
+  const summary = wireSummary([
+    { direction: 'out', amount: 18_000_000, status: 'staged' },
+    { direction: 'out', amount: 750_000, status: 'cleared' },
+    { direction: 'in', amount: 10_000_000, status: 'expected' },
+    { direction: 'in', amount: 6_000_000, status: 'cleared' },
+    { direction: 'in', amount: -5, status: 'expected' },
+    { direction: 'out', amount: 99, status: 'settled' },
+    { direction: 'sideways', amount: 99, status: 'staged' }
   ]);
-  assert.equal(totals.settledIn, 1_000_000);
-  assert.equal(totals.settledOut, 400_000);
-  assert.equal(totals.accounted, 600_000);
-  assert.equal(totals.inFlight, 300_000);
+  assert.equal(summary.outStagedCount, 1);
+  assert.equal(summary.outTotal, 18_750_000);
+  assert.equal(summary.inExpected, 10_000_000);
+  assert.equal(summary.clearedIn, 6_000_000);
+  assert.equal(summary.clearedOut, 750_000);
 });
 
-test('wireTotals on an empty ledger is all zeros', () => {
-  assert.deepEqual(wireTotals([]), { accounted: 0, settledIn: 0, settledOut: 0, inFlight: 0 });
+test('wireSummary on an empty ledger is all zeros', () => {
+  assert.deepEqual(wireSummary([]), {
+    outStagedCount: 0,
+    outTotal: 0,
+    inExpected: 0,
+    clearedIn: 0,
+    clearedOut: 0
+  });
 });

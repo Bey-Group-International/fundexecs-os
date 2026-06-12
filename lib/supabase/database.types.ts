@@ -4837,35 +4837,47 @@ export type Database = {
       }
       signatures: {
         Row: {
+          amount_label: string | null
+          chased_at: string | null
           closing_id: string | null
           created_at: string
           document: string
+          drives: string | null
           id: string
           org_id: string
           signed_at: string | null
           signer: string
+          signer_role: string | null
           status: string
           updated_at: string
         }
         Insert: {
+          amount_label?: string | null
+          chased_at?: string | null
           closing_id?: string | null
           created_at?: string
           document: string
+          drives?: string | null
           id?: string
           org_id: string
           signed_at?: string | null
           signer: string
+          signer_role?: string | null
           status?: string
           updated_at?: string
         }
         Update: {
+          amount_label?: string | null
+          chased_at?: string | null
           closing_id?: string | null
           created_at?: string
           document?: string
+          drives?: string | null
           id?: string
           org_id?: string
           signed_at?: string | null
           signer?: string
+          signer_role?: string | null
           status?: string
           updated_at?: string
         }
@@ -4894,7 +4906,9 @@ export type Database = {
           created_at: string
           currency: string
           direction: string
+          drives: string | null
           id: string
+          label: string | null
           org_id: string
           reference: string | null
           settled_at: string | null
@@ -4908,7 +4922,9 @@ export type Database = {
           created_at?: string
           currency?: string
           direction: string
+          drives?: string | null
           id?: string
+          label?: string | null
           org_id: string
           reference?: string | null
           settled_at?: string | null
@@ -4922,7 +4938,9 @@ export type Database = {
           created_at?: string
           currency?: string
           direction?: string
+          drives?: string | null
           id?: string
+          label?: string | null
           org_id?: string
           reference?: string | null
           settled_at?: string | null
