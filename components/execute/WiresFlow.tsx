@@ -114,6 +114,9 @@ export function WiresFlow({
   const [view, setView] = useState<InnerView>('signatures');
   const [runner, setRunner] = useState<RunnerState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // True when the act persisted but its Chain of Trust record did not —
+  // the toast must not claim a log that never landed.
+  const [trustMissed, setTrustMissed] = useState(false);
 
   // Stage-a-signature form
   const [sigDoc, setSigDoc] = useState('');
@@ -633,11 +636,16 @@ export function WiresFlow({
           approveLabel="Approve & sign"
           onApprove={async () => {
             const res = await resolveSignature({ signatureId: runner.sig.id, outcome: 'signed' });
+            if (res.ok) setTrustMissed(res.trustLogged === false);
             return res.ok ? { ok: true } : { ok: false, error: res.error };
           }}
           onClose={() => setRunner(null)}
           onApplied={() => {
-            setToast(`${runner.sig.document} — signed`);
+            setToast(
+              `${runner.sig.document} — signed${
+                trustMissed ? ' (Chain of Trust log could not be written)' : ''
+              }`
+            );
             router.refresh();
           }}
         />
@@ -773,11 +781,16 @@ export function WiresFlow({
               approveLabel={out ? 'Approve & release' : 'Approve & confirm'}
               onApprove={async () => {
                 const res = await clearWire({ wireId: runner.wire.id });
+                if (res.ok) setTrustMissed(res.trustLogged === false);
                 return res.ok ? { ok: true } : { ok: false, error: res.error };
               }}
               onClose={() => setRunner(null)}
               onApplied={() => {
-                setToast(`${amt} ${runner.wire.counterparty} — cleared`);
+                setToast(
+                  `${amt} ${runner.wire.counterparty} — cleared${
+                    trustMissed ? ' (Chain of Trust log could not be written)' : ''
+                  }`
+                );
                 router.refresh();
               }}
             />
