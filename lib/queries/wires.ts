@@ -12,6 +12,7 @@ export interface SignatureView {
   signer: string;
   status: string;
   signedAt: string | null;
+  chasedAt: string | null;
   createdAt: string;
   closingId: string | null;
 }
@@ -47,7 +48,7 @@ export const getWiresData = cache(async (orgId: string): Promise<WiresData> => {
   const [{ data: signatures }, { data: wires }, { data: closings }] = await Promise.all([
     supabase
       .from('signatures')
-      .select('id, document, signer, status, signed_at, created_at, closing_id')
+      .select('id, document, signer, status, signed_at, chased_at, created_at, closing_id')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false }),
     supabase
@@ -84,6 +85,7 @@ export const getWiresData = cache(async (orgId: string): Promise<WiresData> => {
       signer: s.signer,
       status: s.status,
       signedAt: s.signed_at,
+      chasedAt: s.chased_at,
       createdAt: s.created_at,
       closingId: s.closing_id
     })),
