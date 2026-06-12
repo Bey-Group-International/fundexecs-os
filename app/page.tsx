@@ -8,19 +8,11 @@ import { ArrowRight, Lock, Sparkles, Shield, Zap, BarChart3, Users } from 'lucid
 import { EarnCoin, Wordmark } from '@/components/brand/BrandPrimitives';
 
 /* ── Specialist chip ── */
-function Chip({
-  name,
-  role,
-  tone = 'azure',
-}: {
-  name: string;
-  role: string;
-  tone?: string;
-}) {
+function Chip({ name, role, tone = 'azure' }: { name: string; role: string; tone?: string }) {
   const colors: Record<string, { bg: string; border: string; text: string }> = {
     gold: { bg: 'rgba(247,201,72,0.1)', border: 'rgba(247,201,72,0.25)', text: '#F7C948' },
     azure: { bg: 'rgba(96,165,250,0.08)', border: 'rgba(96,165,250,0.2)', text: '#60a5fa' },
-    success: { bg: 'rgba(52,211,153,0.08)', border: 'rgba(52,211,153,0.2)', text: '#34d399' },
+    success: { bg: 'rgba(52,211,153,0.08)', border: 'rgba(52,211,153,0.2)', text: '#34d399' }
   };
   const c = colors[tone] || colors.azure;
   return (
@@ -33,7 +25,7 @@ function Chip({
         borderRadius: 999,
         border: `1px solid ${c.border}`,
         background: c.bg,
-        fontSize: 12.5,
+        fontSize: 12.5
       }}
     >
       <span
@@ -48,7 +40,7 @@ function Chip({
           justifyContent: 'center',
           color: c.text,
           fontSize: 9,
-          fontWeight: 700,
+          fontWeight: 700
         }}
       >
         {name[0]}
@@ -76,47 +68,47 @@ const SPECIALISTS = [
   { name: 'Camille', role: 'Top of Funnel', tone: 'azure' },
   { name: 'Noah', role: 'Digital Presence', tone: 'azure' },
   { name: 'Jasper', role: 'Private Events', tone: 'azure' },
-  { name: 'Felix', role: 'Enablement', tone: 'azure' },
+  { name: 'Felix', role: 'Enablement', tone: 'azure' }
 ];
 
 const FEATURES = [
   {
     icon: <Sparkles size={18} />,
     title: 'AI Executive Team',
-    desc: '15 specialists handle sourcing, diligence, capital formation, and closes — you set direction and approve.',
+    desc: '15 specialists handle sourcing, diligence, capital formation, and closes — you set direction and approve.'
   },
   {
     icon: <BarChart3 size={18} />,
     title: 'Command Center',
-    desc: 'One ranked next move, every session. Your team worked overnight; Earn surfaces what matters most.',
+    desc: 'One ranked next move, every session. Your team worked overnight; Earn surfaces what matters most.'
   },
   {
     icon: <Shield size={18} />,
     title: 'Chain of Trust',
-    desc: 'Four-layer trust architecture — nothing executes without your approval. Full audit trail on every action.',
+    desc: 'Four-layer trust architecture — nothing executes without your approval. Full audit trail on every action.'
   },
   {
     icon: <Zap size={18} />,
     title: 'Lifecycle Coverage',
-    desc: 'Source → Diligence → Execute → Build. Every hub, fully automated, from first fund to $500M raise.',
+    desc: 'Source → Diligence → Execute → Build. Every hub, fully automated, from first fund to $500M raise.'
   },
   {
     icon: <Users size={18} />,
     title: 'GP/LP Collaboration',
-    desc: 'Structured data rooms, automated LP updates, and co-investor coordination — all in one place.',
+    desc: 'Structured data rooms, automated LP updates, and co-investor coordination — all in one place.'
   },
   {
     icon: <Lock size={18} />,
     title: 'Operator-Grade Security',
-    desc: 'SOC 2, Row-Level Security, Supabase Auth. Built for institutional-grade data sensitivity.',
-  },
+    desc: 'SOC 2, Row-Level Security, Supabase Auth. Built for institutional-grade data sensitivity.'
+  }
 ];
 
 const STATS: [string, string][] = [
   ['$500M+', 'raises supported'],
   ['15', 'AI specialists'],
   ['4-layer', 'Chain of Trust'],
-  ['7 hubs', 'full lifecycle'],
+  ['7 hubs', 'full lifecycle']
 ];
 
 export default function LandingPage() {
@@ -128,7 +120,7 @@ export default function LandingPage() {
         color: '#f1f5f9',
         fontFamily: 'Geist, -apple-system, BlinkMacSystemFont, sans-serif',
         position: 'relative',
-        overflow: 'hidden',
+        overflow: 'hidden'
       }}
     >
       {/* Aurora background */}
@@ -138,7 +130,7 @@ export default function LandingPage() {
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          background: 'radial-gradient(46% 38% at 50% 20%, rgba(247,201,72,0.06), transparent 70%)',
+          background: 'radial-gradient(46% 38% at 50% 20%, rgba(247,201,72,0.06), transparent 70%)'
         }}
       />
 
@@ -151,7 +143,7 @@ export default function LandingPage() {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '20px clamp(20px,5vw,52px)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)'
         }}
       >
         <Wordmark />
@@ -166,7 +158,7 @@ export default function LandingPage() {
               border: '1px solid var(--border)',
               background: 'var(--surface-1)',
               textDecoration: 'none',
-              whiteSpace: 'nowrap',
+              whiteSpace: 'nowrap'
             }}
           >
             Check airdrop
@@ -180,7 +172,7 @@ export default function LandingPage() {
               borderRadius: 10,
               border: '1px solid transparent',
               background: 'rgba(255,255,255,0.08)',
-              textDecoration: 'none',
+              textDecoration: 'none'
             }}
           >
             Sign in
@@ -198,7 +190,7 @@ export default function LandingPage() {
             textAlign: 'center',
             padding: 'clamp(56px,8vh,96px) clamp(20px,5vw,52px) 64px',
             maxWidth: 960,
-            margin: '0 auto',
+            margin: '0 auto'
           }}
         >
           {/* Beta badge */}
@@ -214,7 +206,7 @@ export default function LandingPage() {
               fontSize: 12,
               fontWeight: 600,
               color: '#60a5fa',
-              marginBottom: 28,
+              marginBottom: 28
             }}
           >
             <span
@@ -223,7 +215,7 @@ export default function LandingPage() {
                 height: 6,
                 borderRadius: 999,
                 background: '#60a5fa',
-                animation: 'pulse 2s infinite',
+                animation: 'pulse 2s infinite'
               }}
             />
             Invite-only private beta — join the waitlist
@@ -235,13 +227,12 @@ export default function LandingPage() {
               lineHeight: 1.04,
               fontWeight: 600,
               letterSpacing: '-0.03em',
-              margin: '0 0 24px',
+              margin: '0 0 24px'
             }}
           >
             Set the mandate.
             <br />
-            Your AI executive team{' '}
-            <span style={{ color: '#F7C948' }}>does the rest.</span>
+            Your AI executive team <span style={{ color: '#F7C948' }}>does the rest.</span>
           </h1>
 
           <p
@@ -250,7 +241,7 @@ export default function LandingPage() {
               lineHeight: 1.65,
               color: 'var(--fg-3)',
               maxWidth: 640,
-              margin: '0 0 36px',
+              margin: '0 0 36px'
             }}
           >
             Fifteen specialists, led by Earn, launch the fund, raise the capital, source the deals,
@@ -265,7 +256,7 @@ export default function LandingPage() {
               gap: 12,
               flexWrap: 'wrap',
               justifyContent: 'center',
-              marginBottom: 20,
+              marginBottom: 20
             }}
           >
             <Link
@@ -281,7 +272,7 @@ export default function LandingPage() {
                 background: 'linear-gradient(135deg,#F7C948,#E5A823)',
                 color: '#070b14',
                 textDecoration: 'none',
-                boxShadow: '0 8px 24px -8px rgba(247,201,72,0.4)',
+                boxShadow: '0 8px 24px -8px rgba(247,201,72,0.4)'
               }}
             >
               Claim your desk <ArrowRight size={16} />
@@ -299,14 +290,22 @@ export default function LandingPage() {
                 background: 'rgba(255,255,255,0.06)',
                 color: '#f1f5f9',
                 border: '1px solid rgba(255,255,255,0.1)',
-                textDecoration: 'none',
+                textDecoration: 'none'
               }}
             >
               Check airdrop status
             </Link>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--fg-5)' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              fontSize: 12,
+              color: 'var(--fg-5)'
+            }}
+          >
             <Lock size={13} /> By referral · no card, no setup fee
           </div>
 
@@ -317,7 +316,7 @@ export default function LandingPage() {
               gap: 'clamp(24px,5vw,56px)',
               marginTop: 52,
               flexWrap: 'wrap',
-              justifyContent: 'center',
+              justifyContent: 'center'
             }}
           >
             {STATS.map(([v, l]) => (
@@ -327,7 +326,7 @@ export default function LandingPage() {
                     fontSize: 'clamp(22px,3vw,30px)',
                     fontWeight: 700,
                     letterSpacing: '-0.02em',
-                    color: '#F7C948',
+                    color: '#F7C948'
                   }}
                 >
                   {v}
@@ -339,7 +338,9 @@ export default function LandingPage() {
         </section>
 
         {/* Specialist grid */}
-        <section style={{ padding: '0 clamp(20px,5vw,52px) 72px', maxWidth: 1080, margin: '0 auto' }}>
+        <section
+          style={{ padding: '0 clamp(20px,5vw,52px) 72px', maxWidth: 1080, margin: '0 auto' }}
+        >
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
             <div
               style={{
@@ -347,7 +348,7 @@ export default function LandingPage() {
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
                 color: 'var(--fg-5)',
-                marginBottom: 8,
+                marginBottom: 8
               }}
             >
               Your executive team
@@ -364,7 +365,9 @@ export default function LandingPage() {
         </section>
 
         {/* Features grid */}
-        <section style={{ padding: '0 clamp(20px,5vw,52px) 80px', maxWidth: 1080, margin: '0 auto' }}>
+        <section
+          style={{ padding: '0 clamp(20px,5vw,52px) 80px', maxWidth: 1080, margin: '0 auto' }}
+        >
           <div style={{ textAlign: 'center', marginBottom: 40 }}>
             <div
               style={{
@@ -372,7 +375,7 @@ export default function LandingPage() {
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
                 color: 'var(--fg-5)',
-                marginBottom: 8,
+                marginBottom: 8
               }}
             >
               Built for operators
@@ -385,7 +388,7 @@ export default function LandingPage() {
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 16,
+              gap: 16
             }}
           >
             {FEATURES.map((f) => (
@@ -396,7 +399,7 @@ export default function LandingPage() {
                   borderRadius: 16,
                   border: '1px solid rgba(255,255,255,0.08)',
                   background: 'rgba(255,255,255,0.03)',
-                  backdropFilter: 'blur(4px)',
+                  backdropFilter: 'blur(4px)'
                 }}
               >
                 <div
@@ -405,7 +408,7 @@ export default function LandingPage() {
                     alignItems: 'center',
                     gap: 10,
                     marginBottom: 12,
-                    color: '#60a5fa',
+                    color: '#60a5fa'
                   }}
                 >
                   {f.icon}
@@ -427,7 +430,7 @@ export default function LandingPage() {
             textAlign: 'center',
             padding: '0 clamp(20px,5vw,52px) 100px',
             maxWidth: 640,
-            margin: '0 auto',
+            margin: '0 auto'
           }}
         >
           <div
@@ -435,7 +438,7 @@ export default function LandingPage() {
               padding: '40px 32px',
               borderRadius: 20,
               border: '1px solid rgba(247,201,72,0.2)',
-              background: 'rgba(247,201,72,0.04)',
+              background: 'rgba(247,201,72,0.04)'
             }}
           >
             <EarnCoin size={52} />
@@ -444,14 +447,12 @@ export default function LandingPage() {
                 fontSize: 26,
                 fontWeight: 600,
                 letterSpacing: '-0.02em',
-                margin: '18px 0 10px',
+                margin: '18px 0 10px'
               }}
             >
               Ready to brief the team?
             </h2>
-            <p
-              style={{ fontSize: 14, color: 'var(--fg-3)', lineHeight: 1.65, margin: '0 0 24px' }}
-            >
+            <p style={{ fontSize: 14, color: 'var(--fg-3)', lineHeight: 1.65, margin: '0 0 24px' }}>
               Join the waitlist and reserve your desk. The first 100 operators get Founding Operator
               access and airdrop eligibility.
             </p>
@@ -467,7 +468,7 @@ export default function LandingPage() {
                 fontWeight: 600,
                 background: 'linear-gradient(135deg,#F7C948,#E5A823)',
                 color: '#070b14',
-                textDecoration: 'none',
+                textDecoration: 'none'
               }}
             >
               Join the waitlist <ArrowRight size={16} />
@@ -487,11 +488,17 @@ export default function LandingPage() {
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: 12,
+          gap: 12
         }}
       >
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--fg-4)' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontSize: 13,
+            color: 'var(--fg-4)'
+          }}
         >
           <EarnCoin size={22} />
           <span>

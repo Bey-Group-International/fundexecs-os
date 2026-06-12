@@ -138,7 +138,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { email, name, firm, roleGroup, investorRole, referralCode, utm } = body;
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // Safe email validation — no regex on user-controlled input (prevents ReDoS / CodeQL flag)
+    const emailStr = typeof email === 'string' ? email.toLowerCase().trim() : '';
+    const atIdx = emailStr.lastIndexOf('@');
+    const isValidEmail =
+      emailStr.length > 0 &&
+      emailStr.length <= 320 &&
+      atIdx > 0 &&
+      atIdx < emailStr.length - 1 &&
+      emailStr.indexOf('.', atIdx) > atIdx + 1;
+
+    if (!isValidEmail) {
       return NextResponse.json({ error: 'Valid email required.' }, { status: 400 });
     }
 
