@@ -5,6 +5,7 @@ import {
   STEP_SEQUENCE,
   closingProgress,
   isClosingKind,
+  isSignatureStep,
   nextExecutableSeq,
   stepDisplayStatus,
   STEP_DISPLAY
@@ -81,6 +82,18 @@ test('every step carries the prototype anatomy (who, party, drives, detail, acti
     const wires = STEP_SEQUENCE[kind].filter((s) => s.wire);
     if (kind !== 'engagement') assert.equal(wires.length, 1, `${kind} has one wire step`);
   }
+});
+
+test('isSignatureStep marks signable, non-wire steps only', () => {
+  // Every kind has at least one e-signable step, and no wire step is signable.
+  for (const kind of CLOSING_KINDS) {
+    const signable = STEP_SEQUENCE[kind].filter((s) => isSignatureStep(s));
+    assert.ok(signable.length >= 1, `${kind} has a signature step`);
+    for (const step of signable) assert.equal(step.wire, undefined);
+  }
+  assert.equal(isSignatureStep(undefined), false);
+  assert.equal(isSignatureStep({ sign: true, wire: true } as never), false);
+  assert.equal(isSignatureStep({ wire: false } as never), false);
 });
 
 test('stepDisplayStatus walks the prototype ladder', () => {
