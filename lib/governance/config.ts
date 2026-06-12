@@ -149,6 +149,27 @@ export const GOV_POLICIES: readonly GovPolicy[] = [
   }
 ] as const;
 
+/** Per-policy stage in the hub grid: To do → Drafting → Active. */
+export type PolStage = 'todo' | 'drafting' | 'active';
+
+export const POL_STAGES: Record<PolStage, string> = {
+  todo: 'To do',
+  drafting: 'Drafting',
+  active: 'Active'
+};
+
+/** Badge tone per stage (matches the prototype's grid tones). */
+export const POL_TONE: Record<PolStage, 'neutral' | 'gold' | 'success'> = {
+  todo: 'neutral',
+  drafting: 'gold',
+  active: 'success'
+};
+
+/** Adopted wins; a draft-in-progress reads Drafting; otherwise To do. */
+export function policyStage(adopted: boolean, drafting: boolean): PolStage {
+  return adopted ? 'active' : drafting ? 'drafting' : 'todo';
+}
+
 export interface GovMember {
   id: string;
   name?: string;
@@ -167,6 +188,12 @@ export interface GovCandidate {
   carry?: string;
 }
 
+/*
+ * Starting rosters hold only the operator's own seat, open seats, or pending
+ * placeholders — never the prototype's seeded people. Those live on the
+ * candidate benches below, presented as suggestions; a member becomes real
+ * data only when the operator confirms them into a seat.
+ */
 export const FM_0: readonly GovMember[] = [
   {
     id: 'fm1',
@@ -197,40 +224,37 @@ export const IC_CANDIDATES: readonly GovCandidate[] = [
 ];
 
 export const ADV_0: readonly GovMember[] = [
-  {
-    id: 'a1',
-    name: 'Sir Reginald Hale',
-    role: 'Industry Advisor',
-    note: 'Former CEO, sector incumbent'
-  },
+  { id: 'a1', name: 'Open seat', role: 'Industry Advisor', open: true },
   { id: 'a2', name: 'Open seat', role: 'Advisor', open: true }
 ];
 export const ADV_CANDIDATES: readonly GovCandidate[] = [
+  { name: 'Sir Reginald Hale', role: 'Industry Advisor', note: 'Former CEO, sector incumbent' },
   { name: 'Dr. Amara Diallo', role: 'Technical Advisor', note: 'Research lead · diligence depth' },
   { name: 'Gloria Tan', role: 'Capital Markets Advisor', note: 'Ex-placement · LP introductions' },
   { name: 'Hiroshi Sato', role: 'Operating Advisor', note: '3 exits · operator network' }
 ];
 
 export const CAP_0: readonly GovMember[] = [
-  { id: 'c1', name: 'First Republic', role: 'Subscription credit line', note: '$25M facility' },
+  { id: 'c1', name: 'Open relationship', role: 'Capital partner', open: true },
   { id: 'c2', name: 'Open relationship', role: 'Capital partner', open: true }
 ];
 export const CAP_CANDIDATES: readonly GovCandidate[] = [
+  { name: 'First Republic', role: 'Subscription credit line', note: '$25M facility' },
   { name: 'Apollo Credit', role: 'NAV facility', note: 'Portfolio-level leverage' },
   { name: 'Coastal Co-invest', role: 'Co-investment partner', note: 'Deal-by-deal capital' },
   { name: 'Silicon Valley Bank', role: 'Capital-call facility', note: 'Bridge financing' }
 ];
 
 export const LEGAL_0: readonly GovMember[] = [
+  { id: 'g1', name: 'Open relationship', role: 'Fund counsel', open: true },
+  { id: 'g2', name: 'Open relationship', role: 'Legal counsel', open: true }
+];
+export const LEGAL_CANDIDATES: readonly GovCandidate[] = [
   {
-    id: 'g1',
     name: 'Standish & Cole',
     role: 'Fund counsel',
     note: 'Formation & LPA · from Partner Network'
   },
-  { id: 'g2', name: 'Open relationship', role: 'Legal counsel', open: true }
-];
-export const LEGAL_CANDIDATES: readonly GovCandidate[] = [
   { name: 'Whitman Regulatory', role: 'Regulatory & SEC counsel', note: 'Compliance & exemptions' },
   { name: 'Harbor Tax LLP', role: 'Fund tax counsel', note: 'Structuring & K-1s' },
   { name: 'Meridian IP', role: 'Portfolio counsel', note: 'Deal & IP support' }
