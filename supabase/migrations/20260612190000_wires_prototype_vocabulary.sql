@@ -41,7 +41,12 @@ begin
   end if;
 end$$;
 
-alter table public.wires alter column status set default 'staged';
+-- No column default: `staged` is outbound-only and `expected` inbound-only,
+-- so status is direction-specific. Callers set it explicitly via
+-- stagedWireStatus(direction) in lib/wires/actions.ts; a NOT NULL column with
+-- no default forces that contract rather than silently defaulting an inbound
+-- wire to a releasable outbound one.
+alter table public.wires alter column status drop default;
 
 -- ── Signatures: `partial` + the chase attestation ────────────────────
 
