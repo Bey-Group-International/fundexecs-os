@@ -41,13 +41,17 @@ test('an LP passes the vetted gate and shows up in the operator room', async ({
   }
 
   // ── the room: a live link for the One-pager ─────────────────────────────
+  // A successful build auto-switches to the room; an already-Ready material
+  // stays on the grid, so switch in explicitly. The build choreography + the
+  // server write + re-render can run several seconds, so give the row a
+  // choreography-aware timeout rather than the default 10s.
   await page.getByText('The data room', { exact: true }).click();
   const docRow = page
     .locator('div')
     .filter({ has: page.getByText('One-pager', { exact: true }) })
     .filter({ hasText: 'Built here' })
     .last();
-  await expect(docRow).toBeVisible();
+  await expect(docRow).toBeVisible({ timeout: 20_000 });
 
   const genBtn = docRow.getByRole('button', { name: /^(Generate link|New link)$/ });
   if (await genBtn.isVisible().catch(() => false)) {
