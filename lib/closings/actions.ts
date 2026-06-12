@@ -126,6 +126,25 @@ export async function executeClosingStep(input: {
       .eq('org_id', org.orgId);
     if (!closeErr) {
       closed = true;
+      // Chain of Trust: the close is a real record (idempotent) — the run
+      // choreography's "Log to Chain of Trust" step, made literal.
+      const { data: existingTrust } = await supabase
+        .from('chain_of_trust_records')
+        .select('id')
+        .eq('org_id', org.orgId)
+        .eq('entity_type', 'closing')
+        .eq('entity_id', closing.id)
+        .maybeSingle();
+      if (!existingTrust) {
+        await supabase.from('chain_of_trust_records').insert({
+          org_id: org.orgId,
+          entity_type: 'closing',
+          entity_id: closing.id,
+          current_layer: 'Proof of Execution',
+          completion_percentage: 100,
+          status: 'active'
+        });
+      }
       // Feed the flywheel: a completed closing is proof of execution. Deal
       // closes credit the deal lane; LP commitments / engagements credit
       // capital. Idempotent (keyed on the closing id) + best-effort.
