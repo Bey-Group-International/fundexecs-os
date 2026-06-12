@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Award, Bell, LayoutDashboard, LogOut, Settings, Sparkles } from 'lucide-react';
-import { EarnDock } from '@/components/earn/EarnDock';
+import { Award, Bell, LayoutDashboard, LogOut, Settings } from 'lucide-react';
+import { EarnDock, type EarnContext } from '@/components/earn/EarnDock';
+import { EarnOrb } from '@/components/earn/EarnOrb';
+import { EARN_OPEN_EVENT, type EarnOpenDetail } from '@/lib/earn/launcher';
 import { Badge } from '@/components/ui/Badge';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { MandateIcon } from '@/components/ui/MandateIcon';
@@ -84,6 +86,19 @@ export function AppShell({
 }: AppShellProps) {
   const pathname = usePathname();
   const [earnOpen, setEarnOpen] = useState(false);
+  const [earnDetail, setEarnDetail] = useState<EarnOpenDetail | null>(null);
+
+  // The global opener: any client surface (the orb, per-panel buttons) calls
+  // openEarn() and we raise the panel, carrying any starting intent.
+  useEffect(() => {
+    function onOpen(e: Event) {
+      setEarnDetail((e as CustomEvent<EarnOpenDetail>).detail ?? null);
+      setEarnOpen(true);
+    }
+    window.addEventListener(EARN_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(EARN_OPEN_EVENT, onOpen);
+  }, []);
+
   const activeHub = hubs.find((h) => pathname.startsWith(h.href));
   const utility = pathname.startsWith('/notifications')
     ? 'Notifications'
@@ -92,6 +107,21 @@ export function AppShell({
       : null;
   const isHome = !activeHub && !utility;
   const title = activeHub?.label ?? utility ?? 'Command Center';
+
+  // Earn's contextual next-move: where the operator is (the hub they're on, or
+  // their center of gravity), with the next module that isn't the current page.
+  // Real readiness — no invented suggestions.
+  const ctxHub = activeHub ?? hubs.find((h) => h.id === center) ?? null;
+  const ctxNext = ctxHub?.modules.find((m) => m.href && !pathname.startsWith(m.href.split('?')[0]));
+  const earnContext: EarnContext | null = ctxHub
+    ? {
+        hubLabel: ctxHub.label,
+        hubHref: ctxHub.href,
+        pct: ctxHub.pct,
+        nextLabel: ctxNext?.label,
+        nextHref: ctxNext?.href
+      }
+    : null;
 
   return (
     <div className="flex min-h-dvh bg-bg-0 text-fg-1">
@@ -196,14 +226,6 @@ export function AppShell({
           })}
 
           <div className="mx-1 my-3 h-px bg-[var(--border)]" aria-hidden />
-          <button
-            type="button"
-            onClick={() => setEarnOpen(true)}
-            className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[13.5px] font-medium text-fg-3 transition hover:bg-surface-1 hover:text-fg-1"
-          >
-            <Sparkles size={17} strokeWidth={1.9} className="text-gold-1" aria-hidden />
-            <span className="flex-1">Ask Earn</span>
-          </button>
           <Link
             href="/notifications"
             className={cn(
@@ -283,14 +305,6 @@ export function AppShell({
               </span>
             )}
           </Link>
-          <button
-            type="button"
-            onClick={() => setEarnOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-1.5 text-[12.5px] font-semibold text-gold-1 transition hover:brightness-110"
-          >
-            <Sparkles size={14} aria-hidden />
-            Ask Earn
-          </button>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-1 text-[12.5px] font-semibold text-gold-1">
             <Award size={14} aria-hidden />
             Level {level}
@@ -349,7 +363,15 @@ export function AppShell({
         </nav>
       </div>
 
-      <EarnDock open={earnOpen} onClose={() => setEarnOpen(false)} />
+      {/* Earn — the always-available companion: the floating orb summons the
+          command-first panel; both live above the shell, on every surface. */}
+      <EarnOrb hidden={earnOpen} />
+      <EarnDock
+        open={earnOpen}
+        onClose={() => setEarnOpen(false)}
+        context={earnContext}
+        openDetail={earnDetail}
+      />
     </div>
   );
 }

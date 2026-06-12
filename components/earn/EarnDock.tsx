@@ -2,21 +2,47 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, ArrowUp, Check, Loader2, ShieldCheck, Sparkles, X } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowUp,
+  Check,
+  FileSearch,
+  Landmark,
+  Loader2,
+  type LucideIcon,
+  Radar,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
+  X
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { executeEarnAction } from '@/lib/actions/earn-actions';
 import { EARN_NAV_DESTINATIONS } from '@/lib/ai/earn-nav';
+import type { EarnOpenDetail } from '@/lib/earn/launcher';
 import { TEAM_ROSTER } from '@/lib/team';
 import { cn } from '@/lib/utils';
 
 /**
- * The Earn dock — the prototype's Ask Earn modal wired to the real backend:
- * streaming NDJSON chat from /api/ask-earn (brain citations, deltas, calm
+ * The Earn Copilot panel — the prototype's Ask Earn surface wired to the real
+ * backend, in the command-first form factor: a right-side panel on desktop, a
+ * bottom sheet on mobile. The empty state leads with five primary commands
+ * (Raise · Review · Find · Analyze · Ask), each landing on a real surface or
+ * action, plus a contextual next-move read from live readiness. Underneath:
+ * streaming NDJSON chat from /api/ask-earn (brain citations, calm
  * degradation), thread restore from /api/earn/history, auto-navigation on
- * Earn's `navigate` tool (allowlisted), and confirm cards for the mutating
- * tools — approved actions execute through the audited server action.
+ * Earn's `navigate` tool (allowlisted), and confirm cards for mutating tools.
  */
+
+/** Where the operator is, for Earn's contextual next-move (real readiness). */
+export interface EarnContext {
+  hubLabel: string;
+  hubHref: string;
+  pct: number;
+  nextLabel?: string;
+  nextHref?: string;
+}
 
 interface ChatSource {
   brainId: string | null;
@@ -38,6 +64,48 @@ interface ChatMessage {
   actions?: PendingAction[];
 }
 
+/** A primary command — either a real navigation, a routed ask, or focus. */
+interface EarnCommand {
+  id: string;
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+  href?: string;
+  ask?: string;
+}
+
+const COMMANDS: EarnCommand[] = [
+  {
+    id: 'raise',
+    label: 'Raise',
+    hint: 'Plan & run the raise',
+    icon: Landmark,
+    href: '/source/capital-map'
+  },
+  {
+    id: 'review',
+    label: 'Review',
+    hint: 'Run the committee',
+    icon: FileSearch,
+    href: '/run/diligence'
+  },
+  {
+    id: 'find',
+    label: 'Find',
+    hint: 'Source on-thesis deals',
+    icon: Radar,
+    href: '/source/pipeline'
+  },
+  {
+    id: 'analyze',
+    label: 'Analyze',
+    hint: 'Ask your documents',
+    icon: Wand2,
+    ask: 'Analyze my latest fund materials and surface what an institutional LP would flag.'
+  },
+  { id: 'ask', label: 'Ask', hint: 'Anything else', icon: Sparkles }
+];
+
 const SUGGESTIONS = [
   'Find me 3 on-thesis deals',
   'Who should I raise from next?',
@@ -55,7 +123,18 @@ const ACTION_LABEL: Record<string, string> = {
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function EarnDock({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function EarnDock({
+  open,
+  onClose,
+  context,
+  openDetail
+}: {
+  open: boolean;
+  onClose: () => void;
+  context?: EarnContext | null;
+  /** Starting intent handed in by the opener (a command id or a free ask). */
+  openDetail?: EarnOpenDetail | null;
+}) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -71,6 +150,7 @@ export function EarnDock({ open, onClose }: { open: boolean; onClose: () => void
   const panelRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const consumedDetail = useRef<EarnOpenDetail | null>(null);
 
   // Restore the persisted thread once per mount-open.
   useEffect(() => {
@@ -130,6 +210,33 @@ export function EarnDock({ open, onClose }: { open: boolean; onClose: () => void
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, streaming]);
+
+  // Consume a starting intent once per distinct open detail.
+  useEffect(() => {
+    if (!open || !historyLoaded || !openDetail) return;
+    if (consumedDetail.current === openDetail) return;
+    consumedDetail.current = openDetail;
+    if (openDetail.command) {
+      const cmd = COMMANDS.find((c) => c.id === openDetail.command);
+      if (cmd) runCommand(cmd);
+    } else if (openDetail.ask) {
+      void send(openDetail.ask);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, historyLoaded, openDetail]);
+
+  function runCommand(c: EarnCommand) {
+    if (c.href) {
+      router.push(c.href);
+      onClose();
+      return;
+    }
+    if (c.ask) {
+      void send(c.ask);
+      return;
+    }
+    panelRef.current?.querySelector<HTMLElement>('textarea')?.focus();
+  }
 
   async function send(text?: string) {
     const q = (text ?? input).trim();
@@ -264,16 +371,16 @@ export function EarnDock({ open, onClose }: { open: boolean; onClose: () => void
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Ask Earn"
-        className="fixed bottom-0 right-0 top-0 z-[61] flex w-[480px] max-w-[96vw] flex-col border-l border-[var(--border-strong)] bg-bg-2 shadow-[-30px_0_80px_-30px_rgba(0,0,0,0.7)]"
+        aria-label="Earn Copilot"
+        className="fx-rise fixed inset-x-0 bottom-0 z-[61] flex max-h-[88vh] flex-col rounded-t-2xl border border-[var(--border-strong)] bg-bg-2 shadow-[0_-30px_80px_-30px_rgba(0,0,0,0.7)] lg:inset-x-auto lg:bottom-0 lg:right-0 lg:top-0 lg:max-h-none lg:w-[400px] lg:rounded-none lg:border-y-0 lg:border-r-0 lg:border-l lg:shadow-[-30px_0_80px_-30px_rgba(0,0,0,0.7)]"
       >
         {/* header */}
         <div className="flex items-center gap-3 border-b border-hairline bg-[linear-gradient(100deg,rgba(247,201,72,0.12),transparent_60%)] px-5 py-4">
           <EarnCoin size={38} online className="flex-none" />
           <div className="min-w-0 flex-1">
-            <div className="text-[14.5px] font-semibold text-fg-1">Ask Earn</div>
+            <div className="text-[14.5px] font-semibold text-fg-1">Earn Copilot</div>
             <div className="text-[11px] text-fg-4">
-              Chief Operating Officer · routes to your 15-specialist team
+              Guide your raise, diligence, LP outreach, and fund execution.
             </div>
           </div>
           <button
@@ -295,10 +402,54 @@ export function EarnDock({ open, onClose }: { open: boolean; onClose: () => void
             </div>
           ) : messages.length === 0 ? (
             <div>
-              <p className="text-[12.5px] leading-relaxed text-fg-3">
-                Ask anything — source a deal, draft an LP note, run diligence. I pull from your
-                workspace and the team&apos;s 15 brains, and nothing executes until you approve.
-              </p>
+              {/* primary prompt + command-first grid */}
+              <h2 className="text-[15.5px] font-semibold tracking-[-0.01em] text-fg-1">
+                What are we moving forward today?
+              </h2>
+              <div className="mt-3 grid grid-cols-5 gap-1.5">
+                {COMMANDS.map((c) => {
+                  const Icon = c.icon;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => runCommand(c)}
+                      title={c.hint}
+                      className="flex flex-col items-center gap-1.5 rounded-[12px] border border-hairline bg-surface-1 px-1 py-2.5 text-center transition hover:border-[var(--gold-line)] hover:bg-[var(--gold-soft)]"
+                    >
+                      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1">
+                        <Icon size={15} strokeWidth={1.9} aria-hidden />
+                      </span>
+                      <span className="text-[11px] font-semibold text-fg-1">{c.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* contextual next-move from live readiness */}
+              {context ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push(context.nextHref ?? context.hubHref);
+                    onClose();
+                  }}
+                  className="mt-3 flex w-full items-center gap-3 rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-soft)] px-3.5 py-3 text-left transition hover:brightness-[1.03]"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                      Where you are · {context.pct}% ready
+                    </span>
+                    <span className="mt-0.5 block truncate text-[12.5px] font-semibold text-fg-1">
+                      {context.nextLabel
+                        ? `Continue ${context.nextLabel}`
+                        : `Open ${context.hubLabel}`}
+                    </span>
+                  </span>
+                  <ArrowRight size={15} className="flex-none text-azure-1" aria-hidden />
+                </button>
+              ) : null}
+
               <div className="mb-2 mt-5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
                 Try
               </div>
