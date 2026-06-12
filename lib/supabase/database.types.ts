@@ -1877,6 +1877,8 @@ export type Database = {
           detail: string | null
           id: string
           org_id: string
+          resolution: string | null
+          resolved_at: string | null
           run_id: string
           score: number | null
           summary: string
@@ -1888,6 +1890,8 @@ export type Database = {
           detail?: string | null
           id?: string
           org_id: string
+          resolution?: string | null
+          resolved_at?: string | null
           run_id: string
           score?: number | null
           summary: string
@@ -1899,6 +1903,8 @@ export type Database = {
           detail?: string | null
           id?: string
           org_id?: string
+          resolution?: string | null
+          resolved_at?: string | null
           run_id?: string
           score?: number | null
           summary?: string
@@ -5078,28 +5084,49 @@ export type Database = {
       }
       compliance_items: {
         Row: {
+          action_label: string | null
           category: string
+          checklist: Json
           created_at: string
+          detail: string | null
+          drives: string | null
+          due_label: string | null
           id: string
+          name: string | null
           org_id: string
+          owner_name: string | null
           severity: string
           status: string
           updated_at: string
         }
         Insert: {
+          action_label?: string | null
           category: string
+          checklist?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id: string
+          owner_name?: string | null
           severity: string
           status?: string
           updated_at?: string
         }
         Update: {
+          action_label?: string | null
           category?: string
+          checklist?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id?: string
+          owner_name?: string | null
           severity?: string
           status?: string
           updated_at?: string
@@ -5117,30 +5144,48 @@ export type Database = {
       ir_items: {
         Row: {
           cat: string
+          category: string | null
+          contents: Json
           created_at: string
+          detail: string | null
+          drives: string | null
           due_at: string | null
           id: string
+          name: string | null
           org_id: string
           status: string
           updated_at: string
+          who: string | null
         }
         Insert: {
           cat: string
+          category?: string | null
+          contents?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
           due_at?: string | null
           id?: string
+          name?: string | null
           org_id: string
           status?: string
           updated_at?: string
+          who?: string | null
         }
         Update: {
           cat?: string
+          category?: string | null
+          contents?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
           due_at?: string | null
           id?: string
+          name?: string | null
           org_id?: string
           status?: string
           updated_at?: string
+          who?: string | null
         }
         Relationships: [
           {

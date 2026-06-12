@@ -5,6 +5,7 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { getAuthUser } from '@/lib/queries/auth';
 import { recordLoopClose } from '@/lib/actions/loop';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 import {
   earnReviewDeal,
   createDiligenceDocumentUpload,
@@ -154,4 +155,67 @@ export async function ingestDiligenceUpload(documentId: string): Promise<IngestU
     const message = err instanceof Error ? err.message : 'Could not index the document.';
     return { ok: false, error: message };
   }
+}
+
+export type ResolveFindingActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Resolve an open diligence workstream — the prototype's "Clear with Earn"
+ * moment. Marks the finding resolved (member-update RLS applies via the
+ * org-scoped client), records the resolution note, and ensures a real Chain
+ * of Trust record exists for the finding. Only flagged/cautioned findings
+ * need resolving; resolving twice is a no-op.
+ */
+export async function resolveDiligenceFinding(input: {
+  runId: string;
+  agent: string;
+  note?: string;
+}): Promise<ResolveFindingActionResult> {
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+
+  const supabase = await createClient();
+
+  const { data: finding, error: findErr } = await supabase
+    .from('diligence_findings')
+    .select('id, org_id, resolved_at, summary')
+    .eq('run_id', input.runId)
+    .eq('agent', input.agent)
+    .eq('org_id', org.orgId)
+    .maybeSingle();
+  if (findErr || !finding) return { ok: false, error: 'Finding not found.' };
+  if (finding.resolved_at) return { ok: true };
+
+  const resolution =
+    input.note?.trim() ||
+    'Resolved by the operator through the approve loop — evidence reviewed and the workstream cleared.';
+
+  const { error: updErr } = await supabase
+    .from('diligence_findings')
+    .update({ resolved_at: new Date().toISOString(), resolution })
+    .eq('id', finding.id);
+  if (updErr) return { ok: false, error: updErr.message };
+
+  // Chain of Trust: one real record per resolved finding (idempotent).
+  const { data: existing } = await supabase
+    .from('chain_of_trust_records')
+    .select('id')
+    .eq('org_id', org.orgId)
+    .eq('entity_type', 'diligence_finding')
+    .eq('entity_id', finding.id)
+    .maybeSingle();
+  if (!existing) {
+    await supabase.from('chain_of_trust_records').insert({
+      org_id: org.orgId,
+      entity_type: 'diligence_finding',
+      entity_id: finding.id,
+      current_layer: 'Proof of Truth',
+      completion_percentage: 100,
+      status: 'active'
+    });
+  }
+
+  revalidatePath(`/run/diligence/${input.runId}`);
+  revalidatePath('/run/diligence');
+  return { ok: true };
 }
