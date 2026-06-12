@@ -1,7 +1,10 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import { parseLpMeta } from '@/lib/pipeline/lp-meta';
 import {
   LP_STAGES,
+  lpValue,
+  normalizeLpStage,
   type LpEntry,
   type LpPipelineData,
   type LpStageColumn,
@@ -13,9 +16,10 @@ import {
  *
  * The LP pipeline is a stage board over `capital_providers` (shared with the
  * Partner Marketplace's capital side): an LP's `status` is its pipeline stage.
- * Returns LPs grouped into the canonical stages with AI-enriched metadata, a
- * lightweight progress score, and roll-up totals. Stage constants + view types
- * live in `lib/pipeline/lp-stages` so the client board can import them too.
+ * Returns LPs grouped into the canonical stages with AI-enriched metadata
+ * (parsed honestly — a missing fit score stays null) and roll-up totals.
+ * Stage constants + view types live in `lib/pipeline/lp-stages` so the client
+ * board can import them too.
  * ========================================================================= */
 
 export {
@@ -26,29 +30,6 @@ export {
   type LpStageColumn,
   type LpPipelineData
 } from '@/lib/pipeline/lp-stages';
-
-const STAGE_PROGRESS: Record<LpStageKey, number> = {
-  prospect: 25,
-  contacted: 50,
-  soft_circled: 75,
-  committed: 100
-};
-
-/** Map a free-form capital_providers.status to a canonical board stage. */
-function normalizeStage(status: string): LpStageKey | 'passed' {
-  const s = (status || '').toLowerCase();
-  if (/(commit|won|closed|funded)/.test(s)) return 'committed';
-  if (/(soft|circle)/.test(s)) return 'soft_circled';
-  if (/(contact|engage|intro|active|warm|meeting)/.test(s)) return 'contacted';
-  if (/(pass|dead|lost|declin|cold)/.test(s)) return 'passed';
-  return 'prospect';
-}
-
-/** A single representative commitment value for an LP (range midpoint). */
-function lpValue(min: number | null, max: number | null): number {
-  if (min != null && max != null) return Math.round((min + max) / 2);
-  return max ?? min ?? 0;
-}
 
 export async function getLpPipeline(orgId: string): Promise<LpPipelineData> {
   const supabase = await createClient();
@@ -68,12 +49,12 @@ export async function getLpPipeline(orgId: string): Promise<LpPipelineData> {
   let totalLps = 0;
 
   for (const row of error ? [] : (data ?? [])) {
-    const normalized = normalizeStage(row.status);
+    const normalized = normalizeLpStage(row.status);
     if (normalized === 'passed') {
       passedCount += 1;
       continue;
     }
-    const meta = (row.criteria as Record<string, unknown> | null) ?? {};
+    const meta = parseLpMeta(row.criteria);
     const min = row.check_size_min;
     const max = row.check_size_max;
     const entry: LpEntry = {
@@ -83,12 +64,14 @@ export async function getLpPipeline(orgId: string): Promise<LpPipelineData> {
       capitalTypes: row.capital_types ?? [],
       checkSizeMin: min,
       checkSizeMax: max,
-      description: typeof meta.description === 'string' ? meta.description : null,
-      fitRationale: typeof meta.fitRationale === 'string' ? meta.fitRationale : null,
-      assignedSpecialist:
-        typeof meta.assignedSpecialist === 'string' ? meta.assignedSpecialist : null,
-      firstTouchNote: typeof meta.firstTouchNote === 'string' ? meta.firstTouchNote : null,
-      fit: STAGE_PROGRESS[normalized],
+      description: meta.description,
+      fitRationale: meta.fitRationale,
+      assignedSpecialist: meta.assignedSpecialist,
+      firstTouchNote: meta.firstTouchNote,
+      fit: meta.fit,
+      warmth: meta.warmth,
+      source: meta.source,
+      lastTouch: meta.lastTouch,
       createdAt: row.created_at
     };
     byStage.get(normalized)!.push(entry);
