@@ -1,11 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DEFAULT_LINK_EXPIRY,
+  LINK_EXPIRY_PRESETS,
   MATERIAL_BUILD,
   MAT_DOCS,
   MAT_LABEL,
   MAT_META,
   buildSteps,
+  expiryTimestamp,
   linkToken,
   materialDefaults,
   materialRows,
@@ -56,6 +59,16 @@ test('buildSteps ends by placing the doc in its folder', () => {
   const steps = buildSteps('deck');
   assert.ok(steps.length >= 2);
   assert.match(steps[steps.length - 1], /Fund Overview/);
+});
+
+test('expiryTimestamp resolves presets and never defaults to "never"', () => {
+  const now = new Date('2026-06-12T00:00:00.000Z');
+  assert.equal(expiryTimestamp('30d', now), '2026-07-12T00:00:00.000Z');
+  assert.equal(expiryTimestamp('90d', now), '2026-09-10T00:00:00.000Z');
+  assert.equal(expiryTimestamp('never', now), null);
+  // Unknown ids fall back to the default preset, not to no-expiry.
+  assert.equal(expiryTimestamp('garbage', now), expiryTimestamp(DEFAULT_LINK_EXPIRY, now));
+  assert.ok(LINK_EXPIRY_PRESETS.some((p) => p.id === DEFAULT_LINK_EXPIRY));
 });
 
 test('linkToken is deterministic under a seeded rng, with two 4-char segments', () => {

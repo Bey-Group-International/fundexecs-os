@@ -70,3 +70,31 @@ export function defaultMaterialSpec(id: string): Record<string, MaterialValue> {
   const cfg = MATERIAL_BUILD[id];
   return cfg ? materialDefaults(cfg) : {};
 }
+
+/* ── viewer rows (`data_room_views`) ─────────────────────────────────────── */
+
+/** Cap on logged views per link — a leaked link can't flood the room. */
+export const VIEWS_PER_LINK_CAP = 500;
+
+/** `data_room_views.viewer` stores "Name · email"; split it for display. */
+export function splitStoredViewer(viewer: string): { name: string; email: string | null } {
+  const sep = viewer.lastIndexOf(' · ');
+  if (sep < 0) return { name: viewer, email: null };
+  return { name: viewer.slice(0, sep), email: viewer.slice(sep + 3) || null };
+}
+
+/** Viewer-supplied name: strip control characters, collapse whitespace. */
+export function sanitizeViewerName(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+/** Viewer-supplied email, normalized as the dedupe key. */
+export function normalizeViewerEmail(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw.trim().toLowerCase().slice(0, 200);
+}

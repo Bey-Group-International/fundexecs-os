@@ -11,6 +11,7 @@ import {
   FolderLock,
   Info,
   Link2,
+  LinkIcon,
   Loader2,
   Sparkles,
   TriangleAlert,
@@ -22,14 +23,18 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { Select } from '@/components/ui/Select';
 import { SegTabs } from '@/components/ui/Tabs';
-import { generateMaterialLink } from '@/lib/dataroom/actions';
+import { generateMaterialLink, revokeMaterialLink } from '@/lib/dataroom/actions';
 import {
+  DEFAULT_LINK_EXPIRY,
   DR_PROSPECTS,
+  LINK_EXPIRY_PRESETS,
   MAT_DOCS,
   MAT_LABEL,
   MAT_META,
   MAT_TONE,
+  expiryTimestamp,
   type MaterialStage,
   type MaterialValue
 } from '@/lib/dataroom/config';
@@ -54,6 +59,9 @@ interface PreviewViewer {
 interface DocLink {
   token: string;
   vetting: string;
+  /** Set when the link has an expiry; in the past = revoked/expired. */
+  expiresAt: string | null;
+  expired: boolean;
   /** Real logged views (from data_room_views). */
   viewers: { name: string; email: string | null; verifiedAt: string | null }[];
   /** Session-only recipient previews — never persisted. */
@@ -85,6 +93,7 @@ export function DataRoomFlow({
   );
   const [linkPending, setLinkPending] = useState<string | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [expiryChoice, setExpiryChoice] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [gate, setGate] = useState<string | null>(null);
   const [prospIdx, setProspIdx] = useState(0);
@@ -115,14 +124,22 @@ export function DataRoomFlow({
 
   function generateLink(id: string) {
     const name = MAT_LABEL[id];
+    const expiry = expiryChoice[id] ?? DEFAULT_LINK_EXPIRY;
     setLinkPending(id);
     setLinkError(null);
-    generateMaterialLink(id)
+    generateMaterialLink(id, expiry)
       .then((res) => {
         if (res.ok && res.token) {
           setLinks((p) => ({
             ...p,
-            [id]: { token: res.token!, vetting: 'Accredited + NDA', viewers: [], previews: [] }
+            [id]: {
+              token: res.token!,
+              vetting: 'Accredited + NDA',
+              expiresAt: expiryTimestamp(expiry),
+              expired: false,
+              viewers: p[id]?.viewers ?? [],
+              previews: []
+            }
           }));
           logActivity('You', `generated a secure link for ${name}`, 'link');
         } else if (!res.ok) {
@@ -130,6 +147,26 @@ export function DataRoomFlow({
         }
       })
       .catch(() => setLinkError('Could not generate the link — try again.'))
+      .finally(() => setLinkPending(null));
+  }
+
+  function revokeLink(id: string) {
+    const name = MAT_LABEL[id];
+    setLinkPending(id);
+    setLinkError(null);
+    revokeMaterialLink(id)
+      .then((res) => {
+        if (res.ok) {
+          setLinks((p) => ({
+            ...p,
+            [id]: { ...p[id], expired: true, expiresAt: new Date().toISOString() }
+          }));
+          logActivity('You', `revoked the secure link for ${name}`, 'link');
+        } else {
+          setLinkError(res.error);
+        }
+      })
+      .catch(() => setLinkError('Could not revoke the link — try again.'))
       .finally(() => setLinkPending(null));
   }
 
@@ -328,55 +365,106 @@ export function DataRoomFlow({
                             </div>
                             <div className="text-[10.5px] text-fg-5">{doc.folder} · Built here</div>
                           </div>
-                          {link ? (
+                          {link && !link.expired ? (
                             <span className="inline-flex flex-none items-center gap-1.5 text-[10.5px] font-semibold text-success">
                               <CheckCircle2 size={12} aria-hidden />
                               Link live
+                              {link.expiresAt && (
+                                <span className="font-normal text-fg-5">
+                                  · expires {new Date(link.expiresAt).toLocaleDateString()}
+                                </span>
+                              )}
                             </span>
                           ) : (
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              icon={linkPending === doc.key ? Loader2 : Link2}
-                              disabled={linkPending === doc.key}
-                              onClick={() => generateLink(doc.key)}
-                            >
-                              {linkPending === doc.key ? 'Generating…' : 'Generate link'}
-                            </Button>
+                            <span className="flex flex-none items-center gap-2">
+                              {link?.expired && (
+                                <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-warning">
+                                  <TriangleAlert size={12} aria-hidden />
+                                  Revoked
+                                </span>
+                              )}
+                              <Select
+                                aria-label={`Link expiry for ${doc.name}`}
+                                options={LINK_EXPIRY_PRESETS.map((pr) => ({
+                                  value: pr.id,
+                                  label: pr.label
+                                }))}
+                                value={expiryChoice[doc.key] ?? DEFAULT_LINK_EXPIRY}
+                                onChange={(e) =>
+                                  setExpiryChoice((p) => ({ ...p, [doc.key]: e.target.value }))
+                                }
+                                className="w-auto py-1.5 text-[11.5px]"
+                              />
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                icon={linkPending === doc.key ? Loader2 : Link2}
+                                disabled={linkPending === doc.key}
+                                onClick={() => generateLink(doc.key)}
+                              >
+                                {linkPending === doc.key
+                                  ? 'Generating…'
+                                  : link?.expired
+                                    ? 'New link'
+                                    : 'Generate link'}
+                              </Button>
+                            </span>
                           )}
                         </div>
                         {link && (
                           <div className="mt-2.5 border-t border-[var(--border-faint)] pt-2.5">
                             <div className="flex flex-wrap items-center gap-2">
-                              <a
-                                href={`/dr/${link.token}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="rounded-[7px] border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2 py-0.5 font-mono text-[11px] text-[var(--accent)] hover:underline"
-                              >
-                                {host}/dr/{link.token}
-                              </a>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                icon={copied === doc.key ? CheckCircle2 : Copy}
-                                onClick={() => copyLink(doc.key, link.token)}
-                              >
-                                {copied === doc.key ? 'Copied' : 'Copy'}
-                              </Button>
+                              {link.expired ? (
+                                <span className="rounded-[7px] border border-hairline bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-fg-5 line-through">
+                                  {host}/dr/{link.token}
+                                </span>
+                              ) : (
+                                <>
+                                  <a
+                                    href={`/dr/${link.token}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="rounded-[7px] border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2 py-0.5 font-mono text-[11px] text-[var(--accent)] hover:underline"
+                                  >
+                                    {host}/dr/{link.token}
+                                  </a>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon={copied === doc.key ? CheckCircle2 : Copy}
+                                    onClick={() => copyLink(doc.key, link.token)}
+                                  >
+                                    {copied === doc.key ? 'Copied' : 'Copy'}
+                                  </Button>
+                                </>
+                              )}
                               <span className="inline-flex items-center gap-1 text-[10.5px] text-fg-4">
                                 <CheckCircle2 size={12} className="text-gold-1" aria-hidden />
                                 Vets: {link.vetting}
                               </span>
                               <span className="flex-1" />
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                icon={ExternalLink}
-                                onClick={() => setGate(doc.key)}
-                              >
-                                Preview as recipient
-                              </Button>
+                              {!link.expired && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon={ExternalLink}
+                                    onClick={() => setGate(doc.key)}
+                                  >
+                                    Preview as recipient
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon={linkPending === doc.key ? Loader2 : LinkIcon}
+                                    disabled={linkPending === doc.key}
+                                    className="text-danger"
+                                    onClick={() => revokeLink(doc.key)}
+                                  >
+                                    Revoke
+                                  </Button>
+                                </>
+                              )}
                             </div>
                             <div className="mt-2">
                               <div className="mb-1.5 text-[10.5px] text-fg-5">
@@ -395,7 +483,7 @@ export function DataRoomFlow({
                                   </div>
                                   <span className="inline-flex flex-none items-center gap-1 text-[10px] font-semibold text-success">
                                     <CheckCircle2 size={11} aria-hidden />
-                                    Vetted
+                                    Attested
                                   </span>
                                   {v.verifiedAt && (
                                     <span className="flex-none text-[10.5px] text-fg-5">
@@ -435,7 +523,8 @@ export function DataRoomFlow({
               {realViewers.length === 0 ? (
                 <p className="px-0.5 py-2 text-[12px] leading-relaxed text-fg-5">
                   No LPs have been through a link yet. Share a vetted link and every recipient
-                  appears here the moment they verify — accredited + NDA, logged and watermarked.
+                  appears here the moment they pass the gate — accredited + NDA attested, every view
+                  logged.
                 </p>
               ) : (
                 <div className="flex flex-col gap-1.5">
@@ -450,13 +539,13 @@ export function DataRoomFlow({
                           {v.name}
                         </div>
                         <div className="truncate text-[10.5px] text-fg-5">
-                          {v.email ?? 'Vetted'}
+                          {v.email ?? 'Access logged'}
                           {v.verifiedAt ? ` · ${relTime(v.verifiedAt)}` : ''}
                         </div>
                       </div>
                       <span className="inline-flex flex-none items-center gap-1 text-[10px] font-semibold text-success">
                         <CheckCircle2 size={11} aria-hidden />
-                        Verified
+                        Attested
                       </span>
                     </div>
                   ))}

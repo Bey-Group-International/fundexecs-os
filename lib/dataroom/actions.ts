@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import type { Json } from '@/lib/supabase/database.types';
-import { MAT_LABEL } from './config';
+import { MAT_LABEL, expiryTimestamp } from './config';
 import { MATERIAL_DB_KIND, isMaterialId, sanitizeMaterialSpec } from './persistence';
 
 /**
@@ -64,8 +64,12 @@ export async function buildMaterial(id: string, spec: unknown): Promise<DataRoom
   return { ok: true };
 }
 
-/** Generate (or return) the vetted share link for a built material. */
-export async function generateMaterialLink(id: string): Promise<DataRoomActionResult> {
+/** Generate (or return) the live vetted share link for a built material.
+ *  Expired/revoked links are never reused — a fresh token is minted. */
+export async function generateMaterialLink(
+  id: string,
+  expiry?: string
+): Promise<DataRoomActionResult> {
   if (!isMaterialId(id)) return { ok: false, error: 'Unknown material.' };
 
   const org = await getActiveOrg();
@@ -74,12 +78,15 @@ export async function generateMaterialLink(id: string): Promise<DataRoomActionRe
   const supabase = await createClient();
   const label = MAT_LABEL[id];
   const kind = MATERIAL_DB_KIND[id];
+  const nowIso = new Date().toISOString();
+  const live = `expires_at.is.null,expires_at.gt.${nowIso}`;
 
   const { data: existing } = await supabase
     .from('data_room_links')
     .select('token')
     .eq('org_id', org.orgId)
     .eq('material_kind', kind)
+    .or(live)
     .limit(1)
     .maybeSingle();
   if (existing) return { ok: true, token: existing.token };
@@ -92,6 +99,7 @@ export async function generateMaterialLink(id: string): Promise<DataRoomActionRe
     .eq('org_id', org.orgId)
     .is('material_kind', null)
     .eq('label', label)
+    .or(live)
     .limit(1)
     .maybeSingle();
   if (legacy) {
@@ -99,16 +107,41 @@ export async function generateMaterialLink(id: string): Promise<DataRoomActionRe
     return { ok: true, token: legacy.token };
   }
 
-  const token = randomBytes(6).toString('base64url');
+  // 128-bit token: possession of the URL is the access credential.
+  const token = randomBytes(16).toString('base64url');
   const { error } = await supabase.from('data_room_links').insert({
     org_id: org.orgId,
     label,
     material_kind: kind,
     token,
-    vetting: 'nda'
+    vetting: 'nda',
+    expires_at: expiryTimestamp(expiry ?? '')
   });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/build/data-room');
   return { ok: true, token };
+}
+
+/** Kill a material's live share link(s) now. The public route already honors
+ *  `expires_at`, so revocation is immediate; logged views stay on the record. */
+export async function revokeMaterialLink(id: string): Promise<DataRoomActionResult> {
+  if (!isMaterialId(id)) return { ok: false, error: 'Unknown material.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active workspace.' };
+
+  const supabase = await createClient();
+  const nowIso = new Date().toISOString();
+
+  const { error } = await supabase
+    .from('data_room_links')
+    .update({ expires_at: nowIso })
+    .eq('org_id', org.orgId)
+    .eq('material_kind', MATERIAL_DB_KIND[id])
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/build/data-room');
+  return { ok: true };
 }

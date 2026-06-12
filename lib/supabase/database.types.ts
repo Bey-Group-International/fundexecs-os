@@ -4551,6 +4551,7 @@ export type Database = {
           updated_at: string
           verified_at: string | null
           viewer: string
+          viewer_email: string | null
         }
         Insert: {
           created_at?: string
@@ -4560,6 +4561,7 @@ export type Database = {
           updated_at?: string
           verified_at?: string | null
           viewer: string
+          viewer_email?: string | null
         }
         Update: {
           created_at?: string
@@ -4569,6 +4571,7 @@ export type Database = {
           updated_at?: string
           verified_at?: string | null
           viewer?: string
+          viewer_email?: string | null
         }
         Relationships: [
           {

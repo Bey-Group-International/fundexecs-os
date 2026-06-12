@@ -133,8 +133,8 @@ export function VettingGate({
               </div>
               <div className="mt-1.5 text-[12.5px] text-fg-3">
                 This is what a recipient sees: verify identity to unlock{' '}
-                <span className="font-semibold text-fg-1">{docName}</span>. Access is logged and
-                watermarked.
+                <span className="font-semibold text-fg-1">{docName}</span>. Every access is logged
+                for your records.
               </div>
             </div>
             <div className="flex flex-col gap-3">
@@ -213,15 +213,15 @@ export function VettingGate({
               Verified — {docName} unlocked
             </div>
             <div className="mx-auto mt-1.5 max-w-[36ch] text-[12.5px] text-fg-3">
-              Welcome, {name}. The document opens watermarked, and access is logged for {firm} —
-              this preview shows the flow without recording anything.
+              Welcome, {name}. Access is logged for {firm}&rsquo;s records — this preview shows the
+              flow without recording anything.
             </div>
             <div className="my-4 flex items-center gap-2.5 rounded-[12px] border border-hairline bg-surface-1 px-3.5 py-3 text-left">
               <FileText size={18} className="text-gold-1" aria-hidden />
               <div className="min-w-0 flex-1">
                 <div className="text-[12.5px] font-semibold text-fg-1">{docName}</div>
                 <div className="text-[10.5px] text-fg-5">
-                  Watermarked · {name} · {pfirm}
+                  Access logged · {name} · {pfirm}
                 </div>
               </div>
               <Eye size={16} className="text-fg-4" aria-hidden />
