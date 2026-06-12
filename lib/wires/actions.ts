@@ -1,18 +1,33 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/database.types';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
-import { canResolveSignature, isWireDirection, nextWireStatus } from './vocabulary';
+import {
+  canChaseSignature,
+  canMarkSignaturePartial,
+  canResolveSignature,
+  isWireDirection,
+  nextWireStatus,
+  stagedWireStatus
+} from './vocabulary';
 
 /**
  * lib/wires/actions.ts — the Signatures & wires room's mutations.
  *
  * Operator-driven through the approve loop; member-scoped through RLS
  * (20260611280000). Gates are enforced server-side: a signature resolves
- * exactly once, and a wire advances strictly one stage at a time
- * (instructed → sent → settled) — the same one-stage discipline as every
- * other hub interior.
+ * exactly once (awaiting/partial → signed/declined), and a wire clears in
+ * exactly one transition (staged → cleared on release, expected → cleared
+ * on confirm) — the prototype's choreography, made law here.
+ *
+ * Honesty contracts (EXECUTE_TABS_PLAYBOOK): everything here is
+ * record-keeping + attestation. Marking signed records that the document
+ * was executed outside FundExecs OS; clearing a wire records that money
+ * moved at the bank — none moves through this system. Terminal events log
+ * a real Proof of Execution row to the Chain of Trust ledger.
  */
 
 export type WiresActionResult = { ok: true; id: string } | { ok: false; error: string };
@@ -23,7 +38,54 @@ function clean(value: string | null | undefined, max = MAX_TEXT): string {
   return (value ?? '').trim().slice(0, max);
 }
 
-/** Send a document out for signature (optionally tied to an open closing). */
+/**
+ * "Log to Chain of Trust" — the prototype's final run step, made real.
+ * One idempotent Proof of Execution record per completed entity (the same
+ * house pattern as diligence-finding resolutions). Best-effort: the ledger
+ * row must never block the attestation itself.
+ */
+async function logExecutionProof(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  entityType: 'signature' | 'wire',
+  entityId: string
+): Promise<void> {
+  try {
+    const { data: existing } = await supabase
+      .from('chain_of_trust_records')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId)
+      .maybeSingle();
+    if (existing) return;
+    await supabase.from('chain_of_trust_records').insert({
+      org_id: orgId,
+      entity_type: entityType,
+      entity_id: entityId,
+      current_layer: 'Proof of Execution',
+      completion_percentage: 100,
+      status: 'active'
+    });
+  } catch {
+    // best-effort — the attestation already landed
+  }
+}
+
+function refreshWires() {
+  revalidatePath('/execute/wires');
+  revalidatePath('/execute/chain-of-trust');
+  revalidatePath('/execute');
+}
+
+/**
+ * Send a document out for signature (optionally tied to an open closing).
+ *
+ * E-SIGN HOOK POINT: when the DocuSign slice lands, this is where the
+ * envelope gets created and sent; the row's status keeps tracking the
+ * envelope's lifecycle. Until then the document moves outside FundExecs OS
+ * and this records that it went out.
+ */
 export async function sendSignature(input: {
   document: string;
   signer: string;
@@ -51,12 +113,15 @@ export async function sendSignature(input: {
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? 'Could not send it out.' };
 
-  revalidatePath('/execute/wires');
-  revalidatePath('/execute');
+  refreshWires();
   return { ok: true, id: data.id };
 }
 
-/** Record a signature's resolution — signed or declined, exactly once. */
+/**
+ * Record a signature's resolution — signed or declined, exactly once.
+ * Signed is an attestation that the document was executed outside
+ * FundExecs OS; it logs a Proof of Execution record to the Chain of Trust.
+ */
 export async function resolveSignature(input: {
   signatureId: string;
   outcome: 'signed' | 'declined';
@@ -89,16 +154,93 @@ export async function resolveSignature(input: {
       updated_at: new Date().toISOString()
     })
     .eq('id', sig.id)
-    .eq('org_id', org.orgId);
+    .eq('org_id', org.orgId)
+    // Concurrency guard: resolve only from the state we just read.
+    .eq('status', sig.status);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath('/execute/wires');
-  revalidatePath('/execute');
+  if (input.outcome === 'signed') {
+    await logExecutionProof(supabase, org.orgId, 'signature', sig.id);
+  }
+
+  refreshWires();
   return { ok: true, id: sig.id };
 }
 
-/** Stage a wire instruction (optionally tied to an open closing). */
-export async function instructWire(input: {
+/** Record that some signers are in but not all — awaiting → partial. */
+export async function markSignaturePartial(input: {
+  signatureId: string;
+}): Promise<WiresActionResult> {
+  if (!input.signatureId) return { ok: false, error: 'Missing signature.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active workspace.' };
+
+  const supabase = await createClient();
+  const { data: sig } = await supabase
+    .from('signatures')
+    .select('id, status')
+    .eq('id', input.signatureId)
+    .eq('org_id', org.orgId)
+    .maybeSingle();
+  if (!sig) return { ok: false, error: 'Signature not found.' };
+  if (!canMarkSignaturePartial(sig.status)) {
+    return { ok: false, error: 'Only an awaiting document can turn partial.' };
+  }
+
+  const { error } = await supabase
+    .from('signatures')
+    .update({ status: 'partial', updated_at: new Date().toISOString() })
+    .eq('id', sig.id)
+    .eq('org_id', org.orgId)
+    .eq('status', sig.status);
+  if (error) return { ok: false, error: error.message };
+
+  refreshWires();
+  return { ok: true, id: sig.id };
+}
+
+/**
+ * Chase the outstanding countersigners on a partial document. Records the
+ * chase on the ledger (`chased_at`); the reminder itself travels outside
+ * FundExecs OS until e-sign is connected (see the hook point above).
+ */
+export async function chaseSignature(input: { signatureId: string }): Promise<WiresActionResult> {
+  if (!input.signatureId) return { ok: false, error: 'Missing signature.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active workspace.' };
+
+  const supabase = await createClient();
+  const { data: sig } = await supabase
+    .from('signatures')
+    .select('id, status')
+    .eq('id', input.signatureId)
+    .eq('org_id', org.orgId)
+    .maybeSingle();
+  if (!sig) return { ok: false, error: 'Signature not found.' };
+  if (!canChaseSignature(sig.status)) {
+    return { ok: false, error: 'Only a partial document gets chased.' };
+  }
+
+  const { error } = await supabase
+    .from('signatures')
+    .update({ chased_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', sig.id)
+    .eq('org_id', org.orgId);
+  if (error) return { ok: false, error: error.message };
+
+  refreshWires();
+  return { ok: true, id: sig.id };
+}
+
+/**
+ * Stage a wire on the ledger (optionally tied to an open closing).
+ * Outbound wires stage as `staged` (awaiting release); inbound as
+ * `expected` (awaiting confirmation of receipt). This RECORDS the wire —
+ * no money moves through FundExecs OS.
+ */
+export async function stageWire(input: {
   direction: string;
   amount: number;
   counterparty: string;
@@ -125,19 +267,23 @@ export async function instructWire(input: {
       amount: input.amount,
       counterparty,
       reference: clean(input.reference) || null,
-      status: 'instructed'
+      status: stagedWireStatus(input.direction)
     })
     .select('id')
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? 'Could not stage the wire.' };
 
-  revalidatePath('/execute/wires');
-  revalidatePath('/execute');
+  refreshWires();
   return { ok: true, id: data.id };
 }
 
-/** Advance a wire exactly one stage (instructed → sent → settled). */
-export async function advanceWire(input: { wireId: string }): Promise<WiresActionResult> {
+/**
+ * Clear a wire — release (staged → cleared) or confirm receipt
+ * (expected → cleared), exactly one transition, server-enforced. The
+ * operator attests against their bank; clearing records it and logs a
+ * Proof of Execution row to the Chain of Trust.
+ */
+export async function clearWire(input: { wireId: string }): Promise<WiresActionResult> {
   if (!input.wireId) return { ok: false, error: 'Missing wire.' };
 
   const org = await getActiveOrg();
@@ -157,9 +303,9 @@ export async function advanceWire(input: { wireId: string }): Promise<WiresActio
     return {
       ok: false,
       error:
-        wire.status === 'settled'
-          ? 'This wire is already settled.'
-          : `Cannot advance from "${wire.status}".`
+        wire.status === 'cleared'
+          ? 'This wire is already cleared.'
+          : `Cannot clear from "${wire.status}".`
     };
   }
 
@@ -167,16 +313,17 @@ export async function advanceWire(input: { wireId: string }): Promise<WiresActio
     .from('wires')
     .update({
       status: next,
-      settled_at: next === 'settled' ? new Date().toISOString() : null,
+      settled_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
     .eq('id', wire.id)
     .eq('org_id', org.orgId)
-    // Concurrency guard: only advance from the stage we just read.
+    // Concurrency guard: only clear from the status we just read.
     .eq('status', wire.status);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath('/execute/wires');
-  revalidatePath('/execute');
+  await logExecutionProof(supabase, org.orgId, 'wire', wire.id);
+
+  refreshWires();
   return { ok: true, id: wire.id };
 }

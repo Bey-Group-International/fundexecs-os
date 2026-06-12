@@ -295,6 +295,40 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
   const recordIds = records.map((r) => r.id);
   const dealById = new Map(deals.map((d) => [d.id, d]));
 
+  // Real titles for execution-attestation records (the Signatures & wires
+  // room logs `signature` / `wire` rows). Best-effort: a miss falls back to
+  // the generic entity label below.
+  const sigIds = records.filter((r) => r.entity_type === 'signature').map((r) => r.entity_id);
+  const wireIds = records.filter((r) => r.entity_type === 'wire').map((r) => r.entity_id);
+  const signatureTitle = new Map<string, string>();
+  const wireTitle = new Map<string, string>();
+  if (sigIds.length > 0) {
+    const { data } = await supabase
+      .from('signatures')
+      .select('id, document, signer')
+      .in('id', sigIds);
+    for (const s of (data ?? []) as { id: string; document: string; signer: string }[]) {
+      signatureTitle.set(s.id, `${s.document} — signed (${s.signer})`);
+    }
+  }
+  if (wireIds.length > 0) {
+    const { data } = await supabase
+      .from('wires')
+      .select('id, direction, amount, counterparty')
+      .in('id', wireIds);
+    for (const w of (data ?? []) as {
+      id: string;
+      direction: string;
+      amount: number;
+      counterparty: string;
+    }[]) {
+      wireTitle.set(
+        w.id,
+        `${w.direction === 'out' ? 'Outbound' : 'Inbound'} wire cleared — ${w.counterparty}`
+      );
+    }
+  }
+
   // Layers for every record. (Event history is owned by the Audit Trail at
   // /audit — the Trust Center deliberately does not re-render that log.)
   // Skip the lookup for a deals-only org (no records → nothing to fetch).
@@ -373,6 +407,20 @@ export async function getTrustCenterData(orgId: string): Promise<TrustCenterData
     if (rec.entity_type === 'member_profile') return 'Member Proof of Truth';
     if (rec.entity_type === 'objective') return `Objective · ${rec.entity_id.slice(0, 8)}`;
     if (rec.entity_type === 'org') return 'Organization chain';
+    if (rec.entity_type === 'signature') {
+      return (
+        signatureTitle.get(rec.entity_id) ?? `Signature attested · ${rec.entity_id.slice(0, 8)}`
+      );
+    }
+    if (rec.entity_type === 'wire') {
+      return wireTitle.get(rec.entity_id) ?? `Wire cleared · ${rec.entity_id.slice(0, 8)}`;
+    }
+    if (rec.entity_type === 'diligence_finding') {
+      return `Diligence finding resolved · ${rec.entity_id.slice(0, 8)}`;
+    }
+    if (rec.entity_type === 'formation_step') {
+      return `Formation step filed · ${rec.entity_id.slice(0, 8)}`;
+    }
     return `${rec.entity_type} · ${rec.entity_id.slice(0, 8)}`;
   }
   function capitalFor(rec: (typeof records)[number]): number {
