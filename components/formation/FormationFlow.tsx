@@ -1103,7 +1103,7 @@ function FormationComplete({
       <Card className="p-[18px]">
         <div className="mb-3.5 flex items-center justify-between gap-3">
           <div>
-            <Eyebrow>7 documents · on your fund record</Eyebrow>
+            <Eyebrow>7 documents · logged to your Chain of Trust</Eyebrow>
             <div className="mt-0.5 text-[14.5px] font-semibold text-fg-1">On the record</div>
           </div>
           <Button variant="ghost" size="sm" icon={FolderOpen} onClick={onReview}>
@@ -1132,7 +1132,10 @@ function FormationComplete({
       </Card>
 
       <Card className="p-[18px]">
-        <Eyebrow className="mb-3.5">Your fund is investable — next in your lifecycle</Eyebrow>
+        <Eyebrow>Your fund is investable — next in your lifecycle</Eyebrow>
+        <h2 className="mb-3.5 mt-0.5 text-[14.5px] font-semibold tracking-[-0.01em] text-fg-1">
+          What this unlocks
+        </h2>
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           {unlocks.map((u) => {
             const t = COMPLETE_TONE[u.tone];
@@ -1304,6 +1307,16 @@ export function FormationFlow({
         <Badge tone="warning" className="text-[10px]">
           Illustrative
         </Badge>
+        {firstOpenId && (
+          <Button
+            variant="gold"
+            size="sm"
+            iconRight={ArrowRight}
+            onClick={() => openItem(firstOpenId)}
+          >
+            {completedCount === 0 ? 'Start formation' : 'Continue formation'}
+          </Button>
+        )}
       </div>
 
       <ProgressBar
@@ -1311,6 +1324,11 @@ export function FormationFlow({
         height={6}
         label="Formation progress"
       />
+
+      <p className="flex items-center gap-2 text-[12px] text-fg-4">
+        <Info size={13} className="flex-none text-gold-1" aria-hidden />
+        Each step is copiloted — you decide, Earn drafts. Stop and pick back up anytime.
+      </p>
 
       <Card className="flex flex-col gap-1.5 p-3">
         {items.map((item, i) => {
@@ -1428,6 +1446,9 @@ function FormationStory({ firm, onBegin }: { firm: string; onBegin: () => void }
           <Route size={14} className="text-fg-4" aria-hidden />
           <Eyebrow>The path to a formed fund · seven steps</Eyebrow>
         </div>
+        <h2 className="text-[14.5px] font-semibold tracking-[-0.01em] text-fg-1">
+          What we&rsquo;ll do together
+        </h2>
         <div className="mt-2 flex flex-col">
           {FORMATION_ARC.map((s, i) => {
             const Ico = iconFor(s.icon);
