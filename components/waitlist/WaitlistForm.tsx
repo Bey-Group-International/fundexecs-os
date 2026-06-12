@@ -139,7 +139,7 @@ export default function WaitlistForm() {
           <h1
             style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', margin: '0 0 10px' }}
           >
-            You're already in.
+            You&apos;re already in.
           </h1>
         ) : (
           <h1
@@ -223,7 +223,7 @@ export default function WaitlistForm() {
               ? ['Claim your airdrop', 'Head to /airdrop to claim your early-access privileges.']
               : null
           ]
-            .filter(Boolean)
+            .filter((item): item is string[] => item !== null)
             .map(([title, sub]) => (
               <div key={title as string} style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                 <span
