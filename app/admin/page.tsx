@@ -4,8 +4,13 @@ import { redirect } from 'next/navigation';
 import { Download, FileClock } from 'lucide-react';
 import { requirePlatformAdmin } from '@/lib/access.server';
 import { getAccessApplicants } from '@/lib/queries/admin-access';
+import { getAdminMetrics } from '@/lib/queries/admin-metrics';
+import { getBetaInvites } from '@/lib/queries/beta-invites';
+import { getActiveOrg } from '@/lib/queries/org';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { AccessInbox } from './AccessInbox';
+import { BetaInvitesPanel } from './BetaInvitesPanel';
+import { MetricsStrip } from './MetricsStrip';
 
 export const metadata: Metadata = { title: 'Admin · Beta access' };
 
@@ -15,14 +20,19 @@ export const dynamic = 'force-dynamic';
 /**
  * Admin portal — beta access control. Platform-admin (Bey Group) only: the gate
  * runs first and bounces anyone else to their command center. Surfaces the
- * Applications inbox (approve / decline / reset) over the enforced
- * `member_profiles.access_status` gate, plus a one-click CSV export of the
- * whole applicant list.
+ * platform-health strip, the Applications inbox (approve / decline / reset) over
+ * the enforced `member_profiles.access_status` gate, invite-by-email, plus
+ * one-click CSV exports (applicants + audit log).
  */
 export default async function AdminPage() {
   if (!(await requirePlatformAdmin())) redirect('/command-center');
 
-  const applicants = await getAccessApplicants();
+  const org = await getActiveOrg();
+  const [applicants, metrics, invites] = await Promise.all([
+    getAccessApplicants(),
+    org ? getAdminMetrics(org.orgId) : Promise.resolve(null),
+    org ? getBetaInvites(org.orgId) : Promise.resolve([])
+  ]);
   const pendingCount = applicants.filter((a) => a.access === 'pending').length;
 
   return (
@@ -58,6 +68,8 @@ export default async function AdminPage() {
       </header>
 
       <div className="mx-auto max-w-[960px] px-6 py-8">
+        {metrics && <MetricsStrip metrics={metrics} />}
+
         <div className="mb-6">
           <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Applications</h1>
           <p className="mt-1 text-[13px] text-fg-3">
@@ -68,6 +80,8 @@ export default async function AdminPage() {
         </div>
 
         <AccessInbox applicants={applicants} />
+
+        <BetaInvitesPanel invites={invites} />
       </div>
     </main>
   );
