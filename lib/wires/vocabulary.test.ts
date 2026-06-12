@@ -5,6 +5,7 @@ import {
   canMarkSignaturePartial,
   canResolveSignature,
   clearWireVerb,
+  isValidWirePair,
   isWireDirection,
   isWireStatus,
   nextWireStatus,
@@ -74,6 +75,17 @@ test('direction guard accepts only in/out', () => {
   assert.equal(isWireDirection('sideways'), false);
 });
 
+test('isValidWirePair allows only direction-appropriate states', () => {
+  assert.equal(isValidWirePair('out', 'staged'), true);
+  assert.equal(isValidWirePair('out', 'cleared'), true);
+  assert.equal(isValidWirePair('out', 'expected'), false);
+  assert.equal(isValidWirePair('in', 'expected'), true);
+  assert.equal(isValidWirePair('in', 'cleared'), true);
+  assert.equal(isValidWirePair('in', 'staged'), false);
+  assert.equal(isValidWirePair('sideways', 'cleared'), false);
+  assert.equal(isValidWirePair('out', 'junk'), false);
+});
+
 test('wireTotals accounts cleared wires only and nets directions', () => {
   const totals = wireTotals([
     { direction: 'in', amount: 1_000_000, status: 'cleared' },
@@ -81,7 +93,10 @@ test('wireTotals accounts cleared wires only and nets directions', () => {
     { direction: 'out', amount: 400_000, status: 'cleared' },
     { direction: 'out', amount: 50_000, status: 'staged' },
     { direction: 'in', amount: -5, status: 'cleared' },
-    { direction: 'in', amount: 99, status: 'junk' }
+    { direction: 'in', amount: 99, status: 'junk' },
+    // impossible direction/status pairs — must be ignored
+    { direction: 'out', amount: 5_000_000, status: 'expected' },
+    { direction: 'in', amount: 5_000_000, status: 'staged' }
   ]);
   assert.equal(totals.clearedIn, 1_000_000);
   assert.equal(totals.clearedOut, 400_000);
