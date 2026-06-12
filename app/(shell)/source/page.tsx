@@ -1,9 +1,9 @@
-import type { Metadata } from 'next';
-import { HubPage } from '@/components/hubs/HubPage';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Source' };
-
-/** SOURCE — find & raise: pipeline, LP targets, partners, lead engine. */
+/**
+ * /source resolves to the hub's first tab — the prototype opens SourceHub on
+ * the LP Capital Map. The hub chrome lives in ./layout.tsx.
+ */
 export default function SourceHubPage() {
-  return <HubPage id="source" />;
+  redirect('/source/capital-map');
 }
