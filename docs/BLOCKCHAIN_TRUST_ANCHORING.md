@@ -15,13 +15,39 @@ confidential information ever leaves the system.**
 
 ## 1. The decision (locked)
 
-| Question                         | Decision                                                          |
-| -------------------------------- | ----------------------------------------------------------------- |
-| Where does blockchain add value? | **Anchor the Chain of Trust** (Stages 1 & 7 of the lifecycle)     |
-| Custody posture                  | **Anchor-only** — never hold tokens, securities, or funds         |
-| Infrastructure                   | **Public L2** (e.g. Base / Polygon) — anchor a hash, nothing else |
-| Scope now                        | **Ship an anchoring MVP** — additive to the existing trust flow   |
-| Hard constraint                  | **No confidential information is ever disclosed on-chain**        |
+| Question                         | Decision                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| Where does blockchain add value? | **Anchor the Chain of Trust** (Stages 1 & 7 of the lifecycle)                  |
+| Custody posture                  | **Anchor-only** — never hold tokens, securities, or funds                      |
+| Infrastructure                   | **Internal-first.** Public L2 (e.g. Base / Polygon) is an optional later step  |
+| Trust ceiling                    | **Internal now, external witness optional later** — no third-party dependency  |
+| Scope now                        | **Ship an anchoring MVP** — fully internal, additive to the existing trust flow|
+| Hard constraint                  | **No confidential information is ever disclosed** (and nothing public until/unless the witness is enabled) |
+
+### Internal-first, witness-later (the key architectural call)
+
+Two distinct guarantees were bundled inside "anchoring":
+
+- **Tamper-_evident_ integrity** — detect if any historical record was altered,
+  and prove integrity to anyone who trusts our infrastructure. **Fully
+  achievable internally**: zero third parties, no chain RPC, no gas key, no
+  external compliance sign-off.
+- **Tamper-_proof_ external verifiability** — let an LP/auditor prove _we_ did
+  not rewrite history _without trusting us_. This is impossible with internal
+  storage alone (the operator can always recompute the chain) — it requires at
+  least one **witness we do not control**.
+
+Decision: **build the entire structure internally now** (hash chain + salted
+Merkle commitments + verify UX), and keep the external witness as a **dormant,
+one-config switch**. We get tamper-evidence and the full verify experience
+immediately; upgrading to the "don't trust us" guarantee later is a provider
+swap with **no schema or UX change**. The external witness, if ever enabled, is
+a single ~32-byte Merkle root posted per window — not custody, not a counterparty,
+~cents/window.
+
+> Note: the earlier "compliance sign-off" caveat was conservative. Anchor-only
+> hashing of our _own_ internal records (no tokens/securities/funds) is
+> notarization of our own data and carries minimal external-compliance burden.
 
 ### Why this and not tokenization
 
@@ -131,9 +157,12 @@ lib/anchor/
   merkle.ts       # pure: leaf + tree + proof helpers (unit-testable, no I/O)
 ```
 
-Default provider is `local` (no key, no network) so the feature is safe to merge
-dark. Production lights up by setting the provider env (chain RPC + a dedicated
-anchoring key that holds *only* gas — never customer funds).
+Per the internal-first decision, the **`local` provider is the MVP** — it folds
+leaves into roots and stores them in `anchor_batches` with no chain calls, no
+key, and no network. This delivers full tamper-evidence and the verify UX with
+**zero third-party dependency**. The `l2` provider stays a dormant switch: enable
+the external witness later by configuring a chain RPC + a gas-only key (never
+customer funds). No schema or UX change is needed to flip it on.
 
 ### Schema (additive + idempotent, per the migration invariant)
 
@@ -153,22 +182,27 @@ client); batch roots carry no org linkage by design.
 
 **In:**
 
-1. `lib/anchor/*` — merkle + provider interface + `local` default + `l2` stub.
-2. `enqueueAnchor` hook in `approveEvidence` (never-block).
+1. `lib/anchor/*` — merkle + provider interface + **`local` provider (the MVP)**
+   + `l2` stub (dormant).
+2. `enqueueAnchor` hook in `approveEvidence` (never-block), writing salted leaves.
 3. Additive migration: `anchor_leaves`, `anchor_batches` + RLS.
-4. Batch cron route that folds leaves → root → `anchorRoot`.
+4. Batch cron route that folds leaves → Merkle root → `anchorRoot` (which, for
+   `local`, just persists the root — no chain, no key, no network).
 5. A "Verify this record" surface in the Trust Center: given an authorized
    share, shows the proof bundle and a one-click recompute/verify result.
 
 **Explicitly out:** tokenization, identity passports, stablecoin rails, any
-custody, and any public-facing on-chain data beyond the Merkle root.
+custody, and — for the MVP — any external/public anchoring at all.
 
-**Risks / watch-items:** key management for the gas-only anchoring wallet; L2
-liveness (mitigated by never-block + retry on next window); ensuring the
-canonical-payload serializer is stable (a format drift would break old proofs —
-version the payload schema).
+**Risks / watch-items:** ensuring the canonical-payload serializer is stable (a
+format drift would break old proofs — version the payload schema). Be explicit in
+the verify UX that the internal-only guarantee is "unaltered, provable to anyone
+who trusts our infrastructure" — *not* operator-tamper-proof until the external
+witness is enabled. Key management / L2 liveness become relevant only if/when the
+`l2` provider is switched on.
 
 ---
 
 _Maintained by Claude. Encodes the Jun-12 blockchain anchoring decision:
-anchor-only, public L2, confidentiality-first, additive to the Chain of Trust._
+anchor-only, **internal-first** (external witness optional later),
+confidentiality-first, additive to the Chain of Trust._
