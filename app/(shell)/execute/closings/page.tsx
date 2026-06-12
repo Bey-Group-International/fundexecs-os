@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ClosingsFlow } from '@/components/execute/ClosingsFlow';
 import { getClosingsData } from '@/lib/queries/closings';
 import { getActiveOrg } from '@/lib/queries/org';
+import { createClient } from '@/lib/supabase/server';
 
 export const metadata: Metadata = {
   title: 'Closings',
@@ -21,11 +22,17 @@ export default async function ExecuteClosingsPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const data = await getClosingsData(org.orgId);
+  const supabase = await createClient();
+  const [data, { data: orgRow }] = await Promise.all([
+    getClosingsData(org.orgId),
+    supabase.from('organizations').select('name').eq('id', org.orgId).maybeSingle()
+  ]);
 
   return (
-    <div className="fx-rise mx-auto max-w-[920px]">
-      <ClosingsFlow closings={data.closings} candidates={data.candidates} />
-    </div>
+    <ClosingsFlow
+      closings={data.closings}
+      candidates={data.candidates}
+      firm={orgRow?.name ?? null}
+    />
   );
 }
