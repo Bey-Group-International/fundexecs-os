@@ -3084,6 +3084,7 @@ export type Database = {
       }
       formation_steps: {
         Row: {
+          amended_at: string | null
           created_at: string
           filed_at: string
           filed_by: string | null
@@ -3091,8 +3092,10 @@ export type Database = {
           kind: string
           org_id: string
           status: string
+          version: number
         }
         Insert: {
+          amended_at?: string | null
           created_at?: string
           filed_at?: string
           filed_by?: string | null
@@ -3100,8 +3103,10 @@ export type Database = {
           kind: string
           org_id: string
           status?: string
+          version?: number
         }
         Update: {
+          amended_at?: string | null
           created_at?: string
           filed_at?: string
           filed_by?: string | null
@@ -3109,6 +3114,7 @@ export type Database = {
           kind?: string
           org_id?: string
           status?: string
+          version?: number
         }
         Relationships: [
           {
