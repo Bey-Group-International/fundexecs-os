@@ -5099,30 +5099,48 @@ export type Database = {
       ir_items: {
         Row: {
           cat: string
+          category: string | null
+          contents: Json
           created_at: string
+          detail: string | null
+          drives: string | null
           due_at: string | null
           id: string
+          name: string | null
           org_id: string
           status: string
           updated_at: string
+          who: string | null
         }
         Insert: {
           cat: string
+          category?: string | null
+          contents?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
           due_at?: string | null
           id?: string
+          name?: string | null
           org_id: string
           status?: string
           updated_at?: string
+          who?: string | null
         }
         Update: {
           cat?: string
+          category?: string | null
+          contents?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
           due_at?: string | null
           id?: string
+          name?: string | null
           org_id?: string
           status?: string
           updated_at?: string
+          who?: string | null
         }
         Relationships: [
           {
