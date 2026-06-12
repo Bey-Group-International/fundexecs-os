@@ -182,6 +182,31 @@ export const PRESENCE_ITEMS: readonly PresenceItem[] = [
   }
 ];
 
+/**
+ * The prototype's approve-loop copy for setting up a presence item —
+ * rendered by ActionRunner before anything persists.
+ */
+export function presenceRunCopy(itemName: string): {
+  title: string;
+  steps: string[];
+  draftTitle: string;
+  draft: string;
+} {
+  const title = `Set up ${itemName}`;
+  return {
+    title,
+    steps: [
+      'Verify the handle / domain',
+      'Apply your brand & bio',
+      'Link to your workspace',
+      'Prepare for your approval'
+    ],
+    draftTitle: title,
+    draft:
+      'Earn set this up from your brand kit and profile. Approve to connect it and keep it in sync.'
+  };
+}
+
 /** A fresh, editable copy of a builder's recommended decisions. */
 export function brandDefaults(cfg: BrandBuildCfg): Record<string, BrandValue> {
   const out: Record<string, BrandValue> = {};

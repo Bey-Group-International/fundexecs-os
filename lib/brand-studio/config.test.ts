@@ -11,8 +11,17 @@ import {
   brandStage,
   buildSteps,
   paletteFor,
+  presenceRunCopy,
   type BrandBuildCfg
 } from './config';
+
+test('presenceRunCopy frames the prototype approve loop for a presence item', () => {
+  const copy = presenceRunCopy('Custom domain');
+  assert.equal(copy.title, 'Set up Custom domain');
+  assert.equal(copy.steps.length, 4);
+  assert.equal(copy.steps.at(-1), 'Prepare for your approval');
+  assert.ok(copy.draft.includes('Approve to connect'));
+});
 
 test('brand stage progression: To do → Produced → Live, published wins', () => {
   assert.equal(brandStage(false, false), 'todo');

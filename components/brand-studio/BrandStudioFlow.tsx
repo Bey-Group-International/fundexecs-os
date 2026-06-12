@@ -39,6 +39,7 @@ import { Eyebrow } from '@/components/ui/Eyebrow';
 import { PanelHeader } from '@/components/ui/PanelHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SegTabs } from '@/components/ui/Tabs';
+import { ActionRunner } from '@/components/earn/ActionRunner';
 import { publishBrandAsset, setPresenceItem } from '@/lib/brand-studio/actions';
 import {
   BRAND_BUILD,
@@ -52,6 +53,7 @@ import {
   brandStage,
   buildSteps,
   paletteFor,
+  presenceRunCopy,
   type BrandBuildCfg,
   type BrandStage,
   type BrandValue
@@ -418,20 +420,8 @@ export function BrandStudioFlow({
     Partial<Record<BrandAssetId, Record<string, BrandValue>>>
   >({});
   const [presence, setPresence] = useState<string[]>(initialDoc.presence);
-  const [setupPending, setSetupPending] = useState<string | null>(null);
-  const [setupError, setSetupError] = useState<string | null>(null);
-
-  function setUp(id: string) {
-    setSetupPending(id);
-    setSetupError(null);
-    setPresenceItem(id)
-      .then((res) => {
-        if (res.ok) setPresence((p) => (p.includes(id) ? p : [...p, id]));
-        else setSetupError(res.error);
-      })
-      .catch(() => setSetupError('Could not save — try again.'))
-      .finally(() => setSetupPending(null));
-  }
+  /** A presence item awaiting the operator's approve moment. */
+  const [pendingSetup, setPendingSetup] = useState<{ id: string; name: string } | null>(null);
 
   if (openId && isBrandAssetId(openId)) {
     return (
@@ -529,13 +519,6 @@ export function BrandStudioFlow({
           { id: 'presence', label: 'Digital presence', icon: Globe }
         ]}
       />
-
-      {setupError && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[12.5px] text-danger">
-          <TriangleAlert size={15} aria-hidden />
-          {setupError}
-        </div>
-      )}
 
       {view === 'profile' ? (
         <>
@@ -652,11 +635,10 @@ export function BrandStudioFlow({
                     <Button
                       variant="secondary"
                       size="sm"
-                      icon={setupPending === it.id ? Loader2 : Plus}
-                      disabled={setupPending === it.id}
-                      onClick={() => setUp(it.id)}
+                      icon={Plus}
+                      onClick={() => setPendingSetup({ id: it.id, name: it.name })}
                     >
-                      {setupPending === it.id ? 'Saving…' : 'Build'}
+                      Build
                     </Button>
                   )}
                 </div>
@@ -806,11 +788,10 @@ export function BrandStudioFlow({
                     <Button
                       variant="secondary"
                       size="sm"
-                      icon={setupPending === it.id ? Loader2 : Plus}
-                      disabled={setupPending === it.id}
-                      onClick={() => setUp(it.id)}
+                      icon={Plus}
+                      onClick={() => setPendingSetup({ id: it.id, name: it.name })}
                     >
-                      {setupPending === it.id ? 'Saving…' : 'Set up'}
+                      Set up
                     </Button>
                   )}
                 </div>
@@ -898,6 +879,24 @@ export function BrandStudioFlow({
           everywhere.
         </div>
       </Card>
+
+      {pendingSetup &&
+        (() => {
+          const copy = presenceRunCopy(pendingSetup.name);
+          return (
+            <ActionRunner
+              title={copy.title}
+              steps={copy.steps}
+              draftTitle={copy.draftTitle}
+              draft={copy.draft}
+              onApprove={() => setPresenceItem(pendingSetup.id)}
+              onApplied={() =>
+                setPresence((p) => (p.includes(pendingSetup.id) ? p : [...p, pendingSetup.id]))
+              }
+              onClose={() => setPendingSetup(null)}
+            />
+          );
+        })()}
     </div>
   );
 }
