@@ -355,9 +355,10 @@ export function PartnerNetworkFlow({
   const act = running ? BENCH_NEXT[running.stage] : undefined;
 
   function lastActivityFor(row: BenchRow): string {
-    const provider = providers.find((p) => p.id === row.id);
-    const iso = introActivity[row.id] ?? (row.stage === 'engaged' ? provider?.createdAt : null);
-    return relativeActivity(iso);
+    // Only a real intro-request timestamp is "last activity" — provider
+    // creation time is not, so an engaged provider with no outreach on record
+    // honestly reads "—" rather than looking recently active.
+    return relativeActivity(introActivity[row.id] ?? null);
   }
 
   return (

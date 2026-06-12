@@ -39,8 +39,10 @@ export const BENCH_NEXT: Partial<Record<BenchStage, string>> = {
 };
 
 /** Directory statuses that read as an active relationship ('active' is the
- *  schema default and what the marketplace writes for live providers). */
-const ENGAGED_STATUS = /(active|engaged|retained)/i;
+ *  schema default and what the marketplace writes for live providers).
+ *  Exact match (normalized) — a substring test would wrongly promote
+ *  'inactive' / 'disengaged'. */
+const ENGAGED_STATUS = new Set(['active', 'engaged', 'retained']);
 
 const INTRO_CONTACTED = new Set(['requested', 'accepted']);
 const INTRO_ENGAGED = new Set(['introduced']);
@@ -49,7 +51,7 @@ export function benchStage(
   providerStatus: string | null | undefined,
   introStatus?: string | null
 ): BenchStage {
-  if (ENGAGED_STATUS.test(providerStatus ?? '')) return 'engaged';
+  if (ENGAGED_STATUS.has((providerStatus ?? '').trim().toLowerCase())) return 'engaged';
   const s = (introStatus ?? '').toLowerCase();
   if (INTRO_ENGAGED.has(s)) return 'engaged';
   if (INTRO_CONTACTED.has(s)) return 'contacted';

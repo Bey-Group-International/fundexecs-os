@@ -63,13 +63,31 @@ export async function engagePartner(input: { partnerId: string }): Promise<Engag
   if (!org) return { ok: false, error: 'No active organization.' };
 
   const supabase = await createClient();
-  const { data, error } = await supabase
+
+  // Pick exactly one open request (requested | accepted) to advance — never a
+  // blanket update, so a single Engage approval can't promote several rows.
+  const { data: open, error: readError } = await supabase
     .from('partner_intro_requests')
-    .update({ status: 'introduced' })
+    .select('id')
     .eq('org_id', org.orgId)
     .eq('requester_id', org.userId)
     .eq('partner_type', 'service_provider')
     .eq('partner_id', input.partnerId)
+    .in('status', ['requested', 'accepted'])
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (readError) return { ok: false, error: readError.message };
+  if (!open) {
+    return { ok: false, error: 'No open intro request to engage — request the intro first.' };
+  }
+
+  // Advance that one row, re-checking the open status to lose cleanly to a
+  // concurrent advance rather than double-introducing.
+  const { data, error } = await supabase
+    .from('partner_intro_requests')
+    .update({ status: 'introduced' })
+    .eq('id', open.id)
     .in('status', ['requested', 'accepted'])
     .select('id, status');
 
@@ -115,15 +133,19 @@ export async function requestPartnerIntro(
 
   const supabase = await createClient();
 
-  // Re-usable filter for the open request that uniquely identifies this
-  // (org, requester, partner_type, partner) — mirrors the partial unique index.
+  // The open request for this (org, requester, partner_type, partner).
+  // 'requested' and 'accepted' are the single OPEN state — reuse either rather
+  // than minting a second open row beside an accepted one (which would let one
+  // Engage approval advance multiple records).
   const openRequestMatch = (q: ReturnType<typeof openSelect>) =>
     q
       .eq('org_id', org.orgId)
       .eq('requester_id', org.userId)
       .eq('partner_type', input.partnerType)
       .eq('partner_id', input.partnerId)
-      .eq('status', 'requested');
+      .in('status', ['requested', 'accepted'])
+      .order('created_at', { ascending: true })
+      .limit(1);
 
   function openSelect() {
     return supabase.from('partner_intro_requests').select('id, status');
