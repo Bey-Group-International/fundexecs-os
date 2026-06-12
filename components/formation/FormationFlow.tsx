@@ -1,6 +1,6 @@
 'use client';
 
-import { createElement, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createElement, useCallback, useEffect, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   ArrowLeft,
@@ -41,7 +41,9 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Chip } from '@/components/ui/Chip';
 import { EarnCoin } from '@/components/ui/EarnCoin';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 import { Input } from '@/components/ui/Input';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Select } from '@/components/ui/Select';
@@ -85,33 +87,6 @@ function iconFor(name: string): LucideIcon {
 }
 
 /* ── small building blocks ───────────────────────────────────────────────── */
-
-function Chip({
-  label,
-  selected,
-  onClick
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition',
-        selected
-          ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-fg-1'
-          : 'border-hairline bg-surface-1 text-fg-3 hover:bg-surface-2'
-      )}
-    >
-      {selected && <Check size={12} strokeWidth={2.4} aria-hidden />}
-      {label}
-    </button>
-  );
-}
 
 function ChoiceCard({
   opt,
@@ -164,16 +139,6 @@ function ChoiceCard({
         {selected && <Check size={13} strokeWidth={2.4} className="text-white" aria-hidden />}
       </span>
     </button>
-  );
-}
-
-function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn('text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4', className)}
-    >
-      {children}
-    </div>
   );
 }
 

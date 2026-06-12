@@ -1,6 +1,6 @@
 'use client';
 
-import { createElement, useEffect, useState, type ReactNode } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   ArrowLeft,
@@ -33,20 +33,27 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Chip } from '@/components/ui/Chip';
 import { EarnCoin } from '@/components/ui/EarnCoin';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { PanelHeader } from '@/components/ui/PanelHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SegTabs } from '@/components/ui/Tabs';
 import { publishBrandAsset, setPresenceItem } from '@/lib/brand-studio/actions';
 import {
   BRAND_BUILD,
   BRAND_ITEM_NAME,
+  BRAND_STAGES,
+  BRAND_TONE,
   CONNECTORS,
   PRESENCE_ITEMS,
   brandDefaults,
   brandRows,
+  brandStage,
   buildSteps,
   paletteFor,
   type BrandBuildCfg,
+  type BrandStage,
   type BrandValue
 } from '@/lib/brand-studio/config';
 import {
@@ -80,92 +87,35 @@ const CONNECTOR_PROVIDER: Record<string, string> = {
   slack: 'slack'
 };
 
-function Chip({
-  label,
-  selected,
-  onClick
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition',
-        selected
-          ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-fg-1'
-          : 'border-hairline bg-surface-1 text-fg-3 hover:bg-surface-2'
-      )}
-    >
-      {selected && <Check size={12} strokeWidth={2.4} aria-hidden />}
-      {label}
-    </button>
-  );
-}
-
-function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn('text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4', className)}
-    >
-      {children}
-    </div>
-  );
-}
-
-function PanelHeader({
-  icon: Ico,
-  title,
-  eyebrow,
-  action
-}: {
-  icon: LucideIcon;
-  title: string;
-  eyebrow: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="mb-3 flex items-start justify-between gap-3">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
-          <Ico size={16} strokeWidth={1.9} aria-hidden />
-        </span>
-        <div>
-          <Eyebrow className="mb-px">{eyebrow}</Eyebrow>
-          <div className="text-[14.5px] font-semibold tracking-[-0.01em] text-fg-1">{title}</div>
-        </div>
-      </div>
-      {action}
-    </div>
-  );
-}
-
 /* ── the copiloted brand builder ─────────────────────────────────────────── */
 
 function BrandBuilder({
   id,
   initialSpec,
   alreadyLive,
+  startProduced,
   onBack,
-  onPublished
+  onPublished,
+  onProduced
 }: {
   id: BrandAssetId;
-  /** Persisted spec when re-opening a published asset. */
+  /** Persisted spec when re-opening a published asset, or the in-flight produced spec. */
   initialSpec: Record<string, BrandValue> | null;
   alreadyLive: boolean;
+  /** Resume a produced-but-not-published asset at its preview. */
+  startProduced: boolean;
   onBack: () => void;
   onPublished: (id: BrandAssetId, spec: Record<string, BrandValue>) => void;
+  onProduced: (id: BrandAssetId, spec: Record<string, BrandValue>) => void;
 }) {
   const reduced = useReducedMotion() ?? false;
   const cfg: BrandBuildCfg = BRAND_BUILD[id];
   const name = BRAND_ITEM_NAME[id] ?? id;
   const [d, setD] = useState<Record<string, BrandValue>>(() => initialSpec ?? brandDefaults(cfg));
   const [applied, setApplied] = useState(false);
-  const [phase, setPhase] = useState<'edit' | 'building' | 'done'>(alreadyLive ? 'done' : 'edit');
+  const [phase, setPhase] = useState<'edit' | 'building' | 'done'>(
+    alreadyLive || startProduced ? 'done' : 'edit'
+  );
   const [n, setN] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -374,7 +324,15 @@ function BrandBuilder({
             <Button variant="ghost" icon={ArrowLeft} onClick={onBack}>
               Cancel
             </Button>
-            <Button variant="gold" iconRight={Sparkles} onClick={() => setPhase('building')}>
+            <Button
+              variant="gold"
+              iconRight={Sparkles}
+              onClick={() => {
+                onProduced(id, d);
+                setN(0);
+                setPhase('building');
+              }}
+            >
               Produce &amp; publish
             </Button>
           </div>
@@ -455,6 +413,10 @@ export function BrandStudioFlow({
   const [view, setView] = useState<'profile' | 'brand' | 'presence'>('profile');
   const [openId, setOpenId] = useState<BrandAssetId | null>(null);
   const [built, setBuilt] = useState(initialDoc.built);
+  /** Produced-but-not-published specs, per asset — the studio's Produced stage. */
+  const [producedSpecs, setProducedSpecs] = useState<
+    Partial<Record<BrandAssetId, Record<string, BrandValue>>>
+  >({});
   const [presence, setPresence] = useState<string[]>(initialDoc.presence);
   const [setupPending, setSetupPending] = useState<string | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -476,11 +438,19 @@ export function BrandStudioFlow({
       <BrandBuilder
         key={openId}
         id={openId}
-        initialSpec={built[openId] ?? null}
+        initialSpec={built[openId] ?? producedSpecs[openId] ?? null}
         alreadyLive={!!built[openId]}
+        startProduced={!built[openId] && !!producedSpecs[openId]}
         onBack={() => setOpenId(null)}
+        onProduced={(id, spec) => {
+          setProducedSpecs((p) => ({ ...p, [id]: spec }));
+        }}
         onPublished={(id, spec) => {
           setBuilt((p) => ({ ...p, [id]: spec }));
+          setProducedSpecs((p) => {
+            const { [id]: _published, ...rest } = p;
+            return rest;
+          });
           setOpenId(null);
         }}
       />
@@ -490,6 +460,9 @@ export function BrandStudioFlow({
   const bioBuilt = !!built.bio;
   const kitBuilt = !!built.brandkit;
   const siteBuilt = !!built.website;
+  const bioStage = brandStage(bioBuilt, !!producedSpecs.bio);
+  const kitStage = brandStage(kitBuilt, !!producedSpecs.brandkit);
+  const siteStage = brandStage(siteBuilt, !!producedSpecs.website);
   const credentialsDone = presence.includes('credentials');
   const palette = paletteFor(built.brandkit?.palette as string | undefined);
 
@@ -516,21 +489,33 @@ export function BrandStudioFlow({
         <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           <BrandStat
             label="Profile"
-            value={bioBuilt ? 'Live' : 'Draft'}
+            value={bioBuilt ? 'Live' : bioStage === 'produced' ? 'Produced' : 'Draft'}
             sub="GP bio & credentials"
             tone={bioBuilt ? 'var(--success)' : 'var(--gold-1)'}
           />
           <BrandStat
             label="Firm brand"
-            value={kitBuilt ? 'Set' : 'Pending'}
+            value={kitBuilt ? 'Set' : kitStage === 'produced' ? 'Produced' : 'Pending'}
             sub="identity & voice"
-            tone={kitBuilt ? 'var(--success)' : 'var(--accent)'}
+            tone={
+              kitBuilt
+                ? 'var(--success)'
+                : kitStage === 'produced'
+                  ? 'var(--gold-1)'
+                  : 'var(--accent)'
+            }
           />
           <BrandStat
             label="Web presence"
-            value={siteBuilt ? 'Live' : 'Pending'}
+            value={siteBuilt ? 'Live' : siteStage === 'produced' ? 'Produced' : 'Pending'}
             sub="site & domain"
-            tone={siteBuilt ? 'var(--success)' : 'var(--info)'}
+            tone={
+              siteBuilt
+                ? 'var(--success)'
+                : siteStage === 'produced'
+                  ? 'var(--gold-1)'
+                  : 'var(--info)'
+            }
           />
         </div>
       </Card>
@@ -597,6 +582,7 @@ export function BrandStudioFlow({
                   name: 'Professional bio',
                   sub: 'Drafted from your fund story',
                   done: bioBuilt,
+                  stage: bioStage as BrandStage | null,
                   copilot: true
                 },
                 {
@@ -604,6 +590,7 @@ export function BrandStudioFlow({
                   name: 'Credentials & track record',
                   sub: 'Structured & verified from your history',
                   done: credentialsDone,
+                  stage: null,
                   copilot: false
                 }
               ].map((it) => (
@@ -616,7 +603,9 @@ export function BrandStudioFlow({
                       'flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg border',
                       it.done
                         ? 'border-[var(--success-line)] bg-[var(--success-soft)] text-success'
-                        : 'border-hairline bg-surface-2 text-fg-3'
+                        : it.stage === 'produced'
+                          ? 'border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1'
+                          : 'border-hairline bg-surface-2 text-fg-3'
                     )}
                   >
                     {it.done ? (
@@ -631,30 +620,34 @@ export function BrandStudioFlow({
                     <div className="text-[12.5px] font-semibold text-fg-1">{it.name}</div>
                     <div className="text-[10.5px] text-fg-5">{it.sub}</div>
                   </div>
-                  {it.done ? (
-                    it.copilot ? (
+                  {it.copilot && it.stage ? (
+                    <>
+                      <Badge tone={BRAND_TONE[it.stage]} className="text-[9.5px]">
+                        {BRAND_STAGES[it.stage]}
+                      </Badge>
                       <Button
-                        variant="ghost"
+                        variant={
+                          it.stage === 'live'
+                            ? 'ghost'
+                            : it.stage === 'produced'
+                              ? 'gold'
+                              : 'secondary'
+                        }
                         size="sm"
-                        icon={Sparkles}
+                        icon={it.stage === 'produced' ? Check : Sparkles}
                         onClick={() => setOpenId(it.id as BrandAssetId)}
                       >
-                        Refine
+                        {it.stage === 'live'
+                          ? 'Refine'
+                          : it.stage === 'produced'
+                            ? 'Publish'
+                            : 'Draft'}
                       </Button>
-                    ) : (
-                      <Badge tone="success" className="text-[9.5px]">
-                        Done
-                      </Badge>
-                    )
-                  ) : it.copilot ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={Sparkles}
-                      onClick={() => setOpenId(it.id as BrandAssetId)}
-                    >
-                      Draft
-                    </Button>
+                    </>
+                  ) : it.done ? (
+                    <Badge tone="success" className="text-[9.5px]">
+                      Done
+                    </Badge>
                   ) : (
                     <Button
                       variant="secondary"
@@ -678,14 +671,25 @@ export function BrandStudioFlow({
             title="Firm brand"
             eyebrow="Your visual identity"
             action={
-              <Button
-                variant={kitBuilt ? 'ghost' : 'secondary'}
-                size="sm"
-                icon={Sparkles}
-                onClick={() => setOpenId('brandkit')}
-              >
-                {kitBuilt ? 'Refine' : 'Build brand kit'}
-              </Button>
+              <span className="flex items-center gap-2">
+                <Badge tone={BRAND_TONE[kitStage]} className="text-[9.5px]">
+                  {BRAND_STAGES[kitStage]}
+                </Badge>
+                <Button
+                  variant={
+                    kitStage === 'live' ? 'ghost' : kitStage === 'produced' ? 'gold' : 'secondary'
+                  }
+                  size="sm"
+                  icon={kitStage === 'produced' ? Check : Sparkles}
+                  onClick={() => setOpenId('brandkit')}
+                >
+                  {kitStage === 'live'
+                    ? 'Refine'
+                    : kitStage === 'produced'
+                      ? 'Publish brand kit'
+                      : 'Build brand kit'}
+                </Button>
+              </span>
             }
           />
           <div
@@ -742,7 +746,9 @@ export function BrandStudioFlow({
                   'flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border',
                   siteBuilt
                     ? 'border-[var(--success-line)] bg-[var(--success-soft)] text-success'
-                    : 'border-hairline bg-surface-2 text-fg-3'
+                    : siteStage === 'produced'
+                      ? 'border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1'
+                      : 'border-hairline bg-surface-2 text-fg-3'
                 )}
               >
                 {siteBuilt ? <Check size={16} aria-hidden /> : <Globe size={16} aria-hidden />}
@@ -752,28 +758,24 @@ export function BrandStudioFlow({
                 <div className="truncate text-[10.5px] text-fg-5">
                   {siteBuilt
                     ? `${(built.website?.type as string) ?? 'One-pager'} · ${(built.website?.gate as string) ?? ''}`
-                    : 'One-pager + gated room'}
+                    : siteStage === 'produced'
+                      ? 'Produced — publish to go live'
+                      : 'One-pager + gated room'}
                 </div>
               </div>
-              {siteBuilt ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={Sparkles}
-                  onClick={() => setOpenId('website')}
-                >
-                  Refine
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={Sparkles}
-                  onClick={() => setOpenId('website')}
-                >
-                  Build
-                </Button>
-              )}
+              <Badge tone={BRAND_TONE[siteStage]} className="text-[9.5px]">
+                {BRAND_STAGES[siteStage]}
+              </Badge>
+              <Button
+                variant={
+                  siteStage === 'live' ? 'ghost' : siteStage === 'produced' ? 'gold' : 'secondary'
+                }
+                size="sm"
+                icon={siteStage === 'produced' ? Check : Sparkles}
+                onClick={() => setOpenId('website')}
+              >
+                {siteStage === 'live' ? 'Refine' : siteStage === 'produced' ? 'Publish' : 'Build'}
+              </Button>
             </div>
             {PRESENCE_ITEMS.map((it) => {
               const on = presence.includes(it.id);

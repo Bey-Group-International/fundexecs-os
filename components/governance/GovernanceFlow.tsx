@@ -1,6 +1,6 @@
 'use client';
 
-import { createElement, useEffect, useState, type ReactNode } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   ArrowLeft,
@@ -34,7 +34,10 @@ import { Avatar, type AvatarTone } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Chip as GovChip } from '@/components/ui/Chip';
 import { EarnCoin } from '@/components/ui/EarnCoin';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { PanelHeader } from '@/components/ui/PanelHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SegTabs } from '@/components/ui/Tabs';
 import { ActionRunner } from '@/components/earn/ActionRunner';
@@ -85,71 +88,6 @@ const POLICY_ICONS: Record<string, LucideIcon> = {
 };
 function policyIcon(name: string): LucideIcon {
   return POLICY_ICONS[name] ?? Scale;
-}
-
-/** The selectable chip primitive shared by the governance builders. */
-function GovChip({
-  label,
-  selected,
-  onClick
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition',
-        selected
-          ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-fg-1'
-          : 'border-hairline bg-surface-1 text-fg-3 hover:bg-surface-2'
-      )}
-    >
-      {selected && <Check size={12} strokeWidth={2.4} aria-hidden />}
-      {label}
-    </button>
-  );
-}
-
-function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn('text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4', className)}
-    >
-      {children}
-    </div>
-  );
-}
-
-function PanelHeader({
-  icon,
-  title,
-  eyebrow,
-  action
-}: {
-  icon: LucideIcon;
-  title: string;
-  eyebrow: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="mb-3 flex items-start justify-between gap-3">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
-          {createElement(icon, { size: 16, strokeWidth: 1.9, 'aria-hidden': true })}
-        </span>
-        <div>
-          <Eyebrow className="mb-px">{eyebrow}</Eyebrow>
-          <div className="text-[14.5px] font-semibold tracking-[-0.01em] text-fg-1">{title}</div>
-        </div>
-      </div>
-      {action}
-    </div>
-  );
 }
 
 /* ── a governance-body roster ────────────────────────────────────────────── */
