@@ -66,7 +66,9 @@ export function lpShare(total: number | null, lpCount: number): number | null {
  * With any positive weights, each share is total × weight / weightSum — a
  * missing or zero weight yields 0, the honest reading of "no commitment
  * amount on record". With no positive weights at all, every LP gets the
- * even split.
+ * even split. Shares always sum back to the total (largest-remainder
+ * rounding, earliest index wins ties) — an issued call never gains or
+ * loses dollars to rounding.
  */
 export function proRataShares(
   total: number | null,
@@ -77,11 +79,21 @@ export function proRataShares(
   }
   const clean = weights.map((w) => (w != null && Number.isFinite(w) && w > 0 ? w : 0));
   const weightSum = clean.reduce((s, w) => s + w, 0);
-  if (weightSum <= 0) {
-    const even = lpShare(total, weights.length);
-    return weights.map(() => even);
+  const effective = weightSum > 0 ? clean : weights.map(() => 1);
+  const effectiveSum = weightSum > 0 ? weightSum : weights.length;
+
+  const raw = effective.map((w) => (total * w) / effectiveSum);
+  const shares = raw.map(Math.floor);
+  let remainder = Math.round(total - shares.reduce((s, v) => s + v, 0));
+  const byFraction = raw
+    .map((r, i) => ({ frac: r - Math.floor(r), i }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (const { i } of byFraction) {
+    if (remainder <= 0) break;
+    shares[i] += 1;
+    remainder -= 1;
   }
-  return clean.map((w) => Math.round((total * w) / weightSum));
+  return shares;
 }
 
 /* ---- Overdue: derived from the call's due date, never stored ---- */

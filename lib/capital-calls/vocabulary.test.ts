@@ -88,6 +88,15 @@ test('proRataShares rejects junk totals', () => {
   assert.deepEqual(proRataShares(1_000_000, []), []);
 });
 
+test('proRataShares preserves the issued total under uneven ratios', () => {
+  const sum = (shares: Array<number | null>) => shares.reduce((s: number, v) => s + (v ?? 0), 0);
+  assert.equal(sum(proRataShares(100, [1, 1, 1])), 100);
+  assert.deepEqual(proRataShares(100, [1, 1, 1]), [34, 33, 33]);
+  assert.equal(sum(proRataShares(1_000_000, [null, null, null])), 1_000_000);
+  assert.equal(sum(proRataShares(999_999, [7, 3, 11, 2])), 999_999);
+  assert.equal(sum(proRataShares(2_500_000, [600_000, null, 300_000])), 2_500_000);
+});
+
 test('isCallOverdue flips only once the due day has fully passed', () => {
   const due = '2026-06-10';
   assert.equal(isCallOverdue(due, new Date('2026-06-10T23:00:00Z')), false);

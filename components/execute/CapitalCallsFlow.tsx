@@ -61,10 +61,28 @@ const LINE_BORDER: Record<CallLpView['state'], string> = {
   overdue: 'border-l-[var(--danger)]'
 };
 
+/**
+ * Render a date-only "YYYY-MM-DD" as the local calendar day. Parsing it
+ * through `new Date(string)` would read it as UTC midnight and shift the
+ * displayed day back in western timezones.
+ */
+function localDate(dateOnly: string): string {
+  const [y, m, d] = dateOnly.split('-').map(Number);
+  if (!y || !m || !d) return dateOnly;
+  return new Date(y, m - 1, d).toLocaleDateString();
+}
+
+/** Date-only strings render as local calendar days; timestamps parse normally. */
+function displayDate(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? localDate(value)
+    : new Date(value).toLocaleDateString();
+}
+
 function dueLabel(c: CapitalCallView): string {
   if (c.status === 'settled') return 'Complete';
   if (!c.dueAt) return 'No due date';
-  const date = new Date(c.dueAt).toLocaleDateString();
+  const date = localDate(c.dueAt);
   return c.overdueCount > 0 ? `Was due ${date}` : `Due ${date}`;
 }
 
@@ -378,7 +396,7 @@ export function CapitalCallsFlow({
                       <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
                       <div className="mt-0.5 text-[10.5px] text-fg-5">
                         {d.detail}
-                        {d.date ? ` · ${new Date(d.date).toLocaleDateString()}` : ''}
+                        {d.date ? ` · ${displayDate(d.date)}` : ''}
                       </div>
                     </div>
                     {d.amount != null && (
@@ -617,7 +635,7 @@ export function CapitalCallsFlow({
           draftTitle={`${runner.line.lpRef}${
             runner.line.amount != null ? ` · ${compactMoney(runner.line.amount)}` : ''
           }`}
-          draft={`${runner.line.lpRef} owes${
+          draft={`${runner.line.lpRef} ${runner.call.kind === 'call' ? 'owes' : 'is due'}${
             runner.line.amount != null ? ` ${compactMoney(runner.line.amount)}` : ' their share'
           } on "${runner.call.label}". Confirming RECORDS the ${
             runner.call.kind === 'call' ? 'funding' : 'payment'

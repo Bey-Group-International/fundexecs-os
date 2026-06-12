@@ -52,10 +52,19 @@ export async function issueCapitalCall(input: {
   // The roster comes from the Capital Map — committed LPs only. No roster,
   // no call: nothing is issued against thin air. Commitment amounts ride
   // along so each LP line can carry its pro-rata share, fixed at issue time.
-  const [{ data: lps }, { data: commitments }] = await Promise.all([
-    supabase.from('capital_providers').select('id, name, status').eq('org_id', org.orgId),
-    supabase.from('capital_commitments').select('lp_id, amount, stage').eq('org_id', org.orgId)
-  ]);
+  // Fail closed: a read error must abort issuance, never degrade into wrong
+  // shares or a false "no committed LPs".
+  const [{ data: lps, error: lpsErr }, { data: commitments, error: commitmentsErr }] =
+    await Promise.all([
+      supabase.from('capital_providers').select('id, name, status').eq('org_id', org.orgId),
+      supabase.from('capital_commitments').select('lp_id, amount, stage').eq('org_id', org.orgId)
+    ]);
+  if (lpsErr || commitmentsErr) {
+    return {
+      ok: false,
+      error: lpsErr?.message ?? commitmentsErr?.message ?? 'Could not load the committed roster.'
+    };
+  }
   const committed = (lps ?? []).filter((lp) => COMMITTED_RE.test((lp.status || '').toLowerCase()));
   if (committed.length === 0) {
     return {
@@ -111,7 +120,12 @@ export async function issueCapitalCall(input: {
       amount: shares[i]
     }))
   );
-  if (linesErr) return { ok: false, error: linesErr.message };
+  if (linesErr) {
+    // No lines, no call: compensate so an issued call never exists without
+    // its funnel (Supabase has no client-side transaction to lean on).
+    await supabase.from('capital_calls').delete().eq('id', call.id).eq('org_id', org.orgId);
+    return { ok: false, error: linesErr.message };
+  }
 
   revalidatePath('/execute/capital');
   revalidatePath('/execute');
@@ -161,9 +175,17 @@ export async function resolveCallLp(input: {
     .eq('org_id', org.orgId);
   if (updErr) return { ok: false, error: updErr.message };
 
-  const remaining = (lines ?? []).filter(
-    (l) => l.id !== input.lineId && !isLpResolved(kind, l.status)
-  );
+  // Re-read after the update so two operators resolving the last lines
+  // concurrently can't both see "one still open" and leave the call
+  // unsettled forever.
+  const { data: currentLines, error: recheckErr } = await supabase
+    .from('call_lp_status')
+    .select('id, status')
+    .eq('call_id', input.callId)
+    .eq('org_id', org.orgId);
+  if (recheckErr) return { ok: false, error: recheckErr.message };
+
+  const remaining = (currentLines ?? []).filter((l) => !isLpResolved(kind, l.status));
   let settled = false;
   if (remaining.length === 0) {
     const { error: settleErr } = await supabase
