@@ -843,7 +843,7 @@ function humanizeAction(action: string): string {
  * sorted newest-first. RLS-scoped; degrades to an empty feed on any read error
  * (e.g. a table not yet readable in a given environment).
  */
-async function loadActivityFeed(orgId: string): Promise<ActivityItem[]> {
+export async function loadActivityFeed(orgId: string): Promise<ActivityItem[]> {
   const supabase = await createClient();
   const items: ActivityItem[] = [];
 

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Cockpit } from '@/components/hubs/Cockpit';
 import { RunWithEarnButton } from '@/components/command-center/RunWithEarnButton';
+import { MarkVisited } from '@/components/command-center/MarkVisited';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { MandateIcon } from '@/components/ui/MandateIcon';
@@ -29,7 +30,8 @@ import {
 import { compactMoney } from '@/lib/format';
 import { getLifecycleRail } from '@/lib/hubs';
 import { getCommandCenterData } from '@/lib/queries/command-center';
-import { loadStreak } from '@/lib/queries/dashboard/lifecycle';
+import { loadActivityFeed, loadStreak, type ActivityItem } from '@/lib/queries/dashboard/lifecycle';
+import { readLastVisit } from '@/lib/dashboard/state';
 import { getShellIdentity } from '@/lib/queries/identity';
 import { getMandate } from '@/lib/queries/mandate';
 import { getActiveOrg } from '@/lib/queries/org';
@@ -178,6 +180,58 @@ function SignalGrid({ signals }: { signals: DeskSignal[] }) {
   );
 }
 
+/** Where each kind of autonomous work opens, and its glyph. */
+const OVERNIGHT_HREF: Record<ActivityItem['kind'], string> = {
+  trust: '/execute/chain-of-trust',
+  diligence: '/run/diligence',
+  system: '/command-center'
+};
+const OVERNIGHT_ICON: Record<ActivityItem['kind'], string> = {
+  trust: 'shield-check',
+  diligence: 'cpu',
+  system: 'sparkles'
+};
+
+/**
+ * The prototype's "worked overnight" panel, on real data — the desk activity
+ * (Chain-of-Trust events, diligence runs) the AI team logged *since the
+ * operator's last visit*. Only rendered when there's genuine autonomous work
+ * to show; otherwise the SignalGrid (the read of the desk) takes its place, so
+ * the overnight claim is never empty theatre.
+ */
+function OvernightPanel({ items }: { items: ActivityItem[] }) {
+  return (
+    <Panel
+      icon={MoonStar}
+      eyebrow="Proactive — while you were away"
+      title="Your team worked overnight"
+    >
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        {items.map((it) => (
+          <Link
+            key={it.id}
+            href={OVERNIGHT_HREF[it.kind]}
+            className="flex items-start gap-2.5 rounded-[12px] border border-[var(--border-faint)] bg-surface-1 px-3 py-3 transition hover:-translate-y-0.5 hover:border-hairline hover:bg-surface-2"
+          >
+            <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg border border-[var(--azure-line)] bg-[var(--azure-soft)] text-azure-1">
+              <MandateIcon name={OVERNIGHT_ICON[it.kind]} size={15} strokeWidth={1.9} aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[12.5px] font-semibold leading-snug text-fg-1">
+                {it.title}
+              </span>
+              <span className="mt-1 flex items-center gap-1 text-[11px] text-fg-4">
+                <Sparkles size={11} aria-hidden />
+                {it.actor}
+              </span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 function QueueList({ moves }: { moves: DeskMove[] }) {
   return (
     <Panel icon={ListOrdered} eyebrow="Ranked by impact — one tap to open" title="Then, in order">
@@ -231,13 +285,22 @@ export default async function CommandCenterPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const [mandate, data, rail, identity, streak] = await Promise.all([
+  const [mandate, data, rail, identity, streak, activityFeed, lastVisit] = await Promise.all([
     getMandate(org.orgId),
     getCommandCenterData(org.orgId),
     getLifecycleRail(org.orgId),
     getShellIdentity(),
-    loadStreak(org.orgId)
+    loadStreak(org.orgId),
+    loadActivityFeed(org.orgId),
+    readLastVisit()
   ]);
+
+  // Real autonomous work logged since the prior visit — the honest "worked
+  // overnight". Only on a return visit (lastVisit set); a first-timer has no
+  // "while you were away" to show, so they see the desk read instead.
+  const overnight: ActivityItem[] = lastVisit
+    ? activityFeed.filter((it) => it.at > lastVisit).slice(0, 6)
+    : [];
 
   const firstName = (mandate?.principal ?? '').trim().split(/\s+/)[0] || 'there';
 
@@ -341,7 +404,11 @@ export default async function CommandCenterPage() {
         ))}
       </div>
 
-      <SignalGrid signals={signals} />
+      {overnight.length > 0 ? (
+        <OvernightPanel items={overnight} />
+      ) : (
+        <SignalGrid signals={signals} />
+      )}
       <QueueList moves={queue} />
 
       {/* the team — prototype pill chips */}
@@ -377,6 +444,9 @@ export default async function CommandCenterPage() {
         You set the mandate · the team works · you approve — everything routes through your
         approval.
       </p>
+
+      {/* Baseline this visit for the next "worked overnight" read (post-paint). */}
+      <MarkVisited />
     </div>
   );
 }
