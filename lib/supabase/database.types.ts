@@ -3560,6 +3560,9 @@ export type Database = {
       }
       member_profiles: {
         Row: {
+          access_decided_at: string | null
+          access_decided_by: string | null
+          access_status: string
           bio: string | null
           completion_pct: number
           created_at: string
@@ -3574,6 +3577,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          access_decided_at?: string | null
+          access_decided_by?: string | null
+          access_status?: string
           bio?: string | null
           completion_pct?: number
           created_at?: string
@@ -3588,6 +3594,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          access_decided_at?: string | null
+          access_decided_by?: string | null
+          access_status?: string
           bio?: string | null
           completion_pct?: number
           created_at?: string
@@ -3602,6 +3611,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "member_profiles_access_decided_by_fkey"
+            columns: ["access_decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "member_profiles_user_id_fkey"
             columns: ["user_id"]
