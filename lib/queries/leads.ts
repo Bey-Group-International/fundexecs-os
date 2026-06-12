@@ -15,6 +15,8 @@ export interface LeadView {
   stage: LeadStageKey;
   estValue: number | null;
   signal: string | null;
+  /** ISO timestamp of the last touch on the row (updated_at). */
+  lastActivity: string | null;
 }
 
 export interface LeadEngineView {
@@ -40,7 +42,7 @@ export const getLeadEngines = cache(async (orgId: string): Promise<LeadEngineDat
       .order('created_at', { ascending: false }),
     supabase
       .from('leads')
-      .select('id, deal_id, name, segment, intent, stage, est_value, signal')
+      .select('id, deal_id, name, segment, intent, stage, est_value, signal, updated_at')
       .eq('org_id', orgId)
       .order('intent', { ascending: false, nullsFirst: false })
   ]);
@@ -56,7 +58,8 @@ export const getLeadEngines = cache(async (orgId: string): Promise<LeadEngineDat
       intent: l.intent,
       stage: l.stage as LeadStageKey,
       estValue: l.est_value,
-      signal: l.signal
+      signal: l.signal,
+      lastActivity: l.updated_at
     });
   }
 
