@@ -3,6 +3,12 @@
 Copy-paste prompt for the agent (read `docs/agents/BUILD_TABS_PLAYBOOK.md`
 first — it is binding):
 
+> **Prerequisites (land with the playbook setup, not this PR):** this prompt
+> depends on `docs/agents/BUILD_TABS_PLAYBOOK.md` (binding rules) and the
+> prototype source `docs/agents/prototype/build/materials.jsx.txt`. Both are
+> added by the shared playbook-setup change; the prompt can only be run once
+> they are present in the repo.
+
 ---
 
 You own the **Materials & data room** tab of the Build hub in
@@ -59,10 +65,12 @@ Fidelity notes specific to this tab:
 - Material vocabulary, decision configs and seeded benches live in
   `lib/dataroom/config.ts` (pure, unit-tested — `config.test.ts`); extend
   there, not inline.
-- Server actions in `lib/dataroom/actions.ts` (`buildMaterial`,
-  `generateMaterialLink`) own all writes; spec sanitization stays in
-  `lib/dataroom/persistence.ts` (unit-tested). Keep new mutations behind
-  the same server-action + sanitize path.
+- Builder-side writes go through server actions in `lib/dataroom/actions.ts`
+  (`buildMaterial`, `generateMaterialLink`); spec sanitization stays in
+  `lib/dataroom/persistence.ts` (unit-tested). The public `/dr/[token]` route
+  is the only other write path — it logs real `data_room_views` rows via
+  `lib/dataroom/public-actions.ts`. Keep new mutations behind the same
+  server-action + sanitize path.
 
 Definition of done, gates, and PR format: per the playbook. Open a draft PR
 titled `Build tab — Materials & data room: prototype parity`.
