@@ -90,6 +90,20 @@ export function persistableGovMembers(input: unknown): GovMember[] {
   return addedMembers(sanitizeGovMembers(input));
 }
 
+/**
+ * Union a roster write onto what is already stored, keyed by member id, so two
+ * sessions seating different members concurrently can't clobber each other —
+ * the write is additive. Roster removal, if it ever lands, needs a dedicated
+ * path; today every roster write only adds. The incoming copy of a member wins
+ * on id conflict, and the result is capped to MAX_MEMBERS.
+ */
+export function mergeGovMembers(existing: GovMember[], incoming: GovMember[]): GovMember[] {
+  const byId = new Map<string, GovMember>();
+  for (const m of existing) byId.set(m.id, m);
+  for (const m of incoming) byId.set(m.id, m);
+  return [...byId.values()].slice(0, MAX_MEMBERS);
+}
+
 /** Coerce unknown input into a bounded, well-typed member roster. */
 export function sanitizeGovMembers(input: unknown): GovMember[] {
   if (!Array.isArray(input)) return [];

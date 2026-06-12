@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { GOV_POLICIES } from './config';
 import {
   GOV_BODY_KINDS,
+  mergeGovMembers,
   persistableGovMembers,
   policyById,
   sanitizeGovMembers,
@@ -89,6 +90,37 @@ test('sanitizePolicyStatus reads drafted, defaults everything else to adopted', 
   assert.equal(sanitizePolicyStatus('adopted'), 'adopted');
   assert.equal(sanitizePolicyStatus(undefined), 'adopted');
   assert.equal(sanitizePolicyStatus('weird'), 'adopted');
+});
+
+test('mergeGovMembers is additive — concurrent seats both survive', () => {
+  const stored = [{ id: 'm-a', name: 'A', role: 'Partner' }];
+  const incoming = [
+    { id: 'm-a', name: 'A', role: 'Partner' },
+    { id: 'm-b', name: 'B', role: 'Partner' }
+  ];
+  // The new member is added, the shared one isn't duplicated.
+  assert.deepEqual(
+    mergeGovMembers(stored, incoming).map((m) => m.id),
+    ['m-a', 'm-b']
+  );
+  // A write that doesn't know about a concurrently-seated member keeps it.
+  const concurrent = mergeGovMembers(
+    [
+      { id: 'm-a', name: 'A', role: 'Partner' },
+      { id: 'm-c', name: 'C', role: 'Partner' }
+    ],
+    [
+      { id: 'm-a', name: 'A', role: 'Partner' },
+      { id: 'm-b', name: 'B', role: 'Partner' }
+    ]
+  );
+  assert.deepEqual(concurrent.map((m) => m.id).sort(), ['m-a', 'm-b', 'm-c']);
+});
+
+test('mergeGovMembers caps the unioned roster', () => {
+  const stored = Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, role: 'Member' }));
+  const incoming = Array.from({ length: 10 }, (_, i) => ({ id: `i${i}`, role: 'Member' }));
+  assert.equal(mergeGovMembers(stored, incoming).length, 12);
 });
 
 test('body kinds match the migration check constraint', () => {
