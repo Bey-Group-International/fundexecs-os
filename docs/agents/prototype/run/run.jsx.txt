@@ -1,0 +1,857 @@
+/* ===========================================================
+   FundExecs OS — Onboarding Prototype · Run hub
+   Operate the systems. Starting with Diligence — Marcus runs
+   a panel of agents on each deal; you review and clear items.
+   =========================================================== */
+
+const DD_AGENTS = [
+  { id: 'financial',  name: 'Financial diligence',   icon: 'calculator',   who: 'Marcus' },
+  { id: 'legal',      name: 'Legal & contracts',     icon: 'scale',        who: 'Adrian' },
+  { id: 'commercial', name: 'Commercial & market',   icon: 'trending-up',  who: 'Theodore' },
+  { id: 'tech',       name: 'Technology & IP',       icon: 'cpu',          who: 'Dalia' },
+  { id: 'ops',        name: 'Operations & team',     icon: 'users',        who: 'Sterling' },
+  { id: 'esg',        name: 'ESG & compliance',      icon: 'leaf',         who: 'Adrian' },
+  { id: 'customer',   name: 'Customer & references', icon: 'phone',        who: 'Eleanor' },
+];
+
+/* per-deal diligence state: agent -> {status, headline, detail, confidence, checks, severity, evidence} */
+const DD_DEALS = {
+  helios: {
+    name: 'Helios Robotics', sector: 'Industrials', amt: 18,
+    agents: {
+      financial:  { status: 'clear', confidence: 94, checks: 18, headline: 'Quality of earnings confirmed', detail: 'EBITDA bridge ties out; 2 small add-backs normalized. Net revenue retention 118%.', evidence: ['3yr audited financials', 'QoE report (Whitfield)', 'Bank statements', 'AR/AP aging'] },
+      commercial: { status: 'clear', confidence: 88, checks: 12, headline: 'Market tailwind intact', detail: 'TAM growing 14%/yr; win rate up vs. two incumbents. Pipeline coverage 3.1x.', evidence: ['Market study', 'Win/loss analysis', 'Customer concentration'] },
+      tech:       { status: 'clear', confidence: 91, checks: 15, headline: 'IP clean, stack modern', detail: '4 granted patents, no freedom-to-operate conflicts. Tech debt low.', evidence: ['Patent search', 'Code audit', 'Security scan', 'Architecture review'] },
+      ops:        { status: 'caution', confidence: 76, checks: 11, severity: 'Low', headline: 'Key-person risk on CTO', detail: 'Single point of failure on the CTO. Retention package in the LOI mitigates but does not eliminate.', action: 'Add CTO retention milestone', evidence: ['Org chart', 'Comp review', 'Tenure analysis'] },
+      esg:        { status: 'clear', confidence: 90, checks: 9, headline: 'No material exposure', detail: 'Standard industrial profile; no sanctions or environmental liabilities.', evidence: ['Sanctions screen', 'Environmental review', 'Litigation search'] },
+      legal:      { status: 'flag', confidence: 62, checks: 14, severity: 'High', headline: 'Change-of-control in top-2 contracts', detail: 'Change-of-control clauses in the top-2 accounts (31% of revenue) require counterparty consent on close. Without consent, revenue is at risk.', action: 'Confirm consent path', evidence: ['Top-10 customer contracts', 'Cap table', 'Corporate records'] },
+      customer:   { status: 'flag', confidence: 70, checks: 6, severity: 'Medium', headline: 'Largest account reference pending', detail: '5 of 6 references strongly positive. The 6th (largest account, 19% of revenue) has not responded — Eleanor is chasing.', action: 'Chase final reference', evidence: ['5 completed reference calls', 'NPS data'] },
+    },
+  },
+  cedar: {
+    name: 'Cedar Roll-up', sector: 'Consumer', amt: 24,
+    agents: {
+      financial:  { status: 'clear', confidence: 89, checks: 16, headline: 'Roll-up economics hold', detail: 'Pro-forma combined EBITDA validated across 3 targets; synergy assumptions conservative.', evidence: ['Combined P&L', 'Synergy model', 'Working capital review'] },
+      commercial: { status: 'caution', confidence: 74, checks: 10, severity: 'Medium', headline: 'Fragmentation thesis intact, integration risk', detail: 'Market is fragmented as expected, but integrating 3 teams carries execution risk.', action: 'Stress the integration plan', evidence: ['Market map', 'Target overlap analysis'] },
+      tech:       { status: 'clear', confidence: 82, checks: 8, headline: 'Systems consolidation feasible', detail: 'Common ERP path identified; 6-month consolidation timeline.', evidence: ['Systems audit'] },
+      ops:        { status: 'flag', confidence: 58, checks: 12, severity: 'High', headline: 'Two founders exiting at close', detail: 'Both lead-target founders plan to exit at close. Management gap must be filled before signing.', action: 'Line up interim leadership', evidence: ['Org charts', 'Founder interviews', 'Retention analysis'] },
+      esg:        { status: 'clear', confidence: 86, checks: 7, headline: 'Clean across targets', detail: 'No material ESG flags across the three businesses.', evidence: ['Sanctions screen', 'Litigation search'] },
+      legal:      { status: 'clear', confidence: 84, checks: 13, headline: 'Clean cap tables', detail: 'All three targets have clean ownership; no change-of-control issues.', evidence: ['Cap tables', 'Customer contracts'] },
+      customer:   { status: 'caution', confidence: 78, checks: 9, severity: 'Low', headline: 'Overlapping customers', detail: 'Some customer overlap across targets — modest concentration once combined.', action: 'Confirm post-merger concentration', evidence: ['Customer lists', 'Reference calls'] },
+    },
+  },
+  nova: {
+    name: 'Nova AI', sector: 'AI & Software', amt: 12,
+    agents: {
+      financial:  { status: 'clear', confidence: 80, checks: 11, headline: 'Strong unit economics', detail: 'Gross margin 82%, efficient growth, 14-month CAC payback.', evidence: ['SaaS metrics', 'Cohort analysis'] },
+      commercial: { status: 'clear', confidence: 85, checks: 9, headline: 'Category leader emerging', detail: 'Differentiated vertical AI; strong logos and expansion revenue.', evidence: ['Win/loss', 'Logo review'] },
+      tech:       { status: 'flag', confidence: 60, checks: 14, severity: 'High', headline: 'Model dependency on third-party LLM', detail: 'Core product depends on a single external model provider — concentration and cost risk.', action: 'Assess model portability', evidence: ['Architecture review', 'Vendor contracts', 'Cost analysis'] },
+      ops:        { status: 'caution', confidence: 72, checks: 8, severity: 'Medium', headline: 'Hiring plan ambitious', detail: 'Plan assumes aggressive engineering hires in a tight market.', action: 'Pressure-test the hiring plan', evidence: ['Headcount plan', 'Comp benchmarks'] },
+      esg:        { status: 'pending', confidence: 0, checks: 2, headline: 'AI governance review running', detail: 'Adrian is reviewing data-use, bias and AI-governance exposure.', evidence: ['In progress'] },
+      legal:      { status: 'clear', confidence: 83, checks: 10, headline: 'IP assigned, clean', detail: 'All IP properly assigned; standard customer terms.', evidence: ['IP assignments', 'Contracts'] },
+      customer:   { status: 'pending', confidence: 0, checks: 1, headline: 'Reference calls scheduling', detail: 'Eleanor is scheduling 6 customer reference calls.', evidence: ['In progress'] },
+    },
+  },
+};
+const DD_DEAL_META = [
+  { id: 'helios', label: 'Helios Robotics', sub: 'Industrials · $18M' },
+  { id: 'cedar', label: 'Cedar Roll-up', sub: 'Consumer · $24M' },
+  { id: 'nova', label: 'Nova AI', sub: 'AI & Software · $12M' },
+];
+
+const DD_STATUS = {
+  clear:   { tone: 'success', label: 'Clear', icon: 'check-circle-2' },
+  caution: { tone: 'info', label: 'Caution', icon: 'info' },
+  flag:    { tone: 'warning', label: 'Needs review', icon: 'alert-triangle' },
+  pending: { tone: 'neutral', label: 'Running', icon: 'loader' },
+};
+const DD_SEV = { High: { tone: 'danger', c: 'var(--danger)' }, Medium: { tone: 'warning', c: 'var(--warning)' }, Low: { tone: 'info', c: 'var(--info)' } };
+
+/* ---- Workflows / Compliance / IR — each item drives toward execution ---- */
+const RUN_TONE = { open: 'warning', progress: 'azure', done: 'success', upcoming: 'info' };
+const WF_SEED = [
+  { id: 'icmemo',  name: 'IC memo & approval', who: 'Theodore', status: 'done', due: 'Approved', critical: true, drives: 'Authorizes the investment', action: '', done: 'Approved',
+    sub: [['Draft memo from diligence', true], ['Circulate to IC', true], ['Unanimous vote', true]], dep: '' },
+  { id: 'spa',     name: 'Finalize the SPA', who: 'Adrian', status: 'progress', due: 'Due in 3d', critical: true, drives: 'Unblocks signing & wire', action: 'Finish redlines', done: 'Final',
+    sub: [['Exchange markups', true], ['Resolve indemnity cap', true], ['Reps & warranties final', false], ['Disclosure schedules', false]], dep: 'IC approval' },
+  { id: 'debt',    name: 'Confirm debt commitment', who: 'Priya', status: 'open', due: 'Due in 5d', critical: true, drives: 'Funds 40% of the close', action: 'Lock the term sheet', done: 'Committed',
+    sub: [['Lender credit approval', true], ['Term sheet countersigned', false], ['Conditions precedent list', false]], dep: 'QoE complete' },
+  { id: 'checklist', name: 'Closing checklist', who: 'Sterling', status: 'progress', due: '12 of 19 done', critical: false, drives: 'Sequences every closing step', action: 'Clear next 3 items', done: 'Complete',
+    sub: [['Funds flow memo', true], ['Signature pages prepped', true], ['Escrow instructions', false], ['Wire confirmations', false]], dep: 'SPA final' },
+  { id: 'integration', name: '100-day integration plan', who: 'Sterling', status: 'open', due: 'Pre-close', critical: false, drives: 'Day-one value creation', action: 'Draft the plan', done: 'Ready',
+    sub: [['Value-creation thesis', false], ['First-90-days owner map', false], ['KPI dashboard', false]], dep: '' },
+];
+const CO_ITEMS = [
+  { id: 'kyc',     name: 'LP KYC / AML', cat: 'Investor', who: 'Adrian', status: 'open', sev: 'High', due: '2 LPs pending', drives: 'Blocks $16M of commitments', action: 'Clear the 2 LPs', done: 'All cleared', detail: 'Two subscribing LPs have incomplete source-of-funds verification. Capital cannot be accepted until cleared.', items: ['Granite Endowment — ID verified, SoF pending', 'Harbor Family Trust — awaiting docs'] },
+  { id: 'formd',   name: 'Form D amendment', cat: 'Regulatory', who: 'Adrian', status: 'upcoming', sev: 'Medium', due: 'Due in 12d', drives: 'Keeps the raise SEC-compliant', action: 'Prepare the filing', done: 'Filed', detail: 'A Form D amendment is due within 30 days of the first sale to reflect the new total offering amount.', items: ['Updated offering size', 'New investor count', 'EDGAR filing'] },
+  { id: 'attest',  name: 'Personal trading attestations', cat: 'Internal', who: 'Adrian', status: 'open', sev: 'Low', due: '3 outstanding', drives: 'Required before next close', action: 'Send reminders', done: 'Complete', detail: 'Three team members have outstanding quarterly personal-trading attestations under the Code of Ethics.', items: ['Jordan A. — submitted', 'Priya A. — pending', 'Tom B. — pending', 'Advisor — pending'] },
+  { id: 'adv',     name: 'Form ADV annual update', cat: 'Regulatory', who: 'Adrian', status: 'upcoming', sev: 'Medium', due: 'Due in 38d', drives: 'Maintains adviser registration', action: 'Draft the update', done: 'Filed', detail: 'The annual Form ADV update is due within 90 days of fiscal year-end. AUM and disclosures need refreshing.', items: ['AUM update', 'Brochure (Part 2A)', 'Disclosure review'] },
+  { id: 'review',  name: 'Annual compliance review', cat: 'Internal', who: 'Adrian', status: 'done', sev: 'Low', due: 'Complete', drives: 'ODD-ready for institutions', action: '', done: 'Complete', detail: 'The annual review of the compliance program under Rule 206(4)-7 is complete and documented.', items: ['Policy review', 'Testing', 'Findings memo'] },
+  { id: 'calendar', name: 'Regulatory filings calendar', cat: 'Regulatory', who: 'Adrian', status: 'done', sev: 'Low', due: 'On track', drives: 'No surprises pre-close', action: '', done: 'On track', detail: 'All upcoming regulatory deadlines are tracked with owners and reminders set.', items: ['Form D', 'Form ADV', 'Blue sky filings', '13F (if triggered)'] },
+  { id: 'soc2',    name: 'SOC 2 / cybersecurity', cat: 'Data & Cyber', who: 'Noah', status: 'open', sev: 'Medium', due: 'In progress', drives: 'Increasingly required in ODD', action: 'Close the gaps', done: 'Aligned', detail: 'Institutional LPs now ask for SOC 2-aligned controls. Two gaps remain in access management and incident response.', items: ['Access controls', 'Incident response plan', 'Vendor risk review', 'Penetration test'] },
+  { id: 'aml',     name: 'AML program & officer', cat: 'Investor', who: 'Adrian', status: 'done', sev: 'Low', due: 'Active', drives: 'Lets you accept institutional capital', action: '', done: 'Active', detail: 'AML program adopted with a designated officer and ongoing screening against sanctions lists.', items: ['Written program', 'Designated officer', 'OFAC screening'] },
+  { id: 'bluesky', name: 'Blue sky (state) filings', cat: 'Regulatory', who: 'Adrian', status: 'upcoming', sev: 'Low', due: 'Per state, post-close', drives: 'State-level offering compliance', action: 'File the 4 states', done: 'Filed', detail: 'State notice filings are due in the states where your LPs reside, generally within 15 days of first sale.', items: ['CA', 'NY', 'TX', 'MA'] },
+  { id: 'marketing', name: 'Marketing & comms review', cat: 'Internal', who: 'Sienna', status: 'open', sev: 'Medium', due: '2 to review', drives: 'Keeps the raise within the rules', action: 'Review the 2 pieces', done: 'Approved', detail: 'Two LP-facing materials need compliance review under the Marketing Rule before they go out.', items: ['Pitch deck performance page', 'One-pager track record'] },
+  { id: 'privacy', name: 'Data privacy (GDPR/CCPA)', cat: 'Data & Cyber', who: 'Noah', status: 'upcoming', sev: 'Low', due: 'Policy refresh', drives: 'Required for EU & CA investors', action: 'Refresh the policy', done: 'Current', detail: 'Privacy policy and data-processing terms need a refresh to cover EU and California LP data.', items: ['Privacy policy', 'DPA template', 'Data map'] },
+];
+const CO_CATS = ['Regulatory', 'Investor', 'Internal', 'Data & Cyber'];
+const IR_ITEMS = [
+  { id: 'q2',      name: 'Q2 LP letter', cat: 'Letters', who: 'Eleanor', status: 'progress', due: 'Draft ready', drives: 'Keeps momentum into next close', action: 'Review & send', done: 'Sent', detail: 'Your quarterly letter is drafted from the workspace — performance, portfolio news and market view. Review and send.', items: ['Performance section', 'Portfolio updates', 'Market commentary', 'Capital activity'] },
+  { id: 'capacct', name: 'Capital account statements', cat: 'Statements', who: 'Eleanor', status: 'open', due: 'Quarter-end', drives: 'LPs expect them on cadence', action: 'Generate & send', done: 'Sent', detail: 'Per-LP capital account statements with NAV, contributions, distributions, fees and carry.', items: ['NAV struck', 'Per-LP allocations', 'Fee & carry calc', 'Distribution'] },
+  { id: 'annual',  name: 'Annual meeting deck', cat: 'Events', who: 'Sienna', status: 'open', due: 'In 6 weeks', drives: 'The room that drives re-ups', action: 'Start the deck', done: 'Ready', detail: 'The annual LP meeting is your single biggest re-up moment. Build the deck and run of show.', items: ['Performance review', 'Portfolio deep-dives', 'Strategy & outlook', 'Q&A prep'] },
+  { id: 'datalp',  name: 'LP portal', cat: 'Portal', who: 'Eleanor', status: 'done', due: 'Live', drives: 'Self-serve transparency', action: '', done: 'Live', detail: 'Your secure LP portal is live with documents, statements and performance — reducing one-off requests.', items: ['Documents', 'Statements', 'Performance', 'Capital calls'] },
+  { id: 'monthly', name: 'Monthly snapshot', cat: 'Letters', who: 'Eleanor', status: 'progress', due: 'Auto · 3d', drives: 'Light-touch confidence between quarters', action: 'Approve the draft', done: 'Sent', detail: 'A short monthly note (Earn auto-drafts it) keeps LPs warm between formal reports.', items: ['KPIs', 'One portfolio highlight', 'One ask'] },
+  { id: 'k1',      name: 'K-1 tax packages', cat: 'Statements', who: 'Adrian', status: 'upcoming', due: 'By Mar 15', drives: 'Avoids the tax-season scramble', action: 'Brief the accountants', done: 'Issued', detail: 'K-1s must reach LPs before the tax deadline. Kick off early with Harbor Tax.', items: ['Engage Harbor Tax', 'Allocations', 'Review', 'Distribute'] },
+  { id: 'oneonone', name: 'Anchor LP 1:1s', cat: 'Events', who: 'Sloane', status: 'open', due: '3 to schedule', drives: 'Anchors drive the next fund', action: 'Schedule the 3', done: 'Done', detail: 'Quarterly 1:1s with your three largest LPs keep the most important relationships strong.', items: ['Granite Endowment', 'Meridian Family Office', 'Coastal Pension'] },
+  { id: 'webinar', name: 'Portfolio webinar', cat: 'Events', who: 'Sienna', status: 'upcoming', due: 'Next month', drives: 'Deepens conviction across all LPs', action: 'Plan the agenda', done: 'Held', detail: 'A live portfolio update webinar lets every LP hear directly from you and a portfolio CEO.', items: ['Topic & speakers', 'Invite list', 'Q&A prep'] },
+  { id: 'coda', name: 'Capital call notice', cat: 'Statements', who: 'Eleanor', status: 'open', due: 'Drawdown #2', drives: 'Funds the next investment', action: 'Issue the notice', done: 'Issued', detail: 'Capital call #2 funds the Helios close. Notices go to all LPs with 10 business days to fund.', items: ['Per-LP amounts', 'Wire instructions', 'Due date'] },
+  { id: 'survey', name: 'Annual LP survey', cat: 'Portal', who: 'Eleanor', status: 'done', due: 'Closed', drives: 'Surfaces sentiment before re-up', action: '', done: 'Closed', detail: 'The annual LP satisfaction survey is complete — overall NPS 72, with a clear ask for more frequent updates.', items: ['Sent to 12', '9 responded', 'NPS 72', 'Action items logged'] },
+];
+const IR_CATS = ['Letters', 'Statements', 'Events', 'Portal'];
+const IR_LPS = [
+  { id: 'meridian', name: 'Meridian Family Office', amt: 6, sentiment: 'Champion', tone: 'success', last: 'Met 1w ago' },
+  { id: 'granite', name: 'Granite Endowment', amt: 10, sentiment: 'Engaged', tone: 'azure', last: 'Opened Q2 letter' },
+  { id: 'coastal', name: 'Coastal Pension', amt: 15, sentiment: 'Engaged', tone: 'azure', last: 'Portal active' },
+  { id: 'harbor', name: 'Harbor Family Trust', amt: 8, sentiment: 'Champion', tone: 'success', last: 'Referred a new LP' },
+  { id: 'beacon', name: 'Beacon Foundation', amt: 5, sentiment: 'Engaged', tone: 'azure', last: 'Joined webinar' },
+  { id: 'aurelius', name: 'Aurelius Capital', amt: 20, sentiment: 'Needs attention', tone: 'warning', last: 'Quiet 6w' },
+];
+/* fund performance — the headline numbers every LP checks */
+const IR_PERF = [
+  { label: 'Net IRR', value: '24.1%', tone: 'success' },
+  { label: 'TVPI', value: '1.6x', tone: 'gold' },
+  { label: 'DPI', value: '0.4x', tone: 'azure' },
+  { label: 'NAV', value: '$112M', tone: 'info' },
+];
+const IR_SEED = IR_ITEMS;
+
+/* multiple active workflow streams + Earn's recurring automations */
+const WF_STREAMS = [
+  { id: 'helios', label: 'Helios close', sub: 'Deal · $18M', icon: 'building-2' },
+  { id: 'fundraise', label: 'Fund I raise', sub: 'Capital ops', icon: 'landmark' },
+  { id: 'portfolio', label: 'Portfolio ops', sub: 'Post-close', icon: 'briefcase' },
+  { id: 'lponboard', label: 'LP onboarding', sub: 'New investors', icon: 'user-plus' },
+  { id: 'reporting', label: 'Quarter-end', sub: 'Reporting cycle', icon: 'calendar-clock' },
+];
+const WF_FUNDRAISE = [
+  { id: 'firstclose', name: 'First close ($150M)', who: 'Sloane', status: 'progress', due: 'Due in 10d', critical: true, drives: 'Triggers the management fee', action: 'Confirm the 8 anchors', done: 'Closed',
+    sub: [['8 anchor LPs soft-circled', true], ['Subscription docs out', true], ['Countersignatures', false], ['Capital call notice', false]], dep: 'Fund formed' },
+  { id: 'subpack', name: 'Subscription processing', who: 'Eleanor', status: 'progress', due: '5 of 12 in', critical: false, drives: 'Converts commitments to cash', action: 'Chase the 7 open', done: 'Complete',
+    sub: [['Docs issued to 12', true], ['5 returned & countersigned', true], ['KYC cleared', false]], dep: '' },
+  { id: 'dataroom', name: 'Diligence requests', who: 'Eleanor', status: 'open', due: '3 LPs asking', critical: false, drives: 'Unblocks final commitments', action: 'Fulfill the requests', done: 'Cleared',
+    sub: [['Track-record verification', false], ['Reference calls', false]], dep: '' },
+  { id: 'sideletters', name: 'Side letter negotiations', who: 'Adrian', status: 'open', due: '2 anchors', critical: true, drives: 'Locks the anchor checks', action: 'Resolve MFN terms', done: 'Signed',
+    sub: [['MFN review', false], ['Fee terms', false]], dep: 'LPA final' },
+];
+const WF_PORTFOLIO = [
+  { id: 'onboarding', name: 'Atlas onboarding', who: 'Sterling', status: 'progress', due: 'Day 1–30', critical: true, drives: 'Secures the investment day one', action: 'Complete the 30-day plan', done: 'Onboarded',
+    sub: [['Board seats taken', true], ['Banking & systems access', true], ['100-day plan live', false], ['KPI dashboard', false]], dep: 'Close complete' },
+  { id: 'reporting', name: 'Portfolio reporting setup', who: 'Eleanor', status: 'open', due: 'By month-end', critical: false, drives: 'Feeds LP updates', action: 'Stand up the cadence', done: 'Live',
+    sub: [['Monthly KPI pull', false], ['Valuation policy applied', false]], dep: '' },
+  { id: 'value', name: 'Value-creation initiatives', who: 'Theodore', status: 'open', due: 'Q1 targets', critical: false, drives: 'Drives the return', action: 'Prioritize the top 3', done: 'In motion',
+    sub: [['Pricing optimization', false], ['Add-on pipeline', false], ['Ops efficiency', false]], dep: '' },
+];
+const WF_BOARDS = { helios: 'wfHelios', fundraise: 'wfFundraise', portfolio: 'wfPortfolio' };
+const WF_LPONBOARD = [
+  { id: 'subdocs', name: 'Collect subscription docs', who: 'Eleanor', status: 'progress', due: '4 of 6 in', critical: true, drives: 'Converts the commitment to cash', action: 'Chase the 2 open', done: 'Received',
+    sub: [['Docs issued', true], ['4 returned', true], ['Wire instructions sent', false]], dep: '' },
+  { id: 'kyconboard', name: 'KYC / AML verification', who: 'Adrian', status: 'open', due: '2 pending', critical: true, drives: 'Required before accepting capital', action: 'Run the 2 checks', done: 'Cleared',
+    sub: [['ID verification', false], ['Source-of-funds', false]], dep: '' },
+  { id: 'portalaccess', name: 'Grant data-room & portal access', who: 'Eleanor', status: 'open', due: 'On signature', critical: false, drives: 'Self-serve LP experience', action: 'Provision access', done: 'Live',
+    sub: [['Scoped links', false], ['Welcome sequence', false]], dep: 'Docs signed' },
+  { id: 'welcome', name: 'Onboarding welcome call', who: 'Sloane', status: 'done', due: 'Done', critical: false, drives: 'Starts the relationship right', action: '', done: 'Done',
+    sub: [['Intro call', true], ['Reporting expectations set', true]], dep: '' },
+];
+const WF_REPORTING = [
+  { id: 'nav', name: 'Strike NAV & valuations', who: 'Eleanor', status: 'progress', due: 'Due in 4d', critical: true, drives: 'The basis for every LP statement', action: 'Finalize marks', done: 'Struck',
+    sub: [['Portfolio marks', true], ['Valuation policy applied', true], ['Auditor review', false]], dep: '' },
+  { id: 'capstatements', name: 'Capital account statements', who: 'Eleanor', status: 'open', due: 'Quarter-end', critical: true, drives: 'LPs expect them on cadence', action: 'Generate & send', done: 'Sent',
+    sub: [['Per-LP allocations', false], ['Fee & carry calc', false]], dep: 'NAV struck' },
+  { id: 'qletter', name: 'Quarterly LP letter', who: 'Sienna', status: 'progress', due: 'Draft ready', critical: false, drives: 'Keeps LPs confident', action: 'Review & send', done: 'Sent',
+    sub: [['Performance section', true], ['Portfolio updates', true], ['Market commentary', false]], dep: '' },
+  { id: 'k1prep', name: 'K-1 tax prep kickoff', who: 'Adrian', status: 'open', due: 'Pre-year-end', critical: false, drives: 'Avoids the tax-season scramble', action: 'Brief the accountants', done: 'Underway',
+    sub: [['Engage Harbor Tax', false], ['Data package', false]], dep: '' },
+];
+const AUTOMATIONS = [
+  { id: 'digest', name: 'Weekly LP digest', icon: 'mail', desc: 'Auto-drafts your investor update every Friday', on: true, last: 'Ran 2d ago' },
+  { id: 'compliance', name: 'Compliance monitoring', icon: 'shield-check', desc: 'Watches filings, deadlines & attestations', on: true, last: 'Live' },
+  { id: 'pipeline', name: 'Pipeline refresh', icon: 'radar', desc: 'Re-scores deals & LPs nightly', on: true, last: 'Ran 8h ago' },
+  { id: 'cash', name: 'Cash & capital calls', icon: 'banknote', desc: 'Flags when a call or distribution is due', on: false, last: 'Paused' },
+];
+
+function RunSection({ title, eyebrow, icon, items, headline, onItem, onRun }) {
+  const done = items.filter(i => i.status === 'done').length;
+  const open = items.filter(i => i.status !== 'done');
+  return (
+    <Panel title={title} eyebrow={eyebrow} icon={icon}
+      action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Ask Earn</Button>}>
+      {/* drive-to-execution banner */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 14, padding: '11px 14px', borderRadius: 12, background: open.length ? 'var(--gold-soft)' : 'var(--success-soft)', border: `1px solid ${open.length ? 'var(--gold-line)' : 'var(--success-line)'}` }}>
+        <Icon name={open.length ? 'flag' : 'circle-check-big'} size={17} color={open.length ? 'var(--gold-1)' : 'var(--success)'} />
+        <div style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.45 }}>{headline}</div>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--fg-3)', flex: 'none' }}>{done}/{items.length} done</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {items.slice().sort((a, b) => (a.status === 'done') - (b.status === 'done')).map(it => {
+          const t = RUN_TONE[it.status] || 'neutral'; const isDone = it.status === 'done';
+          return (
+            <div key={it.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--surface-1)', borderLeft: `2px solid ${TONE[t].c}`, opacity: isDone ? 0.72 : 1 }}>
+              <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isDone ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${isDone ? 'var(--success-line)' : 'var(--border)'}`, color: isDone ? 'var(--success)' : 'var(--fg-3)' }}><Icon name={isDone ? 'check' : icon} size={15} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
+                  <Badge tone={t} style={{ fontSize: 9, padding: '1px 6px', flex: 'none' }}>{it.due}</Badge>
+                </div>
+                <div style={{ fontSize: 11, color: open.length && !isDone ? 'var(--gold-1)' : 'var(--fg-5)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Icon name={isDone ? 'check' : 'arrow-right'} size={11} />{isDone ? 'Done · ' + it.who : it.drives + ' · ' + it.who}
+                </div>
+              </div>
+              {isDone ? <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', flex: 'none' }}>Done</span>
+                : <Button variant="secondary" size="sm" icon="sparkles" style={{ flex: 'none' }} onClick={() => onItem(it)}>{it.action}</Button>}
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+function IRCenter({ items, lps, onRunItem, onRun, mobile }) {
+  const [openId, setOpenId] = useState(null);
+  const [cat, setCat] = useState('All');
+  const sent = items.filter(i => i.status === 'done').length;
+  const open = items.filter(i => i.status !== 'done');
+  const attention = lps.filter(l => l.tone === 'warning').length;
+  const onTime = Math.round((sent / items.length) * 100);
+  const champions = lps.filter(l => l.sentiment === 'Champion').length;
+  const shown = items.filter(i => cat === 'All' || i.cat === cat);
+  const it = openId && items.find(x => x.id === openId);
+
+  return (
+    <Panel title="IR & reporting" eyebrow="Keep LPs confident · Eleanor" icon="users"
+      action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Ask Earn</Button>}>
+      {/* IR posture header */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div className="card-flat" style={{ flex: '2 1 280px', padding: '14px 16px', background: 'var(--surface-1)', borderLeft: `3px solid ${attention ? 'var(--warning)' : 'var(--success)'}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 9, flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: attention ? 'var(--warning)' : 'var(--success)', background: attention ? 'var(--warning-soft)' : 'var(--success-soft)', border: `1px solid ${attention ? 'var(--warning-line)' : 'var(--success-line)'}`, borderRadius: 999, padding: '4px 12px' }}><Icon name="heart-handshake" size={14} />{attention ? `${attention} LP needs attention` : 'LPs warm'}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{champions} champion · {open.length} reports open</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}><b style={{ color: 'var(--fg-1)' }}>{onTime}%</b> reporting on cadence</span>
+            <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>{sent}/{items.length} sent</span>
+          </div>
+          <ProgressBar value={onTime} gradient="linear-gradient(90deg,#1F8A5B,#2fae74)" height={7} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
+          <Button variant={open.length ? 'secondary' : 'gold'} size="sm" icon={open.length ? 'send' : 'check-circle-2'} disabled={!!open.length}>{open.length ? `${open.length} to send` : 'All sent'}</Button>
+          <Button variant="ghost" size="sm" icon="calendar">Reporting calendar</Button>
+        </div>
+      </div>
+      {/* fund performance snapshot */}
+      <div className="card-flat" style={{ padding: '12px 14px', marginBottom: 14, background: 'var(--surface-1)' }}>
+        <div className="t-eyebrow" style={{ marginBottom: 9, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="trending-up" size={12} color="var(--gold-1)" />Fund performance · what LPs check first</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 10 }}>
+          {IR_PERF.map(p => (
+            <div key={p.label} style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>{p.label}</div>
+              <div className="t-metric" style={{ fontSize: 20, marginTop: 4, color: TONE[p.tone].c }}>{p.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* LP engagement roster */}
+      <div className="card-flat" style={{ padding: '12px 14px', marginBottom: 14, background: 'var(--surface-1)' }}>
+        <div className="t-eyebrow" style={{ marginBottom: 9, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="users" size={12} color="var(--fg-4)" />LP engagement</div>
+        <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(auto-fit,minmax(220px,1fr))', gap: 8 }}>
+          {lps.map(l => (
+            <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+              <Avatar name={l.name} size={28} tone={l.tone === 'success' ? 'gold' : 'azure'} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</div>
+                <div style={{ fontSize: 10, color: 'var(--fg-5)' }}>{l.last}</div>
+              </div>
+              <Badge tone={l.tone} style={{ fontSize: 9, padding: '1px 6px', flex: 'none' }}>{l.sentiment}</Badge>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* category filter */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 12 }}>
+        {['All', ...IR_CATS].map(c => <Chip key={c} label={c} selected={cat === c} onClick={() => setCat(c)} />)}
+      </div>
+      {/* deliverables */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {shown.slice().sort((a, b) => (a.status === 'done') - (b.status === 'done')).map(i => {
+          const t = RUN_TONE[i.status] || 'neutral'; const isDone = i.status === 'done';
+          return (
+            <div key={i.id} className="clickable card-flat" onClick={() => setOpenId(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--surface-1)', borderLeft: `2px solid ${TONE[t].c}`, cursor: 'pointer', opacity: isDone ? 0.72 : 1 }}>
+              <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isDone ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${isDone ? 'var(--success-line)' : 'var(--border)'}`, color: isDone ? 'var(--success)' : 'var(--fg-3)' }}><Icon name={isDone ? 'check' : 'file-text'} size={15} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.name}</span>
+                  <span style={{ fontSize: 9.5, color: 'var(--fg-5)', flex: 'none' }}>· {i.cat}</span>
+                </div>
+                <div style={{ fontSize: 11, color: !isDone ? 'var(--gold-1)' : 'var(--fg-5)', marginTop: 3 }}>{isDone ? 'Sent · ' + i.who : i.drives}</div>
+              </div>
+              <Badge tone={t} style={{ fontSize: 9, padding: '1px 6px', flex: 'none' }}>{i.due}</Badge>
+              {!isDone && i.action && <Button variant="secondary" size="sm" icon="sparkles" style={{ flex: 'none' }} onClick={(e) => { e.stopPropagation(); onRunItem(i); }}>{i.action}</Button>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* detail drawer */}
+      {it && (
+        <>
+          <div onClick={() => setOpenId(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.64)', backdropFilter: 'blur(3px)', zIndex: 60 }} />
+          <div className="fade-in" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 440, maxWidth: '94vw', background: 'var(--bg-2)', borderLeft: '1px solid var(--border-strong)', zIndex: 61, overflowY: 'auto', boxShadow: '-30px 0 80px -30px rgba(0,0,0,0.7)' }}>
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ width: 42, height: 42, borderRadius: 11, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}><Icon name="file-text" size={20} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{it.name}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{it.cat} · {it.who} · {it.due}</div>
+              </div>
+              <button className="clickable" onClick={() => setOpenId(null)} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start', fontSize: 12, fontWeight: 600, color: TONE[RUN_TONE[it.status]].c, background: TONE[RUN_TONE[it.status]].bg, border: `1px solid ${TONE[RUN_TONE[it.status]].b}`, borderRadius: 999, padding: '4px 11px' }}><Icon name={it.status === 'done' ? 'check-circle-2' : it.status === 'upcoming' ? 'clock' : 'edit-3'} size={13} />{it.status === 'done' ? 'Sent' : it.status === 'upcoming' ? 'Upcoming' : 'Ready to send'}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 13px', borderRadius: 11, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                <Icon name="zap" size={15} color="var(--gold-1)" /><span style={{ fontSize: 12, color: 'var(--fg-2)' }}><b style={{ color: 'var(--gold-1)' }}>Why it matters:</b> {it.drives}.</span>
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--fg-3)', lineHeight: 1.6 }}>{it.detail}</div>
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 9 }}>Contents · {(it.items || []).length}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {(it.items || []).map((x, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 9, background: 'var(--surface-1)', border: '1px solid var(--border-faint)' }}>
+                      <Icon name={it.status === 'done' ? 'check-circle-2' : 'circle-dashed'} size={14} color={it.status === 'done' ? 'var(--success)' : 'var(--fg-5)'} />
+                      <span style={{ fontSize: 12.5, color: it.status === 'done' ? 'var(--fg-4)' : 'var(--fg-2)' }}>{x}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {it.status !== 'done' && it.action ? (
+                <div style={{ padding: '14px 15px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}><EarnCoin size={24} /><span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)' }}>Earn's next move</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5, marginBottom: 11 }}>{it.action} — I drafted it from your workspace. Review and approve; it sends and logs to every LP record.</div>
+                  <Button variant="gold" size="sm" icon="sparkles" style={{ width: '100%' }} onClick={() => { onRunItem(it); setOpenId(null); }}>{it.action} with Earn</Button>
+                </div>
+              ) : it.status === 'done' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '14px 15px', borderRadius: 13, background: 'var(--success-soft)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><Icon name="check-circle-2" size={17} />Sent · logged to LP records</div>
+              ) : null}
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function IRCenter_anchor() { return null; }
+
+function ComplianceCenter({ items, onRunItem, onRun, mobile }) {
+  const [openId, setOpenId] = useState(null);
+  const [cat, setCat] = useState('All');
+  const clear = items.filter(i => i.status === 'done').length;
+  const open = items.filter(i => i.status === 'open');
+  const upcoming = items.filter(i => i.status === 'upcoming');
+  const highOpen = items.filter(i => i.sev === 'High' && i.status === 'open').length;
+  const score = Math.round((clear / items.length) * 100);
+  const posture = highOpen ? { label: 'Action required', tone: 'danger' } : open.length ? { label: 'Items open', tone: 'warning' } : upcoming.length ? { label: 'On track', tone: 'info' } : { label: 'Fully compliant', tone: 'success' };
+  const shown = items.filter(i => cat === 'All' || i.cat === cat);
+  const it = openId && items.find(x => x.id === openId);
+
+  return (
+    <Panel title="Compliance" eyebrow="Stay execution-ready · Adrian" icon="shield-check"
+      action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Ask Earn</Button>}>
+      {/* posture header */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div className="card-flat" style={{ flex: '2 1 280px', padding: '14px 16px', background: 'var(--surface-1)', borderLeft: `3px solid ${TONE[posture.tone].c}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 9, flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: TONE[posture.tone].c, background: TONE[posture.tone].bg, border: `1px solid ${TONE[posture.tone].b}`, borderRadius: 999, padding: '4px 12px' }}><Icon name="shield-check" size={14} />{posture.label}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{open.length} open · {upcoming.length} upcoming · {clear} clear</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}><b style={{ color: 'var(--fg-1)' }}>{score}%</b> compliant · ODD-readiness</span>
+            {highOpen > 0 && <span style={{ fontSize: 11, color: 'var(--danger)' }}>{highOpen} high-severity</span>}
+          </div>
+          <ProgressBar value={score} gradient="linear-gradient(90deg,#1F8A5B,#2fae74)" height={7} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
+          <Button variant={open.length ? 'secondary' : 'gold'} size="sm" icon={open.length ? 'list-checks' : 'shield-check'} disabled={!!open.length}>{open.length ? `${open.length} to clear` : 'ODD-ready'}</Button>
+          <Button variant="ghost" size="sm" icon="calendar">Filings calendar</Button>
+        </div>
+      </div>
+      {/* category filter */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 12 }}>
+        {['All', ...CO_CATS].map(c => <Chip key={c} label={c} selected={cat === c} onClick={() => setCat(c)} />)}
+      </div>
+      {/* upcoming-deadline strip */}
+      {upcoming.length > 0 && (
+        <div className="card-flat" style={{ padding: '10px 13px', marginBottom: 12, background: 'var(--surface-1)' }}>
+          <div className="t-eyebrow" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="calendar-clock" size={12} color="var(--info)" />Upcoming deadlines · {upcoming.length}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {upcoming.map(u => (
+              <button key={u.id} className="clickable" onClick={() => setOpenId(u.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 11px', borderRadius: 999, background: 'var(--info-soft)', border: '1px solid var(--info-line)', color: 'var(--fg-2)' }}>
+                <Icon name="clock" size={12} color="var(--info)" /><span style={{ fontSize: 11.5, fontWeight: 500 }}>{u.name}</span><span style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>· {u.due}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* items */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {shown.slice().sort((a, b) => (a.status === 'done') - (b.status === 'done')).map(i => {
+          const t = RUN_TONE[i.status] || 'neutral'; const isDone = i.status === 'done'; const sev = i.sev && i.status !== 'done' && DD_SEV[i.sev];
+          return (
+            <div key={i.id} className="clickable card-flat" onClick={() => setOpenId(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--surface-1)', borderLeft: `2px solid ${TONE[t].c}`, textAlign: 'left', cursor: 'pointer', opacity: isDone ? 0.72 : 1 }}>
+              <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isDone ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${isDone ? 'var(--success-line)' : 'var(--border)'}`, color: isDone ? 'var(--success)' : 'var(--fg-3)' }}><Icon name={isDone ? 'check' : 'shield-check'} size={15} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.name}</span>
+                  {sev && <span style={{ fontSize: 8.5, fontWeight: 700, color: '#fff', background: sev.c, borderRadius: 4, padding: '1px 5px', flex: 'none' }}>{i.sev.toUpperCase()}</span>}
+                  <span style={{ fontSize: 9.5, color: 'var(--fg-5)', flex: 'none' }}>· {i.cat}</span>
+                </div>
+                <div style={{ fontSize: 11, color: !isDone ? 'var(--gold-1)' : 'var(--fg-5)', marginTop: 3 }}>{isDone ? 'Clear · ' + i.who : i.drives}</div>
+              </div>
+              <Badge tone={t} style={{ fontSize: 9, padding: '1px 6px', flex: 'none' }}>{i.due}</Badge>
+              {!isDone && i.action && <Button variant="secondary" size="sm" icon="sparkles" style={{ flex: 'none' }} onClick={(e) => { e.stopPropagation(); onRunItem(i); }}>{i.action}</Button>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* detail drawer */}
+      {it && (
+        <>
+          <div onClick={() => setOpenId(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.64)', backdropFilter: 'blur(3px)', zIndex: 60 }} />
+          <div className="fade-in" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 440, maxWidth: '94vw', background: 'var(--bg-2)', borderLeft: '1px solid var(--border-strong)', zIndex: 61, overflowY: 'auto', boxShadow: '-30px 0 80px -30px rgba(0,0,0,0.7)' }}>
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ width: 42, height: 42, borderRadius: 11, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}><Icon name="shield-check" size={20} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{it.name}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{it.cat} · {it.who} · {it.due}</div>
+              </div>
+              <button className="clickable" onClick={() => setOpenId(null)} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: TONE[RUN_TONE[it.status]].c, background: TONE[RUN_TONE[it.status]].bg, border: `1px solid ${TONE[RUN_TONE[it.status]].b}`, borderRadius: 999, padding: '4px 11px' }}><Icon name={it.status === 'done' ? 'check-circle-2' : it.status === 'upcoming' ? 'clock' : 'alert-triangle'} size={13} />{it.status === 'done' ? 'Clear' : it.status === 'upcoming' ? 'Upcoming' : 'Action needed'}</span>
+                {it.sev && it.status !== 'done' && <span style={{ fontSize: 9.5, fontWeight: 700, color: '#fff', background: (DD_SEV[it.sev] || DD_SEV.Low).c, borderRadius: 5, padding: '3px 8px' }}>{it.sev.toUpperCase()} SEVERITY</span>}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 13px', borderRadius: 11, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                <Icon name="zap" size={15} color="var(--gold-1)" /><span style={{ fontSize: 12, color: 'var(--fg-2)' }}><b style={{ color: 'var(--gold-1)' }}>Why it matters:</b> {it.drives}.</span>
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--fg-3)', lineHeight: 1.6 }}>{it.detail}</div>
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 9 }}>Checklist · {(it.items || []).length}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {(it.items || []).map((x, i) => {
+                    const ok = it.status === 'done' || /verified|submitted|received/i.test(x);
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 9, background: 'var(--surface-1)', border: '1px solid var(--border-faint)' }}>
+                        <Icon name={ok ? 'check-circle-2' : 'circle-dashed'} size={14} color={ok ? 'var(--success)' : 'var(--fg-5)'} />
+                        <span style={{ fontSize: 12.5, color: ok ? 'var(--fg-4)' : 'var(--fg-2)' }}>{x}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {it.status !== 'done' && it.action ? (
+                <div style={{ padding: '14px 15px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}><EarnCoin size={24} /><span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)' }}>Earn's next move</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5, marginBottom: 11 }}>{it.action} — I'll handle it with {it.who} and bring it back for your sign-off, keeping you execution-ready.</div>
+                  <Button variant="gold" size="sm" icon="sparkles" style={{ width: '100%' }} onClick={() => { onRunItem(it); setOpenId(null); }}>{it.action} with Earn</Button>
+                </div>
+              ) : it.status === 'done' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '14px 15px', borderRadius: 13, background: 'var(--success-soft)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><Icon name="check-circle-2" size={17} />Compliant · logged to Chain of Trust</div>
+              ) : null}
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function WorkflowsBoard({ deal, wf, stream, setStream, autos, setAutos, onRunItem, onRun, mobile }) {
+  const [openId, setOpenId] = useState(null);
+  const cols = [['open', 'To do'], ['progress', 'In progress'], ['done', 'Done']];
+  const done = wf.filter(t => t.status === 'done').length;
+  const critOpen = wf.filter(t => t.critical && t.status !== 'done').length;
+  const t = openId && wf.find(x => x.id === openId);
+  const subDone = (it) => (it.sub || []).filter(s => s[1]).length;
+  const streamName = (WF_STREAMS.find(s => s.id === stream) || {}).label;
+
+  return (
+    <Panel title="Workflows & tasks" eyebrow={`${streamName} · ${done}/${wf.length} complete`} icon="list-checks"
+      action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Ask Earn</Button>}>
+      {/* workflow stream selector */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        {WF_STREAMS.map(s => {
+          const on = s.id === stream; const list = s.id === 'helios' ? wf : null;
+          return (
+            <button key={s.id} className="clickable" onClick={() => { setStream(s.id); setOpenId(null); }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderRadius: 11, textAlign: 'left', background: on ? 'var(--accent-soft)' : 'var(--surface-1)', border: `1px solid ${on ? 'var(--accent-line)' : 'var(--border)'}` }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--accent)' : 'var(--surface-2)', color: on ? '#fff' : 'var(--fg-3)', border: on ? 'none' : '1px solid var(--border)' }}><Icon name={s.icon} size={15} /></span>
+              <div><div style={{ fontSize: 12.5, fontWeight: 600, color: on ? 'var(--fg-1)' : 'var(--fg-2)' }}>{s.label}</div><div style={{ fontSize: 10, color: 'var(--fg-5)' }}>{s.sub}</div></div>
+            </button>
+          );
+        })}
+      </div>
+      {/* close-readiness header */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div className="card-flat" style={{ flex: '2 1 280px', padding: '14px 16px', background: 'var(--surface-1)', borderLeft: `3px solid ${critOpen ? 'var(--warning)' : 'var(--success)'}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 9, flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: critOpen ? 'var(--warning)' : 'var(--success)', background: critOpen ? 'var(--warning-soft)' : 'var(--success-soft)', border: `1px solid ${critOpen ? 'var(--warning-line)' : 'var(--success-line)'}`, borderRadius: 999, padding: '4px 12px' }}><Icon name="flag" size={14} />{critOpen ? `${critOpen} on the critical path` : 'All critical items clear'}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{stream === 'helios' ? 'Target close · 14 days' : stream === 'fundraise' ? 'First close · 10 days' : stream === 'portfolio' ? 'Onboarding · day 18' : stream === 'lponboard' ? 'New LPs · close on signature' : 'Quarter-end · 4 days'}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}><b style={{ color: 'var(--fg-1)' }}>{done}/{wf.length}</b> workstreams complete</span>
+            <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>{Math.round((done / wf.length) * 100)}% to signing</span>
+          </div>
+          <ProgressBar value={Math.round((done / wf.length) * 100)} gradient="linear-gradient(90deg,#1F8A5B,#2fae74)" height={7} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
+          <Button variant={critOpen ? 'secondary' : 'gold'} size="sm" icon={critOpen ? 'list-checks' : 'pen-line'} disabled={!!critOpen}>{critOpen ? `${critOpen} blocking` : 'Proceed to sign'}</Button>
+          <Button variant="ghost" size="sm" icon="calendar">Close plan</Button>
+        </div>
+      </div>
+      {/* kanban columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(3,1fr)', gap: 10 }}>
+        {cols.map(([st, label]) => {
+          const items = wf.filter(x => x.status === st);
+          return (
+            <div key={st} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 2px' }}>
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: TONE[RUN_TONE[st]].c }} />
+                <span className="t-eyebrow">{label}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{items.length}</span>
+              </div>
+              {items.length === 0 && <div style={{ fontSize: 11, color: 'var(--fg-5)', padding: '10px', border: '1px dashed var(--border)', borderRadius: 10, textAlign: 'center' }}>—</div>}
+              {items.map(it => {
+                const isDone = it.status === 'done';
+                return (
+                  <button key={it.id} className="clickable card-flat" onClick={() => setOpenId(it.id)} style={{ textAlign: 'left', padding: '12px 13px', background: 'var(--surface-1)', borderTop: it.critical ? '2px solid var(--gold-1)' : '2px solid transparent', opacity: isDone ? 0.74 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+                      {it.critical && <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--gold-1)', background: 'var(--gold-soft)', border: '1px solid var(--gold-line)', borderRadius: 4, padding: '1px 5px' }}>CRITICAL</span>}
+                      <span style={{ fontSize: 10, color: 'var(--fg-5)', marginLeft: 'auto' }}>{it.due}</span>
+                    </div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.3 }}>{it.name}</div>
+                    <div style={{ fontSize: 10.5, color: 'var(--fg-5)', marginTop: 5 }}>{it.drives}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 }}>
+                      <Avatar name={it.who} size={20} tone="azure" />
+                      <span style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>{it.who}</span>
+                      <span style={{ flex: 1 }} />
+                      {it.sub && <span style={{ fontSize: 10, color: 'var(--fg-5)' }}>{subDone(it)}/{it.sub.length}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Earn automations */}
+      <div style={{ marginTop: 16 }}>
+        <div className="t-eyebrow" style={{ marginBottom: 9, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="zap" size={12} color="var(--gold-1)" />Automations · Earn runs these for you</div>
+        <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
+          {autos.map(a => (
+            <div key={a.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', background: 'var(--surface-1)' }}>
+              <span style={{ width: 30, height: 30, borderRadius: 8, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: a.on ? 'var(--gold-soft)' : 'var(--surface-2)', border: `1px solid ${a.on ? 'var(--gold-line)' : 'var(--border)'}`, color: a.on ? 'var(--gold-1)' : 'var(--fg-4)' }}><Icon name={a.icon} size={15} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>
+                <div style={{ fontSize: 10, color: 'var(--fg-5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.on ? a.last : 'Paused'}</div>
+              </div>
+              <button className="clickable" onClick={() => setAutos(prev => prev.map(x => x.id === a.id ? { ...x, on: !x.on, last: !x.on ? 'Just now' : 'Paused' } : x))} title={a.desc}
+                style={{ width: 34, height: 20, borderRadius: 999, flex: 'none', background: a.on ? 'var(--success)' : 'var(--surface-3)', position: 'relative', transition: 'background .15s' }}>
+                <span style={{ position: 'absolute', top: 2, left: a.on ? 16 : 2, width: 16, height: 16, borderRadius: 999, background: '#fff', transition: 'left .15s' }} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* task drawer */}
+      {t && (
+        <>
+          <div onClick={() => setOpenId(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.64)', backdropFilter: 'blur(3px)', zIndex: 60 }} />
+          <div className="fade-in" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 440, maxWidth: '94vw', background: 'var(--bg-2)', borderLeft: '1px solid var(--border-strong)', zIndex: 61, overflowY: 'auto', boxShadow: '-30px 0 80px -30px rgba(0,0,0,0.7)' }}>
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ width: 42, height: 42, borderRadius: 11, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}><Icon name="list-checks" size={20} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  {t.critical && <span style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--gold-1)', background: 'var(--gold-soft)', border: '1px solid var(--gold-line)', borderRadius: 4, padding: '1px 5px' }}>CRITICAL</span>}
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>{t.name}</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{t.who} · {t.due}</div>
+              </div>
+              <button className="clickable" onClick={() => setOpenId(null)} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 13px', borderRadius: 11, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                <Icon name="zap" size={15} color="var(--gold-1)" /><span style={{ fontSize: 12, color: 'var(--fg-2)' }}><b style={{ color: 'var(--gold-1)' }}>Why it matters:</b> {t.drives}.</span>
+              </div>
+              {t.dep && <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}><b style={{ color: 'var(--fg-2)' }}>Depends on</b> · {t.dep}</div>}
+              {/* subtasks */}
+              {t.sub && (
+                <div>
+                  <div className="t-eyebrow" style={{ marginBottom: 9 }}>Subtasks · {subDone(t)}/{t.sub.length}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {t.sub.map(([label, ok], i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 9, background: 'var(--surface-1)', border: '1px solid var(--border-faint)' }}>
+                        <span style={{ width: 18, height: 18, flex: 'none', borderRadius: 5, border: `1.5px solid ${ok ? 'var(--success)' : 'var(--border-strong)'}`, background: ok ? 'var(--success)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{ok && <Icon name="check" size={12} color="#fff" />}</span>
+                        <span style={{ fontSize: 12.5, color: ok ? 'var(--fg-4)' : 'var(--fg-2)', textDecoration: ok ? 'line-through' : 'none' }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {t.status !== 'done' ? (
+                <div style={{ padding: '14px 15px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}><EarnCoin size={24} /><span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)' }}>Earn's next move</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5, marginBottom: 11 }}>{t.action} — I'll handle it with {t.who} and bring it back for your sign-off, moving you one step closer to signing.</div>
+                  <Button variant="gold" size="sm" icon="sparkles" style={{ width: '100%' }} onClick={() => { onRunItem(t); setOpenId(null); }}>{t.action} with Earn</Button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '14px 15px', borderRadius: 13, background: 'var(--success-soft)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><Icon name="check-circle-2" size={17} />{t.done} · on the record</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function RunHub({ mandate, pct, onRun, mobile }) {
+  const [tab, setTab] = useState('diligence');
+  const [dealId, setDealId] = useState('helios');
+  const [dealAgents, setDealAgents] = useState({ helios: DD_DEALS.helios.agents, cedar: DD_DEALS.cedar.agents, nova: DD_DEALS.nova.agents });
+  const deal = DD_DEALS[dealId];
+  const agents = dealAgents[dealId];
+  const setAgents = (updater) => setDealAgents(prev => ({ ...prev, [dealId]: typeof updater === 'function' ? updater(prev[dealId]) : updater }));
+  const [openAgent, setOpenAgent] = useState(null);
+  const [wfHelios, setWfHelios] = useState(WF_SEED);
+  const [wfFundraise, setWfFundraise] = useState(WF_FUNDRAISE);
+  const [wfPortfolio, setWfPortfolio] = useState(WF_PORTFOLIO);
+  const [wfLp, setWfLp] = useState(WF_LPONBOARD);
+  const [wfRep, setWfRep] = useState(WF_REPORTING);
+  const [wfStream, setWfStream] = useState('helios');
+  const [autos, setAutos] = useState(AUTOMATIONS);
+  const wfMap = { helios: [wfHelios, setWfHelios], fundraise: [wfFundraise, setWfFundraise], portfolio: [wfPortfolio, setWfPortfolio], lponboard: [wfLp, setWfLp], reporting: [wfRep, setWfRep] };
+  const [wfActive, setWfActive] = wfMap[wfStream];
+  const [co, setCo] = useState(CO_ITEMS);
+  const [ir, setIr] = useState(IR_SEED);
+
+  function runItem(sectionId, setSection, item) {
+    if (!item.action) return;
+    onRun({ id: sectionId + '-' + item.id + '-' + item.status, hub: 'run', xp: 14, title: `${item.action} — ${item.name}`,
+      apply: () => setSection(prev => prev.map(x => x.id === item.id ? { ...x, status: 'done', due: x.done } : x)),
+      run: { title: `${item.action} — ${item.name}`, steps: [`Pull context with ${item.who}`, item.action, 'Update the record', 'Prepare for your approval'],
+        draftTitle: `${item.name}`, draft: `${item.who} prepared "${item.action}" for ${item.name}. This ${item.drives.toLowerCase()}. Approve to advance it toward close.` } });
+  }
+
+  const total = DD_AGENTS.length;
+  const cleared = DD_AGENTS.filter(a => (agents[a.id] || {}).status === 'clear').length;
+  const open = DD_AGENTS.filter(a => { const s = (agents[a.id] || {}).status; return s === 'flag' || s === 'caution'; });
+  const flags = DD_AGENTS.filter(a => (agents[a.id] || {}).status === 'flag').length;
+  const highFlags = DD_AGENTS.filter(a => (agents[a.id] || {}).severity === 'High' && (agents[a.id] || {}).status === 'flag').length;
+  const ddPct = Math.round((cleared / total) * 100);
+  const avgConf = Math.round(DD_AGENTS.reduce((s, a) => s + ((agents[a.id] || {}).confidence || 0), 0) / total);
+  const totalChecks = DD_AGENTS.reduce((s, a) => s + ((agents[a.id] || {}).checks || 0), 0);
+  const verdict = highFlags ? { label: 'On hold', tone: 'danger', note: `${highFlags} high-severity item${highFlags > 1 ? 's' : ''} to resolve` }
+    : flags ? { label: 'Conditional pass', tone: 'warning', note: `${flags} open item${flags > 1 ? 's' : ''} before IC` }
+    : open.length ? { label: 'Pass with notes', tone: 'info', note: `${open.length} caution${open.length > 1 ? 's' : ''} logged` }
+    : { label: 'Clear to proceed', tone: 'success', note: 'IC-ready' };
+  const icReady = open.length === 0;
+
+  function clearItem(agentId) {
+    const ag = agents[agentId]; const meta = DD_AGENTS.find(a => a.id === agentId);
+    onRun({ id: 'dd-' + dealId + '-' + agentId, hub: 'run', xp: 16, title: `Clear: ${meta.name}`,
+      apply: () => setAgents(prev => ({ ...prev, [agentId]: { ...prev[agentId], status: 'clear', confidence: Math.max(prev[agentId].confidence || 80, 90), headline: 'Resolved — ' + prev[agentId].headline } })),
+      run: { title: `Resolve — ${meta.name}`, steps: [`Pull ${meta.who}'s findings`, ag.action ? ag.action : 'Confirm the open item', 'Update the diligence record', 'Log evidence to Chain of Trust'],
+        draftTitle: `${meta.name} — resolution`, draft: `${meta.who} prepared the resolution for "${ag.headline}". ${ag.detail} Approve to clear this workstream and log it to the Chain of Trust.` } });
+  }
+
+  const ag = openAgent && agents[openAgent];
+  const agMeta = openAgent && DD_AGENTS.find(a => a.id === openAgent);
+
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="card" style={{ padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+          <span style={{ width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)' }}><Icon name="activity" size={22} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="t-h2" style={{ fontSize: 19 }}>Run</div>
+            <div style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 2 }}>Operate the systems that move work forward. The team runs it; you review and approve.</div>
+          </div>
+          <div style={{ textAlign: 'right', flex: 'none' }}>
+            <div className="t-metric" style={{ fontSize: 22, color: 'var(--gold-1)' }}>{pct}%</div>
+            <div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>Run ready</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 14 }}><ProgressBar value={pct} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} /></div>
+      </div>
+
+      <div style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2 }}>
+        <SegTabs active={tab} onChange={setTab} tabs={[{ id: 'diligence', label: 'Diligence', icon: 'file-search' }, { id: 'workflows', label: 'Workflows', icon: 'list-checks' }, { id: 'compliance', label: 'Compliance', icon: 'shield-check' }, { id: 'ir', label: 'IR & reporting', icon: 'users' }]} />
+      </div>
+
+      {tab === 'diligence' ? (
+        <Panel title="Diligence" eyebrow={`${deal.name} · ${deal.sector} · $${deal.amt}M`} icon="file-search"
+          action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Ask Earn</Button>}>
+          {/* deal switcher */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+            {DD_DEAL_META.map(d => {
+              const on = d.id === dealId; const ags = dealAgents[d.id];
+              const cl = DD_AGENTS.filter(a => (ags[a.id] || {}).status === 'clear').length;
+              return (
+                <button key={d.id} className="clickable" onClick={() => { setDealId(d.id); setOpenAgent(null); }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderRadius: 11, textAlign: 'left', background: on ? 'var(--accent-soft)' : 'var(--surface-1)', border: `1px solid ${on ? 'var(--accent-line)' : 'var(--border)'}` }}>
+                  <span style={{ width: 28, height: 28, borderRadius: 8, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--accent)' : 'var(--surface-2)', color: on ? '#fff' : 'var(--fg-3)', border: on ? 'none' : '1px solid var(--border)' }}><Icon name="building-2" size={15} /></span>
+                  <div><div style={{ fontSize: 12.5, fontWeight: 600, color: on ? 'var(--fg-1)' : 'var(--fg-2)' }}>{d.label}</div><div style={{ fontSize: 10, color: 'var(--fg-5)' }}>{d.sub} · {cl}/{DD_AGENTS.length} clear</div></div>
+                </button>
+              );
+            })}
+          </div>
+          {/* verdict + readiness */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+            <div className="card-flat" style={{ flex: '2 1 280px', padding: '14px 16px', background: 'var(--surface-1)', borderLeft: `3px solid ${TONE[verdict.tone].c}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 9 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: TONE[verdict.tone].c, background: TONE[verdict.tone].bg, border: `1px solid ${TONE[verdict.tone].b}`, borderRadius: 999, padding: '4px 12px' }}><Icon name={icReady ? 'circle-check-big' : 'gauge'} size={14} />{verdict.label}</span>
+                <span style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{verdict.note}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}><b style={{ color: 'var(--fg-1)' }}>{cleared}/{total}</b> workstreams clear · {totalChecks} checks run</span>
+                <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>avg confidence <b style={{ color: 'var(--gold-1)' }}>{avgConf}%</b></span>
+              </div>
+              <ProgressBar value={ddPct} gradient="linear-gradient(90deg,#1F8A5B,#2fae74)" height={7} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
+              <Button variant={icReady ? 'gold' : 'secondary'} size="sm" icon={icReady ? 'circle-check-big' : 'list-checks'} disabled={!icReady}>{icReady ? 'Send to IC' : `${open.length} open`}</Button>
+              <Button variant="ghost" size="sm" icon="file-text">Export memo</Button>
+            </div>
+          </div>
+          {/* risk register */}
+          {open.length > 0 && (
+            <div className="card-flat" style={{ padding: '12px 14px', marginBottom: 14, background: 'var(--surface-1)' }}>
+              <div className="t-eyebrow" style={{ marginBottom: 9, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="alert-triangle" size={12} color="var(--warning)" />Risk register · {open.length} open</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {open.map(a => {
+                  const st = agents[a.id]; const sev = DD_SEV[st.severity] || DD_SEV.Low;
+                  return (
+                    <button key={a.id} className="clickable" onClick={() => setOpenAgent(a.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, background: 'var(--surface-2)', border: '1px solid var(--border)', textAlign: 'left' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: '#fff', background: sev.c, borderRadius: 5, padding: '2px 6px', flex: 'none' }}>{(st.severity || 'Low').toUpperCase()}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.headline}</span>
+                      <span style={{ fontSize: 10.5, color: 'var(--fg-5)', flex: 'none' }}>{a.name}</span>
+                      <Icon name="chevron-right" size={14} color="var(--fg-5)" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {/* agent grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gap: 10 }}>
+            {DD_AGENTS.map(a => {
+              const st = (agents[a.id] || {}); const s = DD_STATUS[st.status] || DD_STATUS.pending; const sev = st.severity && DD_SEV[st.severity];
+              return (
+                <button key={a.id} className="clickable card-flat" onClick={() => setOpenAgent(a.id)} style={{ textAlign: 'left', padding: '13px 14px', background: 'var(--surface-1)', borderLeft: `2px solid ${TONE[s.tone].c}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 30, height: 30, borderRadius: 8, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-3)' }}><Icon name={a.icon} size={15} /></span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--fg-5)' }}>{a.who} · {st.checks} checks</div>
+                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontWeight: 600, color: TONE[s.tone].c, flex: 'none' }}><Icon name={s.icon} size={11} />{s.label}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 9, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{st.headline}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                    <div style={{ flex: 1, height: 4, borderRadius: 999, background: 'var(--surface-3)', overflow: 'hidden' }}><div style={{ width: (st.confidence || 0) + '%', height: '100%', background: TONE[s.tone].c }} /></div>
+                    <span style={{ fontSize: 10, color: 'var(--fg-5)', flex: 'none' }}>{st.confidence}%</span>
+                    {sev && <span style={{ fontSize: 8.5, fontWeight: 700, color: '#fff', background: sev.c, borderRadius: 4, padding: '1px 5px', flex: 'none' }}>{st.severity.toUpperCase()}</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="card" style={{ padding: '13px 15px', marginTop: 14, display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gold-soft)', borderColor: 'var(--gold-line)' }}>
+            <EarnCoin size={24} />
+            <div style={{ flex: 1, fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.45 }}><b style={{ color: 'var(--gold-1)' }}>Earn:</b> {open.length ? `${verdict.label} — ${open.length} of ${total} workstreams need your call. Open the risk register and I'll resolve each with you.` : `All ${total} workstreams clear at ${avgConf}% avg confidence. This deal is IC-ready.`}</div>
+          </div>
+        </Panel>
+      ) : tab === 'workflows' ? (
+        <WorkflowsBoard deal={deal} wf={wfActive} stream={wfStream} setStream={setWfStream} autos={autos} setAutos={setAutos} onRunItem={(it) => runItem('wf-' + wfStream, setWfActive, it)} onRun={onRun} mobile={mobile} />
+      ) : tab === 'compliance' ? (
+        <ComplianceCenter items={co} onRunItem={(it) => runItem('co', setCo, it)} onRun={onRun} mobile={mobile} />
+      ) : (
+        <IRCenter items={ir} lps={IR_LPS} onRunItem={(it) => runItem('ir', setIr, it)} onRun={onRun} mobile={mobile} />
+      )}
+
+      {/* diligence detail drawer */}
+      {ag && (
+        <>
+          <div onClick={() => setOpenAgent(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.64)', backdropFilter: 'blur(3px)', zIndex: 60 }} />
+          <div className="fade-in" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 440, maxWidth: '94vw', background: 'var(--bg-2)', borderLeft: '1px solid var(--border-strong)', zIndex: 61, overflowY: 'auto', boxShadow: '-30px 0 80px -30px rgba(0,0,0,0.7)' }}>
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ width: 42, height: 42, borderRadius: 11, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}><Icon name={agMeta.icon} size={20} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 600 }}>{agMeta.name}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>Run by {agMeta.who} · {deal.name}</div>
+              </div>
+              <button className="clickable" onClick={() => setOpenAgent(null)} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: TONE[DD_STATUS[ag.status].tone].c, background: TONE[DD_STATUS[ag.status].tone].bg, border: `1px solid ${TONE[DD_STATUS[ag.status].tone].b}`, borderRadius: 999, padding: '4px 11px' }}>
+                  <Icon name={DD_STATUS[ag.status].icon} size={13} />{DD_STATUS[ag.status].label}
+                </span>
+                {ag.severity && ag.status !== 'clear' && <span style={{ fontSize: 9.5, fontWeight: 700, color: '#fff', background: (DD_SEV[ag.severity] || DD_SEV.Low).c, borderRadius: 5, padding: '3px 8px' }}>{ag.severity.toUpperCase()} SEVERITY</span>}
+              </div>
+              {/* results: confidence + checks */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="card-flat" style={{ padding: '11px 13px', background: 'var(--surface-1)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--fg-5)' }}>Confidence</div>
+                  <div className="t-metric" style={{ fontSize: 18, marginTop: 4, color: TONE[DD_STATUS[ag.status].tone].c }}>{ag.confidence}%</div>
+                </div>
+                <div className="card-flat" style={{ padding: '11px 13px', background: 'var(--surface-1)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--fg-5)' }}>Checks run</div>
+                  <div className="t-metric" style={{ fontSize: 18, marginTop: 4 }}>{ag.checks}</div>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 14.5, fontWeight: 600 }}>{ag.headline}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 8, lineHeight: 1.6 }}>{ag.detail}</div>
+              </div>
+              {/* evidence reviewed — the results */}
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="paperclip" size={12} color="var(--fg-4)" />Evidence reviewed · {(ag.evidence || []).length}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {(ag.evidence || []).map((e, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', borderRadius: 9, background: 'var(--surface-1)', border: '1px solid var(--border-faint)' }}>
+                      <Icon name="file-check" size={14} color="var(--success)" />
+                      <span style={{ flex: 1, fontSize: 12, color: 'var(--fg-2)' }}>{e}</span>
+                      <Icon name="check" size={13} color="var(--fg-5)" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {ag.status !== 'clear' ? (
+                <div style={{ padding: '14px 15px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}><EarnCoin size={24} /><span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)' }}>Earn's resolution</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5, marginBottom: 11 }}>{ag.action} — I'll prepare it with {agMeta.who} and bring it back for your sign-off.</div>
+                  <Button variant="gold" size="sm" icon="sparkles" style={{ width: '100%' }} onClick={() => { clearItem(openAgent); setOpenAgent(null); }}>{ag.action} with Earn</Button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '14px 15px', borderRadius: 13, background: 'var(--success-soft)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><Icon name="check-circle-2" size={17} />Cleared · logged to Chain of Trust</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window, { RunHub });

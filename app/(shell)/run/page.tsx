@@ -1,9 +1,9 @@
-import type { Metadata } from 'next';
-import { HubPage } from '@/components/hubs/HubPage';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Run' };
-
-/** RUN — operate: diligence, workflows, compliance, IR & reporting. */
+/**
+ * /run resolves to the hub's first tab — the prototype opens RunHub on
+ * Diligence. The hub chrome lives in ./layout.tsx.
+ */
 export default function RunHubPage() {
-  return <HubPage id="run" />;
+  redirect('/run/diligence');
 }
