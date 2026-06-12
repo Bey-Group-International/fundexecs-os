@@ -210,10 +210,9 @@ begin
        source_snapshot, created_by)
     values (_org_id, _material_id, _version, _mtitle, coalesce(_doc_body, ''),
             'deterministic_template', _spec, _user)
-    on conflict (material_id, version_number) do update set
-      title = excluded.title,
-      body = excluded.body,
-      source_snapshot = excluded.source_snapshot;
+    -- Append-only history: on the (bug/replay-only) chance a version row
+    -- already exists, keep the original snapshot rather than rewriting it.
+    on conflict (material_id, version_number) do nothing;
   end if;
 
   -- Audit entry — inside the transaction, so the trail can never be missing.
