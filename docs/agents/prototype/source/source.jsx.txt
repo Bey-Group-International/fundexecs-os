@@ -1,0 +1,605 @@
+/* ===========================================================
+   FundExecs OS — Onboarding Prototype · Source hub
+   The working surface: LP Capital Map + Deal pipeline.
+   Earn drafts the move → you approve → the target advances
+   and the Source progress ticks up. Reactive + interactive.
+   =========================================================== */
+
+const SRC_TITLE = { fund: 'LP Capital Map', capital: 'Allocation targets', service: 'Client pipeline' };
+const SRC_NOUN  = { fund: 'LP', capital: 'target', service: 'client' };
+
+const LP_STAGES = ['Target', 'Contacted', 'Soft-circled', 'Committed'];
+const LP_STAGE_TONE = { Target: 'neutral', Contacted: 'azure', 'Soft-circled': 'gold', Committed: 'success' };
+const LP_NEXT = { Target: 'Draft intro', Contacted: 'Send follow-up', 'Soft-circled': 'Lock allocation' };
+
+const LP_SEED = [
+  { id: 'granite',  name: 'Granite Endowment',     type: 'Endowment',      amt: 10, fit: 88, warmth: 'Warm', stage: 'Soft-circled', source: 'Warm intro · Theodore', last: '2d ago', focus: 'Industrials, long duration' },
+  { id: 'meridian', name: 'Meridian Family Office', type: 'Family office',  amt: 6,  fit: 84, warmth: 'Hot',  stage: 'Committed', source: 'Your network', last: 'Today', focus: 'Operator-led funds' },
+  { id: 'coastal',  name: 'Coastal Pension',        type: 'Pension',        amt: 15, fit: 81, warmth: 'Warm', stage: 'Contacted', source: 'Placement agent', last: '5d ago', focus: 'Sub-$500M emerging managers' },
+  { id: 'beacon',   name: 'Beacon Foundation',      type: 'Foundation',     amt: 5,  fit: 79, warmth: 'Warm', stage: 'Target', source: 'Sloane sourced', last: '—', focus: 'Mission-aligned, climate tilt' },
+  { id: 'summit',   name: 'Summit Ventures LP',     type: 'Institutional',  amt: 12, fit: 76, warmth: 'Cold', stage: 'Target', source: 'Sloane sourced', last: '—', focus: 'Top-quartile track record' },
+  { id: 'aurelius', name: 'Aurelius Capital',       type: 'Fund-of-funds',  amt: 20, fit: 72, warmth: 'Cold', stage: 'Target', source: 'Sloane sourced', last: '—', focus: 'First-time funds, anchor checks' },
+  { id: 'harbor',   name: 'Harbor Family Trust',    type: 'Family office',  amt: 8,  fit: 83, warmth: 'Warm', stage: 'Target', source: 'Warm intro · Eleanor', last: '—', focus: 'Direct & fund co-invest' },
+];
+
+const DEAL_STAGES = ['Sourced', 'Screening', 'Diligence', 'IC', 'Closing'];
+const DEAL_STAGE_TONE = { Sourced: 'neutral', Screening: 'azure', Diligence: 'info', IC: 'gold', Closing: 'success' };
+const DEAL_NEXT = { Sourced: 'Screen', Screening: 'Run diligence', Diligence: 'Take to IC', IC: 'Move to close' };
+const PROV_STAGES = ['Suggested', 'Contacted', 'Engaged'];
+const PROV_TONE = { Suggested: 'neutral', Contacted: 'azure', Engaged: 'success' };
+const PROV_NEXT = { Suggested: 'Request intro', Contacted: 'Engage' };
+const PROV_CAT_ICON = { 'Fund counsel': 'scale', 'Fund administration': 'calculator', 'Audit & tax': 'file-check', 'Placement agent': 'handshake', 'Capital provider': 'banknote', 'Prime brokerage': 'landmark' };
+const PROV_ESSENTIAL = ['Fund counsel', 'Fund administration', 'Audit & tax', 'Placement agent'];
+const PROVIDER_SEED = [
+  { id: 'standish', name: 'Standish & Cole', cat: 'Fund counsel',        fit: 90, stage: 'Engaged',   note: 'Top emerging-manager practice', terms: 'Capped formation fee', last: 'Engaged 1w ago' },
+  { id: 'apex',     name: 'Apex Fund Admin',  cat: 'Fund administration', fit: 86, stage: 'Contacted', note: 'Tech-forward, LP portal included', terms: 'Per-LP pricing', last: '3d ago' },
+  { id: 'whitfield', name: 'Whitfield Audit', cat: 'Audit & tax',         fit: 82, stage: 'Suggested', note: 'PCAOB-registered, fund specialist', terms: 'Annual engagement', last: '—' },
+  { id: 'harbor',   name: 'Harbor Placement', cat: 'Placement agent',     fit: 78, stage: 'Suggested', note: 'Institutional LP relationships', terms: '2% placement fee', last: '—' },
+  { id: 'evergreen', name: 'Evergreen Capital', cat: 'Capital provider',  fit: 81, stage: 'Contacted', note: 'Sub-line & NAV facilities', terms: 'SOFR + 250', last: '4d ago' },
+  { id: 'northbridge', name: 'Northbridge Prime', cat: 'Prime brokerage', fit: 74, stage: 'Suggested', note: 'Custody & execution', terms: 'Tiered', last: '—' },
+];
+const DEAL_SEED = [
+  { id: 'atlas',  name: 'Atlas Manufacturing', sector: 'Industrials',     amt: 32, score: 91, stage: 'Closing',   thesis: 'Roll-up of regional precision-parts makers', source: 'Marcus sourced', last: 'Today' },
+  { id: 'helios', name: 'Helios Robotics',     sector: 'Industrials',     amt: 18, score: 84, stage: 'Diligence', thesis: 'Warehouse automation, recurring revenue', source: 'Proprietary', last: '1d ago' },
+  { id: 'cedar',  name: 'Cedar Roll-up',       sector: 'Consumer',        amt: 24, score: 77, stage: 'IC',        thesis: 'Fragmented services consolidation', source: 'Banker', last: '3d ago' },
+  { id: 'nova',   name: 'Nova AI',             sector: 'AI & Software',   amt: 12, score: 88, stage: 'Screening', thesis: 'Vertical AI for industrials', source: 'Inbound', last: '2d ago' },
+  { id: 'vertex', name: 'Vertex Health',       sector: 'Healthcare',      amt: 9,  score: 73, stage: 'Sourced',   thesis: 'Outpatient platform, buy-and-build', source: 'Marcus sourced', last: '—' },
+  { id: 'pinemill', name: 'Pine Mill Logistics', sector: 'Industrials',   amt: 21, score: 80, stage: 'Sourced',   thesis: 'Last-mile cold chain', source: 'Marcus sourced', last: '—' },
+];
+
+const LEAD_STAGES = ['New', 'Qualified', 'Contacted', 'Meeting'];
+const LEAD_TONE = { New: 'neutral', Qualified: 'azure', Contacted: 'gold', Meeting: 'success' };
+const LEAD_NEXT = { New: 'Qualify', Qualified: 'Reach out', Contacted: 'Book meeting' };
+const LEAD_SEED = [
+  { id: 'summit',   name: 'Summit Equipment Co.', seg: 'Industrial OEM',  intent: 88, stage: 'Meeting',   value: 240, signal: 'Requested a quote twice this month', last: 'Today' },
+  { id: 'cascade',  name: 'Cascade Logistics',    seg: 'Distribution',    intent: 86, stage: 'Qualified', value: 180, signal: 'Visited pricing page 5×', last: '1d ago' },
+  { id: 'pioneer',  name: 'Pioneer Foods',        seg: 'Manufacturing',   intent: 82, stage: 'Contacted', value: 320, signal: 'Opened 3 emails, downloaded spec', last: '2d ago' },
+  { id: 'ironwood', name: 'Ironwood Builders',     seg: 'Construction',    intent: 79, stage: 'New',       value: 150, signal: 'Matched ICP, in-territory', last: '—' },
+  { id: 'meridian', name: 'Meridian Freight',      seg: 'Logistics',       intent: 74, stage: 'New',       value: 95,  signal: 'Hiring ops staff (growth signal)', last: '—' },
+  { id: 'apex2',    name: 'Apex Tooling',          seg: 'Industrial',      intent: 71, stage: 'New',       value: 130, signal: 'Lookalike to your best customer', last: '—' },
+];
+
+function nextStage(list, s) { const i = list.indexOf(s); return i < list.length - 1 ? list[i + 1] : s; }
+function fitColor(f) { return f >= 85 ? 'var(--success)' : f >= 75 ? 'var(--gold-1)' : 'var(--fg-3)'; }
+
+/* ---- LP Capital Map: thermometer + funnel + cards + detail drawer ---- */
+const LP_RAISE_TARGET = { '25': 25, '100': 100, '500': 500, '1000': 1000, '5': 5, '50': 50, '250': 250, emerging: 100, midmarket: 250, institutional: 500, all: 500 };
+
+function LpCapitalMap({ lps, target, noun, onRunLp, onRun, fitColor }) {
+  const [openLp, setOpenLp] = useState(null);
+  const committed = lps.filter(l => l.stage === 'Committed').reduce((s, l) => s + l.amt, 0);
+  const soft = lps.filter(l => l.stage === 'Soft-circled').reduce((s, l) => s + l.amt, 0);
+  const pipeline = lps.filter(l => l.stage === 'Target' || l.stage === 'Contacted').reduce((s, l) => s + l.amt, 0);
+  const pctC = Math.min(100, Math.round((committed / target) * 100));
+  const pctS = Math.min(100 - pctC, Math.round((soft / target) * 100));
+  const stages = ['Target', 'Contacted', 'Soft-circled', 'Committed'];
+  const byStage = (st) => lps.filter(l => l.stage === st);
+  const lp = openLp && lps.find(l => l.id === openLp);
+
+  return (
+    <Panel title="LP Capital Map" eyebrow="Fit-scored & ranked by Sloane · tap an LP to open" icon="landmark"
+      action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Build more targets</Button>}>
+      {/* raise thermometer */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 7 }}>
+          <span style={{ fontSize: 12, color: 'var(--fg-3)' }}><b style={{ color: 'var(--fg-1)' }}>${committed}M</b> committed <span style={{ color: 'var(--fg-5)' }}>+ ${soft}M soft-circled</span></span>
+          <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>of <b style={{ color: 'var(--gold-1)' }}>${target}M</b> target</span>
+        </div>
+        <div style={{ height: 12, borderRadius: 999, background: 'var(--surface-2)', overflow: 'hidden', display: 'flex', border: '1px solid var(--border)' }}>
+          <div style={{ width: pctC + '%', background: 'linear-gradient(90deg,#1F8A5B,#2fae74)', transition: 'width .4s' }} />
+          <div style={{ width: pctS + '%', background: 'linear-gradient(90deg,#F7C948,#E5A823)', opacity: 0.55, transition: 'width .4s' }} />
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--fg-5)', marginTop: 6 }}>{pctC}% closed · {Math.round((pipeline / target) * 100)}% more in pipeline</div>
+      </div>
+      {/* stage funnel */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 16 }}>
+        {stages.map(st => {
+          const items = byStage(st); const amt = items.reduce((s, l) => s + l.amt, 0);
+          return (
+            <div key={st} className="card-flat" style={{ padding: '10px 11px', background: 'var(--surface-1)', borderTop: `2px solid ${TONE[LP_STAGE_TONE[st]].c}` }}>
+              <div style={{ fontSize: 10.5, color: 'var(--fg-4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 4 }}>
+                <span className="t-metric" style={{ fontSize: 18 }}>{items.length}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>· ${amt}M</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* LP cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 10 }}>
+        {lps.slice().sort((a, b) => stages.indexOf(b.stage) - stages.indexOf(a.stage) || b.fit - a.fit).map(l => (
+          <button key={l.id} className="clickable card-flat" onClick={() => setOpenLp(l.id)} style={{ textAlign: 'left', padding: '13px 14px', background: 'var(--surface-1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Avatar name={l.name} size={32} tone={l.stage === 'Committed' ? 'gold' : 'azure'} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{l.type}</div>
+              </div>
+              <Badge tone={LP_STAGE_TONE[l.stage]} style={{ fontSize: 9.5, padding: '2px 7px' }}>{l.stage}</Badge>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 11 }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Check <b className="t-mono" style={{ color: 'var(--fg-2)' }}>${l.amt}M</b></span>
+              <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Fit <b style={{ color: fitColor(l.fit) }}>{l.fit}</b></span>
+              <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>{l.warmth}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* detail drawer */}
+      {lp && (
+        <>
+          <div onClick={() => setOpenLp(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.64)', backdropFilter: 'blur(3px)', zIndex: 60 }} />
+          <div className="fade-in" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, maxWidth: '94vw', background: 'var(--bg-2)', borderLeft: '1px solid var(--border-strong)', zIndex: 61, overflowY: 'auto', boxShadow: '-30px 0 80px -30px rgba(0,0,0,0.7)' }}>
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Avatar name={lp.name} size={42} tone={lp.stage === 'Committed' ? 'gold' : 'azure'} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 600 }}>{lp.name}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{lp.type} · {lp.warmth} lead</div>
+              </div>
+              <button className="clickable" onClick={() => setOpenLp(null)} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+                {[['Check', `$${lp.amt}M`, 'gold'], ['Fit score', lp.fit, 'azure'], ['Stage', '', 'neutral']].map(([k, v, t], i) => (
+                  <div key={k} className="card-flat" style={{ padding: '11px 12px', background: 'var(--surface-1)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--fg-5)' }}>{k}</div>
+                    {i === 2 ? <Badge tone={LP_STAGE_TONE[lp.stage]} style={{ fontSize: 9.5, marginTop: 5 }}>{lp.stage}</Badge>
+                      : <div className="t-metric" style={{ fontSize: 18, marginTop: 4, color: i === 1 ? fitColor(lp.fit) : TONE[t].c }}>{v}</div>}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 8 }}>Why they fit</div>
+                <div className="card-flat" style={{ padding: '12px 14px', background: 'var(--surface-1)', fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.55 }}>{lp.focus}. Sloane scored this a {lp.fit} on thesis alignment, check size and warmth.</div>
+              </div>
+              <div style={{ display: 'flex', gap: 18, fontSize: 11.5, color: 'var(--fg-4)' }}>
+                <span><b style={{ color: 'var(--fg-2)' }}>Source</b><br />{lp.source}</span>
+                <span><b style={{ color: 'var(--fg-2)' }}>Last touch</b><br />{lp.last}</span>
+              </div>
+              {lp.stage !== 'Committed' ? (
+                <div style={{ padding: '14px 15px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}><EarnCoin size={24} /><span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)' }}>Earn's next move</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5, marginBottom: 11 }}>{LP_NEXT[lp.stage]} — I'll personalize it from your fund story and their stated focus, then queue it for your approval.</div>
+                  <Button variant="gold" size="sm" icon="sparkles" style={{ width: '100%' }} onClick={() => { onRunLp(lp); setOpenLp(null); }}>{LP_NEXT[lp.stage]} with Earn</Button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '14px 15px', borderRadius: 13, background: 'var(--success-soft)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><Icon name="check-circle-2" size={17} />Committed · ${lp.amt}M closed</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function StatTile({ label, value, sub, tone = 'gold' }) {
+  return (
+    <div className="card-flat" style={{ padding: '12px 14px', background: 'var(--surface-1)' }}>
+      <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>{label}</div>
+      <div className="t-metric" style={{ fontSize: 21, marginTop: 6, color: TONE[tone].c }}>{value}</div>
+      {sub && <div style={{ fontSize: 10.5, color: 'var(--fg-5)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+/* ---- Deal Pipeline: funnel + scored deal cards + detail drawer ---- */
+function DealPipeline({ deals, onRunDeal, onRun }) {
+  const [openId, setOpenId] = useState(null);
+  const stages = DEAL_STAGES;
+  const byStage = (st) => deals.filter(d => d.stage === st);
+  const weighted = deals.reduce((s, d) => s + d.amt, 0);
+  const closing = deals.filter(d => d.stage === 'Closing').reduce((s, d) => s + d.amt, 0);
+  const d = openId && deals.find(x => x.id === openId);
+
+  return (
+    <Panel title="Deal pipeline" eyebrow="Sourced & scored by Marcus · tap a deal to open" icon="trending-up"
+      action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Source more deals</Button>}>
+      {/* pipeline summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 16 }}>
+        <StatTile label="In pipeline" value={`${deals.length}`} sub="on-thesis deals" tone="azure" />
+        <StatTile label="Pipeline value" value={`$${weighted}M`} sub="total deal size" tone="gold" />
+        <StatTile label="At close" value={`$${closing}M`} sub="ready to sign" tone="success" />
+      </div>
+      {/* stage funnel */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 7, marginBottom: 16 }}>
+        {stages.map(st => {
+          const items = byStage(st);
+          return (
+            <div key={st} className="card-flat" style={{ padding: '9px 10px', background: 'var(--surface-1)', borderTop: `2px solid ${TONE[DEAL_STAGE_TONE[st]].c}` }}>
+              <div style={{ fontSize: 10, color: 'var(--fg-4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st}</div>
+              <div className="t-metric" style={{ fontSize: 17, marginTop: 3 }}>{items.length}</div>
+            </div>
+          );
+        })}
+      </div>
+      {/* deal cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 10 }}>
+        {deals.slice().sort((a, b) => stages.indexOf(b.stage) - stages.indexOf(a.stage) || b.score - a.score).map(d => (
+          <button key={d.id} className="clickable card-flat" onClick={() => setOpenId(d.id)} style={{ textAlign: 'left', padding: '13px 14px', background: 'var(--surface-1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-3)' }}><Icon name="building-2" size={16} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{d.sector}</div>
+              </div>
+              <Badge tone={DEAL_STAGE_TONE[d.stage]} style={{ fontSize: 9.5, padding: '2px 7px' }}>{d.stage}</Badge>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 11 }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Size <b className="t-mono" style={{ color: 'var(--fg-2)' }}>${d.amt}M</b></span>
+              <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Score <b style={{ color: fitColor(d.score) }}>{d.score}</b></span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* detail drawer */}
+      {d && (
+        <>
+          <div onClick={() => setOpenId(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.64)', backdropFilter: 'blur(3px)', zIndex: 60 }} />
+          <div className="fade-in" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, maxWidth: '94vw', background: 'var(--bg-2)', borderLeft: '1px solid var(--border-strong)', zIndex: 61, overflowY: 'auto', boxShadow: '-30px 0 80px -30px rgba(0,0,0,0.7)' }}>
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ width: 42, height: 42, borderRadius: 11, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}><Icon name="building-2" size={20} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 600 }}>{d.name}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{d.sector}</div>
+              </div>
+              <button className="clickable" onClick={() => setOpenId(null)} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+                {[['Size', `$${d.amt}M`, 'gold'], ['Score', d.score, 'azure'], ['Stage', '', 'neutral']].map(([k, v, t], i) => (
+                  <div key={k} className="card-flat" style={{ padding: '11px 12px', background: 'var(--surface-1)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--fg-5)' }}>{k}</div>
+                    {i === 2 ? <Badge tone={DEAL_STAGE_TONE[d.stage]} style={{ fontSize: 9.5, marginTop: 5 }}>{d.stage}</Badge>
+                      : <div className="t-metric" style={{ fontSize: 18, marginTop: 4, color: i === 1 ? fitColor(d.score) : TONE[t].c }}>{v}</div>}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 8 }}>Thesis</div>
+                <div className="card-flat" style={{ padding: '12px 14px', background: 'var(--surface-1)', fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.55 }}>{d.thesis}. Marcus scored this a {d.score} against your mandate.</div>
+              </div>
+              {/* stage tracker */}
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 9 }}>Pipeline stage</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {stages.map((st, i) => {
+                    const at = stages.indexOf(d.stage); const done = i <= at;
+                    return (
+                      <React.Fragment key={st}>
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ height: 4, borderRadius: 999, background: done ? TONE[DEAL_STAGE_TONE[d.stage]].c : 'var(--surface-3)' }} />
+                          <div style={{ fontSize: 8.5, color: i === at ? 'var(--fg-2)' : 'var(--fg-5)', marginTop: 4, whiteSpace: 'nowrap' }}>{st}</div>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 18, fontSize: 11.5, color: 'var(--fg-4)' }}>
+                <span><b style={{ color: 'var(--fg-2)' }}>Source</b><br />{d.source}</span>
+                <span><b style={{ color: 'var(--fg-2)' }}>Last update</b><br />{d.last}</span>
+              </div>
+              {d.stage !== 'Closing' ? (
+                <div style={{ padding: '14px 15px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}><EarnCoin size={24} /><span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)' }}>Earn's next move</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5, marginBottom: 11 }}>{DEAL_NEXT[d.stage]} — I'll assemble the package and cross-check your thesis, then queue it for approval.</div>
+                  <Button variant="gold" size="sm" icon="sparkles" style={{ width: '100%' }} onClick={() => { onRunDeal(d); setOpenId(null); }}>{DEAL_NEXT[d.stage]} with Earn</Button>
+                </div>
+              ) : (
+                <div style={{ padding: '14px 15px', borderRadius: 13, background: 'var(--success-soft)', border: '1px solid var(--success-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 9 }}><Icon name="circle-check-big" size={17} />At close · ${d.amt}M</div>
+                  <Button variant="gold" size="sm" icon="sparkles" style={{ width: '100%' }} onClick={() => { onRunDeal(d); setOpenId(null); }}>Drive the close with Earn</Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+/* ---- Partner Network: service coverage + partner cards + detail drawer ---- */
+function PartnerNetwork({ providers, onRunProvider, onRun }) {
+  const [openId, setOpenId] = useState(null);
+  const engaged = providers.filter(p => p.stage === 'Engaged').length;
+  const covered = PROV_ESSENTIAL.filter(c => providers.some(p => p.cat === c && p.stage === 'Engaged')).length;
+  const p = openId && providers.find(x => x.id === openId);
+
+  return (
+    <Panel title="Partner Network" eyebrow="Vetted partners & providers · tap to open" icon="handshake"
+      action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Find more partners</Button>}>
+      {/* coverage summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 14 }}>
+        <StatTile label="Essential coverage" value={`${covered}/${PROV_ESSENTIAL.length}`} sub="key services engaged" tone="success" />
+        <StatTile label="Engaged" value={`${engaged}`} sub="active relationships" tone="gold" />
+        <StatTile label="On the bench" value={`${providers.length}`} sub="vetted & ranked" tone="azure" />
+      </div>
+      {/* essential coverage chips */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 16 }}>
+        {PROV_ESSENTIAL.map(c => {
+          const done = providers.some(x => x.cat === c && x.stage === 'Engaged');
+          return (
+            <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 500, color: done ? 'var(--success)' : 'var(--fg-4)', background: done ? 'var(--success-soft)' : 'var(--surface-1)', border: `1px solid ${done ? 'var(--success-line)' : 'var(--border)'}`, borderRadius: 999, padding: '4px 11px' }}>
+              <Icon name={done ? 'check' : (PROV_CAT_ICON[c] || 'circle')} size={12} />{c}
+            </span>
+          );
+        })}
+      </div>
+      {/* partner cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 10 }}>
+        {providers.slice().sort((a, b) => (b.stage === 'Engaged') - (a.stage === 'Engaged') || b.fit - a.fit).map(p => (
+          <button key={p.id} className="clickable card-flat" onClick={() => setOpenId(p.id)} style={{ textAlign: 'left', padding: '13px 14px', background: 'var(--surface-1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.stage === 'Engaged' ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${p.stage === 'Engaged' ? 'var(--success-line)' : 'var(--border)'}`, color: p.stage === 'Engaged' ? 'var(--success)' : 'var(--fg-3)' }}><Icon name={PROV_CAT_ICON[p.cat] || 'briefcase'} size={16} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{p.cat}</div>
+              </div>
+              <Badge tone={PROV_TONE[p.stage]} style={{ fontSize: 9.5, padding: '2px 7px' }}>{p.stage}</Badge>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 10, display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span>Fit <b style={{ color: fitColor(p.fit) }}>{p.fit}</b></span>
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.note}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* detail drawer */}
+      {p && (
+        <>
+          <div onClick={() => setOpenId(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.64)', backdropFilter: 'blur(3px)', zIndex: 60 }} />
+          <div className="fade-in" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, maxWidth: '94vw', background: 'var(--bg-2)', borderLeft: '1px solid var(--border-strong)', zIndex: 61, overflowY: 'auto', boxShadow: '-30px 0 80px -30px rgba(0,0,0,0.7)' }}>
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ width: 42, height: 42, borderRadius: 11, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}><Icon name={PROV_CAT_ICON[p.cat] || 'briefcase'} size={20} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 600 }}>{p.name}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{p.cat}</div>
+              </div>
+              <button className="clickable" onClick={() => setOpenId(null)} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+                {[['Fit', p.fit, 'azure'], ['Terms', '', 'gold'], ['Status', '', 'neutral']].map(([k, v, t], i) => (
+                  <div key={k} className="card-flat" style={{ padding: '11px 12px', background: 'var(--surface-1)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--fg-5)' }}>{k}</div>
+                    {i === 0 ? <div className="t-metric" style={{ fontSize: 18, marginTop: 4, color: fitColor(p.fit) }}>{v}</div>
+                      : i === 1 ? <div style={{ fontSize: 11.5, fontWeight: 600, marginTop: 5, color: 'var(--fg-2)' }}>{p.terms}</div>
+                      : <Badge tone={PROV_TONE[p.stage]} style={{ fontSize: 9.5, marginTop: 5 }}>{p.stage}</Badge>}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 8 }}>Why this partner</div>
+                <div className="card-flat" style={{ padding: '12px 14px', background: 'var(--surface-1)', fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.55 }}>{p.note}. Vetted by Adrian and scored {p.fit} on fit, terms and references for a fund your size.</div>
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}><b style={{ color: 'var(--fg-2)' }}>Last activity</b><br />{p.last}</div>
+              {p.stage !== 'Engaged' ? (
+                <div style={{ padding: '14px 15px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}><EarnCoin size={24} /><span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)' }}>Earn's next move</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5, marginBottom: 11 }}>{PROV_NEXT[p.stage]} — I'll handle the outreach, confirm terms and references, then queue it for approval.</div>
+                  <Button variant="gold" size="sm" icon="sparkles" style={{ width: '100%' }} onClick={() => { onRunProvider(p); setOpenId(null); }}>{PROV_NEXT[p.stage]} with Earn</Button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '14px 15px', borderRadius: 13, background: 'var(--success-soft)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><Icon name="check-circle-2" size={17} />Engaged · active relationship</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+/* ---- Lead Engine: demand-gen funnel + intent-scored leads + drawer ---- */
+function LeadEngine({ leads, onRunLead, onRun }) {
+  const [openId, setOpenId] = useState(null);
+  const stages = LEAD_STAGES;
+  const byStage = (st) => leads.filter(l => l.stage === st);
+  const meetings = leads.filter(l => l.stage === 'Meeting').length;
+  const pipeValue = leads.reduce((s, l) => s + (l.value || 0), 0);
+  const l = openId && leads.find(x => x.id === openId);
+
+  return (
+    <Panel title="Lead Engine" eyebrow="Demand generation by Vivian & Camille · tap a lead to open" icon="megaphone"
+      action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Generate leads</Button>}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14, padding: '10px 13px', borderRadius: 11, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+        <Icon name="building-2" size={15} color="var(--gold-1)" />
+        <span style={{ fontSize: 12, color: 'var(--fg-2)' }}>Sourcing customers for <b style={{ color: 'var(--fg-1)' }}>Atlas Manufacturing</b> — your newest portfolio company. Earn spins up a Lead Engine for every acquisition you close.</span>
+      </div>
+      {/* funnel summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 14 }}>
+        <StatTile label="Live leads" value={`${leads.length}`} sub="intent-scored" tone="azure" />
+        <StatTile label="Pipeline value" value={`$${(pipeValue / 1000).toFixed(1)}M`} sub="weighted ARR" tone="gold" />
+        <StatTile label="Meetings booked" value={`${meetings}`} sub="sales-ready" tone="success" />
+      </div>
+      {/* stage funnel */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 7, marginBottom: 16 }}>
+        {stages.map(st => (
+          <div key={st} className="card-flat" style={{ padding: '9px 10px', background: 'var(--surface-1)', borderTop: `2px solid ${TONE[LEAD_TONE[st]].c}` }}>
+            <div style={{ fontSize: 10, color: 'var(--fg-4)' }}>{st}</div>
+            <div className="t-metric" style={{ fontSize: 17, marginTop: 3 }}>{byStage(st).length}</div>
+          </div>
+        ))}
+      </div>
+      {/* lead cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 10 }}>
+        {leads.slice().sort((a, b) => stages.indexOf(b.stage) - stages.indexOf(a.stage) || b.intent - a.intent).map(l => (
+          <button key={l.id} className="clickable card-flat" onClick={() => setOpenId(l.id)} style={{ textAlign: 'left', padding: '13px 14px', background: 'var(--surface-1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-3)' }}><Icon name="building-2" size={16} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{l.seg}</div>
+              </div>
+              <Badge tone={LEAD_TONE[l.stage]} style={{ fontSize: 9.5, padding: '2px 7px' }}>{l.stage}</Badge>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 11 }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Intent <b style={{ color: fitColor(l.intent) }}>{l.intent}</b></span>
+              <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Value <b className="t-mono" style={{ color: 'var(--fg-2)' }}>${l.value}K</b></span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* detail drawer */}
+      {l && (
+        <>
+          <div onClick={() => setOpenId(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.64)', backdropFilter: 'blur(3px)', zIndex: 60 }} />
+          <div className="fade-in" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, maxWidth: '94vw', background: 'var(--bg-2)', borderLeft: '1px solid var(--border-strong)', zIndex: 61, overflowY: 'auto', boxShadow: '-30px 0 80px -30px rgba(0,0,0,0.7)' }}>
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ width: 42, height: 42, borderRadius: 11, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}><Icon name="building-2" size={20} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 600 }}>{l.name}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{l.seg}</div>
+              </div>
+              <button className="clickable" onClick={() => setOpenId(null)} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+                {[['Intent', l.intent, 'azure'], ['Value', `$${l.value}K`, 'gold'], ['Stage', '', 'neutral']].map(([k, v, t], i) => (
+                  <div key={k} className="card-flat" style={{ padding: '11px 12px', background: 'var(--surface-1)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--fg-5)' }}>{k}</div>
+                    {i === 2 ? <Badge tone={LEAD_TONE[l.stage]} style={{ fontSize: 9.5, marginTop: 5 }}>{l.stage}</Badge>
+                      : <div className="t-metric" style={{ fontSize: 18, marginTop: 4, color: i === 0 ? fitColor(l.intent) : TONE[t].c }}>{v}</div>}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div className="t-eyebrow" style={{ marginBottom: 8 }}>Intent signal</div>
+                <div className="card-flat" style={{ padding: '12px 14px', background: 'var(--surface-1)', fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.55 }}>{l.signal}. Scored {l.intent} on buying intent and fit to Atlas's ICP.</div>
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}><b style={{ color: 'var(--fg-2)' }}>Last activity</b><br />{l.last}</div>
+              {l.stage !== 'Meeting' ? (
+                <div style={{ padding: '14px 15px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}><EarnCoin size={24} /><span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)' }}>Earn's next move</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5, marginBottom: 11 }}>{LEAD_NEXT[l.stage]} — I'll personalize the outreach to their segment and signal, then queue it for approval.</div>
+                  <Button variant="gold" size="sm" icon="sparkles" style={{ width: '100%' }} onClick={() => { onRunLead(l); setOpenId(null); }}>{LEAD_NEXT[l.stage]} with Earn</Button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '14px 15px', borderRadius: 13, background: 'var(--success-soft)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><Icon name="calendar-check" size={17} />Meeting booked · sales-ready</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function SourceHub({ mandate, group, pct, onRun }) {
+  const [tab, setTab] = useState('lps');
+  const [lps, setLps] = useState(LP_SEED);
+  const [deals, setDeals] = useState(DEAL_SEED);
+  const [providers, setProviders] = useState(PROVIDER_SEED);
+  const [leads, setLeads] = useState(LEAD_SEED);
+  const noun = SRC_NOUN[group] || 'LP';
+
+  const committed = lps.filter(l => l.stage === 'Committed').reduce((s, l) => s + l.amt, 0);
+  const soft = lps.filter(l => l.stage === 'Soft-circled').reduce((s, l) => s + l.amt, 0);
+  const advanced = lps.filter(l => l.stage !== 'Target').length;
+
+  function runLp(lp) {
+    const act = LP_NEXT[lp.stage]; if (!act) return;
+    onRun({ id: 'lp-' + lp.id + '-' + lp.stage, hub: 'source', xp: 20, title: `${act} — ${lp.name}`,
+      apply: () => setLps(prev => prev.map(x => x.id === lp.id ? { ...x, stage: nextStage(LP_STAGES, x.stage) } : x)),
+      run: { title: `${act} — ${lp.name}`, steps: ['Pull engagement + fit signals', `Draft the ${act.toLowerCase()}`, 'Attach your one-pager + track record', 'Prepare for your approval'],
+        draftTitle: `${act} — ${lp.name}`, draft: `Earn drafted a personalized ${act.toLowerCase()} for ${lp.name} (${lp.type}, fit ${lp.fit}). Approve to send and advance them to the next stage — nothing leaves FundExecs OS until you confirm.` } });
+  }
+  function runDeal(d) {
+    const ns = nextStage(DEAL_STAGES, d.stage); if (ns === d.stage) return;
+    onRun({ id: 'deal-' + d.id + '-' + d.stage, hub: 'source', xp: 20, title: `Advance ${d.name} → ${ns}`,
+      apply: () => setDeals(prev => prev.map(x => x.id === d.id ? { ...x, stage: ns } : x)),
+      run: { title: `Advance ${d.name} → ${ns}`, steps: ['Pull the latest on the deal', `Prepare the ${ns} package`, 'Cross-check against your thesis', 'Prepare for your approval'],
+        draftTitle: `${d.name} → ${ns}`, draft: `Earn assembled what's needed to move ${d.name} (${d.sector}, score ${d.score}) into ${ns}. Approve to advance it on your pipeline.` } });
+  }
+  function runProvider(p) {
+    const act = PROV_NEXT[p.stage]; if (!act) return;
+    onRun({ id: 'prov-' + p.id + '-' + p.stage, hub: 'source', xp: 15, title: `${act} — ${p.name}`,
+      apply: () => setProviders(prev => prev.map(x => x.id === p.id ? { ...x, stage: nextStage(PROV_STAGES, x.stage) } : x)),
+      run: { title: `${act} — ${p.name}`, steps: ['Pull vetting + fit on ' + p.cat, `Draft the ${act.toLowerCase()}`, 'Check terms & references', 'Prepare for your approval'],
+        draftTitle: `${act} — ${p.name}`, draft: `Earn lined up ${p.name} (${p.cat}, fit ${p.fit}) from the vetted bench. Approve to ${act.toLowerCase()} and move them forward.` } });
+  }
+  function runLead(l) {
+    const act = LEAD_NEXT[l.stage]; if (!act) return;
+    onRun({ id: 'lead-' + l.id + '-' + l.stage, hub: 'source', xp: 12, title: `${act} — ${l.name}`,
+      apply: () => setLeads(prev => prev.map(x => x.id === l.id ? { ...x, stage: nextStage(LEAD_STAGES, x.stage) } : x)),
+      run: { title: `${act} — ${l.name}`, steps: ['Pull intent + firmographics', `Draft the ${act.toLowerCase()}`, 'Personalize to their segment', 'Prepare for your approval'],
+        draftTitle: `${act} — ${l.name}`, draft: `Earn prepared the ${act.toLowerCase()} for ${l.name} (${l.seg}, intent ${l.intent}) to drive revenue for your portfolio company. Approve to send and advance the lead.` } });
+  }
+
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* raise summary */}
+      <div className="card" style={{ padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+          <span style={{ width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)' }}><Icon name="radar" size={22} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="t-h2" style={{ fontSize: 19 }}>Source</div>
+            <div style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 2 }}>The team finds your capital and deals. Approve a move and it advances here.</div>
+          </div>
+          <div style={{ textAlign: 'right', flex: 'none' }}>
+            <div className="t-metric" style={{ fontSize: 22, color: 'var(--gold-1)' }}>{pct}%</div>
+            <div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>Source ready</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 14, marginBottom: 16 }}><ProgressBar value={pct} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} /></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10 }}>
+          <StatTile label="Committed" value={`$${committed}M`} sub="closed allocations" tone="success" />
+          <StatTile label="Soft-circled" value={`$${soft}M`} sub="near-term" tone="gold" />
+          <StatTile label={`${noun === 'LP' ? 'LPs' : noun + 's'} advanced`} value={`${advanced}/${lps.length}`} sub="past first touch" tone="azure" />
+          <StatTile label="Deals sourced" value={`${deals.length}`} sub="on-thesis, scored" tone="info" />
+        </div>
+      </div>
+
+      <div style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2 }}><SegTabs active={tab} onChange={setTab} tabs={[{ id: 'lps', label: SRC_TITLE[group] || 'LP Capital Map', icon: 'landmark' }, { id: 'deals', label: 'Deal pipeline', icon: 'trending-up' }, { id: 'partners', label: 'Partner Network', icon: 'handshake' }, { id: 'leads', label: 'Lead Engine', icon: 'megaphone' }]} /></div>
+
+      {tab === 'lps' ? (
+        group === 'fund'
+          ? <LpCapitalMap lps={lps} target={LP_RAISE_TARGET[mandate.size] || 500} noun={noun} onRunLp={runLp} onRun={onRun} fitColor={fitColor} />
+          : (
+        <Panel title={SRC_TITLE[group] || 'LP Capital Map'} eyebrow="Fit-scored & ranked by Sloane" icon="landmark"
+          action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Build more targets</Button>}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.8fr 0.6fr 1fr auto', gap: 10, padding: '0 4px 8px', alignItems: 'center' }} className="t-eyebrow">
+            <span>Investor</span><span>Check</span><span>Fit</span><span>Stage</span><span></span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {lps.map(lp => (
+              <div key={lp.id} className="card-flat" style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.8fr 0.6fr 1fr auto', gap: 10, alignItems: 'center', padding: '10px 13px', background: 'var(--surface-1)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lp.name}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{lp.type} · {lp.warmth}</div>
+                </div>
+                <span className="t-mono" style={{ fontSize: 12.5, color: 'var(--fg-2)' }}>${lp.amt}M</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: fitColor(lp.fit) }}>{lp.fit}</span>
+                <Badge tone={LP_STAGE_TONE[lp.stage]} style={{ fontSize: 10, padding: '2px 8px' }}>{lp.stage}</Badge>
+                {lp.stage === 'Committed'
+                  ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--success)', fontWeight: 600, justifySelf: 'end' }}><Icon name="check-circle-2" size={14} />Closed</span>
+                  : <Button variant="secondary" size="sm" icon="sparkles" style={{ justifySelf: 'end' }} onClick={() => runLp(lp)}>{LP_NEXT[lp.stage]}</Button>}
+              </div>
+            ))}
+          </div>
+        </Panel>
+          )
+      ) : tab === 'deals' ? (
+        <DealPipeline deals={deals} onRunDeal={runDeal} onRun={onRun} />
+      ) : tab === 'partners' ? (
+        <PartnerNetwork providers={providers} onRunProvider={runProvider} onRun={onRun} />
+      ) : (
+        <LeadEngine leads={leads} onRunLead={runLead} onRun={onRun} />
+      )}
+
+      <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gold-soft)', borderColor: 'var(--gold-line)' }}>
+        <EarnCoin size={26} />
+        <div style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.5 }}><b style={{ color: 'var(--gold-1)' }}>Earn:</b> I rank every {noun} and deal by fit and momentum. Tap any move — I draft it, you approve, it advances.</div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { SourceHub });
