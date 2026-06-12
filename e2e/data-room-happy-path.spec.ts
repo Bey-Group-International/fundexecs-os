@@ -32,12 +32,20 @@ test('an LP passes the vetted gate and shows up in the operator room', async ({
     .filter({ has: page.getByText('One-pager', { exact: true }) })
     .filter({ has: page.getByRole('button', { name: /^(Build|Open)$/ }) })
     .last();
+  // Wait for the materials grid to actually render before deciding whether to
+  // build. A bare isVisible() races the grid's hydration (the heading paints
+  // first), would return false, and silently skip the build — leaving the
+  // One-pager unbuilt and the room empty.
+  await expect(matCard).toBeVisible({ timeout: 20_000 });
   const buildBtn = matCard.getByRole('button', { name: 'Build', exact: true });
   if (await buildBtn.isVisible().catch(() => false)) {
     await buildBtn.click();
     await page.getByRole('button', { name: /Build & add to room/ }).click();
     // The drafting choreography runs, then the review state offers the add.
     await page.getByRole('button', { name: /Add to room & continue/ }).click({ timeout: 20_000 });
+    // The build auto-switches to the room; wait for it to settle so the row read
+    // below sees the freshly-built doc.
+    await expect(page.getByText('The data room', { exact: true })).toBeVisible({ timeout: 20_000 });
   }
 
   // ── the room: a live link for the One-pager ─────────────────────────────
