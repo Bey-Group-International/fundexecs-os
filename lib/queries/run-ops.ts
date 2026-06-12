@@ -60,16 +60,41 @@ export interface ComplianceItemView {
   category: string;
   severity: ComplianceSeverity | string;
   status: string;
+  /** Obligation name; legacy rows stored it in `category` (null here). */
+  name: string | null;
+  owner: string | null;
+  due: string | null;
+  drives: string | null;
+  detail: string | null;
+  /** Earn's action verb for the resolve loop. */
+  action: string | null;
+  checklist: string[];
 }
 
 export const getComplianceItems = cache(async (orgId: string): Promise<ComplianceItemView[]> => {
   const supabase = await createClient();
   const { data } = await supabase
     .from('compliance_items')
-    .select('id, category, severity, status')
+    .select(
+      'id, category, severity, status, name, owner_name, due_label, drives, detail, action_label, checklist'
+    )
     .eq('org_id', orgId)
     .order('created_at', { ascending: true });
-  return (data ?? []) as ComplianceItemView[];
+  return (data ?? []).map((i) => ({
+    id: i.id,
+    category: i.category,
+    severity: i.severity,
+    status: i.status,
+    name: i.name,
+    owner: i.owner_name,
+    due: i.due_label,
+    drives: i.drives,
+    detail: i.detail,
+    action: i.action_label,
+    checklist: Array.isArray(i.checklist)
+      ? i.checklist.filter((c): c is string => typeof c === 'string')
+      : []
+  }));
 });
 
 export interface IrItemView {
