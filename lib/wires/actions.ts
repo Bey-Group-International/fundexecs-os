@@ -66,6 +66,28 @@ async function logToChainOfTrust(
   });
 }
 
+/**
+ * Resolve a client-supplied closing id to one this org actually owns and
+ * that is still open — otherwise null. Stops a forged payload from
+ * attaching a signature/wire to another org's closing or a closed one;
+ * RLS scopes the row, but `closing_id` is a free FK the client controls.
+ */
+async function resolveOpenClosingId(
+  supabase: Supabase,
+  orgId: string,
+  closingId: string | null | undefined
+): Promise<string | null> {
+  if (!closingId) return null;
+  const { data } = await supabase
+    .from('closings')
+    .select('id')
+    .eq('id', closingId)
+    .eq('org_id', orgId)
+    .eq('status', 'open')
+    .maybeSingle();
+  return data ? data.id : null;
+}
+
 function refreshWires() {
   revalidatePath('/execute/wires');
   revalidatePath('/execute');
@@ -95,11 +117,12 @@ export async function sendSignature(input: {
   if (!org) return { ok: false, error: 'No active workspace.' };
 
   const supabase = await createClient();
+  const closingId = await resolveOpenClosingId(supabase, org.orgId, input.closingId);
   const { data, error } = await supabase
     .from('signatures')
     .insert({
       org_id: org.orgId,
-      closing_id: input.closingId || null,
+      closing_id: closingId,
       document,
       signer,
       signer_role: clean(input.signerRole) || null,
@@ -144,7 +167,7 @@ export async function resolveSignature(input: {
     return { ok: false, error: `Cannot move this signature from "${sig.status}".` };
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('signatures')
     .update({
       status: input.outcome,
@@ -154,8 +177,13 @@ export async function resolveSignature(input: {
     .eq('id', sig.id)
     .eq('org_id', org.orgId)
     // Concurrency guard: only move from the stage we just read.
-    .eq('status', sig.status);
+    .eq('status', sig.status)
+    .select('id');
   if (error) return { ok: false, error: error.message };
+  // 0 rows means the status changed under us — a no-error miss, not success.
+  if (!updated || updated.length !== 1) {
+    return { ok: false, error: 'This signature just changed — refresh and try again.' };
+  }
 
   if (input.outcome === 'signed') {
     await logToChainOfTrust(supabase, org.orgId, 'signature', sig.id);
@@ -189,12 +217,18 @@ export async function chaseSignature(input: { signatureId: string }): Promise<Wi
     return { ok: false, error: 'Only partially signed documents get chased.' };
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('signatures')
     .update({ chased_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('id', sig.id)
-    .eq('org_id', org.orgId);
+    .eq('org_id', org.orgId)
+    // Concurrency guard: only chase while it's still partial.
+    .eq('status', sig.status)
+    .select('id');
   if (error) return { ok: false, error: error.message };
+  if (!updated || updated.length !== 1) {
+    return { ok: false, error: 'This signature just changed — refresh and try again.' };
+  }
 
   refreshWires();
   return { ok: true, id: sig.id };
@@ -226,11 +260,12 @@ export async function stageWire(input: {
   if (!org) return { ok: false, error: 'No active workspace.' };
 
   const supabase = await createClient();
+  const closingId = await resolveOpenClosingId(supabase, org.orgId, input.closingId);
   const { data, error } = await supabase
     .from('wires')
     .insert({
       org_id: org.orgId,
-      closing_id: input.closingId || null,
+      closing_id: closingId,
       direction: input.direction,
       amount: input.amount,
       counterparty,
@@ -276,7 +311,7 @@ export async function clearWire(input: { wireId: string }): Promise<WiresActionR
     };
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('wires')
     .update({
       status: 'cleared',
@@ -286,8 +321,13 @@ export async function clearWire(input: { wireId: string }): Promise<WiresActionR
     .eq('id', wire.id)
     .eq('org_id', org.orgId)
     // Concurrency guard: only clear from the stage we just read.
-    .eq('status', wire.status);
+    .eq('status', wire.status)
+    .select('id');
   if (error) return { ok: false, error: error.message };
+  // 0 rows means another request already cleared it — don't double-log.
+  if (!updated || updated.length !== 1) {
+    return { ok: false, error: 'This wire just changed — refresh and try again.' };
+  }
 
   await logToChainOfTrust(supabase, org.orgId, 'wire', wire.id);
 

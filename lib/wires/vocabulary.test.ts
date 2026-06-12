@@ -7,6 +7,7 @@ import {
   canSignatureTransition,
   initialWireStatus,
   isSignatureStatus,
+  isValidWirePair,
   isWireDirection,
   isWireStatus,
   signatureSummary,
@@ -94,6 +95,17 @@ test('status and direction guards reject strays', () => {
   assert.equal(isWireDirection('sideways'), false);
 });
 
+test('isValidWirePair allows only direction-appropriate stages', () => {
+  assert.equal(isValidWirePair('out', 'staged'), true);
+  assert.equal(isValidWirePair('out', 'cleared'), true);
+  assert.equal(isValidWirePair('out', 'expected'), false);
+  assert.equal(isValidWirePair('in', 'expected'), true);
+  assert.equal(isValidWirePair('in', 'cleared'), true);
+  assert.equal(isValidWirePair('in', 'staged'), false);
+  assert.equal(isValidWirePair('sideways', 'cleared'), false);
+  assert.equal(isValidWirePair('out', 'settled'), false);
+});
+
 test('wireSummary counts only well-formed rows', () => {
   const summary = wireSummary([
     { direction: 'out', amount: 18_000_000, status: 'staged' },
@@ -102,7 +114,10 @@ test('wireSummary counts only well-formed rows', () => {
     { direction: 'in', amount: 6_000_000, status: 'cleared' },
     { direction: 'in', amount: -5, status: 'expected' },
     { direction: 'out', amount: 99, status: 'settled' },
-    { direction: 'sideways', amount: 99, status: 'staged' }
+    { direction: 'sideways', amount: 99, status: 'staged' },
+    // impossible direction/status pair — must be ignored
+    { direction: 'out', amount: 5_000_000, status: 'expected' },
+    { direction: 'in', amount: 5_000_000, status: 'staged' }
   ]);
   assert.equal(summary.outStagedCount, 1);
   assert.equal(summary.outTotal, 18_750_000);

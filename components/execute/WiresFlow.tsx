@@ -142,7 +142,11 @@ export function WiresFlow({
 
   const closingOptions = [
     { value: '', label: 'No closing — standalone' },
-    ...openClosings.map((c) => ({ value: c.id, label: c.counterparty ?? 'Open closing' }))
+    // Suffix a short id so same-counterparty (or null-counterparty) closings stay distinct.
+    ...openClosings.map((c) => ({
+      value: c.id,
+      label: `${c.counterparty ?? 'Open closing'} · ${c.id.slice(0, 8)}`
+    }))
   ];
 
   const sigSummary = signatureSummary(signatures);

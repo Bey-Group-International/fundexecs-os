@@ -109,6 +109,17 @@ export function initialWireStatus(direction: WireDirection): WireStatus {
 }
 
 /**
+ * The direction-aware model only allows certain pairs: outbound wires are
+ * staged or cleared, inbound wires expected or cleared. Mirrors the DB
+ * check constraint so the pure summary never counts an impossible row.
+ */
+export function isValidWirePair(direction: string, status: string): boolean {
+  if (direction === 'out') return status === 'staged' || status === 'cleared';
+  if (direction === 'in') return status === 'expected' || status === 'cleared';
+  return false;
+}
+
+/**
  * A wire clears exactly once: staged (released) or expected (confirmed)
  * → cleared. Cleared is terminal.
  */
@@ -147,7 +158,7 @@ export function wireSummary(wires: readonly WireLike[]): WireSummary {
   let clearedOut = 0;
   for (const w of wires) {
     if (!Number.isFinite(w.amount) || w.amount <= 0) continue;
-    if (!isWireStatus(w.status) || !isWireDirection(w.direction)) continue;
+    if (!isValidWirePair(w.direction, w.status)) continue;
     if (w.direction === 'out') {
       outTotal += w.amount;
       if (w.status === 'staged') outStagedCount += 1;
