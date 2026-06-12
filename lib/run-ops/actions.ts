@@ -173,7 +173,14 @@ export async function seedIr(): Promise<RunOpsActionResult> {
   const { error } = await supabase.from('ir_items').insert(
     IR_BASELINE.map((i) => ({
       org_id: org.orgId,
-      cat: i.cat,
+      // Legacy column: `cat` predates the anatomy columns and carried the name.
+      cat: i.name,
+      name: i.name,
+      category: i.category,
+      who: i.who,
+      drives: i.drives,
+      detail: i.detail,
+      contents: [...i.contents],
       status: 'todo',
       due_at: new Date(now + i.dueInDays * 86_400_000).toISOString()
     }))
