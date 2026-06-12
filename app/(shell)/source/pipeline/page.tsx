@@ -24,12 +24,10 @@ export default async function SourcePipelinePage() {
   const data = await getPipelineData(org.orgId);
 
   return (
-    <div className="fx-rise mx-auto max-w-[980px]">
-      <DealPipelineFlow
-        stages={data.stages}
-        pipelineValue={data.pipelineValue}
-        committed={data.committed}
-      />
-    </div>
+    <DealPipelineFlow
+      stages={data.stages}
+      pipelineValue={data.pipelineValue}
+      committed={data.committed}
+    />
   );
 }
