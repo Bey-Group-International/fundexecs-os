@@ -140,6 +140,178 @@ export function paletteFor(name: string | undefined): [string, string, string] {
   return PALETTES[name ?? ''] ?? PALETTES['Navy & gold'];
 }
 
+/* ── the dedicated bio builder (composeBio + facts) ──────────────────────── */
+
+/** The bio spec the dedicated builder publishes (decisions + facts + text). */
+export interface BioSpec {
+  voice: string;
+  length: string;
+  include: string[];
+  years: string;
+  prior: string;
+  win: string;
+  edu: string;
+  /** The composed paragraph, rendered on the public profile. */
+  text: string;
+}
+
+export const BIO_REC: Omit<BioSpec, 'text'> = {
+  voice: 'Operator',
+  length: 'Standard',
+  include: ['Track record', 'Operating wins', 'Thesis'],
+  years: '10',
+  prior: 'Head of Operations at a sector incumbent',
+  win: 'three exits and a top-quartile angel track record',
+  edu: 'an MBA from a top program'
+};
+
+/** Compose the actual bio paragraph from the facts + posture (the prototype's composeBio). */
+export function composeBio(
+  d: Partial<Omit<BioSpec, 'text'>>,
+  principal: string,
+  firm: string
+): string {
+  const first = (principal || 'Jordan Avery').split(' ')[0];
+  const yrs = d.years || '10';
+  const prior = d.prior || 'a decade operating in the sector';
+  const win = d.win || 'three exits and a portfolio built on conviction';
+  const edu = d.edu || '';
+  const voiceOpen =
+    {
+      Operator: `${principal} is the Managing Partner of ${firm} — an operator-turned-investor who spent ${yrs} years building in the sector before backing it.`,
+      Investor: `${principal} is the Managing Partner of ${firm}, an investor with ${yrs} years of disciplined sector focus and a track record of finding value others miss.`,
+      Visionary: `${principal} is the Managing Partner of ${firm}, building the firm to back the operators and ideas the market is only now catching up to.`
+    }[d.voice ?? 'Operator'] ??
+    `${principal} is the Managing Partner of ${firm} — an operator-turned-investor who spent ${yrs} years building in the sector before backing it.`;
+  const include = d.include ?? [];
+  const parts = [voiceOpen];
+  if (include.includes('Operating wins'))
+    parts.push(
+      `Before ${firm}, ${first} led ${prior.toLowerCase().startsWith('a ') ? prior : 'work at ' + prior} — earning the relationships and pattern-recognition that now drive the fund's edge.`
+    );
+  if (include.includes('Track record')) parts.push(`That work produced ${win}.`);
+  if (include.includes('Thesis'))
+    parts.push(
+      `Today ${first} invests behind a focused thesis: backing overlooked operators with an unfair sourcing edge.`
+    );
+  if (include.includes('Network'))
+    parts.push(
+      `${first}'s network across the sector turns into proprietary deal flow and warm capital.`
+    );
+  if (include.includes('Education') && edu) parts.push(`${first} holds ${edu}.`);
+  const full = parts.join(' ');
+  if (d.length === 'Short') return parts.slice(0, 2).join(' ');
+  if (d.length === 'Full')
+    return (
+      full +
+      ` ${first} writes and speaks regularly on the space, and sits at the center of the conversations that shape it.`
+    );
+  return full;
+}
+
+/* ── the dedicated brand-kit builder (live brand board) ──────────────────── */
+
+export interface BrandKitSpec {
+  tagline: string;
+  logo: string;
+  palette: string;
+  type: string;
+  voice: string;
+  aesthetic: string;
+}
+
+export const BK_LOGOS = ['Monogram', 'Coin', 'Symbol'] as const;
+export const BK_VOICES = ['Measured', 'Direct', 'Visionary'] as const;
+export const BK_AESTHETICS = ['Institutional', 'Modern', 'Bold'] as const;
+
+/** Typeface options → CSS stack + weight for the live brand board. */
+export const BK_TYPES: Record<string, { stack: string; weight: number }> = {
+  'Geist · modern': { stack: "'Geist', system-ui, sans-serif", weight: 600 },
+  'Serif · classic': { stack: "'Georgia', serif", weight: 600 },
+  'Grotesk · bold': { stack: 'system-ui, sans-serif', weight: 700 }
+};
+
+export const BK_TAGLINES = [
+  'Backing the operators others overlook.',
+  'Conviction, earned on the ground.',
+  'Where operating insight meets capital.',
+  'The unfair edge, institutionalized.'
+] as const;
+
+export const BK_REC: Omit<BrandKitSpec, 'aesthetic'> = {
+  tagline: 'Backing the operators others overlook.',
+  logo: 'Monogram',
+  palette: 'Navy & gold',
+  type: 'Geist · modern',
+  voice: 'Measured'
+};
+
+/** The prototype's aesthetic derivation at publish time. */
+export function brandKitAesthetic(voice: string): string {
+  return voice === 'Visionary' ? 'Bold' : 'Institutional';
+}
+
+/** Resolve a typeface by name, falling back to the recommended modern stack. */
+export function typeFor(name: string | undefined): { stack: string; weight: number } {
+  return BK_TYPES[name ?? ''] ?? BK_TYPES['Geist · modern'];
+}
+
+/* ── the credentials & track-record builder ──────────────────────────────── */
+
+export interface TrackDeal {
+  company: string;
+  year: string;
+  multiple: string;
+  status: 'Realized' | 'Unrealized';
+}
+
+export interface TrackAgg {
+  count: number;
+  realized: number;
+  blended: string;
+  top: string;
+}
+
+export interface CredentialsSpec {
+  deals: TrackDeal[];
+  edu: string;
+  recognition: string[];
+  agg: TrackAgg;
+}
+
+export const TR_REC_DEALS: readonly TrackDeal[] = [
+  { company: 'Northwind Industrial', year: '2017', multiple: '4.1', status: 'Realized' },
+  { company: 'Cedar Logistics', year: '2018', multiple: '2.8', status: 'Realized' },
+  { company: 'Apex Components', year: '2020', multiple: '3.5', status: 'Realized' },
+  { company: 'Helios Robotics', year: '2022', multiple: '2.2', status: 'Unrealized' }
+];
+
+export const TR_REC_CREDS = {
+  edu: 'MBA, Wharton',
+  recognition: ['Forbes 30 Under 30', '2 board seats', 'Ex-Head of Ops, sector incumbent']
+};
+
+export const TR_RECOGNITION_OPTS = [
+  'Forbes 30 Under 30',
+  '2 board seats',
+  'Ex-Head of Ops, sector incumbent',
+  'Published author',
+  'Industry award',
+  'Prior exit founder'
+] as const;
+
+/** Compute the live performance summary from the deal list (the prototype's trAgg). */
+export function trAgg(
+  deals: readonly Pick<TrackDeal, 'company' | 'multiple' | 'status'>[]
+): TrackAgg {
+  const valid = deals.filter((d) => d.company && parseFloat(d.multiple) > 0);
+  const mults = valid.map((d) => parseFloat(d.multiple));
+  const realized = valid.filter((d) => d.status === 'Realized').length;
+  const blended = mults.length ? mults.reduce((a, b) => a + b, 0) / mults.length : 0;
+  const top = mults.length ? Math.max(...mults) : 0;
+  return { count: valid.length, realized, blended: blended.toFixed(1), top: top.toFixed(1) };
+}
+
 /** One-click integrations shown in the connections grid. */
 export interface BrandConnector {
   id: string;

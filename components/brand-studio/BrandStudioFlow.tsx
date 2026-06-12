@@ -42,6 +42,7 @@ import { SegTabs } from '@/components/ui/Tabs';
 import { ActionRunner } from '@/components/earn/ActionRunner';
 import { publishBrandAsset, setPresenceItem } from '@/lib/brand-studio/actions';
 import {
+  BK_TAGLINES,
   BRAND_BUILD,
   BRAND_ITEM_NAME,
   BRAND_STAGES,
@@ -61,9 +62,13 @@ import {
 import {
   isBrandAssetId,
   type BrandAssetId,
+  type BrandBuiltSpecs,
   type BrandStudioDoc
 } from '@/lib/brand-studio/persistence';
 import { cn } from '@/lib/utils';
+import { BioBuilder } from './BioBuilder';
+import { BrandKitBuilder } from './BrandKitBuilder';
+import { CredentialsBuilder } from './CredentialsBuilder';
 
 /* ── icon resolvers ──────────────────────────────────────────────────────── */
 const ICONS: Record<string, LucideIcon> = {
@@ -416,33 +421,75 @@ export function BrandStudioFlow({
   const [openId, setOpenId] = useState<BrandAssetId | null>(null);
   const [built, setBuilt] = useState(initialDoc.built);
   /** Produced-but-not-published specs, per asset — the studio's Produced stage. */
-  const [producedSpecs, setProducedSpecs] = useState<
-    Partial<Record<BrandAssetId, Record<string, BrandValue>>>
-  >({});
+  const [producedSpecs, setProducedSpecs] = useState<BrandBuiltSpecs>({});
   const [presence, setPresence] = useState<string[]>(initialDoc.presence);
   /** A presence item awaiting the operator's approve moment. */
   const [pendingSetup, setPendingSetup] = useState<{ id: string; name: string } | null>(null);
 
+  const settle = <K extends BrandAssetId>(id: K) => ({
+    produced: (spec: BrandBuiltSpecs[K]) => setProducedSpecs((p) => ({ ...p, [id]: spec })),
+    published: (spec: BrandBuiltSpecs[K]) => {
+      setBuilt((p) => ({ ...p, [id]: spec }));
+      setProducedSpecs((p) => {
+        const { [id]: _published, ...rest } = p;
+        return rest;
+      });
+      setOpenId(null);
+    }
+  });
+
   if (openId && isBrandAssetId(openId)) {
+    const alreadyLive = !!built[openId];
+    const startProduced = !built[openId] && !!producedSpecs[openId];
+    const common = { alreadyLive, startProduced, onBack: () => setOpenId(null) };
+    if (openId === 'bio') {
+      const s = settle('bio');
+      return (
+        <BioBuilder
+          key={openId}
+          principal={principal}
+          firm={firm}
+          initial={built.bio ?? producedSpecs.bio ?? null}
+          {...common}
+          onProduced={s.produced}
+          onPublished={s.published}
+        />
+      );
+    }
+    if (openId === 'brandkit') {
+      const s = settle('brandkit');
+      return (
+        <BrandKitBuilder
+          key={openId}
+          firm={firm}
+          initial={built.brandkit ?? producedSpecs.brandkit ?? null}
+          {...common}
+          onProduced={s.produced}
+          onPublished={s.published}
+        />
+      );
+    }
+    if (openId === 'credentials') {
+      const s = settle('credentials');
+      return (
+        <CredentialsBuilder
+          key={openId}
+          initial={built.credentials ?? producedSpecs.credentials ?? null}
+          {...common}
+          onProduced={s.produced}
+          onPublished={s.published}
+        />
+      );
+    }
+    const s = settle('website');
     return (
       <BrandBuilder
         key={openId}
         id={openId}
-        initialSpec={built[openId] ?? producedSpecs[openId] ?? null}
-        alreadyLive={!!built[openId]}
-        startProduced={!built[openId] && !!producedSpecs[openId]}
-        onBack={() => setOpenId(null)}
-        onProduced={(id, spec) => {
-          setProducedSpecs((p) => ({ ...p, [id]: spec }));
-        }}
-        onPublished={(id, spec) => {
-          setBuilt((p) => ({ ...p, [id]: spec }));
-          setProducedSpecs((p) => {
-            const { [id]: _published, ...rest } = p;
-            return rest;
-          });
-          setOpenId(null);
-        }}
+        initialSpec={built.website ?? producedSpecs.website ?? null}
+        {...common}
+        onProduced={(_id, spec) => s.produced(spec)}
+        onPublished={(_id, spec) => s.published(spec)}
       />
     );
   }
@@ -450,11 +497,14 @@ export function BrandStudioFlow({
   const bioBuilt = !!built.bio;
   const kitBuilt = !!built.brandkit;
   const siteBuilt = !!built.website;
+  const credentials = built.credentials ?? null;
+  /** Legacy docs marked credentials live via the presence toggle. */
+  const credentialsLive = !!credentials || presence.includes('credentials');
   const bioStage = brandStage(bioBuilt, !!producedSpecs.bio);
   const kitStage = brandStage(kitBuilt, !!producedSpecs.brandkit);
   const siteStage = brandStage(siteBuilt, !!producedSpecs.website);
-  const credentialsDone = presence.includes('credentials');
-  const palette = paletteFor(built.brandkit?.palette as string | undefined);
+  const credStage = brandStage(credentialsLive, !!producedSpecs.credentials);
+  const palette = paletteFor(built.brandkit?.palette);
 
   return (
     <div className="flex flex-col gap-4">
@@ -537,17 +587,34 @@ export function BrandStudioFlow({
                 </div>
                 <div className="mt-2.5 max-w-[62ch] text-[12px] leading-relaxed text-fg-2">
                   {bioBuilt ? (
-                    `${principal} is the Managing Partner of ${firm} — positioned as ${String(built.bio?.voice ?? 'an operator').toLowerCase()}-first, with ${(
-                      (built.bio?.include as string[]) ?? []
-                    )
-                      .map((s) => s.toLowerCase())
-                      .join(', ')} leading the story.`
+                    built.bio?.text || `${principal} is the Managing Partner of ${firm}.`
                   ) : (
                     <span className="italic text-fg-5">
                       Your bio will appear here once Earn drafts it from your fund story.
                     </span>
                   )}
                 </div>
+                {credentials && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2.5 py-1 text-[11px] font-semibold text-gold-1">
+                      <TrendingUp size={11} aria-hidden />
+                      {credentials.agg.count} deals · {credentials.agg.blended}x MOIC
+                    </span>
+                    {credentials.edu && (
+                      <span className="rounded-full border border-hairline bg-surface-1 px-2.5 py-1 text-[11px] text-fg-2">
+                        {credentials.edu}
+                      </span>
+                    )}
+                    {credentials.recognition.slice(0, 2).map((r) => (
+                      <span
+                        key={r}
+                        className="rounded-full border border-hairline bg-surface-1 px-2.5 py-1 text-[11px] text-fg-2"
+                      >
+                        {r}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -571,10 +638,12 @@ export function BrandStudioFlow({
                 {
                   id: 'credentials' as const,
                   name: 'Credentials & track record',
-                  sub: 'Structured & verified from your history',
-                  done: credentialsDone,
-                  stage: null,
-                  copilot: false
+                  sub: credentials
+                    ? `${credentials.agg.count} deals · ${credentials.agg.blended}x blended MOIC`
+                    : 'Structured & verified from your history',
+                  done: credentialsLive,
+                  stage: credStage as BrandStage | null,
+                  copilot: true
                 }
               ].map((it) => (
                 <div
@@ -690,8 +759,8 @@ export function BrandStudioFlow({
               style={{ color: kitBuilt ? palette[2] : 'rgba(255,255,255,0.6)' }}
             >
               {kitBuilt
-                ? `${built.brandkit?.aesthetic} · ${built.brandkit?.voice} voice`
-                : 'Your identity appears once your brand kit is built.'}
+                ? built.brandkit?.tagline || BK_TAGLINES[0]
+                : 'Your tagline appears once your brand kit is built.'}
             </div>
           </div>
           <div className="mt-3.5 flex flex-wrap items-center gap-4">

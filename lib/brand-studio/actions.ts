@@ -7,9 +7,13 @@ import type { Json } from '@/lib/supabase/database.types';
 import {
   PRESENCE_SETUP_IDS,
   isBrandAssetId,
+  sanitizeBioSpec,
+  sanitizeBrandKitSpec,
   sanitizeBrandSpec,
-  sanitizeBrandStudioDoc
+  sanitizeBrandStudioDoc,
+  sanitizeCredentialsSpec
 } from './persistence';
+import type { BrandValue } from './config';
 
 /**
  * lib/brand-studio/actions.ts — persistence for the Profile & Brand studio.
@@ -57,7 +61,20 @@ export async function publishBrandAsset(
 ): Promise<BrandStudioActionResult> {
   if (!isBrandAssetId(id)) return { ok: false, error: 'Unknown brand asset.' };
   return patchDoc((doc) => {
-    doc.built[id] = sanitizeBrandSpec(id, spec);
+    switch (id) {
+      case 'bio':
+        doc.built.bio = sanitizeBioSpec(spec);
+        break;
+      case 'brandkit':
+        doc.built.brandkit = sanitizeBrandKitSpec(spec);
+        break;
+      case 'credentials':
+        doc.built.credentials = sanitizeCredentialsSpec(spec);
+        break;
+      case 'website':
+        doc.built.website = sanitizeBrandSpec('website', spec) as Record<string, BrandValue>;
+        break;
+    }
   });
 }
 
