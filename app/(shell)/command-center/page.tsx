@@ -15,6 +15,7 @@ import {
   Users
 } from 'lucide-react';
 import { Cockpit } from '@/components/hubs/Cockpit';
+import { RunWithEarnButton } from '@/components/command-center/RunWithEarnButton';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { MandateIcon } from '@/components/ui/MandateIcon';
@@ -28,6 +29,8 @@ import {
 import { compactMoney } from '@/lib/format';
 import { getLifecycleRail } from '@/lib/hubs';
 import { getCommandCenterData } from '@/lib/queries/command-center';
+import { loadStreak } from '@/lib/queries/dashboard/lifecycle';
+import { getShellIdentity } from '@/lib/queries/identity';
 import { getMandate } from '@/lib/queries/mandate';
 import { getActiveOrg } from '@/lib/queries/org';
 import { TEAM_ROSTER } from '@/lib/team';
@@ -104,18 +107,14 @@ function RightNowCard({ move }: { move: DeskMove }) {
         <h1 className="text-[21px] font-semibold tracking-[-0.015em] text-fg-1">{move.title}</h1>
         <p className="mt-2 max-w-[62ch] text-[13.5px] leading-relaxed text-fg-3">{move.why}</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
+          {/* The one move runs from the dashboard — handed to Earn (real
+              approve-before-write loop). The link stays as "open the surface". */}
+          <RunWithEarnButton ask={`Run my top move: ${move.title}. ${move.why}`} />
           <Link
             href={move.primary.href}
-            className="inline-flex items-center gap-2 rounded-xl bg-[linear-gradient(135deg,#F7C948,#E5A823)] px-4 py-2.5 text-[13.5px] font-semibold text-[#070b14] shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_20px_-8px_rgba(247,201,72,0.55)] transition hover:brightness-105"
-          >
-            <Sparkles size={15} aria-hidden />
-            {move.primary.label}
-          </Link>
-          <Link
-            href={move.secondary.href}
             className="inline-flex items-center gap-1.5 rounded-xl border border-hairline bg-surface-1 px-4 py-2.5 text-[13.5px] font-medium text-fg-2 transition hover:bg-surface-2 hover:text-fg-1"
           >
-            {move.secondary.label}
+            {move.primary.label}
             <ArrowRight size={14} aria-hidden />
           </Link>
           <span className="flex items-center gap-1.5 text-[11px] text-fg-5">
@@ -232,10 +231,12 @@ export default async function CommandCenterPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const [mandate, data, rail] = await Promise.all([
+  const [mandate, data, rail, identity, streak] = await Promise.all([
     getMandate(org.orgId),
     getCommandCenterData(org.orgId),
-    getLifecycleRail(org.orgId)
+    getLifecycleRail(org.orgId),
+    getShellIdentity(),
+    loadStreak(org.orgId)
   ]);
 
   const firstName = (mandate?.principal ?? '').trim().split(/\s+/)[0] || 'there';
@@ -289,6 +290,29 @@ export default async function CommandCenterPage() {
             <>You&rsquo;re clear — Earn is sourcing your next move.</>
           )}
         </p>
+
+        {/* progression — real XP/level (from profiles.xp) + active-day streak */}
+        <span className="ml-auto inline-flex items-center gap-2 rounded-full border border-hairline bg-surface-1 px-3 py-1 text-[11.5px]">
+          <EarnCoin size={16} className="flex-none" />
+          <span className="font-semibold text-fg-1">Level {identity?.level ?? 1}</span>
+          <span className="text-fg-5" aria-hidden>
+            ·
+          </span>
+          <span className="text-fg-3 [font-feature-settings:'tnum']">
+            {(identity?.xp ?? 0).toLocaleString()} XP
+          </span>
+          {streak.current > 0 && (
+            <>
+              <span className="text-fg-5" aria-hidden>
+                ·
+              </span>
+              <span className="inline-flex items-center gap-1 text-gold-1">
+                <Flame size={12} aria-hidden />
+                {streak.current}-day
+              </span>
+            </>
+          )}
+        </span>
       </div>
 
       {/* lifecycle cockpit — the rail's reactive mirror */}

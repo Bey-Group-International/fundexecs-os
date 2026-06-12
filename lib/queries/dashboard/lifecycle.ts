@@ -960,7 +960,7 @@ export function deriveStreak(timestamps: string[], now: number = Date.now()): St
  * `created_at` to keep it cheap while covering meaningful runs. RLS-scoped;
  * returns a zero streak on any read error.
  */
-async function loadStreak(orgId: string): Promise<StreakResult> {
+export async function loadStreak(orgId: string): Promise<StreakResult> {
   try {
     const supabase = await createClient();
     const since = new Date(Date.now() - 120 * 86400_000).toISOString();
