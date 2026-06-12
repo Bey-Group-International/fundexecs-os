@@ -44,11 +44,11 @@ import {
   saveGovernanceBody
 } from '@/lib/governance/actions';
 import {
+  addedMembers,
   ADV_0,
   ADV_CANDIDATES,
   CAP_0,
   CAP_CANDIDATES,
-  confirmedMembers,
   FM_0,
   FM_CANDIDATES,
   GOV_POLICIES,
@@ -57,6 +57,7 @@ import {
   LEGAL_0,
   LEGAL_CANDIDATES,
   LPAC_0,
+  operatorSeats,
   padRoster,
   POL_CTA,
   POL_STAGES,
@@ -658,32 +659,40 @@ interface PendingAdd {
   cand: GovCandidate;
 }
 
+function candidateMember(cand: GovCandidate): GovMember {
+  return {
+    id: `m-${cand.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    name: cand.name,
+    role: cand.role,
+    note: cand.note,
+    carry: cand.carry
+  };
+}
+
 /**
- * One governance body's roster state. Only confirmed members are held (and
- * persisted); open seats are re-padded from the config's starting roster for
- * display. Adding from the bench runs through the ActionRunner approve loop
- * — the member joins only after the server write succeeds.
+ * One governance body's roster state. Only the operator-added members are held
+ * (and persisted); the operator's own seats are re-derived from config on every
+ * render, so an empty or stale row can never lose them. Open seats are
+ * re-padded from the starting roster for display. Adding from the bench runs
+ * through the ActionRunner approve loop — the member joins only after the
+ * server write succeeds.
  */
 function useRoster(
   initial: readonly GovMember[],
   candidates: readonly GovCandidate[],
   persisted: GovMember[] | undefined
 ) {
-  const [confirmed, setConfirmed] = useState<GovMember[]>(persisted ?? confirmedMembers(initial));
+  const [added, setAdded] = useState<GovMember[]>(() => persisted ?? addedMembers(initial));
+  const confirmed = [...operatorSeats(initial), ...added];
   const members = padRoster(initial, confirmed);
-  const taken = new Set(confirmed.map((m) => m.name));
+  const taken = new Set(added.map((m) => m.name));
   const bench = candidates.filter((c) => !taken.has(c.name));
-  const confirm = (cand: GovCandidate): GovMember[] => [
-    ...confirmed,
-    {
-      id: `m-${cand.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-      name: cand.name,
-      role: cand.role,
-      note: cand.note,
-      carry: cand.carry
-    }
-  ];
-  return { confirmed, setConfirmed, members, bench, confirm };
+  /** The roster after seating `cand`, for the write and the optimistic apply. */
+  const withCandidate = (cand: GovCandidate) => {
+    const member = candidateMember(cand);
+    return { member, added: [...added, member], confirmed: [...confirmed, member] };
+  };
+  return { added, setAdded, confirmed, members, bench, withCandidate };
 }
 
 export function GovernanceFlow({
@@ -762,6 +771,8 @@ export function GovernanceFlow({
   ];
 
   const pendingRun = pending ? rosterRun(pending.kind, pending.cand) : null;
+  // Seat the candidate once: the same roster feeds both the write and the apply.
+  const pendingNext = pending ? rosters[pending.kind].withCandidate(pending.cand) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -1068,22 +1079,18 @@ export function GovernanceFlow({
         </p>
       </Card>
 
-      {pending && pendingRun && (
+      {pending && pendingRun && pendingNext && (
         <ActionRunner
           title={pendingRun.title}
           steps={pendingRun.steps}
           draftTitle={pendingRun.draftTitle}
           draft={pendingRun.draft}
           onApprove={async () => {
-            const roster = rosters[pending.kind];
-            const res = await saveGovernanceBody(pending.kind, roster.confirm(pending.cand));
+            const res = await saveGovernanceBody(pending.kind, pendingNext.confirmed);
             return res.ok ? { ok: true } : { ok: false, error: res.error };
           }}
           onClose={() => setPending(null)}
-          onApplied={() => {
-            const roster = rosters[pending.kind];
-            roster.setConfirmed(roster.confirm(pending.cand));
-          }}
+          onApplied={() => rosters[pending.kind].setAdded(pendingNext.added)}
         />
       )}
     </div>

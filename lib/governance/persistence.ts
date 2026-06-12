@@ -1,5 +1,5 @@
 import {
-  confirmedMembers,
+  addedMembers,
   GOV_POLICIES,
   type GovBodyId,
   type GovMember,
@@ -81,11 +81,13 @@ export function sanitizePolicyStatus(input: unknown): GovPolicyStatus {
 }
 
 /**
- * What a roster write is allowed to contain: sanitized members with the
- * placeholders stripped — only operator-confirmed members ever persist.
+ * What a roster write is allowed to contain: only the members an operator
+ * added. Placeholders never persist, and the operator's own identity seats
+ * (`you`) are re-derived from config on read — never stored — so the operator
+ * can never be lost to an empty or stale row.
  */
 export function persistableGovMembers(input: unknown): GovMember[] {
-  return confirmedMembers(sanitizeGovMembers(input));
+  return addedMembers(sanitizeGovMembers(input));
 }
 
 /** Coerce unknown input into a bounded, well-typed member roster. */

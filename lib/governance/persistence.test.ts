@@ -70,16 +70,16 @@ test('sanitizeGovMembers caps roster size', () => {
   assert.equal(sanitizeGovMembers(big).length, 12);
 });
 
-test('persistableGovMembers strips placeholders — only confirmed members write', () => {
+test('persistableGovMembers stores only operator-added members', () => {
   const out = persistableGovMembers([
-    { id: 'a', name: 'Jane', role: 'Partner', you: true },
-    { id: 'b', name: 'Open seat', role: 'Partner', open: true },
-    { id: 'c', name: 'Forms at first close', role: 'LP representatives', pending: true },
-    { id: 'd', name: 'Standish & Cole', role: 'Fund counsel' }
+    { id: 'a', name: 'Jane', role: 'Managing Partner', you: true }, // operator — re-derived, not stored
+    { id: 'b', name: 'Open seat', role: 'Partner', open: true }, // placeholder
+    { id: 'c', name: 'Forms at first close', role: 'LP representatives', pending: true }, // placeholder
+    { id: 'd', name: 'Standish & Cole', role: 'Fund counsel' } // a real add
   ]);
   assert.deepEqual(
     out.map((m) => m.id),
-    ['a', 'd']
+    ['d']
   );
   assert.deepEqual(persistableGovMembers('junk'), []);
 });

@@ -259,6 +259,22 @@ export function confirmedMembers(members: readonly GovMember[]): GovMember[] {
 }
 
 /**
+ * The operator's own seats (`you`) — identity, re-derived from config on every
+ * read rather than persisted. A roster's confirmed set is always
+ * `[...operatorSeats(initial), ...addedMembers(stored)]`, so the operator can
+ * never be lost to an empty or hand-edited row.
+ */
+export function operatorSeats(members: readonly GovMember[]): GovMember[] {
+  return members.filter((m) => m.you);
+}
+
+/** The members an operator actually added — what persistence stores (no
+ *  placeholders, no operator identity seats). */
+export function addedMembers(members: readonly GovMember[]): GovMember[] {
+  return members.filter((m) => !m.open && !m.pending && !m.you);
+}
+
+/**
  * The render shape of a roster: its confirmed members padded back to the
  * body's seat layout with the starting roster's open-seat templates, so an
  * empty roster reads as open seats and a part-filled one keeps the right

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  addedMembers,
   ADV_0,
   CAP_0,
   confirmedMembers,
@@ -9,6 +10,7 @@ import {
   IC_MEMBERS_0,
   LEGAL_0,
   LEGAL_CANDIDATES,
+  operatorSeats,
   padRoster,
   POL_CTA,
   POL_STAGES,
@@ -79,6 +81,29 @@ test('confirmedMembers drops open and pending placeholders', () => {
   assert.deepEqual(confirmedMembers(ADV_0), []);
   assert.equal(confirmedMembers(FM_0).length, 1); // just the operator
   assert.ok(confirmedMembers(FM_0)[0].you);
+});
+
+test('operator seats are identity (re-derived), never persisted', () => {
+  // The operator is always recoverable from config, independent of stored state.
+  assert.equal(operatorSeats(FM_0).length, 1);
+  assert.ok(operatorSeats(FM_0)[0].you);
+  assert.deepEqual(operatorSeats(ADV_0), []); // advisory has no operator seat
+  // addedMembers — what persistence stores — excludes the operator and placeholders.
+  assert.deepEqual(addedMembers(FM_0), []); // a fresh GP roster stores nothing
+  const withPartner = addedMembers([...FM_0, { id: 'p', name: 'Priya', role: 'Partner' }]);
+  assert.deepEqual(
+    withPartner.map((m) => m.name),
+    ['Priya']
+  );
+});
+
+test('the operator survives an empty or operator-less stored roster', () => {
+  // The seeding model is [...operatorSeats(config), ...storedAdded]; even if the
+  // stored roster is empty or somehow lost the operator, config restores it.
+  const confirmed = [...operatorSeats(FM_0), ...addedMembers([])];
+  assert.equal(confirmed.length, 1);
+  assert.ok(confirmed[0].you);
+  assert.ok(padRoster(FM_0, confirmed).some((m) => m.you));
 });
 
 test('padRoster pads confirmed members back to the seat layout', () => {
