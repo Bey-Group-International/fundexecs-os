@@ -122,7 +122,6 @@ export async function POST(req: NextRequest) {
         {
           waitlist_id: ws.id,
           email: normalized,
-          tier: ws.tier,
           access_type: 'early_access'
         },
         { onConflict: 'email', ignoreDuplicates: false }
