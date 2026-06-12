@@ -16,13 +16,13 @@ const PAGE_SIZE = 1000;
  */
 async function findUserByEmail(
   supabase: ReturnType<typeof createAdminClient>,
-  email: string,
+  email: string
 ): Promise<boolean> {
   let page = 1;
   while (true) {
     const { data, error } = await supabase.auth.admin.listUsers({
       page,
-      perPage: PAGE_SIZE,
+      perPage: PAGE_SIZE
     });
     if (error || !data?.users?.length) break;
     if (data.users.some((u) => u.email === email)) return true;
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
       eligible: ws.airdrop_eligible,
       claimed: !!claimData,
       claimedAt: claimData?.claimed_at ?? null,
-      accessType: claimData?.access_type ?? null,
+      accessType: claimData?.access_type ?? null
     });
   }
 
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
       source: 'user',
       tier: 'founding_operator',
       eligible: true,
-      claimed: false,
+      claimed: false
     });
   }
 
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     if (!ws.airdrop_eligible) {
       return NextResponse.json(
         { error: 'Not eligible for airdrop at this tier.' },
-        { status: 403 },
+        { status: 403 }
       );
     }
 
@@ -123,9 +123,9 @@ export async function POST(req: NextRequest) {
           waitlist_id: ws.id,
           email: normalized,
           tier: ws.tier,
-          access_type: 'early_access',
+          access_type: 'early_access'
         },
-        { onConflict: 'email', ignoreDuplicates: false },
+        { onConflict: 'email', ignoreDuplicates: false }
       )
       .select('id, claimed_at')
       .single();
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
       alreadyClaimed,
       tier: ws.tier,
       accessType: 'early_access',
-      claimedAt: claim.claimed_at,
+      claimedAt: claim.claimed_at
     });
   } catch (err) {
     console.error('[/api/airdrop]', err);

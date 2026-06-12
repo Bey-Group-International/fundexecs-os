@@ -15,15 +15,15 @@ export const metadata: Metadata = {
     title: 'Join the Waitlist — FundExecs OS',
     description:
       'Reserve your desk. 15 AI specialists, led by Earn, execute your private-market mandate.',
-    images: [{ url: '/og-waitlist.png', width: 1200, height: 630 }],
-  },
+    images: [{ url: '/og-waitlist.png', width: 1200, height: 630 }]
+  }
 };
 
 const TIERS = [
   { pos: '1–100', label: 'Founding Operator', color: '#F7C948', airdrop: true },
   { pos: '101–500', label: 'Early Access', color: '#60a5fa', airdrop: true },
   // fix: 501+ matches backend boundary (position > 500)
-  { pos: '501+', label: 'Waitlist', color: '#64748b', airdrop: false },
+  { pos: '501+', label: 'Waitlist', color: '#64748b', airdrop: false }
 ];
 
 export default function WaitlistPage() {
@@ -36,7 +36,7 @@ export default function WaitlistPage() {
         fontFamily: 'Geist, -apple-system, BlinkMacSystemFont, sans-serif',
         position: 'relative',
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: 'column'
       }}
     >
       <div className="bg-aurora" />
@@ -45,7 +45,7 @@ export default function WaitlistPage() {
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          background: 'radial-gradient(40% 36% at 50% 20%, rgba(247,201,72,0.08), transparent 70%)',
+          background: 'radial-gradient(40% 36% at 50% 20%, rgba(247,201,72,0.08), transparent 70%)'
         }}
       />
 
@@ -58,12 +58,18 @@ export default function WaitlistPage() {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '18px clamp(20px,5vw,52px)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)'
         }}
       >
         <Link
           href="/"
-          style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            textDecoration: 'none',
+            color: 'inherit'
+          }}
         >
           <EarnCoin size={30} />
           <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em' }}>
@@ -84,7 +90,7 @@ export default function WaitlistPage() {
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'center',
-          padding: 'clamp(36px,6vh,72px) clamp(20px,5vw,52px)',
+          padding: 'clamp(36px,6vh,72px) clamp(20px,5vw,52px)'
         }}
       >
         <div
@@ -94,7 +100,7 @@ export default function WaitlistPage() {
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
             gap: 48,
-            alignItems: 'start',
+            alignItems: 'start'
           }}
         >
           {/* Left: value prop */}
@@ -111,7 +117,7 @@ export default function WaitlistPage() {
                 fontSize: 12,
                 fontWeight: 600,
                 color: '#60a5fa',
-                marginBottom: 24,
+                marginBottom: 24
               }}
             >
               <span style={{ width: 6, height: 6, borderRadius: 999, background: '#60a5fa' }} />
@@ -123,14 +129,12 @@ export default function WaitlistPage() {
                 fontWeight: 600,
                 letterSpacing: '-0.03em',
                 lineHeight: 1.1,
-                margin: '0 0 16px',
+                margin: '0 0 16px'
               }}
             >
               Your AI executive team is waiting.
             </h1>
-            <p
-              style={{ fontSize: 14.5, lineHeight: 1.65, color: '#94a3b8', margin: '0 0 28px' }}
-            >
+            <p style={{ fontSize: 14.5, lineHeight: 1.65, color: '#94a3b8', margin: '0 0 28px' }}>
               Fifteen specialists — led by Earn — launch the fund, raise the capital, source the
               deals, and drive every engagement to a signed close. You set direction and approve.
               They execute.
@@ -148,7 +152,7 @@ export default function WaitlistPage() {
                     padding: '11px 14px',
                     borderRadius: 12,
                     border: `1px solid ${t.color}22`,
-                    background: `${t.color}08`,
+                    background: `${t.color}08`
                   }}
                 >
                   <span
@@ -164,7 +168,7 @@ export default function WaitlistPage() {
                       fontSize: 10,
                       fontWeight: 700,
                       color: t.color,
-                      flexShrink: 0,
+                      flexShrink: 0
                     }}
                   >
                     {t.pos.split('–')[0]}
@@ -184,7 +188,7 @@ export default function WaitlistPage() {
                         background: 'rgba(247,201,72,0.08)',
                         border: '1px solid rgba(247,201,72,0.2)',
                         borderRadius: 999,
-                        padding: '2px 8px',
+                        padding: '2px 8px'
                       }}
                     >
                       ✦ Airdrop
@@ -201,7 +205,7 @@ export default function WaitlistPage() {
               background: 'rgba(255,255,255,0.03)',
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 20,
-              padding: '28px 26px',
+              padding: '28px 26px'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
@@ -212,7 +216,7 @@ export default function WaitlistPage() {
                     inset: -10,
                     borderRadius: '50%',
                     background: 'radial-gradient(circle, rgba(247,201,72,0.35), transparent 70%)',
-                    filter: 'blur(8px)',
+                    filter: 'blur(8px)'
                   }}
                 />
                 <div style={{ position: 'relative' }}>
@@ -226,7 +230,7 @@ export default function WaitlistPage() {
                 fontWeight: 600,
                 letterSpacing: '-0.02em',
                 textAlign: 'center',
-                margin: '0 0 6px',
+                margin: '0 0 6px'
               }}
             >
               Claim your desk

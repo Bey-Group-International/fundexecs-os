@@ -5,16 +5,31 @@
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { Resend } from 'resend';
-
-/** Lazily-initialised Resend client — avoids module-level throw on missing key */
-function getResend() {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) throw new Error('RESEND_API_KEY is not set');
-  return new Resend(key);
-}
 
 const FROM = 'FundExecs OS <noreply@fundexecs.com>';
+
+/** Send an email via Resend REST API — no SDK dependency required */
+async function sendEmail(payload: {
+  from: string;
+  to: string[];
+  subject: string;
+  html: string;
+}): Promise<void> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) throw new Error('RESEND_API_KEY is not set');
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend API error ${res.status}: ${body}`);
+  }
+}
 
 /** Escape HTML special chars to prevent XSS in email templates */
 function escapeHtml(str: string): string {
@@ -38,14 +53,14 @@ function hashIp(ip: string | null) {
 const TIER_LABELS: Record<string, string> = {
   founding_operator: 'Founding Operator',
   early_access: 'Early Access',
-  waitlist: 'Waitlist',
+  waitlist: 'Waitlist'
 };
 
 function tierBadgeHtml(tier: string) {
   const colors: Record<string, string> = {
     founding_operator: '#F7C948',
     early_access: '#60a5fa',
-    waitlist: '#94a3b8',
+    waitlist: '#94a3b8'
   };
   const c = colors[tier] ?? colors.waitlist;
   const label = escapeHtml(TIER_LABELS[tier] ?? tier);
@@ -101,13 +116,13 @@ function confirmationHtml(data: {
           [
             '2',
             'Brief your mandate',
-            "15 AI specialists — led by Earn — take your direction and start executing the moment you're in.",
+            "15 AI specialists — led by Earn — take your direction and start executing the moment you're in."
           ],
           [
             '3',
             'Run your full lifecycle',
-            'Source deals, raise capital, run diligence, close — from one command center.',
-          ],
+            'Source deals, raise capital, run diligence, close — from one command center.'
+          ]
         ]
           .map(
             ([n, title, sub]) => `
@@ -117,7 +132,7 @@ function confirmationHtml(data: {
             <div style="font-size:13px;font-weight:600;margin-bottom:2px">${title}</div>
             <div style="font-size:12px;color:#64748b;line-height:1.5">${sub}</div>
           </div>
-        </div>`,
+        </div>`
           )
           .join('')}
       </div>
@@ -138,7 +153,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { email, name, firm, roleGroup, investorRole, referralCode, utm } = body;
 
-    // Safe email validation — no regex on user-controlled input (prevents ReDoS / CodeQL flag)
+    // Safe email validation — no regex on user-controlled input (prevents ReDoS)
     const emailStr = typeof email === 'string' ? email.toLowerCase().trim() : '';
     const atIdx = emailStr.lastIndexOf('@');
     const isValidEmail =
@@ -158,7 +173,7 @@ export async function POST(req: NextRequest) {
     const { data: existing } = await supabase
       .from('waitlist_signups')
       .select('id, email, position, tier, airdrop_eligible')
-      .eq('email', email.toLowerCase().trim())
+      .eq('email', emailStr)
       .single();
 
     if (existing) {
@@ -166,7 +181,7 @@ export async function POST(req: NextRequest) {
         already: true,
         position: existing.position,
         tier: existing.tier,
-        airdropEligible: existing.airdrop_eligible,
+        airdropEligible: existing.airdrop_eligible
       });
     }
 
@@ -185,7 +200,7 @@ export async function POST(req: NextRequest) {
     const { data: row, error: insertError } = await supabase
       .from('waitlist_signups')
       .insert({
-        email: email.toLowerCase().trim(),
+        email: emailStr,
         name: name?.trim() || null,
         firm: firm?.trim() || null,
         role_group: roleGroup || null,
@@ -195,7 +210,7 @@ export async function POST(req: NextRequest) {
         utm_source: utm?.source || null,
         utm_medium: utm?.medium || null,
         utm_campaign: utm?.campaign || null,
-        ip_hash: hashIp(ip),
+        ip_hash: hashIp(ip)
       })
       .select('id, position, tier, airdrop_eligible')
       .single();
@@ -206,7 +221,7 @@ export async function POST(req: NextRequest) {
       name: name?.trim() || '',
       position: row.position,
       tier: row.tier,
-      airdropEligible: row.airdrop_eligible,
+      airdropEligible: row.airdrop_eligible
     });
 
     const subject = `You're ${row.position === 1 ? 'first' : `#${row.position}`} on the FundExecs OS waitlist`;
@@ -216,7 +231,7 @@ export async function POST(req: NextRequest) {
     // async IIFE so neither is silently dropped.
     void (async () => {
       try {
-        await getResend().emails.send({ from: FROM, to: [email], subject, html: emailHtml });
+        await sendEmail({ from: FROM, to: [emailStr], subject, html: emailHtml });
         await supabase
           .from('waitlist_signups')
           .update({ confirmation_sent_at: new Date().toISOString() })
@@ -230,14 +245,11 @@ export async function POST(req: NextRequest) {
       success: true,
       position: row.position,
       tier: row.tier,
-      airdropEligible: row.airdrop_eligible,
+      airdropEligible: row.airdrop_eligible
     });
   } catch (err: unknown) {
     console.error('[/api/waitlist]', err);
-    return NextResponse.json(
-      { error: 'Something went wrong. Please try again.' },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
   }
 }
 
