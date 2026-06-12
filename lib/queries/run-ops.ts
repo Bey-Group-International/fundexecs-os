@@ -8,10 +8,21 @@ import type { ComplianceSeverity, IrStatus, TaskStatus } from '@/lib/run-ops/voc
  * degrades to empty on failure. One request-cached load per surface.
  */
 
+export interface SubtaskView {
+  name: string;
+  done: boolean;
+}
+
 export interface TaskView {
   id: string;
   name: string;
   status: TaskStatus | string;
+  who: string | null;
+  drives: string | null;
+  action: string | null;
+  dueLabel: string | null;
+  critical: boolean;
+  sub: SubtaskView[];
 }
 
 export interface WorkflowGroup {
@@ -19,6 +30,17 @@ export interface WorkflowGroup {
   stream: string;
   name: string;
   tasks: TaskView[];
+}
+
+function parseSubtasks(raw: unknown): SubtaskView[] {
+  if (!Array.isArray(raw)) return [];
+  const subs: SubtaskView[] = [];
+  for (const entry of raw) {
+    if (entry && typeof entry === 'object' && 'name' in entry && typeof entry.name === 'string') {
+      subs.push({ name: entry.name, done: 'done' in entry && entry.done === true });
+    }
+  }
+  return subs;
 }
 
 export const getWorkflows = cache(async (orgId: string): Promise<WorkflowGroup[]> => {
@@ -31,7 +53,7 @@ export const getWorkflows = cache(async (orgId: string): Promise<WorkflowGroup[]
       .order('created_at', { ascending: true }),
     supabase
       .from('workflow_tasks')
-      .select('id, workflow_id, status, subtasks, created_at')
+      .select('id, workflow_id, status, subtasks, name, who, drives, action, due_label, critical')
       .eq('org_id', orgId)
       .order('created_at', { ascending: true })
   ]);
@@ -39,12 +61,21 @@ export const getWorkflows = cache(async (orgId: string): Promise<WorkflowGroup[]
   const byWorkflow = new Map<string, TaskView[]>();
   for (const t of tasks ?? []) {
     if (!byWorkflow.has(t.workflow_id)) byWorkflow.set(t.workflow_id, []);
-    const first = Array.isArray(t.subtasks) ? t.subtasks[0] : null;
-    const name =
-      first && typeof first === 'object' && 'name' in first && typeof first.name === 'string'
-        ? first.name
-        : 'Task';
-    byWorkflow.get(t.workflow_id)!.push({ id: t.id, name, status: t.status });
+    const subs = parseSubtasks(t.subtasks);
+    // Pre-anatomy rows kept the task name as the only subtasks entry; honor
+    // that shape as a fallback rather than rendering a bogus checklist.
+    const legacyNameHolder = !t.name && subs.length === 1;
+    byWorkflow.get(t.workflow_id)!.push({
+      id: t.id,
+      name: t.name ?? (legacyNameHolder ? subs[0].name : 'Task'),
+      status: t.status,
+      who: t.who,
+      drives: t.drives,
+      action: t.action,
+      dueLabel: t.due_label,
+      critical: Boolean(t.critical),
+      sub: legacyNameHolder ? [] : subs
+    });
   }
 
   return (workflows ?? []).map((w) => ({
@@ -54,6 +85,28 @@ export const getWorkflows = cache(async (orgId: string): Promise<WorkflowGroup[]
     tasks: byWorkflow.get(w.id) ?? []
   }));
 });
+
+export interface AutomationState {
+  enabled: boolean;
+  lastRunAt: string | null;
+}
+
+/** Persisted org-scoped automation toggles, keyed by automations.on_event. */
+export const getWorkflowAutomations = cache(
+  async (orgId: string): Promise<Record<string, AutomationState>> => {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from('automations')
+      .select('on_event, enabled, last_run_at, updated_at')
+      .eq('org_id', orgId)
+      .order('updated_at', { ascending: true });
+    const states: Record<string, AutomationState> = {};
+    for (const row of data ?? []) {
+      states[row.on_event] = { enabled: row.enabled, lastRunAt: row.last_run_at };
+    }
+    return states;
+  }
+);
 
 export interface ComplianceItemView {
   id: string;

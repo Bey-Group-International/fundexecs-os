@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { WorkflowsFlow } from '@/components/run/WorkflowsFlow';
-import { getWorkflows } from '@/lib/queries/run-ops';
+import { getWorkflowAutomations, getWorkflows } from '@/lib/queries/run-ops';
 import { getActiveOrg } from '@/lib/queries/org';
 
 export const metadata: Metadata = {
@@ -14,10 +14,13 @@ export const metadata: Metadata = {
 export default async function RunWorkflowsPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
-  const workflows = await getWorkflows(org.orgId);
+  const [workflows, automations] = await Promise.all([
+    getWorkflows(org.orgId),
+    getWorkflowAutomations(org.orgId)
+  ]);
   return (
     <div className="fx-rise mx-auto max-w-[920px]">
-      <WorkflowsFlow workflows={workflows} />
+      <WorkflowsFlow workflows={workflows} automations={automations} />
     </div>
   );
 }

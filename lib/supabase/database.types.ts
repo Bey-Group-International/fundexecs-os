@@ -4977,30 +4977,48 @@ export type Database = {
       }
       workflow_tasks: {
         Row: {
+          action: string | null
           created_at: string
+          critical: boolean
+          drives: string | null
+          due_label: string | null
           id: string
+          name: string | null
           org_id: string
           status: string
           subtasks: Json
           updated_at: string
+          who: string | null
           workflow_id: string
         }
         Insert: {
+          action?: string | null
           created_at?: string
+          critical?: boolean
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id: string
           status?: string
           subtasks?: Json
           updated_at?: string
+          who?: string | null
           workflow_id: string
         }
         Update: {
+          action?: string | null
           created_at?: string
+          critical?: boolean
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id?: string
           status?: string
           subtasks?: Json
           updated_at?: string
+          who?: string | null
           workflow_id?: string
         }
         Relationships: [
