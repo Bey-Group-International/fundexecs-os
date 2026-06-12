@@ -4,7 +4,14 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { recordLoopClose } from '@/lib/actions/loop';
-import { CALL_RESOLVED_STATUS, isCallKind, isLpResolved, type CallKind } from './vocabulary';
+import {
+  CALL_RESOLVED_STATUS,
+  isCallKind,
+  isCallOverdue,
+  isLpResolved,
+  proRataShares,
+  type CallKind
+} from './vocabulary';
 
 /**
  * lib/capital-calls/actions.ts — the Capital calls room's mutations.
@@ -43,17 +50,27 @@ export async function issueCapitalCall(input: {
   const supabase = await createClient();
 
   // The roster comes from the Capital Map — committed LPs only. No roster,
-  // no call: nothing is issued against thin air.
-  const { data: lps } = await supabase
-    .from('capital_providers')
-    .select('id, name, status')
-    .eq('org_id', org.orgId);
+  // no call: nothing is issued against thin air. Commitment amounts ride
+  // along so each LP line can carry its pro-rata share, fixed at issue time.
+  const [{ data: lps }, { data: commitments }] = await Promise.all([
+    supabase.from('capital_providers').select('id, name, status').eq('org_id', org.orgId),
+    supabase.from('capital_commitments').select('lp_id, amount, stage').eq('org_id', org.orgId)
+  ]);
   const committed = (lps ?? []).filter((lp) => COMMITTED_RE.test((lp.status || '').toLowerCase()));
   if (committed.length === 0) {
     return {
       ok: false,
       error: 'No committed LPs on your Capital Map yet — commitments come first.'
     };
+  }
+
+  const weightByLp = new Map<string, number>();
+  for (const c of commitments ?? []) {
+    if (!c.lp_id || !COMMITTED_RE.test((c.stage || '').toLowerCase())) continue;
+    const amt = Number(c.amount);
+    if (Number.isFinite(amt) && amt > 0) {
+      weightByLp.set(c.lp_id, (weightByLp.get(c.lp_id) ?? 0) + amt);
+    }
   }
 
   const total =
@@ -81,12 +98,17 @@ export async function issueCapitalCall(input: {
     .single();
   if (error || !call) return { ok: false, error: error?.message ?? 'Could not issue the call.' };
 
+  const shares = proRataShares(
+    total,
+    committed.map((lp) => weightByLp.get(lp.id) ?? null)
+  );
   const { error: linesErr } = await supabase.from('call_lp_status').insert(
-    committed.map((lp) => ({
+    committed.map((lp, i) => ({
       org_id: org.orgId,
       call_id: call.id,
       lp_ref: lp.name,
-      status: 'notified'
+      status: 'notified',
+      amount: shares[i]
     }))
   );
   if (linesErr) return { ok: false, error: linesErr.message };
@@ -172,4 +194,59 @@ export async function resolveCallLp(input: {
   revalidatePath('/execute');
   revalidatePath('/command-center');
   return { ok: true, callId: call.id, settled };
+}
+
+/**
+ * Chase an overdue LP line — records that the reminder went out (chased_at).
+ * Honesty contract: chasing never resolves the line; the money is marked in
+ * only when the operator confirms receipt against their bank (resolveCallLp).
+ * Overdue is server-derived from the call's due date, never trusted from
+ * the client.
+ */
+export async function chaseCallLp(input: {
+  callId: string;
+  lineId: string;
+}): Promise<CapitalCallActionResult> {
+  if (!input.callId || !input.lineId) return { ok: false, error: 'Missing line.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active workspace.' };
+
+  const supabase = await createClient();
+  const [{ data: call }, { data: line }] = await Promise.all([
+    supabase
+      .from('capital_calls')
+      .select('id, kind, due_at, status')
+      .eq('id', input.callId)
+      .eq('org_id', org.orgId)
+      .maybeSingle(),
+    supabase
+      .from('call_lp_status')
+      .select('id, lp_ref, status')
+      .eq('id', input.lineId)
+      .eq('call_id', input.callId)
+      .eq('org_id', org.orgId)
+      .maybeSingle()
+  ]);
+  if (!call) return { ok: false, error: 'Call not found.' };
+  if (call.status === 'settled') return { ok: false, error: 'This call is already settled.' };
+  if (!isCallKind(call.kind)) return { ok: false, error: 'Unknown call kind.' };
+  if (!line) return { ok: false, error: 'LP line not found.' };
+  if (isLpResolved(call.kind, line.status)) {
+    return { ok: false, error: `${line.lp_ref} is already resolved.` };
+  }
+  if (!isCallOverdue(call.due_at, new Date())) {
+    return { ok: false, error: 'This line is not overdue yet — nothing to chase.' };
+  }
+
+  const { error: updErr } = await supabase
+    .from('call_lp_status')
+    .update({ chased_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', line.id)
+    .eq('org_id', org.orgId);
+  if (updErr) return { ok: false, error: updErr.message };
+
+  revalidatePath('/execute/capital');
+  revalidatePath('/execute');
+  return { ok: true, callId: call.id };
 }
