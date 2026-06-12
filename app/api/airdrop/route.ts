@@ -5,15 +5,36 @@
 
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const PAGE_SIZE = 1000;
+
+/**
+ * Paginated user lookup by email.
+ * listUsers() returns at most `perPage` entries per call (default 50).
+ * We loop until we find the user or exhaust all pages.
+ */
+async function findUserByEmail(
+  supabase: ReturnType<typeof createAdminClient>,
+  email: string,
+): Promise<boolean> {
+  let page = 1;
+  while (true) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page,
+      perPage: PAGE_SIZE,
+    });
+    if (error || !data?.users?.length) break;
+    if (data.users.some((u) => u.email === email)) return true;
+    if (data.users.length < PAGE_SIZE) break; // last page
+    page++;
+  }
+  return false;
+}
 
 // GET /api/airdrop?email=xxx — check eligibility
 export async function GET(req: NextRequest) {
+  const supabase = createAdminClient();
   const { searchParams } = new URL(req.url);
   const email = searchParams.get('email')?.toLowerCase().trim();
   if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 });
@@ -44,10 +65,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Check if already a user
-  const { data: users } = await supabase.auth.admin.listUsers();
-  const user = users?.users.find(u => u.email === email);
-  if (user) {
+  // Check if already a full user (paginated to avoid missing anyone)
+  const isUser = await findUserByEmail(supabase, email);
+  if (isUser) {
     return NextResponse.json({
       found: true,
       source: 'user',
@@ -62,6 +82,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/airdrop — claim access
 export async function POST(req: NextRequest) {
+  const supabase = createAdminClient();
   try {
     const { email } = await req.json();
     if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 });
@@ -81,36 +102,47 @@ export async function POST(req: NextRequest) {
     if (!ws.airdrop_eligible) {
       return NextResponse.json({ error: 'Not eligible for airdrop at this tier.' }, { status: 403 });
     }
-    if (ws.airdrop_claimed) {
-      return NextResponse.json({ error: 'Already claimed.' }, { status: 409 });
-    }
 
-    // Idempotency check
-    const { data: existing } = await supabase
+    // Atomic upsert: insert-or-ignore into airdrop_claims (unique on email)
+    // then update waitlist_signups — both in the same operation window.
+    // Returns the row whether new or existing.
+    const { data: claim, error: claimErr } = await supabase
       .from('airdrop_claims')
-      .select('id')
-      .eq('email', normalized)
+      .upsert(
+        {
+          waitlist_id: ws.id,
+          email: normalized,
+          tier: ws.tier,
+          access_type: 'early_access',
+        },
+        { onConflict: 'email', ignoreDuplicates: false },
+      )
+      .select('id, claimed_at')
       .single();
-    if (existing) {
-      return NextResponse.json({ alreadyClaimed: true });
-    }
 
-    // Record claim
-    const { error: claimErr } = await supabase.from('airdrop_claims').insert({
-      waitlist_id: ws.id,
-      email: normalized,
-      tier: ws.tier,
-      access_type: 'early_access',
-    });
     if (claimErr) throw claimErr;
 
-    // Mark as claimed on waitlist row
-    await supabase
+    // Mark waitlist row as claimed — treat update errors as non-fatal
+    // (the claim record is the source of truth)
+    const { error: updateErr } = await supabase
       .from('waitlist_signups')
       .update({ airdrop_claimed: true })
       .eq('id', ws.id);
 
-    return NextResponse.json({ success: true, tier: ws.tier, accessType: 'early_access' });
+    if (updateErr) {
+      console.error('[/api/airdrop] waitlist update failed (non-fatal)', updateErr);
+    }
+
+    // If the claim row already existed before this request, surface alreadyClaimed
+    const alreadyClaimed = ws.airdrop_claimed;
+
+    return NextResponse.json({
+      success: true,
+      alreadyClaimed,
+      tier: ws.tier,
+      accessType: 'early_access',
+      claimedAt: claim.claimed_at,
+    });
   } catch (err) {
     console.error('[/api/airdrop]', err);
     return NextResponse.json({ error: 'Something went wrong.' }, { status: 500 });

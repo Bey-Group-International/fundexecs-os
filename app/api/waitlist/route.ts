@@ -4,15 +4,22 @@
 
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { Resend } from 'resend';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 const resend = new Resend(process.env.RESEND_API_KEY!);
 const FROM = 'FundExecs OS <noreply@fundexecs.com>';
+
+/** Escape HTML special chars to prevent XSS in email templates */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/`/g, '&#x60;');
+}
 
 function hashIp(ip: string | null) {
   if (!ip) return null;
@@ -35,7 +42,8 @@ function tierBadgeHtml(tier: string) {
     waitlist: '#94a3b8',
   };
   const c = colors[tier] || colors.waitlist;
-  return `<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#070b14;background:${c}">${TIER_LABELS[tier] || tier}</span>`;
+  const label = escapeHtml(TIER_LABELS[tier] || tier);
+  return `<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#070b14;background:${c}">${label}</span>`;
 }
 
 function confirmationHtml(data: {
@@ -45,6 +53,11 @@ function confirmationHtml(data: {
   airdropEligible: boolean;
 }) {
   const { name, position, tier, airdropEligible } = data;
+  // Sanitize user-supplied values before interpolating into HTML
+  const safeName = escapeHtml(name);
+  const positionStr =
+    position === 1 ? 'first in line' : `#${position.toLocaleString()} on the waitlist`;
+
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -61,21 +74,25 @@ function confirmationHtml(data: {
 
       <!-- Hero -->
       <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;margin:0 0 12px">
-        You're ${position === 1 ? 'first in line' : `#${position.toLocaleString()} on the waitlist`}${airdropEligible ? ' 🎉' : ''}.
+        You're ${positionStr}${airdropEligible ? ' 🎉' : ''}.
       </h1>
       <p style="font-size:15px;line-height:1.6;color:#94a3b8;margin:0 0 24px">
-        ${name ? `${name}, welcome` : 'Welcome'} to FundExecs OS — the AI-native command center for private-market operators. Your desk is reserved.
+        ${safeName ? `${safeName}, welcome` : 'Welcome'} to FundExecs OS — the AI-native command center for private-market operators. Your desk is reserved.
       </p>
 
       <!-- Tier card -->
       <div style="background:#0e1526;border:1px solid #1e2d45;border-radius:16px;padding:20px 22px;margin-bottom:24px">
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Your access tier</div>
         ${tierBadgeHtml(tier)}
-        ${airdropEligible ? `
+        ${
+          airdropEligible
+            ? `
         <div style="margin-top:14px;padding:12px 14px;background:rgba(247,201,72,0.08);border:1px solid rgba(247,201,72,0.2);border-radius:10px">
           <div style="font-size:13px;font-weight:600;color:#F7C948;margin-bottom:4px">✦ Airdrop eligible</div>
           <div style="font-size:12px;color:#94a3b8;line-height:1.5">You qualify for early-operator access privileges. Check your status at <a href="https://fundexecs.com/airdrop" style="color:#60a5fa">fundexecs.com/airdrop</a>.</div>
-        </div>` : ''}
+        </div>`
+            : ''
+        }
       </div>
 
       <!-- What's next -->
@@ -83,16 +100,28 @@ function confirmationHtml(data: {
         <div style="font-size:13px;font-weight:600;margin-bottom:14px">What happens next</div>
         ${[
           ['1', 'Your spot is confirmed', "We'll notify you when your desk is ready to activate."],
-          ['2', 'Brief your mandate', "15 AI specialists — led by Earn — take your direction and start executing the moment you're in."],
-          ['3', 'Run your full lifecycle', 'Source deals, raise capital, run diligence, close — from one command center.'],
-        ].map(([n, title, sub]) => `
+          [
+            '2',
+            'Brief your mandate',
+            "15 AI specialists — led by Earn — take your direction and start executing the moment you're in.",
+          ],
+          [
+            '3',
+            'Run your full lifecycle',
+            'Source deals, raise capital, run diligence, close — from one command center.',
+          ],
+        ]
+          .map(
+            ([n, title, sub]) => `
         <div style="display:flex;gap:12px;margin-bottom:12px">
           <div style="width:22px;height:22px;border-radius:50%;background:#1e2d45;color:#64748b;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${n}</div>
           <div>
             <div style="font-size:13px;font-weight:600;margin-bottom:2px">${title}</div>
             <div style="font-size:12px;color:#64748b;line-height:1.5">${sub}</div>
           </div>
-        </div>`).join('')}
+        </div>`,
+          )
+          .join('')}
       </div>
 
       <!-- Footer -->
@@ -108,6 +137,7 @@ function confirmationHtml(data: {
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = createAdminClient();
   try {
     const body = await req.json();
     const { email, name, firm, roleGroup, investorRole, referralCode, utm } = body;
@@ -185,7 +215,7 @@ export async function POST(req: NextRequest) {
         supabase
           .from('waitlist_signups')
           .update({ confirmation_sent_at: new Date().toISOString() })
-          .eq('id', row.id)
+          .eq('id', row.id),
       )
       .catch(console.error);
 
@@ -197,20 +227,30 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: unknown) {
     console.error('[/api/waitlist]', err);
-    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Something went wrong. Please try again.' },
+      { status: 500 },
+    );
   }
 }
 
 export async function GET(req: NextRequest) {
+  const supabase = createAdminClient();
   const { searchParams } = new URL(req.url);
   const email = searchParams.get('email')?.toLowerCase().trim();
   if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 });
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('waitlist_signups')
     .select('position, tier, airdrop_eligible, airdrop_claimed, created_at')
     .eq('email', email)
     .single();
+
+  // PGRST116 = PostgREST "no rows found" — expected for unknown emails
+  if (error && error.code !== 'PGRST116') {
+    console.error('[/api/waitlist GET]', error);
+    return NextResponse.json({ found: false, error: error.message }, { status: 500 });
+  }
 
   if (!data) return NextResponse.json({ found: false });
   return NextResponse.json({ found: true, ...data });
