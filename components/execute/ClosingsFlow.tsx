@@ -12,6 +12,7 @@ import {
   FileText,
   Landmark,
   PenLine,
+  Send,
   ShieldCheck,
   Sparkles,
   X
@@ -21,25 +22,35 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
-import { executeClosingStep, openClosing } from '@/lib/closings/actions';
+import { executeClosingStep, openClosing, requestStepSignature } from '@/lib/closings/actions';
 import {
   CLOSING_KIND_LABEL,
   STEP_DISPLAY,
   STEP_SEQUENCE,
   isClosingKind,
+  isSignatureStep,
   isStepDone,
   nextExecutableSeq,
   stepDisplayStatus,
   type ClosingKind,
   type ClosingStepSpec
 } from '@/lib/closings/sequence';
+import { ENVELOPE_DISPLAY, isValidEmail, mapEnvelopeStatus } from '@/lib/closings/docusign';
 import { compactMoney } from '@/lib/format';
 import type { ClosingCandidate, ClosingStepView, ClosingView } from '@/lib/queries/closings';
 import { cn } from '@/lib/utils';
 
 type RunnerState =
   | { type: 'open'; candidate: ClosingCandidate }
-  | { type: 'step'; closing: ClosingView; step: ClosingStepView; spec?: ClosingStepSpec };
+  | { type: 'step'; closing: ClosingView; step: ClosingStepView; spec?: ClosingStepSpec }
+  | {
+      type: 'sign';
+      closing: ClosingView;
+      step: ClosingStepView;
+      spec?: ClosingStepSpec;
+      signerName: string;
+      signerEmail: string;
+    };
 
 function specFor(closing: ClosingView, seq: number): ClosingStepSpec | undefined {
   return isClosingKind(closing.kind)
@@ -100,18 +111,27 @@ function StepDrawer({
   step,
   isNext,
   onClose,
-  onExecute
+  onExecute,
+  onSendSignature
 }: {
   closing: ClosingView;
   step: ClosingStepView;
   isNext: boolean;
   onClose: () => void;
   onExecute: (step: ClosingStepView) => void;
+  onSendSignature: (step: ClosingStepView, signerName: string, signerEmail: string) => void;
 }) {
   const panelRef = useModalFocus(onClose);
   const spec = specFor(closing, step.seq);
   const display = stepDisplayStatus(step.status, isNext, spec?.wire);
   const chip = STEP_DISPLAY[display];
+  const done = isStepDone(step.status);
+  const signable = isSignatureStep(spec) && !done && closing.status === 'open';
+  const envelope = step.signature ? mapEnvelopeStatus(step.signature.status) : null;
+
+  const [signerName, setSignerName] = useState('');
+  const [signerEmail, setSignerEmail] = useState(step.signature?.signerEmail ?? '');
+  const canSend = signerName.trim().length > 0 && isValidEmail(signerEmail);
 
   return (
     <>
@@ -183,7 +203,69 @@ function StepDrawer({
             </div>
           ) : null}
 
-          {isStepDone(step.status) ? (
+          {/* e-signature — send the signature step out via DocuSign */}
+          {envelope ? (
+            <div className="rounded-[13px] border border-hairline bg-surface-1 px-4 py-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-[12px] font-semibold text-fg-2">
+                  <Send size={14} className="text-fg-4" aria-hidden />
+                  DocuSign envelope
+                </div>
+                <Badge tone={ENVELOPE_DISPLAY[envelope].tone} className="px-2 py-0.5 text-[9.5px]">
+                  {ENVELOPE_DISPLAY[envelope].label}
+                </Badge>
+              </div>
+              {step.signature?.signerEmail ? (
+                <div className="mt-1.5 truncate text-[11px] text-fg-5">
+                  Sent to {step.signature.signerEmail}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {signable ? (
+            <div className="rounded-[13px] border border-[var(--azure-line)] bg-[var(--azure-soft)] px-4 py-3.5">
+              <div className="mb-1 flex items-center gap-2 text-[12.5px] font-semibold text-fg-1">
+                <Send size={14} className="text-[var(--azure)]" aria-hidden />
+                Send for signature
+              </div>
+              <p className="mb-3 text-[11.5px] leading-relaxed text-fg-3">
+                Sends a real DocuSign envelope to the signer. Signing happens on DocuSign — this
+                doesn&apos;t execute the step; you still approve and attest it here once it&apos;s
+                signed. Nothing sends until you approve.
+              </p>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="text"
+                  value={signerName}
+                  onChange={(e) => setSignerName(e.target.value)}
+                  placeholder="Signer name"
+                  aria-label="Signer name"
+                  className="w-full rounded-lg border border-hairline bg-surface-1 px-3 py-2 text-[12.5px] text-fg-1 outline-none placeholder:text-fg-5 focus:border-[var(--azure-line)]"
+                />
+                <input
+                  type="email"
+                  value={signerEmail}
+                  onChange={(e) => setSignerEmail(e.target.value)}
+                  placeholder="signer@email.com"
+                  aria-label="Signer email"
+                  className="w-full rounded-lg border border-hairline bg-surface-1 px-3 py-2 text-[12.5px] text-fg-1 outline-none placeholder:text-fg-5 focus:border-[var(--azure-line)]"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Send}
+                  disabled={!canSend}
+                  className="w-full"
+                  onClick={() => onSendSignature(step, signerName.trim(), signerEmail.trim())}
+                >
+                  {envelope ? 'Resend for signature' : 'Send for signature'}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {done ? (
             <div className="flex items-center gap-2.5 rounded-[13px] border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3.5 text-[13px] font-semibold text-success">
               <CheckCircle2 size={17} aria-hidden />
               Executed · logged to Chain of Trust
@@ -257,6 +339,23 @@ export function ClosingsFlow({
   function executeStep(closing: ClosingView, step: ClosingStepView) {
     setOpenStepId(null);
     setRunner({ type: 'step', closing, step, spec: specFor(closing, step.seq) });
+  }
+
+  function sendSignature(
+    closing: ClosingView,
+    step: ClosingStepView,
+    signerName: string,
+    signerEmail: string
+  ) {
+    setOpenStepId(null);
+    setRunner({
+      type: 'sign',
+      closing,
+      step,
+      spec: specFor(closing, step.seq),
+      signerName,
+      signerEmail
+    });
   }
 
   return (
@@ -579,6 +678,7 @@ export function ClosingsFlow({
           isNext={gate === openStep.seq && selected.status === 'open'}
           onClose={() => setOpenStepId(null)}
           onExecute={(s) => executeStep(selected, s)}
+          onSendSignature={(s, name, email) => sendSignature(selected, s, name, email)}
         />
       )}
 
@@ -640,6 +740,35 @@ export function ClosingsFlow({
                 ? `${runner.closing.counterparty ?? 'Closing'} — closed & recorded`
                 : `${runner.step.name} — executed`
             );
+            router.refresh();
+          }}
+        />
+      )}
+
+      {runner?.type === 'sign' && (
+        <ActionRunner
+          title={`Send for signature — ${runner.step.name}`}
+          steps={[
+            'Assemble the document package',
+            'Prepare the DocuSign envelope',
+            `Address it to ${runner.signerName}`,
+            'Prepare for your approval'
+          ]}
+          draftTitle={`DocuSign envelope · ${runner.closing.counterparty ?? 'closing'}`}
+          draft={`A DocuSign envelope for "${runner.step.name}" addressed to ${runner.signerName} (${runner.signerEmail}). Approving sends a real envelope for e-signature. Signing happens on DocuSign — this does not execute the step; you still approve and attest it here once it's signed.`}
+          approveLabel="Approve & send"
+          onApprove={async () => {
+            const res = await requestStepSignature({
+              closingId: runner.closing.id,
+              seq: runner.step.seq,
+              signerName: runner.signerName,
+              signerEmail: runner.signerEmail
+            });
+            return res.ok ? { ok: true } : { ok: false, error: res.error };
+          }}
+          onClose={() => setRunner(null)}
+          onApplied={() => {
+            setToast(`Sent for signature — ${runner.signerEmail}`);
             router.refresh();
           }}
         />

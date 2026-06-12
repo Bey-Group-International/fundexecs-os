@@ -4743,6 +4743,76 @@ export type Database = {
           },
         ]
       }
+      closing_step_signatures: {
+        Row: {
+          closing_id: string
+          created_at: string
+          created_by: string | null
+          envelope_id: string
+          id: string
+          org_id: string
+          seq: number
+          signer_email: string | null
+          signer_name: string | null
+          status: string
+          step_id: string
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          closing_id: string
+          created_at?: string
+          created_by?: string | null
+          envelope_id: string
+          id?: string
+          org_id: string
+          seq: number
+          signer_email?: string | null
+          signer_name?: string | null
+          status?: string
+          step_id: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          closing_id?: string
+          created_at?: string
+          created_by?: string | null
+          envelope_id?: string
+          id?: string
+          org_id?: string
+          seq?: number
+          signer_email?: string | null
+          signer_name?: string | null
+          status?: string
+          step_id?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closing_step_signatures_closing_id_org_id_fkey"
+            columns: ["closing_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "closings"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "closing_step_signatures_step_id_org_id_fkey"
+            columns: ["step_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "closing_steps"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "closing_step_signatures_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       capital_calls: {
         Row: {
           created_at: string
