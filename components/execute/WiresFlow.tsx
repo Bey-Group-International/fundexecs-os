@@ -86,6 +86,9 @@ export function WiresFlow({
   const [runner, setRunner] = useState<RunnerState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [view, setView] = useState<View>('signatures');
+  // True when the act persisted but its Chain of Trust record did not —
+  // the toast must not claim a log that never landed.
+  const [trustMissed, setTrustMissed] = useState(false);
 
   // Stage-a-signature form
   const [sigDoc, setSigDoc] = useState('');
@@ -607,11 +610,16 @@ export function WiresFlow({
               signatureId: runner.sig.id,
               outcome: runner.outcome
             });
+            if (res.ok) setTrustMissed(res.trustLogged === false);
             return res.ok ? { ok: true } : { ok: false, error: res.error };
           }}
           onClose={() => setRunner(null)}
           onApplied={() => {
-            setToast(`${runner.sig.document} — ${runner.outcome}`);
+            setToast(
+              `${runner.sig.document} — ${runner.outcome}${
+                trustMissed ? ' (Chain of Trust log could not be written)' : ''
+              }`
+            );
             router.refresh();
           }}
         />
@@ -694,12 +702,15 @@ export function WiresFlow({
           approveLabel="Approve & advance"
           onApprove={async () => {
             const res = await advanceWire({ wireId: runner.wire.id });
+            if (res.ok) setTrustMissed(res.trustLogged === false);
             return res.ok ? { ok: true } : { ok: false, error: res.error };
           }}
           onClose={() => setRunner(null)}
           onApplied={() => {
             setToast(
-              `${compactMoney(runner.wire.amount)} ${runner.wire.counterparty} — ${WIRE_STATUS_LABEL[runner.next].toLowerCase()}`
+              `${compactMoney(runner.wire.amount)} ${runner.wire.counterparty} — ${WIRE_STATUS_LABEL[runner.next].toLowerCase()}${
+                trustMissed ? ' (Chain of Trust log could not be written)' : ''
+              }`
             );
             router.refresh();
           }}

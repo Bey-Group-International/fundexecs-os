@@ -15,12 +15,41 @@ import { canResolveSignature, isWireDirection, nextWireStatus } from './vocabula
  * other hub interior.
  */
 
-export type WiresActionResult = { ok: true; id: string } | { ok: false; error: string };
+export type WiresActionResult =
+  | {
+      ok: true;
+      id: string;
+      /** Whether the Chain of Trust record actually landed (signed/settled acts only). */
+      trustLogged?: boolean;
+    }
+  | { ok: false; error: string };
 
 const MAX_TEXT = 200;
 
 function clean(value: string | null | undefined, max = MAX_TEXT): string {
   return (value ?? '').trim().slice(0, max);
+}
+
+/**
+ * Resolve a client-provided closing id to one this org actually owns and
+ * that is still open — never trust the raw id into an insert.
+ */
+async function resolveOpenClosingId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  closingId: string | null | undefined
+): Promise<{ ok: true; id: string | null } | { ok: false; error: string }> {
+  if (!closingId) return { ok: true, id: null };
+  const { data, error } = await supabase
+    .from('closings')
+    .select('id')
+    .eq('id', closingId)
+    .eq('org_id', orgId)
+    .eq('status', 'open')
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: 'That closing is not open in this workspace.' };
+  return { ok: true, id: data.id };
 }
 
 /** Send a document out for signature (optionally tied to an open closing). */
@@ -38,11 +67,13 @@ export async function sendSignature(input: {
   if (!org) return { ok: false, error: 'No active workspace.' };
 
   const supabase = await createClient();
+  const closing = await resolveOpenClosingId(supabase, org.orgId, input.closingId);
+  if (!closing.ok) return closing;
   const { data, error } = await supabase
     .from('signatures')
     .insert({
       org_id: org.orgId,
-      closing_id: input.closingId || null,
+      closing_id: closing.id,
       document,
       signer,
       status: 'out_for_signature'
@@ -89,7 +120,7 @@ export async function resolveSignature(input: {
     return { ok: false, error: 'This signature is already resolved.' };
   }
 
-  const { error } = await supabase
+  const { data: resolved, error } = await supabase
     .from('signatures')
     .update({
       status: input.outcome,
@@ -97,18 +128,28 @@ export async function resolveSignature(input: {
       updated_at: new Date().toISOString()
     })
     .eq('id', sig.id)
-    .eq('org_id', org.orgId);
+    .eq('org_id', org.orgId)
+    // Compare-and-set: a signature resolves exactly once, even under
+    // concurrent operators — zero matched rows means it just resolved.
+    .eq('status', sig.status)
+    .select('id')
+    .maybeSingle();
   if (error) return { ok: false, error: error.message };
+  if (!resolved) {
+    return { ok: false, error: 'This signature just changed — refresh and try again.' };
+  }
 
+  let trustLogged: boolean | undefined;
   if (input.outcome === 'signed') {
     // Chain of Trust: the attestation is a real record (idempotent) — the
-    // run choreography's "Log to Chain of Trust" step, made literal.
-    await logExecutionRecord(supabase, org.orgId, 'signature', sig.id);
+    // run choreography's "Log to Chain of Trust" step, made literal. The
+    // result rides along so the UI never claims a log that didn't happen.
+    trustLogged = await logExecutionRecord(supabase, org.orgId, 'signature', sig.id);
   }
 
   revalidatePath('/execute/wires');
   revalidatePath('/execute');
-  return { ok: true, id: sig.id };
+  return { ok: true, id: sig.id, trustLogged };
 }
 
 /**
@@ -134,12 +175,19 @@ export async function chaseSignature(input: { signatureId: string }): Promise<Wi
     return { ok: false, error: 'This signature is already resolved — nothing to chase.' };
   }
 
-  const { error } = await supabase
+  const { data: chased, error } = await supabase
     .from('signatures')
     .update({ chased_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('id', sig.id)
-    .eq('org_id', org.orgId);
+    .eq('org_id', org.orgId)
+    // Compare-and-set: never stamp a chase on a request that just resolved.
+    .eq('status', sig.status)
+    .select('id')
+    .maybeSingle();
   if (error) return { ok: false, error: error.message };
+  if (!chased) {
+    return { ok: false, error: 'This signature just changed — refresh and try again.' };
+  }
 
   revalidatePath('/execute/wires');
   revalidatePath('/execute');
@@ -165,11 +213,13 @@ export async function instructWire(input: {
   if (!org) return { ok: false, error: 'No active workspace.' };
 
   const supabase = await createClient();
+  const closing = await resolveOpenClosingId(supabase, org.orgId, input.closingId);
+  if (!closing.ok) return closing;
   const { data, error } = await supabase
     .from('wires')
     .insert({
       org_id: org.orgId,
-      closing_id: input.closingId || null,
+      closing_id: closing.id,
       direction: input.direction,
       amount: input.amount,
       counterparty,
@@ -212,7 +262,7 @@ export async function advanceWire(input: { wireId: string }): Promise<WiresActio
     };
   }
 
-  const { error } = await supabase
+  const { data: advanced, error } = await supabase
     .from('wires')
     .update({
       status: next,
@@ -221,51 +271,59 @@ export async function advanceWire(input: { wireId: string }): Promise<WiresActio
     })
     .eq('id', wire.id)
     .eq('org_id', org.orgId)
-    // Concurrency guard: only advance from the stage we just read.
-    .eq('status', wire.status);
+    // Compare-and-set: only advance from the stage we just read; zero
+    // matched rows means another actor advanced it first.
+    .eq('status', wire.status)
+    .select('id')
+    .maybeSingle();
   if (error) return { ok: false, error: error.message };
+  if (!advanced) return { ok: false, error: 'This wire just changed — refresh and try again.' };
 
+  let trustLogged: boolean | undefined;
   if (next === 'settled') {
     // Chain of Trust: a settled wire is a real record (idempotent) — the
     // dual-control choreography's "Log to Chain of Trust" step, made literal.
-    await logExecutionRecord(supabase, org.orgId, 'wire', wire.id);
+    trustLogged = await logExecutionRecord(supabase, org.orgId, 'wire', wire.id);
   }
 
   revalidatePath('/execute/wires');
   revalidatePath('/execute');
-  return { ok: true, id: wire.id };
+  return { ok: true, id: wire.id, trustLogged };
 }
 
 /**
  * The Closings tab's pattern: completing an execution act inserts an
- * idempotent `chain_of_trust_records` row at Proof of Execution. Best
- * effort — never blocks the act it records.
+ * idempotent `chain_of_trust_records` row at Proof of Execution. Never
+ * blocks the act it records, but reports whether the record actually
+ * landed so callers can hedge their copy instead of overclaiming.
  */
 async function logExecutionRecord(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
   entityType: 'signature' | 'wire',
   entityId: string
-): Promise<void> {
+): Promise<boolean> {
   try {
-    const { data: existing } = await supabase
+    const { data: existing, error: readErr } = await supabase
       .from('chain_of_trust_records')
       .select('id')
       .eq('org_id', orgId)
       .eq('entity_type', entityType)
       .eq('entity_id', entityId)
       .maybeSingle();
-    if (!existing) {
-      await supabase.from('chain_of_trust_records').insert({
-        org_id: orgId,
-        entity_type: entityType,
-        entity_id: entityId,
-        current_layer: 'Proof of Execution',
-        completion_percentage: 100,
-        status: 'active'
-      });
-    }
+    if (existing) return true;
+    if (readErr) return false;
+    const { error: insertErr } = await supabase.from('chain_of_trust_records').insert({
+      org_id: orgId,
+      entity_type: entityType,
+      entity_id: entityId,
+      current_layer: 'Proof of Execution',
+      completion_percentage: 100,
+      status: 'active'
+    });
+    return !insertErr;
   } catch {
-    // The ledger write is best-effort; the act itself already persisted.
+    // The act itself already persisted; only the proof record failed.
+    return false;
   }
 }
