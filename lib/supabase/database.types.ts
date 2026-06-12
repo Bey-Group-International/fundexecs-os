@@ -4504,6 +4504,7 @@ export type Database = {
           expires_at: string | null
           id: string
           label: string | null
+          material_kind: string | null
           org_id: string
           token: string
           updated_at: string
@@ -4515,6 +4516,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           label?: string | null
+          material_kind?: string | null
           org_id: string
           token: string
           updated_at?: string
@@ -4526,6 +4528,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           label?: string | null
+          material_kind?: string | null
           org_id?: string
           token?: string
           updated_at?: string
@@ -4557,6 +4560,7 @@ export type Database = {
           updated_at: string
           verified_at: string | null
           viewer: string
+          viewer_email: string | null
         }
         Insert: {
           created_at?: string
@@ -4566,6 +4570,7 @@ export type Database = {
           updated_at?: string
           verified_at?: string | null
           viewer: string
+          viewer_email?: string | null
         }
         Update: {
           created_at?: string
@@ -4575,6 +4580,7 @@ export type Database = {
           updated_at?: string
           verified_at?: string | null
           viewer?: string
+          viewer_email?: string | null
         }
         Relationships: [
           {
