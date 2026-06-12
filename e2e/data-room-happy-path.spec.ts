@@ -24,7 +24,9 @@ test('an LP passes the vetted gate and shows up in the operator room', async ({
   test.slow(); // build choreography + a second browser context
 
   await signIn(page, '/build/data-room');
-  await expect(page.getByText('Materials & data room')).toBeVisible();
+  // Pin to the heading: the rail link and the hub tab can carry the same
+  // text, so a bare getByText trips Playwright's strict mode.
+  await expect(page.getByRole('heading', { name: 'Materials & data room' })).toBeVisible();
 
   // ── ensure the One-pager material is Ready ──────────────────────────────
   const matCard = page

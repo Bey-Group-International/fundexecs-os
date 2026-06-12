@@ -5,11 +5,16 @@ import { useRouter } from 'next/navigation';
 import {
   Building2,
   CheckCircle2,
+  Columns3,
   DollarSign,
   FileSearch,
   HandCoins,
+  LayoutGrid,
+  PlusCircle,
+  Search,
   ShieldCheck,
   Sparkles,
+  StickyNote,
   TrendingUp,
   X
 } from 'lucide-react';
@@ -19,7 +24,11 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { Field } from '@/components/ui/Field';
-import { createDeal, updateDealStage } from '@/lib/actions/deals';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { addDealNote, createDeal, updateDealStage } from '@/lib/actions/deals';
+import { BOARD_SORTS, filterDeals, sortDeals, type BoardSortKey } from '@/lib/deal-pipeline/board';
+import { mergeTimeline, timeAgo } from '@/lib/deal-pipeline/timeline';
 import { compactMoney } from '@/lib/format';
 import type { PipelineDeal, PipelineStage } from '@/lib/queries/pipeline';
 import { cn } from '@/lib/utils';
@@ -200,20 +209,26 @@ function DealDrawer({
   deal,
   stages,
   onClose,
-  onRun
+  onRun,
+  onLogNote
 }: {
   deal: PipelineDeal;
   stages: PipelineStage[];
   onClose: () => void;
   onRun: (deal: PipelineDeal) => void;
+  onLogNote: (deal: PipelineDeal, body: string) => void;
 }) {
   const panelRef = useModalFocus(onClose);
+  const [noteDraft, setNoteDraft] = useState('');
 
   const stageKeys = stages.map((s) => s.key);
   const at = stageKeys.indexOf(deal.stage);
   const stageLabel = stages.find((s) => s.key === deal.stage)?.label ?? deal.stage;
+  const stageLabelOf = (key: string | null) =>
+    (key && stages.find((s) => s.key === key)?.label) ?? key ?? '';
   const move = NEXT_MOVE[deal.stage] ?? null;
   const latestRun = deal.diligenceRuns[0] ?? null;
+  const timeline = mergeTimeline(deal.notes, deal.events);
 
   return (
     <>
@@ -365,6 +380,68 @@ function DealDrawer({
               Closed{deal.amount ? ` · ${compactMoney(deal.amount)}` : ''} — on your record
             </div>
           )}
+
+          {/* notes & activity — the deal's written record, real rows only */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                Notes &amp; activity
+              </div>
+              <div className="text-[10.5px] text-fg-5">updated {timeAgo(deal.updatedAt)}</div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                rows={2}
+                maxLength={2000}
+                placeholder="Log a note — calls, color, conviction…"
+                aria-label="Log a note"
+                className="w-full resize-none rounded-xl border border-hairline bg-surface-2 px-3 py-2.5 text-[12.5px] text-fg-1 outline-none transition placeholder:text-fg-4 focus:border-[var(--accent-line)] focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={StickyNote}
+                disabled={!noteDraft.trim()}
+                onClick={() => onLogNote(deal, noteDraft.trim())}
+              >
+                Log note with Earn
+              </Button>
+            </div>
+            {timeline.length > 0 && (
+              <ul className="mt-3 flex flex-col gap-2">
+                {timeline.map((item) => (
+                  <li
+                    key={`${item.kind}-${item.id}`}
+                    className="flex items-start gap-2.5 rounded-xl border border-hairline bg-surface-1 px-3 py-2.5"
+                  >
+                    <span className="mt-px flex-none">
+                      {item.kind === 'note' ? (
+                        <StickyNote size={14} className="text-gold-1" aria-hidden />
+                      ) : item.kind === 'stage' ? (
+                        <TrendingUp size={14} className="text-azure-1" aria-hidden />
+                      ) : (
+                        <PlusCircle size={14} className="text-fg-4" aria-hidden />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-fg-2">
+                      {item.kind === 'note' ? (
+                        item.body
+                      ) : item.kind === 'stage' ? (
+                        <>
+                          Advanced to <b className="text-fg-1">{stageLabelOf(item.stage)}</b>
+                        </>
+                      ) : (
+                        'Logged on the pipeline'
+                      )}
+                    </div>
+                    <span className="flex-none text-[10.5px] text-fg-5">{timeAgo(item.at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </>
@@ -475,7 +552,12 @@ export function DealPipelineFlow({
   const [running, setRunning] = useState<PipelineDeal | null>(null);
   const [adding, setAdding] = useState(false);
   const [sourcing, setSourcing] = useState<{ name: string; amount: number | null } | null>(null);
+  const [noting, setNoting] = useState<{ deal: PipelineDeal; body: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [view, setView] = useState<'grid' | 'board'>('grid');
+  const [query, setQuery] = useState('');
+  const [stageFilter, setStageFilter] = useState('');
+  const [sortKey, setSortKey] = useState<BoardSortKey>('stage');
 
   // Server refreshes (after a create) re-seed the board.
   const [seededFrom, setSeededFrom] = useState(initialStages);
@@ -494,6 +576,9 @@ export function DealPipelineFlow({
   const stageKeys = stages.map((s) => s.key);
   const openDeal = openId ? (deals.find((d) => d.id === openId) ?? null) : null;
   const move = running ? (NEXT_MOVE[running.stage] ?? null) : null;
+
+  const visible = filterDeals(deals, { query, stage: stageFilter });
+  const hasFilters = query.trim() !== '' || stageFilter !== '';
 
   function applyAdvance(deal: PipelineDeal, to: string) {
     setStages((prev) =>
@@ -573,6 +658,72 @@ export function DealPipelineFlow({
           ))}
         </div>
 
+        {/* board toolbar — search, stage pin, sort, grid/board toggle */}
+        {deals.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="min-w-[180px] flex-1">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                icon={Search}
+                placeholder="Search deals…"
+                aria-label="Search deals"
+              />
+            </div>
+            <div className="w-[150px]">
+              <Select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+                aria-label="Filter by stage"
+                options={[
+                  { value: '', label: 'All stages' },
+                  ...stages.map((s) => ({ value: s.key, label: s.label }))
+                ]}
+              />
+            </div>
+            {view === 'grid' && (
+              <div className="w-[160px]">
+                <Select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value as BoardSortKey)}
+                  aria-label="Sort deals"
+                  options={BOARD_SORTS.map((s) => ({ value: s.key, label: s.label }))}
+                />
+              </div>
+            )}
+            <div
+              className="flex items-center gap-1 rounded-xl border border-hairline bg-surface-1 p-1"
+              role="group"
+              aria-label="Board view"
+            >
+              <button
+                type="button"
+                onClick={() => setView('grid')}
+                aria-pressed={view === 'grid'}
+                aria-label="Grid view"
+                className={cn(
+                  'flex h-[30px] w-[34px] items-center justify-center rounded-lg transition',
+                  view === 'grid' ? 'bg-surface-2 text-fg-1' : 'text-fg-4 hover:text-fg-2'
+                )}
+              >
+                <LayoutGrid size={15} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('board')}
+                aria-pressed={view === 'board'}
+                aria-label="Board view"
+                className={cn(
+                  'flex h-[30px] w-[34px] items-center justify-center rounded-lg transition',
+                  view === 'board' ? 'bg-surface-2 text-fg-1' : 'text-fg-4 hover:text-fg-2'
+                )}
+              >
+                <Columns3 size={15} aria-hidden />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* deal cards */}
         {deals.length === 0 ? (
           <div className="px-4 py-8 text-center">
@@ -594,48 +745,112 @@ export function DealPipelineFlow({
               Source your first deal
             </Button>
           </div>
+        ) : visible.length === 0 && hasFilters && view === 'grid' ? (
+          <div className="px-4 py-8 text-center">
+            <Search size={22} className="mx-auto text-fg-4" aria-hidden />
+            <h3 className="mt-3 text-[15px] font-semibold text-fg-1">No deals match</h3>
+            <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-fg-4">
+              Nothing on your pipeline matches that search and stage — the deals are still here.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-4"
+              onClick={() => {
+                setQuery('');
+                setStageFilter('');
+              }}
+            >
+              Clear filters
+            </Button>
+          </div>
+        ) : view === 'board' ? (
+          <div className="flex gap-2.5 overflow-x-auto pb-1.5" aria-label="Pipeline board">
+            {stages
+              .filter((s) => !stageFilter || s.key === stageFilter)
+              .map((s) => {
+                const col = sortDeals(filterDeals(s.deals, { query, stage: '' }), 'fit', stageKeys);
+                const colValue = col.reduce((sum, d) => sum + (d.amount ?? 0), 0);
+                return (
+                  <div
+                    key={s.key}
+                    className="w-[190px] flex-none self-start rounded-xl border border-hairline bg-surface-1"
+                    style={{ borderTopWidth: 2, borderTopColor: STAGE_BAR[s.key] ?? 'var(--fg-4)' }}
+                  >
+                    <div className="flex items-center justify-between gap-2 px-2.5 pb-1.5 pt-2">
+                      <span className="truncate text-[10.5px] font-semibold text-fg-3">
+                        {s.label}
+                      </span>
+                      <span className="flex-none text-[10px] text-fg-5 [font-feature-settings:'tnum']">
+                        {col.length}
+                        {colValue > 0 ? ` · ${compactMoney(colValue)}` : ''}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1.5 px-1.5 pb-1.5">
+                      {col.length === 0 ? (
+                        <div className="px-1 pb-1.5 pt-0.5 text-[10.5px] text-fg-5">No deals</div>
+                      ) : (
+                        col.map((d) => (
+                          <button
+                            key={d.id}
+                            type="button"
+                            onClick={() => setOpenId(d.id)}
+                            className="rounded-[10px] border border-hairline bg-surface-2 px-2.5 py-2 text-left transition hover:border-[var(--border-strong)]"
+                          >
+                            <div className="truncate text-[12px] font-semibold text-fg-1">
+                              {d.name}
+                            </div>
+                            <div className="mt-1 flex items-center justify-between text-[10.5px] text-fg-4">
+                              <span className="[font-feature-settings:'tnum']">
+                                {d.amount ? compactMoney(d.amount) : '—'}
+                              </span>
+                              <b style={{ color: fitColor(d.fit) }}>{d.fit}</b>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
         ) : (
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-            {deals
-              .slice()
-              .sort(
-                (a, b) => stageKeys.indexOf(b.stage) - stageKeys.indexOf(a.stage) || b.fit - a.fit
-              )
-              .map((d) => (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => setOpenId(d.id)}
-                  className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-left transition hover:bg-surface-2"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
-                      <Building2 size={16} aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
-                      <div className="truncate text-[10.5px] text-fg-5">{d.note}</div>
-                    </div>
-                    <Badge
-                      tone={STAGE_TONE[d.stage] ?? 'neutral'}
-                      className="px-2 py-0.5 text-[9.5px]"
-                    >
-                      {stages.find((s) => s.key === d.stage)?.label ?? d.stage}
-                    </Badge>
+            {sortDeals(visible, sortKey, stageKeys).map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setOpenId(d.id)}
+                className="rounded-xl border border-hairline bg-surface-1 px-3.5 py-3 text-left transition hover:bg-surface-2"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
+                    <Building2 size={16} aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-semibold text-fg-1">{d.name}</div>
+                    <div className="truncate text-[10.5px] text-fg-5">{d.note}</div>
                   </div>
-                  <div className="mt-2.5 flex items-center gap-3.5 text-[11px] text-fg-4">
-                    <span>
-                      Size{' '}
-                      <b className="font-mono text-fg-2 [font-feature-settings:'tnum']">
-                        {d.amount ? compactMoney(d.amount) : '—'}
-                      </b>
-                    </span>
-                    <span>
-                      Score <b style={{ color: fitColor(d.fit) }}>{d.fit}</b>
-                    </span>
-                  </div>
-                </button>
-              ))}
+                  <Badge
+                    tone={STAGE_TONE[d.stage] ?? 'neutral'}
+                    className="px-2 py-0.5 text-[9.5px]"
+                  >
+                    {stages.find((s) => s.key === d.stage)?.label ?? d.stage}
+                  </Badge>
+                </div>
+                <div className="mt-2.5 flex items-center gap-3.5 text-[11px] text-fg-4">
+                  <span>
+                    Size{' '}
+                    <b className="font-mono text-fg-2 [font-feature-settings:'tnum']">
+                      {d.amount ? compactMoney(d.amount) : '—'}
+                    </b>
+                  </span>
+                  <span>
+                    Score <b style={{ color: fitColor(d.fit) }}>{d.fit}</b>
+                  </span>
+                </div>
+              </button>
+            ))}
           </div>
         )}
       </Card>
@@ -648,6 +863,10 @@ export function DealPipelineFlow({
           onRun={(d) => {
             setOpenId(null);
             setRunning(d);
+          }}
+          onLogNote={(d, body) => {
+            setOpenId(null);
+            setNoting({ deal: d, body });
           }}
         />
       )}
@@ -686,6 +905,33 @@ export function DealPipelineFlow({
           onClose={() => setSourcing(null)}
           onApplied={() => {
             setToast(`${sourcing.name} added to your pipeline`);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {noting && (
+        <ActionRunner
+          title={`Log note — ${noting.deal.name}`}
+          steps={[
+            'Attach your note to the deal record',
+            'Timestamp it on the activity log',
+            'Prepare for your approval'
+          ]}
+          draftTitle={`Note · ${noting.deal.name}`}
+          draft={noting.body}
+          onApprove={async () => {
+            const res = await addDealNote(noting.deal.id, noting.body);
+            return res.ok ? { ok: true } : { ok: false, error: res.error };
+          }}
+          onClose={() => {
+            // Reopen the drawer either way — the composer lives there, and a
+            // logged note should be visible on the refreshed timeline.
+            setNoting(null);
+            setOpenId(noting.deal.id);
+          }}
+          onApplied={() => {
+            setToast(`Note logged on ${noting.deal.name}`);
             router.refresh();
           }}
         />
