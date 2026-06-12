@@ -1,11 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LEAD_MOVE,
+  LEAD_NEXT,
   LEAD_STAGES,
   isLeadStage,
+  lastActivityLabel,
+  leadRunSteps,
   nextLeadStage,
-  sanitizeLeadCandidates
+  sanitizeLeadCandidates,
+  summarizeLeads
 } from './engine';
 
 test('lead stages advance strictly in order and terminate at meeting', () => {
@@ -17,13 +20,40 @@ test('lead stages advance strictly in order and terminate at meeting', () => {
   assert.equal(isLeadStage('won'), false);
 });
 
-test('every non-terminal stage has a move with run steps', () => {
+test('every non-terminal stage has a next move with the runner choreography', () => {
+  assert.deepEqual(LEAD_NEXT, {
+    new: 'Qualify',
+    qualified: 'Reach out',
+    contacted: 'Book meeting'
+  });
   for (const s of LEAD_STAGES) {
     if (s.key === 'meeting') continue;
-    const move = LEAD_MOVE[s.key];
-    assert.ok(move.label.length > 0);
-    assert.ok(move.steps.length >= 3);
+    const act = LEAD_NEXT[s.key];
+    assert.deepEqual(leadRunSteps(act), [
+      'Pull intent + firmographics',
+      `Draft the ${act.toLowerCase()}`,
+      'Personalize to their segment',
+      'Prepare for your approval'
+    ]);
   }
+});
+
+test('summarizeLeads rolls up live count, est. value and meetings', () => {
+  assert.deepEqual(summarizeLeads([]), { live: 0, pipelineValue: 0, meetings: 0 });
+  const sum = summarizeLeads([
+    { stage: 'meeting', estValue: 240_000 },
+    { stage: 'qualified', estValue: 180_000 },
+    { stage: 'new', estValue: null }
+  ]);
+  assert.deepEqual(sum, { live: 3, pipelineValue: 420_000, meetings: 1 });
+});
+
+test('lastActivityLabel renders — / Today / Nd ago', () => {
+  const now = new Date('2026-06-12T12:00:00Z');
+  assert.equal(lastActivityLabel(null, now), '—');
+  assert.equal(lastActivityLabel('not a date', now), '—');
+  assert.equal(lastActivityLabel('2026-06-12T08:00:00Z', now), 'Today');
+  assert.equal(lastActivityLabel('2026-06-10T08:00:00Z', now), '2d ago');
 });
 
 test('sanitizeLeadCandidates bounds and types AI output', () => {

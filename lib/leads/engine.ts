@@ -27,39 +27,44 @@ export function nextLeadStage(stage: LeadStageKey): LeadStageKey | null {
   return i >= 0 && i < LEAD_STAGES.length - 1 ? LEAD_STAGES[i + 1].key : null;
 }
 
-/** Earn's move per stage (label shown on the card + runner). */
-export const LEAD_MOVE: Record<
-  Exclude<LeadStageKey, 'meeting'>,
-  { label: string; steps: string[] }
-> = {
-  new: {
-    label: 'Qualify',
-    steps: [
-      'Check the signal against the ICP',
-      'Score the intent',
-      'Draft the qualification note',
-      'Prepare for your approval'
-    ]
-  },
-  qualified: {
-    label: 'Reach out',
-    steps: [
-      'Draft the first-touch message',
-      'Reference the buying signal',
-      'Set the follow-up cadence',
-      'Prepare for your approval'
-    ]
-  },
-  contacted: {
-    label: 'Book the meeting',
-    steps: [
-      'Propose meeting windows',
-      'Attach the relevant materials',
-      'Confirm attendees',
-      'Prepare for your approval'
-    ]
-  }
+/** Earn's move per non-terminal stage — the prototype's `LEAD_NEXT`. */
+export const LEAD_NEXT: Record<Exclude<LeadStageKey, 'meeting'>, string> = {
+  new: 'Qualify',
+  qualified: 'Reach out',
+  contacted: 'Book meeting'
 };
+
+/** The ActionRunner choreography for an advance — the prototype's `runLead`. */
+export function leadRunSteps(act: string): string[] {
+  return [
+    'Pull intent + firmographics',
+    `Draft the ${act.toLowerCase()}`,
+    'Personalize to their segment',
+    'Prepare for your approval'
+  ];
+}
+
+/** The funnel-summary roll-up: live leads, est. pipeline value, meetings. */
+export function summarizeLeads(
+  leads: ReadonlyArray<{ stage: LeadStageKey; estValue: number | null }>
+): { live: number; pipelineValue: number; meetings: number } {
+  return {
+    live: leads.length,
+    pipelineValue: leads.reduce((s, l) => s + (l.estValue ?? 0), 0),
+    meetings: leads.filter((l) => l.stage === 'meeting').length
+  };
+}
+
+const DAY_MS = 86_400_000;
+
+/** "Last activity" label from a timestamp: — / Today / Nd ago. */
+export function lastActivityLabel(iso: string | null, now: Date = new Date()): string {
+  if (!iso) return '—';
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '—';
+  const days = Math.floor(Math.max(0, now.getTime() - t) / DAY_MS);
+  return days <= 0 ? 'Today' : `${days}d ago`;
+}
 
 /** An AI-discovered customer lead, shape-guarded before insert. */
 export interface LeadCandidate {
