@@ -3936,6 +3936,7 @@ export type Database = {
           full_name?: string;
           id?: string;
           member_type?: string | null;
+          referral_code?: string | null;
           role?: string | null;
           updated_at?: string;
           xp?: number;
