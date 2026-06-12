@@ -31,22 +31,22 @@ const TIER_CONFIG: Record<
     color: '#F7C948',
     bg: 'rgba(247,201,72,0.08)',
     border: 'rgba(247,201,72,0.2)',
-    icon: <Star size={14} />,
+    icon: <Star size={14} />
   },
   early_access: {
     label: 'Early Access',
     color: '#60a5fa',
     bg: 'rgba(96,165,250,0.07)',
     border: 'rgba(96,165,250,0.18)',
-    icon: <Sparkles size={14} />,
+    icon: <Sparkles size={14} />
   },
   waitlist: {
     label: 'Waitlist',
     color: '#94a3b8',
     bg: 'rgba(148,163,184,0.07)',
     border: 'rgba(148,163,184,0.15)',
-    icon: <Clock size={14} />,
-  },
+    icon: <Clock size={14} />
+  }
 };
 
 export default function AirdropPage() {
@@ -85,7 +85,7 @@ export default function AirdropPage() {
       const res = await fetch('/api/airdrop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email })
       });
       const data = await res.json();
       if (!res.ok && !data.alreadyClaimed) {
@@ -112,7 +112,7 @@ export default function AirdropPage() {
         fontFamily: 'Geist, -apple-system, BlinkMacSystemFont, sans-serif',
         position: 'relative',
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: 'column'
       }}
     >
       <div className="bg-aurora" />
@@ -121,7 +121,7 @@ export default function AirdropPage() {
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          background: 'radial-gradient(40% 36% at 50% 24%, rgba(247,201,72,0.07), transparent 70%)',
+          background: 'radial-gradient(40% 36% at 50% 24%, rgba(247,201,72,0.07), transparent 70%)'
         }}
       />
 
@@ -134,12 +134,18 @@ export default function AirdropPage() {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '18px clamp(20px,5vw,52px)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)'
         }}
       >
         <Link
           href="/"
-          style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            textDecoration: 'none',
+            color: 'inherit'
+          }}
         >
           <EarnCoin size={30} />
           <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em' }}>
@@ -160,7 +166,7 @@ export default function AirdropPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: 'clamp(36px,6vh,72px) clamp(20px,5vw,52px)',
+          padding: 'clamp(36px,6vh,72px) clamp(20px,5vw,52px)'
         }}
       >
         <div style={{ width: '100%', maxWidth: 480, textAlign: 'center' }}>
@@ -174,7 +180,7 @@ export default function AirdropPage() {
                     inset: -12,
                     borderRadius: '50%',
                     background: 'radial-gradient(circle, rgba(247,201,72,0.4), transparent 70%)',
-                    filter: 'blur(10px)',
+                    filter: 'blur(10px)'
                   }}
                 />
                 <div style={{ position: 'relative' }}>
@@ -194,7 +200,7 @@ export default function AirdropPage() {
                 fontSize: 11.5,
                 fontWeight: 600,
                 color: '#F7C948',
-                marginBottom: 14,
+                marginBottom: 14
               }}
             >
               ✦ Early Operator Airdrop
@@ -204,7 +210,7 @@ export default function AirdropPage() {
                 fontSize: 'clamp(26px,4vw,36px)',
                 fontWeight: 600,
                 letterSpacing: '-0.02em',
-                margin: '0 0 10px',
+                margin: '0 0 10px'
               }}
             >
               {step === 'claimed' ? 'Access claimed.' : 'Check your eligibility.'}
@@ -218,7 +224,10 @@ export default function AirdropPage() {
 
           {/* Check form */}
           {(step === 'check' || step === 'checking') && (
-            <form onSubmit={checkEligibility} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <form
+              onSubmit={checkEligibility}
+              style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+            >
               {error && (
                 <div
                   style={{
@@ -228,7 +237,7 @@ export default function AirdropPage() {
                     border: '1px solid rgba(248,113,113,0.2)',
                     borderRadius: 10,
                     padding: '10px 13px',
-                    textAlign: 'left',
+                    textAlign: 'left'
                   }}
                 >
                   {error}
@@ -243,7 +252,7 @@ export default function AirdropPage() {
                     top: '50%',
                     transform: 'translateY(-50%)',
                     color: '#475569',
-                    pointerEvents: 'none',
+                    pointerEvents: 'none'
                   }}
                 />
                 <input
@@ -261,7 +270,7 @@ export default function AirdropPage() {
                     borderRadius: 13,
                     padding: '12px 12px 12px 40px',
                     outline: 'none',
-                    boxSizing: 'border-box',
+                    boxSizing: 'border-box'
                   }}
                 />
               </div>
@@ -281,7 +290,7 @@ export default function AirdropPage() {
                   color: '#070b14',
                   border: 'none',
                   cursor: step === 'checking' ? 'not-allowed' : 'pointer',
-                  opacity: step === 'checking' ? 0.7 : 1,
+                  opacity: step === 'checking' ? 0.7 : 1
                 }}
               >
                 {step === 'checking' ? (
@@ -303,7 +312,7 @@ export default function AirdropPage() {
                   padding: '18px',
                   borderRadius: 14,
                   border: '1px solid rgba(148,163,184,0.15)',
-                  background: 'rgba(148,163,184,0.06)',
+                  background: 'rgba(148,163,184,0.06)'
                 }}
               >
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
@@ -327,7 +336,7 @@ export default function AirdropPage() {
                   fontWeight: 600,
                   background: 'linear-gradient(135deg,#F7C948,#E5A823)',
                   color: '#070b14',
-                  textDecoration: 'none',
+                  textDecoration: 'none'
                 }}
               >
                 Join the waitlist <ArrowRight size={15} />
@@ -338,7 +347,13 @@ export default function AirdropPage() {
                   setEmail('');
                   setStatus(null);
                 }}
-                style={{ fontSize: 13, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{
+                  fontSize: 13,
+                  color: '#64748b',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
               >
                 Try a different email
               </button>
@@ -354,7 +369,7 @@ export default function AirdropPage() {
                   borderRadius: 16,
                   border: `1px solid ${tc.border}`,
                   background: tc.bg,
-                  textAlign: 'left',
+                  textAlign: 'left'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -365,7 +380,7 @@ export default function AirdropPage() {
                       gap: 6,
                       fontSize: 13,
                       fontWeight: 700,
-                      color: tc.color,
+                      color: tc.color
                     }}
                   >
                     {tc.icon} {tc.label}
@@ -381,7 +396,7 @@ export default function AirdropPage() {
                     style={{
                       fontSize: 13,
                       fontWeight: 600,
-                      color: status.eligible ? '#34d399' : '#64748b',
+                      color: status.eligible ? '#34d399' : '#64748b'
                     }}
                   >
                     {status.eligible ? '✓ Airdrop eligible' : '✗ Not eligible at this tier'}
@@ -394,7 +409,7 @@ export default function AirdropPage() {
                         background: 'rgba(52,211,153,0.08)',
                         border: '1px solid rgba(52,211,153,0.2)',
                         borderRadius: 999,
-                        padding: '2px 8px',
+                        padding: '2px 8px'
                       }}
                     >
                       Claimed
@@ -411,7 +426,7 @@ export default function AirdropPage() {
                     background: 'rgba(248,113,113,0.08)',
                     border: '1px solid rgba(248,113,113,0.2)',
                     borderRadius: 10,
-                    padding: '10px 13px',
+                    padding: '10px 13px'
                   }}
                 >
                   {error}
@@ -433,7 +448,7 @@ export default function AirdropPage() {
                     background: 'linear-gradient(135deg,#F7C948,#E5A823)',
                     color: '#070b14',
                     border: 'none',
-                    cursor: 'pointer',
+                    cursor: 'pointer'
                   }}
                 >
                   Claim early-operator access <ArrowRight size={15} />
@@ -452,7 +467,7 @@ export default function AirdropPage() {
                     fontWeight: 600,
                     background: 'rgba(52,211,153,0.08)',
                     border: '1px solid rgba(52,211,153,0.2)',
-                    color: '#34d399',
+                    color: '#34d399'
                   }}
                 >
                   <Check size={16} /> Access already claimed
@@ -473,7 +488,7 @@ export default function AirdropPage() {
                     background: 'rgba(255,255,255,0.06)',
                     color: '#f1f5f9',
                     border: '1px solid rgba(255,255,255,0.1)',
-                    textDecoration: 'none',
+                    textDecoration: 'none'
                   }}
                 >
                   Refer friends to move up the list
@@ -485,7 +500,13 @@ export default function AirdropPage() {
                   setEmail('');
                   setStatus(null);
                 }}
-                style={{ fontSize: 13, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{
+                  fontSize: 13,
+                  color: '#64748b',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
               >
                 Check a different email
               </button>
@@ -503,7 +524,7 @@ export default function AirdropPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 12,
+                gap: 12
               }}
             >
               <EarnCoin size={32} />
@@ -527,7 +548,7 @@ export default function AirdropPage() {
                   borderRadius: 16,
                   border: '1px solid rgba(52,211,153,0.25)',
                   background: 'rgba(52,211,153,0.06)',
-                  textAlign: 'left',
+                  textAlign: 'left'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -541,7 +562,7 @@ export default function AirdropPage() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#34d399',
+                      color: '#34d399'
                     }}
                   >
                     <Check size={16} />
@@ -553,7 +574,15 @@ export default function AirdropPage() {
                     <div style={{ fontSize: 12, color: '#64748b' }}>{email}</div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#64748b' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: 12.5,
+                    color: '#64748b'
+                  }}
+                >
                   <Shield size={13} /> Access-only · non-financial · operator privileges
                 </div>
               </div>
@@ -570,7 +599,7 @@ export default function AirdropPage() {
                   fontWeight: 600,
                   background: 'linear-gradient(135deg,#F7C948,#E5A823)',
                   color: '#070b14',
-                  textDecoration: 'none',
+                  textDecoration: 'none'
                 }}
               >
                 Sign in to your OS <ArrowRight size={15} />
