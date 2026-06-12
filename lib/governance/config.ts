@@ -264,6 +264,92 @@ export const LPAC_0: readonly GovMember[] = [
   { id: 'l1', name: 'Forms at first close', role: 'LP representatives', pending: true }
 ];
 
+/** The governance bodies whose seats are filled from the candidate bench. */
+export type AddableBodyKind =
+  | 'fund_mgmt'
+  | 'ic'
+  | 'advisory'
+  | 'capital_partners'
+  | 'legal_counsel';
+
+export interface GovRunCopy {
+  title: string;
+  steps: string[];
+  draftTitle: string;
+  draft: string;
+}
+
+/**
+ * The prototype's approve-loop copy for confirming a bench candidate into a
+ * governance body — rendered by ActionRunner before anything persists.
+ */
+export function bodyRunCopy(kind: AddableBodyKind, cand: GovCandidate): GovRunCopy {
+  switch (kind) {
+    case 'fund_mgmt':
+      return {
+        title: `Bring ${cand.name} onto the GP`,
+        steps: [
+          'Confirm role & track record',
+          'Model the carry & ownership split',
+          'Draft the partnership terms',
+          'Prepare for your approval'
+        ],
+        draftTitle: `GP partner — ${cand.name}`,
+        draft: `Earn structured terms for ${cand.name} (${cand.note}) as ${cand.role}${
+          cand.carry ? `, with a ${cand.carry} carry allocation` : ''
+        }. Approve to add them to the management team.`
+      };
+    case 'ic':
+      return {
+        title: `Invite ${cand.name} to your IC`,
+        steps: [
+          'Confirm independence & fit',
+          'Draft the appointment letter',
+          'Set IC charter & voting rights',
+          'Prepare for your approval'
+        ],
+        draftTitle: `IC appointment — ${cand.name}`,
+        draft: `Earn lined up ${cand.name} (${cand.note}) for your Investment Committee. Approve to extend the seat and set their voting rights.`
+      };
+    case 'advisory':
+      return {
+        title: `Invite ${cand.name} as an advisor`,
+        steps: [
+          'Confirm expertise & network fit',
+          'Draft the advisory agreement',
+          'Set advisory-share terms',
+          'Prepare for your approval'
+        ],
+        draftTitle: `Advisory Board — ${cand.name}`,
+        draft: `Earn lined up ${cand.name} (${cand.note}) for your Advisory Board. Approve to extend the role and set advisory-share terms.`
+      };
+    case 'capital_partners':
+      return {
+        title: `Engage ${cand.name}`,
+        steps: [
+          'Confirm terms & covenants',
+          'Draft the facility / co-invest agreement',
+          'Run counsel review',
+          'Prepare for your approval'
+        ],
+        draftTitle: `Capital partner — ${cand.name}`,
+        draft: `Earn structured terms with ${cand.name} (${cand.role}, ${cand.note}). Approve to engage and add the relationship to your capital stack.`
+      };
+    case 'legal_counsel':
+      return {
+        title: `Engage ${cand.name}`,
+        steps: [
+          'Confirm scope & conflicts',
+          'Draft the engagement letter',
+          'Set fee arrangement',
+          'Prepare for your approval'
+        ],
+        draftTitle: `Legal counsel — ${cand.name}`,
+        draft: `Earn lined up ${cand.name} (${cand.role}, ${cand.note}). Approve to engage and add them to your counsel bench.`
+      };
+  }
+}
+
 /** A fresh, editable copy of a policy's recommended decisions. */
 export function policyDefaults(pol: GovPolicy): Record<string, PolicyValue> {
   const out: Record<string, PolicyValue> = {};

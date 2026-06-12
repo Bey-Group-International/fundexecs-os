@@ -15,12 +15,42 @@ import {
   LPAC_0,
   POL_STAGES,
   POL_TONE,
+  bodyRunCopy,
   policyDefaults,
   policyRows,
   policyStage,
+  type AddableBodyKind,
   type GovPolicy,
   type PolicyValue
 } from './config';
+
+test('bodyRunCopy gives every addable body a full approve-loop run', () => {
+  const benches: Record<AddableBodyKind, (typeof FM_CANDIDATES)[number]> = {
+    fund_mgmt: FM_CANDIDATES[0],
+    ic: IC_CANDIDATES[0],
+    advisory: ADV_CANDIDATES[0],
+    capital_partners: CAP_CANDIDATES[0],
+    legal_counsel: LEGAL_CANDIDATES[0]
+  };
+  for (const [kind, cand] of Object.entries(benches) as [
+    AddableBodyKind,
+    (typeof FM_CANDIDATES)[number]
+  ][]) {
+    const copy = bodyRunCopy(kind, cand);
+    assert.ok(copy.title.includes(cand.name), `${kind} title names the candidate`);
+    assert.equal(copy.steps.length, 4, `${kind} has the prototype's 4 run steps`);
+    assert.equal(copy.steps.at(-1), 'Prepare for your approval');
+    assert.ok(copy.draftTitle.includes(cand.name));
+    assert.ok(copy.draft.includes('Approve to'), `${kind} draft frames the approve moment`);
+  }
+  const withCarry = bodyRunCopy('fund_mgmt', FM_CANDIDATES[0]);
+  assert.ok(
+    withCarry.draft.includes(FM_CANDIDATES[0].carry as string),
+    'GP draft carries the carry'
+  );
+  const noCarry = bodyRunCopy('fund_mgmt', { name: 'A', role: 'Partner', note: 'n' });
+  assert.ok(!noCarry.draft.includes('undefined'), 'no carry → no undefined in copy');
+});
 
 test('every policy has decisions and a recommendation covering each key', () => {
   for (const pol of GOV_POLICIES) {

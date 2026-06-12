@@ -40,6 +40,7 @@ import { Eyebrow } from '@/components/ui/Eyebrow';
 import { PanelHeader } from '@/components/ui/PanelHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SegTabs } from '@/components/ui/Tabs';
+import { ActionRunner } from '@/components/earn/ActionRunner';
 import { adoptGovernancePolicy, saveGovernanceBody } from '@/lib/governance/actions';
 import {
   ADV_0,
@@ -56,9 +57,11 @@ import {
   LPAC_0,
   POL_STAGES,
   POL_TONE,
+  bodyRunCopy,
   policyDefaults,
   policyRows,
   policyStage,
+  type AddableBodyKind,
   type GovCandidate,
   type GovMember,
   type GovPolicy,
@@ -96,6 +99,8 @@ function RosterPanel({
   members,
   variant,
   entityIcon,
+  memberTone = 'azure',
+  entityTone = 'gold',
   principal,
   bench,
   onAddCandidate,
@@ -109,6 +114,10 @@ function RosterPanel({
   members: GovMember[];
   variant: 'people' | 'entity';
   entityIcon?: LucideIcon;
+  /** Tone for non-you member avatars (the prototype: advisors read info). */
+  memberTone?: AvatarTone;
+  /** Tone for the entity icon square (the prototype: counsel reads info). */
+  entityTone?: 'gold' | 'info';
   principal: string;
   /** Remaining candidate suggestions — rendered only while a seat is open. */
   bench: GovCandidate[];
@@ -157,9 +166,9 @@ function RosterPanel({
                 <span
                   className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] border"
                   style={{
-                    background: TONE.gold.bg,
-                    color: TONE.gold.color,
-                    borderColor: TONE.gold.line
+                    background: TONE[entityTone].bg,
+                    color: TONE[entityTone].color,
+                    borderColor: TONE[entityTone].line
                   }}
                 >
                   {createElement(entityIcon ?? Banknote, {
@@ -169,7 +178,7 @@ function RosterPanel({
                   })}
                 </span>
               ) : (
-                <Avatar name={name} size={30} tone={(m.you ? 'gold' : 'azure') as AvatarTone} />
+                <Avatar name={name} size={30} tone={m.you ? 'gold' : memberTone} />
               )}
               <div className="min-w-0 flex-1">
                 <div
@@ -220,7 +229,7 @@ function RosterPanel({
                     })}
                   </span>
                 ) : (
-                  <Avatar name={c.name} size={26} tone="azure" />
+                  <Avatar name={c.name} size={26} tone={memberTone} />
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[12px] font-semibold text-fg-2">{c.name}</div>
@@ -556,24 +565,22 @@ export interface GovernanceFlowProps {
 }
 
 /**
- * Confirm a bench candidate into the roster's first open seat, and persist
- * the roster. Only this operator confirmation writes a member — the bench
- * itself is never persisted. Optimistic: a failed write reverts the seat and
- * surfaces the error through `onError`.
+ * A governance-body roster fed from the candidate bench. The bench is never
+ * persisted — `confirm` runs the real write (the ActionRunner's approve
+ * moment) and `apply` settles the optimistic state only after that write
+ * succeeds.
  */
 function useRoster(
   kind: GovBodyKind,
   initial: readonly GovMember[],
   candidates: readonly GovCandidate[],
-  persisted: GovMember[] | undefined,
-  onError: (msg: string) => void
+  persisted: GovMember[] | undefined
 ) {
   const [members, setMembers] = useState<GovMember[]>(persisted ?? [...initial]);
   const bench = candidates.filter((c) => !members.some((m) => m.name === c.name));
-  const add = (cand: GovCandidate) => {
+  const nextWith = (cand: GovCandidate): GovMember[] | null => {
     const at = members.findIndex((m) => m.open);
-    if (at < 0) return;
-    const prev = members;
+    if (at < 0) return null;
     const next = [...members];
     next[at] = {
       id: `${next[at].id}-${cand.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
@@ -582,20 +589,18 @@ function useRoster(
       note: cand.note,
       carry: cand.carry
     };
-    setMembers(next);
-    saveGovernanceBody(kind, next)
-      .then((res) => {
-        if (!res.ok) {
-          setMembers(prev);
-          onError(`Could not save ${kind.replace(/_/g, ' ')} — try again.`);
-        }
-      })
-      .catch(() => {
-        setMembers(prev);
-        onError(`Could not save ${kind.replace(/_/g, ' ')} — try again.`);
-      });
+    return next;
   };
-  return { members, bench, add };
+  const confirm = async (cand: GovCandidate) => {
+    const next = nextWith(cand);
+    if (!next) return { ok: false as const, error: 'No open seat left on this body.' };
+    return saveGovernanceBody(kind, next);
+  };
+  const apply = (cand: GovCandidate) => {
+    const next = nextWith(cand);
+    if (next) setMembers(next);
+  };
+  return { members, bench, confirm, apply };
 }
 
 export function GovernanceFlow({
@@ -611,25 +616,24 @@ export function GovernanceFlow({
     useState<Record<string, Record<string, PolicyValue>>>(initialAdopted);
   /** Drafted-but-not-adopted decisions, per policy — the grid's Drafting stage. */
   const [drafts, setDrafts] = useState<Record<string, Record<string, PolicyValue>>>({});
-  const [bodyError, setBodyError] = useState<string | null>(null);
+  /** A bench candidate awaiting the operator's approve moment. */
+  const [pendingAdd, setPendingAdd] = useState<{
+    kind: AddableBodyKind;
+    cand: GovCandidate;
+  } | null>(null);
 
-  const fm = useRoster('fund_mgmt', FM_0, FM_CANDIDATES, initialBodies.fund_mgmt, setBodyError);
-  const ic = useRoster('ic', IC_MEMBERS_0, IC_CANDIDATES, initialBodies.ic, setBodyError);
-  const adv = useRoster('advisory', ADV_0, ADV_CANDIDATES, initialBodies.advisory, setBodyError);
-  const cap = useRoster(
-    'capital_partners',
-    CAP_0,
-    CAP_CANDIDATES,
-    initialBodies.capital_partners,
-    setBodyError
-  );
-  const legal = useRoster(
-    'legal_counsel',
-    LEGAL_0,
-    LEGAL_CANDIDATES,
-    initialBodies.legal_counsel,
-    setBodyError
-  );
+  const fm = useRoster('fund_mgmt', FM_0, FM_CANDIDATES, initialBodies.fund_mgmt);
+  const ic = useRoster('ic', IC_MEMBERS_0, IC_CANDIDATES, initialBodies.ic);
+  const adv = useRoster('advisory', ADV_0, ADV_CANDIDATES, initialBodies.advisory);
+  const cap = useRoster('capital_partners', CAP_0, CAP_CANDIDATES, initialBodies.capital_partners);
+  const legal = useRoster('legal_counsel', LEGAL_0, LEGAL_CANDIDATES, initialBodies.legal_counsel);
+  const rosters: Record<AddableBodyKind, ReturnType<typeof useRoster>> = {
+    fund_mgmt: fm,
+    ic,
+    advisory: adv,
+    capital_partners: cap,
+    legal_counsel: legal
+  };
 
   if (openPol) {
     const pol = GOV_POLICIES.find((p) => p.id === openPol);
@@ -720,13 +724,6 @@ export function GovernanceFlow({
           { id: 'policies', label: 'Policies', icon: Scale }
         ]}
       />
-
-      {bodyError && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[12.5px] text-danger">
-          <TriangleAlert size={15} aria-hidden />
-          {bodyError}
-        </div>
-      )}
 
       {view === 'structure' && (
         <div className="flex flex-col gap-4">
@@ -833,7 +830,7 @@ export function GovernanceFlow({
             variant="people"
             principal={principal}
             bench={fm.bench}
-            onAddCandidate={fm.add}
+            onAddCandidate={(cand) => setPendingAdd({ kind: 'fund_mgmt', cand })}
             addLabel="Add partner"
             setLabel="Team set"
             stats={[
@@ -849,7 +846,7 @@ export function GovernanceFlow({
             variant="people"
             principal={principal}
             bench={ic.bench}
-            onAddCandidate={ic.add}
+            onAddCandidate={(cand) => setPendingAdd({ kind: 'ic', cand })}
             addLabel="Fill seat"
             setLabel="Quorum met"
             stats={[
@@ -864,9 +861,10 @@ export function GovernanceFlow({
             eyebrow="External experts · strategy, deal flow & credibility"
             members={adv.members}
             variant="people"
+            memberTone="info"
             principal={principal}
             bench={adv.bench}
-            onAddCandidate={adv.add}
+            onAddCandidate={(cand) => setPendingAdd({ kind: 'advisory', cand })}
             addLabel="Add advisor"
             setLabel="Board seated"
             stats={[
@@ -909,7 +907,7 @@ export function GovernanceFlow({
             entityIcon={Banknote}
             principal={principal}
             bench={cap.bench}
-            onAddCandidate={cap.add}
+            onAddCandidate={(cand) => setPendingAdd({ kind: 'capital_partners', cand })}
             addLabel="Add partner"
             setLabel="Stack set"
             stats={[
@@ -924,9 +922,10 @@ export function GovernanceFlow({
             members={legal.members}
             variant="entity"
             entityIcon={Scale}
+            entityTone="info"
             principal={principal}
             bench={legal.bench}
-            onAddCandidate={legal.add}
+            onAddCandidate={(cand) => setPendingAdd({ kind: 'legal_counsel', cand })}
             addLabel="Add counsel"
             setLabel="Bench set"
             stats={[['Scope', '· formation, regulatory, tax, deals']]}
@@ -996,6 +995,23 @@ export function GovernanceFlow({
           the posture and adopt.
         </p>
       </Card>
+
+      {pendingAdd &&
+        (() => {
+          const roster = rosters[pendingAdd.kind];
+          const copy = bodyRunCopy(pendingAdd.kind, pendingAdd.cand);
+          return (
+            <ActionRunner
+              title={copy.title}
+              steps={copy.steps}
+              draftTitle={copy.draftTitle}
+              draft={copy.draft}
+              onApprove={() => roster.confirm(pendingAdd.cand)}
+              onApplied={() => roster.apply(pendingAdd.cand)}
+              onClose={() => setPendingAdd(null)}
+            />
+          );
+        })()}
     </div>
   );
 }
