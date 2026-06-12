@@ -3084,6 +3084,7 @@ export type Database = {
       }
       formation_steps: {
         Row: {
+          amended_at: string | null
           created_at: string
           filed_at: string
           filed_by: string | null
@@ -3091,8 +3092,10 @@ export type Database = {
           kind: string
           org_id: string
           status: string
+          version: number
         }
         Insert: {
+          amended_at?: string | null
           created_at?: string
           filed_at?: string
           filed_by?: string | null
@@ -3100,8 +3103,10 @@ export type Database = {
           kind: string
           org_id: string
           status?: string
+          version?: number
         }
         Update: {
+          amended_at?: string | null
           created_at?: string
           filed_at?: string
           filed_by?: string | null
@@ -3109,6 +3114,7 @@ export type Database = {
           kind?: string
           org_id?: string
           status?: string
+          version?: number
         }
         Relationships: [
           {
@@ -3157,31 +3163,34 @@ export type Database = {
       }
       governance_policies: {
         Row: {
-          adopted_at: string
+          adopted_at: string | null
           adopted_by: string | null
           created_at: string
           decisions: Json
           id: string
           org_id: string
           policy_id: string
+          status: string
         }
         Insert: {
-          adopted_at?: string
+          adopted_at?: string | null
           adopted_by?: string | null
           created_at?: string
           decisions?: Json
           id?: string
           org_id: string
           policy_id: string
+          status?: string
         }
         Update: {
-          adopted_at?: string
+          adopted_at?: string | null
           adopted_by?: string | null
           created_at?: string
           decisions?: Json
           id?: string
           org_id?: string
           policy_id?: string
+          status?: string
         }
         Relationships: [
           {
@@ -5081,6 +5090,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      file_formation_step: {
+        Args: {
+          _data: Json
+          _doc_body: string
+          _kind: string
+          _org_id: string
+          _spec: Json
+        }
+        Returns: Json
+      }
       accept_beta_invite: {
         Args: { _email: string; _invite_id?: string; _user_id: string }
         Returns: Json

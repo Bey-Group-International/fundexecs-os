@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { FormationFlow } from '@/components/formation/FormationFlow';
+import { getFormationFiledSpecs, getFormationStepMeta } from '@/lib/formation/queries';
+import { personalizeFormationData } from '@/lib/formation/steps';
 import { mandateCfg, type InvestorGroup } from '@/lib/onboarding/mandate';
 import { getFormationState } from '@/lib/queries/formation';
 import { getMandate } from '@/lib/queries/mandate';
@@ -23,9 +25,11 @@ export default async function FormationPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const [mandate, formation] = await Promise.all([
+  const [mandate, formation, stepMeta, filedSpecs] = await Promise.all([
     getMandate(org.orgId),
-    getFormationState(org.orgId)
+    getFormationState(org.orgId),
+    getFormationStepMeta(org.orgId),
+    getFormationFiledSpecs(org.orgId)
   ]);
 
   const firm = mandate?.firm ?? 'your fund';
@@ -34,9 +38,7 @@ export default async function FormationPage() {
 
   // Personalize the untouched entity-name defaults to the mandate's firm
   // (the prototype seeds "<firm> GP, LLC" / "<firm> Management, LLC").
-  const data = { ...formation.data };
-  if (data.gp === 'GP, LLC') data.gp = `${firm} GP, LLC`;
-  if (data.mgmtco === 'Management, LLC') data.mgmtco = `${firm} Management, LLC`;
+  const data = personalizeFormationData(formation.data, firm);
 
   return (
     <div className="fx-rise">
@@ -45,6 +47,8 @@ export default async function FormationPage() {
         sizeLabel={sizeLabel}
         initialData={data}
         initialCompleted={formation.completedIds}
+        initialStepMeta={stepMeta}
+        initialFiledSpecs={filedSpecs}
       />
     </div>
   );

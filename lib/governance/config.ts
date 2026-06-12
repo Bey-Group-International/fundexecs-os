@@ -167,6 +167,13 @@ export interface GovCandidate {
   carry?: string;
 }
 
+/*
+ * Starting rosters hold only what is honestly true on day one: the operator
+ * (`you`) and open seats. The prototype's seeded people (Sir Reginald Hale,
+ * First Republic, Standish & Cole) live on the candidate BENCHES below —
+ * presented as Earn's suggestions, never as members. A person joins a roster
+ * only through the approve loop, and only confirmed members persist.
+ */
 export const FM_0: readonly GovMember[] = [
   {
     id: 'fm1',
@@ -197,40 +204,37 @@ export const IC_CANDIDATES: readonly GovCandidate[] = [
 ];
 
 export const ADV_0: readonly GovMember[] = [
-  {
-    id: 'a1',
-    name: 'Sir Reginald Hale',
-    role: 'Industry Advisor',
-    note: 'Former CEO, sector incumbent'
-  },
+  { id: 'a1', name: 'Open seat', role: 'Industry Advisor', open: true },
   { id: 'a2', name: 'Open seat', role: 'Advisor', open: true }
 ];
 export const ADV_CANDIDATES: readonly GovCandidate[] = [
+  { name: 'Sir Reginald Hale', role: 'Industry Advisor', note: 'Former CEO, sector incumbent' },
   { name: 'Dr. Amara Diallo', role: 'Technical Advisor', note: 'Research lead · diligence depth' },
   { name: 'Gloria Tan', role: 'Capital Markets Advisor', note: 'Ex-placement · LP introductions' },
   { name: 'Hiroshi Sato', role: 'Operating Advisor', note: '3 exits · operator network' }
 ];
 
 export const CAP_0: readonly GovMember[] = [
-  { id: 'c1', name: 'First Republic', role: 'Subscription credit line', note: '$25M facility' },
+  { id: 'c1', name: 'Open relationship', role: 'Capital partner', open: true },
   { id: 'c2', name: 'Open relationship', role: 'Capital partner', open: true }
 ];
 export const CAP_CANDIDATES: readonly GovCandidate[] = [
+  { name: 'First Republic', role: 'Subscription credit line', note: '$25M facility' },
   { name: 'Apollo Credit', role: 'NAV facility', note: 'Portfolio-level leverage' },
   { name: 'Coastal Co-invest', role: 'Co-investment partner', note: 'Deal-by-deal capital' },
   { name: 'Silicon Valley Bank', role: 'Capital-call facility', note: 'Bridge financing' }
 ];
 
 export const LEGAL_0: readonly GovMember[] = [
+  { id: 'g1', name: 'Open relationship', role: 'Fund counsel', open: true },
+  { id: 'g2', name: 'Open relationship', role: 'Legal counsel', open: true }
+];
+export const LEGAL_CANDIDATES: readonly GovCandidate[] = [
   {
-    id: 'g1',
     name: 'Standish & Cole',
     role: 'Fund counsel',
     note: 'Formation & LPA · from Partner Network'
   },
-  { id: 'g2', name: 'Open relationship', role: 'Legal counsel', open: true }
-];
-export const LEGAL_CANDIDATES: readonly GovCandidate[] = [
   { name: 'Whitman Regulatory', role: 'Regulatory & SEC counsel', note: 'Compliance & exemptions' },
   { name: 'Harbor Tax LLP', role: 'Fund tax counsel', note: 'Structuring & K-1s' },
   { name: 'Meridian IP', role: 'Portfolio counsel', note: 'Deal & IP support' }
@@ -239,6 +243,163 @@ export const LEGAL_CANDIDATES: readonly GovCandidate[] = [
 export const LPAC_0: readonly GovMember[] = [
   { id: 'l1', name: 'Forms at first close', role: 'LP representatives', pending: true }
 ];
+
+/** The persistable governance-body kinds (DB check constraint mirrors this). */
+export type GovBodyId =
+  | 'fund_mgmt'
+  | 'ic'
+  | 'advisory'
+  | 'lpac'
+  | 'capital_partners'
+  | 'legal_counsel';
+
+/** Members that are real: placeholders (open seats, pending notes) never persist. */
+export function confirmedMembers(members: readonly GovMember[]): GovMember[] {
+  return members.filter((m) => !m.open && !m.pending);
+}
+
+/**
+ * The render shape of a roster: its confirmed members padded back to the
+ * body's seat layout with the starting roster's open-seat templates, so an
+ * empty roster reads as open seats and a part-filled one keeps the right
+ * "next seat" label.
+ */
+export function padRoster(
+  initial: readonly GovMember[],
+  confirmed: readonly GovMember[]
+): GovMember[] {
+  const opens = initial.filter((m) => m.open);
+  const fixedSeats = initial.length - opens.length;
+  // Seats genuinely consumed = confirmed members beyond the body's fixed
+  // (non-open) seats. Caps how many open templates can remain.
+  const consumed = Math.max(0, confirmed.length - fixedSeats);
+
+  // Retire the specific open template each confirmed member fills, matched by
+  // seat role — so filling the *second* slot removes the second placeholder,
+  // not always the first (the old count-only trim mishandled mixed rosters).
+  const remaining = [...opens];
+  for (const m of confirmed) {
+    const idx = remaining.findIndex((o) => o.role === m.role);
+    if (idx !== -1) remaining.splice(idx, 1);
+  }
+
+  // Enforce the seat-count cap for any members whose role didn't match a named
+  // open seat, dropping extra placeholders from the front (fill earliest-first).
+  const overflow = remaining.length - (opens.length - consumed);
+  return [...confirmed, ...(overflow > 0 ? remaining.slice(overflow) : remaining)];
+}
+
+/* ── the per-body approve-loop copy (the prototype's onRun payloads) ─────── */
+
+export interface GovRunCopy {
+  title: string;
+  steps: string[];
+  draftTitle: string;
+  draft: string;
+}
+
+/** The ActionRunner copy for adding a bench candidate to a governance body. */
+export function rosterRun(kind: Exclude<GovBodyId, 'lpac'>, cand: GovCandidate): GovRunCopy {
+  switch (kind) {
+    case 'fund_mgmt':
+      return {
+        title: `Bring ${cand.name} onto the GP`,
+        steps: [
+          'Confirm role & track record',
+          'Model the carry & ownership split',
+          'Draft the partnership terms',
+          'Prepare for your approval'
+        ],
+        draftTitle: `GP partner — ${cand.name}`,
+        draft: `Earn structured terms for ${cand.name} (${cand.note}) as ${cand.role}${
+          cand.carry ? `, with a ${cand.carry} carry allocation` : ''
+        }. Approve to add them to the management team.`
+      };
+    case 'ic':
+      return {
+        title: `Invite ${cand.name} to your IC`,
+        steps: [
+          'Confirm independence & fit',
+          'Draft the appointment letter',
+          'Set IC charter & voting rights',
+          'Prepare for your approval'
+        ],
+        draftTitle: `IC appointment — ${cand.name}`,
+        draft: `Earn lined up ${cand.name} (${cand.note}) for your Investment Committee. Approve to extend the seat and set their voting rights.`
+      };
+    case 'advisory':
+      return {
+        title: `Invite ${cand.name} as an advisor`,
+        steps: [
+          'Confirm expertise & network fit',
+          'Draft the advisory agreement',
+          'Set advisory-share terms',
+          'Prepare for your approval'
+        ],
+        draftTitle: `Advisory Board — ${cand.name}`,
+        draft: `Earn lined up ${cand.name} (${cand.note}) for your Advisory Board. Approve to extend the role and set advisory-share terms.`
+      };
+    case 'capital_partners':
+      return {
+        title: `Engage ${cand.name}`,
+        steps: [
+          'Confirm terms & covenants',
+          'Draft the facility / co-invest agreement',
+          'Run counsel review',
+          'Prepare for your approval'
+        ],
+        draftTitle: `Capital partner — ${cand.name}`,
+        draft: `Earn structured terms with ${cand.name} (${cand.role}, ${cand.note}). Approve to engage and add the relationship to your capital stack.`
+      };
+    case 'legal_counsel':
+      return {
+        title: `Engage ${cand.name}`,
+        steps: [
+          'Confirm scope & conflicts',
+          'Draft the engagement letter',
+          'Set fee arrangement',
+          'Prepare for your approval'
+        ],
+        draftTitle: `Legal counsel — ${cand.name}`,
+        draft: `Earn lined up ${cand.name} (${cand.role}, ${cand.note}). Approve to engage and add them to your counsel bench.`
+      };
+  }
+}
+
+/* ── the policy stage progression (To do → Drafting → Active) ────────────── */
+
+export type PolicyStage = 'todo' | 'drafting' | 'active';
+
+export const POL_STAGES: Record<PolicyStage, string> = {
+  todo: 'Not adopted',
+  drafting: 'Drafted — adopt to activate',
+  active: 'Active'
+};
+
+/** Badge/accent tone per stage. */
+export const POL_TONE: Record<PolicyStage, 'neutral' | 'gold' | 'success'> = {
+  todo: 'neutral',
+  drafting: 'gold',
+  active: 'success'
+};
+
+/** The per-stage call to action: Draft → Adopt → View. */
+export const POL_CTA: Record<PolicyStage, string> = {
+  todo: 'Draft',
+  drafting: 'Adopt',
+  active: 'View'
+};
+
+/** Where a policy sits given the org's adopted + drafted decision maps. */
+export function policyStage(
+  id: string,
+  adopted: Record<string, unknown>,
+  drafts: Record<string, unknown>
+): PolicyStage {
+  if (id in adopted) return 'active';
+  if (id in drafts) return 'drafting';
+  return 'todo';
+}
 
 /** A fresh, editable copy of a policy's recommended decisions. */
 export function policyDefaults(pol: GovPolicy): Record<string, PolicyValue> {

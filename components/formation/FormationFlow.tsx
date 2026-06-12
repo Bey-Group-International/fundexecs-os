@@ -1,6 +1,14 @@
 'use client';
 
-import { createElement, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   ArrowLeft,
@@ -45,9 +53,12 @@ import { EarnCoin } from '@/components/ui/EarnCoin';
 import { Input } from '@/components/ui/Input';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Select } from '@/components/ui/Select';
+import { FormationDocView } from '@/components/formation/FormationDocView';
 import { fileFormationStep, saveFormationDraft } from '@/lib/formation/actions';
+import { composeFormationDoc } from '@/lib/formation/compose';
 import {
   FORMATION_ARC,
+  FORMATION_D0,
   FORMATION_ITEMS,
   F_EDGES,
   F_ENTITY_OPTS,
@@ -63,6 +74,13 @@ import {
   type FormationKind,
   type FormationOption
 } from '@/lib/formation/config';
+import {
+  applyFiledSpecs,
+  formationStepSpec,
+  personalizeFormationData,
+  stepTouched,
+  type FormationStepMeta
+} from '@/lib/formation/steps';
 import { cn } from '@/lib/utils';
 
 /* ── icon resolver — the prototype's kebab names → lucide ─────────────────── */
@@ -666,10 +684,13 @@ function FormationStep({
   index,
   total,
   completedCount,
+  alreadyFiled,
+  meta,
   d,
   setD,
   onClose,
   onCompleted,
+  onOpenDoc,
   nextItem,
   onOpenNext
 }: {
@@ -677,10 +698,14 @@ function FormationStep({
   index: number;
   total: number;
   completedCount: number;
+  /** This step is already on the record — re-filing records an amendment. */
+  alreadyFiled: boolean;
+  meta: FormationStepMeta | null;
   d: FormationData;
   setD: React.Dispatch<React.SetStateAction<FormationData>>;
   onClose: () => void;
-  onCompleted: (id: string) => void;
+  onCompleted: (id: string, meta: FormationStepMeta) => void;
+  onOpenDoc: (id: string) => void;
   nextItem: FormationItem | null;
   onOpenNext: (id: string) => void;
 }) {
@@ -689,39 +714,68 @@ function FormationStep({
   const [applied, setApplied] = useState(false);
   const [n, setN] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [fileResult, setFileResult] = useState<{ version: number; amended: boolean } | null>(null);
   // The real write races the filing animation; "done" needs both. Tracked in
   // refs and resolved from the timer/promise callbacks (not effect bodies).
   const animDoneRef = useRef(false);
-  const writeRef = useRef<'pending' | 'ok' | 'err'>('pending');
+  const writeRef = useRef<
+    | { status: 'pending' }
+    | {
+        status: 'ok';
+        version: number;
+        amended: boolean;
+        filedAt: string;
+        amendedAt: string | null;
+      }
+    | { status: 'err'; error: string }
+  >({ status: 'pending' });
   const steps = fileSteps(item.kind, d);
   const set = <K extends keyof FormationData>(k: K, v: FormationData[K]) =>
     setD((p) => ({ ...p, [k]: v }));
 
   const finishIfReady = useCallback(() => {
-    if (writeRef.current === 'err') {
+    const w = writeRef.current;
+    if (w.status === 'err') {
       setPhase('edit');
-      setSaveError('Could not save this step — check your connection and try again.');
+      setSaveError(w.error);
       return;
     }
-    if (animDoneRef.current && writeRef.current === 'ok') {
+    if (animDoneRef.current && w.status === 'ok') {
       setPhase('done');
-      onCompleted(item.id);
+      setFileResult({ version: w.version, amended: w.amended });
+      onCompleted(item.id, {
+        version: w.version,
+        filedAt: w.filedAt,
+        amendedAt: w.amendedAt
+      });
     }
   }, [item.id, onCompleted]);
 
   function startFiling() {
     setSaveError(null);
+    setFileResult(null);
     setN(0);
     animDoneRef.current = false;
-    writeRef.current = 'pending';
+    writeRef.current = { status: 'pending' };
     setPhase('filing');
     fileFormationStep(item.kind, d)
       .then((res) => {
-        writeRef.current = res.ok ? 'ok' : 'err';
+        writeRef.current = res.ok
+          ? {
+              status: 'ok',
+              version: res.version,
+              amended: res.amended,
+              filedAt: res.filedAt,
+              amendedAt: res.amendedAt
+            }
+          : { status: 'err', error: res.error };
         finishIfReady();
       })
       .catch(() => {
-        writeRef.current = 'err';
+        writeRef.current = {
+          status: 'err',
+          error: 'Could not save this step — check your connection and try again.'
+        };
         finishIfReady();
       });
   }
@@ -760,12 +814,19 @@ function FormationStep({
             <Check size={28} strokeWidth={2.2} aria-hidden />
           </span>
           <h2 className="text-[20px] font-semibold tracking-[-0.015em] text-fg-1">
-            {item.name} — filed
+            {item.name} — {fileResult?.amended ? 'amended' : 'filed'}
           </h2>
           <p className="mt-1.5 text-[13px] text-fg-3">
             {completedCount} of {total} formation steps complete. Review what was produced, then
             continue — or go back and edit.
           </p>
+          {fileResult?.amended && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-1 text-[11.5px] font-medium text-fg-2">
+              <ShieldCheck size={12} className="text-gold-1" aria-hidden />
+              Version {fileResult.version} on the record — a fresh Chain of Trust entry was logged;
+              the original filing stays in history.
+            </p>
+          )}
         </div>
 
         <div className="mt-[18px] w-full overflow-hidden rounded-[14px] border border-hairline">
@@ -799,16 +860,21 @@ function FormationStep({
         </p>
 
         <div className="mt-5 flex w-full flex-wrap items-center justify-between gap-2.5">
-          <Button
-            variant="ghost"
-            icon={Pencil}
-            onClick={() => {
-              setPhase('edit');
-              setN(0);
-            }}
-          >
-            Go back &amp; edit
-          </Button>
+          <div className="flex flex-wrap gap-2.5">
+            <Button
+              variant="ghost"
+              icon={Pencil}
+              onClick={() => {
+                setPhase('edit');
+                setN(0);
+              }}
+            >
+              Go back &amp; edit
+            </Button>
+            <Button variant="ghost" icon={FileText} onClick={() => onOpenDoc(item.id)}>
+              Review full draft
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-2.5">
             <Button variant="outline" icon={ListChecks} onClick={onClose}>
               Checklist
@@ -911,6 +977,14 @@ function FormationStep({
         </div>
       )}
 
+      {alreadyFiled && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3.5 py-2.5 text-[12.5px] text-fg-2">
+          <ShieldCheck size={15} className="flex-none text-gold-1" aria-hidden />
+          This step is on the record{meta ? ` (v${meta.version})` : ''}. Re-filing records an
+          amendment and logs a fresh Chain of Trust entry — history is never rewritten.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
         <Card className="p-6">
           <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-fg-1">
@@ -930,7 +1004,7 @@ function FormationStep({
               Save &amp; close
             </Button>
             <Button variant="gold" iconRight={FileSignature} onClick={startFiling}>
-              Complete &amp; file this step
+              {alreadyFiled ? 'Amend & re-file this step' : 'Complete & file this step'}
             </Button>
           </div>
         </Card>
@@ -981,12 +1055,16 @@ function FormationComplete({
   firm,
   sizeLabel,
   d,
-  onReview
+  stepMeta,
+  onReview,
+  onOpenDoc
 }: {
   firm: string;
   sizeLabel: string;
   d: FormationData;
+  stepMeta: Record<string, FormationStepMeta>;
   onReview: () => void;
+  onOpenDoc: (id: string) => void;
 }) {
   const entity = d.entity === 'Undecided' ? 'Delaware LP' : d.entity;
   const exemption = d.exemption === 'Undecided' ? 'Rule 506(b)' : d.exemption;
@@ -998,25 +1076,38 @@ function FormationComplete({
   });
 
   const onRecord = [
-    { name: 'Fund narrative', sub: 'Your positioning, origin & edge', layer: 'Truth' },
-    { name: 'Certificate of Formation', sub: `${entity} · ${d.domicile}`, layer: 'Truth' },
+    { id: 'story', name: 'Fund narrative', sub: 'Your positioning, origin & edge', layer: 'Truth' },
     {
+      id: 'entity',
+      name: 'Certificate of Formation',
+      sub: `${entity} · ${d.domicile}`,
+      layer: 'Truth'
+    },
+    {
+      id: 'lpa',
       name: 'Limited Partnership Agreement',
       sub: `${d.fee}% fee · ${d.carry}% carry · ${d.hurdle}% pref`,
       layer: 'Concept'
     },
     {
+      id: 'ppm',
       name: 'Private Placement Memorandum',
       sub: 'Offering terms & risk factors',
       layer: 'Concept'
     },
     {
+      id: 'subdocs',
       name: 'Subscription documents',
       sub: `${d.minCommit} minimum · ${exemption}`,
       layer: 'Execution'
     },
-    { name: 'Form D', sub: `${exemption} · prepared for filing`, layer: 'Execution' },
-    { name: 'Bank & escrow accounts', sub: `${d.bank} · capital-call ready`, layer: 'Work' }
+    { id: 'regd', name: 'Form D', sub: `${exemption} · prepared for filing`, layer: 'Execution' },
+    {
+      id: 'bank',
+      name: 'Bank & escrow accounts',
+      sub: `${d.bank} · capital-call ready`,
+      layer: 'Work'
+    }
   ];
 
   const unlocks = [
@@ -1103,7 +1194,7 @@ function FormationComplete({
       <Card className="p-[18px]">
         <div className="mb-3.5 flex items-center justify-between gap-3">
           <div>
-            <Eyebrow>7 documents · on your fund record</Eyebrow>
+            <Eyebrow>7 documents · logged to your Chain of Trust</Eyebrow>
             <div className="mt-0.5 text-[14.5px] font-semibold text-fg-1">On the record</div>
           </div>
           <Button variant="ghost" size="sm" icon={FolderOpen} onClick={onReview}>
@@ -1111,28 +1202,41 @@ function FormationComplete({
           </Button>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {onRecord.map((r) => (
-            <div
-              key={r.name}
-              className="flex items-center gap-2.5 rounded-[12px] border border-hairline bg-surface-1 px-[13px] py-2.5"
-            >
-              <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-[var(--success-line)] bg-[var(--success-soft)] text-success">
-                <Check size={15} strokeWidth={2.2} aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-semibold text-fg-1">{r.name}</div>
-                <div className="truncate text-[10.5px] text-fg-5">{r.sub}</div>
-              </div>
-              <span className="flex-none text-[9.5px] font-semibold uppercase tracking-[0.04em] text-fg-4">
-                {r.layer}
-              </span>
-            </div>
-          ))}
+          {onRecord.map((r) => {
+            const version = stepMeta[r.id]?.version ?? 1;
+            return (
+              <button
+                key={r.name}
+                type="button"
+                onClick={() => onOpenDoc(r.id)}
+                className="flex items-center gap-2.5 rounded-[12px] border border-hairline bg-surface-1 px-[13px] py-2.5 text-left transition hover:bg-surface-2"
+              >
+                <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-[var(--success-line)] bg-[var(--success-soft)] text-success">
+                  <Check size={15} strokeWidth={2.2} aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-semibold text-fg-1">{r.name}</div>
+                  <div className="truncate text-[10.5px] text-fg-5">{r.sub}</div>
+                </div>
+                {version > 1 && (
+                  <span className="flex-none font-mono text-[9.5px] font-semibold text-gold-1">
+                    v{version}
+                  </span>
+                )}
+                <span className="flex-none text-[9.5px] font-semibold uppercase tracking-[0.04em] text-fg-4">
+                  {r.layer}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </Card>
 
       <Card className="p-[18px]">
-        <Eyebrow className="mb-3.5">Your fund is investable — next in your lifecycle</Eyebrow>
+        <Eyebrow>Your fund is investable — next in your lifecycle</Eyebrow>
+        <h2 className="mb-3.5 mt-0.5 text-[14.5px] font-semibold tracking-[-0.01em] text-fg-1">
+          What this unlocks
+        </h2>
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           {unlocks.map((u) => {
             const t = COMPLETE_TONE[u.tone];
@@ -1210,17 +1314,23 @@ export interface FormationFlowProps {
   initialData: FormationData;
   /** Item ids already filed, from `getFormationState`. */
   initialCompleted: string[];
+  /** Per-step filing metadata (version, amendments), from `getFormationStepMeta`. */
+  initialStepMeta: Record<string, FormationStepMeta>;
+  /** Persisted filed snapshots per step, from `getFormationFiledSpecs`. */
+  initialFiledSpecs: Record<string, Record<string, unknown>>;
 }
 
 export function FormationFlow({
   firm,
   sizeLabel,
   initialData,
-  initialCompleted
+  initialCompleted,
+  initialStepMeta,
+  initialFiledSpecs
 }: FormationFlowProps) {
   const total = FORMATION_ITEMS.length;
   const items = FORMATION_ITEMS;
-  const [view, setView] = useState<'story' | 'checklist' | 'item' | 'complete'>(
+  const [view, setView] = useState<'story' | 'checklist' | 'item' | 'doc' | 'complete'>(
     initialCompleted.length >= total
       ? 'complete'
       : initialCompleted.length > 0
@@ -1229,7 +1339,16 @@ export function FormationFlow({
   );
   const [d, setD] = useState<FormationData>(initialData);
   const [completed, setCompleted] = useState<string[]>(initialCompleted);
+  const [stepMeta, setStepMeta] = useState<Record<string, FormationStepMeta>>(initialStepMeta);
+  const [filedSpecs, setFiledSpecs] =
+    useState<Record<string, Record<string, unknown>>>(initialFiledSpecs);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [docId, setDocId] = useState<string | null>(null);
+  const [docReturn, setDocReturn] = useState<'checklist' | 'complete'>('checklist');
+
+  // What "untouched" looks like for this firm — drives honest In-progress
+  // states from real saved data, never a guess.
+  const baseline = useMemo(() => personalizeFormationData(FORMATION_D0, firm), [firm]);
 
   const completedCount = completed.length;
   const allDone = completedCount >= total;
@@ -1243,8 +1362,18 @@ export function FormationFlow({
     setView('item');
   }
 
-  function onCompleted(id: string) {
+  function openDoc(id: string) {
+    setDocId(id);
+    setDocReturn(view === 'complete' || (view === 'item' && allDone) ? 'complete' : 'checklist');
+    setView('doc');
+  }
+
+  function onCompleted(id: string, meta: FormationStepMeta) {
     setCompleted((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setStepMeta((prev) => ({ ...prev, [id]: meta }));
+    // What just filed is the new on-the-record snapshot for this step.
+    const item = items.find((i) => i.id === id);
+    if (item) setFiledSpecs((prev) => ({ ...prev, [id]: formationStepSpec(item.kind, d) }));
   }
 
   function backToChecklist() {
@@ -1263,23 +1392,47 @@ export function FormationFlow({
         index={activeIndex}
         total={total}
         completedCount={completedCount}
+        alreadyFiled={completed.includes(activeItem.id)}
+        meta={stepMeta[activeItem.id] ?? null}
         d={d}
         setD={setD}
         onClose={backToChecklist}
         onCompleted={onCompleted}
+        onOpenDoc={openDoc}
         nextItem={nextItem}
         onOpenNext={openItem}
       />
     );
   }
 
-  if (view === 'complete' || (view === 'checklist' && allDone)) {
+  if (view === 'doc' && docId) {
+    const docItem = items.find((i) => i.id === docId);
+    if (docItem) {
+      // Render the record, not the working draft: overlay the persisted filed
+      // snapshots so reopened-but-unfiled edits never masquerade as filed.
+      const filedData = applyFiledSpecs(d, filedSpecs);
+      return (
+        <FormationDocView
+          item={docItem}
+          doc={composeFormationDoc(docItem.kind, filedData, { firm })}
+          meta={stepMeta[docItem.id] ?? null}
+          backLabel={docReturn === 'complete' ? 'Formed fund' : 'Checklist'}
+          onBack={() => setView(docReturn)}
+          onAmend={() => openItem(docItem.id)}
+        />
+      );
+    }
+  }
+
+  if (view === 'complete') {
     return (
       <FormationComplete
         firm={firm}
         sizeLabel={sizeLabel}
         d={d}
+        stepMeta={stepMeta}
         onReview={() => setView('checklist')}
+        onOpenDoc={openDoc}
       />
     );
   }
@@ -1304,6 +1457,16 @@ export function FormationFlow({
         <Badge tone="warning" className="text-[10px]">
           Illustrative
         </Badge>
+        {firstOpenId && (
+          <Button
+            variant="gold"
+            size="sm"
+            iconRight={ArrowRight}
+            onClick={() => openItem(firstOpenId)}
+          >
+            {completedCount === 0 ? 'Start formation' : 'Continue formation'}
+          </Button>
+        )}
       </div>
 
       <ProgressBar
@@ -1312,17 +1475,24 @@ export function FormationFlow({
         label="Formation progress"
       />
 
+      <p className="flex items-center gap-2 text-[12px] text-fg-4">
+        <Info size={13} className="flex-none text-gold-1" aria-hidden />
+        Each step is copiloted — you decide, Earn drafts. Stop and pick back up anytime.
+      </p>
+
       <Card className="flex flex-col gap-1.5 p-3">
         {items.map((item, i) => {
           const done = completed.includes(item.id);
           const isNext = item.id === firstOpenId;
+          const inProgress = !done && stepTouched(item.kind, d, baseline);
+          const meta = stepMeta[item.id];
           const Ico = done ? CheckCircle2 : isNext ? Sparkles : FileText;
           const undec = itemUndecided(item.kind, d);
           return (
             <button
               key={item.id}
               type="button"
-              onClick={() => openItem(item.id)}
+              onClick={() => (done ? openDoc(item.id) : openItem(item.id))}
               className={cn(
                 'flex items-center gap-3 rounded-[12px] border px-3.5 py-3 text-left transition',
                 isNext
@@ -1351,18 +1521,29 @@ export function FormationFlow({
               </span>
               {done ? (
                 <Badge tone="success" className="text-[10px]">
-                  Filed
+                  {meta && meta.version > 1 ? `Filed · v${meta.version}` : 'Filed'}
                 </Badge>
               ) : undec > 0 ? (
                 <Badge tone="warning" className="text-[10px]">
                   {undec} for Earn
+                </Badge>
+              ) : inProgress ? (
+                <Badge tone="azure" className="text-[10px]">
+                  In progress
                 </Badge>
               ) : isNext ? (
                 <Badge tone="gold" dot className="text-[10px]">
                   Next
                 </Badge>
               ) : null}
-              <ArrowRight size={14} className="flex-none text-fg-5" aria-hidden />
+              {done ? (
+                <span className="inline-flex flex-none items-center gap-1 text-[11px] font-semibold text-fg-4">
+                  Review
+                  <ArrowRight size={13} aria-hidden />
+                </span>
+              ) : (
+                <ArrowRight size={14} className="flex-none text-fg-5" aria-hidden />
+              )}
             </button>
           );
         })}
@@ -1428,6 +1609,9 @@ function FormationStory({ firm, onBegin }: { firm: string; onBegin: () => void }
           <Route size={14} className="text-fg-4" aria-hidden />
           <Eyebrow>The path to a formed fund · seven steps</Eyebrow>
         </div>
+        <h2 className="text-[14.5px] font-semibold tracking-[-0.01em] text-fg-1">
+          What we&rsquo;ll do together
+        </h2>
         <div className="mt-2 flex flex-col">
           {FORMATION_ARC.map((s, i) => {
             const Ico = iconFor(s.icon);

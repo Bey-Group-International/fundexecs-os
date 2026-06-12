@@ -390,7 +390,10 @@ export function fileSteps(kind: FormationKind, d: FormationData): string[] {
     undec > 0
       ? [`Finalizing ${undec} undecided item${undec > 1 ? 's' : ''} to the standard`, ...base[kind]]
       : [...base[kind]];
-  arr.push('Saving to your fund record');
+  // The bank step opens accounts; every other step files a real document
+  // into the data room (capital_materials).
+  if (kind !== 'bank') arr.push('Filing to your data room');
+  arr.push('Logging to your Chain of Trust');
   return arr;
 }
 
