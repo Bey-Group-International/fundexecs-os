@@ -1,0 +1,434 @@
+/* ===========================================================
+   FundExecs OS — Onboarding Prototype · Structure & governance
+   The institutional spine: legal structure, governance bodies
+   (Investment Committee, LPAC), and copiloted policies.
+   You decide, Earn drafts to the institutional standard.
+   =========================================================== */
+
+/* ---- copiloted policies (you set the standard, Earn drafts) ---- */
+const GOV_POLICIES = [
+  { id: 'valuation',  name: 'Valuation policy',        icon: 'scale',
+    intro: 'How you mark positions — the methodology LPs and auditors hold you to.',
+    decisions: [{ key: 'method', kind: 'radio', label: 'Basis', opts: ['Fair value (ASC 820)', 'Cost less impairment'] }, { key: 'cadence', kind: 'radio', label: 'Cadence', opts: ['Quarterly', 'Semi-annual'] }],
+    rec: { method: 'Fair value (ASC 820)', cadence: 'Quarterly' },
+    recText: 'Fair value under ASC 820, marked quarterly, is the institutional standard your auditor and LPs expect. I\u2019ll draft the full methodology and a quarterly review workflow.' },
+  { id: 'conflicts',  name: 'Conflicts of interest',   icon: 'git-fork',
+    intro: 'How conflicts are identified, disclosed and cleared — reviewed by your LPAC.',
+    decisions: [{ key: 'review', kind: 'radio', label: 'Clearance', opts: ['LPAC approval', 'GP discretion + disclosure'] }, { key: 'coinvest', kind: 'radio', label: 'Co-investment', opts: ['Pro-rata to LPs', 'Case-by-case'] }],
+    rec: { review: 'LPAC approval', coinvest: 'Pro-rata to LPs' },
+    recText: 'Route material conflicts to your LPAC and allocate co-investment pro-rata. It\u2019s the cleanest posture for diligence and avoids the questions that stall a raise.' },
+  { id: 'allocation', name: 'Allocation policy',        icon: 'pie-chart',
+    intro: 'How deals and capacity are split across vehicles and co-investors — fairly and on the record.',
+    decisions: [{ key: 'rule', kind: 'radio', label: 'Rule', opts: ['Pro-rata by commitment', 'Capacity-weighted'] }],
+    rec: { rule: 'Pro-rata by commitment' },
+    recText: 'Pro-rata by commitment is the defensible default — predictable for LPs and simple to audit. I\u2019ll document exceptions and the approval path.' },
+  { id: 'compliance', name: 'Compliance manual',        icon: 'shield-check',
+    intro: 'Your firm\u2019s rulebook — personal trading, marketing, recordkeeping, and the annual review.',
+    decisions: [{ key: 'scope', kind: 'multi', label: 'Include', opts: ['Personal trading', 'Marketing rules', 'Recordkeeping', 'Insider info / MNPI', 'Annual review'] }],
+    rec: { scope: ['Personal trading', 'Marketing rules', 'Recordkeeping', 'Insider info / MNPI', 'Annual review'] },
+    recText: 'Cover all five — this is the document an LP\u2019s ODD team reads first. I\u2019ll draft each section to the SEC baseline for a private fund adviser.' },
+  { id: 'ethics',     name: 'Code of ethics',           icon: 'book-open',
+    intro: 'The standards of conduct everyone at the firm signs — the foundation of LP trust.',
+    decisions: [{ key: 'attest', kind: 'radio', label: 'Attestation', opts: ['Annual', 'On hire only'] }],
+    rec: { attest: 'Annual' },
+    recText: 'Annual attestation is expected by institutional LPs. I\u2019ll draft the code and a one-click attestation workflow for the team.' },
+  { id: 'cyber',      name: 'Cybersecurity & BCP',      icon: 'lock',
+    intro: 'Data protection and business-continuity — increasingly a hard requirement in diligence.',
+    decisions: [{ key: 'level', kind: 'radio', label: 'Standard', opts: ['SOC 2-aligned', 'Baseline'] }],
+    rec: { level: 'SOC 2-aligned' },
+    recText: 'Aligning to SOC 2 signals seriousness to institutional LPs and most ODD checklists now ask for it. I\u2019ll draft the policy and a continuity plan.' },
+];
+
+const IC_MEMBERS_0 = [
+  { id: 'p1', name: '', role: 'Chair · Managing Partner', you: true },
+  { id: 'p2', name: 'Open seat', role: 'Investment Partner', open: true },
+];
+const IC_CANDIDATES = [
+  { name: 'Dr. Helen Ashford', role: 'Investment Partner', note: 'Ex-operator, 20y sector' },
+  { name: 'Marcus Reyes', role: 'Investment Partner', note: 'Former MD, growth equity' },
+];
+const FM_0 = [
+  { id: 'fm1', you: true, role: 'Managing Partner', carry: '60%', note: 'Key person · final IC vote' },
+  { id: 'fm2', name: 'Open seat', role: 'Partner', open: true },
+];
+const FM_CANDIDATES = [
+  { name: 'Priya Anand', role: 'Partner', carry: '25%', note: 'Deal lead · ex-PE principal' },
+  { name: 'Tom Becker', role: 'Partner, Operations', carry: '15%', note: 'Portfolio ops & value creation' },
+];
+const ADV_0 = [
+  { id: 'a1', name: 'Sir Reginald Hale', role: 'Industry Advisor', note: 'Former CEO, sector incumbent' },
+  { id: 'a2', name: 'Open seat', role: 'Advisor', open: true },
+];
+const ADV_CANDIDATES = [
+  { name: 'Dr. Amara Diallo', role: 'Technical Advisor', note: 'Research lead · diligence depth' },
+  { name: 'Gloria Tan', role: 'Capital Markets Advisor', note: 'Ex-placement · LP introductions' },
+  { name: 'Hiroshi Sato', role: 'Operating Advisor', note: '3 exits · operator network' },
+];
+const CAP_0 = [
+  { id: 'c1', name: 'First Republic', role: 'Subscription credit line', note: '$25M facility' },
+  { id: 'c2', name: 'Open relationship', role: 'Capital partner', open: true },
+];
+const CAP_CANDIDATES = [
+  { name: 'Apollo Credit', role: 'NAV facility', note: 'Portfolio-level leverage' },
+  { name: 'Coastal Co-invest', role: 'Co-investment partner', note: 'Deal-by-deal capital' },
+  { name: 'Silicon Valley Bank', role: 'Capital-call facility', note: 'Bridge financing' },
+];
+const LEGAL_0 = [
+  { id: 'g1', name: 'Standish & Cole', role: 'Fund counsel', note: 'Formation & LPA · from Partner Network' },
+  { id: 'g2', name: 'Open relationship', role: 'Legal counsel', open: true },
+];
+const LEGAL_CANDIDATES = [
+  { name: 'Whitman Regulatory', role: 'Regulatory & SEC counsel', note: 'Compliance & exemptions' },
+  { name: 'Harbor Tax LLP', role: 'Fund tax counsel', note: 'Structuring & K-1s' },
+  { name: 'Meridian IP', role: 'Portfolio counsel', note: 'Deal & IP support' },
+];
+const LPAC_0 = [
+  { id: 'l1', name: 'Forms at first close', role: 'LP representatives', pending: true },
+];
+
+function GovChip({ label, selected, onClick }) {
+  return <Chip label={label} selected={selected} onClick={onClick} />;
+}
+
+/* compact copiloted policy builder */
+function PolicyBuilder({ pol, mobile, onBack, onAdopt }) {
+  const [d, setD] = useState(() => ({ ...pol.rec }));
+  const [applied, setApplied] = useState(false);
+  const [phase, setPhase] = useState('edit');
+  const set = (k, v) => setD(p => ({ ...p, [k]: v }));
+  const toggle = (k, v) => setD(p => { const c = p[k] || []; return { ...p, [k]: c.includes(v) ? c.filter(x => x !== v) : [...c, v] }; });
+  const steps = ['Pull your fund context', `Draft the ${pol.name.toLowerCase()}`, 'Check against the institutional standard', 'Prepare for adoption'];
+  const [n, setN] = useState(0);
+  useEffect(() => { if (phase !== 'building') return; let i = 0; const t = setInterval(() => { i += 1; setN(i); if (i >= steps.length) { clearInterval(t); setTimeout(() => setPhase('done'), 400); } }, 560); return () => clearInterval(t); }, [phase]);
+  const rows = pol.decisions.map(dec => [dec.label, Array.isArray(d[dec.key]) ? (d[dec.key].join(', ') || 'None') : d[dec.key]]);
+
+  if (phase === 'done') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+        <div style={{ width: '100%', maxWidth: 540 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 54, height: 54, borderRadius: '50%', margin: '0 auto 13px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--success-soft)', border: '1px solid var(--success-line)' }}><Icon name="check" size={26} color="var(--success)" /></div>
+            <div className="t-h2" style={{ fontSize: 19 }}>{pol.name} — adopted</div>
+            <p style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 6 }}>Drafted to the institutional standard and active across the firm.</p>
+          </div>
+          <div style={{ borderRadius: 13, border: '1px solid var(--border)', overflow: 'hidden', marginTop: 16 }}>
+            {rows.map(([k, v], i) => (
+              <div key={k} style={{ display: 'flex', gap: 14, padding: '10px 15px', background: i % 2 ? 'transparent' : 'var(--surface-1)', borderTop: i ? '1px solid var(--border-faint)' : 'none' }}>
+                <span style={{ width: 130, flex: 'none', fontSize: 12, color: 'var(--fg-4)' }}>{k}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-1)' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 18, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="pencil" onClick={() => { setPhase('edit'); setN(0); }}>Go back &amp; edit</Button>
+            <Button variant="gold" iconRight="check" onClick={onAdopt}>Adopt &amp; finish</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (phase === 'building') {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 0' }}>
+        <div style={{ width: '100%', maxWidth: 520 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ position: 'relative', marginBottom: 12 }}><div className="pulse-dot" style={{ position: 'absolute', inset: -10, borderRadius: '50%', background: 'radial-gradient(circle, rgba(247,201,72,0.5), transparent 70%)', filter: 'blur(8px)' }} /><div style={{ position: 'relative' }}><EarnCoin size={48} /></div></div>
+            <div className="t-h2" style={{ fontSize: 18 }}>Drafting {pol.name}…</div>
+          </div>
+          <ProgressBar value={Math.round((n / steps.length) * 100)} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} />
+          <div className="card" style={{ marginTop: 13, padding: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {steps.map((s, i) => i <= n && (
+              <div key={i} className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px' }}>
+                <span style={{ width: 22, height: 22, borderRadius: 999, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: i < n ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${i < n ? 'var(--success-line)' : 'var(--border)'}`, color: i < n ? 'var(--success)' : 'var(--fg-4)' }}>{i < n ? <Icon name="check" size={12} /> : <Icon name="loader" size={12} className="spin" />}</span>
+                <span style={{ fontSize: 13, color: i < n ? 'var(--fg-2)' : 'var(--fg-1)' }}>{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button className="clickable" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--fg-3)', padding: '7px 11px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface-1)' }}><Icon name="arrow-left" size={14} />Policies</button>
+        <div style={{ flex: 1, minWidth: 0 }}><div className="t-h2" style={{ fontSize: 18 }}>{pol.name}</div><div style={{ fontSize: 12, color: 'var(--fg-4)' }}>You set the standard, Earn drafts it</div></div>
+        <Badge tone="azure" dot>Copiloted</Badge>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0,1fr) 300px', gap: 16, alignItems: 'start' }}>
+        <div className="card" style={{ padding: 22 }}>
+          <p style={{ fontSize: 12.5, color: 'var(--fg-4)', margin: '0 0 18px', lineHeight: 1.55 }}>{pol.intro}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {pol.decisions.map(dec => (
+              <div key={dec.key}>
+                <div className="t-eyebrow" style={{ marginBottom: 9 }}>{dec.label}{dec.kind === 'multi' && <span style={{ color: 'var(--fg-5)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}> · pick any</span>}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {dec.opts.map(o => <GovChip key={o} label={o} selected={dec.kind === 'multi' ? (d[dec.key] || []).includes(o) : d[dec.key] === o} onClick={() => dec.kind === 'multi' ? toggle(dec.key, o) : set(dec.key, o)} />)}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, gap: 10, flexWrap: 'wrap' }}>
+            <Button variant="ghost" icon="arrow-left" onClick={onBack}>Cancel</Button>
+            <Button variant="gold" iconRight="sparkles" onClick={() => { setN(0); setPhase('building'); }}>Draft &amp; adopt</Button>
+          </div>
+        </div>
+        <div className="card" style={{ padding: 17, alignSelf: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 11 }}><div style={{ position: 'relative', flex: 'none' }}><EarnCoin size={32} /><span className="pulse-dot" style={{ position: 'absolute', right: -1, bottom: -1, width: 9, height: 9, borderRadius: 999, background: 'var(--success)', border: '2px solid var(--bg-2)' }} /></div><div><div style={{ fontSize: 13, fontWeight: 600 }}>Earn</div><div style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>Compliance copilot</div></div></div>
+          <div className="t-eyebrow" style={{ marginBottom: 7, color: 'var(--gold-1)' }}>Earn recommends</div>
+          <div style={{ fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.6 }}>{pol.recText}</div>
+          <Button variant={applied ? 'secondary' : 'gold'} size="sm" icon={applied ? 'check' : 'sparkles'} style={{ width: '100%', marginTop: 14 }} onClick={() => { setD({ ...pol.rec }); setApplied(true); }}>{applied ? 'Recommendation applied' : "Apply Earn's recommendation"}</Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 11, color: 'var(--fg-5)' }}><Icon name="hand" size={12} />You're in control — change anything.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GovernanceHub({ mandate, formD = {}, pct, adopted = [], onAdopt, onRun, mobile }) {
+  const [view, setView] = useState('structure');
+  const [openPol, setOpenPol] = useState(null);
+  const [ic, setIc] = useState(IC_MEMBERS_0);
+  const [icIdx, setIcIdx] = useState(0);
+  const [fm, setFm] = useState(FM_0);
+  const [fmIdx, setFmIdx] = useState(0);
+  const [adv, setAdv] = useState(ADV_0);
+  const [advIdx, setAdvIdx] = useState(0);
+  const [cap, setCap] = useState(CAP_0);
+  const [capIdx, setCapIdx] = useState(0);
+  const [legal, setLegal] = useState(LEGAL_0);
+  const [legalIdx, setLegalIdx] = useState(0);
+  const principal = mandate.principal || 'Jordan Avery';
+  const firm = mandate.firm || 'Cedar Lane Capital';
+  const adoptedCount = adopted.length;
+
+  const isActive = (id) => adopted.includes(id);
+  function adoptPolicy(id) {
+    onAdopt && onAdopt(id, (GOV_POLICIES.find(p => p.id === id) || {}).name);
+    setOpenPol(null);
+  }
+  function fillSeat() {
+    const cand = IC_CANDIDATES[icIdx % IC_CANDIDATES.length];
+    onRun({ id: 'ic-' + icIdx, hub: 'build', xp: 12, title: `Add ${cand.name} to the Investment Committee`,
+      apply: () => { setIc(prev => prev.map(m => m.open ? { id: 'ic' + icIdx, name: cand.name, role: cand.role } : m)); setIcIdx(i => i + 1); },
+      run: { title: `Invite ${cand.name} to your IC`, steps: ['Confirm independence & fit', 'Draft the appointment letter', 'Set IC charter & voting rights', 'Prepare for your approval'], draftTitle: `IC appointment — ${cand.name}`, draft: `Earn lined up ${cand.name} (${cand.note}) for your Investment Committee. Approve to extend the seat and set their voting rights.` } });
+  }
+  function addManager() {
+    const cand = FM_CANDIDATES[fmIdx % FM_CANDIDATES.length];
+    onRun({ id: 'fm-' + fmIdx, hub: 'build', xp: 12, title: `Add ${cand.name} to the management team`,
+      apply: () => { setFm(prev => prev.map(m => m.open ? { id: 'fm' + fmIdx, name: cand.name, role: cand.role, carry: cand.carry, note: cand.note } : m)); setFmIdx(i => i + 1); },
+      run: { title: `Bring ${cand.name} onto the GP`, steps: ['Confirm role & track record', 'Model the carry & ownership split', 'Draft the partnership terms', 'Prepare for your approval'], draftTitle: `GP partner — ${cand.name}`, draft: `Earn structured terms for ${cand.name} (${cand.note}) as ${cand.role}, with a ${cand.carry} carry allocation. Approve to add them to the management team.` } });
+  }
+  function addAdvisor() {
+    const cand = ADV_CANDIDATES[advIdx % ADV_CANDIDATES.length];
+    onRun({ id: 'adv-' + advIdx, hub: 'build', xp: 10, title: `Add ${cand.name} to the Advisory Board`,
+      apply: () => { setAdv(prev => prev.map(m => m.open ? { id: 'adv' + advIdx, name: cand.name, role: cand.role, note: cand.note } : m)); setAdvIdx(i => i + 1); },
+      run: { title: `Invite ${cand.name} as an advisor`, steps: ['Confirm expertise & network fit', 'Draft the advisory agreement', 'Set advisory-share terms', 'Prepare for your approval'], draftTitle: `Advisory Board — ${cand.name}`, draft: `Earn lined up ${cand.name} (${cand.note}) for your Advisory Board. Approve to extend the role and set advisory-share terms.` } });
+  }
+  function addCapital() {
+    const cand = CAP_CANDIDATES[capIdx % CAP_CANDIDATES.length];
+    onRun({ id: 'cap-' + capIdx, hub: 'build', xp: 10, title: `Add ${cand.name} as a capital partner`,
+      apply: () => { setCap(prev => prev.map(m => m.open ? { id: 'cap' + capIdx, name: cand.name, role: cand.role, note: cand.note } : m)); setCapIdx(i => i + 1); },
+      run: { title: `Engage ${cand.name}`, steps: ['Confirm terms & covenants', 'Draft the facility / co-invest agreement', 'Run counsel review', 'Prepare for your approval'], draftTitle: `Capital partner — ${cand.name}`, draft: `Earn structured terms with ${cand.name} (${cand.role}, ${cand.note}). Approve to engage and add the relationship to your capital stack.` } });
+  }
+  function addLegal() {
+    const cand = LEGAL_CANDIDATES[legalIdx % LEGAL_CANDIDATES.length];
+    onRun({ id: 'legal-' + legalIdx, hub: 'build', xp: 10, title: `Engage ${cand.name} as counsel`,
+      apply: () => { setLegal(prev => prev.map(m => m.open ? { id: 'lg' + legalIdx, name: cand.name, role: cand.role, note: cand.note } : m)); setLegalIdx(i => i + 1); },
+      run: { title: `Engage ${cand.name}`, steps: ['Confirm scope & conflicts', 'Draft the engagement letter', 'Set fee arrangement', 'Prepare for your approval'], draftTitle: `Legal counsel — ${cand.name}`, draft: `Earn lined up ${cand.name} (${cand.role}, ${cand.note}). Approve to engage and add them to your counsel bench.` } });
+  }
+
+  if (openPol) {
+    const pol = GOV_POLICIES.find(p => p.id === openPol);
+    return <PolicyBuilder key={openPol} pol={pol} mobile={mobile} onBack={() => setOpenPol(null)} onAdopt={() => adoptPolicy(openPol)} />;
+  }
+
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="card" style={{ padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+          <span style={{ width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)' }}><Icon name="git-fork" size={22} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="t-h2" style={{ fontSize: 19 }}>Structure &amp; governance</div>
+            <div style={{ fontSize: 12.5, color: 'var(--fg-3)', marginTop: 2 }}>The institutional spine LPs diligence — structure, committees and policies.</div>
+          </div>
+          <div style={{ textAlign: 'right', flex: 'none' }}>
+            <div className="t-metric" style={{ fontSize: 22, color: 'var(--gold-1)' }}>{adoptedCount}/{GOV_POLICIES.length}</div>
+            <div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>policies active</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 14 }}><ProgressBar value={Math.round((adoptedCount / GOV_POLICIES.length) * 100)} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} /></div>
+      </div>
+
+      <div style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2 }}>
+        <SegTabs active={view} onChange={setView} tabs={[{ id: 'structure', label: 'Structure', icon: 'network' }, { id: 'bodies', label: 'Governance bodies', icon: 'users' }, { id: 'policies', label: 'Policies', icon: 'scale' }]} />
+      </div>
+
+      {view === 'structure' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Panel title="Fund structure" eyebrow="The legal stack · from your formation" icon="network">
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+              {[
+                { label: 'Limited Partners', sub: 'Commit capital', icon: 'users', tone: 'azure' },
+                { label: `${firm} Fund I, LP`, sub: formD.entity || 'Delaware LP', icon: 'landmark', tone: 'gold' },
+                { label: formD.gp || `${firm} GP, LLC`, sub: 'General Partner · controls the fund', icon: 'shield-check', tone: 'success' },
+                { label: formD.mgmtco || `${firm} Management, LLC`, sub: 'Management company · runs operations', icon: 'building-2', tone: 'info' },
+              ].map((node, i) => (
+                <React.Fragment key={node.label}>
+                  {i > 0 && <div style={{ width: 2, height: 16, background: 'var(--border-strong)' }} />}
+                  <div className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 15px', background: 'var(--surface-1)', width: '100%', maxWidth: 460 }}>
+                    <span style={{ width: 34, height: 34, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TONE[node.tone].bg, color: TONE[node.tone].c, border: `1px solid ${TONE[node.tone].b}` }}><Icon name={node.icon} size={17} /></span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{node.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-5)' }}>{node.sub}</div>
+                    </div>
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
+          </Panel>
+          <Panel title="Key persons" eyebrow="Who runs the firm" icon="user-check"
+            action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Plan hires</Button>}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[{ name: principal, role: 'Managing Partner · key person', you: true }, { name: 'Fractional CFO', role: 'Finance & operations', sug: true }, { name: 'Fund administrator', role: 'Apex Fund Admin · outsourced', sug: true }].map((p, i) => (
+                <div key={i} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 13px', background: 'var(--surface-1)' }}>
+                  <Avatar name={p.name} size={30} tone={p.you ? 'gold' : 'azure'} />
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 600 }}>{p.name}</div><div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{p.role}</div></div>
+                  {p.you ? <Badge tone="gold" style={{ fontSize: 9.5 }}>You</Badge> : <Badge tone="neutral" style={{ fontSize: 9.5 }}>Suggested</Badge>}
+                </div>
+              ))}
+            </div>
+          </Panel>
+          <Panel title="100 / 30 / 10 Governance Plan" eyebrow="Your operating cadence · set by Sterling" icon="target">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+              {[['100', 'relationships mapped', 'azure'], ['30', 'in active motion', 'gold'], ['10', 'priority targets', 'success']].map(([n, l, t]) => (
+                <div key={l} className="card-flat" style={{ padding: '14px 15px', background: 'var(--surface-1)' }}>
+                  <div className="t-metric" style={{ fontSize: 26, color: TONE[t].c }}>{n}</div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      ) : view === 'bodies' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Panel title="Fund management team" eyebrow="The GP partners running the fund · carry split" icon="briefcase"
+            action={fm.some(m => m.open) ? <Button variant="secondary" size="sm" icon="user-plus" onClick={addManager}>Add partner</Button> : <Badge tone="success" style={{ fontSize: 9.5 }}>Team set</Badge>}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {fm.map(m => (
+                <div key={m.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 13px', background: m.open ? 'transparent' : 'var(--surface-1)', border: m.open ? '1px dashed var(--border-strong)' : '1px solid var(--border)' }}>
+                  {m.open ? <span style={{ width: 30, height: 30, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-strong)', color: 'var(--fg-5)' }}><Icon name="plus" size={15} /></span> : <Avatar name={m.you ? principal : m.name} size={30} tone={m.you ? 'gold' : 'azure'} />}
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 600, color: m.open ? 'var(--fg-4)' : 'var(--fg-1)' }}>{m.you ? principal : m.name}</div><div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{m.role}{m.note ? ` · ${m.note}` : ''}</div></div>
+                  {m.carry && <span className="t-mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--gold-1)', flex: 'none' }}>{m.carry}</span>}
+                  {m.you && <Badge tone="gold" style={{ fontSize: 9.5 }}>You</Badge>}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11.5, color: 'var(--fg-4)' }}>
+              <span><b style={{ color: 'var(--fg-2)' }}>Carry pool</b> · 20% of profits</span>
+              <span><b style={{ color: 'var(--fg-2)' }}>Vesting</b> · 4 yrs</span>
+            </div>
+          </Panel>
+          <Panel title="Investment Committee" eyebrow="Approves every deal · unanimous for new investments" icon="gavel"
+            action={ic.some(m => m.open) ? <Button variant="secondary" size="sm" icon="user-plus" onClick={fillSeat}>Fill seat</Button> : <Badge tone="success" style={{ fontSize: 9.5 }}>Quorum met</Badge>}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {ic.map(m => (
+                <div key={m.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 13px', background: m.open ? 'transparent' : 'var(--surface-1)', border: m.open ? '1px dashed var(--border-strong)' : '1px solid var(--border)' }}>
+                  {m.open ? <span style={{ width: 30, height: 30, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-strong)', color: 'var(--fg-5)' }}><Icon name="plus" size={15} /></span> : <Avatar name={m.you ? principal : m.name} size={30} tone={m.you ? 'gold' : 'azure'} />}
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 600, color: m.open ? 'var(--fg-4)' : 'var(--fg-1)' }}>{m.you ? principal : m.name}</div><div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{m.role}</div></div>
+                  {m.you && <Badge tone="gold" style={{ fontSize: 9.5 }}>You</Badge>}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11.5, color: 'var(--fg-4)' }}>
+              <span><b style={{ color: 'var(--fg-2)' }}>Quorum</b> · majority</span>
+              <span><b style={{ color: 'var(--fg-2)' }}>New deals</b> · unanimous</span>
+              <span><b style={{ color: 'var(--fg-2)' }}>Charter</b> · drafted</span>
+            </div>
+          </Panel>
+          <Panel title="Advisory Board" eyebrow="External experts · strategy, deal flow & credibility" icon="lightbulb"
+            action={adv.some(m => m.open) ? <Button variant="secondary" size="sm" icon="user-plus" onClick={addAdvisor}>Add advisor</Button> : <Badge tone="success" style={{ fontSize: 9.5 }}>Board seated</Badge>}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {adv.map(m => (
+                <div key={m.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 13px', background: m.open ? 'transparent' : 'var(--surface-1)', border: m.open ? '1px dashed var(--border-strong)' : '1px solid var(--border)' }}>
+                  {m.open ? <span style={{ width: 30, height: 30, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-strong)', color: 'var(--fg-5)' }}><Icon name="plus" size={15} /></span> : <Avatar name={m.name} size={30} tone="info" />}
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 600, color: m.open ? 'var(--fg-4)' : 'var(--fg-1)' }}>{m.name}</div><div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{m.role}{m.note ? ` · ${m.note}` : ''}</div></div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11.5, color: 'var(--fg-4)' }}>
+              <span><b style={{ color: 'var(--fg-2)' }}>Role</b> · advisory, non-voting</span>
+              <span><b style={{ color: 'var(--fg-2)' }}>Comp</b> · advisory shares</span>
+            </div>
+          </Panel>
+          <Panel title="LP Advisory Committee (LPAC)" eyebrow="LP oversight · conflicts & valuation review" icon="users">
+            <div className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 14px', background: 'var(--surface-1)' }}>
+              <Icon name="hourglass" size={17} color="var(--fg-4)" />
+              <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--fg-3)' }}>Forms at your first close from your largest LPs. Earn drafts the LPAC charter and seats it automatically.</div>
+              <Badge tone="neutral" style={{ fontSize: 9.5 }}>At first close</Badge>
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11.5, color: 'var(--fg-4)' }}>
+              <span><b style={{ color: 'var(--fg-2)' }}>Reviews</b> · conflicts, valuation, extensions</span>
+              <span><b style={{ color: 'var(--fg-2)' }}>Seats</b> · top 3 LPs</span>
+            </div>
+          </Panel>
+          <Panel title="Capital Partners" eyebrow="Your capital stack · facilities, lenders & co-investors" icon="banknote"
+            action={cap.some(m => m.open) ? <Button variant="secondary" size="sm" icon="plus" onClick={addCapital}>Add partner</Button> : <Badge tone="success" style={{ fontSize: 9.5 }}>Stack set</Badge>}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {cap.map(m => (
+                <div key={m.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 13px', background: m.open ? 'transparent' : 'var(--surface-1)', border: m.open ? '1px dashed var(--border-strong)' : '1px solid var(--border)' }}>
+                  {m.open ? <span style={{ width: 30, height: 30, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-strong)', color: 'var(--fg-5)' }}><Icon name="plus" size={15} /></span> : <span style={{ width: 30, height: 30, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TONE.gold.bg, color: TONE.gold.c, border: `1px solid ${TONE.gold.b}` }}><Icon name="banknote" size={15} /></span>}
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 600, color: m.open ? 'var(--fg-4)' : 'var(--fg-1)' }}>{m.name}</div><div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{m.role}{m.note ? ` · ${m.note}` : ''}</div></div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11.5, color: 'var(--fg-4)' }}>
+              <span><b style={{ color: 'var(--fg-2)' }}>Use</b> · bridge calls, leverage, co-invest</span>
+              <span><b style={{ color: 'var(--fg-2)' }}>Counsel</b> · reviewed</span>
+            </div>
+          </Panel>
+          <Panel title="Legal Counsel" eyebrow="Your counsel bench · formation, regulatory & tax" icon="scale"
+            action={legal.some(m => m.open) ? <Button variant="secondary" size="sm" icon="plus" onClick={addLegal}>Add counsel</Button> : <Badge tone="success" style={{ fontSize: 9.5 }}>Bench set</Badge>}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {legal.map(m => (
+                <div key={m.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 13px', background: m.open ? 'transparent' : 'var(--surface-1)', border: m.open ? '1px dashed var(--border-strong)' : '1px solid var(--border)' }}>
+                  {m.open ? <span style={{ width: 30, height: 30, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-strong)', color: 'var(--fg-5)' }}><Icon name="plus" size={15} /></span> : <span style={{ width: 30, height: 30, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TONE.info.bg, color: TONE.info.c, border: `1px solid ${TONE.info.b}` }}><Icon name="scale" size={15} /></span>}
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 600, color: m.open ? 'var(--fg-4)' : 'var(--fg-1)' }}>{m.name}</div><div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>{m.role}{m.note ? ` · ${m.note}` : ''}</div></div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11.5, color: 'var(--fg-4)' }}>
+              <span><b style={{ color: 'var(--fg-2)' }}>Scope</b> · formation, regulatory, tax, deals</span>
+            </div>
+          </Panel>
+        </div>
+      ) : (
+        <Panel title="Policies" eyebrow="Adopt the institutional baseline · copiloted by Adrian" icon="scale">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 10 }}>
+            {GOV_POLICIES.map(p => {
+              const active = isActive(p.id);
+              return (
+                <div key={p.id} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px', background: 'var(--surface-1)' }}>
+                  <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${active ? 'var(--success-line)' : 'var(--border)'}`, color: active ? 'var(--success)' : 'var(--fg-3)' }}><Icon name={active ? 'check' : p.icon} size={16} /></span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                    <div style={{ fontSize: 10.5, color: active ? 'var(--success)' : 'var(--fg-5)' }}>{active ? 'Active' : 'Not adopted'}</div>
+                  </div>
+                  {active ? <Button variant="ghost" size="sm" icon="eye" onClick={() => setOpenPol(p.id)}>View</Button>
+                    : <Button variant="secondary" size="sm" icon="sparkles" onClick={() => setOpenPol(p.id)}>Draft</Button>}
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
+
+      <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gold-soft)', borderColor: 'var(--gold-line)' }}>
+        <EarnCoin size={26} />
+        <div style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.5 }}><b style={{ color: 'var(--gold-1)' }}>Earn:</b> Governance is what separates a fund from a deal. I draft every policy and charter to the institutional standard — you set the posture and adopt.</div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { GovernanceHub });
