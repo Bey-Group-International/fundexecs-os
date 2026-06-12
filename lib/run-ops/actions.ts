@@ -2,11 +2,14 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/supabase/database.types';
 import { getActiveOrg } from '@/lib/queries/org';
 import {
   COMPLIANCE_BASELINE,
   IR_BASELINE,
   WORKFLOW_BASELINE,
+  isAutomationKey,
+  isComplianceResolvable,
   isTaskStatus,
   nextTaskStatus,
   type TaskStatus
@@ -43,11 +46,16 @@ export async function seedWorkflows(): Promise<RunOpsActionResult> {
       .single();
     if (error || !row) return { ok: false, error: error?.message ?? 'Could not seed workflows.' };
     const { error: taskErr } = await supabase.from('workflow_tasks').insert(
-      wf.tasks.map((name) => ({
+      wf.tasks.map((task) => ({
         org_id: org.orgId,
         workflow_id: row.id,
         status: 'todo',
-        subtasks: [{ name }]
+        name: task.name,
+        who: task.who,
+        drives: task.drives,
+        action: task.action,
+        critical: task.critical,
+        subtasks: task.sub.map((name) => ({ name, done: false }))
       }))
     );
     if (taskErr) return { ok: false, error: taskErr.message };
@@ -73,7 +81,7 @@ export async function advanceWorkflowTask(input: {
   const supabase = await createClient();
   const { data: task } = await supabase
     .from('workflow_tasks')
-    .select('id, status')
+    .select('id, status, subtasks')
     .eq('id', input.taskId)
     .eq('org_id', org.orgId)
     .maybeSingle();
@@ -82,11 +90,53 @@ export async function advanceWorkflowTask(input: {
   const expected = isTaskStatus(task.status) ? nextTaskStatus(task.status as TaskStatus) : 'todo';
   if (expected !== input.to) return { ok: false, error: 'Tasks advance one step at a time.' };
 
-  const { error } = await supabase
+  // Completing the step completes its checklist — the approve loop is the
+  // operator's confirmation that the work behind every subtask is done.
+  const patch: { status: string; subtasks?: Json } = { status: input.to };
+  if (input.to === 'done' && Array.isArray(task.subtasks)) {
+    patch.subtasks = task.subtasks.map((s) =>
+      s && typeof s === 'object' && !Array.isArray(s) ? { ...s, done: true } : s
+    );
+  }
+
+  const { data: updated, error } = await supabase
     .from('workflow_tasks')
-    .update({ status: input.to })
+    .update(patch)
     .eq('id', task.id)
-    .eq('org_id', org.orgId);
+    .eq('org_id', org.orgId)
+    .eq('status', task.status)
+    .select('id')
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) return { ok: false, error: 'The step just advanced. Refresh and try again.' };
+
+  revalidatePath('/run/workflows');
+  return { ok: true };
+}
+
+/**
+ * Toggle one of Earn's automations — a real, org-scoped preference row in
+ * `automations` (keyed by on_event) so the state survives reload. Never
+ * writes run history: last_run_at stays untouched until a real engine runs.
+ */
+export async function setWorkflowAutomation(input: {
+  key: string;
+  enabled: boolean;
+}): Promise<RunOpsActionResult> {
+  if (!isAutomationKey(input.key)) return { ok: false, error: 'Unknown automation.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active workspace.' };
+
+  const supabase = await createClient();
+  // Atomic against the unique (org_id, on_event) key — never touches
+  // last_run_at, so no fake run history can appear.
+  const { error } = await supabase
+    .from('automations')
+    .upsert(
+      { org_id: org.orgId, on_event: input.key, enabled: input.enabled },
+      { onConflict: 'org_id,on_event' }
+    );
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/run/workflows');
@@ -110,7 +160,14 @@ export async function seedCompliance(): Promise<RunOpsActionResult> {
       org_id: org.orgId,
       category: i.category,
       severity: i.severity,
-      status: 'open'
+      status: i.status,
+      name: i.name,
+      owner_name: i.owner,
+      due_label: i.due,
+      drives: i.drives,
+      detail: i.detail,
+      action_label: i.action,
+      checklist: [...i.checklist]
     }))
   );
   if (error) return { ok: false, error: error.message };
@@ -120,7 +177,7 @@ export async function seedCompliance(): Promise<RunOpsActionResult> {
   return { ok: true, created: COMPLIANCE_BASELINE.length };
 }
 
-/** Resolve one open compliance item. */
+/** Resolve one open or upcoming compliance item. */
 export async function resolveComplianceItem(itemId: string): Promise<RunOpsActionResult> {
   if (!itemId) return { ok: false, error: 'Missing item.' };
 
@@ -135,7 +192,8 @@ export async function resolveComplianceItem(itemId: string): Promise<RunOpsActio
     .eq('org_id', org.orgId)
     .maybeSingle();
   if (!item) return { ok: false, error: 'Item not found.' };
-  if (item.status !== 'open') return { ok: false, error: 'This item is already resolved.' };
+  if (!isComplianceResolvable(item.status))
+    return { ok: false, error: 'This item is already resolved.' };
 
   const { error } = await supabase
     .from('compliance_items')
@@ -164,7 +222,14 @@ export async function seedIr(): Promise<RunOpsActionResult> {
   const { error } = await supabase.from('ir_items').insert(
     IR_BASELINE.map((i) => ({
       org_id: org.orgId,
-      cat: i.cat,
+      // Legacy column: `cat` predates the anatomy columns and carried the name.
+      cat: i.name,
+      name: i.name,
+      category: i.category,
+      who: i.who,
+      drives: i.drives,
+      detail: i.detail,
+      contents: [...i.contents],
       status: 'todo',
       due_at: new Date(now + i.dueInDays * 86_400_000).toISOString()
     }))

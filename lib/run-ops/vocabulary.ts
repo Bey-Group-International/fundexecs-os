@@ -28,10 +28,38 @@ export const TASK_MOVE: Record<Exclude<TaskStatus, 'done'>, string> = {
   doing: 'Complete'
 };
 
+/** The prototype's RUN_TONE over the canonical task statuses. */
+export type TaskTone = 'warning' | 'azure' | 'success';
+export const TASK_TONE: Record<TaskStatus, TaskTone> = {
+  todo: 'warning',
+  doing: 'azure',
+  done: 'success'
+};
+
+/** The board's three columns, in order, with their eyebrow labels. */
+export const WF_COLUMNS: readonly { status: TaskStatus; label: string }[] = [
+  { status: 'todo', label: 'To do' },
+  { status: 'doing', label: 'In progress' },
+  { status: 'done', label: 'Done' }
+] as const;
+
+export interface BaselineTask {
+  name: string;
+  /** Specialist first name from the team roster. */
+  who: string;
+  /** Why the step matters — the card's drives line. */
+  drives: string;
+  /** The next concrete action, phrased for the approve loop. */
+  action: string;
+  critical: boolean;
+  /** Subtask checklist — seeded unchecked; nothing is pretend-done. */
+  sub: readonly string[];
+}
+
 export interface BaselineWorkflow {
   stream: string;
   name: string;
-  tasks: string[];
+  tasks: readonly BaselineTask[];
 }
 
 /** Sterling's standard launch plan — seeded once, then worked for real. */
@@ -40,74 +68,454 @@ export const WORKFLOW_BASELINE: readonly BaselineWorkflow[] = [
     stream: 'Launch',
     name: 'Stand up the fund',
     tasks: [
-      'Finalize the fund story',
-      'Complete formation filings',
-      'Adopt the governance baseline',
-      'Publish the data room'
+      {
+        name: 'Finalize the fund story',
+        who: 'Sienna',
+        drives: 'Anchors every LP conversation',
+        action: 'Lock the narrative',
+        critical: true,
+        sub: ['Thesis one-liner', 'Track-record summary', 'Edge & market view']
+      },
+      {
+        name: 'Complete formation filings',
+        who: 'Adrian',
+        drives: 'Makes the fund legally real',
+        action: 'File the documents',
+        critical: true,
+        sub: ['Entity filings', 'EIN & bank accounts', 'LPA executed']
+      },
+      {
+        name: 'Adopt the governance baseline',
+        who: 'Adrian',
+        drives: 'Keeps every decision defensible',
+        action: 'Adopt the policies',
+        critical: false,
+        sub: ['Policy set adopted', 'IC charter', 'Signing authority']
+      },
+      {
+        name: 'Publish the data room',
+        who: 'Eleanor',
+        drives: 'Lets LPs diligence you self-serve',
+        action: 'Publish the room',
+        critical: false,
+        sub: ['Core documents staged', 'Access controls set', 'Share links minted']
+      }
     ]
   },
   {
     stream: 'Raise',
     name: 'Open the raise',
     tasks: [
-      'Rank the LP target list',
-      'Send the first outreach wave',
-      'Run the follow-up cadence',
-      'Lock the first soft-circles'
+      {
+        name: 'Rank the LP target list',
+        who: 'Sloane',
+        drives: 'Focuses outreach on real fits',
+        action: 'Rank the targets',
+        critical: true,
+        sub: ['Fit-score the capital map', 'Pick the first twenty']
+      },
+      {
+        name: 'Send the first outreach wave',
+        who: 'Sloane',
+        drives: 'Starts the raise clock',
+        action: 'Draft the wave',
+        critical: true,
+        sub: ['Personalized intros', 'One-pager attached']
+      },
+      {
+        name: 'Run the follow-up cadence',
+        who: 'Sloane',
+        drives: 'Keeps warm leads moving',
+        action: 'Queue the follow-ups',
+        critical: false,
+        sub: ['Seven-day touches', 'Meeting asks']
+      },
+      {
+        name: 'Lock the first soft-circles',
+        who: 'Priya',
+        drives: 'Converts interest into commitments',
+        action: 'Confirm the circles',
+        critical: true,
+        sub: ['Verbal confirms', 'Allocation notes']
+      }
     ]
   },
   {
     stream: 'Deploy',
     name: 'Build the pipeline',
     tasks: [
-      'Define the sourcing thesis',
-      'Qualify the first inbound set',
-      'Open diligence on the lead deal'
+      {
+        name: 'Define the sourcing thesis',
+        who: 'Marcus',
+        drives: 'Filters the funnel before it fills',
+        action: 'Write the thesis',
+        critical: false,
+        sub: ['Sectors & stages', 'Disqualifiers']
+      },
+      {
+        name: 'Qualify the first inbound set',
+        who: 'Marcus',
+        drives: 'Surfaces the deals worth your time',
+        action: 'Score the inbound',
+        critical: false,
+        sub: ['First-pass screens', 'Fit notes']
+      },
+      {
+        name: 'Open diligence on the lead deal',
+        who: 'Theodore',
+        drives: 'Moves the best deal toward IC',
+        action: 'Open the desk',
+        critical: true,
+        sub: ['Diligence desk opened', 'Document requests out']
+      }
     ]
   }
 ] as const;
+
+/** Stream posture: completion + how many critical steps still block. */
+export function workflowPosture(tasks: readonly { status: string; critical?: boolean | null }[]): {
+  total: number;
+  done: number;
+  open: number;
+  critOpen: number;
+  pct: number;
+} {
+  const total = tasks.length;
+  const done = tasks.filter((t) => t.status === 'done').length;
+  const critOpen = tasks.filter((t) => Boolean(t.critical) && t.status !== 'done').length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return { total, done, open: total - done, critOpen, pct };
+}
+
+/** Stream chip icons, keyed off the stream's name (prototype's WF_STREAMS). */
+export type StreamIconKey =
+  | 'rocket'
+  | 'landmark'
+  | 'briefcase'
+  | 'user-plus'
+  | 'calendar-clock'
+  | 'list-checks';
+
+export function streamIconKey(stream: string): StreamIconKey {
+  const s = stream.toLowerCase();
+  if (s.includes('launch') || s.includes('formation')) return 'rocket';
+  if (s.includes('raise') || s.includes('fund') || s.includes('capital')) return 'landmark';
+  if (s.includes('deploy') || s.includes('pipeline') || s.includes('deal')) return 'briefcase';
+  if (s.includes('onboard')) return 'user-plus';
+  if (s.includes('report') || s.includes('quarter')) return 'calendar-clock';
+  return 'list-checks';
+}
+
+/* — Earn's automations strip — */
+
+export interface WorkflowAutomation {
+  /** Persisted as automations.on_event, org-scoped. */
+  key: string;
+  name: string;
+  /** The claimed outcome — badged Illustrative until a real engine runs it. */
+  desc: string;
+  icon: 'mail' | 'shield-check' | 'radar' | 'banknote';
+}
+
+/** The prototype's AUTOMATIONS catalog. Off until the operator turns one on. */
+export const WF_AUTOMATIONS: readonly WorkflowAutomation[] = [
+  {
+    key: 'lp_digest',
+    name: 'Weekly LP digest',
+    desc: 'Auto-drafts your investor update every Friday',
+    icon: 'mail'
+  },
+  {
+    key: 'compliance_watch',
+    name: 'Compliance monitoring',
+    desc: 'Watches filings, deadlines & attestations',
+    icon: 'shield-check'
+  },
+  {
+    key: 'pipeline_refresh',
+    name: 'Pipeline refresh',
+    desc: 'Re-scores deals & LPs nightly',
+    icon: 'radar'
+  },
+  {
+    key: 'cash_calls',
+    name: 'Cash & capital calls',
+    desc: 'Flags when a call or distribution is due',
+    icon: 'banknote'
+  }
+] as const;
+
+export function isAutomationKey(key: string): boolean {
+  return WF_AUTOMATIONS.some((a) => a.key === key);
+}
+
+/** Honest status line for an automation card — no fake run history. */
+export function automationStatusLabel(
+  enabled: boolean,
+  lastRunAt: string | null,
+  now: number = Date.now()
+): string {
+  if (!enabled) return 'Paused';
+  if (!lastRunAt) return 'On';
+  const ms = now - new Date(lastRunAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return 'On';
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return 'Ran just now';
+  if (hours < 24) return `Ran ${hours}h ago`;
+  return `Ran ${Math.floor(hours / 24)}d ago`;
+}
+
+/* — the prototype's runItem choreography, as pure copy builders — */
+
+export function taskRunSteps(who: string | null, act: string): string[] {
+  return [
+    who ? `Pull context with ${who}` : "Pull the step's context",
+    act,
+    'Update the record',
+    'Prepare for your approval'
+  ];
+}
+
+export function taskRunDraft(input: {
+  name: string;
+  who: string | null;
+  drives: string | null;
+  act: string;
+  toLabel: string;
+}): string {
+  const lead = input.who
+    ? `${input.who} prepared "${input.act}" for ${input.name}.`
+    : `"${input.act}" is prepared for ${input.name}.`;
+  const why = input.drives
+    ? ` This ${input.drives.charAt(0).toLowerCase()}${input.drives.slice(1).replace(/\.$/, '')}.`
+    : '';
+  return `${lead}${why} Approve to move it to ${input.toLabel} — nothing changes until you confirm.`;
+}
 
 /* ── Compliance ──────────────────────────────────────────────────────────── */
 
 export const COMPLIANCE_SEVERITIES = ['high', 'medium', 'low'] as const;
 export type ComplianceSeverity = (typeof COMPLIANCE_SEVERITIES)[number];
 
-export const COMPLIANCE_STATUSES = ['open', 'resolved'] as const;
+export const COMPLIANCE_STATUSES = ['open', 'upcoming', 'resolved'] as const;
 export type ComplianceStatus = (typeof COMPLIANCE_STATUSES)[number];
 
-export interface BaselineComplianceItem {
-  category: string;
-  severity: ComplianceSeverity;
-  /** What "resolved" means for this item — shown in the runner draft. */
-  note: string;
+/** Open and upcoming items can be worked; resolved is terminal. */
+export function isComplianceResolvable(s: string): boolean {
+  return s === 'open' || s === 'upcoming';
 }
 
-/** Adrian's compliance baseline — the posture every emerging manager owes. */
+/** The prototype's CO_CATS — the posture board's filter chips. */
+export const COMPLIANCE_CATEGORIES = [
+  'Regulatory',
+  'Investor',
+  'Internal',
+  'Data & Cyber'
+] as const;
+export type ComplianceCategory = (typeof COMPLIANCE_CATEGORIES)[number];
+
+/**
+ * Map a stored category to one of the four board categories. New rows store
+ * the canonical value; legacy rows stored the obligation itself ('Reg D /
+ * Form D', 'Accreditation records', …) and are bucketed by keyword.
+ */
+export function normalizeComplianceCategory(raw: string): ComplianceCategory {
+  const exact = COMPLIANCE_CATEGORIES.find((c) => c.toLowerCase() === raw.trim().toLowerCase());
+  if (exact) return exact;
+  const r = raw.toLowerCase();
+  if (/(privacy|data|cyber|soc\s?2)/.test(r)) return 'Data & Cyber';
+  if (/(reg\s?d|form\s|filing|blue sky|sec\b|regulat)/.test(r)) return 'Regulatory';
+  if (/(accredit|kyc|aml|investor|subscription|lp\b)/.test(r)) return 'Investor';
+  return 'Internal';
+}
+
+export interface CompliancePosture {
+  label: 'Action required' | 'Items open' | 'On track' | 'Fully compliant';
+  tone: 'danger' | 'warning' | 'info' | 'success';
+}
+
+/**
+ * The prototype's posture ladder, computed from real items: high-severity
+ * open → Action required; open → Items open; upcoming → On track; otherwise
+ * Fully compliant.
+ */
+export function compliancePosture(
+  items: ReadonlyArray<{ status: string; severity: string }>
+): CompliancePosture {
+  const open = items.filter((i) => i.status === 'open');
+  if (open.some((i) => i.severity === 'high')) return { label: 'Action required', tone: 'danger' };
+  if (open.length > 0) return { label: 'Items open', tone: 'warning' };
+  if (items.some((i) => i.status === 'upcoming')) return { label: 'On track', tone: 'info' };
+  return { label: 'Fully compliant', tone: 'success' };
+}
+
+export interface BaselineComplianceItem {
+  /** The obligation itself ('Form D filing', 'LP KYC / AML clearance', …). */
+  name: string;
+  category: ComplianceCategory;
+  severity: ComplianceSeverity;
+  /** Honest starting state — the baseline never seeds anything as resolved. */
+  status: Extract<ComplianceStatus, 'open' | 'upcoming'>;
+  /** Owning specialist (first name from the roster). */
+  owner: string;
+  /** Rule-derived due framing — never a fabricated countdown. */
+  due: string;
+  /** Why it matters — the drives-line under the row. */
+  drives: string;
+  /** Earn's action verb for the resolve loop. */
+  action: string;
+  detail: string;
+  checklist: readonly string[];
+}
+
+/**
+ * Adrian's compliance baseline — the posture every emerging manager owes,
+ * spanning all four categories. Every item seeds open or upcoming; nothing
+ * is ever pre-marked resolved (no fake filing is ever marked done).
+ */
 export const COMPLIANCE_BASELINE: readonly BaselineComplianceItem[] = [
   {
-    category: 'Reg D / Form D',
+    name: 'LP KYC / AML clearance',
+    category: 'Investor',
     severity: 'high',
-    note: 'File within 15 days of first sale; keep the exemption posture current.'
+    status: 'open',
+    owner: 'Adrian',
+    due: 'Before capital is accepted',
+    drives: 'Commitments cannot close until every subscribing LP clears',
+    action: 'Stand up the checks',
+    detail:
+      'Every subscribing LP needs identity and source-of-funds verification before their capital is accepted into the fund.',
+    checklist: ['Identity verification', 'Source-of-funds review', 'Sanctions screening']
   },
   {
-    category: 'Accreditation records',
+    name: 'Form D filing',
+    category: 'Regulatory',
     severity: 'high',
-    note: 'Evidence on file for every LP, matched to the exemption.'
+    status: 'open',
+    owner: 'Adrian',
+    due: 'Within 15 days of first sale',
+    drives: 'Keeps the raise SEC-compliant',
+    action: 'Prepare the filing',
+    detail:
+      'Form D is due within 15 days of the first sale — and an amendment whenever the offering amount or investor count materially changes.',
+    checklist: ['Offering size', 'Investor count', 'EDGAR filing']
   },
   {
-    category: 'Advertising & solicitation',
+    name: 'Accreditation records',
+    category: 'Investor',
+    severity: 'high',
+    status: 'open',
+    owner: 'Adrian',
+    due: 'Evidence on file per LP',
+    drives: 'Protects the exemption on every commitment',
+    action: 'Collect the evidence',
+    detail:
+      'Accreditation evidence must be on file for every LP, matched to the exemption you are relying on (506(b) vs 506(c)).',
+    checklist: ['Verification method per LP', 'Evidence on file', 'Exemption match']
+  },
+  {
+    name: 'AML program & officer',
+    category: 'Investor',
     severity: 'medium',
-    note: 'Marketing reviewed against the 506(b)/(c) line before anything ships.'
+    status: 'open',
+    owner: 'Adrian',
+    due: 'Before institutional capital',
+    drives: 'Lets you accept institutional capital',
+    action: 'Adopt the program',
+    detail:
+      'A written AML program with a designated officer and ongoing sanctions screening is table stakes for institutional LPs.',
+    checklist: ['Written program', 'Designated officer', 'OFAC screening']
   },
   {
-    category: 'Books & records',
+    name: 'Marketing & comms review',
+    category: 'Internal',
     severity: 'medium',
-    note: 'Ledgers, minutes and side letters retained and retrievable.'
+    status: 'open',
+    owner: 'Sienna',
+    due: 'Before anything ships',
+    drives: 'Keeps the raise within the Marketing Rule',
+    action: 'Review the materials',
+    detail:
+      'Every LP-facing material needs compliance review under the Marketing Rule — and against the 506(b)/(c) solicitation line — before it goes out.',
+    checklist: ['Pitch deck', 'One-pager & track record', 'Web & social presence']
   },
   {
-    category: 'Privacy & data handling',
+    name: 'Form ADV annual update',
+    category: 'Regulatory',
+    severity: 'medium',
+    status: 'upcoming',
+    owner: 'Adrian',
+    due: 'Within 90 days of fiscal year-end',
+    drives: 'Maintains adviser registration',
+    action: 'Draft the update',
+    detail:
+      'The annual Form ADV update is due within 90 days of fiscal year-end — AUM, brochure and disclosures need refreshing.',
+    checklist: ['AUM update', 'Brochure (Part 2A)', 'Disclosure review']
+  },
+  {
+    name: 'Annual compliance review',
+    category: 'Internal',
+    severity: 'medium',
+    status: 'upcoming',
+    owner: 'Adrian',
+    due: 'Annually under Rule 206(4)-7',
+    drives: 'ODD-ready for institutions',
+    action: 'Schedule the review',
+    detail:
+      'The annual review of the compliance program under Rule 206(4)-7 must be performed and documented — institutional ODD asks for it.',
+    checklist: ['Policy review', 'Testing', 'Findings memo']
+  },
+  {
+    name: 'Personal trading attestations',
+    category: 'Internal',
     severity: 'low',
-    note: 'LP PII scoped, access-controlled, and disclosed in the subscription docs.'
+    status: 'upcoming',
+    owner: 'Adrian',
+    due: 'Quarterly',
+    drives: 'Required under the Code of Ethics before each close',
+    action: 'Send the attestations',
+    detail:
+      'Quarterly personal-trading attestations under the Code of Ethics keep the team clean ahead of every close.',
+    checklist: ['Code of Ethics adopted', 'Quarterly attestations', 'Exception log']
+  },
+  {
+    name: 'Blue sky (state) filings',
+    category: 'Regulatory',
+    severity: 'low',
+    status: 'upcoming',
+    owner: 'Adrian',
+    due: 'Per state, after first sale',
+    drives: 'State-level offering compliance',
+    action: 'Map the states',
+    detail:
+      'State notice filings are due in the states where your LPs reside, generally within 15 days of the first sale in that state.',
+    checklist: ['LP state map', 'Notice filings', 'Fee schedule']
+  },
+  {
+    name: 'SOC 2 / cybersecurity',
+    category: 'Data & Cyber',
+    severity: 'medium',
+    status: 'upcoming',
+    owner: 'Noah',
+    due: 'Ahead of institutional ODD',
+    drives: 'Increasingly required in ODD',
+    action: 'Close the gaps',
+    detail:
+      'Institutional LPs increasingly ask for SOC 2-aligned controls — access management, incident response and vendor risk all get tested.',
+    checklist: ['Access controls', 'Incident response plan', 'Vendor risk review']
+  },
+  {
+    name: 'Data privacy (GDPR/CCPA)',
+    category: 'Data & Cyber',
+    severity: 'low',
+    status: 'upcoming',
+    owner: 'Noah',
+    due: 'Before EU or California capital',
+    drives: 'Required for EU & California investors',
+    action: 'Refresh the policy',
+    detail:
+      'Privacy policy and data-processing terms must cover EU and California LP data, and be disclosed in the subscription docs.',
+    checklist: ['Privacy policy', 'DPA template', 'Data map']
   }
 ] as const;
 
@@ -116,16 +524,101 @@ export const COMPLIANCE_BASELINE: readonly BaselineComplianceItem[] = [
 export const IR_STATUSES = ['todo', 'sent'] as const;
 export type IrStatus = (typeof IR_STATUSES)[number];
 
+/** The prototype's IR_CATS — the deliverable filter chips. */
+export const IR_CATS = ['Letters', 'Statements', 'Events', 'Portal'] as const;
+export type IrCategory = (typeof IR_CATS)[number];
+
+export function isIrCategory(s: string): s is IrCategory {
+  return (IR_CATS as readonly string[]).includes(s);
+}
+
+/** The per-item action verb, by category — the prototype's `action` field. */
+export const IR_ACTION: Record<IrCategory, string> = {
+  Letters: 'Review & send',
+  Statements: 'Generate & send',
+  Events: 'Plan & schedule',
+  Portal: 'Publish & send'
+};
+
+export function irAction(category: string | null): string {
+  return category && isIrCategory(category) ? IR_ACTION[category] : 'Prepare & send';
+}
+
 export interface BaselineIrItem {
-  cat: string;
+  name: string;
+  category: IrCategory;
+  /** The specialist who assembles it. */
+  who: string;
+  /** Why it matters — the row's drives-line and the drawer's gold strip. */
+  drives: string;
+  /** The drawer's explanation paragraph. */
+  detail: string;
+  /** The contents checklist ("Contents · {n}"). */
+  contents: string[];
   /** Days from seeding until due. */
   dueInDays: number;
 }
 
 /** Eleanor's reporting cadence — the deliverables LPs expect on a clock. */
 export const IR_BASELINE: readonly BaselineIrItem[] = [
-  { cat: 'Quarterly LP letter', dueInDays: 30 },
-  { cat: 'Capital account statements', dueInDays: 45 },
-  { cat: 'Pipeline & portfolio update', dueInDays: 14 },
-  { cat: 'Annual meeting planning', dueInDays: 90 }
+  {
+    name: 'Pipeline & portfolio update',
+    category: 'Letters',
+    who: 'Eleanor',
+    drives: 'Light-touch confidence between quarters',
+    detail:
+      'A short between-quarters note — what moved in the pipeline and the portfolio. Eleanor drafts it from your workspace; nothing reaches an LP until you approve.',
+    contents: ['Pipeline movement', 'One portfolio highlight', 'One ask'],
+    dueInDays: 14
+  },
+  {
+    name: 'Quarterly LP letter',
+    category: 'Letters',
+    who: 'Eleanor',
+    drives: 'Keeps momentum into next close',
+    detail:
+      'Your quarterly letter, assembled from the workspace — performance, portfolio news and market view. Review and send on your approval.',
+    contents: ['Performance section', 'Portfolio updates', 'Market commentary', 'Capital activity'],
+    dueInDays: 30
+  },
+  {
+    name: 'Capital account statements',
+    category: 'Statements',
+    who: 'Eleanor',
+    drives: 'LPs expect them on cadence',
+    detail:
+      'Per-LP capital account statements with NAV, contributions, distributions, fees and carry — generated from your capital records.',
+    contents: ['NAV struck', 'Per-LP allocations', 'Fee & carry calc', 'Distribution summary'],
+    dueInDays: 45
+  },
+  {
+    name: 'Annual meeting planning',
+    category: 'Events',
+    who: 'Sienna',
+    drives: 'The room that drives re-ups',
+    detail:
+      'The annual LP meeting is your single biggest re-up moment. Build the deck and the run of show well before the room fills.',
+    contents: ['Performance review', 'Portfolio deep-dives', 'Strategy & outlook', 'Q&A prep'],
+    dueInDays: 90
+  }
 ] as const;
+
+/** LP roster sentiment, derived only from a real recorded warmth signal. */
+export interface IrSentiment {
+  label: 'Champion' | 'Engaged' | 'Needs attention';
+  tone: 'success' | 'azure' | 'warning';
+}
+
+/**
+ * Map a capital_providers warmth ("Hot"/"Warm"/"Cold", free-form) to the
+ * prototype's sentiment vocabulary. A missing or unrecognized warmth returns
+ * null — sentiment only renders where a real signal exists.
+ */
+export function irSentiment(warmth: string | null | undefined): IrSentiment | null {
+  const w = (warmth ?? '').trim().toLowerCase();
+  if (!w) return null;
+  if (/^(hot|champion)/.test(w)) return { label: 'Champion', tone: 'success' };
+  if (/^(warm|engaged|active)/.test(w)) return { label: 'Engaged', tone: 'azure' };
+  if (/^(cold|cool|quiet|stale)/.test(w)) return { label: 'Needs attention', tone: 'warning' };
+  return null;
+}

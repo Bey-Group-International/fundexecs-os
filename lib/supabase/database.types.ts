@@ -4983,30 +4983,48 @@ export type Database = {
       }
       workflow_tasks: {
         Row: {
+          action: string | null
           created_at: string
+          critical: boolean
+          drives: string | null
+          due_label: string | null
           id: string
+          name: string | null
           org_id: string
           status: string
           subtasks: Json
           updated_at: string
+          who: string | null
           workflow_id: string
         }
         Insert: {
+          action?: string | null
           created_at?: string
+          critical?: boolean
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id: string
           status?: string
           subtasks?: Json
           updated_at?: string
+          who?: string | null
           workflow_id: string
         }
         Update: {
+          action?: string | null
           created_at?: string
+          critical?: boolean
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id?: string
           status?: string
           subtasks?: Json
           updated_at?: string
+          who?: string | null
           workflow_id?: string
         }
         Relationships: [
@@ -5066,28 +5084,49 @@ export type Database = {
       }
       compliance_items: {
         Row: {
+          action_label: string | null
           category: string
+          checklist: Json
           created_at: string
+          detail: string | null
+          drives: string | null
+          due_label: string | null
           id: string
+          name: string | null
           org_id: string
+          owner_name: string | null
           severity: string
           status: string
           updated_at: string
         }
         Insert: {
+          action_label?: string | null
           category: string
+          checklist?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id: string
+          owner_name?: string | null
           severity: string
           status?: string
           updated_at?: string
         }
         Update: {
+          action_label?: string | null
           category?: string
+          checklist?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
+          due_label?: string | null
           id?: string
+          name?: string | null
           org_id?: string
+          owner_name?: string | null
           severity?: string
           status?: string
           updated_at?: string
@@ -5105,30 +5144,48 @@ export type Database = {
       ir_items: {
         Row: {
           cat: string
+          category: string | null
+          contents: Json
           created_at: string
+          detail: string | null
+          drives: string | null
           due_at: string | null
           id: string
+          name: string | null
           org_id: string
           status: string
           updated_at: string
+          who: string | null
         }
         Insert: {
           cat: string
+          category?: string | null
+          contents?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
           due_at?: string | null
           id?: string
+          name?: string | null
           org_id: string
           status?: string
           updated_at?: string
+          who?: string | null
         }
         Update: {
           cat?: string
+          category?: string | null
+          contents?: Json
           created_at?: string
+          detail?: string | null
+          drives?: string | null
           due_at?: string | null
           id?: string
+          name?: string | null
           org_id?: string
           status?: string
           updated_at?: string
+          who?: string | null
         }
         Relationships: [
           {

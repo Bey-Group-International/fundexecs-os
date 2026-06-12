@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { IrFlow } from '@/components/run/IrFlow';
-import { getIrItems } from '@/lib/queries/run-ops';
+import { getIrItems, getIrLpRoster, getIrPerformance } from '@/lib/queries/run-ops';
 import { getActiveOrg } from '@/lib/queries/org';
 
 export const metadata: Metadata = {
@@ -14,10 +14,14 @@ export const metadata: Metadata = {
 export default async function RunIrPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
-  const items = await getIrItems(org.orgId);
+  const [items, lps, perf] = await Promise.all([
+    getIrItems(org.orgId),
+    getIrLpRoster(org.orgId),
+    getIrPerformance(org.orgId)
+  ]);
   return (
     <div className="fx-rise mx-auto max-w-[920px]">
-      <IrFlow items={items} />
+      <IrFlow items={items} lps={lps} perf={perf} />
     </div>
   );
 }
