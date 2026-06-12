@@ -1,0 +1,175 @@
+/* ===========================================================
+   FundExecs OS UI Kit — shared primitives
+   Icon (Lucide), Button, Badge, Card, Avatar, ProgressBar,
+   SegTabs, Field, Tooltip, EarnCoin
+   Exported to window for cross-file use.
+   =========================================================== */
+const { useState, useEffect, useRef, useMemo } = React;
+
+const COIN = (typeof window !== 'undefined' && window.__resources && window.__resources.earnCoin) || 'earn-coin-sm.png';
+
+/* --- Lucide icon: inject via innerHTML so React never owns the <svg> --- */
+function Icon({ name, size = 18, color, strokeWidth = 1.9, style, className }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const n = ref.current;
+    if (!n || !window.lucide) return;
+    n.innerHTML = `<i data-lucide="${name}"></i>`;
+    window.lucide.createIcons();
+    const svg = n.querySelector('svg');
+    if (svg) {
+      svg.setAttribute('width', size);
+      svg.setAttribute('height', size);
+      svg.setAttribute('stroke-width', strokeWidth);
+    }
+  }, [name, size, strokeWidth]);
+  return <span ref={ref} className={className} style={{ display: 'inline-flex', alignItems: 'center', color, flex: 'none', ...style }} />;
+}
+
+function EarnCoin({ size = 28, radius = 8, pad = 2 }) {
+  return (
+    <span style={{ width: size, height: size, borderRadius: '50%', background: '#fff', overflow: 'hidden',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+      <img src={COIN} alt="Earn" style={{ width: '124%', height: '124%', objectFit: 'contain' }} />
+    </span>
+  );
+}
+
+const BTN = {
+  primary: { background: 'linear-gradient(135deg,#3B74F0,#2152D8)', color: '#fff', border: '1px solid transparent', boxShadow: '0 1px 2px rgba(0,0,0,0.2), 0 8px 18px -8px rgba(37,99,235,0.55)' },
+  light: { background: '#fff', color: '#070b14', border: '1px solid transparent' },
+  secondary: { background: 'var(--surface-2)', color: 'var(--fg-1)', border: '1px solid var(--border)' },
+  gold: { background: 'linear-gradient(135deg,#F7C948,#E5A823)', color: '#070b14', border: '1px solid transparent', fontWeight: 600 },
+  ghost: { background: 'transparent', color: 'var(--fg-3)', border: '1px solid transparent' },
+  danger: { background: 'var(--danger-soft)', color: 'var(--danger)', border: '1px solid var(--danger-line)' },
+  outline: { background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--border)' },
+};
+function Button({ variant = 'secondary', icon, iconRight, children, onClick, style, size = 'md', disabled, title }) {
+  const [hover, setHover] = useState(false);
+  const pads = size === 'sm' ? '6px 12px' : size === 'lg' ? '11px 20px' : '9px 16px';
+  const fs = size === 'sm' ? 12.5 : 14;
+  const base = BTN[variant];
+  const hoverStyle = hover && !disabled ? (
+    variant === 'primary' ? { filter: 'brightness(1.08)' } :
+    variant === 'light' ? { background: '#e2e8f0' } :
+    variant === 'gold' ? { filter: 'brightness(1.06)' } :
+    variant === 'ghost' ? { background: 'var(--surface-1)', color: 'var(--fg-1)' } :
+    variant === 'danger' ? { background: 'rgba(251,113,133,0.18)' } :
+    { background: 'var(--surface-3)' }
+  ) : {};
+  return (
+    <button className="clickable" onClick={disabled ? undefined : onClick} title={title}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+        fontSize: fs, fontWeight: base.fontWeight || 500, borderRadius: 12, padding: pads,
+        opacity: disabled ? 0.5 : 1, whiteSpace: 'nowrap', ...base, ...hoverStyle, ...style }}>
+      {icon && <Icon name={icon} size={size === 'sm' ? 14 : 16} />}
+      {children}
+      {iconRight && <Icon name={iconRight} size={size === 'sm' ? 14 : 16} />}
+    </button>
+  );
+}
+
+const TONE = {
+  neutral: { c: 'var(--fg-3)', bg: 'var(--surface-2)', b: 'var(--border)' },
+  gold: { c: 'var(--gold-1)', bg: 'var(--gold-soft)', b: 'var(--gold-line)' },
+  azure: { c: 'var(--azure-1)', bg: 'var(--azure-soft)', b: 'var(--azure-line)' },
+  success: { c: 'var(--success)', bg: 'var(--success-soft)', b: 'var(--success-line)' },
+  warning: { c: 'var(--warning)', bg: 'var(--warning-soft)', b: 'var(--warning-line)' },
+  danger: { c: 'var(--danger)', bg: 'var(--danger-soft)', b: 'var(--danger-line)' },
+  info: { c: 'var(--info)', bg: 'var(--info-soft)', b: 'var(--info-line)' },
+};
+function Badge({ tone = 'neutral', children, dot, pulse, style }) {
+  const t = TONE[tone] || TONE.neutral;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600,
+      borderRadius: 999, padding: dot ? '4px 11px 4px 9px' : '4px 11px', color: t.c, background: t.bg,
+      border: `1px solid ${t.b}`, whiteSpace: 'nowrap', ...style }}>
+      {dot && <span className={pulse ? 'pulse-dot' : ''} style={{ width: 6, height: 6, borderRadius: 999, background: t.c }} />}
+      {children}
+    </span>
+  );
+}
+
+function ProgressBar({ value, color = 'var(--gold-1)', track = 'rgba(255,255,255,0.08)', height = 6, gradient }) {
+  return (
+    <div style={{ height, borderRadius: 999, background: track, overflow: 'hidden', width: '100%' }}>
+      <div style={{ height: '100%', width: `${value}%`, borderRadius: 999,
+        background: gradient || color, transition: 'width .6s cubic-bezier(.2,.7,.2,1)' }} />
+    </div>
+  );
+}
+
+function Avatar({ name, size = 32, tone = 'azure' }) {
+  const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const t = TONE[tone] || TONE.azure;
+  return (
+    <span style={{ width: size, height: size, borderRadius: size * 0.32, background: t.bg, color: t.c,
+      border: `1px solid ${t.b}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.38, fontWeight: 600, flex: 'none' }}>{initials}</span>
+  );
+}
+
+function SegTabs({ tabs, active, onChange, style }) {
+  return (
+    <div style={{ display: 'inline-flex', gap: 2, padding: 3, background: 'var(--surface-1)',
+      border: '1px solid var(--border)', borderRadius: 12, ...style }}>
+      {tabs.map(t => {
+        const on = (t.id || t) === active;
+        return (
+          <button key={t.id || t} className="clickable" onClick={() => onChange(t.id || t)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500,
+              padding: '6px 13px', borderRadius: 9, color: on ? 'var(--fg-1)' : 'var(--fg-4)',
+              background: on ? 'var(--surface-3)' : 'transparent' }}>
+            {t.icon && <Icon name={t.icon} size={14} />}{t.label || t}
+            {t.count != null && <span style={{ fontSize: 11, color: on ? 'var(--fg-3)' : 'var(--fg-5)' }}>{t.count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Field({ label, type = 'text', value, onChange, placeholder, icon, hint, options }) {
+  const [focus, setFocus] = useState(false);
+  const inputStyle = {
+    width: '100%', fontSize: 14, color: 'var(--fg-1)', background: 'var(--surface-2)',
+    border: `1px solid ${focus ? 'var(--accent-line)' : 'var(--border)'}`, borderRadius: 12,
+    padding: icon ? '10px 12px 10px 38px' : '10px 12px', outline: 'none',
+    boxShadow: focus ? '0 0 0 3px var(--accent-soft)' : 'none', transition: 'border-color .14s, box-shadow .14s',
+  };
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {label && <span style={{ fontSize: 12.5, color: 'var(--fg-3)', fontWeight: 500 }}>{label}</span>}
+      <div style={{ position: 'relative' }}>
+        {icon && <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-4)' }}><Icon name={icon} size={16} /></span>}
+        {options ? (
+          <select value={value} onChange={e => onChange && onChange(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+            style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}>
+            {options.map(o => <option key={o} value={o} style={{ background: '#0e1526' }}>{o}</option>)}
+          </select>
+        ) : (
+          <input type={type} value={value} placeholder={placeholder}
+            onChange={e => onChange && onChange(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+            style={inputStyle} />
+        )}
+        {options && <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-4)', pointerEvents: 'none' }}><Icon name="chevron-down" size={15} /></span>}
+      </div>
+      {hint && <span style={{ fontSize: 11.5, color: 'var(--fg-5)' }}>{hint}</span>}
+    </label>
+  );
+}
+
+function SectionTitle({ eyebrow, title, action }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 14 }}>
+      <div>
+        {eyebrow && <div className="t-eyebrow" style={{ marginBottom: 5 }}>{eyebrow}</div>}
+        <div className="t-h2">{title}</div>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+Object.assign(window, { Icon, EarnCoin, Button, Badge, ProgressBar, Avatar, SegTabs, Field, SectionTitle, COIN, TONE });
