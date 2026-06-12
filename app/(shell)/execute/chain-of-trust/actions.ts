@@ -2,18 +2,25 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
+import { getOrgAnchorVerification, type OrgAnchorVerification } from '@/lib/queries/anchor';
 
 /**
- * Verify chain — the prototype's button, made real and honest. Records are
- * not cryptographically hashed yet, so this does what CAN be verified
- * today: re-query the ledger server-side and cross-check its continuity —
- * every record's completion in bounds, every proof-layer set complete and
- * in order, no layers orphaned from their record. The copy in the UI
- * claims exactly this and no more.
+ * Verify chain — real verification on two levels. First, ledger continuity:
+ * every record's completion in bounds, every proof-layer set complete and in
+ * order, no layers orphaned. Second, CRYPTOGRAPHIC verification: every approval
+ * anchored in the tamper-evident ledger is recomputed from its source row and
+ * re-folded to its Merkle root (see lib/queries/anchor). The UI copy now claims
+ * exactly this — tamper-evidence, internal, no third party.
  */
 
 export type VerifyChainResult =
-  | { ok: true; records: number; layers: number; issues: string[] }
+  | {
+      ok: true;
+      records: number;
+      layers: number;
+      issues: string[];
+      anchoring: OrgAnchorVerification;
+    }
   | { ok: false; error: string };
 
 export async function verifyChain(): Promise<VerifyChainResult> {
@@ -82,5 +89,13 @@ export async function verifyChain(): Promise<VerifyChainResult> {
     }
   }
 
-  return { ok: true, records: records.length, layers: layers.length, issues };
+  // Cryptographic verification of the tamper-evident anchor ledger.
+  const anchoring = await getOrgAnchorVerification(org.orgId);
+  if (anchoring.tampered > 0) {
+    issues.push(
+      `${anchoring.tampered} anchored record${anchoring.tampered === 1 ? '' : 's'} failed cryptographic verification — the source no longer matches what was anchored.`
+    );
+  }
+
+  return { ok: true, records: records.length, layers: layers.length, issues, anchoring };
 }

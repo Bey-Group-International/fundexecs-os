@@ -74,7 +74,8 @@ export async function runAnchorBatch(): Promise<AnchorBatchSummary> {
       .order('created_at', { ascending: true })
       .limit(MAX_BATCH_LEAVES);
 
-    if (readErr) return { ok: false, batched: 0, batchId: null, provider: null, error: readErr.message };
+    if (readErr)
+      return { ok: false, batched: 0, batchId: null, provider: null, error: readErr.message };
     if (!pending || pending.length === 0) {
       return { ok: true, batched: 0, batchId: null, provider: null };
     }
@@ -95,10 +96,21 @@ export async function runAnchorBatch(): Promise<AnchorBatchSummary> {
       _tx_hash: result.txHash ?? undefined
     });
     if (commitErr) {
-      return { ok: false, batched: 0, batchId: null, provider: result.provider, error: commitErr.message };
+      return {
+        ok: false,
+        batched: 0,
+        batchId: null,
+        provider: result.provider,
+        error: commitErr.message
+      };
     }
 
-    return { ok: true, batched: pending.length, batchId: batchId ?? null, provider: result.provider };
+    return {
+      ok: true,
+      batched: pending.length,
+      batchId: batchId ?? null,
+      provider: result.provider
+    };
   } catch (err) {
     return {
       ok: false,

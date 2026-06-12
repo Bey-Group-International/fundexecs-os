@@ -7,7 +7,7 @@ custody, public L2, ship an MVP — **with an absolute constraint that no
 confidential information ever leaves the system.**
 
 > Companion to `docs/PRIVATE_MARKET_LIFECYCLE.md`. Where that doc says each
-> module maps to a lifecycle stage, this doc says: the *proof* each stage
+> module maps to a lifecycle stage, this doc says: the _proof_ each stage
 > produces becomes independently verifiable, without anyone trusting FundExecs
 > as custodian of the record.
 
@@ -15,13 +15,13 @@ confidential information ever leaves the system.**
 
 ## 1. The decision (locked)
 
-| Question                         | Decision                                                                       |
-| -------------------------------- | ------------------------------------------------------------------------------ |
-| Where does blockchain add value? | **Anchor the Chain of Trust** (Stages 1 & 7 of the lifecycle)                  |
-| Custody posture                  | **Anchor-only** — never hold tokens, securities, or funds                      |
-| Infrastructure                   | **Internal-first.** Public L2 (e.g. Base / Polygon) is an optional later step  |
-| Trust ceiling                    | **Internal now, external witness optional later** — no third-party dependency  |
-| Scope now                        | **Ship an anchoring MVP** — fully internal, additive to the existing trust flow|
+| Question                         | Decision                                                                                                   |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Where does blockchain add value? | **Anchor the Chain of Trust** (Stages 1 & 7 of the lifecycle)                                              |
+| Custody posture                  | **Anchor-only** — never hold tokens, securities, or funds                                                  |
+| Infrastructure                   | **Internal-first.** Public L2 (e.g. Base / Polygon) is an optional later step                              |
+| Trust ceiling                    | **Internal now, external witness optional later** — no third-party dependency                              |
+| Scope now                        | **Ship an anchoring MVP** — fully internal, additive to the existing trust flow                            |
 | Hard constraint                  | **No confidential information is ever disclosed** (and nothing public until/unless the witness is enabled) |
 
 ### Internal-first, witness-later (the key architectural call)
@@ -53,8 +53,8 @@ a single ~32-byte Merkle root posted per window — not custody, not a counterpa
 
 We already built the asset blockchain is best at: a trust ledger
 (`chain_of_trust_records` → `proof_layers` → `evidence` → `trust_events`, plus
-the Memory Audit Trail). Today that ledger is an *internal claim* — an LP has to
-trust our database. Anchoring turns it into an *external proof*: tamper-evident,
+the Memory Audit Trail). Today that ledger is an _internal claim_ — an LP has to
+trust our database. Anchoring turns it into an _external proof_: tamper-evident,
 timestamped, and verifiable off-platform.
 
 Tokenized fund interests, on-chain capital calls, and identity passports are
@@ -66,12 +66,12 @@ notarization, not a financial instrument. It ships first and de-risks the rest.
 
 ## 2. Lifecycle mapping (value, strongest first)
 
-| Stage                  | Today (internal claim)                       | Anchoring value-add (external proof)                                  |
-| ---------------------- | -------------------------------------------- | --------------------------------------------------------------------- |
-| **1. Establish truth** | `evidence` + AI validation + human approval  | Each approval's commitment anchored → track record provable to any LP |
-| **7. Prove & compound**| Memory Audit Trail (`trust_events`, `admin_actions`) | Audit trail becomes externally verifiable institutional memory |
-| 4. Convert LPs         | Soft-circle → commitment in capital stack    | Anchor the *attestation* of a commitment milestone (still no custody) |
-| 5. Execute deals       | IC memo / diligence synthesis approval       | Anchor the IC decision record → provable governance trail             |
+| Stage                   | Today (internal claim)                               | Anchoring value-add (external proof)                                  |
+| ----------------------- | ---------------------------------------------------- | --------------------------------------------------------------------- |
+| **1. Establish truth**  | `evidence` + AI validation + human approval          | Each approval's commitment anchored → track record provable to any LP |
+| **7. Prove & compound** | Memory Audit Trail (`trust_events`, `admin_actions`) | Audit trail becomes externally verifiable institutional memory        |
+| 4. Convert LPs          | Soft-circle → commitment in capital stack            | Anchor the _attestation_ of a commitment milestone (still no custody) |
+| 5. Execute deals        | IC memo / diligence synthesis approval               | Anchor the IC decision record → provable governance trail             |
 
 Out of scope for the MVP (deliberately): tokenization, identity passports,
 on-chain money movement. Revisit only after anchoring proves the thesis.
@@ -100,7 +100,7 @@ root       = MerkleRoot( [leaf_1, leaf_2, … leaf_n] )       # batch of leaves
   who already holds a candidate document still can't prove it was anchored, and
   guessable records can't be confirmed.
 - **Merkle batching** (one root per time window, e.g. hourly) means the chain
-  reveals neither *which* records, *how many*, nor *which org* — a root is
+  reveals neither _which_ records, _how many_, nor _which org_ — a root is
   indistinguishable random bytes. It also collapses cost to one tx per window.
 - **Off-chain, under existing RLS:** salt, leaf preimage, Merkle proof, and the
   anchoring tx hash. These are released to an authorized verifier (e.g. an LP
@@ -183,7 +183,7 @@ client); batch roots carry no org linkage by design.
 **In:**
 
 1. `lib/anchor/*` — merkle + provider interface + **`local` provider (the MVP)**
-   + `l2` stub (dormant).
+   - `l2` stub (dormant).
 2. `enqueueAnchor` hook in `approveEvidence` (never-block), writing salted leaves.
 3. Additive migration: `anchor_leaves`, `anchor_batches` + RLS.
 4. Batch cron route that folds leaves → Merkle root → `anchorRoot` (which, for
@@ -197,7 +197,7 @@ custody, and — for the MVP — any external/public anchoring at all.
 **Risks / watch-items:** ensuring the canonical-payload serializer is stable (a
 format drift would break old proofs — version the payload schema). Be explicit in
 the verify UX that the internal-only guarantee is "unaltered, provable to anyone
-who trusts our infrastructure" — *not* operator-tamper-proof until the external
+who trusts our infrastructure" — _not_ operator-tamper-proof until the external
 witness is enabled. Key management / L2 liveness become relevant only if/when the
 `l2` provider is switched on.
 

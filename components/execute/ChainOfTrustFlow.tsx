@@ -127,12 +127,20 @@ export function ChainOfTrustFlow({ data }: { data: TrustCenterData }) {
       setVerify({ phase: 'done', summary: res.error, intact: false });
       return;
     }
+    const a = res.anchoring;
+    // The cryptographic clause — only shown once something has been anchored.
+    const cryptoClause =
+      a.anchored > 0
+        ? ` ${a.verified} of ${a.anchored} anchored record${a.anchored === 1 ? '' : 's'} cryptographically verified${a.tampered > 0 ? `, ${a.tampered} tampered` : ''}${a.pending > 0 ? `, ${a.pending} awaiting anchor` : ''}.`
+        : a.pending > 0
+          ? ` ${a.pending} record${a.pending === 1 ? '' : 's'} awaiting their first anchor.`
+          : '';
     setVerify({
       phase: 'done',
       intact: res.issues.length === 0,
       summary:
         res.issues.length === 0
-          ? `Re-queried ${res.records} record${res.records === 1 ? '' : 's'} and ${res.layers} proof layer${res.layers === 1 ? '' : 's'} — counts and continuity check out.`
+          ? `Re-queried ${res.records} record${res.records === 1 ? '' : 's'} and ${res.layers} proof layer${res.layers === 1 ? '' : 's'} — counts and continuity check out.${cryptoClause}`
           : res.issues.join(' ')
     });
   }
@@ -238,19 +246,20 @@ export function ChainOfTrustFlow({ data }: { data: TrustCenterData }) {
             })}
           </div>
 
-          {/* integrity banner — honest: records aren't cryptographically
-              hashed yet, so Verify re-queries and cross-checks continuity */}
+          {/* integrity banner — Verify cross-checks ledger continuity AND
+              re-folds the tamper-evident anchor ledger (internal, no third party) */}
           <Card className="border-[var(--success-line)] bg-[var(--success-soft)] p-3.5">
             <div className="flex flex-wrap items-center gap-3">
               <ShieldCheck size={18} className="flex-none text-success" aria-hidden />
               <div className="min-w-0 flex-1 basis-60 text-[12.5px] text-fg-2">
                 <b className="text-success">Chain intact.</b> {data.recordCount} record
                 {data.recordCount === 1 ? '' : 's'} on the ledger, each tied to its source entity
-                and timestamped. Cryptographic sealing lands with hashing{' '}
+                and timestamped. Every approval is anchored as a salted hash in a tamper-evident
+                ledger{' '}
                 <Badge tone="neutral" className="px-1.5 py-0 text-[8.5px]">
-                  Illustrative
+                  Internal
                 </Badge>{' '}
-                — until then, Verify re-queries the ledger and cross-checks its continuity.
+                — Verify re-queries continuity and re-folds each anchor to its Merkle root.
               </div>
               <Button
                 variant="ghost"
@@ -651,8 +660,8 @@ export function ChainOfTrustFlow({ data }: { data: TrustCenterData }) {
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-fg-5">
                     <Link2 size={13} className="flex-none text-fg-4" aria-hidden />
-                    This is the row’s real id — auditable in the database. Hash-linking arrives with
-                    cryptographic sealing.
+                    This is the row’s real id — auditable in the database. Each approval on this
+                    chain is anchored as a salted hash in the tamper-evident ledger.
                   </div>
                   {source.href ? (
                     <Link
