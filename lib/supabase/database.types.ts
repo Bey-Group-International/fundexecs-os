@@ -4798,11 +4798,11 @@ export type Database = {
             referencedColumns: ["id", "org_id"]
           },
           {
-            foreignKeyName: "closing_step_signatures_step_id_org_id_fkey"
-            columns: ["step_id", "org_id"]
+            foreignKeyName: "closing_step_signatures_step_id_fkey"
+            columns: ["step_id"]
             isOneToOne: false
             referencedRelation: "closing_steps"
-            referencedColumns: ["id", "org_id"]
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "closing_step_signatures_org_id_fkey"

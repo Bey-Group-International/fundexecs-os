@@ -16,7 +16,10 @@ create table if not exists public.closing_step_signatures (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations (id) on delete cascade,
   closing_id uuid not null,
-  step_id uuid not null,
+  -- closing_steps is keyed on its PK only (no composite (id, org_id) unique),
+  -- so the step reference is single-column; org scoping is enforced by the
+  -- closings composite FK below plus RLS.
+  step_id uuid not null references public.closing_steps (id) on delete cascade,
   seq integer not null,
   envelope_id text not null,
   status text not null default 'sent',
@@ -26,8 +29,7 @@ create table if not exists public.closing_step_signatures (
   created_by uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  foreign key (closing_id, org_id) references public.closings (id, org_id) on delete cascade,
-  foreign key (step_id, org_id) references public.closing_steps (id, org_id) on delete cascade
+  foreign key (closing_id, org_id) references public.closings (id, org_id) on delete cascade
 );
 
 -- One live envelope per step (a re-send replaces the reference via upsert).
