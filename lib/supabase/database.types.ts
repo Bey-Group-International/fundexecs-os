@@ -5084,6 +5084,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      file_formation_step: {
+        Args: {
+          _data: Json
+          _doc_body: string
+          _kind: string
+          _org_id: string
+          _spec: Json
+        }
+        Returns: Json
+      }
       accept_beta_invite: {
         Args: { _email: string; _invite_id?: string; _user_id: string }
         Returns: Json

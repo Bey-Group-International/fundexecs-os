@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FORMATION_D0, FORMATION_ITEMS, type FormationData } from './config';
-import { FORMATION_DOC_DISCLAIMER, composeFormationDoc } from './compose';
+import { FORMATION_DOC_DISCLAIMER, composeFormationDoc, renderFormationDoc } from './compose';
 
 const CTX = { firm: 'Acme Capital' };
 const KINDS = FORMATION_ITEMS.map((i) => i.kind);
@@ -89,4 +89,26 @@ test('an unwritten story says so instead of inventing copy', () => {
 test('the firm name threads through the composed docs', () => {
   const doc = composeFormationDoc('structure', FORMATION_D0, CTX);
   assert.ok(doc.sections.some((s) => s.paras.some((p) => p.includes('Acme Capital'))));
+});
+
+test('renderFormationDoc emits every section, row and paragraph plus the disclaimer', () => {
+  for (const kind of KINDS) {
+    const doc = composeFormationDoc(kind, FORMATION_D0, CTX);
+    const text = renderFormationDoc(doc);
+    assert.ok(text.startsWith(`# ${doc.title}`));
+    assert.ok(text.includes(doc.lede));
+    for (const s of doc.sections) {
+      assert.ok(text.includes(`## ${s.heading}`), `${kind} missing section ${s.heading}`);
+      for (const [k, v] of s.rows) assert.ok(text.includes(`- ${k}: ${v}`));
+      for (const p of s.paras) assert.ok(text.includes(p));
+    }
+    assert.ok(text.includes(FORMATION_DOC_DISCLAIMER));
+  }
+});
+
+test('renderFormationDoc snapshots differ when the decisions differ', () => {
+  const a = renderFormationDoc(composeFormationDoc('terms', FORMATION_D0, CTX));
+  const b = renderFormationDoc(composeFormationDoc('terms', { ...FORMATION_D0, fee: 1.5 }, CTX));
+  assert.notEqual(a, b);
+  assert.ok(b.includes('1.5%'));
 });
