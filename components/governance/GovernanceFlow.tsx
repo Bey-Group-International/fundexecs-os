@@ -30,6 +30,7 @@ import {
   Users,
   type LucideIcon
 } from 'lucide-react';
+import { ActionRunner } from '@/components/earn/ActionRunner';
 import { Avatar, type AvatarTone } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -37,12 +38,17 @@ import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SegTabs } from '@/components/ui/Tabs';
-import { adoptGovernancePolicy, saveGovernanceBody } from '@/lib/governance/actions';
+import {
+  adoptGovernancePolicy,
+  draftGovernancePolicy,
+  saveGovernanceBody
+} from '@/lib/governance/actions';
 import {
   ADV_0,
   ADV_CANDIDATES,
   CAP_0,
   CAP_CANDIDATES,
+  confirmedMembers,
   FM_0,
   FM_CANDIDATES,
   GOV_POLICIES,
@@ -51,14 +57,19 @@ import {
   LEGAL_0,
   LEGAL_CANDIDATES,
   LPAC_0,
+  padRoster,
+  POL_CTA,
   POL_STAGES,
   POL_TONE,
   policyDefaults,
   policyRows,
   policyStage,
+  rosterRun,
+  type GovBodyId,
   type GovCandidate,
   type GovMember,
   type GovPolicy,
+  type PolicyStage,
   type PolicyValue
 } from '@/lib/governance/config';
 import type { GovBodyKind } from '@/lib/governance/persistence';
@@ -84,7 +95,20 @@ function policyIcon(name: string): LucideIcon {
   return POLICY_ICONS[name] ?? Scale;
 }
 
-/** The selectable chip primitive shared by the governance builders. */
+/** POL_TONE rendered: the stage's icon-square and label classes. */
+const STAGE_CLASSES: Record<(typeof POL_TONE)[PolicyStage], { square: string; text: string }> = {
+  neutral: { square: 'border-hairline bg-surface-2 text-fg-3', text: 'text-fg-5' },
+  gold: {
+    square: 'border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1',
+    text: 'text-gold-1'
+  },
+  success: {
+    square: 'border-[var(--success-line)] bg-[var(--success-soft)] text-success',
+    text: 'text-success'
+  }
+};
+
+/** The selectable chip primitive shared by the policy builders. */
 function GovChip({
   label,
   selected,
@@ -149,18 +173,18 @@ function PanelHeader({
   );
 }
 
-/* ── a governance-body roster ────────────────────────────────────────────── */
+/* ── a governance-body roster + its candidate bench ──────────────────────── */
 
 function RosterPanel({
   icon,
   title,
   eyebrow,
   members,
+  bench,
   variant,
   entityIcon,
   principal,
-  bench,
-  onAddCandidate,
+  onLineUp,
   addLabel,
   setLabel,
   stats
@@ -168,18 +192,20 @@ function RosterPanel({
   icon: LucideIcon;
   title: string;
   eyebrow: string;
+  /** The render roster: confirmed members padded with open seats. */
   members: GovMember[];
+  /** Earn's suggestions for the open seats — never members until approved. */
+  bench: GovCandidate[];
   variant: 'people' | 'entity';
   entityIcon?: LucideIcon;
   principal: string;
-  /** Remaining candidate suggestions — rendered only while a seat is open. */
-  bench: GovCandidate[];
-  onAddCandidate: (cand: GovCandidate) => void;
-  addLabel?: string;
+  onLineUp: (cand: GovCandidate) => void;
+  addLabel: string;
   setLabel: string;
   stats: [string, string][];
 }) {
-  const openCount = members.filter((m) => m.open).length;
+  const hasOpen = members.some((m) => m.open);
+  const available = hasOpen ? bench : [];
   return (
     <Card className="p-[18px]">
       <PanelHeader
@@ -187,13 +213,18 @@ function RosterPanel({
         title={title}
         eyebrow={eyebrow}
         action={
-          openCount > 0 ? (
-            <Badge tone="neutral" className="text-[9.5px]">
-              {openCount} open
-            </Badge>
+          hasOpen && available.length > 0 ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={UserPlus}
+              onClick={() => onLineUp(available[0])}
+            >
+              {addLabel}
+            </Button>
           ) : (
-            <Badge tone="success" className="text-[9.5px]">
-              {setLabel}
+            <Badge tone={hasOpen ? 'neutral' : 'success'} className="text-[9.5px]">
+              {hasOpen ? 'Open seats' : setLabel}
             </Badge>
           )
         }
@@ -256,48 +287,35 @@ function RosterPanel({
           );
         })}
       </div>
-      {openCount > 0 && bench.length > 0 && (
-        <div className="mt-3 border-t border-[var(--border-faint)] pt-3">
-          <Eyebrow className="mb-2">
-            Earn&apos;s bench · suggestions
+      {available.length > 0 && (
+        <div className="mt-3 rounded-[12px] border border-[var(--border-faint)] bg-surface-2 p-2.5">
+          <Eyebrow className="mb-1.5 flex items-center gap-1.5 px-0.5">
+            <Sparkles size={11} className="text-gold-1" aria-hidden />
+            Earn&apos;s bench
             <span className="font-normal normal-case tracking-normal text-fg-5">
-              {' '}
-              — nothing is added until you confirm
+              · suggestions — nothing joins until you approve
             </span>
           </Eyebrow>
-          <div className="flex flex-col gap-1.5">
-            {bench.map((c) => (
-              <button
-                key={c.name}
-                type="button"
-                onClick={() => onAddCandidate(c)}
-                className="group flex w-full items-center gap-2.5 rounded-[12px] border border-dashed border-hairline px-3 py-2 text-left transition hover:border-[var(--accent-line)] hover:bg-[var(--accent-soft)]"
+          <div className="flex flex-col gap-1">
+            {available.map((cand) => (
+              <div
+                key={cand.name}
+                className="flex items-center gap-2.5 rounded-[10px] px-2 py-1.5 hover:bg-surface-1"
               >
-                {variant === 'entity' ? (
-                  <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-[8px] border border-hairline bg-surface-2 text-fg-4">
-                    {createElement(entityIcon ?? Banknote, {
-                      size: 13,
-                      strokeWidth: 1.9,
-                      'aria-hidden': true
-                    })}
-                  </span>
-                ) : (
-                  <Avatar name={c.name} size={26} tone="azure" />
-                )}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12px] font-semibold text-fg-2">{c.name}</div>
-                  <div className="truncate text-[10.5px] text-fg-5">
-                    {c.role} · {c.note}
-                  </div>
+                  <span className="text-[12px] font-medium text-fg-2">{cand.name}</span>
+                  <span className="text-[10.5px] text-fg-5">
+                    {' '}
+                    · {cand.role} · {cand.note}
+                  </span>
                 </div>
-                {c.carry && (
-                  <span className="font-mono text-[11px] font-semibold text-gold-1">{c.carry}</span>
+                {cand.carry && (
+                  <span className="font-mono text-[11px] text-fg-4">{cand.carry}</span>
                 )}
-                <span className="flex flex-none items-center gap-1 text-[11px] font-medium text-fg-4 transition group-hover:text-[var(--accent)]">
-                  <UserPlus size={13} aria-hidden />
-                  {addLabel ?? 'Add'}
-                </span>
-              </button>
+                <Button variant="ghost" size="sm" icon={Plus} onClick={() => onLineUp(cand)}>
+                  Line up
+                </Button>
+              </div>
             ))}
           </div>
         </div>
@@ -321,26 +339,25 @@ function PolicyBuilder({
   pol,
   initial,
   alreadyAdopted,
-  startDrafted,
+  alreadyDrafted,
   onBack,
-  onAdopted,
-  onDrafted
+  onDrafted,
+  onAdopted
 }: {
   pol: GovPolicy;
-  /** Persisted decisions when re-opening an adopted policy, or the in-flight draft. */
+  /** Persisted decisions when re-opening a drafted or adopted policy. */
   initial: Record<string, PolicyValue> | null;
   alreadyAdopted: boolean;
-  /** Resume a drafted-but-not-adopted policy at its preview. */
-  startDrafted: boolean;
+  alreadyDrafted: boolean;
   onBack: () => void;
-  onAdopted: (id: string, decisions: Record<string, PolicyValue>) => void;
   onDrafted: (id: string, decisions: Record<string, PolicyValue>) => void;
+  onAdopted: (id: string, decisions: Record<string, PolicyValue>) => void;
 }) {
   const reduced = useReducedMotion() ?? false;
   const [d, setD] = useState<Record<string, PolicyValue>>(() => initial ?? policyDefaults(pol));
   const [applied, setApplied] = useState(false);
   const [phase, setPhase] = useState<'edit' | 'building' | 'done'>(
-    alreadyAdopted || startDrafted ? 'done' : 'edit'
+    alreadyAdopted || alreadyDrafted ? 'done' : 'edit'
   );
   const [n, setN] = useState(0);
   const [adopting, setAdopting] = useState(false);
@@ -361,8 +378,25 @@ function PolicyBuilder({
 
   useEffect(() => {
     if (phase !== 'building') return;
+    // Drafting completes into the persisted Drafting stage (Draft → Adopt);
+    // an adopted policy keeps its standing until re-adopted.
+    // Await the draft write before revealing the done state, so the Adopt
+    // button never becomes clickable while the draft save is still in flight
+    // (which could let an adoption race — and be overwritten by — the draft).
+    const finish = async () => {
+      if (!alreadyAdopted) {
+        try {
+          const res = await draftGovernancePolicy(pol.id, d);
+          if (res.ok) onDrafted(pol.id, d);
+          else setAdoptError(res.error);
+        } catch {
+          setAdoptError('Could not save the draft — it lives in this session only.');
+        }
+      }
+      setPhase('done');
+    };
     if (reduced) {
-      const t = setTimeout(() => setPhase('done'), 300);
+      const t = setTimeout(finish, 300);
       return () => clearTimeout(t);
     }
     let i = 0;
@@ -371,10 +405,11 @@ function PolicyBuilder({
       setN(i);
       if (i >= steps.length) {
         clearInterval(timer);
-        setTimeout(() => setPhase('done'), 400);
+        setTimeout(finish, 400);
       }
     }, 560);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, reduced, steps.length]);
 
   async function adopt() {
@@ -562,7 +597,6 @@ function PolicyBuilder({
               variant="gold"
               iconRight={Sparkles}
               onClick={() => {
-                onDrafted(pol.id, d);
                 setN(0);
                 setPhase('building');
               }}
@@ -614,50 +648,42 @@ export interface GovernanceFlowProps {
   structure: { entity: string; gp: string; mgmtco: string };
   /** Persisted state from `getGovernanceHubState`. */
   initialAdopted: Record<string, Record<string, PolicyValue>>;
+  initialDrafts: Record<string, Record<string, PolicyValue>>;
   initialBodies: Partial<Record<GovBodyKind, GovMember[]>>;
 }
 
+/** A pending add-from-bench, awaiting the approve loop. */
+interface PendingAdd {
+  kind: Exclude<GovBodyId, 'lpac'>;
+  cand: GovCandidate;
+}
+
 /**
- * Confirm a bench candidate into the roster's first open seat, and persist
- * the roster. Only this operator confirmation writes a member — the bench
- * itself is never persisted. Optimistic: a failed write reverts the seat and
- * surfaces the error through `onError`.
+ * One governance body's roster state. Only confirmed members are held (and
+ * persisted); open seats are re-padded from the config's starting roster for
+ * display. Adding from the bench runs through the ActionRunner approve loop
+ * — the member joins only after the server write succeeds.
  */
 function useRoster(
-  kind: GovBodyKind,
   initial: readonly GovMember[],
   candidates: readonly GovCandidate[],
-  persisted: GovMember[] | undefined,
-  onError: (msg: string) => void
+  persisted: GovMember[] | undefined
 ) {
-  const [members, setMembers] = useState<GovMember[]>(persisted ?? [...initial]);
-  const bench = candidates.filter((c) => !members.some((m) => m.name === c.name));
-  const add = (cand: GovCandidate) => {
-    const at = members.findIndex((m) => m.open);
-    if (at < 0) return;
-    const prev = members;
-    const next = [...members];
-    next[at] = {
-      id: `${next[at].id}-${cand.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+  const [confirmed, setConfirmed] = useState<GovMember[]>(persisted ?? confirmedMembers(initial));
+  const members = padRoster(initial, confirmed);
+  const taken = new Set(confirmed.map((m) => m.name));
+  const bench = candidates.filter((c) => !taken.has(c.name));
+  const confirm = (cand: GovCandidate): GovMember[] => [
+    ...confirmed,
+    {
+      id: `m-${cand.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
       name: cand.name,
       role: cand.role,
       note: cand.note,
       carry: cand.carry
-    };
-    setMembers(next);
-    saveGovernanceBody(kind, next)
-      .then((res) => {
-        if (!res.ok) {
-          setMembers(prev);
-          onError(`Could not save ${kind.replace(/_/g, ' ')} — try again.`);
-        }
-      })
-      .catch(() => {
-        setMembers(prev);
-        onError(`Could not save ${kind.replace(/_/g, ' ')} — try again.`);
-      });
-  };
-  return { members, bench, add };
+    }
+  ];
+  return { confirmed, setConfirmed, members, bench, confirm };
 }
 
 export function GovernanceFlow({
@@ -665,46 +691,40 @@ export function GovernanceFlow({
   principal,
   structure,
   initialAdopted,
+  initialDrafts,
   initialBodies
 }: GovernanceFlowProps) {
   const [view, setView] = useState<Tab>('structure');
   const [openPol, setOpenPol] = useState<string | null>(null);
   const [adopted, setAdopted] =
     useState<Record<string, Record<string, PolicyValue>>>(initialAdopted);
-  /** Drafted-but-not-adopted decisions, per policy — the grid's Drafting stage. */
-  const [drafts, setDrafts] = useState<Record<string, Record<string, PolicyValue>>>({});
-  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, Record<string, PolicyValue>>>(initialDrafts);
+  const [pending, setPending] = useState<PendingAdd | null>(null);
 
-  const fm = useRoster('fund_mgmt', FM_0, FM_CANDIDATES, initialBodies.fund_mgmt, setBodyError);
-  const ic = useRoster('ic', IC_MEMBERS_0, IC_CANDIDATES, initialBodies.ic, setBodyError);
-  const adv = useRoster('advisory', ADV_0, ADV_CANDIDATES, initialBodies.advisory, setBodyError);
-  const cap = useRoster(
-    'capital_partners',
-    CAP_0,
-    CAP_CANDIDATES,
-    initialBodies.capital_partners,
-    setBodyError
-  );
-  const legal = useRoster(
-    'legal_counsel',
-    LEGAL_0,
-    LEGAL_CANDIDATES,
-    initialBodies.legal_counsel,
-    setBodyError
-  );
+  const fm = useRoster(FM_0, FM_CANDIDATES, initialBodies.fund_mgmt);
+  const ic = useRoster(IC_MEMBERS_0, IC_CANDIDATES, initialBodies.ic);
+  const adv = useRoster(ADV_0, ADV_CANDIDATES, initialBodies.advisory);
+  const cap = useRoster(CAP_0, CAP_CANDIDATES, initialBodies.capital_partners);
+  const legal = useRoster(LEGAL_0, LEGAL_CANDIDATES, initialBodies.legal_counsel);
+  const rosters: Record<PendingAdd['kind'], ReturnType<typeof useRoster>> = {
+    fund_mgmt: fm,
+    ic: ic,
+    advisory: adv,
+    capital_partners: cap,
+    legal_counsel: legal
+  };
 
   if (openPol) {
     const pol = GOV_POLICIES.find((p) => p.id === openPol);
     if (pol) {
-      const existing = adopted[pol.id] ?? null;
-      const draft = drafts[pol.id] ?? null;
+      const existing = adopted[pol.id] ?? drafts[pol.id] ?? null;
       return (
         <PolicyBuilder
           key={openPol}
           pol={pol}
-          initial={existing ?? draft}
-          alreadyAdopted={existing != null}
-          startDrafted={existing == null && draft != null}
+          initial={existing}
+          alreadyAdopted={pol.id in adopted}
+          alreadyDrafted={pol.id in drafts}
           onBack={() => setOpenPol(null)}
           onDrafted={(id, decisions) => {
             setDrafts((prev) => ({ ...prev, [id]: decisions }));
@@ -712,8 +732,9 @@ export function GovernanceFlow({
           onAdopted={(id, decisions) => {
             setAdopted((prev) => ({ ...prev, [id]: decisions }));
             setDrafts((prev) => {
-              const { [id]: _done, ...rest } = prev;
-              return rest;
+              const next = { ...prev };
+              delete next[id];
+              return next;
             });
             setOpenPol(null);
           }}
@@ -739,6 +760,8 @@ export function GovernanceFlow({
       tone: 'info'
     }
   ];
+
+  const pendingRun = pending ? rosterRun(pending.kind, pending.cand) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -782,13 +805,6 @@ export function GovernanceFlow({
           { id: 'policies', label: 'Policies', icon: Scale }
         ]}
       />
-
-      {bodyError && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[12.5px] text-danger">
-          <TriangleAlert size={15} aria-hidden />
-          {bodyError}
-        </div>
-      )}
 
       {view === 'structure' && (
         <div className="flex flex-col gap-4">
@@ -892,10 +908,10 @@ export function GovernanceFlow({
             title="Fund management team"
             eyebrow="The GP partners running the fund · carry split"
             members={fm.members}
+            bench={fm.bench}
             variant="people"
             principal={principal}
-            bench={fm.bench}
-            onAddCandidate={fm.add}
+            onLineUp={(cand) => setPending({ kind: 'fund_mgmt', cand })}
             addLabel="Add partner"
             setLabel="Team set"
             stats={[
@@ -908,10 +924,10 @@ export function GovernanceFlow({
             title="Investment Committee"
             eyebrow="Approves every deal · unanimous for new investments"
             members={ic.members}
+            bench={ic.bench}
             variant="people"
             principal={principal}
-            bench={ic.bench}
-            onAddCandidate={ic.add}
+            onLineUp={(cand) => setPending({ kind: 'ic', cand })}
             addLabel="Fill seat"
             setLabel="Quorum met"
             stats={[
@@ -925,10 +941,10 @@ export function GovernanceFlow({
             title="Advisory Board"
             eyebrow="External experts · strategy, deal flow & credibility"
             members={adv.members}
+            bench={adv.bench}
             variant="people"
             principal={principal}
-            bench={adv.bench}
-            onAddCandidate={adv.add}
+            onLineUp={(cand) => setPending({ kind: 'advisory', cand })}
             addLabel="Add advisor"
             setLabel="Board seated"
             stats={[
@@ -967,11 +983,11 @@ export function GovernanceFlow({
             title="Capital Partners"
             eyebrow="Your capital stack · facilities, lenders & co-investors"
             members={cap.members}
+            bench={cap.bench}
             variant="entity"
             entityIcon={Banknote}
             principal={principal}
-            bench={cap.bench}
-            onAddCandidate={cap.add}
+            onLineUp={(cand) => setPending({ kind: 'capital_partners', cand })}
             addLabel="Add partner"
             setLabel="Stack set"
             stats={[
@@ -984,11 +1000,11 @@ export function GovernanceFlow({
             title="Legal Counsel"
             eyebrow="Your counsel bench · formation, regulatory & tax"
             members={legal.members}
+            bench={legal.bench}
             variant="entity"
             entityIcon={Scale}
             principal={principal}
-            bench={legal.bench}
-            onAddCandidate={legal.add}
+            onLineUp={(cand) => setPending({ kind: 'legal_counsel', cand })}
             addLabel="Add counsel"
             setLabel="Bench set"
             stats={[['Scope', '· formation, regulatory, tax, deals']]}
@@ -1005,7 +1021,8 @@ export function GovernanceFlow({
           />
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {GOV_POLICIES.map((p) => {
-              const stage = policyStage(p.id in adopted, p.id in drafts);
+              const stage: PolicyStage = policyStage(p.id, adopted, drafts);
+              const classes = STAGE_CLASSES[POL_TONE[stage]];
               return (
                 <div
                   key={p.id}
@@ -1014,11 +1031,7 @@ export function GovernanceFlow({
                   <span
                     className={cn(
                       'flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border',
-                      stage === 'active'
-                        ? 'border-[var(--success-line)] bg-[var(--success-soft)] text-success'
-                        : stage === 'drafting'
-                          ? 'border-[var(--gold-line)] bg-[var(--gold-soft)] text-gold-1'
-                          : 'border-hairline bg-surface-2 text-fg-3'
+                      classes.square
                     )}
                   >
                     {createElement(stage === 'active' ? Check : policyIcon(p.icon), {
@@ -1029,19 +1042,15 @@ export function GovernanceFlow({
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[12.5px] font-semibold text-fg-1">{p.name}</div>
-                    <Badge tone={POL_TONE[stage]} className="mt-1 text-[9px]">
-                      {POL_STAGES[stage]}
-                    </Badge>
+                    <div className={cn('text-[10.5px]', classes.text)}>{POL_STAGES[stage]}</div>
                   </div>
                   <Button
-                    variant={
-                      stage === 'active' ? 'ghost' : stage === 'drafting' ? 'gold' : 'secondary'
-                    }
+                    variant={stage === 'active' ? 'ghost' : 'secondary'}
                     size="sm"
                     icon={stage === 'active' ? Eye : stage === 'drafting' ? Check : Sparkles}
                     onClick={() => setOpenPol(p.id)}
                   >
-                    {stage === 'active' ? 'View' : stage === 'drafting' ? 'Adopt' : 'Draft'}
+                    {POL_CTA[stage]}
                   </Button>
                 </div>
               );
@@ -1058,6 +1067,25 @@ export function GovernanceFlow({
           the posture and adopt.
         </p>
       </Card>
+
+      {pending && pendingRun && (
+        <ActionRunner
+          title={pendingRun.title}
+          steps={pendingRun.steps}
+          draftTitle={pendingRun.draftTitle}
+          draft={pendingRun.draft}
+          onApprove={async () => {
+            const roster = rosters[pending.kind];
+            const res = await saveGovernanceBody(pending.kind, roster.confirm(pending.cand));
+            return res.ok ? { ok: true } : { ok: false, error: res.error };
+          }}
+          onClose={() => setPending(null)}
+          onApplied={() => {
+            const roster = rosters[pending.kind];
+            roster.setConfirmed(roster.confirm(pending.cand));
+          }}
+        />
+      )}
     </div>
   );
 }

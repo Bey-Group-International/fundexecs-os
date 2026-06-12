@@ -1,4 +1,11 @@
-import { GOV_POLICIES, type GovMember, type GovPolicy, type PolicyValue } from './config';
+import {
+  confirmedMembers,
+  GOV_POLICIES,
+  type GovBodyId,
+  type GovMember,
+  type GovPolicy,
+  type PolicyValue
+} from './config';
 
 /**
  * lib/governance/persistence.ts — shape guards for the governance jsonb
@@ -12,13 +19,7 @@ import { GOV_POLICIES, type GovMember, type GovPolicy, type PolicyValue } from '
  */
 
 /** The persistable governance-body kinds (DB check constraint mirrors this). */
-export type GovBodyKind =
-  | 'fund_mgmt'
-  | 'ic'
-  | 'advisory'
-  | 'lpac'
-  | 'capital_partners'
-  | 'legal_counsel';
+export type GovBodyKind = GovBodyId;
 
 export const GOV_BODY_KINDS: readonly GovBodyKind[] = [
   'fund_mgmt',
@@ -70,6 +71,22 @@ export function sanitizePolicyDecisions(
 
 const cap = (v: unknown): string | undefined =>
   typeof v === 'string' && v.length > 0 ? v.slice(0, MAX_STR) : undefined;
+
+/** The policy stages a row may persist with ('drafted' awaits adoption). */
+export type GovPolicyStatus = 'drafted' | 'adopted';
+
+/** Coerce a stored status; anything unknown reads as adopted (the legacy rows). */
+export function sanitizePolicyStatus(input: unknown): GovPolicyStatus {
+  return input === 'drafted' ? 'drafted' : 'adopted';
+}
+
+/**
+ * What a roster write is allowed to contain: sanitized members with the
+ * placeholders stripped — only operator-confirmed members ever persist.
+ */
+export function persistableGovMembers(input: unknown): GovMember[] {
+  return confirmedMembers(sanitizeGovMembers(input));
+}
 
 /** Coerce unknown input into a bounded, well-typed member roster. */
 export function sanitizeGovMembers(input: unknown): GovMember[] {

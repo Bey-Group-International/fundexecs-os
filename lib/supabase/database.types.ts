@@ -3157,31 +3157,34 @@ export type Database = {
       }
       governance_policies: {
         Row: {
-          adopted_at: string
+          adopted_at: string | null
           adopted_by: string | null
           created_at: string
           decisions: Json
           id: string
           org_id: string
           policy_id: string
+          status: string
         }
         Insert: {
-          adopted_at?: string
+          adopted_at?: string | null
           adopted_by?: string | null
           created_at?: string
           decisions?: Json
           id?: string
           org_id: string
           policy_id: string
+          status?: string
         }
         Update: {
-          adopted_at?: string
+          adopted_at?: string | null
           adopted_by?: string | null
           created_at?: string
           decisions?: Json
           id?: string
           org_id?: string
           policy_id?: string
+          status?: string
         }
         Relationships: [
           {
