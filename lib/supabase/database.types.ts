@@ -3157,7 +3157,7 @@ export type Database = {
       }
       governance_policies: {
         Row: {
-          adopted_at: string
+          adopted_at: string | null
           adopted_by: string | null
           created_at: string
           decisions: Json
@@ -3167,7 +3167,7 @@ export type Database = {
           status: string
         }
         Insert: {
-          adopted_at?: string
+          adopted_at?: string | null
           adopted_by?: string | null
           created_at?: string
           decisions?: Json
@@ -3177,7 +3177,7 @@ export type Database = {
           status?: string
         }
         Update: {
-          adopted_at?: string
+          adopted_at?: string | null
           adopted_by?: string | null
           created_at?: string
           decisions?: Json

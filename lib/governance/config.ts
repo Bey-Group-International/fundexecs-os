@@ -269,8 +269,24 @@ export function padRoster(
   confirmed: readonly GovMember[]
 ): GovMember[] {
   const opens = initial.filter((m) => m.open);
-  const missing = Math.min(opens.length, Math.max(0, initial.length - confirmed.length));
-  return [...confirmed, ...opens.slice(opens.length - missing)];
+  const fixedSeats = initial.length - opens.length;
+  // Seats genuinely consumed = confirmed members beyond the body's fixed
+  // (non-open) seats. Caps how many open templates can remain.
+  const consumed = Math.max(0, confirmed.length - fixedSeats);
+
+  // Retire the specific open template each confirmed member fills, matched by
+  // seat role — so filling the *second* slot removes the second placeholder,
+  // not always the first (the old count-only trim mishandled mixed rosters).
+  const remaining = [...opens];
+  for (const m of confirmed) {
+    const idx = remaining.findIndex((o) => o.role === m.role);
+    if (idx !== -1) remaining.splice(idx, 1);
+  }
+
+  // Enforce the seat-count cap for any members whose role didn't match a named
+  // open seat, dropping extra placeholders from the front (fill earliest-first).
+  const overflow = remaining.length - (opens.length - consumed);
+  return [...confirmed, ...(overflow > 0 ? remaining.slice(overflow) : remaining)];
 }
 
 /* ── the per-body approve-loop copy (the prototype's onRun payloads) ─────── */

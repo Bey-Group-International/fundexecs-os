@@ -70,27 +70,45 @@ export async function draftGovernancePolicy(
   if (!org) return { ok: false, error: 'No active workspace.' };
 
   const supabase = await createClient();
-  const { data: existing, error: readError } = await supabase
+  const decisionsJson = sanitizePolicyDecisions(pol, decisions) as unknown as Json;
+
+  // Atomic, race-safe: a single guarded UPDATE only moves a not-yet-adopted row
+  // into 'drafted', so an adoption that lands first is never overwritten. A
+  // draft carries no adoption stamp (adopted_by / adopted_at stay null until
+  // the policy is actually adopted).
+  const { data: updated, error: updateError } = await supabase
     .from('governance_policies')
-    .select('status')
+    .update({
+      status: 'drafted',
+      adopted_by: null,
+      adopted_at: null,
+      decisions: decisionsJson
+    })
     .eq('org_id', org.orgId)
     .eq('policy_id', pol.id)
-    .maybeSingle();
-  if (readError) return { ok: false, error: readError.message };
-  if (existing?.status === 'adopted') return { ok: true };
+    .neq('status', 'adopted')
+    .select('policy_id');
+  if (updateError) return { ok: false, error: updateError.message };
+  if (updated && updated.length > 0) {
+    revalidatePath('/build/governance');
+    return { ok: true };
+  }
 
-  const { error } = await supabase.from('governance_policies').upsert(
-    {
-      org_id: org.orgId,
-      policy_id: pol.id,
-      status: 'drafted',
-      adopted_by: org.userId,
-      adopted_at: new Date().toISOString(),
-      decisions: sanitizePolicyDecisions(pol, decisions) as unknown as Json
-    },
-    { onConflict: 'org_id,policy_id' }
-  );
-  if (error) return { ok: false, error: error.message };
+  // No non-adopted row was updated: either the policy has no row yet, or it is
+  // already adopted. Insert a fresh draft; a unique-violation (23505) means a
+  // row already exists (adopted, or created concurrently) — leave it untouched.
+  const { error: insertError } = await supabase.from('governance_policies').insert({
+    org_id: org.orgId,
+    policy_id: pol.id,
+    status: 'drafted',
+    adopted_by: null,
+    adopted_at: null,
+    decisions: decisionsJson
+  });
+  if (insertError) {
+    if (insertError.code === '23505') return { ok: true };
+    return { ok: false, error: insertError.message };
+  }
 
   revalidatePath('/build/governance');
   return { ok: true };

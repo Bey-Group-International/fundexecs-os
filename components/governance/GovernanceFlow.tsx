@@ -380,14 +380,18 @@ function PolicyBuilder({
     if (phase !== 'building') return;
     // Drafting completes into the persisted Drafting stage (Draft → Adopt);
     // an adopted policy keeps its standing until re-adopted.
-    const finish = () => {
+    // Await the draft write before revealing the done state, so the Adopt
+    // button never becomes clickable while the draft save is still in flight
+    // (which could let an adoption race — and be overwritten by — the draft).
+    const finish = async () => {
       if (!alreadyAdopted) {
-        draftGovernancePolicy(pol.id, d)
-          .then((res) => {
-            if (res.ok) onDrafted(pol.id, d);
-            else setAdoptError(res.error);
-          })
-          .catch(() => setAdoptError('Could not save the draft — it lives in this session only.'));
+        try {
+          const res = await draftGovernancePolicy(pol.id, d);
+          if (res.ok) onDrafted(pol.id, d);
+          else setAdoptError(res.error);
+        } catch {
+          setAdoptError('Could not save the draft — it lives in this session only.');
+        }
       }
       setPhase('done');
     };
