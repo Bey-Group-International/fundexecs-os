@@ -370,12 +370,7 @@ function OSSimulation() {
                 alignItems: 'center',
                 gap: 12,
                 padding: '10px 16px',
-<<<<<<< HEAD
                 borderBottom: i < tasks.length - 1 ? '1px solid rgba(255,255,255,0.04)' : undefined,
-=======
-                borderBottom:
-                  i < tasks.length - 1 ? '1px solid rgba(255,255,255,0.04)' : undefined,
->>>>>>> cdc4124 (feat: replace dollar orb with earn-coin image, add live ticker bar + OS simulation to landing)
                 transition: 'background 0.15s'
               }}
             >
@@ -497,12 +492,7 @@ export default function LandingPage() {
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-<<<<<<< HEAD
           background: 'radial-gradient(60% 50% at 50% 0%, rgba(247,201,72,0.09), transparent 70%)'
-=======
-          background:
-            'radial-gradient(60% 50% at 50% 0%, rgba(247,201,72,0.09), transparent 70%)'
->>>>>>> cdc4124 (feat: replace dollar orb with earn-coin image, add live ticker bar + OS simulation to landing)
         }}
       />
       {/* Blue accent glow bottom-left */}
@@ -788,7 +778,6 @@ export default function LandingPage() {
               />
               Live simulation
             </div>
-<<<<<<< HEAD
             <div
               style={{
                 fontSize: 'clamp(18px,2.5vw,24px)',
@@ -807,12 +796,7 @@ export default function LandingPage() {
                 margin: '8px auto 0'
               }}
             >
-=======
-            <div style={{ fontSize: 'clamp(18px,2.5vw,24px)', fontWeight: 600, letterSpacing: '-0.02em' }}>
-              Your team is already working.
-            </div>
-            <p style={{ fontSize: 14, color: 'var(--fg-4)', marginTop: 8, maxWidth: 480, margin: '8px auto 0' }}>
->>>>>>> cdc4124 (feat: replace dollar orb with earn-coin image, add live ticker bar + OS simulation to landing)
+              {' '}
               This is a live simulation of the FundExecs OS command center — the view waiting for
               you when you sign in.
             </p>
@@ -836,7 +820,6 @@ export default function LandingPage() {
             >
               Done for you
             </div>
-<<<<<<< HEAD
             <div
               style={{
                 fontSize: 'clamp(18px,2.5vw,24px)',
@@ -844,9 +827,7 @@ export default function LandingPage() {
                 letterSpacing: '-0.02em'
               }}
             >
-=======
-            <div style={{ fontSize: 'clamp(18px,2.5vw,24px)', fontWeight: 600, letterSpacing: '-0.02em' }}>
->>>>>>> cdc4124 (feat: replace dollar orb with earn-coin image, add live ticker bar + OS simulation to landing)
+              {' '}
               You don&apos;t run the raise. Your team does.
             </div>
           </div>
@@ -878,12 +859,8 @@ export default function LandingPage() {
                     right: 0,
                     width: 80,
                     height: 80,
-<<<<<<< HEAD
                     background:
                       'radial-gradient(circle at 100% 0%, rgba(247,201,72,0.08), transparent 70%)',
-=======
-                    background: 'radial-gradient(circle at 100% 0%, rgba(247,201,72,0.08), transparent 70%)',
->>>>>>> cdc4124 (feat: replace dollar orb with earn-coin image, add live ticker bar + OS simulation to landing)
                     pointerEvents: 'none'
                   }}
                 />
@@ -923,7 +900,6 @@ export default function LandingPage() {
             >
               Your executive team
             </div>
-<<<<<<< HEAD
             <div
               style={{
                 fontSize: 'clamp(18px,2.5vw,24px)',
@@ -931,9 +907,7 @@ export default function LandingPage() {
                 letterSpacing: '-0.02em'
               }}
             >
-=======
-            <div style={{ fontSize: 'clamp(18px,2.5vw,24px)', fontWeight: 600, letterSpacing: '-0.02em' }}>
->>>>>>> cdc4124 (feat: replace dollar orb with earn-coin image, add live ticker bar + OS simulation to landing)
+              {' '}
               15 specialists, activated the moment you brief them.
             </div>
           </div>
@@ -960,7 +934,6 @@ export default function LandingPage() {
             >
               Built for operators
             </div>
-<<<<<<< HEAD
             <div
               style={{
                 fontSize: 'clamp(18px,2.5vw,24px)',
@@ -968,9 +941,7 @@ export default function LandingPage() {
                 letterSpacing: '-0.02em'
               }}
             >
-=======
-            <div style={{ fontSize: 'clamp(18px,2.5vw,24px)', fontWeight: 600, letterSpacing: '-0.02em' }}>
->>>>>>> cdc4124 (feat: replace dollar orb with earn-coin image, add live ticker bar + OS simulation to landing)
+              {' '}
               Everything you need, nothing you don&apos;t.
             </div>
           </div>
@@ -1003,12 +974,8 @@ export default function LandingPage() {
                     left: 0,
                     right: 0,
                     height: 1,
-<<<<<<< HEAD
                     background:
                       'linear-gradient(90deg, transparent, rgba(96,165,250,0.3), transparent)'
-=======
-                    background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.3), transparent)'
->>>>>>> cdc4124 (feat: replace dollar orb with earn-coin image, add live ticker bar + OS simulation to landing)
                   }}
                 />
                 <div
@@ -1103,12 +1070,8 @@ export default function LandingPage() {
               style={{
                 position: 'absolute',
                 inset: 0,
-<<<<<<< HEAD
                 background:
                   'radial-gradient(ellipse at 50% 0%, rgba(247,201,72,0.08), transparent 70%)',
-=======
-                background: 'radial-gradient(ellipse at 50% 0%, rgba(247,201,72,0.08), transparent 70%)',
->>>>>>> cdc4124 (feat: replace dollar orb with earn-coin image, add live ticker bar + OS simulation to landing)
                 pointerEvents: 'none'
               }}
             />
