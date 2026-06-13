@@ -32,13 +32,12 @@ async function fetchHtml(url: string): Promise<string | null> {
     const timeout = setTimeout(() => controller.abort(), 10_000);
     const res = await fetch(url, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (compatible; FundExecsIntelBot/1.0; +https://fundexecs.com)',
+        'User-Agent': 'Mozilla/5.0 (compatible; FundExecsIntelBot/1.0; +https://fundexecs.com)',
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Language': 'en-US,en;q=0.9'
       },
       cache: 'no-store',
-      signal: controller.signal,
+      signal: controller.signal
     });
     clearTimeout(timeout);
     if (!res.ok) return null;
@@ -86,7 +85,7 @@ const KNOWN_VERTICALS = [
   'Security AI',
   'Education AI',
   'Marketing AI',
-  'Supply Chain AI',
+  'Supply Chain AI'
 ];
 
 function parseTopVerticals(html: string): string[] {
@@ -101,13 +100,13 @@ export async function fetchBotMemoPulse(): Promise<BotMemoPulse> {
     startupCount: null,
     topVerticals: [],
     sourceUrl: INSIGHTS_URL,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: new Date().toISOString()
   };
 
   // Fetch insights and startups pages concurrently; each can fail independently.
   const [insightsHtml, startupsHtml] = await Promise.all([
     fetchHtml(INSIGHTS_URL),
-    fetchHtml(STARTUPS_URL),
+    fetchHtml(STARTUPS_URL)
   ]);
 
   if (insightsHtml) {

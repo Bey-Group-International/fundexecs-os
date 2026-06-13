@@ -340,9 +340,9 @@ export async function ingestBotMemo(): Promise<{ inserted: number }> {
       period: pulse.period,
       startup_count: pulse.startupCount,
       top_verticals: pulse.topVerticals,
-      source_url: pulse.sourceUrl,
+      source_url: pulse.sourceUrl
     },
-    raw_payload: JSON.parse(JSON.stringify(pulse)),
+    raw_payload: JSON.parse(JSON.stringify(pulse))
   });
 
   return { inserted: error ? 0 : 1 };

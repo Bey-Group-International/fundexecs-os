@@ -34,7 +34,7 @@ export async function getMarketPulse(): Promise<MarketPulse | null> {
     dealCount: (n.deal_count as number | null) ?? null,
     startupCount: (n.startup_count as number | null) ?? null,
     topVerticals,
-    fetchedAt: data.occurred_at ?? null,
+    fetchedAt: data.occurred_at ?? null
   };
 }
 

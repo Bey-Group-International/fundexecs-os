@@ -92,15 +92,7 @@ export function MarketPulseCard({ pulse }: Props) {
   );
 }
 
-function Stat({
-  label,
-  value,
-  period,
-}: {
-  label: string;
-  value: string;
-  period?: string | null;
-}) {
+function Stat({ label, value, period }: { label: string; value: string; period?: string | null }) {
   return (
     <div className="rounded-[10px] border border-hairline bg-surface-1 px-3 py-2.5">
       <div className="text-[17px] font-semibold tracking-[-0.01em] [font-feature-settings:'tnum'] text-fg-1">
