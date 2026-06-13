@@ -16,6 +16,14 @@ export type InboxStatus = 'pending' | 'accepted' | 'dismissed' | 'sent' | 'snooz
 export const WIRED_CHANNELS: InboxChannel[] = ['email', 'slack', 'call'];
 export const COMING_SOON_CHANNELS: InboxChannel[] = ['linkedin', 'sms'];
 
+/** A deal candidate offered when routing an accepted conversation onto a deal. */
+export interface InboxDealOption {
+  id: string;
+  name: string;
+  stage: string;
+  status: string;
+}
+
 export interface InboxItem {
   id: string;
   channel: InboxChannel;

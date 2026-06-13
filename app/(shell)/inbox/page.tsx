@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { InboxList } from '@/components/inbox/InboxList';
-import { getInboxData } from '@/lib/queries/inbox';
+import { getInboxData, getInboxDealOptions } from '@/lib/queries/inbox';
 import { getActiveOrg } from '@/lib/queries/org';
 
 export const metadata: Metadata = {
@@ -15,11 +15,18 @@ export default async function InboxPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const { pending, actioned, countsByChannel } = await getInboxData(org.orgId);
+  const [{ pending, actioned, countsByChannel }, dealOptions] = await Promise.all([
+    getInboxData(org.orgId),
+    getInboxDealOptions(org.orgId)
+  ]);
 
   return (
     <div className="fx-rise mx-auto max-w-[760px]">
-      <InboxList items={[...pending, ...actioned]} countsByChannel={countsByChannel} />
+      <InboxList
+        items={[...pending, ...actioned]}
+        countsByChannel={countsByChannel}
+        dealOptions={dealOptions}
+      />
     </div>
   );
 }

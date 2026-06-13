@@ -19,6 +19,8 @@ import {
   Sparkles,
   Send,
   Video,
+  Search,
+  Target,
   type LucideIcon
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
@@ -34,8 +36,10 @@ import {
   COMING_SOON_CHANNELS,
   WIRED_CHANNELS,
   type InboxChannel,
+  type InboxDealOption,
   type InboxItem
 } from '@/lib/inbox/channels';
+import { suggestDeal } from '@/lib/inbox/suggest';
 import { cn } from '@/lib/utils';
 
 /* The Relationship Inbox (P1-P3). Channel-agnostic triage list with channel
@@ -72,10 +76,12 @@ function relativeTime(iso: string | null): string {
 
 export function InboxList({
   items: initialItems,
-  countsByChannel
+  countsByChannel,
+  dealOptions = []
 }: {
   items: InboxItem[];
   countsByChannel: Record<InboxChannel, number>;
+  dealOptions?: InboxDealOption[];
 }) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -125,8 +131,9 @@ export function InboxList({
   }
 
   // Optimistically drop the item from the worklist; revert + surface an error
-  // if the guarded RPC rejects the transition.
-  async function act(item: InboxItem, action: InboxAction) {
+  // if the guarded RPC rejects the transition. `dealId` routes an accepted
+  // conversation onto a deal (null = accept without routing).
+  async function act(item: InboxItem, action: InboxAction, dealId: string | null = null) {
     // Serialize triage mutations: one in-flight RPC at a time, so an
     // out-of-order failure can't roll the list back to a stale snapshot.
     if (pending) return;
@@ -135,7 +142,7 @@ export function InboxList({
     const snapshot = items;
     removeItem(item.id);
     try {
-      const res = await act_on_inbox_item(item.id, action);
+      const res = await act_on_inbox_item(item.id, action, dealId);
       if (res.ok) {
         router.refresh();
       } else {
@@ -246,8 +253,9 @@ export function InboxList({
             <InboxRow
               key={item.id}
               item={item}
+              dealOptions={dealOptions}
               busy={pending !== null}
-              onAct={(action) => void act(item, action)}
+              onAct={(action, dealId) => void act(item, action, dealId)}
               onSent={() => removeItem(item.id)}
               onError={setError}
             />
@@ -286,14 +294,16 @@ function FilterChip({
 
 function InboxRow({
   item,
+  dealOptions,
   busy,
   onAct,
   onSent,
   onError
 }: {
   item: InboxItem;
+  dealOptions: InboxDealOption[];
   busy: boolean;
-  onAct: (action: InboxAction) => void;
+  onAct: (action: InboxAction, dealId: string | null) => void;
   onSent: () => void;
   onError: (msg: string) => void;
 }) {
@@ -302,6 +312,7 @@ function InboxRow({
   const canReply = pendingItem && SENDABLE.includes(item.channel);
   const isCall = item.channel === 'call';
 
+  const [routing, setRouting] = useState(false);
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState(item.draftReply ?? '');
   const [drafting, setDrafting] = useState(false);
@@ -407,9 +418,17 @@ function InboxRow({
                 type="button"
                 title="Accept — route onto the deal loop"
                 aria-label={`Accept conversation "${item.subject || meta.label}"`}
+                aria-expanded={routing}
                 disabled={rowBusy}
-                onClick={() => onAct('accepted')}
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+                onClick={() =>
+                  dealOptions.length === 0 ? onAct('accepted', null) : setRouting((v) => !v)
+                }
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-lg border transition disabled:opacity-50',
+                  routing
+                    ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                    : 'border-hairline text-fg-4 hover:bg-surface-2 hover:text-fg-1'
+                )}
               >
                 {busy ? (
                   <Loader2 size={13} className="motion-safe:animate-spin" aria-hidden />
@@ -423,7 +442,7 @@ function InboxRow({
               title="Dismiss"
               aria-label={`Dismiss conversation "${item.subject || meta.label}"`}
               disabled={rowBusy}
-              onClick={() => onAct('dismissed')}
+              onClick={() => onAct('dismissed', null)}
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
             >
               <X size={13} aria-hidden />
@@ -431,6 +450,16 @@ function InboxRow({
           </div>
         )}
       </div>
+
+      {routing && (
+        <DealPicker
+          item={item}
+          deals={dealOptions}
+          busy={rowBusy}
+          onCancel={() => setRouting(false)}
+          onRoute={(dealId) => onAct('accepted', dealId)}
+        />
+      )}
 
       {composing && (
         <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-1 p-3">
@@ -485,5 +514,144 @@ function InboxRow({
         </div>
       )}
     </Card>
+  );
+}
+
+/** Route-on-accept picker: a suggested deal (when there's a real name match)
+ * pinned on top, a searchable list, and an "accept without a deal" escape. */
+function DealPicker({
+  item,
+  deals,
+  busy,
+  onCancel,
+  onRoute
+}: {
+  item: InboxItem;
+  deals: InboxDealOption[];
+  busy: boolean;
+  onCancel: () => void;
+  onRoute: (dealId: string | null) => void;
+}) {
+  const suggestion = useMemo(() => suggestDeal(item, deals), [item, deals]);
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<string | null>(suggestion?.dealId ?? null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matches = q ? deals.filter((d) => d.name.toLowerCase().includes(q)) : deals;
+    // Pin the suggested deal to the top so the operator's eye lands on it.
+    if (!suggestion) return matches;
+    const sugg = matches.find((d) => d.id === suggestion.dealId);
+    if (!sugg) return matches;
+    return [sugg, ...matches.filter((d) => d.id !== suggestion.dealId)];
+  }, [deals, query, suggestion]);
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-1 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-fg-3">
+        <Target size={12} strokeWidth={1.9} className="text-[var(--accent)]" aria-hidden />
+        Route onto a deal
+      </div>
+
+      {suggestion && suggestion.matched.length > 0 && (
+        <p className="text-[10.5px] text-fg-5">
+          Suggested — matches{' '}
+          {suggestion.matched.map((m, i) => (
+            <span key={m} className="font-medium text-fg-3">
+              {i > 0 ? ', ' : ''}“{m}”
+            </span>
+          ))}
+        </p>
+      )}
+
+      {deals.length > 6 && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-hairline bg-bg-0 px-2.5">
+          <Search size={12} className="flex-none text-fg-5" aria-hidden />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search deals…"
+            disabled={busy}
+            className="w-full bg-transparent py-1.5 text-[12px] text-fg-1 outline-none disabled:opacity-60"
+          />
+        </div>
+      )}
+
+      <div className="flex max-h-44 flex-col gap-1 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <p className="px-1 py-2 text-[11.5px] text-fg-5">No matching deals.</p>
+        ) : (
+          filtered.map((deal) => {
+            const isSel = selected === deal.id;
+            const isSugg = suggestion?.dealId === deal.id;
+            return (
+              <button
+                key={deal.id}
+                type="button"
+                disabled={busy}
+                onClick={() => setSelected(isSel ? null : deal.id)}
+                aria-pressed={isSel}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[12px] transition disabled:opacity-50',
+                  isSel
+                    ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-fg-1'
+                    : 'border-hairline bg-bg-0 text-fg-2 hover:bg-surface-2'
+                )}
+              >
+                <span
+                  className={cn(
+                    'flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border',
+                    isSel ? 'border-[var(--accent)] bg-[var(--accent)] text-white' : 'border-hairline'
+                  )}
+                >
+                  {isSel && <Check size={10} strokeWidth={3} aria-hidden />}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-medium">{deal.name}</span>
+                {isSugg && (
+                  <Badge tone="neutral" className="px-1 py-0 text-[8.5px]">
+                    Suggested
+                  </Badge>
+                )}
+                {deal.stage && <span className="flex-none text-[10px] text-fg-5">{deal.stage}</span>}
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => onRoute(null)}
+          disabled={busy}
+          className="rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium text-fg-4 transition hover:text-fg-1 disabled:opacity-50"
+        >
+          Accept without a deal
+        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium text-fg-4 transition hover:text-fg-1 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onRoute(selected)}
+            disabled={busy || !selected}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[11.5px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? (
+              <Loader2 size={12} className="motion-safe:animate-spin" aria-hidden />
+            ) : (
+              <Check size={12} strokeWidth={2.5} aria-hidden />
+            )}
+            Route &amp; accept
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

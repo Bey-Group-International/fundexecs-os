@@ -1,6 +1,7 @@
 # Unified Inbox + In-App Video — Blueprint
 
-> Status: **P1–P3.1 landed + P4 foundation**. Additive throughout: a new
+> Status: **P1–P4 landed** (deal routing on accept + embedded LiveKit media;
+> recording/egress deferred by decision). Additive throughout: a new
 > `/inbox` route over `inbox_items`, ingestion that surfaces Gmail/Slack/call
 > conversations as triage items, guarded accept/dismiss, Earn-drafted replies
 > sent in-channel (Gmail/Slack) with threading, and the in-app call foundation
@@ -86,8 +87,12 @@ the existing Notifications bell rather than new nav weight.
   pending → accepted/dismissed, with optional deal routing (validated to the
   org). Accept/Dismiss wired into the Inbox UI (optimistic, reverts on
   rejection).
-- Deal auto-resolution beyond contact linking is deferred to a follow-up (a
-  deal picker / scorer-based routing on accept).
+- **Deal routing on accept _(landed)_** — accepting a non-call conversation
+  opens a deal picker (`getInboxDealOptions`, RLS-scoped, open deals only). A
+  pure, unit-tested `suggestDeal` helper pre-selects the best deal on
+  transparent name↔subject token overlap (honesty contract: suggests only on a
+  real match, never a guess); the operator can override, search, or accept
+  without a deal. Binding is validated to the org inside `act_on_inbox_item`.
 
 ### P3 — Earn-drafted replies + send _(landed)_
 
@@ -130,12 +135,15 @@ the existing Notifications bell rather than new nav weight.
 - UI: "New call" in the inbox header, a `Join` action on `call` items, and a
   `/inbox/call/[room]` surface with the working close-out (transcript →
   Meeting Copilot) loop.
-- **Remaining slice:** the embedded real-time media client
-  (`@livekit/components-react` room + egress + live transcription that auto-
-  feeds `finalize_inbox_call`). The token + finalize seams are in place.
-- **Flag before that slice:** per-minute egress/recording + TURN bandwidth
-  cost, and recording-consent/retention (jurisdiction-dependent — matters
-  for regulated LP users).
+- **Embedded media client _(landed)_** — `components/inbox/LiveCall.tsx` mounts
+  the `@livekit/components-react` room (`VideoConference`: grid + mic/cam +
+  control bar), lazy-loaded `ssr: false` so `livekit-client` never server-
+  renders. `CallRoom` connects on the server-minted token and carries a
+  transcription-consent banner above the room.
+- **Deferred by decision:** server-side egress/recording + live transcription
+  auto-feeding `finalize_inbox_call`. No recording happens — the wrap-up
+  transcript stays client-supplied (lowest retention/consent burden for
+  regulated LP users); revisit egress + a consent gate before enabling it.
 
 ### P5 — Webinars / LP broadcasts
 

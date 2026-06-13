@@ -2,6 +2,7 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import {
   type InboxChannel,
+  type InboxDealOption,
   type InboxItem,
   type InboxStatus,
   WIRED_CHANNELS,
@@ -25,7 +26,7 @@ import {
  * empty inbox so the surface never breaks the shell.
  * ========================================================================= */
 
-export type { InboxChannel, InboxItem, InboxStatus };
+export type { InboxChannel, InboxDealOption, InboxItem, InboxStatus };
 export { WIRED_CHANNELS, COMING_SOON_CHANNELS };
 
 export interface InboxData {
@@ -142,6 +143,36 @@ export async function getInboxData(orgId: string): Promise<InboxData> {
   } catch (err) {
     console.warn('[getInboxData] unexpected error:', err);
     return { pending: [], actioned: [], countsByChannel: { ...ZERO_COUNTS }, empty: true };
+  }
+}
+
+/**
+ * Lightweight deal candidates for routing an accepted conversation onto a deal.
+ * RLS-scoped, newest-first, fail-open to an empty list so the picker degrades
+ * to "no deal" rather than breaking triage. Closed/dead deals are excluded —
+ * you don't route a fresh conversation onto a finished deal.
+ */
+export async function getInboxDealOptions(orgId: string): Promise<InboxDealOption[]> {
+  const supabase = await createClient();
+  try {
+    const { data, error } = await supabase
+      .from('deals')
+      .select('id, name, stage, status')
+      .eq('org_id', orgId)
+      .not('status', 'in', '(closed,dead,lost)')
+      .order('updated_at', { ascending: false })
+      .limit(100);
+    if (error || !data) return [];
+    return (data as Array<{ id: string; name: string | null; stage: string | null; status: string | null }>).map(
+      (d) => ({
+        id: d.id,
+        name: d.name ?? 'Untitled deal',
+        stage: d.stage ?? '',
+        status: d.status ?? ''
+      })
+    );
+  } catch {
+    return [];
   }
 }
 

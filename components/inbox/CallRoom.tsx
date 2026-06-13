@@ -1,17 +1,29 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useState } from 'react';
-import { Loader2, Radio, Sparkles, TriangleAlert } from 'lucide-react';
+import { Info, Loader2, Radio, Sparkles, TriangleAlert } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { finalize_inbox_call } from '@/lib/actions/calls';
 
-/* The in-app call surface (P4 foundation). The server has minted a valid
- * LiveKit join token + URL for this room; the embedded real-time media client
- * (@livekit/components-react room, egress + live transcription) is the next
- * slice. What works end-to-end today is the close-out loop: the operator wraps
- * the call with a transcript and the 4-agent Meeting Copilot synthesizes it
- * onto the linked deal. */
+/* The in-app call surface (P4). The server mints a LiveKit join token + URL for
+ * this room; <LiveCall> embeds the real-time media client (grid + mic/cam).
+ * Recording/egress is intentionally deferred — the transcript stays client-
+ * supplied in the wrap-up box (hence the transcription-consent banner), and the
+ * 4-agent Meeting Copilot synthesizes it onto the linked deal. */
+
+// Browser-only LiveKit client — never server-render it (livekit-client touches
+// window/navigator at module scope).
+const LiveCall = dynamic(() => import('./LiveCall'), {
+  ssr: false,
+  loading: () => (
+    <Card className="flex items-center justify-center border-dashed p-8 text-fg-4">
+      <Loader2 size={16} className="motion-safe:animate-spin" aria-hidden />
+      <span className="ml-2 text-[12.5px]">Connecting to the room…</span>
+    </Card>
+  )
+});
 
 export function CallRoom({ room, token, url }: { room: string; token: string; url: string }) {
   const router = useRouter();
@@ -68,16 +80,18 @@ export function CallRoom({ room, token, url }: { room: string; token: string; ur
         </div>
       </Card>
 
-      <Card className="flex flex-col items-center gap-2 border-dashed p-8 text-center">
-        <Radio size={20} className="text-fg-4" aria-hidden />
-        <p className="max-w-md text-[12.5px] leading-relaxed text-fg-4">
-          A join token is live for this room. The embedded video client is the next slice — until
-          then, run the call in your LiveKit client, then wrap it up below so Earn’s team turns the
-          transcript into deal findings.
-        </p>
-        {/* token is intentionally not rendered; it’s passed to the media client. */}
-        <input type="hidden" value={token} readOnly />
-      </Card>
+      {/* Transcription-consent notice: no server recording happens, but the
+          wrap-up transcript feeds Meeting Copilot — make that explicit to all
+          participants before the call runs. */}
+      <div className="flex items-start gap-2 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-fg-4">
+        <Info size={14} className="mt-0.5 flex-none text-fg-5" aria-hidden />
+        <span>
+          This call isn’t recorded. A transcript you add at wrap-up is sent to Earn’s Meeting Copilot
+          to write findings onto the linked deal — let participants know they’re being transcribed.
+        </span>
+      </div>
+
+      <LiveCall token={token} serverUrl={url} onLeave={() => router.refresh()} />
 
       <Card className="flex flex-col gap-2 p-5">
         <div className="flex items-center gap-1.5 text-[12px] font-semibold text-fg-2">
