@@ -2,35 +2,10 @@
 // Shared branding primitives — EarnCoin orb + FundExecs OS wordmark
 // Extracted to prevent drift across landing, waitlist, and airdrop pages
 
-import Image from 'next/image';
-import earnCoin from '@/public/earn-coin.png';
+import { EarnCoin as EarnCoinUI } from '@/components/ui/EarnCoin';
 
 export function EarnCoin({ size = 40 }: { size?: number }) {
-  return (
-    <span
-      style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: '#fff',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        overflow: 'hidden',
-        boxShadow: '0 2px 12px -2px rgba(247,201,72,0.55)'
-      }}
-    >
-      <Image
-        src={earnCoin}
-        alt="Earn"
-        width={size}
-        height={size}
-        style={{ width: size, height: size, objectFit: 'contain' }}
-        priority
-      />
-    </span>
-  );
+  return <EarnCoinUI size={size} />;
 }
 
 export function Wordmark({ size = 19 }: { size?: number }) {

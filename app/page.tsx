@@ -796,6 +796,7 @@ export default function LandingPage() {
                 margin: '8px auto 0'
               }}
             >
+              {' '}
               This is a live simulation of the FundExecs OS command center — the view waiting for
               you when you sign in.
             </p>
@@ -826,6 +827,7 @@ export default function LandingPage() {
                 letterSpacing: '-0.02em'
               }}
             >
+              {' '}
               You don&apos;t run the raise. Your team does.
             </div>
           </div>
@@ -905,6 +907,7 @@ export default function LandingPage() {
                 letterSpacing: '-0.02em'
               }}
             >
+              {' '}
               15 specialists, activated the moment you brief them.
             </div>
           </div>
@@ -938,6 +941,7 @@ export default function LandingPage() {
                 letterSpacing: '-0.02em'
               }}
             >
+              {' '}
               Everything you need, nothing you don&apos;t.
             </div>
           </div>
