@@ -176,7 +176,9 @@ export function warmthEnrollTasklets(rows: WarmthSignalRow[]): TaskletDraft[] {
         : `High-warmth ${r.channel} signal scored ${r.score}/100 — ready for nurture.`,
       kind,
       specialistSlug: OUTCOME_KINDS[kind].specialistSlug,
-      title: r.subject ? `Enroll in HL sequence: ${r.subject}` : 'Enroll contact in HL nurture sequence',
+      title: r.subject
+        ? `Enroll in HL sequence: ${r.subject}`
+        : 'Enroll contact in HL nurture sequence',
       draft:
         'This contact scored above the warmth threshold. Approve to enroll them in the appropriate HighLevel nurture sequence based on their relationship stage.',
       homeSurface: 'Inbox',

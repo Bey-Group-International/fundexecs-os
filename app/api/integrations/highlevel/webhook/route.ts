@@ -70,11 +70,16 @@ export async function POST(req: Request): Promise<NextResponse> {
   // Surface HL engagement as an inbox_item so it flows into warmth scoring.
   try {
     const admin = createAdminClient();
-    await (admin as unknown as {
-      from: (t: string) => {
-        upsert: (row: Record<string, unknown>, opts: { onConflict: string; ignoreDuplicates: boolean }) => Promise<unknown>;
-      };
-    })
+    await (
+      admin as unknown as {
+        from: (t: string) => {
+          upsert: (
+            row: Record<string, unknown>,
+            opts: { onConflict: string; ignoreDuplicates: boolean }
+          ) => Promise<unknown>;
+        };
+      }
+    )
       .from('inbox_items')
       .upsert(
         {
@@ -92,10 +97,22 @@ export async function POST(req: Request): Promise<NextResponse> {
           score: payload.type.includes('replied') ? 70 : 45,
           status: 'pending',
           rationale: [
-            { factor: 'channel', weight: channel === 'email' ? 25 : 18, detail: `HighLevel ${channel} engagement.` },
+            {
+              factor: 'channel',
+              weight: channel === 'email' ? 25 : 18,
+              detail: `HighLevel ${channel} engagement.`
+            },
             { factor: 'recency', weight: 30, detail: 'Arrived in the last day.' },
-            { factor: 'relationship', weight: 5, detail: 'HighLevel contact — match to network pending.' },
-            { factor: 'responsiveness', weight: payload.type.includes('replied') ? 10 : 0, detail: payload.type.includes('replied') ? 'Reply received.' : 'Passive engagement.' }
+            {
+              factor: 'relationship',
+              weight: 5,
+              detail: 'HighLevel contact — match to network pending.'
+            },
+            {
+              factor: 'responsiveness',
+              weight: payload.type.includes('replied') ? 10 : 0,
+              detail: payload.type.includes('replied') ? 'Reply received.' : 'Passive engagement.'
+            }
           ],
           occurred_at: payload.occurredAt ?? new Date().toISOString()
         },

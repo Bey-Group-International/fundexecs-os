@@ -16,10 +16,10 @@ import 'server-only';
  * ========================================================================= */
 
 export type HighLevelEventType =
-  | 'dataroom_viewed'       // Module 2 — LP/prospect viewed a public data room
-  | 'lp_interest_signal'    // Module 5 — pre-commit LP engagement (view + booking)
-  | 'lead_routed_hl'        // Module 4 — inbound/lower-touch lead routed to HL sequence
-  | 'deal_stage_changed'    // Module 7 — deal advanced stage → stakeholder notification
+  | 'dataroom_viewed' // Module 2 — LP/prospect viewed a public data room
+  | 'lp_interest_signal' // Module 5 — pre-commit LP engagement (view + booking)
+  | 'lead_routed_hl' // Module 4 — inbound/lower-touch lead routed to HL sequence
+  | 'deal_stage_changed' // Module 7 — deal advanced stage → stakeholder notification
   | 'inbox_warmth_enrolled'; // Module 1 — operator approved HL enrollment for warm contact
 
 export interface HighLevelEvent {

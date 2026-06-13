@@ -45,11 +45,16 @@ export async function trackDataRoomView(room: PublicDataRoom): Promise<void> {
   // createAdminClient is inside the try so any config error is also swallowed.
   try {
     const admin = createAdminClient();
-    await (admin as unknown as {
-      from: (t: string) => {
-        upsert: (row: Record<string, unknown>, opts: { onConflict: string; ignoreDuplicates: boolean }) => Promise<unknown>;
-      };
-    })
+    await (
+      admin as unknown as {
+        from: (t: string) => {
+          upsert: (
+            row: Record<string, unknown>,
+            opts: { onConflict: string; ignoreDuplicates: boolean }
+          ) => Promise<unknown>;
+        };
+      }
+    )
       .from('inbox_items')
       .upsert(
         {
@@ -66,7 +71,11 @@ export async function trackDataRoomView(room: PublicDataRoom): Promise<void> {
           score: 67,
           status: 'pending',
           rationale: [
-            { factor: 'channel', weight: 22, detail: 'Public data room access — high-intent signal.' },
+            {
+              factor: 'channel',
+              weight: 22,
+              detail: 'Public data room access — high-intent signal.'
+            },
             { factor: 'recency', weight: 30, detail: 'Arrived in the last day.' },
             { factor: 'relationship', weight: 5, detail: 'Viewer identity not yet verified.' },
             { factor: 'responsiveness', weight: 10, detail: 'Inbound — may need follow-up.' }

@@ -17,9 +17,9 @@ import 'server-only';
  * ========================================================================= */
 
 export type TaskletsAiEventType =
-  | 'brand_content_approved'    // Module 3 — schedule approved content into HL calendar
-  | 'lead_routed_tasklets'      // Module 4 — route lead to correct platform (Apollo vs HL)
-  | 'partner_intro_submitted';  // Module 6 — start 48h follow-up watch
+  | 'brand_content_approved' // Module 3 — schedule approved content into HL calendar
+  | 'lead_routed_tasklets' // Module 4 — route lead to correct platform (Apollo vs HL)
+  | 'partner_intro_submitted'; // Module 6 — start 48h follow-up watch
 
 export interface TaskletsAiEvent {
   type: TaskletsAiEventType;
