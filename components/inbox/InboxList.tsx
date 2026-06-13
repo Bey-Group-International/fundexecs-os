@@ -21,6 +21,7 @@ import {
   Video,
   Search,
   Target,
+  FolderOpen,
   type LucideIcon
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
@@ -53,7 +54,8 @@ const CHANNEL_META: Record<InboxChannel, { label: string; icon: LucideIcon }> = 
   call: { label: 'Calls', icon: Phone },
   linkedin: { label: 'LinkedIn', icon: Contact },
   sms: { label: 'SMS', icon: MessageCircle },
-  webinar: { label: 'Webinars', icon: Phone }
+  webinar: { label: 'Webinars', icon: Phone },
+  dataroom: { label: 'Data Room', icon: FolderOpen }
 };
 
 /** Channels we can send a reply through today. */

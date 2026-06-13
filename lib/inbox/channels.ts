@@ -8,7 +8,7 @@
  * ========================================================================= */
 
 /** Communications channels the inbox can surface. */
-export type InboxChannel = 'email' | 'slack' | 'call' | 'linkedin' | 'sms' | 'webinar';
+export type InboxChannel = 'email' | 'slack' | 'call' | 'linkedin' | 'sms' | 'webinar' | 'dataroom';
 
 export type InboxStatus = 'pending' | 'accepted' | 'dismissed' | 'sent' | 'snoozed';
 

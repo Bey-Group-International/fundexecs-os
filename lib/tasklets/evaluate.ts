@@ -144,6 +144,57 @@ export function submissionTasklets(rows: DealSubmissionRow[]): TaskletDraft[] {
     });
 }
 
+/* -- 4. Warmth threshold → HighLevel sequence enrollment (inbox_items) ------ */
+
+export interface WarmthSignalRow {
+  id: string;
+  channel: string;
+  subject: string | null;
+  preview: string | null;
+  score: number;
+  contact_id: string | null;
+  deal_id: string | null;
+}
+
+const HL_ENROLL_THRESHOLD = 75;
+
+/**
+ * High-warmth inbox items that haven't triggered an enrollment yet. Each
+ * produces a reactivation tasklet: operator approves → HighLevel enrolls the
+ * contact in the appropriate nurture sequence. Gated by score threshold so
+ * routine low-signal items never reach the queue.
+ */
+export function warmthEnrollTasklets(rows: WarmthSignalRow[]): TaskletDraft[] {
+  const kind = 'reactivation' as const;
+  return rows
+    .filter((r) => r.score >= HL_ENROLL_THRESHOLD && !!r.contact_id)
+    .map((r) => ({
+      dedupeKey: `hl_enroll:${r.id}`,
+      signalSource: 'inbox' as const,
+      signalSummary: r.subject
+        ? `High-warmth ${r.channel} — "${r.subject}" scored ${r.score}/100.`
+        : `High-warmth ${r.channel} signal scored ${r.score}/100 — ready for nurture.`,
+      kind,
+      specialistSlug: OUTCOME_KINDS[kind].specialistSlug,
+      title: r.subject
+        ? `Enroll in HL sequence: ${r.subject}`
+        : 'Enroll contact in HL nurture sequence',
+      draft:
+        'This contact scored above the warmth threshold. Approve to enroll them in the appropriate HighLevel nurture sequence based on their relationship stage.',
+      homeSurface: 'Inbox',
+      homeHref: '/inbox',
+      entityType: 'inbox_item',
+      entityId: r.id,
+      metadata: {
+        hlEnroll: true,
+        score: r.score,
+        channel: r.channel,
+        contactId: r.contact_id,
+        dealId: r.deal_id
+      }
+    }));
+}
+
 export interface DealInterestRow {
   id: string;
   deal_id: string;

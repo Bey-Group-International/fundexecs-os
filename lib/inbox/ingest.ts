@@ -69,7 +69,8 @@ const CHANNEL_WEIGHT: Record<InboxChannel, number> = {
   call: 15,
   linkedin: 18,
   sms: 18,
-  webinar: 10
+  webinar: 10,
+  dataroom: 22 // data room views are high-intent public signals
 };
 
 /**

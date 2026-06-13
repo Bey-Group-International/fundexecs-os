@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { recordApprovedOutcome } from '@/lib/earn/record-outcome';
+import { emitHighLevelEvent } from '@/lib/integrations/highlevel';
 import { isOutcomeKind } from '@/lib/earn/outcomes';
 
 /* ============================================================================
@@ -97,7 +98,7 @@ export async function approveTasklet(taskletId: string): Promise<TaskletActionRe
     metadata: { ...(row.metadata ?? {}), taskletId: row.id, source: 'tasklet' }
   });
 
-  await table
+  const { error: updateError } = await table
     .from('tasklets')
     .update({
       status: 'approved',
@@ -106,6 +107,28 @@ export async function approveTasklet(taskletId: string): Promise<TaskletActionRe
       outcome_trust_event_id: trustEventId
     })
     .eq('id', taskletId);
+
+  if (updateError) {
+    return { ok: false, error: 'Could not approve tasklet.' };
+  }
+
+  // Module 1: warmth-threshold tasklets carry hlEnroll:true — fire HL on approval.
+  // Only emits after the DB update is confirmed, so HL is never notified of a failed approval.
+  if (row.metadata?.hlEnroll === true) {
+    void emitHighLevelEvent({
+      type: 'inbox_warmth_enrolled',
+      occurredAt: new Date().toISOString(),
+      data: {
+        inboxItemId: row.entity_id,
+        contactId: row.metadata.contactId ?? null,
+        dealId: row.metadata.dealId ?? null,
+        score: row.metadata.score ?? null,
+        channel: row.metadata.channel ?? null,
+        taskletId: row.id,
+        title: row.title
+      }
+    });
+  }
 
   revalidatePath('/earn');
   revalidatePath('/command-center');
