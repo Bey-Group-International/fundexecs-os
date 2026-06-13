@@ -1,6 +1,43 @@
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/database.types';
 
+export interface MarketPulse {
+  period: string | null;
+  totalCapitalUsd: number | null;
+  dealCount: number | null;
+  startupCount: number | null;
+  topVerticals: string[];
+  fetchedAt: string | null;
+}
+
+/** Fetch the latest BotMemo market-pulse signal, or null if none yet ingested. */
+export async function getMarketPulse(): Promise<MarketPulse | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('market_signals')
+    .select('normalized, occurred_at')
+    .eq('source', 'botmemo')
+    .eq('kind', 'market-pulse')
+    .order('occurred_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  const n = (data.normalized ?? {}) as Record<string, unknown>;
+  const topVerticals = Array.isArray(n.top_verticals)
+    ? n.top_verticals.filter((v): v is string => typeof v === 'string')
+    : [];
+  return {
+    period: (n.period as string | null) ?? null,
+    totalCapitalUsd: (n.total_capital_usd as number | null) ?? null,
+    dealCount: (n.deal_count as number | null) ?? null,
+    startupCount: (n.startup_count as number | null) ?? null,
+    topVerticals,
+    fetchedAt: data.occurred_at ?? null
+  };
+}
+
 type DealRow = Database['public']['Tables']['deals']['Row'];
 type RelationshipRow = Database['public']['Tables']['relationships']['Row'];
 type ContactRow = Database['public']['Tables']['contacts']['Row'];
