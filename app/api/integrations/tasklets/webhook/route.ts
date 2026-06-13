@@ -39,14 +39,23 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false }, { status: 200 });
   }
 
-  const admin = createAdminClient();
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   try {
     if (payload.type === 'partner_intro_reminder_sent' && payload.introRequestId) {
+      if (!UUID_RE.test(payload.introRequestId)) {
+        return NextResponse.json({ error: 'Invalid introRequestId' }, { status: 400 });
+      }
+      const occurredAt =
+        payload.occurredAt && !isNaN(Date.parse(payload.occurredAt))
+          ? payload.occurredAt
+          : new Date().toISOString();
+      // createAdminClient inside try so config errors are caught non-blocking.
+      const admin = createAdminClient();
       // Record that a reminder fired. Use typed update to satisfy Supabase types.
       await admin
         .from('partner_intro_requests')
-        .update({ updated_at: payload.occurredAt ?? new Date().toISOString() })
+        .update({ updated_at: occurredAt })
         .eq('id', payload.introRequestId)
         .in('status', ['requested', 'accepted']);
     }

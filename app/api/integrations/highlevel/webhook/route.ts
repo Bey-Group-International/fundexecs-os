@@ -56,16 +56,22 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(payload.orgId)) {
+    return NextResponse.json({ error: 'Invalid orgId' }, { status: 400 });
+  }
+  const occurredAt =
+    payload.occurredAt && !isNaN(Date.parse(payload.occurredAt))
+      ? payload.occurredAt
+      : new Date().toISOString();
+
   // Deterministic external_id: prefer provider event ID, fall back to a
   // stable fingerprint so webhook retries deduplicate cleanly.
   const externalId = payload.eventId
     ? `hl:${payload.eventId}`
-    : [
-        'hl',
-        payload.type,
-        payload.contactId ?? payload.contactEmail ?? 'unknown',
-        payload.occurredAt ?? 'unknown'
-      ].join(':');
+    : ['hl', payload.type, payload.contactId ?? payload.contactEmail ?? 'unknown', occurredAt].join(
+        ':'
+      );
 
   // Surface HL engagement as an inbox_item so it flows into warmth scoring.
   try {
@@ -114,7 +120,7 @@ export async function POST(req: Request): Promise<NextResponse> {
               detail: payload.type.includes('replied') ? 'Reply received.' : 'Passive engagement.'
             }
           ],
-          occurred_at: payload.occurredAt ?? new Date().toISOString()
+          occurred_at: occurredAt
         },
         { onConflict: 'org_id,channel,external_id', ignoreDuplicates: true }
       );
