@@ -111,7 +111,7 @@ last of the core four.
   to `created_at`/`lastTouch` until populated.
 - **Approval queue** → `agent_drafts` (`entity_id`, `agent_slug`, `kind`, `body`,
   `status`: pending/approved/dismissed). Codex: table + RLS. Claude: draft-generation
-  + approve→`trust_event` server actions.
+  and approve→`trust_event` server actions.
 - **Enrichment** → live Apollo / Carta integration seams (last).
 
 Everything in surfaces 2 and 3 runs on **existing** `capital_providers` data + the
