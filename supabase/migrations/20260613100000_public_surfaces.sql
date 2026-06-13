@@ -39,13 +39,19 @@ create table if not exists public.deal_interest_captures (
 alter table public.deal_submissions enable row level security;
 create policy "anon_insert_deal_submissions"
   on public.deal_submissions for insert
-  to anon with check (true);
+  to anon with check (status = 'pending');
 
--- RLS: deal_interest_captures insert-only for anon
+-- RLS: deal_interest_captures insert-only for anon, only against public-visible deals
 alter table public.deal_interest_captures enable row level security;
 create policy "anon_insert_deal_interest_captures"
   on public.deal_interest_captures for insert
-  to anon with check (true);
+  to anon with check (
+    exists (
+      select 1 from public.deals d
+      where d.id = deal_id
+        and d.public_visible = true
+    )
+  );
 
 -- Public read for visible raise deals (no auth needed)
 create policy "public_read_visible_raises"

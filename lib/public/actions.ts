@@ -1,13 +1,16 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 
 const SubmissionSchema = z.object({
   company_name: z.string().min(1).max(120),
   website: z.string().url().optional().or(z.literal('')),
   stage: z.enum(['pre-seed', 'seed', 'series-a', 'series-b+']),
-  raise_amount: z.coerce.number().positive().optional(),
+  raise_amount: z
+    .preprocess((v) => (v === '' ? undefined : v), z.coerce.number().positive())
+    .optional(),
   deck_url: z.string().url().optional().or(z.literal('')),
   description: z.string().max(1000).optional(),
   founder_name: z.string().min(1).max(120),
@@ -58,7 +61,7 @@ export async function expressInterest(formData: FormData): Promise<InterestResul
 }
 
 export async function getPublicRaise(slug: string) {
-  const db = createAdminClient();
+  const db = await createClient();
   const { data } = await db
     .from('deals')
     .select(

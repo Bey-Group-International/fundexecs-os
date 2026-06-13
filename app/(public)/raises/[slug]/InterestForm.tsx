@@ -34,13 +34,22 @@ export function InterestForm({ dealId }: { dealId: string }) {
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        <InlineField label="Your name *" name="name" placeholder="Alex Chen" />
-        <InlineField label="Email *" name="email" type="email" placeholder="alex@fund.com" />
+        <InlineField label="Your name *" name="name" id="interest-name" placeholder="Alex Chen" />
+        <InlineField
+          label="Email *"
+          name="email"
+          id="interest-email"
+          type="email"
+          placeholder="alex@fund.com"
+        />
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-[12.5px] font-medium text-[#94a3b8]">Note (optional)</label>
+        <label htmlFor="interest-note" className="text-[12.5px] font-medium text-[#94a3b8]">
+          Note (optional)
+        </label>
         <textarea
+          id="interest-note"
           name="note"
           maxLength={500}
           rows={3}
@@ -63,18 +72,23 @@ export function InterestForm({ dealId }: { dealId: string }) {
 function InlineField({
   label,
   name,
+  id,
   type = 'text',
   placeholder
 }: {
   label: string;
   name: string;
+  id: string;
   type?: string;
   placeholder?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[12.5px] font-medium text-[#94a3b8]">{label}</label>
+      <label htmlFor={id} className="text-[12.5px] font-medium text-[#94a3b8]">
+        {label}
+      </label>
       <input
+        id={id}
         name={name}
         type={type}
         placeholder={placeholder}

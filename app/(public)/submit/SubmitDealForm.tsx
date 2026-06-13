@@ -50,14 +50,28 @@ export function SubmitDealForm() {
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Company name *" name="company_name" placeholder="Acme Inc." />
-        <Field label="Website" name="website" type="url" placeholder="https://acme.io" />
+        <Field
+          label="Company name *"
+          name="company_name"
+          id="submit-company-name"
+          placeholder="Acme Inc."
+        />
+        <Field
+          label="Website"
+          name="website"
+          id="submit-website"
+          type="url"
+          placeholder="https://acme.io"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
-          <label className="text-[12.5px] font-medium text-[#94a3b8]">Stage *</label>
+          <label htmlFor="submit-stage" className="text-[12.5px] font-medium text-[#94a3b8]">
+            Stage *
+          </label>
           <select
+            id="submit-stage"
             name="stage"
             required
             defaultValue=""
@@ -73,16 +87,29 @@ export function SubmitDealForm() {
             ))}
           </select>
         </div>
-        <Field label="Raise amount (USD)" name="raise_amount" type="number" placeholder="1000000" />
+        <Field
+          label="Raise amount (USD)"
+          name="raise_amount"
+          id="submit-raise-amount"
+          type="number"
+          placeholder="1000000"
+        />
       </div>
 
-      <Field label="Deck URL" name="deck_url" type="url" placeholder="https://docsend.com/..." />
+      <Field
+        label="Deck URL"
+        name="deck_url"
+        id="submit-deck-url"
+        type="url"
+        placeholder="https://docsend.com/..."
+      />
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-[12.5px] font-medium text-[#94a3b8]">
+        <label htmlFor="submit-description" className="text-[12.5px] font-medium text-[#94a3b8]">
           What does your company do? <span className="text-[#7a899e]">(max 1000 chars)</span>
         </label>
         <textarea
+          id="submit-description"
           name="description"
           maxLength={1000}
           rows={4}
@@ -92,10 +119,16 @@ export function SubmitDealForm() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Founder name *" name="founder_name" placeholder="Jane Smith" />
+        <Field
+          label="Founder name *"
+          name="founder_name"
+          id="submit-founder-name"
+          placeholder="Jane Smith"
+        />
         <Field
           label="Founder email *"
           name="founder_email"
+          id="submit-founder-email"
           type="email"
           placeholder="jane@acme.io"
         />
@@ -127,20 +160,25 @@ export function SubmitDealForm() {
 function Field({
   label,
   name,
+  id,
   type = 'text',
   placeholder,
   required
 }: {
   label: string;
   name: string;
+  id: string;
   type?: string;
   placeholder?: string;
   required?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[12.5px] font-medium text-[#94a3b8]">{label}</label>
+      <label htmlFor={id} className="text-[12.5px] font-medium text-[#94a3b8]">
+        {label}
+      </label>
       <input
+        id={id}
         name={name}
         type={type}
         placeholder={placeholder}

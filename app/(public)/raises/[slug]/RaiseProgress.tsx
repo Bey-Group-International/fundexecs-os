@@ -13,7 +13,7 @@ export function RaiseProgress({
     <div>
       <div className="flex justify-between text-[11.5px] text-[#7a899e] mb-1.5">
         <span>{pct}% filled</span>
-        <span>${formatAmount(target - committed)} remaining</span>
+        <span>${formatAmount(Math.max(0, target - committed))} remaining</span>
       </div>
       <div className="h-2 w-full rounded-full bg-white/[0.07] overflow-hidden">
         <div
