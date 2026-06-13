@@ -16,21 +16,34 @@ This README gets a new contributor productive in under 30 minutes.
 
 ---
 
-## Member types — what each dashboard shows
+## Member types
 
-Every member picks one of five `member_type` values at signup. The
-choice routes them to a dashboard layout tuned to the workflow.
+Every member picks one of five `member_type` values at signup —
+`investment_firm` (GP), `individual_investor` (LP), `startup`,
+`service_provider`, `student`. The choice is set in `app/onboarding`
+and threaded through the product wherever the experience should differ
+by who you are:
 
-| `member_type`         | Layout file                         | Hero KPIs (4)                                                     | List sections                                         |
-| --------------------- | ----------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
-| `investment_firm`     | `InvestmentFirmLayout.tsx` (GP)     | Pipeline value · Active deals · Capital deployed · Sourced 30d    | Active deals, Capital providers, Partnerships         |
-| `individual_investor` | `IndividualInvestorLayout.tsx` (LP) | Active deals · Allocations $ · Syndicate · Watchlist              | Active positions, Watchlist, Syndicate contacts       |
-| `startup`             | `StartupLayout.tsx`                 | Raise progress · Capital committed · Pipeline · Founder check-ins | Raise progress, Active rounds, Cap table teaser       |
-| `service_provider`    | `ServiceProviderLayout.tsx`         | Active engagements · Hours billed · Pipeline · Reviews            | Active engagements, Recent referrals, Service catalog |
-| `student`             | `StudentLayout.tsx`                 | Brains learned · XP · Streak · Next milestone                     | Recent brains, Mentor connections, Live opportunities |
+- **Proof-of-Truth onboarding** — `lib/proof-of-truth/*` (questions,
+  first moves, launch brief, earn profile) and `lib/beta/welcome.ts`
+  tailor the activation flow per type.
+- **Earn intelligence** — `app/api/earn/profile-suggest`,
+  `app/api/earn/launch-brief`, and `lib/ai/launch-brief.ts` shape the
+  COO's suggestions to the member's type.
+- **Recommendations & networking** — `app/(shell)/recommendations` and
+  `lib/ai/network-embeddings.ts` weight matches by type.
 
-All five share a common header (`MemberDashboardChrome`): COO greeting +
-Chain-of-Trust strip + right-rail Earn next-best-actions.
+> **Today the authenticated home is one adaptive surface**,
+> `app/(shell)/command-center/page.tsx`, rendered inside `AppShell`
+> (`components/shell/AppShell.tsx`): the lifecycle rail + cockpit, the
+> COO greeting, live KPIs, and Earn's next moves. It currently presents
+> the GP-oriented lifecycle for every type.
+>
+> **Roadmap:** per-member dashboard layouts (distinct hero KPIs and list
+> sections per `member_type`) are planned — see "Command Center
+> Dashboard" in `ROADMAP.md`. They are not built yet; earlier drafts of
+> this README named layout files (`InvestmentFirmLayout.tsx`, …) that do
+> not exist. When they land, document the real component names here.
 
 ---
 

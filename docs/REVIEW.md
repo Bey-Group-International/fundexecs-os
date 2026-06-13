@@ -146,8 +146,12 @@ of this foundation.
 
 ## Recommended follow-ups (need a decision)
 
-- **README dashboard layouts**: implement the five per-member layouts, or
-  prune the README section. (Product call.)
+- **README dashboard layouts** — _resolved this branch_: the README now
+  describes the real single adaptive command-center and how `member_type`
+  actually flows through the product, with per-member layouts reframed as a
+  `ROADMAP.md` item rather than claimed-as-built. Implementing the five
+  differentiated layouts remains a product-gated feature (new per-type
+  queries + KPI definitions).
 - **Refactor `EarnDock`** into composable pieces.
 - **Add Next 16 caching** to high-traffic authenticated routes.
 - **Optimize `earn-coin.png`** to WebP/AVIF.
@@ -173,3 +177,7 @@ state change, is transform/opacity-led, and is reduced-motion safe.
 - **Landing** (`app/page.tsx`): the six post-hero sections rise + fade once as
   they scroll into view (`Reveal`). Landing-tier cinematic permission; these
   are entrances, not ambient loops, so they don't compete for attention.
+- **Hub module map** (`components/hubs/HubModuleMap.tsx`): the verb-hub entry
+  surface shared by Build/Source/Run/Execute. Module tiles cascade in on view
+  and live tiles get a spring lift + tap (`fxPressable`) — a tactility gap the
+  prior bg-only hover left. Reused across all four hubs (compounding).
