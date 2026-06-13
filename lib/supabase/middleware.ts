@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { isPlatformAdmin } from '@/lib/access';
 import type { Database } from './database.types';
 
 /**
@@ -184,6 +185,7 @@ export async function updateSession(request: NextRequest) {
     '/objections',
     '/onboarding',
     '/partners',
+    '/pending',
     '/pipeline',
     '/profile',
     '/referrals',
@@ -201,30 +203,56 @@ export async function updateSession(request: NextRequest) {
     return redirectTo(login);
   }
 
-  // Bidirectional onboarding gate. For an authenticated user, look up their
-  // `member_profiles.status`. Anything other than `'complete'` forces them
-  // onto `/onboarding`; a completed profile is bounced away from `/onboarding`
-  // back into the app. We only run the lookup for routes that actually need
-  // gating — static assets, public pages, and the whole `/api` surface skip it
-  // so the middleware stays fast on hot paths and never HTML-redirects a fetch.
+  // Onboarding + beta-approval gate. For an authenticated user, look up their
+  // `member_profiles.status` (onboarding finished?) and `access_status` (admin
+  // decision). Two independent dimensions drive three holding states:
+  //   • onboarding incomplete → finish the brief at /onboarding (data capture
+  //     happens BEFORE approval — the door stays open)
+  //   • briefed but not approved → held at /pending until an admin decides
+  //   • complete + approved → full app access (the prior, ungated behavior)
+  // Platform admins (Bey Group) are always treated as approved so the team can
+  // run the portal. Static assets, public pages, and the whole `/api` surface
+  // skip the lookup so the middleware stays fast and never HTML-redirects a
+  // fetch.
   if (user && !isStaticAsset && !isPublic && !isAllowedApi) {
-    // Perf: once a profile is `complete` we cache that in a lightweight cookie
-    // keyed to the user id, so the hot path skips the per-request
-    // `member_profiles` lookup. The cookie value is the user's own id — a
-    // different user (e.g. shared browser) won't match, so they still get a
-    // fresh check. This governs ONLY the onboarding redirect (a UX gate); it
-    // never affects data access, which RLS enforces independently, so a stale
-    // or forged value is harmless.
-    let isComplete = request.cookies.get('fx-onb')?.value === user.id;
+    // Perf: once a profile is complete AND approved (full access) we cache that
+    // in a lightweight cookie keyed to the user id, so the hot path skips the
+    // per-request `member_profiles` lookup. The cookie value is the user's own
+    // id — a different user (e.g. shared browser) won't match, so they still
+    // get a fresh check. It is set ONLY for full-access members, so a pending
+    // user is re-checked every request and gets in the instant they're
+    // approved. This governs ONLY redirects (a UX gate); it never affects data
+    // access, which RLS enforces independently, so a stale value is harmless.
+    const isPlatformAdminUser = isPlatformAdmin(user.email);
+    let fullAccess = request.cookies.get('fx-onb')?.value === user.id;
+    let isComplete = fullAccess;
+    let isApproved = fullAccess || isPlatformAdminUser;
 
-    if (!isComplete) {
-      const { data: mp } = await supabase
+    if (!fullAccess) {
+      const { data: mp, error: mpErr } = await supabase
         .from('member_profiles')
-        .select('status')
+        .select('status, access_status')
         .eq('user_id', user.id)
         .maybeSingle();
-      isComplete = mp?.status === 'complete';
-      if (isComplete) {
+      if (mpErr) {
+        // The `access_status` column may not exist yet (the beta-approval gate
+        // migration hasn't been applied to this database). Fail OPEN to the
+        // pre-gate behavior — gate on onboarding status only, treat everyone as
+        // approved — so a migration lagging the deploy can never lock the whole
+        // app out. Once the column exists this branch never runs.
+        const { data: basic } = await supabase
+          .from('member_profiles')
+          .select('status')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        isComplete = basic?.status === 'complete';
+        isApproved = true;
+      } else {
+        isComplete = mp?.status === 'complete';
+        isApproved = isPlatformAdminUser || mp?.access_status === 'approved';
+      }
+      fullAccess = isComplete && isApproved;
+      if (fullAccess) {
         supabaseResponse.cookies.set('fx-onb', user.id, {
           httpOnly: true,
           sameSite: 'lax',
@@ -234,23 +262,34 @@ export async function updateSession(request: NextRequest) {
       }
     }
 
-    if (!isComplete && !isOnboarding) {
-      const onboarding = request.nextUrl.clone();
-      onboarding.pathname = '/onboarding';
-      onboarding.search = '';
-      onboarding.searchParams.set('from', pathname);
-      return redirectTo(onboarding);
-    }
+    const isPendingRoute = pathname === '/pending';
 
-    if (isComplete && isOnboarding) {
-      // A finished profile is normally bounced out of onboarding so it can't
-      // get stuck re-running the flow. But the Profile's "close gap" / "edit"
-      // deep-links return to the wizard deliberately, to sharpen a published
-      // record — honour an explicit edit intent (`?focus=` or `?edit=`) instead
-      // of redirecting, so post-publish editing actually works.
+    if (!isComplete) {
+      // Door open: finish the brief first (captures the mandate) regardless of
+      // approval. A not-yet-approved visitor still onboards.
+      if (!isOnboarding) {
+        const onboarding = request.nextUrl.clone();
+        onboarding.pathname = '/onboarding';
+        onboarding.search = '';
+        onboarding.searchParams.set('from', pathname);
+        return redirectTo(onboarding);
+      }
+    } else if (!isApproved) {
+      // Briefed but awaiting (or declined) an admin decision → the holding
+      // screen, which shows what Earn captured while they wait.
+      if (!isPendingRoute) {
+        const pending = request.nextUrl.clone();
+        pending.pathname = '/pending';
+        pending.search = '';
+        return redirectTo(pending);
+      }
+    } else {
+      // Full access — bounce away from both gates back into the app. The
+      // Profile's "close gap" / "edit" deep-links return to the wizard
+      // deliberately (`?focus=` / `?edit=`), so honour an explicit edit intent.
       const isEditIntent =
         request.nextUrl.searchParams.has('focus') || request.nextUrl.searchParams.has('edit');
-      if (!isEditIntent) {
+      if (isPendingRoute || (isOnboarding && !isEditIntent)) {
         const commandCenter = request.nextUrl.clone();
         commandCenter.pathname = '/command-center';
         commandCenter.search = '';

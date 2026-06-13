@@ -73,6 +73,22 @@ export function costOf(action: MeteredAction): number {
   return ACTION_COST[action] ?? 0;
 }
 
+/** The priciest single metered action — the floor for "can you still run the
+ *  big thing?". Derived, so it tracks ACTION_COST automatically. */
+export const MAX_ACTION_COST: number = Math.max(...Object.values(ACTION_COST));
+
+/**
+ * The balance at or below which the wallet is "running low" — i.e. the operator
+ * can no longer comfortably run the heaviest action. We take the larger of the
+ * priciest action's cost and 10% of the plan's monthly grant, so the warning
+ * means "you can't do the big thing" rather than an arbitrary number, and scales
+ * with richer plans. (`MONTHLY_GRANT` is defined in §3 below; this is only read
+ * at call time, never at module load.)
+ */
+export function lowBalanceThreshold(plan: Plan): number {
+  return Math.max(MAX_ACTION_COST, Math.ceil(MONTHLY_GRANT[plan] * 0.1));
+}
+
 /* --------------------------------------------------------------------------
  * 2. Paid integrations — which providers each plan may use at all.
  *    Free gets none; everything paid is metered by credits on top of access.

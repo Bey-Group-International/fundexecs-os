@@ -102,6 +102,17 @@ async function main() {
       .upsert({ user_id: user.id, status: 'complete' });
     if (error) throw new Error(`member_profiles: ${error.message}`);
     console.log('member_profiles complete');
+
+    // Approve beta access so the access gate lets the test user in. Best-effort:
+    // the `access_status` column only exists once the beta-approval migration is
+    // applied; before then the middleware fails open (treats everyone approved),
+    // so a missing-column error here is expected and safe to ignore.
+    const { error: accessErr } = await admin
+      .from('member_profiles')
+      .update({ access_status: 'approved' })
+      .eq('user_id', user.id);
+    if (accessErr) console.log(`member_profiles access_status skipped: ${accessErr.message}`);
+    else console.log('member_profiles access approved');
   }
 
   // 4. An active org membership (owner). The live DB's `handle_new_user`

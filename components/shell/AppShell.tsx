@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/Badge';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { MandateIcon } from '@/components/ui/MandateIcon';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { WalletChip } from '@/components/shell/WalletChip';
 import type { HubId } from '@/lib/hubs/lifecycle';
 import { cn } from '@/lib/utils';
 
@@ -298,6 +299,7 @@ export function AppShell({
             </div>
           </div>
           <span className="flex-1" />
+          <WalletChip />
           <Link
             href="/inbox"
             aria-label={unreadCount > 0 ? `Inbox (${unreadCount} unread)` : 'Inbox'}
@@ -323,6 +325,7 @@ export function AppShell({
             <div className="text-[14px] font-semibold">{title}</div>
             <div className="truncate text-[10.5px] text-fg-4">{firm}</div>
           </div>
+          <WalletChip />
           <span className="inline-flex items-center gap-1 rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2 py-0.5 text-[11px] font-semibold text-gold-1">
             <Award size={12} aria-hidden />L{level}
           </span>

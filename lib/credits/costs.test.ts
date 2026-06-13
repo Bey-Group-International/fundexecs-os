@@ -6,6 +6,8 @@ import {
   asPlan,
   canUseIntegration,
   costOf,
+  lowBalanceThreshold,
+  MAX_ACTION_COST,
   nextPlanUp,
   MONTHLY_GRANT,
   PAID_INTEGRATION_ACTION,
@@ -82,6 +84,26 @@ test('asPaidIntegration narrows known providers and rejects owned/unknown ones',
   assert.equal(asPaidIntegration('granola'), 'granola');
   for (const owned of ['gmail', 'google_calendar', 'slack', '', 'APOLLO']) {
     assert.equal(asPaidIntegration(owned), null, `expected null for: ${owned}`);
+  }
+});
+
+test('MAX_ACTION_COST tracks the priciest metered action', () => {
+  assert.equal(MAX_ACTION_COST, Math.max(...Object.values(ACTION_COST)));
+  // The heaviest run today is the diligence run.
+  assert.equal(MAX_ACTION_COST, costOf('diligence_run'));
+});
+
+test('lowBalanceThreshold is the larger of max action cost and 10% of the grant', () => {
+  // Free floors on the priciest action — its 10% (5) is below it, so you must
+  // still be able to run the big thing before we warn.
+  assert.equal(lowBalanceThreshold('free'), MAX_ACTION_COST);
+  // Every richer plan's 10% already clears the floor, so it scales with the grant.
+  assert.equal(lowBalanceThreshold('standard'), Math.ceil(MONTHLY_GRANT.standard * 0.1));
+  assert.equal(lowBalanceThreshold('pro'), Math.ceil(MONTHLY_GRANT.pro * 0.1));
+  assert.equal(lowBalanceThreshold('institutional'), Math.ceil(MONTHLY_GRANT.institutional * 0.1));
+  // Never below the priciest action, for any plan.
+  for (const plan of PLANS) {
+    assert.ok(lowBalanceThreshold(plan) >= MAX_ACTION_COST, `threshold for ${plan} too low`);
   }
 });
 
