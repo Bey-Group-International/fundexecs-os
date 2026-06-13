@@ -20,7 +20,6 @@ import {
   Activity
 } from 'lucide-react';
 import { EarnCoin, Wordmark } from '@/components/brand/BrandPrimitives';
-import { EarnRunner } from '@/components/ui/EarnRunner';
 
 /* ── Live activity ticker ── */
 const TICKER_ITEMS = [
@@ -585,7 +584,7 @@ export default function LandingPage() {
                 filter: 'blur(12px)'
               }}
             />
-            <EarnRunner size={112} glow />
+            <EarnCoin size={112} glow />
           </div>
 
           {/* Beta badge */}
@@ -1072,7 +1071,7 @@ export default function LandingPage() {
               }}
             />
             <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
-              <EarnRunner size={88} glow />
+              <EarnCoin size={88} glow />
             </div>
             <h2
               style={{
