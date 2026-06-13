@@ -11,7 +11,7 @@ import {
   type EarnOutcome,
   type OutcomeKind
 } from '@/lib/earn/outcomes';
-import { getMember } from '@/lib/team';
+import { getMember, gradientForSlug, initialsForName } from '@/lib/team';
 import { cn } from '@/lib/utils';
 
 /**
@@ -39,10 +39,24 @@ function relativeTime(iso: string): string {
 function SpecialistMark({ slug }: { slug: string }) {
   const member = getMember(slug);
   if (member?.chief) return <EarnCoin size={30} />;
+  const { from, to, angle } = gradientForSlug(slug);
+  const name = member?.name ?? slug;
+  const initials = initialsForName(name);
   const Icon = member?.icon ?? Sparkles;
   return (
-    <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full border border-[var(--azure-line)] bg-[var(--azure-soft)] text-azure-1">
-      <Icon size={14} strokeWidth={1.9} aria-hidden />
+    <span
+      title={member ? `${member.name} · ${member.position}` : slug}
+      className="relative flex h-[30px] w-[30px] flex-none items-center justify-center overflow-hidden rounded-full"
+      style={{
+        background: `linear-gradient(${angle}deg, ${from}, ${to})`
+      }}
+      aria-label={name}
+    >
+      {initials ? (
+        <span className="text-[10px] font-bold text-white/90">{initials}</span>
+      ) : (
+        <Icon size={13} strokeWidth={2} className="text-white/90" aria-hidden />
+      )}
     </span>
   );
 }
