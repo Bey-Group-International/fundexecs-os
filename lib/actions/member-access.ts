@@ -63,7 +63,7 @@ export async function setMemberAccess(
   if (!actor) return { ok: false, error: 'Not signed in.' };
 
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from('member_profiles')
     .update({
       access_status: decision,
@@ -72,22 +72,30 @@ export async function setMemberAccess(
       access_decided_at: decision === 'pending' ? null : new Date().toISOString(),
       access_decided_by: decision === 'pending' ? null : actor.id
     })
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .select('user_id')
+    .maybeSingle();
   if (error) return { ok: false, error: error.message };
+  // No matching row means the decision silently dropped — surface it instead of
+  // reporting a success the admin never actually applied.
+  if (!updated) return { ok: false, error: 'Member profile not found.' };
 
   await writeAccessAudit(actor.id, decision, userId);
 
-  // Push the decision to the configured CRM / webhook (never-block). Resolve the
-  // applicant's email best-effort so the destination can match the contact.
-  const targetEmail = await admin.auth.admin
-    .getUserById(userId)
-    .then((r) => r.data.user?.email ?? null)
-    .catch(() => null);
-  void emitOutboundEvent({
-    type: `access_${decision}`,
-    occurredAt: new Date().toISOString(),
-    data: { userId, email: targetEmail, decision, decidedBy: actor.email ?? actor.id }
-  });
+  // Push the decision to the configured CRM / webhook (never-block). The email
+  // lookup + delivery run fire-and-forget so a slow Auth Admin API or webhook
+  // never delays the admin's decision returning.
+  void (async () => {
+    const targetEmail = await admin.auth.admin
+      .getUserById(userId)
+      .then((r) => r.data.user?.email ?? null)
+      .catch(() => null);
+    await emitOutboundEvent({
+      type: `access_${decision}`,
+      occurredAt: new Date().toISOString(),
+      data: { userId, email: targetEmail, decision, decidedBy: actor.email ?? actor.id }
+    });
+  })();
 
   revalidatePath('/admin');
   return { ok: true };

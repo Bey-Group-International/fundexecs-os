@@ -37,24 +37,33 @@ const FILTERS: { id: Filter; label: string }[] = [
  */
 export function AccessInbox({ applicants }: { applicants: AccessApplicant[] }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   // Local override of each row's status for optimistic feedback before refresh.
   const [overrides, setOverrides] = useState<Record<string, AccessStatus>>({});
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('pending');
-  const [busyId, setBusyId] = useState<string | null>(null);
+  // Per-user busy map — a single id would let a second decision re-enable the
+  // first row before its request resolves, so two conflicting writes could race
+  // for the same applicant. Keyed by userId, each decision only clears its own.
+  const [busyIds, setBusyIds] = useState<Record<string, true>>({});
 
   const statusOf = (a: AccessApplicant): AccessStatus => overrides[a.userId] ?? a.access;
 
   function decide(userId: string, decision: AccessDecision) {
+    // Ignore a second decision for the same user while one is in flight.
+    if (busyIds[userId]) return;
     setError(null);
-    setBusyId(userId);
+    setBusyIds((s) => ({ ...s, [userId]: true }));
     const previous = overrides[userId];
     // Optimistic: reflect the decision immediately ('pending' clears any override).
     setOverrides((o) => ({ ...o, [userId]: decision }));
     startTransition(async () => {
       const result = await setMemberAccess(userId, decision);
-      setBusyId(null);
+      setBusyIds((s) => {
+        const next = { ...s };
+        delete next[userId];
+        return next;
+      });
       if (!result.ok) {
         setError(result.error);
         // Roll back the optimistic flip.
@@ -120,7 +129,7 @@ export function AccessInbox({ applicants }: { applicants: AccessApplicant[] }) {
         <ul className="space-y-2.5">
           {visible.map((a) => {
             const status = statusOf(a);
-            const rowBusy = busyId === a.userId && pending;
+            const rowBusy = Boolean(busyIds[a.userId]);
             return (
               <li
                 key={a.userId}

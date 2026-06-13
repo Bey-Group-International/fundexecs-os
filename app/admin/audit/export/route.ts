@@ -5,9 +5,15 @@ import { getAccessAuditLog } from '@/lib/queries/admin-audit';
 // Always run fresh — this is an export of live audit data.
 export const dynamic = 'force-dynamic';
 
-/** Escape a value for a single CSV cell (RFC 4180: quote, double inner quotes). */
+/**
+ * Escape a value for a single CSV cell. RFC 4180 (quote, double inner quotes)
+ * plus CSV-injection defense: a value that starts with a formula-trigger
+ * character (= + - @, or a leading tab/CR) is prefixed with a single quote so
+ * spreadsheet clients render it as text instead of executing it.
+ */
 function cell(value: string | null | undefined): string {
-  const s = value == null ? '' : String(value);
+  let s = value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 }
 
