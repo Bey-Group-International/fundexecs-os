@@ -229,13 +229,28 @@ export async function updateSession(request: NextRequest) {
     let isApproved = fullAccess || isPlatformAdminUser;
 
     if (!fullAccess) {
-      const { data: mp } = await supabase
+      const { data: mp, error: mpErr } = await supabase
         .from('member_profiles')
         .select('status, access_status')
         .eq('user_id', user.id)
         .maybeSingle();
-      isComplete = mp?.status === 'complete';
-      isApproved = isPlatformAdminUser || mp?.access_status === 'approved';
+      if (mpErr) {
+        // The `access_status` column may not exist yet (the beta-approval gate
+        // migration hasn't been applied to this database). Fail OPEN to the
+        // pre-gate behavior — gate on onboarding status only, treat everyone as
+        // approved — so a migration lagging the deploy can never lock the whole
+        // app out. Once the column exists this branch never runs.
+        const { data: basic } = await supabase
+          .from('member_profiles')
+          .select('status')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        isComplete = basic?.status === 'complete';
+        isApproved = true;
+      } else {
+        isComplete = mp?.status === 'complete';
+        isApproved = isPlatformAdminUser || mp?.access_status === 'approved';
+      }
       fullAccess = isComplete && isApproved;
       if (fullAccess) {
         supabaseResponse.cookies.set('fx-onb', user.id, {
