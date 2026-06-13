@@ -76,7 +76,7 @@ slot.
 Render the live lifecycle gate as a **checklist**, not a threshold. Remaining items,
 owning agent, and an ETA derived from surface 1's velocity:
 
-```
+```text
 Gate → source_deals  (1 of 2 cleared)
 ☑ Soft-circle ≥ 1
 ☐ Contact 2 more LPs — Vivian · ETA ~6d at current pace
@@ -89,7 +89,7 @@ directly compounding v2's "decisive next move."
 
 Closes the loop. Agents pre-draft the actual artifact for each next move (the
 cooling-LP follow-up, the intro request, the soft-circle confirmation). It sits in a
-dashboard queue; the operator **approves → it fires and writes a `trust_event`** (on
+dashboard queue; the operator **approves → it fires and writes a `trust_events`** (on
 the record) and advances the entity. Predicted move → drafted artifact → one-click
 execute. Highest-trust, highest-effort piece (agents' words in front of LPs) — ship
 last of the core four.
@@ -111,7 +111,7 @@ last of the core four.
   to `created_at`/`lastTouch` until populated.
 - **Approval queue** → `agent_drafts` (`entity_id`, `agent_slug`, `kind`, `body`,
   `status`: pending/approved/dismissed). Codex: table + RLS. Claude: draft-generation
-  and approve→`trust_event` server actions.
+  and approve→`trust_events` server actions.
 - **Enrichment** → live Apollo / Carta integration seams (last).
 
 Everything in surfaces 2 and 3 runs on **existing** `capital_providers` data + the
@@ -123,7 +123,7 @@ current gate thresholds — no new tables required to ship the entity layer.
   (pending/approved/dismissed). RLS org/member-scoped.
 - **Claude (logic):** extend `getDashboardData` → `conversionForecast`,
   `lpNextMoves[]`, gate-as-checklist with ETAs, `approvalQueue[]`; new loaders under
-  `lib/queries/dashboard/`; draft-generation + approve→`trust_event` server actions.
+  `lib/queries/dashboard/`; draft-generation + approve→`trust_events` server actions.
 - **Emergent (UI):** Raise Cockpit panel in the dense grid — forecast header, per-LP
   move rows, gate checklist, approval queue. Tokens-only; solid `bg-bg-1`; voice
   "Chief Operating Officer · your live AI guide".
@@ -136,7 +136,7 @@ current gate thresholds — no new tables required to ship the entity layer.
 2. **Claude-now:** coarse `conversionForecast` from `created_at`/`lastTouch`
    (degrades cleanly to no-pace).
 3. **Codex:** `lp_stage_events` → real velocity + ETAs; `agent_drafts` → the queue.
-4. **Claude:** wire real ETAs onto the gate; draft-generation + approve→`trust_event`.
+4. **Claude:** wire real ETAs onto the gate; draft-generation + approve→`trust_events`.
 5. **Emergent:** Raise Cockpit UI binding the extended loader.
 6. **Later (integration-gated):** Apollo / Carta enrichment on the LP rows.
 
