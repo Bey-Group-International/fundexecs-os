@@ -333,7 +333,7 @@ export async function ingestBotMemo(): Promise<{ inserted: number }> {
       top_verticals: pulse.topVerticals,
       source_url: pulse.sourceUrl,
     },
-    raw_payload: pulse as unknown as Record<string, unknown>,
+    raw_payload: JSON.parse(JSON.stringify(pulse)),
   });
 
   return { inserted: error ? 0 : 1 };
