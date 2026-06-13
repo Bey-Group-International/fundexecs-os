@@ -1,10 +1,12 @@
 # Unified Inbox + In-App Video — Blueprint
 
-> Status: **P1 + P2 landed**. Additive throughout: a new `/inbox` route over a
-> new `inbox_items` table, plus ingestion that surfaces Gmail/Slack/call
-> conversations as triage items and a guarded accept/dismiss action. No
-> existing surface changes behaviour; the Notifications page stays intact and
-> is reachable from the Inbox "System" tab.
+> Status: **P1–P3 landed**. Additive throughout: a new `/inbox` route over a
+> new `inbox_items` table, ingestion that surfaces Gmail/Slack/call
+> conversations as triage items, a guarded accept/dismiss action, and
+> Earn-drafted replies sent in-channel (Gmail/Slack). The only behaviour
+> change outside the inbox is two new send OAuth scopes (`gmail.send`,
+> `chat:write`) that require a one-time reconnect. The Notifications page stays
+> intact and is reachable from the Inbox "System" tab.
 
 ## Why this exists (the workflow lens)
 
@@ -85,11 +87,26 @@ the existing Notifications bell rather than new nav weight.
 - Deal auto-resolution beyond contact linking is deferred to a follow-up (a
   deal picker / scorer-based routing on accept).
 
-### P3 — Earn-drafted replies + send
+### P3 — Earn-drafted replies + send _(landed)_
 
-- Earn pre-drafts `draft_reply`; user approves → send via Gmail send /
-  Slack `chat.postMessage`. Adds send OAuth scopes (the main net-new ask).
-- External Zoom/Meet calls land as `channel = 'call'` items (no media infra).
+- `lib/inbox/draft.ts` — Earn drafts a reply (Claude, chat tier) from the
+  conversation + resolved contact onto `inbox_items.draft_reply`. Never-block,
+  same contract as `match-judge`.
+- `lib/inbox/send.ts` — Gmail `messages.send` + Slack `chat.postMessage`
+  primitives, returning a typed `missing_scope` reason so the UI can prompt a
+  reconnect.
+- `draft_inbox_reply` / `send_inbox_reply` server actions: authorize via an RLS
+  read, resolve the channel's connection + token (refresh when expired), send,
+  then mark the item `sent`.
+- **Net-new OAuth scopes** (the main ask): `gmail.send` added to
+  `GOOGLE_SCOPES`, `chat:write` to the Slack user scopes. Existing connections
+  must reconnect once to grant them.
+- UI: a per-row composer — "Reply" generates Earn's draft, the operator edits
+  and sends in-channel.
+- External Zoom/Meet calls already land as `channel = 'call'` items via P2
+  ingest (no media infra). Email/Slack threading on send (In-Reply-To /
+  Gmail `threadId`) is a follow-up — the original `Message-ID` isn't stored
+  yet, so replies currently send as a fresh `Re:` message.
 
 ### P4 — In-app calls (LiveKit)
 

@@ -32,6 +32,8 @@ export interface InboxItem {
   dealId: string | null;
   subject: string;
   preview: string;
+  /** Earn's drafted reply, when one has been generated (P3). */
+  draftReply: string | null;
   score: number;
   status: InboxStatus;
   /** [{ factor, weight, detail }] — same shape as `matches.rationale`. */
@@ -58,6 +60,7 @@ interface InboxRow {
   deal_id: string | null;
   subject: string | null;
   preview: string | null;
+  draft_reply: string | null;
   score: number | null;
   status: string;
   rationale: unknown;
@@ -103,6 +106,7 @@ function toItem(r: InboxRow): InboxItem {
     dealId: r.deal_id,
     subject: r.subject ?? '',
     preview: r.preview ?? '',
+    draftReply: r.draft_reply,
     score: typeof r.score === 'number' ? r.score : 0,
     status: r.status as InboxStatus,
     rationale: Array.isArray(r.rationale) ? (r.rationale as Record<string, unknown>[]) : [],
@@ -129,7 +133,7 @@ export async function getInboxData(orgId: string): Promise<InboxData> {
     const { data, error } = await inboxReader(supabase)
       .from('inbox_items')
       .select(
-        'id, channel, direction, thread_id, contact_id, deal_id, subject, preview, score, status, rationale, occurred_at, created_at, acted_at'
+        'id, channel, direction, thread_id, contact_id, deal_id, subject, preview, draft_reply, score, status, rationale, occurred_at, created_at, acted_at'
       )
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })

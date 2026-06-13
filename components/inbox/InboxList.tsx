@@ -16,11 +16,18 @@ import {
   X,
   Loader2,
   TriangleAlert,
+  Sparkles,
+  Send,
   type LucideIcon
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
-import { act_on_inbox_item, type InboxAction } from '@/lib/actions/inbox';
+import {
+  act_on_inbox_item,
+  draft_inbox_reply,
+  send_inbox_reply,
+  type InboxAction
+} from '@/lib/actions/inbox';
 import {
   COMING_SOON_CHANNELS,
   WIRED_CHANNELS,
@@ -29,11 +36,10 @@ import {
 } from '@/lib/queries/inbox';
 import { cn } from '@/lib/utils';
 
-/* The Relationship Inbox (P1-P2). Channel-agnostic triage list with channel
- * filter chips + a "System" link back to notifications. Each pending item can
- * be accepted (routed onto the deal loop) or dismissed via the guarded
- * act_on_inbox_item RPC. Items arrive once ingestion runs (Gmail/Slack sync);
- * until then this renders a tasteful empty state. */
+/* The Relationship Inbox (P1-P3). Channel-agnostic triage list with channel
+ * filter chips + a "System" link back to notifications. Each pending email/
+ * Slack item can be accepted, dismissed, or replied to: Earn drafts a reply
+ * the operator edits and sends in-channel via the guarded server actions. */
 
 const CHANNEL_META: Record<InboxChannel, { label: string; icon: LucideIcon }> = {
   email: { label: 'Email', icon: Mail },
@@ -43,6 +49,9 @@ const CHANNEL_META: Record<InboxChannel, { label: string; icon: LucideIcon }> = 
   sms: { label: 'SMS', icon: MessageCircle },
   webinar: { label: 'Webinars', icon: Phone }
 };
+
+/** Channels we can send a reply through today. */
+const SENDABLE: InboxChannel[] = ['email', 'slack'];
 
 type Filter = 'all' | InboxChannel;
 
@@ -77,13 +86,17 @@ export function InboxList({
     [items, filter]
   );
 
+  function removeItem(id: string) {
+    setItems((prev) => prev.filter((i) => i.id !== id));
+  }
+
   // Optimistically drop the item from the worklist; revert + surface an error
   // if the guarded RPC rejects the transition.
   async function act(item: InboxItem, action: InboxAction) {
     setPending(item.id);
     setError(null);
     const snapshot = items;
-    setItems((prev) => prev.filter((i) => i.id !== item.id));
+    removeItem(item.id);
     try {
       const res = await act_on_inbox_item(item.id, action);
       if (res.ok) {
@@ -185,6 +198,8 @@ export function InboxList({
               item={item}
               busy={pending === item.id}
               onAct={(action) => void act(item, action)}
+              onSent={() => removeItem(item.id)}
+              onError={setError}
             />
           ))}
         </div>
@@ -222,72 +237,183 @@ function FilterChip({
 function InboxRow({
   item,
   busy,
-  onAct
+  onAct,
+  onSent,
+  onError
 }: {
   item: InboxItem;
   busy: boolean;
   onAct: (action: InboxAction) => void;
+  onSent: () => void;
+  onError: (msg: string) => void;
 }) {
   const meta = CHANNEL_META[item.channel];
   const pendingItem = item.status === 'pending';
+  const canReply = pendingItem && SENDABLE.includes(item.channel);
+
+  const [composing, setComposing] = useState(false);
+  const [draft, setDraft] = useState(item.draftReply ?? '');
+  const [drafting, setDrafting] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  async function generate() {
+    setDrafting(true);
+    onError('');
+    try {
+      const res = await draft_inbox_reply(item.id);
+      if (res.ok && res.draft) setDraft(res.draft);
+      else onError('Earn could not draft a reply right now — write one or try again.');
+    } catch {
+      onError('Earn could not draft a reply — check your connection and try again.');
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  async function openComposer() {
+    setComposing(true);
+    if (!draft.trim()) await generate();
+  }
+
+  async function send() {
+    setSending(true);
+    onError('');
+    try {
+      const res = await send_inbox_reply(item.id, draft);
+      if (res.ok) onSent();
+      else onError(res.error ?? 'Could not send the reply — try again.');
+    } catch {
+      onError('Could not send the reply — check your connection and try again.');
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
-    <Card className="flex items-start gap-3 p-4">
-      <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-[10px] border border-hairline bg-surface-1 text-fg-3">
-        <meta.icon size={15} strokeWidth={1.9} aria-hidden />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-[13px] font-semibold text-fg-1">
-            {item.subject || meta.label}
-          </span>
-          <Badge tone="neutral" className="px-1.5 py-0 text-[9px]">
-            {meta.label}
-          </Badge>
-          <span className="text-[10.5px] text-fg-5">
-            {relativeTime(item.occurredAt ?? item.createdAt)}
-          </span>
+    <Card className="flex flex-col gap-3 p-4">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-[10px] border border-hairline bg-surface-1 text-fg-3">
+          <meta.icon size={15} strokeWidth={1.9} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-[13px] font-semibold text-fg-1">
+              {item.subject || meta.label}
+            </span>
+            <Badge tone="neutral" className="px-1.5 py-0 text-[9px]">
+              {meta.label}
+            </Badge>
+            <span className="text-[10.5px] text-fg-5">
+              {relativeTime(item.occurredAt ?? item.createdAt)}
+            </span>
+          </div>
+          {item.preview && (
+            <p className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-fg-3">
+              {item.preview}
+            </p>
+          )}
+          {item.dealId && (
+            <Link
+              href={`/source?deal=${item.dealId}`}
+              className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-semibold text-azure-1"
+            >
+              View deal
+              <ArrowRight size={12} strokeWidth={2} aria-hidden />
+            </Link>
+          )}
         </div>
-        {item.preview && (
-          <p className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-fg-3">
-            {item.preview}
-          </p>
-        )}
-        {item.dealId && (
-          <Link
-            href={`/source?deal=${item.dealId}`}
-            className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-semibold text-azure-1"
-          >
-            View deal
-            <ArrowRight size={12} strokeWidth={2} aria-hidden />
-          </Link>
+        {pendingItem && (
+          <div className="flex flex-none items-center gap-1">
+            {canReply && !composing && (
+              <button
+                type="button"
+                title="Reply with Earn"
+                aria-label={`Reply to "${item.subject || meta.label}"`}
+                disabled={busy}
+                onClick={() => void openComposer()}
+                className="flex h-7 items-center gap-1 rounded-lg border border-hairline px-2 text-[11px] font-medium text-fg-3 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+              >
+                <Sparkles size={12} strokeWidth={1.9} aria-hidden />
+                Reply
+              </button>
+            )}
+            <button
+              type="button"
+              title="Accept — route onto the deal loop"
+              aria-label={`Accept conversation "${item.subject || meta.label}"`}
+              disabled={busy}
+              onClick={() => onAct('accepted')}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+            >
+              {busy ? (
+                <Loader2 size={13} className="motion-safe:animate-spin" aria-hidden />
+              ) : (
+                <Check size={13} aria-hidden />
+              )}
+            </button>
+            <button
+              type="button"
+              title="Dismiss"
+              aria-label={`Dismiss conversation "${item.subject || meta.label}"`}
+              disabled={busy}
+              onClick={() => onAct('dismissed')}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+            >
+              <X size={13} aria-hidden />
+            </button>
+          </div>
         )}
       </div>
-      {pendingItem && (
-        <div className="flex flex-none items-center gap-1">
-          <button
-            type="button"
-            title="Accept — route onto the deal loop"
-            aria-label={`Accept conversation "${item.subject || meta.label}"`}
-            disabled={busy}
-            onClick={() => onAct('accepted')}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
-          >
-            {busy ? (
-              <Loader2 size={13} className="motion-safe:animate-spin" aria-hidden />
-            ) : (
-              <Check size={13} aria-hidden />
-            )}
-          </button>
-          <button
-            type="button"
-            title="Dismiss"
-            aria-label={`Dismiss conversation "${item.subject || meta.label}"`}
-            disabled={busy}
-            onClick={() => onAct('dismissed')}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
-          >
-            <X size={13} aria-hidden />
-          </button>
+
+      {composing && (
+        <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-1 p-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-fg-3">
+            <Sparkles size={12} strokeWidth={1.9} className="text-[var(--accent)]" aria-hidden />
+            Earn&apos;s draft — edit before you send
+          </div>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={5}
+            disabled={drafting || sending}
+            placeholder={drafting ? 'Earn is drafting…' : 'Write your reply…'}
+            className="w-full resize-y rounded-lg border border-hairline bg-bg-0 px-3 py-2 text-[12.5px] leading-relaxed text-fg-1 outline-none focus:border-[var(--accent-line)] disabled:opacity-60"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setComposing(false)}
+              className="rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium text-fg-4 transition hover:text-fg-1"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void generate()}
+              disabled={drafting || sending}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-hairline px-2.5 py-1.5 text-[11.5px] font-medium text-fg-3 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+            >
+              {drafting ? (
+                <Loader2 size={12} className="motion-safe:animate-spin" aria-hidden />
+              ) : (
+                <Sparkles size={12} strokeWidth={1.9} aria-hidden />
+              )}
+              Redraft
+            </button>
+            <button
+              type="button"
+              onClick={() => void send()}
+              disabled={sending || drafting || !draft.trim()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[11.5px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {sending ? (
+                <Loader2 size={12} className="motion-safe:animate-spin" aria-hidden />
+              ) : (
+                <Send size={12} strokeWidth={2} aria-hidden />
+              )}
+              Send
+            </button>
+          </div>
         </div>
       )}
     </Card>
