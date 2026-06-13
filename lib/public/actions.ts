@@ -8,9 +8,10 @@ const SubmissionSchema = z.object({
   company_name: z.string().min(1).max(120),
   website: z.string().url().optional().or(z.literal('')),
   stage: z.enum(['pre-seed', 'seed', 'series-a', 'series-b+']),
-  raise_amount: z
-    .preprocess((v) => (v === '' ? undefined : v), z.coerce.number().positive())
-    .optional(),
+  raise_amount: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.coerce.number().positive().optional()
+  ),
   deck_url: z.string().url().optional().or(z.literal('')),
   description: z.string().max(1000).optional(),
   founder_name: z.string().min(1).max(120),
