@@ -12,11 +12,11 @@ foundation (`PR #383` → `/earn` page → real routing → task engine) lands.
 
 **Decisions this doc encodes** (operator-confirmed, Jun-13):
 
-| Question                          | Decision                                                                 |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| Which lifecycle gap first         | **Capital calls + LP reporting + re-up** — close the loop, Fund I → II    |
-| How the team grows                | **Add 2–3 new desks** for the post-close arc                              |
-| How compounding extends           | **Add a 5th flywheel: Track Record** (returns → the next raise)           |
+| Question                           | Decision                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| Which lifecycle gap first          | **Capital calls + LP reporting + re-up** — close the loop, Fund I → II      |
+| How the team grows                 | **Add 2–3 new desks** for the post-close arc                                |
+| How compounding extends            | **Add a 5th flywheel: Track Record** (returns → the next raise)             |
 | Where honest post-close data lives | **Hybrid: integrations + attestations**, provenance labeled on every figure |
 
 ---
@@ -32,14 +32,14 @@ But a fund is not a line that ends at "Deal hits Committed → open the closing.
 It is a **loop**. The work that actually fills an operator's years — and the
 work that raises the _next_ fund — happens **after** the close:
 
-| Post-close job (today: no desk owns it) | Why it matters                                            |
-| --------------------------------------- | --------------------------------------------------------- |
-| **Capital calls**                       | Funding the commitments that were closed                  |
-| **Portfolio monitoring & value-creation** | The multi-year stretch where returns are actually made  |
-| **Interim marks / NAV**                 | The honest numbers every LP report and re-up depends on   |
-| **Distributions / waterfall**           | Returning capital — the proof LPs underwrite              |
-| **LP quarterly reporting**              | The cadence that keeps capital warm between funds          |
-| **Re-up → Fund II**                     | The loop-back: a realized track record _is_ the next pitch |
+| Post-close job (today: no desk owns it)   | Why it matters                                             |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| **Capital calls**                         | Funding the commitments that were closed                   |
+| **Portfolio monitoring & value-creation** | The multi-year stretch where returns are actually made     |
+| **Interim marks / NAV**                   | The honest numbers every LP report and re-up depends on    |
+| **Distributions / waterfall**             | Returning capital — the proof LPs underwrite               |
+| **LP quarterly reporting**                | The cadence that keeps capital warm between funds          |
+| **Re-up → Fund II**                       | The loop-back: a realized track record _is_ the next pitch |
 
 The doc's strongest claim — _"the Chain of Trust is the appreciating asset"
 (§5.7)_ — is currently **unfinished**. A ledger of formation steps and closings
@@ -123,16 +123,16 @@ Each row is a tasklet: a real signal → Earn drafts → a desk → one approval
 record. Mirrors the §5.4 trigger table, extended through Stage 8 and the
 loop-back.
 
-| Tasklet (real signal)                          | Earn drafts → desk                                          | Writes to                       |
-| ---------------------------------------------- | ---------------------------------------------------------- | ------------------------------- |
-| Deal funded / commitment drawn                 | Capital-call notice + LP allocation schedule → **Beatrix**  | Chain of Trust (call issued)    |
-| Quarter-end reached                            | Quarterly LP report (NAV, activity, marks) → **Beatrix / Eleanor** | Track Record + IR cadence |
-| Portfolio co. posts new financials             | Interim mark update + variance note → **Rhea**              | Track Record (mark, sourced)    |
-| Covenant / runway flag trips                   | Portfolio-health alert + action plan → **Rhea / Sterling**  | Chain of Trust (risk logged)    |
-| Exit event clears (sale / secondary)           | Distribution + waterfall calc → **Soren / Beatrix**         | Track Record (realized DPI)     |
-| DPI / TVPI crosses a threshold                 | "Track-record update — ready to re-engage LPs" → **Sloane** | Track Record → **loops to Stage 3** |
-| LP report opened by a prospect for next fund   | Warm re-up follow-up → **Eleanor**                          | IR cadence (re-up pipeline)     |
-| Fund period nears end                          | Re-up thesis + Fund II target list (seeded from Fund I LPs) → **Sloane** | The next raise (Stage 3)  |
+| Tasklet (real signal)                        | Earn drafts → desk                                                       | Writes to                           |
+| -------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------- |
+| Deal funded / commitment drawn               | Capital-call notice + LP allocation schedule → **Beatrix**               | Chain of Trust (call issued)        |
+| Quarter-end reached                          | Quarterly LP report (NAV, activity, marks) → **Beatrix / Eleanor**       | Track Record + IR cadence           |
+| Portfolio co. posts new financials           | Interim mark update + variance note → **Rhea**                           | Track Record (mark, sourced)        |
+| Covenant / runway flag trips                 | Portfolio-health alert + action plan → **Rhea / Sterling**               | Chain of Trust (risk logged)        |
+| Exit event clears (sale / secondary)         | Distribution + waterfall calc → **Soren / Beatrix**                      | Track Record (realized DPI)         |
+| DPI / TVPI crosses a threshold               | "Track-record update — ready to re-engage LPs" → **Sloane**              | Track Record → **loops to Stage 3** |
+| LP report opened by a prospect for next fund | Warm re-up follow-up → **Eleanor**                                       | IR cadence (re-up pipeline)         |
+| Fund period nears end                        | Re-up thesis + Fund II target list (seeded from Fund I LPs) → **Sloane** | The next raise (Stage 3)            |
 
 **Honest-data rule (inherited & extended):** every figure above carries a
 provenance tag — _pulled from {integration}_ or _attested by the operator on
@@ -147,11 +147,11 @@ The arc needs specialists the current 15 don't cleanly cover. Each new desk
 plugs into the existing relay — its output is another desk's input, exactly like
 the org-chart in `EARN_COMPOUNDING_VALUE.md` §4.
 
-| New specialist                          | Desk                       | Produces                                                          | Whose input it becomes                          |
-| --------------------------------------- | -------------------------- | ---------------------------------------------------------------- | ----------------------------------------------- |
-| **Beatrix** · Fund CFO & Administration | The fund's books           | Capital calls, NAV, distributions/waterfall, K-1s, the LP report | Eleanor (reporting), Sloane (re-up proof)        |
-| **Rhea** · Portfolio Operations         | Post-close value-creation  | Interim marks, KPI & covenant monitoring, value-creation plans   | Beatrix (marks feed NAV), Soren (exit readiness) |
-| **Soren** · Realizations _(when exits begin)_ | Value capture        | Exit readiness, process, realized waterfall, DPI                 | Beatrix (distributions), Sloane (track record)   |
+| New specialist                                | Desk                      | Produces                                                         | Whose input it becomes                           |
+| --------------------------------------------- | ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------ |
+| **Beatrix** · Fund CFO & Administration       | The fund's books          | Capital calls, NAV, distributions/waterfall, K-1s, the LP report | Eleanor (reporting), Sloane (re-up proof)        |
+| **Rhea** · Portfolio Operations               | Post-close value-creation | Interim marks, KPI & covenant monitoring, value-creation plans   | Beatrix (marks feed NAV), Soren (exit readiness) |
+| **Soren** · Realizations _(when exits begin)_ | Value capture             | Exit readiness, process, realized waterfall, DPI                 | Beatrix (distributions), Sloane (track record)   |
 
 **Re-up is not a new desk** — it's Earn orchestrating the loop-back: when Beatrix
 and Rhea have produced a quantified record, Earn routes it to **Sloane** (the
@@ -172,9 +172,9 @@ loop, and the Chain of Trust makes every leg provable.
 The four flywheels (Proof, Context, Routing, Momentum) all turn _within_ a fund.
 The fifth turns _across_ funds — it's the one that closes the loop.
 
-| Flywheel         | The loop                                                                                                    | What the operator feels                                  |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| **Track Record** | Every interim mark, distribution, and realized exit writes **returns proof** → DPI/TVPI rises → the next LP conversation and the re-up open from a quantified position | "Fund I isn't just done — it's the pitch for Fund II."   |
+| Flywheel         | The loop                                                                                                                                                               | What the operator feels                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **Track Record** | Every interim mark, distribution, and realized exit writes **returns proof** → DPI/TVPI rises → the next LP conversation and the re-up open from a quantified position | "Fund I isn't just done — it's the pitch for Fund II." |
 
 _Compounds because:_ a fund's hardest sell is credibility, and **realized
 returns are the only credibility LPs fully underwrite.** Proof logged formation;
@@ -229,16 +229,16 @@ matters most here — and it already covers it:
 
 ## 9. How it maps to what's built — and what's next
 
-| Layer                                   | Status                                              | Compounding role                                                        |
-| --------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------- |
-| Lifecycle Stages 1–7                    | Live (Fund Profile → Deal Desk → Memory Audit Trail) | The front half; readiness is the Proof flywheel's gauge                 |
-| Task-engine triggers (§5.4)             | Next slice                                          | The tasklet primitive — generalize these into the first-class unit       |
-| **Stage 8: Administration & Re-up arc** | **This expansion**                                   | Closes the loop; the tasklet catalog (§4) is the build list             |
-| **Beatrix · Fund CFO & Administration** | New desk                                            | Capital calls, NAV, distributions, the LP report engine                 |
-| **Rhea · Portfolio Operations**         | New desk                                            | Interim marks + portfolio health that keep the report honest & current  |
-| **Soren · Realizations**                | New desk (when exits begin)                          | Realized returns → the Track Record flywheel                            |
-| **Track Record flywheel**               | New                                                 | Returns proof → the next raise (the loop-closer)                        |
-| Hybrid data sourcing (integrations + attestations) | New, provenance-labeled                  | Keeps the appreciating asset defensible                                 |
+| Layer                                              | Status                                               | Compounding role                                                       |
+| -------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
+| Lifecycle Stages 1–7                               | Live (Fund Profile → Deal Desk → Memory Audit Trail) | The front half; readiness is the Proof flywheel's gauge                |
+| Task-engine triggers (§5.4)                        | Next slice                                           | The tasklet primitive — generalize these into the first-class unit     |
+| **Stage 8: Administration & Re-up arc**            | **This expansion**                                   | Closes the loop; the tasklet catalog (§4) is the build list            |
+| **Beatrix · Fund CFO & Administration**            | New desk                                             | Capital calls, NAV, distributions, the LP report engine                |
+| **Rhea · Portfolio Operations**                    | New desk                                             | Interim marks + portfolio health that keep the report honest & current |
+| **Soren · Realizations**                           | New desk (when exits begin)                          | Realized returns → the Track Record flywheel                           |
+| **Track Record flywheel**                          | New                                                  | Returns proof → the next raise (the loop-closer)                       |
+| Hybrid data sourcing (integrations + attestations) | New, provenance-labeled                              | Keeps the appreciating asset defensible                                |
 
 **Build order:** (1) make tasklets first-class on the existing engine; (2) ship
 **Beatrix** (capital calls + quarterly LP report — the highest-frequency, most
