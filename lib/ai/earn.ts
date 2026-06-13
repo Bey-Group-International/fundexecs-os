@@ -9,8 +9,10 @@ import {
   buildDealSnapshot,
   buildRelationshipSnapshot,
   buildIntelligenceGrounding,
-  buildMatchGrounding
+  buildMatchGrounding,
+  buildSpecialistMemory
 } from './awareness';
+import { routeAsk, specialistLabel, EARN_COO_SLUG } from '@/lib/earn/routing';
 import { EARN_NAV_DESTINATIONS } from './earn-nav';
 import { log } from '@/lib/observability/log';
 
@@ -302,7 +304,9 @@ function buildSystem(
   snapshot?: string,
   entitySnapshot?: string,
   intelligence?: string,
-  matchGrounding?: string
+  matchGrounding?: string,
+  specialistMemory?: string,
+  routedSlug?: string
 ): Anthropic.TextBlockParam[] {
   // Today's date (UTC) so "recently" / "this quarter" land correctly. Lives in
   // the cached capability block — the 5-minute prompt cache TTL keeps it fresh.
@@ -344,6 +348,19 @@ function buildSystem(
   // reviewing/acting on the adaptive match flywheel's output. Structured only.
   if (matchGrounding) {
     system.push({ type: 'text', text: matchGrounding });
+  }
+  // Routing: this ask is owned by a specific desk. Answer in that desk's lane,
+  // on its behalf, so the operator feels the team — not one generalist.
+  if (routedSlug && routedSlug !== EARN_COO_SLUG) {
+    system.push({
+      type: 'text',
+      text: `Routing: this ask is owned by the ${specialistLabel(routedSlug)} desk. Answer on their behalf, in their lane, while still speaking as Earn relaying the desk's work. Do not announce the routing — just deliver the desk's answer.`
+    });
+  }
+  // The routed desk's prior outcomes on this mandate (kind tallies + recency,
+  // no free text), so the desk continues its own work instead of starting cold.
+  if (specialistMemory) {
+    system.push({ type: 'text', text: specialistMemory });
   }
   if (contextBlock) {
     system.push({
@@ -400,6 +417,8 @@ export async function streamEarn(
   userId?: string
 ): Promise<{
   sources: EarnSource[];
+  /** The specialist this ask routed to (canonical slug). */
+  routedSlug: string;
   deltas: AsyncIterable<string>;
   /** Resolves after the stream completes with any tool calls Earn proposed. */
   tools: () => Promise<EarnToolUse[]>;
@@ -410,28 +429,42 @@ export async function streamEarn(
   const dealId = hint?.kind === 'deal' && hint.entityId ? hint.entityId : null;
   const lpId = hint?.kind === 'lp' && hint.entityId ? hint.entityId : null;
 
+  // Route the ask to the desk that owns it, then load that desk's prior ledger
+  // outcomes as continuity — the routing flywheel. Classification is cheap and
+  // deterministic (no model call); the memory read is timeboxed below.
+  const lastUserAsk = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  const routedSlug = routeAsk(lastUserAsk);
+
   // RAG grounding, cross-session memory, the workspace snapshot, and the
   // focused-entity snapshot in parallel — none blocks chat. Each is timeboxed
   // and fails open so a stalled network call can't hold up the first streamed
   // token. The focused-entity slot resolves whichever of deal / LP is in focus.
-  const [{ sources, contextBlock }, recap, snapshot, entitySnapshot, intelligence, matchGrounding] =
-    await Promise.all([
-      withTimeout(retrieveContext(supabase, orgId, messages), CONTEXT_TIMEOUT_MS, {
-        sources: [],
-        contextBlock: ''
-      }),
-      userId
-        ? withTimeout(retrieveMemory(supabase, userId, messages.length), MEMORY_TIMEOUT_MS, '')
+  const [
+    { sources, contextBlock },
+    recap,
+    snapshot,
+    entitySnapshot,
+    intelligence,
+    matchGrounding,
+    specialistMemory
+  ] = await Promise.all([
+    withTimeout(retrieveContext(supabase, orgId, messages), CONTEXT_TIMEOUT_MS, {
+      sources: [],
+      contextBlock: ''
+    }),
+    userId
+      ? withTimeout(retrieveMemory(supabase, userId, messages.length), MEMORY_TIMEOUT_MS, '')
+      : Promise.resolve(''),
+    withTimeout(buildWorkspaceSnapshot(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
+    dealId
+      ? withTimeout(buildDealSnapshot(supabase, orgId, dealId), SNAPSHOT_TIMEOUT_MS, '')
+      : lpId
+        ? withTimeout(buildRelationshipSnapshot(supabase, orgId, lpId), SNAPSHOT_TIMEOUT_MS, '')
         : Promise.resolve(''),
-      withTimeout(buildWorkspaceSnapshot(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
-      dealId
-        ? withTimeout(buildDealSnapshot(supabase, orgId, dealId), SNAPSHOT_TIMEOUT_MS, '')
-        : lpId
-          ? withTimeout(buildRelationshipSnapshot(supabase, orgId, lpId), SNAPSHOT_TIMEOUT_MS, '')
-          : Promise.resolve(''),
-      withTimeout(buildIntelligenceGrounding(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
-      withTimeout(buildMatchGrounding(supabase, orgId), SNAPSHOT_TIMEOUT_MS, '')
-    ]);
+    withTimeout(buildIntelligenceGrounding(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
+    withTimeout(buildMatchGrounding(supabase, orgId), SNAPSHOT_TIMEOUT_MS, ''),
+    withTimeout(buildSpecialistMemory(supabase, orgId, routedSlug), SNAPSHOT_TIMEOUT_MS, '')
+  ]);
   const anthropic = new Anthropic();
   const system = buildSystem(
     contextBlock,
@@ -439,7 +472,9 @@ export async function streamEarn(
     snapshot,
     entitySnapshot,
     intelligence,
-    matchGrounding
+    matchGrounding,
+    specialistMemory,
+    routedSlug
   );
 
   // The continuity recap is operator-derived, so it rides in as a reference-only
@@ -457,8 +492,7 @@ export async function streamEarn(
 
   // Escalate to the reasoning tier when the latest user turn is clearly
   // analytical (env-toggleable); ordinary chat stays on snappy Sonnet.
-  const lastUserText = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
-  const model = pickChatModel(lastUserText);
+  const model = pickChatModel(lastUserAsk);
 
   const startedAt = Date.now();
   let firstTokenAt = 0;
@@ -482,6 +516,8 @@ export async function streamEarn(
         orgId,
         tier: model === AI_MODELS.reasoning ? 'reasoning' : 'chat',
         escalated: model === AI_MODELS.reasoning,
+        routedTo: routedSlug,
+        deskMemory: !!specialistMemory,
         rag: sources.length > 0,
         ragCount: sources.length,
         grounding: {
@@ -525,5 +561,5 @@ export async function streamEarn(
       }));
   };
 
-  return { sources, deltas: deltas(), tools };
+  return { sources, routedSlug, deltas: deltas(), tools };
 }

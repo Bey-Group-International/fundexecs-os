@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
 
       // Normal streaming chat path.
       try {
-        const { sources, deltas, tools } = await streamEarn(
+        const { sources, routedSlug, deltas, tools } = await streamEarn(
           supabase,
           org.orgId,
           messages,
@@ -146,6 +146,9 @@ export async function POST(req: NextRequest) {
           },
           user.id
         );
+        // Attribution first: the dock streams a "Routing to {desk}…" moment and
+        // labels the answer with the desk that owns it.
+        controller.enqueue(line({ type: 'routed', slug: routedSlug }));
         if (sources.length) controller.enqueue(line({ type: 'sources', sources }));
         let full = '';
         for await (const chunk of deltas) {

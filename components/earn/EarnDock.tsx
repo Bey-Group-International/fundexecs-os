@@ -22,7 +22,7 @@ import { EarnCoin } from '@/components/ui/EarnCoin';
 import { executeEarnAction } from '@/lib/actions/earn-actions';
 import { EARN_NAV_DESTINATIONS } from '@/lib/ai/earn-nav';
 import type { EarnOpenDetail } from '@/lib/earn/launcher';
-import { TEAM_ROSTER } from '@/lib/team';
+import { getMember, TEAM_ROSTER } from '@/lib/team';
 import { cn } from '@/lib/utils';
 
 /**
@@ -63,6 +63,8 @@ interface ChatMessage {
   sources?: ChatSource[];
   /** Confirm-mode tool proposals attached to this assistant turn. */
   actions?: PendingAction[];
+  /** The specialist this turn routed to (canonical slug), for attribution. */
+  routedSlug?: string;
 }
 
 /** A primary command — either a real navigation, a routed ask, or focus. */
@@ -293,7 +295,10 @@ export function EarnDock({
           } catch {
             continue;
           }
-          if (event.type === 'delta' && typeof event.text === 'string') {
+          if (event.type === 'routed' && typeof event.slug === 'string') {
+            const slug = event.slug;
+            apply((last) => ({ ...last, routedSlug: slug }));
+          } else if (event.type === 'delta' && typeof event.text === 'string') {
             const text = event.text;
             apply((last) => ({ ...last, content: last.content + text }));
           } else if (event.type === 'sources' && Array.isArray(event.sources)) {
@@ -510,64 +515,76 @@ export function EarnDock({
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {messages.map((m, i) => (
-                <div key={i} className={cn('flex', m.role === 'user' && 'justify-end')}>
-                  <div
-                    className={cn(
-                      'max-w-[88%] rounded-[14px] px-3.5 py-2.5 text-[12.5px] leading-relaxed',
-                      m.role === 'user'
-                        ? 'bg-[var(--accent-soft)] text-fg-1'
-                        : 'border border-hairline bg-surface-1 text-fg-2'
-                    )}
-                  >
-                    {m.role === 'assistant' &&
-                    !m.content &&
-                    streaming &&
-                    i === messages.length - 1 ? (
-                      <span className="flex items-center gap-2 text-fg-4">
-                        <Loader2 size={13} className="motion-safe:animate-spin" aria-hidden />
-                        Earn is working…
-                      </span>
-                    ) : (
-                      <span className="whitespace-pre-wrap">{m.content}</span>
-                    )}
-                    {m.sources && m.sources.length > 0 && (
-                      <div className="mt-2 border-t border-[var(--border-faint)] pt-2">
-                        <div className="mb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-fg-5">
-                          From the team&apos;s knowledge
+              {messages.map((m, i) => {
+                // The desk this turn routed to (a real specialist, not Earn) —
+                // surfaces as the "Routing to…" moment and the answer's attribution.
+                const routed = m.routedSlug ? getMember(m.routedSlug) : null;
+                const routedDesk = routed && !routed.chief ? routed : null;
+                return (
+                  <div key={i} className={cn('flex', m.role === 'user' && 'justify-end')}>
+                    <div
+                      className={cn(
+                        'max-w-[88%] rounded-[14px] px-3.5 py-2.5 text-[12.5px] leading-relaxed',
+                        m.role === 'user'
+                          ? 'bg-[var(--accent-soft)] text-fg-1'
+                          : 'border border-hairline bg-surface-1 text-fg-2'
+                      )}
+                    >
+                      {m.role === 'assistant' && routedDesk && m.content && (
+                        <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-gold-1">
+                          <routedDesk.icon size={11} strokeWidth={2} aria-hidden />
+                          {routedDesk.name} · {routedDesk.position}
                         </div>
-                        {m.sources.slice(0, 3).map((s, j) => (
-                          <div key={j} className="truncate text-[10.5px] text-fg-5">
-                            · {s.snippet}
+                      )}
+                      {m.role === 'assistant' &&
+                      !m.content &&
+                      streaming &&
+                      i === messages.length - 1 ? (
+                        <span className="flex items-center gap-2 text-fg-4">
+                          <Loader2 size={13} className="motion-safe:animate-spin" aria-hidden />
+                          {routedDesk ? `Routing to ${routedDesk.name}…` : 'Earn is working…'}
+                        </span>
+                      ) : (
+                        <span className="whitespace-pre-wrap">{m.content}</span>
+                      )}
+                      {m.sources && m.sources.length > 0 && (
+                        <div className="mt-2 border-t border-[var(--border-faint)] pt-2">
+                          <div className="mb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-fg-5">
+                            From the team&apos;s knowledge
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    {m.actions?.map((a) => (
-                      <div
-                        key={a.id}
-                        className="mt-2.5 rounded-[11px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-2.5"
-                      >
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gold-1">
-                          <ShieldCheck size={12} aria-hidden />
-                          Earn proposes: {ACTION_LABEL[a.name] ?? a.name}
+                          {m.sources.slice(0, 3).map((s, j) => (
+                            <div key={j} className="truncate text-[10.5px] text-fg-5">
+                              · {s.snippet}
+                            </div>
+                          ))}
                         </div>
-                        <div className="mt-2 flex gap-2">
-                          <Button
-                            variant="gold"
-                            size="sm"
-                            icon={actionPending === a.id ? Loader2 : Check}
-                            disabled={actionPending === a.id}
-                            onClick={() => void confirmAction(a)}
-                          >
-                            {actionPending === a.id ? 'Executing…' : 'Approve & run'}
-                          </Button>
+                      )}
+                      {m.actions?.map((a) => (
+                        <div
+                          key={a.id}
+                          className="mt-2.5 rounded-[11px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-2.5"
+                        >
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gold-1">
+                            <ShieldCheck size={12} aria-hidden />
+                            Earn proposes: {ACTION_LABEL[a.name] ?? a.name}
+                          </div>
+                          <div className="mt-2 flex gap-2">
+                            <Button
+                              variant="gold"
+                              size="sm"
+                              icon={actionPending === a.id ? Loader2 : Check}
+                              disabled={actionPending === a.id}
+                              onClick={() => void confirmAction(a)}
+                            >
+                              {actionPending === a.id ? 'Executing…' : 'Approve & run'}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {actionResult && (
                 <div
                   className={cn(

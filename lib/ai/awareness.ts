@@ -2,6 +2,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import { computeCalibration } from '@/lib/queries/intelligence-calibration';
+import { EARN_COO_SLUG, specialistLabel } from '@/lib/earn/routing';
+import { OUTCOME_KINDS, type OutcomeKind } from '@/lib/earn/outcomes';
 
 /* ----------------------------------------------------------------------------
  * Live workspace awareness — a compact, real-time snapshot of the operator's
@@ -351,6 +353,85 @@ export async function buildMatchGrounding(supabase: Db, orgId: string): Promise<
     if (parts.length === 0) return '';
 
     return `Match inbox (the operator's adaptive match flywheel — when relevant, propose reviewing or acting on these in the match inbox):\n- ${parts.join('.\n- ')}.`;
+  } catch {
+    return '';
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * Specialist memory — the routing flywheel made real.
+ *
+ * Every ask routes to a desk (see lib/earn/routing.ts); this is what makes the
+ * relay compound. It reads the desk's prior outcomes off the Earn ledger
+ * (`earn_outcomes`) and folds them in as continuity, so the tenth time the
+ * operator asks Sloane about the raise she is standing on nine prior answers
+ * rather than starting cold.
+ *
+ * Injection-safe by construction: only kind tallies + recency are surfaced —
+ * never the user-entered titles — matching this module's no-free-text rule.
+ * `earn_outcomes` isn't in the generated types, so we read through a narrow
+ * typed escape (same pattern as the queries layer). Fails open to '' .
+ * --------------------------------------------------------------------------*/
+
+/** Compact age (e.g. "today", "3 days ago") from an ISO timestamp. */
+function relativeAge(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'recently';
+  const days = Math.floor(Math.max(0, Date.now() - then) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${days} days ago`;
+}
+
+export async function buildSpecialistMemory(
+  supabase: Db,
+  orgId: string,
+  slug: string
+): Promise<string> {
+  // Earn synthesises across every desk — there is no single-desk memory to load.
+  if (!slug || slug === EARN_COO_SLUG) return '';
+  try {
+    const reader = supabase as unknown as {
+      from: (table: string) => {
+        select: (cols: string) => {
+          eq: (
+            col: string,
+            val: string
+          ) => {
+            eq: (
+              col: string,
+              val: string
+            ) => {
+              order: (
+                col: string,
+                opts: { ascending: boolean }
+              ) => {
+                limit: (
+                  n: number
+                ) => Promise<{ data: { kind: string; created_at: string }[] | null }>;
+              };
+            };
+          };
+        };
+      };
+    };
+    const { data } = await reader
+      .from('earn_outcomes')
+      .select('kind, created_at')
+      .eq('org_id', orgId)
+      .eq('specialist_slug', slug)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (!data || data.length === 0) return '';
+
+    const counts = new Map<string, number>();
+    for (const r of data) counts.set(r.kind, (counts.get(r.kind) ?? 0) + 1);
+    const tally = [...counts.entries()]
+      .map(([k, n]) => `${n} ${OUTCOME_KINDS[k as OutcomeKind]?.label ?? k}`)
+      .join(', ');
+    const label = specialistLabel(slug);
+
+    return `${label}'s prior work on this mandate (continue it — do not re-introduce yourself or repeat past work): ${tally}. Most recent ${relativeAge(data[0]!.created_at)}. Reference this as ongoing work and build the next step on top of it.`;
   } catch {
     return '';
   }
