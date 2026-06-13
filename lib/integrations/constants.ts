@@ -13,6 +13,10 @@ export const GOOGLE_PROVIDERS = new Set<string>(GOOGLE_PROVIDER_IDS);
 
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.metadata',
+  // gmail.send lets the Relationship Inbox send Earn-drafted replies in-thread.
+  // It's send-only (no read access) and independent of gmail.metadata; existing
+  // connections must reconnect once to grant it.
+  'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/drive.readonly'
 ] as const;

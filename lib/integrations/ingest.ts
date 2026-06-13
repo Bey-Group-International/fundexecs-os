@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
+import { ingestInboxItems } from '@/lib/inbox/ingest';
 import type { ProviderSignals } from './types';
 
 type Admin = SupabaseClient<Database>;
@@ -14,6 +15,8 @@ interface IngestTarget {
 export interface IngestResult {
   contacts: number;
   interactions: number;
+  /** Conversations surfaced into the Relationship Inbox for triage. */
+  inboxItems: number;
 }
 
 /**
@@ -85,5 +88,20 @@ export async function ingestSignals(
     interactions = data?.length ?? 0;
   }
 
-  return { contacts: uniqueContacts.length, interactions };
+  // 3. Surface the same conversations into the Relationship Inbox for triage,
+  // reusing the email -> contact map so items resolve to known contacts. This
+  // is additive: an inbox write failure must never abort the core
+  // contacts/interactions sync (and its warmth trigger), so it's isolated.
+  let inboxItems = 0;
+  try {
+    inboxItems = await ingestInboxItems(admin, { orgId, provider }, signals, emailToId);
+  } catch (error) {
+    console.error('inbox_ingest_failed', {
+      orgId,
+      provider,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+
+  return { contacts: uniqueContacts.length, interactions, inboxItems };
 }

@@ -242,15 +242,19 @@ export function MandateWizard({ initialName, onBrief }: MandateWizardProps) {
       setStep(step + 1);
       return;
     }
-    if (!mandate.principal.trim() || !mandate.firm.trim()) {
-      setError(
-        'Add your name and a fund or firm name — or let Earn suggest a working title on the Profile step.'
-      );
+    if (!mandate.principal.trim()) {
+      setError('Add your name so the team knows who they’re briefing for.');
       return;
     }
     setSubmitting(true);
     setError(null);
-    const res = await onBrief(mandate);
+    // Firm is optional — if left blank, Earn names the workspace with the same
+    // working title the Profile step offers, so a manager can start without one.
+    const briefed: Mandate = {
+      ...mandate,
+      firm: mandate.firm.trim() || suggestFirmName(mandate.firmSeed || 0)
+    };
+    const res = await onBrief(briefed);
     if (!res.ok) {
       setError(res.error ?? 'Could not brief the team. Please try again.');
       setSubmitting(false);
@@ -343,7 +347,7 @@ export function MandateWizard({ initialName, onBrief }: MandateWizardProps) {
                       value={mandate.firm}
                       onChange={(v) => set('firm', v)}
                       placeholder="Acme Capital"
-                      hint="This names your workspace — you can rename it anytime."
+                      hint="Optional — you can start without one."
                     />
                   ) : (
                     <div>

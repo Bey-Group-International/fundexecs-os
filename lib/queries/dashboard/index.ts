@@ -604,3 +604,4 @@ export {
   type EarnBriefing,
   type AgentStatus
 } from './lifecycle';
+export type { MomentumDelta, MomentumDeltas } from '@/lib/dashboard/momentum';

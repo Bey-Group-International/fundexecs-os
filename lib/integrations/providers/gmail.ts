@@ -6,6 +6,7 @@ interface GmailHeader {
 }
 interface GmailMessage {
   id: string;
+  threadId?: string;
   internalDate?: string;
   payload?: { headers?: GmailHeader[] };
 }
@@ -46,7 +47,9 @@ export const gmailProvider: Provider = {
 
     for (const { id } of list.messages ?? []) {
       const params = new URLSearchParams({ format: 'metadata' });
-      ['From', 'To', 'Subject', 'Date'].forEach((h) => params.append('metadataHeaders', h));
+      ['From', 'To', 'Subject', 'Date', 'Message-ID'].forEach((h) =>
+        params.append('metadataHeaders', h)
+      );
       const msgRes = await fetch(`${GMAIL}/messages/${id}?${params}`, { headers: auth });
       if (!msgRes.ok) continue;
       const msg = (await msgRes.json()) as GmailMessage;
@@ -71,7 +74,9 @@ export const gmailProvider: Provider = {
         direction: outbound ? 'outbound' : 'inbound',
         occurredAt,
         subject: headers.get('subject') ?? '(no subject)',
-        externalRef: id
+        externalRef: id,
+        threadId: msg.threadId,
+        messageId: headers.get('message-id') ?? undefined
       });
     }
 

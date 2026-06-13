@@ -3,7 +3,17 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Award, Bell, LayoutDashboard, LogOut, Settings } from 'lucide-react';
+import {
+  Award,
+  ChevronLeft,
+  Coins,
+  Gift,
+  Inbox,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  Sparkles
+} from 'lucide-react';
 import { EarnDock, type EarnContext } from '@/components/earn/EarnDock';
 import { EarnOrb } from '@/components/earn/EarnOrb';
 import { EARN_OPEN_EVENT, type EarnOpenDetail } from '@/lib/earn/launcher';
@@ -11,6 +21,7 @@ import { Badge } from '@/components/ui/Badge';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { MandateIcon } from '@/components/ui/MandateIcon';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { WalletChip } from '@/components/shell/WalletChip';
 import type { HubId } from '@/lib/hubs/lifecycle';
 import { cn } from '@/lib/utils';
 
@@ -100,11 +111,25 @@ export function AppShell({
   }, []);
 
   const activeHub = hubs.find((h) => pathname.startsWith(h.href));
-  const utility = pathname.startsWith('/notifications')
-    ? 'Notifications'
-    : pathname.startsWith('/settings')
-      ? 'Settings'
-      : null;
+  // Notifications now live under the Inbox entry as a "System" tab, so both
+  // routes light up the rail's Inbox item.
+  const onInbox = pathname.startsWith('/inbox') || pathname.startsWith('/notifications');
+  const onEarn = pathname.startsWith('/earn');
+  const onReferrals = pathname.startsWith('/referrals');
+  const onRecs = pathname.startsWith('/recommendations');
+  const utility = pathname.startsWith('/inbox')
+    ? 'Inbox'
+    : pathname.startsWith('/notifications')
+      ? 'Notifications'
+      : onEarn
+        ? 'Earn Ledger'
+        : onReferrals
+          ? 'Referrals'
+          : onRecs
+            ? 'Recommendations'
+            : pathname.startsWith('/settings')
+              ? 'Settings'
+              : null;
   const isHome = !activeHub && !utility;
   const title = activeHub?.label ?? utility ?? 'Command Center';
 
@@ -226,18 +251,66 @@ export function AppShell({
           })}
 
           <div className="mx-1 my-3 h-px bg-[var(--border)]" aria-hidden />
+          {onEarn && (
+            <Link
+              href="/command-center"
+              className="mb-0.5 flex items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-[12px] text-fg-4 transition hover:bg-surface-1 hover:text-fg-2"
+            >
+              <ChevronLeft size={14} strokeWidth={2} aria-hidden />
+              Back to Dashboard
+            </Link>
+          )}
           <Link
-            href="/notifications"
+            href="/earn"
             className={cn(
               'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium transition',
-              pathname.startsWith('/notifications')
+              onEarn
                 ? 'bg-[linear-gradient(90deg,var(--accent-soft),var(--surface-1))] text-fg-1'
                 : 'text-fg-3 hover:bg-surface-1 hover:text-fg-1'
             )}
-            aria-current={pathname.startsWith('/notifications') ? 'page' : undefined}
+            aria-current={onEarn ? 'page' : undefined}
           >
-            <Bell size={17} strokeWidth={1.9} aria-hidden />
-            <span className="flex-1">Notifications</span>
+            <Coins size={17} strokeWidth={1.9} aria-hidden />
+            <span className="flex-1">Earn Ledger</span>
+          </Link>
+          <Link
+            href="/referrals"
+            className={cn(
+              'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium transition',
+              onReferrals
+                ? 'bg-[linear-gradient(90deg,var(--accent-soft),var(--surface-1))] text-fg-1'
+                : 'text-fg-3 hover:bg-surface-1 hover:text-fg-1'
+            )}
+            aria-current={onReferrals ? 'page' : undefined}
+          >
+            <Gift size={17} strokeWidth={1.9} aria-hidden />
+            <span className="flex-1">Refer & Invite</span>
+          </Link>
+          <Link
+            href="/recommendations"
+            className={cn(
+              'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium transition',
+              onRecs
+                ? 'bg-[linear-gradient(90deg,var(--accent-soft),var(--surface-1))] text-fg-1'
+                : 'text-fg-3 hover:bg-surface-1 hover:text-fg-1'
+            )}
+            aria-current={onRecs ? 'page' : undefined}
+          >
+            <Sparkles size={17} strokeWidth={1.9} aria-hidden />
+            <span className="flex-1">Recommendations</span>
+          </Link>
+          <Link
+            href="/inbox"
+            className={cn(
+              'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium transition',
+              onInbox
+                ? 'bg-[linear-gradient(90deg,var(--accent-soft),var(--surface-1))] text-fg-1'
+                : 'text-fg-3 hover:bg-surface-1 hover:text-fg-1'
+            )}
+            aria-current={onInbox ? 'page' : undefined}
+          >
+            <Inbox size={17} strokeWidth={1.9} aria-hidden />
+            <span className="flex-1">Inbox</span>
             {unreadCount > 0 && (
               <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white [font-feature-settings:'tnum']">
                 {unreadCount > 9 ? '9+' : unreadCount}
@@ -293,12 +366,13 @@ export function AppShell({
             </div>
           </div>
           <span className="flex-1" />
+          <WalletChip />
           <Link
-            href="/notifications"
-            aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
+            href="/inbox"
+            aria-label={unreadCount > 0 ? `Inbox (${unreadCount} unread)` : 'Inbox'}
             className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-hairline bg-surface-1 text-fg-3 transition hover:bg-surface-2 hover:text-fg-1"
           >
-            <Bell size={16} strokeWidth={1.9} aria-hidden />
+            <Inbox size={16} strokeWidth={1.9} aria-hidden />
             {unreadCount > 0 && (
               <span className="absolute -right-1 -top-1 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">
                 {unreadCount > 9 ? '9+' : unreadCount}
@@ -318,6 +392,7 @@ export function AppShell({
             <div className="text-[14px] font-semibold">{title}</div>
             <div className="truncate text-[10.5px] text-fg-4">{firm}</div>
           </div>
+          <WalletChip />
           <span className="inline-flex items-center gap-1 rounded-full border border-[var(--gold-line)] bg-[var(--gold-soft)] px-2 py-0.5 text-[11px] font-semibold text-gold-1">
             <Award size={12} aria-hidden />L{level}
           </span>

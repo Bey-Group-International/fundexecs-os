@@ -12,6 +12,7 @@ import {
   type ReadinessDimensionScore
 } from '@/lib/lifecycle';
 import { readDailyDone, readDismissedAlerts, readLastVisit } from '@/lib/dashboard/state';
+import { momentumDelta, type MomentumDeltas } from '@/lib/dashboard/momentum';
 import { loadValueAtStake, type ValueAtStake } from './value-at-stake';
 import { getSpecialists } from '@/lib/team/roster';
 import {
@@ -223,6 +224,13 @@ export interface DashboardData {
 
   /** Raise/portfolio momentum series for the sparkline chart. */
   momentum: Momentum;
+
+  /**
+   * Resume-hero momentum deltas — readiness/execution/raise as "value (+Δ this
+   * week)". Diffed against the daily snapshot trails; each delta is null until a
+   * prior snapshot exists, so progress is *felt* without ever faking movement.
+   */
+  momentumDeltas: MomentumDeltas;
 
   /** Earn's synthesized daily briefing. */
   briefing: EarnBriefing;
@@ -835,7 +843,7 @@ function humanizeAction(action: string): string {
  * sorted newest-first. RLS-scoped; degrades to an empty feed on any read error
  * (e.g. a table not yet readable in a given environment).
  */
-async function loadActivityFeed(orgId: string): Promise<ActivityItem[]> {
+export async function loadActivityFeed(orgId: string): Promise<ActivityItem[]> {
   const supabase = await createClient();
   const items: ActivityItem[] = [];
 
@@ -952,7 +960,7 @@ export function deriveStreak(timestamps: string[], now: number = Date.now()): St
  * `created_at` to keep it cheap while covering meaningful runs. RLS-scoped;
  * returns a zero streak on any read error.
  */
-async function loadStreak(orgId: string): Promise<StreakResult> {
+export async function loadStreak(orgId: string): Promise<StreakResult> {
   try {
     const supabase = await createClient();
     const since = new Date(Date.now() - 120 * 86400_000).toISOString();
@@ -1076,6 +1084,66 @@ async function loadMomentum(orgId: string): Promise<Momentum> {
   } catch {
     return empty;
   }
+}
+
+/**
+ * Resume-hero momentum deltas — the live readiness/execution/raise values diffed
+ * against the most recent *prior* daily snapshot for each. Readiness reads the
+ * `readiness_snapshots` trail; execution + raise read the `org_posture_snapshots`
+ * pillars (execution + capital). Each metric degrades to a null delta when no
+ * prior snapshot exists yet — the compounding seam: deltas light up as the
+ * snapshot trails fill in, and are never fabricated. RLS-scoped; any read error
+ * degrades the whole read to no-Δ rather than breaking the dashboard.
+ */
+async function loadMomentumDeltas(
+  orgId: string,
+  current: { readiness: number; execution: number; raise: number }
+): Promise<MomentumDeltas> {
+  const today = new Date().toISOString().slice(0, 10);
+  let priorReadiness: number | null = null;
+  let priorExecution: number | null = null;
+  let priorRaise: number | null = null;
+
+  try {
+    const supabase = await createClient();
+    const [{ data: rs }, { data: ps }] = await Promise.all([
+      // readiness_snapshots is newer than the generated types — cast like the
+      // sibling readiness-history loader does.
+      supabase
+        .from('readiness_snapshots' as never)
+        .select('score, captured_on')
+        .eq('org_id', orgId)
+        .lt('captured_on', today)
+        .order('captured_on', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('org_posture_snapshots')
+        .select('execution, capital, snapshot_date')
+        .eq('org_id', orgId)
+        .lt('snapshot_date', today)
+        .order('snapshot_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ]);
+
+    const rrow = rs as { score: number | null } | null;
+    if (rrow && rrow.score != null) priorReadiness = Number(rrow.score);
+
+    const prow = ps as { execution: number | null; capital: number | null } | null;
+    if (prow) {
+      if (prow.execution != null) priorExecution = Number(prow.execution);
+      if (prow.capital != null) priorRaise = Number(prow.capital);
+    }
+  } catch {
+    /* snapshot trails unreadable in this env — degrade to no-Δ */
+  }
+
+  return {
+    readiness: momentumDelta(current.readiness, priorReadiness),
+    execution: momentumDelta(current.execution, priorExecution),
+    raise: momentumDelta(current.raise, priorRaise)
+  };
 }
 
 /** Earn's deterministic daily briefing. SEAM: swap for an Opus synthesis pass. */
@@ -1262,6 +1330,14 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     identity?.unreadCount ?? 0
   ).filter((a) => !dismissedAlertIds.has(a.id));
 
+  // Resume-hero deltas: live values now vs. each metric's prior daily snapshot.
+  // Cheap indexed reads; degrades to no-Δ until the snapshot trails fill in.
+  const momentumDeltas = await loadMomentumDeltas(orgId, {
+    readiness: readiness.score,
+    execution: executionScore.score,
+    raise: raiseProgress.coveragePct
+  });
+
   const sinceLastVisit = buildSinceLastVisit(lastVisitISO, newActivityCount, activityFeed);
   const briefing = buildBriefing(
     stageResult.label,
@@ -1295,6 +1371,7 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     },
     sinceLastVisit,
     momentum,
+    momentumDeltas,
     briefing,
     agentTeam,
     valueAtStake,
