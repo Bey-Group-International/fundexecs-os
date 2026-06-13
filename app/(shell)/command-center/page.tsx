@@ -30,6 +30,7 @@ import {
 import { compactMoney } from '@/lib/format';
 import { getLifecycleRail } from '@/lib/hubs';
 import { getCommandCenterData } from '@/lib/queries/command-center';
+import { getPendingInboxCount } from '@/lib/queries/inbox';
 import { loadActivityFeed, loadStreak, type ActivityItem } from '@/lib/queries/dashboard/lifecycle';
 import { readLastVisit } from '@/lib/dashboard/state';
 import { getShellIdentity } from '@/lib/queries/identity';
@@ -288,15 +289,17 @@ export default async function CommandCenterPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const [mandate, data, rail, identity, streak, activityFeed, lastVisit] = await Promise.all([
-    getMandate(org.orgId),
-    getCommandCenterData(org.orgId),
-    getLifecycleRail(org.orgId),
-    getShellIdentity(),
-    loadStreak(org.orgId),
-    loadActivityFeed(org.orgId),
-    readLastVisit()
-  ]);
+  const [mandate, data, rail, identity, streak, activityFeed, lastVisit, pendingInbox] =
+    await Promise.all([
+      getMandate(org.orgId),
+      getCommandCenterData(org.orgId),
+      getLifecycleRail(org.orgId),
+      getShellIdentity(),
+      loadStreak(org.orgId),
+      loadActivityFeed(org.orgId),
+      readLastVisit(),
+      getPendingInboxCount(org.orgId)
+    ]);
 
   // Real autonomous work logged since the prior visit — the honest "worked
   // overnight". Only on a return visit (lastVisit set); a first-timer has no
@@ -316,7 +319,7 @@ export default async function CommandCenterPage() {
     pct: rail.pct,
     objective: mandate?.objective ?? null
   });
-  const signals = deriveSignals({
+  const deskSignals = deriveSignals({
     activeDealsCount: data.activeDealsCount,
     capitalInMotion: data.capitalInMotion,
     hotRelationshipsCount: data.hotRelationshipsCount,
@@ -325,6 +328,23 @@ export default async function CommandCenterPage() {
     pct: rail.pct,
     objective: mandate?.objective ?? null
   });
+  // Surface real triage need from the Unified Inbox as the first proactive
+  // signal — the desk's conversations waiting on the operator. Real count,
+  // fail-open to 0, so it only appears when there's something to triage.
+  const signals: DeskSignal[] =
+    pendingInbox > 0
+      ? [
+          {
+            id: 'inbox-pending',
+            icon: 'inbox',
+            tone: 'azure',
+            label: `${pendingInbox} conversation${pendingInbox === 1 ? '' : 's'} waiting to triage`,
+            cta: 'Open the inbox',
+            href: '/inbox'
+          },
+          ...deskSignals
+        ]
+      : deskSignals;
   const hero = moves[0];
   const queue = moves.slice(1);
 
@@ -407,11 +427,10 @@ export default async function CommandCenterPage() {
         ))}
       </div>
 
-      {overnight.length > 0 ? (
-        <OvernightPanel items={overnight} />
-      ) : (
-        <SignalGrid signals={signals} />
-      )}
+      {/* What the team did while away (when there's real work), then what's
+          waiting on you — autonomous work and proactive signals are distinct. */}
+      {overnight.length > 0 && <OvernightPanel items={overnight} />}
+      <SignalGrid signals={signals} />
       <QueueList moves={queue} />
 
       {/* the team — prototype pill chips */}
