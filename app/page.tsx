@@ -370,8 +370,7 @@ function OSSimulation() {
                 alignItems: 'center',
                 gap: 12,
                 padding: '10px 16px',
-                borderBottom:
-                  i < tasks.length - 1 ? '1px solid rgba(255,255,255,0.04)' : undefined,
+                borderBottom: i < tasks.length - 1 ? '1px solid rgba(255,255,255,0.04)' : undefined,
                 transition: 'background 0.15s'
               }}
             >
@@ -493,8 +492,7 @@ export default function LandingPage() {
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          background:
-            'radial-gradient(60% 50% at 50% 0%, rgba(247,201,72,0.09), transparent 70%)'
+          background: 'radial-gradient(60% 50% at 50% 0%, rgba(247,201,72,0.09), transparent 70%)'
         }}
       />
       {/* Blue accent glow bottom-left */}
@@ -780,10 +778,24 @@ export default function LandingPage() {
               />
               Live simulation
             </div>
-            <div style={{ fontSize: 'clamp(18px,2.5vw,24px)', fontWeight: 600, letterSpacing: '-0.02em' }}>
+            <div
+              style={{
+                fontSize: 'clamp(18px,2.5vw,24px)',
+                fontWeight: 600,
+                letterSpacing: '-0.02em'
+              }}
+            >
               Your team is already working.
             </div>
-            <p style={{ fontSize: 14, color: 'var(--fg-4)', marginTop: 8, maxWidth: 480, margin: '8px auto 0' }}>
+            <p
+              style={{
+                fontSize: 14,
+                color: 'var(--fg-4)',
+                marginTop: 8,
+                maxWidth: 480,
+                margin: '8px auto 0'
+              }}
+            >
               This is a live simulation of the FundExecs OS command center — the view waiting for
               you when you sign in.
             </p>
@@ -807,7 +819,13 @@ export default function LandingPage() {
             >
               Done for you
             </div>
-            <div style={{ fontSize: 'clamp(18px,2.5vw,24px)', fontWeight: 600, letterSpacing: '-0.02em' }}>
+            <div
+              style={{
+                fontSize: 'clamp(18px,2.5vw,24px)',
+                fontWeight: 600,
+                letterSpacing: '-0.02em'
+              }}
+            >
               You don&apos;t run the raise. Your team does.
             </div>
           </div>
@@ -839,7 +857,8 @@ export default function LandingPage() {
                     right: 0,
                     width: 80,
                     height: 80,
-                    background: 'radial-gradient(circle at 100% 0%, rgba(247,201,72,0.08), transparent 70%)',
+                    background:
+                      'radial-gradient(circle at 100% 0%, rgba(247,201,72,0.08), transparent 70%)',
                     pointerEvents: 'none'
                   }}
                 />
@@ -879,7 +898,13 @@ export default function LandingPage() {
             >
               Your executive team
             </div>
-            <div style={{ fontSize: 'clamp(18px,2.5vw,24px)', fontWeight: 600, letterSpacing: '-0.02em' }}>
+            <div
+              style={{
+                fontSize: 'clamp(18px,2.5vw,24px)',
+                fontWeight: 600,
+                letterSpacing: '-0.02em'
+              }}
+            >
               15 specialists, activated the moment you brief them.
             </div>
           </div>
@@ -906,7 +931,13 @@ export default function LandingPage() {
             >
               Built for operators
             </div>
-            <div style={{ fontSize: 'clamp(18px,2.5vw,24px)', fontWeight: 600, letterSpacing: '-0.02em' }}>
+            <div
+              style={{
+                fontSize: 'clamp(18px,2.5vw,24px)',
+                fontWeight: 600,
+                letterSpacing: '-0.02em'
+              }}
+            >
               Everything you need, nothing you don&apos;t.
             </div>
           </div>
@@ -939,7 +970,8 @@ export default function LandingPage() {
                     left: 0,
                     right: 0,
                     height: 1,
-                    background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.3), transparent)'
+                    background:
+                      'linear-gradient(90deg, transparent, rgba(96,165,250,0.3), transparent)'
                   }}
                 />
                 <div
@@ -1034,7 +1066,8 @@ export default function LandingPage() {
               style={{
                 position: 'absolute',
                 inset: 0,
-                background: 'radial-gradient(ellipse at 50% 0%, rgba(247,201,72,0.08), transparent 70%)',
+                background:
+                  'radial-gradient(ellipse at 50% 0%, rgba(247,201,72,0.08), transparent 70%)',
                 pointerEvents: 'none'
               }}
             />
