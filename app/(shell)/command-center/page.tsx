@@ -5,17 +5,15 @@ import {
   ArrowRight,
   CheckCircle2,
   Flame,
-  Handshake,
   ListChecks,
   ListOrdered,
   MoonStar,
-  Radar,
   Sparkles,
-  ThermometerSun,
   UserRound,
   Users
 } from 'lucide-react';
 import { Cockpit } from '@/components/hubs/Cockpit';
+import { CommandCenterKpis } from '@/components/command-center/CommandCenterKpis';
 import { MarketPulseCard } from '@/components/command-center/MarketPulseCard';
 import { RunWithEarnButton } from '@/components/command-center/RunWithEarnButton';
 import { MarkVisited } from '@/components/command-center/MarkVisited';
@@ -30,7 +28,6 @@ import {
   type DeskSignal,
   type MoveTone
 } from '@/lib/command-center/moves';
-import { compactMoney } from '@/lib/format';
 import { getLifecycleRail } from '@/lib/hubs';
 import { getCommandCenterData, getMarketPulse } from '@/lib/queries/command-center';
 import { getPendingInboxCount } from '@/lib/queries/inbox';
@@ -364,17 +361,6 @@ export default async function CommandCenterPage() {
   const hero = moves[0];
   const queue = moves.slice(1);
 
-  const kpis = [
-    { icon: Radar, label: 'Active deals', value: String(data.activeDealsCount) },
-    { icon: Handshake, label: 'In motion', value: compactMoney(data.capitalInMotion) },
-    { icon: Flame, label: 'Hot relationships', value: String(data.hotRelationshipsCount) },
-    {
-      icon: ThermometerSun,
-      label: 'Warmed this week',
-      value: String(data.warmRelationshipsThisWeek)
-    }
-  ];
-
   return (
     <div className="fx-rise flex flex-col gap-4">
       {/* greeting strip — the prototype's one-liner with the move count */}
@@ -423,25 +409,13 @@ export default async function CommandCenterPage() {
       {/* the one move */}
       {hero && <RightNowCard move={hero} />}
 
-      {/* desk stats */}
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        {kpis.map(({ icon: Icon, label, value }) => (
-          <div
-            key={label}
-            className="flex items-center gap-3 rounded-[12px] border border-hairline bg-surface-1 px-3.5 py-3"
-          >
-            <Icon size={16} strokeWidth={1.9} className="flex-none text-azure-1" aria-hidden />
-            <div className="min-w-0">
-              <div className="text-[17px] font-semibold tracking-[-0.01em] [font-feature-settings:'tnum']">
-                {value}
-              </div>
-              <div className="truncate text-[10.5px] uppercase tracking-[0.08em] text-fg-5">
-                {label}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* desk stats — live KPIs (count-up on view, staggered entrance) */}
+      <CommandCenterKpis
+        activeDeals={data.activeDealsCount}
+        capitalInMotion={data.capitalInMotion}
+        hotRelationships={data.hotRelationshipsCount}
+        warmedThisWeek={data.warmRelationshipsThisWeek}
+      />
 
       {/* BotMemo market pulse — AI funding intelligence, synced every 6h */}
       {marketPulse && <MarketPulseCard pulse={marketPulse} />}

@@ -218,8 +218,15 @@ When importing motion primitives:
   re-exported from there for any consumer.
 - Easing arrays and durations come from `MOTION_EASING` and
   `MOTION_DURATIONS_S` in the same file.
+- Reusable consumers wrap those variants so call sites stay declarative:
+  `MotionStagger` + `MotionItem` (group cascade) and `Reveal` (single
+  scroll-reveal) live in `components/dashboard/command/MotionReveal.tsx`;
+  `AnimatedNumber` (count-up, tabular figures, reduced-motion safe) lives
+  in `components/ui/AnimatedNumber.tsx`. Each guards `useReducedMotion()`
+  itself, so they render statically without the `MotionConfig` ancestor.
 - Reduced motion is honored via the `<MotionConfig reducedMotion="user">`
-  in `DashboardShell` and `useReducedMotion()` at the call site.
+  in `AppShell` (`components/shell/AppShell.tsx`) and `useReducedMotion()`
+  at the call site.
 - Per-component motion code stays declarative — favor `variants`,
   `whileHover`, `whileTap`, `whileInView` over imperative
   `useAnimate()` choreography. Imperative animation belongs in a

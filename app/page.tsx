@@ -20,6 +20,7 @@ import {
   Activity
 } from 'lucide-react';
 import { EarnCoin, Wordmark } from '@/components/brand/BrandPrimitives';
+import { Reveal } from '@/components/dashboard/command/MotionReveal';
 
 /* ── Live activity ticker ── */
 const TICKER_ITEMS = [
@@ -741,410 +742,422 @@ export default function LandingPage() {
         </section>
 
         {/* Live OS Demo Section */}
-        <section
-          style={{
-            padding: '0 clamp(20px,5vw,52px) 80px',
-            maxWidth: 900,
-            margin: '0 auto'
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '4px 12px',
-                borderRadius: 999,
-                border: '1px solid rgba(52,211,153,0.25)',
-                background: 'rgba(52,211,153,0.06)',
-                fontSize: 11,
-                fontWeight: 700,
-                color: '#34d399',
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                marginBottom: 14
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 999,
-                  background: '#34d399',
-                  animation: 'pulse 2s infinite'
-                }}
-              />
-              Live simulation
-            </div>
-            <div
-              style={{
-                fontSize: 'clamp(18px,2.5vw,24px)',
-                fontWeight: 600,
-                letterSpacing: '-0.02em'
-              }}
-            >
-              Your team is already working.
-            </div>
-            <p
-              style={{
-                fontSize: 14,
-                color: 'var(--fg-4)',
-                marginTop: 8,
-                maxWidth: 480,
-                margin: '8px auto 0'
-              }}
-            >
-              This is a live simulation of the FundExecs OS command center — the view waiting for
-              you when you sign in.
-            </p>
-          </div>
-          <OSSimulation />
-        </section>
-
-        {/* Done-for-you band */}
-        <section
-          style={{ padding: '0 clamp(20px,5vw,52px) 72px', maxWidth: 1080, margin: '0 auto' }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: 36 }}>
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'var(--fg-5)',
-                marginBottom: 8
-              }}
-            >
-              Done for you
-            </div>
-            <div
-              style={{
-                fontSize: 'clamp(18px,2.5vw,24px)',
-                fontWeight: 600,
-                letterSpacing: '-0.02em'
-              }}
-            >
-              You don&apos;t run the raise. Your team does.
-            </div>
-          </div>
-          <div
+        <Reveal>
+          <section
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: 16
+              padding: '0 clamp(20px,5vw,52px) 80px',
+              maxWidth: 900,
+              margin: '0 auto'
             }}
           >
-            {DONE_FOR_YOU.map(([n, title, desc]) => (
+            <div style={{ textAlign: 'center', marginBottom: 32 }}>
               <div
-                key={n}
                 style={{
-                  padding: '24px 22px',
-                  borderRadius: 16,
-                  border: '1px solid rgba(247,201,72,0.18)',
-                  background: 'rgba(247,201,72,0.04)',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}
-              >
-                {/* subtle corner shine */}
-                <div
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    width: 80,
-                    height: 80,
-                    background:
-                      'radial-gradient(circle at 100% 0%, rgba(247,201,72,0.08), transparent 70%)',
-                    pointerEvents: 'none'
-                  }}
-                />
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: '#F7C948',
-                    letterSpacing: '0.04em',
-                    marginBottom: 10
-                  }}
-                >
-                  {n}
-                </div>
-                <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 8 }}>{title}</div>
-                <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--fg-4)', margin: 0 }}>
-                  {desc}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Specialist grid */}
-        <section
-          style={{ padding: '0 clamp(20px,5vw,52px) 72px', maxWidth: 1080, margin: '0 auto' }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'var(--fg-5)',
-                marginBottom: 8
-              }}
-            >
-              Your executive team
-            </div>
-            <div
-              style={{
-                fontSize: 'clamp(18px,2.5vw,24px)',
-                fontWeight: 600,
-                letterSpacing: '-0.02em'
-              }}
-            >
-              15 specialists, activated the moment you brief them.
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-            {SPECIALISTS.map((s) => (
-              <Chip key={s.name} {...s} />
-            ))}
-          </div>
-        </section>
-
-        {/* Features grid */}
-        <section
-          style={{ padding: '0 clamp(20px,5vw,52px) 80px', maxWidth: 1080, margin: '0 auto' }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: 40 }}>
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'var(--fg-5)',
-                marginBottom: 8
-              }}
-            >
-              Built for operators
-            </div>
-            <div
-              style={{
-                fontSize: 'clamp(18px,2.5vw,24px)',
-                fontWeight: 600,
-                letterSpacing: '-0.02em'
-              }}
-            >
-              Everything you need, nothing you don&apos;t.
-            </div>
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 16
-            }}
-          >
-            {FEATURES.map((f) => (
-              <div
-                key={f.title}
-                style={{
-                  padding: '20px 22px',
-                  borderRadius: 16,
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  background: 'rgba(255,255,255,0.03)',
-                  backdropFilter: 'blur(4px)',
-                  transition: 'border-color 0.2s',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}
-              >
-                <div
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: 1,
-                    background:
-                      'linear-gradient(90deg, transparent, rgba(96,165,250,0.3), transparent)'
-                  }}
-                />
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    marginBottom: 12,
-                    color: '#60a5fa'
-                  }}
-                >
-                  {f.icon}
-                  <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--fg-1)' }}>
-                    {f.title}
-                  </span>
-                </div>
-                <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--fg-4)', margin: 0 }}>
-                  {f.desc}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Trust bar */}
-        <section
-          style={{
-            padding: '0 clamp(20px,5vw,52px) 72px',
-            maxWidth: 800,
-            margin: '0 auto',
-            textAlign: 'center'
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 16,
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-          >
-            {[
-              { icon: <Shield size={14} />, label: 'SOC 2 Type II' },
-              { icon: <Lock size={14} />, label: 'Row-Level Security' },
-              { icon: <CheckCircle2 size={14} />, label: 'Supabase Auth' },
-              { icon: <Bell size={14} />, label: 'Audit trail on every action' },
-              { icon: <Shield size={14} />, label: '4-layer Chain of Trust' }
-            ].map((t) => (
-              <div
-                key={t.label}
-                style={{
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
-                  fontSize: 12,
-                  color: 'var(--fg-4)',
-                  padding: '6px 12px',
+                  padding: '4px 12px',
                   borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.07)',
-                  background: 'rgba(255,255,255,0.03)'
+                  border: '1px solid rgba(52,211,153,0.25)',
+                  background: 'rgba(52,211,153,0.06)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#34d399',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  marginBottom: 14
                 }}
               >
-                {t.icon} {t.label}
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 999,
+                    background: '#34d399',
+                    animation: 'pulse 2s infinite'
+                  }}
+                />
+                Live simulation
               </div>
-            ))}
-          </div>
-        </section>
+              <div
+                style={{
+                  fontSize: 'clamp(18px,2.5vw,24px)',
+                  fontWeight: 600,
+                  letterSpacing: '-0.02em'
+                }}
+              >
+                Your team is already working.
+              </div>
+              <p
+                style={{
+                  fontSize: 14,
+                  color: 'var(--fg-4)',
+                  marginTop: 8,
+                  maxWidth: 480,
+                  margin: '8px auto 0'
+                }}
+              >
+                This is a live simulation of the FundExecs OS command center — the view waiting for
+                you when you sign in.
+              </p>
+            </div>
+            <OSSimulation />
+          </section>
+        </Reveal>
 
-        {/* Final CTA */}
-        <section
-          style={{
-            textAlign: 'center',
-            padding: '0 clamp(20px,5vw,52px) 100px',
-            maxWidth: 640,
-            margin: '0 auto'
-          }}
-        >
-          <div
+        {/* Done-for-you band */}
+        <Reveal>
+          <section
+            style={{ padding: '0 clamp(20px,5vw,52px) 72px', maxWidth: 1080, margin: '0 auto' }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: 36 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--fg-5)',
+                  marginBottom: 8
+                }}
+              >
+                Done for you
+              </div>
+              <div
+                style={{
+                  fontSize: 'clamp(18px,2.5vw,24px)',
+                  fontWeight: 600,
+                  letterSpacing: '-0.02em'
+                }}
+              >
+                You don&apos;t run the raise. Your team does.
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: 16
+              }}
+            >
+              {DONE_FOR_YOU.map(([n, title, desc]) => (
+                <div
+                  key={n}
+                  style={{
+                    padding: '24px 22px',
+                    borderRadius: 16,
+                    border: '1px solid rgba(247,201,72,0.18)',
+                    background: 'rgba(247,201,72,0.04)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {/* subtle corner shine */}
+                  <div
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      right: 0,
+                      width: 80,
+                      height: 80,
+                      background:
+                        'radial-gradient(circle at 100% 0%, rgba(247,201,72,0.08), transparent 70%)',
+                      pointerEvents: 'none'
+                    }}
+                  />
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: '#F7C948',
+                      letterSpacing: '0.04em',
+                      marginBottom: 10
+                    }}
+                  >
+                    {n}
+                  </div>
+                  <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 8 }}>{title}</div>
+                  <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--fg-4)', margin: 0 }}>
+                    {desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </Reveal>
+
+        {/* Specialist grid */}
+        <Reveal>
+          <section
+            style={{ padding: '0 clamp(20px,5vw,52px) 72px', maxWidth: 1080, margin: '0 auto' }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: 28 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--fg-5)',
+                  marginBottom: 8
+                }}
+              >
+                Your executive team
+              </div>
+              <div
+                style={{
+                  fontSize: 'clamp(18px,2.5vw,24px)',
+                  fontWeight: 600,
+                  letterSpacing: '-0.02em'
+                }}
+              >
+                15 specialists, activated the moment you brief them.
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+              {SPECIALISTS.map((s) => (
+                <Chip key={s.name} {...s} />
+              ))}
+            </div>
+          </section>
+        </Reveal>
+
+        {/* Features grid */}
+        <Reveal>
+          <section
+            style={{ padding: '0 clamp(20px,5vw,52px) 80px', maxWidth: 1080, margin: '0 auto' }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: 40 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--fg-5)',
+                  marginBottom: 8
+                }}
+              >
+                Built for operators
+              </div>
+              <div
+                style={{
+                  fontSize: 'clamp(18px,2.5vw,24px)',
+                  fontWeight: 600,
+                  letterSpacing: '-0.02em'
+                }}
+              >
+                Everything you need, nothing you don&apos;t.
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                gap: 16
+              }}
+            >
+              {FEATURES.map((f) => (
+                <div
+                  key={f.title}
+                  style={{
+                    padding: '20px 22px',
+                    borderRadius: 16,
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: 'rgba(255,255,255,0.03)',
+                    backdropFilter: 'blur(4px)',
+                    transition: 'border-color 0.2s',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <div
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 1,
+                      background:
+                        'linear-gradient(90deg, transparent, rgba(96,165,250,0.3), transparent)'
+                    }}
+                  />
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      marginBottom: 12,
+                      color: '#60a5fa'
+                    }}
+                  >
+                    {f.icon}
+                    <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--fg-1)' }}>
+                      {f.title}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--fg-4)', margin: 0 }}>
+                    {f.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </Reveal>
+
+        {/* Trust bar */}
+        <Reveal>
+          <section
             style={{
-              padding: '44px 32px',
-              borderRadius: 24,
-              border: '1px solid rgba(247,201,72,0.22)',
-              background: 'rgba(247,201,72,0.04)',
-              position: 'relative',
-              overflow: 'hidden'
+              padding: '0 clamp(20px,5vw,52px) 72px',
+              maxWidth: 800,
+              margin: '0 auto',
+              textAlign: 'center'
             }}
           >
-            {/* radial glow behind CTA card */}
-            <div
-              aria-hidden
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background:
-                  'radial-gradient(ellipse at 50% 0%, rgba(247,201,72,0.08), transparent 70%)',
-                pointerEvents: 'none'
-              }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
-              <EarnCoin size={88} glow />
-            </div>
-            <h2
-              style={{
-                fontSize: 'clamp(22px,3vw,28px)',
-                fontWeight: 700,
-                letterSpacing: '-0.025em',
-                margin: '18px 0 10px',
-                position: 'relative'
-              }}
-            >
-              Brief the team. They do the rest.
-            </h2>
-            <p
-              style={{
-                fontSize: 14,
-                color: 'var(--fg-3)',
-                lineHeight: 1.65,
-                margin: '0 0 28px',
-                position: 'relative'
-              }}
-            >
-              Set your mandate once — the executive team sources, structures, and drives every
-              engagement to a signed close. Reserve your desk, or book a call and we&apos;ll map
-              your raise live.
-            </p>
             <div
               style={{
                 display: 'flex',
-                gap: 12,
                 flexWrap: 'wrap',
+                gap: 16,
                 justifyContent: 'center',
-                position: 'relative'
+                alignItems: 'center'
               }}
             >
-              <Link
-                href="/waitlist"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '13px 26px',
-                  borderRadius: 14,
-                  fontSize: 15,
-                  fontWeight: 700,
-                  background: 'linear-gradient(135deg,#F7C948,#E5A823)',
-                  color: '#070b14',
-                  textDecoration: 'none',
-                  boxShadow: '0 8px 28px -8px rgba(247,201,72,0.55)'
-                }}
-              >
-                Claim your desk <ArrowRight size={16} />
-              </Link>
-              <Link
-                href="/airdrop"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '13px 26px',
-                  borderRadius: 14,
-                  fontSize: 15,
-                  fontWeight: 500,
-                  background: 'rgba(255,255,255,0.06)',
-                  color: '#f1f5f9',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  textDecoration: 'none'
-                }}
-              >
-                <PhoneCall size={15} /> Book a strategy call
-              </Link>
+              {[
+                { icon: <Shield size={14} />, label: 'SOC 2 Type II' },
+                { icon: <Lock size={14} />, label: 'Row-Level Security' },
+                { icon: <CheckCircle2 size={14} />, label: 'Supabase Auth' },
+                { icon: <Bell size={14} />, label: 'Audit trail on every action' },
+                { icon: <Shield size={14} />, label: '4-layer Chain of Trust' }
+              ].map((t) => (
+                <div
+                  key={t.label}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    color: 'var(--fg-4)',
+                    padding: '6px 12px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    background: 'rgba(255,255,255,0.03)'
+                  }}
+                >
+                  {t.icon} {t.label}
+                </div>
+              ))}
             </div>
-          </div>
-        </section>
+          </section>
+        </Reveal>
+
+        {/* Final CTA */}
+        <Reveal>
+          <section
+            style={{
+              textAlign: 'center',
+              padding: '0 clamp(20px,5vw,52px) 100px',
+              maxWidth: 640,
+              margin: '0 auto'
+            }}
+          >
+            <div
+              style={{
+                padding: '44px 32px',
+                borderRadius: 24,
+                border: '1px solid rgba(247,201,72,0.22)',
+                background: 'rgba(247,201,72,0.04)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              {/* radial glow behind CTA card */}
+              <div
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background:
+                    'radial-gradient(ellipse at 50% 0%, rgba(247,201,72,0.08), transparent 70%)',
+                  pointerEvents: 'none'
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
+                <EarnCoin size={88} glow />
+              </div>
+              <h2
+                style={{
+                  fontSize: 'clamp(22px,3vw,28px)',
+                  fontWeight: 700,
+                  letterSpacing: '-0.025em',
+                  margin: '18px 0 10px',
+                  position: 'relative'
+                }}
+              >
+                Brief the team. They do the rest.
+              </h2>
+              <p
+                style={{
+                  fontSize: 14,
+                  color: 'var(--fg-3)',
+                  lineHeight: 1.65,
+                  margin: '0 0 28px',
+                  position: 'relative'
+                }}
+              >
+                Set your mandate once — the executive team sources, structures, and drives every
+                engagement to a signed close. Reserve your desk, or book a call and we&apos;ll map
+                your raise live.
+              </p>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                  position: 'relative'
+                }}
+              >
+                <Link
+                  href="/waitlist"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '13px 26px',
+                    borderRadius: 14,
+                    fontSize: 15,
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg,#F7C948,#E5A823)',
+                    color: '#070b14',
+                    textDecoration: 'none',
+                    boxShadow: '0 8px 28px -8px rgba(247,201,72,0.55)'
+                  }}
+                >
+                  Claim your desk <ArrowRight size={16} />
+                </Link>
+                <Link
+                  href="/airdrop"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '13px 26px',
+                    borderRadius: 14,
+                    fontSize: 15,
+                    fontWeight: 500,
+                    background: 'rgba(255,255,255,0.06)',
+                    color: '#f1f5f9',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    textDecoration: 'none'
+                  }}
+                >
+                  <PhoneCall size={15} /> Book a strategy call
+                </Link>
+              </div>
+            </div>
+          </section>
+        </Reveal>
       </main>
 
       {/* Footer */}
