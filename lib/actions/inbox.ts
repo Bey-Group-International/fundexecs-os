@@ -144,7 +144,9 @@ export async function send_inbox_reply(
     // Authorize + load the item under RLS (null = not a member / not found).
     const { data: item } = await rowReader(supabase)
       .from('inbox_items')
-      .select('id, org_id, channel, external_id, contact_id, subject, status')
+      .select(
+        'id, org_id, channel, external_id, thread_id, reply_to_message_id, contact_id, subject, status'
+      )
       .eq('id', itemId)
       .maybeSingle();
     if (!item) return { ok: false, reason: 'not_authorized' };
@@ -228,7 +230,9 @@ export async function send_inbox_reply(
         token,
         to,
         subject: asString(item.subject) || '(no subject)',
-        body: text
+        body: text,
+        threadId: asString(item.thread_id) || null,
+        inReplyTo: asString(item.reply_to_message_id) || null
       });
     } else {
       const channelId = asString(item.external_id).split(':')[0];

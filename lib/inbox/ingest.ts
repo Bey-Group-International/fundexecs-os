@@ -140,6 +140,7 @@ interface InboxItemRow {
   direction: 'inbound' | 'outbound';
   external_id: string;
   thread_id: string | null;
+  reply_to_message_id: string | null;
   contact_id: string | null;
   subject: string | null;
   preview: string | null;
@@ -196,7 +197,8 @@ export async function ingestInboxItems(
       channel,
       direction,
       external_id: i.externalRef,
-      thread_id: null,
+      thread_id: i.threadId ?? null,
+      reply_to_message_id: i.messageId ?? null,
       contact_id: contactId,
       subject: i.subject ?? null,
       preview: i.summary ?? null,

@@ -18,6 +18,7 @@ import {
   TriangleAlert,
   Sparkles,
   Send,
+  Video,
   type LucideIcon
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
@@ -28,6 +29,7 @@ import {
   send_inbox_reply,
   type InboxAction
 } from '@/lib/actions/inbox';
+import { start_inbox_call } from '@/lib/actions/calls';
 import {
   COMING_SOON_CHANNELS,
   WIRED_CHANNELS,
@@ -80,6 +82,28 @@ export function InboxList({
   const [filter, setFilter] = useState<Filter>('all');
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+
+  // Spin up an in-app call room and jump into it. Surfaces a clear message when
+  // LiveKit isn't configured rather than failing silently.
+  async function startCall() {
+    setStarting(true);
+    setError(null);
+    try {
+      const res = await start_inbox_call();
+      if (res.ok && res.room) {
+        router.push(`/inbox/call/${res.room}`);
+      } else if (res.reason === 'not_configured') {
+        setError('In-app calls aren’t set up yet — add LiveKit credentials to enable them.');
+      } else {
+        setError(res.error ?? 'Could not start a call — try again.');
+      }
+    } catch {
+      setError('Could not start a call — check your connection and try again.');
+    } finally {
+      setStarting(false);
+    }
+  }
 
   const visible = useMemo(
     () => (filter === 'all' ? items : items.filter((i) => i.channel === filter)),
@@ -126,6 +150,19 @@ export function InboxList({
             drafting the next reply.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => void startCall()}
+          disabled={starting}
+          className="inline-flex flex-none items-center gap-1.5 rounded-lg border border-hairline bg-surface-1 px-2.5 py-1.5 text-[11.5px] font-medium text-fg-3 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+        >
+          {starting ? (
+            <Loader2 size={13} className="motion-safe:animate-spin" aria-hidden />
+          ) : (
+            <Video size={13} strokeWidth={1.9} aria-hidden />
+          )}
+          New call
+        </button>
         <Link
           href="/notifications"
           className="inline-flex flex-none items-center gap-1.5 rounded-lg border border-hairline bg-surface-1 px-2.5 py-1.5 text-[11.5px] font-medium text-fg-3 transition hover:bg-surface-2 hover:text-fg-1"
@@ -250,6 +287,7 @@ function InboxRow({
   const meta = CHANNEL_META[item.channel];
   const pendingItem = item.status === 'pending';
   const canReply = pendingItem && SENDABLE.includes(item.channel);
+  const isCall = item.channel === 'call';
 
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState(item.draftReply ?? '');
@@ -324,33 +362,46 @@ function InboxRow({
         </div>
         {pendingItem && (
           <div className="flex flex-none items-center gap-1">
-            {canReply && !composing && (
+            {isCall && item.externalId ? (
+              <Link
+                href={`/inbox/call/${item.externalId}`}
+                className="flex h-7 items-center gap-1 rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2 text-[11px] font-semibold text-[var(--accent)] transition hover:opacity-90"
+              >
+                <Video size={12} strokeWidth={1.9} aria-hidden />
+                Join
+              </Link>
+            ) : (
+              canReply &&
+              !composing && (
+                <button
+                  type="button"
+                  title="Reply with Earn"
+                  aria-label={`Reply to "${item.subject || meta.label}"`}
+                  disabled={busy}
+                  onClick={() => void openComposer()}
+                  className="flex h-7 items-center gap-1 rounded-lg border border-hairline px-2 text-[11px] font-medium text-fg-3 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+                >
+                  <Sparkles size={12} strokeWidth={1.9} aria-hidden />
+                  Reply
+                </button>
+              )
+            )}
+            {!isCall && (
               <button
                 type="button"
-                title="Reply with Earn"
-                aria-label={`Reply to "${item.subject || meta.label}"`}
+                title="Accept — route onto the deal loop"
+                aria-label={`Accept conversation "${item.subject || meta.label}"`}
                 disabled={busy}
-                onClick={() => void openComposer()}
-                className="flex h-7 items-center gap-1 rounded-lg border border-hairline px-2 text-[11px] font-medium text-fg-3 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+                onClick={() => onAct('accepted')}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
               >
-                <Sparkles size={12} strokeWidth={1.9} aria-hidden />
-                Reply
+                {busy ? (
+                  <Loader2 size={13} className="motion-safe:animate-spin" aria-hidden />
+                ) : (
+                  <Check size={13} aria-hidden />
+                )}
               </button>
             )}
-            <button
-              type="button"
-              title="Accept — route onto the deal loop"
-              aria-label={`Accept conversation "${item.subject || meta.label}"`}
-              disabled={busy}
-              onClick={() => onAct('accepted')}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
-            >
-              {busy ? (
-                <Loader2 size={13} className="motion-safe:animate-spin" aria-hidden />
-              ) : (
-                <Check size={13} aria-hidden />
-              )}
-            </button>
             <button
               type="button"
               title="Dismiss"

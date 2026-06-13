@@ -1,12 +1,14 @@
 # Unified Inbox + In-App Video — Blueprint
 
-> Status: **P1–P3 landed**. Additive throughout: a new `/inbox` route over a
-> new `inbox_items` table, ingestion that surfaces Gmail/Slack/call
-> conversations as triage items, a guarded accept/dismiss action, and
-> Earn-drafted replies sent in-channel (Gmail/Slack). The only behaviour
-> change outside the inbox is two new send OAuth scopes (`gmail.send`,
-> `chat:write`) that require a one-time reconnect. The Notifications page stays
-> intact and is reachable from the Inbox "System" tab.
+> Status: **P1–P3.1 landed + P4 foundation**. Additive throughout: a new
+> `/inbox` route over `inbox_items`, ingestion that surfaces Gmail/Slack/call
+> conversations as triage items, guarded accept/dismiss, Earn-drafted replies
+> sent in-channel (Gmail/Slack) with threading, and the in-app call foundation
+> (`live_rooms` + LiveKit token minting + transcript → Meeting Copilot). The
+> only behaviour changes outside the inbox are two new send OAuth scopes
+> (`gmail.send`, `chat:write`, one-time reconnect) and optional `LIVEKIT_*`
+> env (calling is off until set). The Notifications page stays intact and is
+> reachable from the Inbox "System" tab.
 
 ## Why this exists (the workflow lens)
 
@@ -108,13 +110,30 @@ the existing Notifications bell rather than new nav weight.
   Gmail `threadId`) is a follow-up — the original `Message-ID` isn't stored
   yet, so replies currently send as a fresh `Re:` message.
 
-### P4 — In-app calls (LiveKit)
+### P3.1 — Reply threading _(landed)_
 
-- Server-minted LiveKit room tokens; `live_rooms` keyed to deal/contact.
-- A call is an inbox item: `Join` → live (Earn present, streaming
-  transcript) → on hangup, transcript → `runMeetingCopilot` →
-  `meeting_findings` land back on the thread automatically.
-- **Flag before building:** per-minute egress/recording + TURN bandwidth
+- Gmail ingestion captures `threadId` + the RFC822 `Message-ID`
+  (`inbox_items.thread_id` + new `reply_to_message_id`).
+- `sendGmailReply` sets `In-Reply-To`/`References` headers and the Gmail
+  `threadId`, so replies land in the original conversation.
+
+### P4 — In-app calls (LiveKit) _(foundation landed)_
+
+- `live_rooms` table keyed to org/deal/contact, linked to an inbox `call`
+  item. RLS mirrors `inbox_items`.
+- `lib/inbox/livekit.ts` — env-guarded, dependency-free HS256 access-token
+  minting (unit-tested). With no `LIVEKIT_*` env the feature is off.
+- `start_inbox_call` / `join_inbox_call` / `finalize_inbox_call` actions:
+  provision a room + `call` inbox item, mint join tokens (authorized via RLS),
+  and on wrap-up run the transcript through `runMeetingCopilot` so findings
+  land on the linked deal.
+- UI: "New call" in the inbox header, a `Join` action on `call` items, and a
+  `/inbox/call/[room]` surface with the working close-out (transcript →
+  Meeting Copilot) loop.
+- **Remaining slice:** the embedded real-time media client
+  (`@livekit/components-react` room + egress + live transcription that auto-
+  feeds `finalize_inbox_call`). The token + finalize seams are in place.
+- **Flag before that slice:** per-minute egress/recording + TURN bandwidth
   cost, and recording-consent/retention (jurisdiction-dependent — matters
   for regulated LP users).
 

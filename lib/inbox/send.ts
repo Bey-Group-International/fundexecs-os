@@ -37,18 +37,25 @@ export async function sendGmailReply(opts: {
   subject: string;
   body: string;
   threadId?: string | null;
+  /** RFC822 Message-ID of the message being replied to, for in-thread placement. */
+  inReplyTo?: string | null;
 }): Promise<SendResult> {
   const subject = opts.subject.toLowerCase().startsWith('re:')
     ? opts.subject
     : `Re: ${opts.subject}`;
 
-  const mime = [
+  const headers = [
     `To: ${opts.to}`,
     `Subject: ${subject}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    '',
-    opts.body
-  ].join('\r\n');
+    'Content-Type: text/plain; charset="UTF-8"'
+  ];
+  // In-Reply-To + References thread the reply onto the original conversation
+  // in the recipient's client (Gmail also uses threadId below).
+  if (opts.inReplyTo) {
+    headers.push(`In-Reply-To: ${opts.inReplyTo}`, `References: ${opts.inReplyTo}`);
+  }
+
+  const mime = [...headers, '', opts.body].join('\r\n');
 
   const payload: { raw: string; threadId?: string } = { raw: base64Url(mime) };
   if (opts.threadId) payload.threadId = opts.threadId;

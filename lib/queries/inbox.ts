@@ -27,6 +27,8 @@ export interface InboxItem {
   id: string;
   channel: InboxChannel;
   direction: 'inbound' | 'outbound';
+  /** Provider id / room name — for 'call' items this is the LiveKit room. */
+  externalId: string | null;
   threadId: string | null;
   contactId: string | null;
   dealId: string | null;
@@ -55,6 +57,7 @@ interface InboxRow {
   id: string;
   channel: string;
   direction: string;
+  external_id: string | null;
   thread_id: string | null;
   contact_id: string | null;
   deal_id: string | null;
@@ -101,6 +104,7 @@ function toItem(r: InboxRow): InboxItem {
     id: r.id,
     channel: r.channel as InboxChannel,
     direction: r.direction === 'outbound' ? 'outbound' : 'inbound',
+    externalId: r.external_id,
     threadId: r.thread_id,
     contactId: r.contact_id,
     dealId: r.deal_id,
@@ -133,7 +137,7 @@ export async function getInboxData(orgId: string): Promise<InboxData> {
     const { data, error } = await inboxReader(supabase)
       .from('inbox_items')
       .select(
-        'id, channel, direction, thread_id, contact_id, deal_id, subject, preview, draft_reply, score, status, rationale, occurred_at, created_at, acted_at'
+        'id, channel, direction, external_id, thread_id, contact_id, deal_id, subject, preview, draft_reply, score, status, rationale, occurred_at, created_at, acted_at'
       )
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })

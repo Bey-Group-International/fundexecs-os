@@ -34,6 +34,10 @@ export interface NormalizedInteraction {
   summary?: string;
   /** Stable provider id for idempotent upserts (e.g. message/event id). */
   externalRef: string;
+  /** Provider conversation/thread id, when known (e.g. Gmail threadId). */
+  threadId?: string;
+  /** RFC822 Message-ID, for threading sent replies (In-Reply-To/References). */
+  messageId?: string;
 }
 
 export interface ProviderSignals {
