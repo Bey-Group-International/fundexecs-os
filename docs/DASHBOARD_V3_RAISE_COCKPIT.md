@@ -13,7 +13,7 @@ not just org aggregate.
 
 ## The conversion thesis
 
-A command center *compounds* (v2). It *converts* when it answers the operator's real
+A command center _compounds_ (v2). It _converts_ when it answers the operator's real
 daily question — **"who do I move, how, and by when?"** Today `getDashboardData`
 returns one readiness score and one pipeline count: it tells you the score, not the
 play. The raise spine is where GPs spend the most calendar time and where the gate to
@@ -37,7 +37,7 @@ assignedSpecialist) is parsed from the `criteria` JSON today.
 
 ## The four surfaces
 
-### 1. Conversion Forecast — *predictive / pace* (priority 1)
+### 1. Conversion Forecast — _predictive / pace_ (priority 1)
 
 From the normalized funnel, compute **velocity** (transition rate across stages over a
 trailing window) and project it forward:
@@ -55,23 +55,23 @@ trailing window) and project it forward:
 > graceful-degradation pattern v2 uses for momentum deltas (no-Δ until snapshots
 > exist).
 
-### 2. Per-LP Next Moves — *entity-level* (the daily workflow surface)
+### 2. Per-LP Next Moves — _entity-level_ (the daily workflow surface)
 
 For each LP, derive a next-best-action + **owning agent** (already mapped in
 `STAGE_ON_POINT`) + urgency:
 
-| Signal | Trigger | Owner |
-| --- | --- | --- |
-| **Cooling** | `soft_circled`, no touch > N days | Eleanor · `investor-relations` |
-| **Stalled** | `contacted`, no stage progression | Vivian · `rainmaker` |
-| **Ready-to-ask** | warm + high fit, not yet asked | Sloane · `capital-raiser` |
-| **Needs match** | committed interest, no deal fit | Priya · `capital-connector` |
+| Signal           | Trigger                           | Owner                          |
+| ---------------- | --------------------------------- | ------------------------------ |
+| **Cooling**      | `soft_circled`, no touch > N days | Eleanor · `investor-relations` |
+| **Stalled**      | `contacted`, no stage progression | Vivian · `rainmaker`           |
+| **Ready-to-ask** | warm + high fit, not yet asked    | Sloane · `capital-raiser`      |
+| **Needs match**  | committed interest, no deal fit   | Priya · `capital-connector`    |
 
-Aggregates tell you the score; these rows tell you what to *do*. Each row is a deep
+Aggregates tell you the score; these rows tell you what to _do_. Each row is a deep
 link into the LP and carries the urgency that ranks it in the dashboard's next-move
 slot.
 
-### 3. Actionable Gate — *gate mechanics*
+### 3. Actionable Gate — _gate mechanics_
 
 Render the live lifecycle gate as a **checklist**, not a threshold. Remaining items,
 owning agent, and an ETA derived from surface 1's velocity:
@@ -85,7 +85,7 @@ Gate → source_deals  (1 of 2 cleared)
 The gate stops being a passive status and becomes a pull toward the next stage —
 directly compounding v2's "decisive next move."
 
-### 4. Approval Queue — *prescriptive automation* (priority 2)
+### 4. Approval Queue — _prescriptive automation_ (priority 2)
 
 Closes the loop. Agents pre-draft the actual artifact for each next move (the
 cooling-LP follow-up, the intro request, the soft-circle confirmation). It sits in a
@@ -106,12 +106,12 @@ last of the core four.
 
 ## Data needs (what conversion requires that we don't have yet)
 
-- **Velocity / ETAs** → `lp_stage_events` (entity_id, from_stage, to_stage, at).
-  _(Codex: table + write on stage change. Claude: read + compute rates; degrade to
-  `created_at`/`lastTouch` until populated.)_
-- **Approval queue** → `agent_drafts` (entity_id, agent_slug, kind, body, status:
-  pending/approved/dismissed). _(Codex: table + RLS. Claude: draft-generation +
-  approve→`trust_event` server actions.)_
+- **Velocity / ETAs** → `lp_stage_events` (`entity_id`, `from_stage`, `to_stage`,
+  `at`). Codex: table + write on stage change. Claude: read + compute rates; degrade
+  to `created_at`/`lastTouch` until populated.
+- **Approval queue** → `agent_drafts` (`entity_id`, `agent_slug`, `kind`, `body`,
+  `status`: pending/approved/dismissed). Codex: table + RLS. Claude: draft-generation
+  + approve→`trust_event` server actions.
 - **Enrichment** → live Apollo / Carta integration seams (last).
 
 Everything in surfaces 2 and 3 runs on **existing** `capital_providers` data + the
