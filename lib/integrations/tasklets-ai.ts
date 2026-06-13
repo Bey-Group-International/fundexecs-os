@@ -38,12 +38,22 @@ export async function emitTaskletsAiEvent(event: TaskletsAiEvent): Promise<boole
   const url = process.env.TASKLETS_WEBHOOK_URL;
   if (!url) return false;
 
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return false;
+  }
+  const isLocalhost = parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
+  const isHttps = parsedUrl.protocol === 'https:';
+  if (!isHttps && !isLocalhost) return false;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     const secret = process.env.TASKLETS_WEBHOOK_SECRET;
-    if (secret) headers.authorization = `Bearer ${secret}`;
+    if (secret && isHttps) headers.authorization = `Bearer ${secret}`;
 
     const res = await fetch(url, {
       method: 'POST',

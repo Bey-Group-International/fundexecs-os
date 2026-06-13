@@ -167,7 +167,7 @@ const HL_ENROLL_THRESHOLD = 75;
 export function warmthEnrollTasklets(rows: WarmthSignalRow[]): TaskletDraft[] {
   const kind = 'reactivation' as const;
   return rows
-    .filter((r) => r.score >= HL_ENROLL_THRESHOLD)
+    .filter((r) => r.score >= HL_ENROLL_THRESHOLD && !!r.contact_id)
     .map((r) => ({
       dedupeKey: `hl_enroll:${r.id}`,
       signalSource: 'inbox' as const,

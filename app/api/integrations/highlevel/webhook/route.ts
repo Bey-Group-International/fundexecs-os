@@ -5,15 +5,17 @@ import { createAdminClient } from '@/lib/supabase/admin';
  * POST /api/integrations/highlevel/webhook
  *
  * Receives engagement events from HighLevel (email opens, clicks, replies,
- * call completed, unsubscribes) and surfaces them as inbox_items so HL
- * engagement closes the loop back into the OS relationship intelligence layer.
+ * call completed) and surfaces them as inbox_items so HL engagement closes
+ * the loop back into the OS relationship intelligence layer.
  *
- * Auth: Bearer token via HIGHLEVEL_WEBHOOK_SECRET (if configured).
- * Never-block: any infra failure returns 200 to prevent HL retry storms.
+ * Auth: HIGHLEVEL_WEBHOOK_SECRET is REQUIRED — requests without a valid
+ * Bearer token are rejected 401. Never fail-open on a missing secret.
+ * Never-block on DB failures: returns 200 to prevent HL retry storms.
  * ========================================================================= */
 
 interface HLEngagementPayload {
   type: string;
+  eventId?: string;
   contactId?: string;
   contactEmail?: string;
   contactName?: string;
@@ -32,13 +34,14 @@ const HL_CHANNEL_MAP: Record<string, string> = {
 };
 
 export async function POST(req: Request): Promise<NextResponse> {
-  // Verify shared secret when configured.
+  // Fail-closed: require the shared secret to be configured.
   const secret = process.env.HIGHLEVEL_WEBHOOK_SECRET;
-  if (secret) {
-    const auth = req.headers.get('authorization') ?? '';
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!secret) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const auth = req.headers.get('authorization') ?? '';
+  if (auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   let payload: HLEngagementPayload;
@@ -52,6 +55,17 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (!channel || !payload.orgId) {
     return NextResponse.json({ ok: true }, { status: 200 });
   }
+
+  // Deterministic external_id: prefer provider event ID, fall back to a
+  // stable fingerprint so webhook retries deduplicate cleanly.
+  const externalId = payload.eventId
+    ? `hl:${payload.eventId}`
+    : [
+        'hl',
+        payload.type,
+        payload.contactId ?? payload.contactEmail ?? 'unknown',
+        payload.occurredAt ?? 'unknown'
+      ].join(':');
 
   // Surface HL engagement as an inbox_item so it flows into warmth scoring.
   try {
@@ -67,7 +81,7 @@ export async function POST(req: Request): Promise<NextResponse> {
           org_id: payload.orgId,
           channel,
           direction: 'inbound',
-          external_id: `hl:${payload.type}:${payload.contactId ?? payload.contactEmail ?? 'unknown'}:${Date.now()}`,
+          external_id: externalId,
           thread_id: null,
           reply_to_message_id: null,
           contact_id: null,

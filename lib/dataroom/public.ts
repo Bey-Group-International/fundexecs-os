@@ -40,10 +40,11 @@ export async function trackDataRoomView(room: PublicDataRoom): Promise<void> {
   if (room.expired) return;
 
   const now = new Date().toISOString();
-  const admin = createAdminClient();
 
   // 1. Upsert inbox item — dedup on linkId so repeat views don't flood the inbox.
+  // createAdminClient is inside the try so any config error is also swallowed.
   try {
+    const admin = createAdminClient();
     await (admin as unknown as {
       from: (t: string) => {
         upsert: (row: Record<string, unknown>, opts: { onConflict: string; ignoreDuplicates: boolean }) => Promise<unknown>;
@@ -61,7 +62,8 @@ export async function trackDataRoomView(room: PublicDataRoom): Promise<void> {
           contact_id: null,
           subject: `Data room viewed — ${room.label}`,
           preview: `Someone accessed your "${room.label}" data room.`,
-          score: 82,
+          // Score = sum of rationale weights: 22 + 30 + 5 + 10 = 67
+          score: 67,
           status: 'pending',
           rationale: [
             { factor: 'channel', weight: 22, detail: 'Public data room access — high-intent signal.' },

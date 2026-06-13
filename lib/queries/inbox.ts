@@ -110,7 +110,8 @@ const ZERO_COUNTS: Record<InboxChannel, number> = {
   call: 0,
   linkedin: 0,
   sms: 0,
-  webinar: 0
+  webinar: 0,
+  dataroom: 0
 };
 
 /** Load the org's inbox — newest first, split into pending vs actioned. */

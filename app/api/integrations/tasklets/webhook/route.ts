@@ -9,29 +9,27 @@ import { createAdminClient } from '@/lib/supabase/admin';
  *   - lead_routed               — Tasklets.ai confirmed routing decision
  *   - brand_content_scheduled   — content queued in HL calendar
  *
- * On partner reminder: updates partner_intro_requests with last_reminder_at
- * so the OS knows a reminder went out and can reset the 48h window.
- *
- * Auth: Bearer token via TASKLETS_WEBHOOK_SECRET (if configured).
- * Never-block: returns 200 on all paths.
+ * Auth: TASKLETS_WEBHOOK_SECRET is REQUIRED — requests without a valid
+ * Bearer token are rejected 401. Never fail-open on a missing secret.
+ * Never-block: returns 200 on all DB failure paths.
  * ========================================================================= */
 
 interface TaskletsPayload {
   type: string;
   introRequestId?: string;
-  leadId?: string;
-  orgId?: string;
   occurredAt?: string;
   [key: string]: unknown;
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
+  // Fail-closed: require the shared secret to be configured.
   const secret = process.env.TASKLETS_WEBHOOK_SECRET;
-  if (secret) {
-    const auth = req.headers.get('authorization') ?? '';
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!secret) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const auth = req.headers.get('authorization') ?? '';
+  if (auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   let payload: TaskletsPayload;
@@ -45,10 +43,10 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   try {
     if (payload.type === 'partner_intro_reminder_sent' && payload.introRequestId) {
-      // Record that a reminder fired — Tasklets.ai will re-arm its own timer.
+      // Record that a reminder fired. Use typed update to satisfy Supabase types.
       await admin
         .from('partner_intro_requests')
-        .update({ updated_at: payload.occurredAt ?? new Date().toISOString() } as Record<string, unknown>)
+        .update({ updated_at: payload.occurredAt ?? new Date().toISOString() })
         .eq('id', payload.introRequestId)
         .in('status', ['requested', 'accepted']);
     }

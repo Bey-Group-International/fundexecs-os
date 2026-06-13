@@ -39,12 +39,24 @@ export async function emitHighLevelEvent(event: HighLevelEvent): Promise<boolean
   const url = process.env.HIGHLEVEL_WEBHOOK_URL;
   if (!url) return false;
 
+  // Only attach the Authorization header over HTTPS (or localhost for local dev)
+  // to prevent bearer secret leakage on misconfigured HTTP destinations.
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return false;
+  }
+  const isLocalhost = parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
+  const isHttps = parsedUrl.protocol === 'https:';
+  if (!isHttps && !isLocalhost) return false;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     const secret = process.env.HIGHLEVEL_WEBHOOK_SECRET;
-    if (secret) headers.authorization = `Bearer ${secret}`;
+    if (secret && isHttps) headers.authorization = `Bearer ${secret}`;
 
     const res = await fetch(url, {
       method: 'POST',
