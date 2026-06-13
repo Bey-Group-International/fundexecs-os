@@ -1,0 +1,635 @@
+/* ===========================================================
+   FundExecs OS — Onboarding Prototype · Command Center
+   Daily usage. One ranked next move → Earn runs it → you
+   approve → it executes. The loop, made legible.
+   =========================================================== */
+
+/* ---- trust toast (proof the loop closed) ---- */
+function TrustToast({ toast, onClose }) {
+  useEffect(() => { if (toast) { const t = setTimeout(onClose, 3200); return () => clearTimeout(t); } }, [toast]);
+  if (!toast) return null;
+  return (
+    <div className="fade-in" style={{ position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 80,
+      display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderRadius: 14, maxWidth: '92vw',
+      background: 'var(--bg-2)', border: '1px solid var(--success-line)', boxShadow: 'var(--shadow-lg)' }}>
+      <Icon name="shield-check" size={18} color="var(--success)" />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{toast.title}</div>
+        <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>{toast.msg}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- Earn acts inline → you approve → it executes ---- */
+function ActionRunner({ action, onClose, onApplied }) {
+  const steps = (action && action.run && action.run.steps) || [];
+  const [done, setDone] = useState(0);
+  const [phase, setPhase] = useState('run'); // run | draft | applied
+  useEffect(() => {
+    setDone(0); setPhase('run');
+    let i = 0;
+    const t = setInterval(() => { i += 1; setDone(i); if (i >= steps.length) { clearInterval(t); setTimeout(() => setPhase('draft'), 420); } }, 640);
+    return () => clearInterval(t);
+  }, [action]);
+  if (!action) return null;
+  const run = action.run;
+  function apply() { setPhase('applied'); setTimeout(() => { onApplied && onApplied(action); onClose(); }, 1000); }
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.64)', backdropFilter: 'blur(3px)', zIndex: 60 }} />
+      <div className="fade-in" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 61,
+        width: 540, maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto', background: 'var(--bg-2)', border: '1px solid var(--border-strong)',
+        borderRadius: 20, boxShadow: '0 40px 90px -30px rgba(0,0,0,0.7)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '18px 20px', borderBottom: '1px solid var(--border)',
+          background: 'linear-gradient(100deg, rgba(247,201,72,0.10), transparent 60%)' }}>
+          <div style={{ position: 'relative', flex: 'none' }}>
+            <EarnCoin size={40} />
+            <span className="pulse-dot" style={{ position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: 999, background: 'var(--success)', border: '2.5px solid var(--bg-2)' }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 600 }}>{run.title}</div>
+            <div style={{ fontSize: 11.5, color: phase === 'applied' ? 'var(--success)' : 'var(--gold-1)', display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+              <Icon name={phase === 'applied' ? 'check-circle-2' : 'sparkles'} size={12} />
+              {phase === 'run' ? 'Earn is working…' : phase === 'draft' ? 'Draft ready for your review' : 'Applied & logged'}
+            </div>
+          </div>
+          <button className="clickable" onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+        </div>
+        <div style={{ padding: 20 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 11 }}>Execution</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
+            {steps.map((s, i) => {
+              const isDone = i < done || phase !== 'run';
+              const now = i === done && phase === 'run';
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 0' }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 999, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: isDone ? 'var(--success-soft)' : 'var(--surface-2)', border: `1px solid ${isDone ? 'var(--success-line)' : 'var(--border)'}`, color: isDone ? 'var(--success)' : 'var(--fg-4)' }}>
+                    {isDone ? <Icon name="check" size={12} /> : now ? <Icon name="loader" size={12} className="spin" /> : <span style={{ width: 5, height: 5, borderRadius: 999, background: 'var(--fg-5)' }} />}
+                  </span>
+                  <span style={{ fontSize: 13, color: isDone ? 'var(--fg-2)' : now ? 'var(--fg-1)' : 'var(--fg-5)' }}>{s}</span>
+                </div>
+              );
+            })}
+          </div>
+          {phase !== 'run' && (
+            <div className="fade-in">
+              <div className="t-eyebrow" style={{ marginBottom: 9 }}>Earn's draft</div>
+              <div style={{ borderRadius: 14, border: '1px solid var(--azure-line)', background: 'var(--azure-soft)', padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 7 }}>{run.draftTitle}</div>
+                <div style={{ fontSize: 12.5, lineHeight: 1.62, color: 'var(--fg-2)' }}>{run.draft}</div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px', borderTop: '1px solid var(--border)' }}>
+          {phase === 'applied'
+            ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><Icon name="check-circle-2" size={16} />Done — logged to Chain of Trust</div>
+            : <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--fg-5)', flex: 1 }}><Icon name="shield-check" size={13} />Nothing sends until you approve.</div>
+                <Button variant="ghost" size="sm" icon="pencil" disabled={phase === 'run'}>Edit</Button>
+                <Button variant="primary" icon="check" onClick={apply} disabled={phase === 'run'}>Approve &amp; execute</Button>
+              </>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ---- the one move ---- */
+function RightNowCard({ hero, onRun }) {
+  const rn = hero;
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden', borderColor: 'var(--gold-line)', boxShadow: '0 0 0 1px var(--gold-line), var(--shadow-lg)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 20px', borderBottom: '1px solid var(--border-faint)', background: 'linear-gradient(100deg, rgba(247,201,72,0.13), transparent 60%)' }}>
+        <span className="t-eyebrow" style={{ color: 'var(--gold-1)' }}>Right now · your highest-impact move</span>
+        <span style={{ flex: 1 }} />
+        <Badge tone={rn.tone} dot>{rn.tag}</Badge>
+      </div>
+      <div style={{ padding: '20px 22px 22px' }}>
+        <div className="t-h2" style={{ fontSize: 21 }}>{rn.title}</div>
+        <div style={{ fontSize: 13.5, color: 'var(--fg-3)', marginTop: 8, lineHeight: 1.55, maxWidth: '62ch' }}>{rn.why}</div>
+        <div style={{ display: 'flex', gap: 12, marginTop: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Button variant="gold" icon="sparkles" onClick={() => onRun(rn)}>{rn.primary}</Button>
+          <Button variant="outline" iconRight="arrow-right">{rn.secondary}</Button>
+          <span style={{ fontSize: 11, color: 'var(--fg-5)', display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="user" size={12} />{rn.specialist}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start', marginTop: 18, padding: '13px 15px', borderRadius: 12, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+          <EarnCoin size={26} />
+          <div style={{ fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.5 }}><b style={{ color: 'var(--gold-1)' }}>Earn:</b> {rn.earnNote}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Panel({ title, eyebrow, icon, action, children }) {
+  return (
+    <div className="card" style={{ padding: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          {icon && <span style={{ width: 30, height: 30, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-3)' }}><Icon name={icon} size={16} /></span>}
+          <div style={{ minWidth: 0 }}>
+            {eyebrow && <div className="t-eyebrow" style={{ marginBottom: 2 }}>{eyebrow}</div>}
+            <div className="t-h3" style={{ fontSize: 14.5 }}>{title}</div>
+          </div>
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SignalStrip({ onRun }) {
+  return (
+    <Panel title="Your team worked overnight" eyebrow="Proactive — since you last looked" icon="moon-star">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
+        {WORKSPACE.signals.map((s, i) => (
+          <button key={i} className="clickable card-flat" onClick={() => onRun(makeRunFromSignal(s))} style={{ display: 'flex', gap: 11, alignItems: 'flex-start', padding: '12px 13px', textAlign: 'left', background: 'var(--surface-1)' }}>
+            <span style={{ width: 30, height: 30, borderRadius: 8, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TONE[s.tone].bg, color: TONE[s.tone].c, border: `1px solid ${TONE[s.tone].b}` }}><Icon name={s.icon} size={15} /></span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.35 }}>{s.label}</div>
+              <div style={{ fontSize: 11, color: TONE[s.tone].c, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="arrow-right" size={11} />{s.cta}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function makeRunFromSignal(s) {
+  return { ...s, run: { title: s.label, steps: ['Pull context from your workspace', 'Draft the recommended output', 'Cross-check against your mandate', 'Prepare for your approval'], draftTitle: s.label, draft: `${s.specialist} prepared this from your workspace. Review and approve to apply it — nothing leaves FundExecs OS until you confirm.` } };
+}
+
+function QueueList({ items, onRun }) {
+  return (
+    <Panel title="Then, in order" eyebrow="Ranked by impact — one tap to run" icon="list-ordered">
+      {items.length === 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', color: 'var(--success)', fontSize: 13 }}><Icon name="check-circle-2" size={16} />You're clear. Earn will surface the next move as work lands.</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {items.map((q, i) => (
+          <div key={i} className="card-flat" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', background: 'var(--surface-1)' }}>
+            <span className="t-mono" style={{ fontSize: 11, color: 'var(--fg-5)', width: 12, flex: 'none' }}>{i + 2}</span>
+            <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TONE[q.tone].bg, color: TONE[q.tone].c, border: `1px solid ${TONE[q.tone].b}` }}><Icon name={q.icon} size={15} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.title}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--fg-4)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.sub}</div>
+            </div>
+            <Button variant="secondary" size="sm" icon="sparkles" style={{ flex: 'none' }} onClick={() => onRun(makeRunFromSignal(q))}>{q.action}</Button>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function TeamStrip() {
+  return (
+    <Panel title="Your executive team" eyebrow="15 specialists · on your desk" icon="users"
+      action={<Button variant="ghost" size="sm" iconRight="arrow-right">Ask Earn</Button>}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {TEAM.map(m => (
+          <span key={m.id} title={`${m.name} · ${m.title}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--fg-2)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 999, padding: '5px 11px 5px 5px' }}>
+            <SpecialistMark member={m} size={22} tone={m.lead ? 'gold' : 'azure'} />{m.short || m.name}
+          </span>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+/* the loop reminder — teaches the model on the daily surface */
+function LoopSpine({ compact }) {
+  const steps = [['target', 'You set the mandate'], ['sparkles', 'The team works'], ['check-circle-2', 'You approve · it executes']];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 7 : 10, flexWrap: 'wrap' }}>
+      {steps.map(([ic, label], i) => (
+        <React.Fragment key={label}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: i === 2 ? 'var(--fg-2)' : 'var(--fg-4)' }}>
+            <Icon name={ic} size={13} color={i === 1 ? 'var(--gold-1)' : i === 2 ? 'var(--success)' : 'var(--fg-4)'} />{label}
+          </span>
+          {i < 2 && <Icon name="chevron-right" size={13} color="var(--fg-5)" />}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+const NAV = [
+  { id: 'dashboard', label: 'Command Center', icon: 'layout-dashboard' },
+  { id: 'pipeline', label: 'Pipeline', icon: 'trending-up' },
+  { id: 'copilot', label: 'Ask Earn', icon: 'sparkles' },
+  { id: 'strategy', label: 'Strategy', icon: 'target' },
+];
+
+const ASK_EARN = { askEarn: true, title: 'Ask Earn', xp: 0, run: { title: 'Ask Earn anything', steps: ['Understand your request', 'Pull from your workspace + 15 brains', 'Draft the answer or action', 'Prepare for your approval'], draftTitle: 'Earn is ready', draft: 'Ask Earn to source a deal, draft an LP note, build a target list, or run diligence — it routes to the right specialist and brings back something to approve.' } };
+
+/* ---- Ask Earn: route a request to the right specialist ---- */
+const ASK_SUGGESTIONS = [
+  { q: 'Find me 3 on-thesis deals', to: 'marcus' },
+  { q: 'Who should I raise from next?', to: 'sloane' },
+  { q: 'Draft my Q2 LP letter', to: 'eleanor' },
+  { q: 'Review the Helios diligence', to: 'marcus' },
+  { q: 'Is my fund formation compliant?', to: 'adrian' },
+  { q: 'Sharpen my investment thesis', to: 'theodore' },
+];
+const ASK_ROUTES = [
+  { k: /deal|source|acqui|target compan|pipeline/i, to: 'marcus' },
+  { k: /lp|raise|capital|investor|anchor|allocat|commit/i, to: 'sloane' },
+  { k: /co-?invest|lender|debt|financ/i, to: 'priya' },
+  { k: /legal|complian|form d|kyc|regulat|counsel|filing/i, to: 'adrian' },
+  { k: /letter|update|report|ir |k-1|statement|distribut/i, to: 'eleanor' },
+  { k: /brand|pr |comms|deck|narrative|press|content/i, to: 'sienna' },
+  { k: /thesis|strateg|market|outlook/i, to: 'theodore' },
+  { k: /plan|task|workflow|close|checklist|sequence/i, to: 'sterling' },
+  { k: /data|structur|record|model/i, to: 'dalia' },
+  { k: /lead|customer|demand|funnel|prospect/i, to: 'vivian' },
+  { k: /website|seo|digital|domain/i, to: 'noah' },
+  { k: /event|dinner|conference|webinar/i, to: 'jasper' },
+];
+function routeAsk(text) {
+  const hit = ASK_ROUTES.find(r => r.k.test(text));
+  return (TEAM.find(t => t.id === (hit ? hit.to : 'earn')) || TEAM[0]);
+}
+function askAnswer(spec, text) {
+  return `On it. I pulled the relevant context from your workspace and the ${spec.title} brain. I've prepared a first pass for "${text.trim()}" — review it, and I'll execute the moment you approve. Nothing leaves FundExecs OS until you say go.`;
+}
+
+function AskEarnModal({ mandate, onClose }) {
+  const [phase, setPhase] = useState('ask'); // ask | routing | answer
+  const [text, setText] = useState('');
+  const [spec, setSpec] = useState(null);
+  function submit(q) {
+    const query = (q || text).trim(); if (!query) return;
+    setText(query); const s = routeAsk(query); setSpec(s); setPhase('routing');
+    setTimeout(() => setPhase('answer'), 1600);
+  }
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(3,6,12,0.66)', backdropFilter: 'blur(3px)', zIndex: 70 }} />
+      <div className="fade-in" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 71, width: 560, maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto', background: 'var(--bg-2)', border: '1px solid var(--border-strong)', borderRadius: 20, boxShadow: '0 40px 90px -30px rgba(0,0,0,0.7)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '18px 20px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(100deg, rgba(247,201,72,0.12), transparent 60%)' }}>
+          <div style={{ position: 'relative', flex: 'none' }}><EarnCoin size={40} /><span className="pulse-dot" style={{ position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: 999, background: 'var(--success)', border: '2.5px solid var(--bg-2)' }} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>Ask Earn</div>
+            <div style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>Your AI Chief of Staff · routes to your 15-person team</div>
+          </div>
+          <button className="clickable" onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={17} /></button>
+        </div>
+
+        {phase === 'ask' && (
+          <div style={{ padding: 20 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit(); }} rows={2} placeholder="Ask anything — source a deal, draft an LP note, run diligence…"
+                style={{ flex: 1, resize: 'none', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--fg-1)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 13px', lineHeight: 1.5 }} />
+              <Button variant="gold" icon="arrow-up" onClick={() => submit()} style={{ flex: 'none', height: 44 }}>Ask</Button>
+            </div>
+            <div className="t-eyebrow" style={{ margin: '18px 0 9px' }}>Try</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {ASK_SUGGESTIONS.map(s => (
+                <button key={s.q} className="clickable" onClick={() => submit(s.q)} style={{ fontSize: 12, color: 'var(--fg-2)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 999, padding: '7px 13px' }}>{s.q}</button>
+              ))}
+            </div>
+            <div className="t-eyebrow" style={{ margin: '20px 0 10px' }}>Your executive team · 15 specialists</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 7 }}>
+              {TEAM.map(m => (
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 9, background: 'var(--surface-1)', border: '1px solid var(--border-faint)' }}>
+                  <SpecialistMark member={m} size={24} tone={m.lead ? 'gold' : 'azure'} />
+                  <div style={{ minWidth: 0 }}><div style={{ fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.short || m.name}</div><div style={{ fontSize: 9, color: 'var(--fg-5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.title}</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {phase === 'routing' && (
+          <div style={{ padding: '36px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <EarnCoin size={34} />
+              <Icon name="arrow-right" size={18} color="var(--fg-5)" />
+              <div className="pulse-dot"><SpecialistMark member={spec} size={40} tone="gold" /></div>
+            </div>
+            <div className="t-h3" style={{ fontSize: 15 }}>Routing to {spec.name}…</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-4)', marginTop: 5 }}>{spec.title} is the right specialist for this.</div>
+            <div style={{ margintop: 14, width: 180, marginTop: 16 }}><ProgressBar value={66} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={4} /></div>
+          </div>
+        )}
+
+        {phase === 'answer' && (
+          <div className="fade-in" style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 12, background: 'var(--surface-1)', border: '1px solid var(--border)', marginBottom: 14 }}>
+              <SpecialistMark member={spec} size={34} tone="gold" />
+              <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{spec.name} <span style={{ fontWeight: 400, color: 'var(--fg-5)', fontSize: 11 }}>· {spec.title}</span></div><div style={{ fontSize: 10.5, color: 'var(--success)' }}>Handled your request</div></div>
+              <EarnCoin size={22} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--fg-5)', marginBottom: 6 }}>You asked</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-2)', fontStyle: 'italic', marginBottom: 14, paddingLeft: 11, borderLeft: '2px solid var(--gold-line)' }}>{text}</div>
+            <div className="card-flat" style={{ padding: '14px 15px', background: 'var(--surface-1)', fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.6 }}>{askAnswer(spec, text)}</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+              <Button variant="gold" icon="check" onClick={onClose}>Approve &amp; run</Button>
+              <Button variant="ghost" icon="rotate-ccw" onClick={() => { setPhase('ask'); setText(''); }}>Ask something else</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* lifecycle cockpit — the dashboard's reactive mirror of the rail */
+function Cockpit({ hubPct, center, onOpen }) {
+  return (
+    <div className="card" style={{ padding: '15px 17px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <Icon name="route" size={14} color="var(--fg-4)" />
+        <span className="t-eyebrow">Your lifecycle</span>
+        <span style={{ fontSize: 11, color: 'var(--fg-5)' }}>· tap a stage to open it</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+        {RAIL_META.map(m => {
+          const pct = hubPct[m.id]; const isCenter = center === m.id;
+          return (
+            <button key={m.id} className="clickable card-flat cockpit-card" onClick={() => onOpen(m.id)} style={{ textAlign: 'left', padding: '12px 13px', background: isCenter ? 'var(--accent-soft)' : 'var(--surface-1)', border: `1px solid ${isCenter ? 'var(--accent-line)' : 'var(--border)'}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
+                <Icon name={m.icon} size={15} color={isCenter ? 'var(--accent)' : 'var(--fg-3)'} />
+                <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{m.label}</span>
+                {isCenter && <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--gold-1)' }} />}
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--fg-3)', fontFeatureSettings: "'tnum'" }}>{pct}%</span>
+              </div>
+              <ProgressBar value={pct} height={4} color={isCenter ? 'var(--accent)' : 'var(--gold-1)'} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+function heroView(m) {
+  if (!m) return null;
+  return { ...m,
+    why: m.why || m.sub || '',
+    primary: m.primary || `${m.action || 'Run'} with Earn`,
+    secondary: m.secondary || 'Open details',
+    earnNote: m.earnNote || 'I prepared this and can take it end to end — you just review and approve.',
+    run: m.run || { title: m.title, steps: ['Pull context from your workspace', 'Draft the recommended output', 'Cross-check against your mandate', 'Prepare for your approval'], draftTitle: m.title, draft: `${m.specialist || 'The team'} prepared this from your workspace. Review and approve to apply it — nothing leaves FundExecs OS until you confirm.` } };
+}
+function fallbackMove(hubPct) {
+  const low = RAIL_META.slice().sort((a, b) => hubPct[a.id] - hubPct[b.id])[0];
+  return { id: 'fallback', hub: low.id, xp: 30, tag: 'Keep momentum', tone: 'azure', specialist: 'Earn',
+    title: `Advance ${low.label} — your thinnest layer`,
+    why: `${low.label} is ${hubPct[low.id]}% ready. Earn can take the next step and bring it back for your approval.`,
+    earnNote: `I'll prepare the next ${low.label.toLowerCase()} move and queue it for you.`,
+    primary: `Advance ${low.label}`, secondary: `Open ${low.label}`,
+    run: { title: `Advancing ${low.label}`, steps: ['Assess current state', 'Draft the next step', 'Cross-check your mandate', 'Prepare for approval'], draftTitle: `${low.label} — next step`, draft: 'Earn prepared the next move. Approve to apply it and advance this layer.' } };
+}
+
+/* a single rail entry */
+function RailBtn({ icon, label, active, onClick, children }) {
+  return (
+    <button className={`clickable rail-btn${active ? ' is-active' : ''}`} onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '9px 11px', borderRadius: 10, fontSize: 13.5, fontWeight: 500,
+      color: active ? 'var(--fg-1)' : 'var(--fg-3)', background: active ? 'linear-gradient(90deg, var(--accent-soft), var(--surface-1))' : 'transparent', position: 'relative', textAlign: 'left' }}>
+      {active && <span className="rail-accent" style={{ position: 'absolute', left: -9, top: 8, bottom: 8, width: 3, borderRadius: 999, background: 'var(--accent)' }} />}
+      <Icon name={icon} size={17} className="rail-ico" color={active ? 'var(--fg-1)' : undefined} /><span style={{ flex: 1 }}>{label}</span>{children}
+    </button>
+  );
+}
+
+/* hub content for Build / Source / Run / Execute */
+function HubView({ hubId, group, onRun, pct }) {
+  const meta = RAIL_META.find(m => m.id === hubId) || RAIL_META[0];
+  const data = railFor(group)[hubId];
+  const p = pct != null ? pct : data.pct;
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="card" style={{ padding: '20px 22px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span style={{ width: 46, height: 46, borderRadius: 13, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)' }}><Icon name={meta.icon} size={23} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <div className="t-h2" style={{ fontSize: 20 }}>{meta.label}</div>
+              <Badge tone="neutral" style={{ fontSize: 10 }}>{meta.tag}</Badge>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 3 }}>{data.blurb}</div>
+          </div>
+          <div style={{ textAlign: 'right', flex: 'none' }}>
+            <div className="t-metric" style={{ fontSize: 22, color: 'var(--gold-1)' }}>{p}%</div>
+            <div style={{ fontSize: 10.5, color: 'var(--fg-5)' }}>ready</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 16 }}><ProgressBar value={p} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} /></div>
+      </div>
+      <Panel title={`${meta.label} — your modules`} eyebrow="What the team manages here" icon={meta.icon}
+        action={<Button variant="ghost" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Ask Earn</Button>}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 10 }}>
+          {data.items.map((it, i) => (
+            <button key={i} className="clickable card-flat" onClick={() => onRun(makeRunFromSignal({ label: it.label, specialist: 'the team' }))}
+              style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px', textAlign: 'left', background: 'var(--surface-1)' }}>
+              <span style={{ width: 32, height: 32, borderRadius: 9, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--fg-3)' }}><Icon name={it.icon} size={16} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--fg-5)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.meta}</div>
+              </div>
+              <Icon name="arrow-right" size={14} color="var(--fg-5)" />
+            </button>
+          ))}
+        </div>
+      </Panel>
+      <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gold-soft)', borderColor: 'var(--gold-line)' }}>
+        <EarnCoin size={26} />
+        <div style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.5 }}><b style={{ color: 'var(--gold-1)' }}>Earn:</b> I keep {meta.label} moving in the background. Tap any module and I'll do the work — you approve.</div>
+        <Button variant="gold" size="sm" icon="sparkles" onClick={() => onRun(ASK_EARN)}>Ask Earn</Button>
+      </div>
+    </div>
+  );
+}
+
+function CommandCenter({ mandate, mobile, onRestart, tw = {} }) {
+  const gam = tw.gamification || 'quiet';
+  const [runAction, setRunAction] = useState(null);
+  const [askEarnOpen, setAskEarnOpen] = useState(false);
+  const handleRun = (a) => { if (a && a.askEarn) { setAskEarnOpen(true); } else { setRunAction(a); } };
+  const [toast, setToast] = useState(null);
+  const [nav, setNav] = useState('home');
+  const group = mandate.investorGroup || 'fund';
+  const railData = railFor(group);
+  const useLifecycle = (tw.rail || 'Lifecycle') === 'Lifecycle';
+  const [expanded, setExpanded] = useState(railData.center);
+  const isHub = RAIL_META.some(m => m.id === nav);
+  const navTitle = isHub ? (RAIL_META.find(m => m.id === nav) || {}).label : 'Command Center';
+  const first = (mandate.principal || 'Jordan Avery').split(' ')[0];
+  const firm = mandate.firm || 'Acme Capital';
+  const stats = workspaceStats(mandate);
+  const [hubPct, setHubPct] = useState({ build: railData.build.pct, source: railData.source.pct, run: railData.run.pct, execute: railData.execute.pct });
+  const [moves, setMoves] = useState([WORKSPACE.rightNow, ...WORKSPACE.queue]);
+  const [xp, setXp] = useState(150);
+  const [formItems, setFormItems] = useState(() => FORMATION_ITEMS.map(i => ({ id: i.id, stage: 'To do' })));
+  const [formD, setFormD] = useState(() => ({ ...FORMATION_D0, gp: `${mandate.firm || 'Your firm'} GP, LLC`, mgmtco: `${mandate.firm || 'Your firm'} Management, LLC` }));
+  const level = Math.floor(xp / 300) + 1;
+  const hero = heroView(moves[0]) || fallbackMove(hubPct);
+  const queueMoves = moves.slice(1);
+  const openCount = moves.length;
+  const onFormationStep = (allDone) => {
+    setHubPct(p => ({ ...p, build: Math.min(100, p.build + (allDone ? 6 : 5)) }));
+    setXp(x => x + (allDone ? 60 : 30));
+    setToast({ title: allDone ? 'Fund fully formed' : 'Formation step filed', msg: allDone ? 'All formation documents are on the record · +60 XP' : 'Logged to your Chain of Trust · +30 XP' });
+  };
+  const onMaterialBuilt = (name) => {
+    setHubPct(p => ({ ...p, build: Math.min(100, p.build + 5) }));
+    setXp(x => x + 20);
+    setToast({ title: 'Material added to your data room', msg: `${name} — built to your spec · +20 XP` });
+  };
+  const onGovAdopted = (name) => {
+    setHubPct(p => ({ ...p, build: Math.min(100, p.build + 4) }));
+    setXp(x => x + 18);
+    setToast({ title: 'Governance policy adopted', msg: `${name} — active across the firm · +18 XP` });
+  };
+  const onApplied = (a) => {
+    const hub = a.hub;
+    if (hub) setHubPct(p => ({ ...p, [hub]: Math.min(100, p[hub] + 9) }));
+    const gain = a.xp != null ? a.xp : 40;
+    if (gain) setXp(x => x + gain);
+    if (a.id) setMoves(ms => ms.filter(m => m.id !== a.id));
+    if (a.apply) a.apply();
+    const hubLabel = hub ? (RAIL_META.find(m => m.id === hub) || {}).label : null;
+    setToast({ title: 'Earn completed an action', msg: `${a.title || a.run.title} — applied${hubLabel ? ` · ${hubLabel} advanced` : ''}${gain ? ` · +${gain} XP` : ''}` });
+  };
+
+  const content = (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap' }}>
+        <EarnCoin size={22} />
+        <div style={{ fontSize: 12.5, color: 'var(--fg-3)' }}>{openCount > 0
+          ? <><b style={{ color: 'var(--fg-1)' }}>Good morning, {first}.</b> Earn lined up {openCount} move{openCount > 1 ? 's' : ''} — the top one first.</>
+          : <><b style={{ color: 'var(--fg-1)' }}>Nice work, {first}.</b> You're clear — Earn is sourcing your next move.</>}</div>
+      </div>
+      <Cockpit hubPct={hubPct} center={railData.center} onOpen={setNav} />
+      <RightNowCard hero={hero} onRun={handleRun} />
+      <SignalStrip onRun={handleRun} />
+      <QueueList items={queueMoves} onRun={handleRun} />
+      <TeamStrip />
+    </div>
+  );
+
+  const mainContent = nav === 'source' ? <SourceHub mandate={mandate} group={group} pct={hubPct.source} onRun={handleRun} /> : nav === 'run' ? <RunHub mandate={mandate} pct={hubPct.run} onRun={handleRun} mobile={mobile} /> : nav === 'execute' ? <ExecuteHub mandate={mandate} pct={hubPct.execute} onRun={handleRun} mobile={mobile} /> : nav === 'build' ? <BuildHub mandate={mandate} group={group} pct={hubPct.build} onRun={handleRun} onNavigate={setNav} mobile={mobile} formItems={formItems} setFormItems={setFormItems} formD={formD} setFormD={setFormD} onFormationStep={onFormationStep} onMaterialBuilt={onMaterialBuilt} onGovAdopted={onGovAdopted} /> : isHub ? <HubView hubId={nav} group={group} onRun={handleRun} pct={hubPct[nav]} /> : content;
+
+  if (mobile) {
+    return (
+      <div data-screen-label="Command Center (mobile)" style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-0)', position: 'relative' }}>
+        <div className="bg-aurora" />
+        <header style={{ position: 'sticky', top: 0, zIndex: 3, display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--border)', background: 'var(--topbar-bg)', backdropFilter: 'blur(10px)' }}>
+          <EarnCoin size={26} radius={7} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{navTitle}</div>
+            <div style={{ fontSize: 10.5, color: 'var(--fg-4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{firm}</div>
+          </div>
+          {gam !== 'off' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: 'var(--gold-1)', background: 'var(--gold-soft)', border: '1px solid var(--gold-line)', borderRadius: 999, padding: '4px 9px' }}><Icon name="award" size={12} />L{level}</span>}
+        </header>
+        <div style={{ position: 'relative', zIndex: 1, flex: 1, overflowY: 'auto', padding: '14px 14px 80px' }}>{mainContent}</div>
+        <nav style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 4, display: 'flex', borderTop: '1px solid var(--border)', background: 'var(--topbar-bg)', backdropFilter: 'blur(10px)' }}>
+          {(useLifecycle ? [{ id: 'home', label: 'Home', icon: 'layout-dashboard' }, ...RAIL_META] : NAV).map(n => (
+            <button key={n.id} className="clickable" onClick={() => setNav(n.id)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '9px 0 11px', color: nav === n.id ? 'var(--fg-1)' : 'var(--fg-5)' }}>
+              <Icon name={n.icon} size={18} />
+              <span style={{ fontSize: 9.5, fontWeight: 500 }}>{n.label.split(' ')[0]}</span>
+            </button>
+          ))}
+        </nav>
+        <ActionRunner action={runAction} onClose={() => setRunAction(null)} onApplied={onApplied} />
+        <TrustToast toast={toast} onClose={() => setToast(null)} />
+        {askEarnOpen && <AskEarnModal mandate={mandate} onClose={() => setAskEarnOpen(false)} />}
+      </div>
+    );
+  }
+
+  return (
+    <div data-screen-label="Command Center" style={{ display: 'flex', height: '100%', overflow: 'hidden', position: 'relative', background: 'var(--bg-0)' }}>
+      <div className="bg-aurora" />
+      {/* sidebar */}
+      <aside style={{ width: 232, flex: 'none', height: '100%', background: 'var(--bg-1)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 18px 14px' }}>
+          <EarnCoin size={28} radius={8} />
+          <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-0.02em' }}>FundExecs <span style={{ color: 'var(--fg-4)', fontWeight: 500 }}>OS</span></div>
+          <Badge tone="azure" style={{ fontSize: 9, padding: '1px 6px', marginLeft: 'auto' }}>BETA</Badge>
+        </div>
+        <div style={{ padding: '0 12px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+            <Avatar name={firm} size={26} tone="gold" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{firm}</div>
+              <div style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>{(SIZES.find(s => s.id === mandate.size) || {}).label} target</div>
+            </div>
+          </div>
+        </div>
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 12px', flex: 1, overflowY: 'auto' }}>
+          {useLifecycle ? (
+            <>
+              <RailBtn icon="layout-dashboard" label="Command Center" active={nav === 'home'} onClick={() => setNav('home')} />
+              <div className="t-eyebrow" style={{ padding: '13px 11px 6px' }}>Lifecycle</div>
+              {RAIL_META.map(m => {
+                const d = railData[m.id]; const on = nav === m.id; const center = railData.center === m.id;
+                return (
+                  <div key={m.id}>
+                    <RailBtn icon={m.icon} label={m.label} active={on} onClick={() => { setNav(m.id); setExpanded(m.id); }}>
+                      {center && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--gold-1)' }}><span className="pulse-dot" style={{ width: 5, height: 5, borderRadius: 999, background: 'var(--gold-1)' }} />NOW</span>}
+                      <span style={{ fontSize: 10.5, color: 'var(--fg-5)', fontFeatureSettings: "'tnum'", marginLeft: center ? 6 : 0 }}>{hubPct[m.id]}%</span>
+                    </RailBtn>
+                    <div style={{ padding: '2px 11px 0 40px' }}><ProgressBar value={hubPct[m.id]} height={3} color={on ? 'var(--accent)' : 'var(--fg-5)'} /></div>
+                    <div className={`rail-sub${on ? ' open' : ''}`}>
+                      <div>
+                        <div style={{ padding: '7px 0 9px 40px', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {d.items.map((it, i) => (
+                            <div key={i} className="rail-subitem" style={{ fontSize: 12, color: 'var(--fg-4)', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Icon name={it.icon} size={13} color="var(--fg-5)" />{it.label}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ height: 1, background: 'var(--border)', margin: '12px 4px' }} />
+              <RailBtn icon="sparkles" label="Ask Earn" onClick={() => setAskEarnOpen(true)} />
+              <RailBtn icon="bell" label="Notifications" onClick={() => {}} />
+              <RailBtn icon="settings" label="Settings" onClick={() => {}} />
+            </>
+          ) : (
+            <>
+              <div className="t-eyebrow" style={{ padding: '8px 11px 6px' }}>Workspace</div>
+              {NAV.map(n => <RailBtn key={n.id} icon={n.icon} label={n.label} active={nav === n.id} onClick={() => setNav(n.id)} />)}
+            </>
+          )}
+        </nav>
+        <div style={{ margin: 12, padding: '10px 12px', borderRadius: 12, background: 'var(--surface-1)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Avatar name={mandate.principal || 'Jordan Avery'} size={30} tone="azure" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mandate.principal || 'Jordan Avery'}</div>
+            <div style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>Level 1 · Operator</div>
+          </div>
+          <button className="clickable" onClick={onRestart} title="Restart the flow" style={{ width: 28, height: 28, borderRadius: 8, color: 'var(--fg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border)' }}><Icon name="rotate-ccw" size={14} /></button>
+        </div>
+      </aside>
+      {/* main */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative', zIndex: 1 }}>
+        <header style={{ height: 60, flex: 'none', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 16, padding: '0 24px', background: 'var(--topbar-bg)', backdropFilter: 'blur(10px)' }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="t-h3" style={{ fontSize: 15 }}>{navTitle}</div>
+            <div style={{ marginTop: 2 }}>{isHub ? <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>{(RAIL_META.find(m => m.id === nav) || {}).tag} · the team works, you approve</span> : <LoopSpine compact />}</div>
+          </div>
+          <span style={{ flex: 1 }} />
+          {gam !== 'off' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: 'var(--gold-1)', background: 'var(--gold-soft)', border: '1px solid var(--gold-line)', borderRadius: 999, padding: '5px 12px' }}><Icon name="award" size={14} />Level {level}{gam === 'prominent' ? ` · ${xp} XP` : ''}</span>}
+          <button className="clickable" style={{ width: 38, height: 38, borderRadius: 10, flex: 'none', background: 'var(--surface-1)', border: '1px solid var(--border)', color: 'var(--fg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="bell" size={17} /></button>
+        </header>
+        <main style={{ flex: 1, overflowY: 'auto', padding: '22px 26px 60px' }}>
+          <div style={{ maxWidth: 1080, margin: '0 auto' }}>{mainContent}</div>
+        </main>
+      </div>
+      <ActionRunner action={runAction} onClose={() => setRunAction(null)} onApplied={onApplied} />
+      <TrustToast toast={toast} onClose={() => setToast(null)} />
+      {askEarnOpen && <AskEarnModal mandate={mandate} onClose={() => setAskEarnOpen(false)} />}
+    </div>
+  );
+}
+
+Object.assign(window, { CommandCenter, ActionRunner });

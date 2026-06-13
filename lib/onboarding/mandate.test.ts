@@ -115,6 +115,28 @@ test('specialistById returns undefined for an unknown id', () => {
   assert.ok(TEAM.length >= ACTIVATION_ORDER.length);
 });
 
+test('the activation desk is structurally complete and roster-linked', () => {
+  // name + title are sourced from lib/team/roster.ts (the single source of
+  // truth) by `slug`; this guard can't import the roster (it pulls lucide,
+  // which the react-server test condition can't evaluate), so it enforces the
+  // structural invariants that catch the likely regressions: a missing member,
+  // a duplicate, a dropped field, or an unlinked entry. Name/title equality to
+  // the roster is owned by the `slug` linkage + review.
+  assert.equal(TEAM.length, 14, 'the desk is the 15-strong roster minus Earn the COO');
+  const slugs = new Set<string>();
+  const ids = new Set<string>();
+  for (const s of TEAM) {
+    assert.ok(s.id && s.slug && s.name && s.title && s.icon && s.build, `${s.id} missing a field`);
+    assert.ok(!slugs.has(s.slug), `duplicate slug ${s.slug}`);
+    assert.ok(!ids.has(s.id), `duplicate id ${s.id}`);
+    slugs.add(s.slug);
+    ids.add(s.id);
+  }
+  // Every member shown building during activation resolves to a desk entry.
+  for (const id of ACTIVATION_ORDER)
+    assert.ok(specialistById(id), `activation id ${id} has no entry`);
+});
+
 test('workspaceStats reflects the mandate and always returns four tiles', () => {
   const fund: Mandate = { ...DEFAULT_MANDATE, investorGroup: 'fund', size: '500' };
   const fundStats = workspaceStats(fund);
