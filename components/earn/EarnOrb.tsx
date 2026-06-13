@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { EarnCoin } from '@/components/ui/EarnCoin';
+import { MOTION_DURATIONS_S, MOTION_EASING } from '@/components/dashboard/command/motion';
 import { openEarn } from '@/lib/earn/launcher';
 
 /**
@@ -36,7 +37,11 @@ export function EarnOrb({ hidden }: { hidden?: boolean }) {
         onBlur={() => setHover(false)}
         whileTap={{ scale: 0.94 }}
         animate={reduced ? undefined : { y: [0, -3, 0] }}
-        transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{
+          duration: MOTION_DURATIONS_S.coinFloat,
+          repeat: Infinity,
+          ease: MOTION_EASING.emphasize
+        }}
         aria-label="Ask Earn"
         className="relative flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full border border-[var(--gold-line)] bg-bg-2 shadow-[0_10px_34px_-8px_rgba(247,201,72,0.55)] transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold-line)]"
       >

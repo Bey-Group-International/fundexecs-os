@@ -1,8 +1,7 @@
-import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { MandateIcon } from '@/components/ui/MandateIcon';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { HubModuleMap } from '@/components/hubs/HubModuleMap';
 import type { HubContent, HubId, HubMeta } from '@/lib/hubs/lifecycle';
 
 /**
@@ -68,46 +67,7 @@ export function HubLanding({
           {meta.label} — your modules
         </h2>
         <p className="mt-1 text-[12.5px] text-fg-4">What the team manages here.</p>
-        <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          {content.modules.map((mod) => {
-            const inner = (
-              <>
-                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-hairline bg-surface-2 text-fg-3">
-                  <MandateIcon name={mod.icon} size={16} strokeWidth={1.9} aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold">{mod.label}</div>
-                  <div className="mt-0.5 truncate text-[11px] text-fg-5">{mod.meta}</div>
-                </div>
-                {mod.href ? (
-                  <span className="inline-flex flex-none items-center gap-1 text-[11px] font-semibold text-azure-1">
-                    Open
-                    <ArrowRight size={12} strokeWidth={2} aria-hidden />
-                  </span>
-                ) : (
-                  <span className="flex-none text-[9.5px] font-semibold uppercase tracking-[0.08em] text-fg-5">
-                    Online next
-                  </span>
-                )}
-              </>
-            );
-            const tile =
-              'flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 px-3.5 py-3';
-            return mod.href ? (
-              <Link
-                key={mod.label}
-                href={mod.href}
-                className={`${tile} transition hover:bg-surface-2`}
-              >
-                {inner}
-              </Link>
-            ) : (
-              <div key={mod.label} className={tile}>
-                {inner}
-              </div>
-            );
-          })}
-        </div>
+        <HubModuleMap modules={content.modules} />
       </section>
 
       {/* Earn's standing note */}
