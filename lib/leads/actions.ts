@@ -127,14 +127,14 @@ export async function advanceLead(input: {
   // HL_SEGMENTS → HighLevel sequence. All others → Apollo (unchanged, no event needed).
   // Tasklets.ai receives the routing event and applies the segment logic.
   if (input.to === 'qualified') {
-    const segment = (lead as unknown as { segment: string | null }).segment ?? '';
+    const segment = lead.segment ?? '';
     const isHlSegment = HL_SEGMENTS.has(segment.toLowerCase().replace(/[^a-z_]/g, '_'));
     void emitTaskletsAiEvent({
       type: 'lead_routed_tasklets',
       occurredAt: new Date().toISOString(),
       data: {
         leadId: lead.id,
-        leadName: (lead as unknown as { name: string }).name,
+        leadName: lead.name,
         segment,
         platform: isHlSegment ? 'highlevel' : 'apollo',
         orgId: org.orgId
@@ -146,7 +146,7 @@ export async function advanceLead(input: {
         occurredAt: new Date().toISOString(),
         data: {
           leadId: lead.id,
-          leadName: (lead as unknown as { name: string }).name,
+          leadName: lead.name,
           segment,
           orgId: org.orgId
         }
