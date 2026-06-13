@@ -196,7 +196,7 @@ const DONE_FOR_YOU: [string, string, string][] = [
   [
     '01',
     'You brief the mandate',
-    'A two-minute brief — who you are, what you're raising, where you play.'
+    "A two-minute brief — who you are, what you're raising, where you play."
   ],
   [
     '02',
