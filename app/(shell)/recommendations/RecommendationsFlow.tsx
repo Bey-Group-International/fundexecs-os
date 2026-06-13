@@ -103,6 +103,36 @@ function deriveRecommendations(answers: Record<string, string>, ctx: Context): R
   const bottleneck = answers['bottleneck'];
   const horizon = answers['horizon'];
 
+  // Personalize first based on member type and objective
+  if (ctx.memberType === 'individual_investor') {
+    recs.push({
+      title: 'Review your LP allocation pipeline',
+      why: 'Priya tracks every allocation you have in flight and surfaces the next commitment window — so you never miss a close.',
+      href: '/source/capital-map',
+      surface: 'Capital Map',
+      tone: 'gold'
+    });
+  }
+  if (ctx.memberType === 'startup') {
+    recs.push({
+      title: 'Run your founder check-in sweep',
+      why: 'Earnest compiles the full picture across your open rounds and surfaces the next move — from pitch to signed term sheet.',
+      href: '/source',
+      surface: 'Source Hub',
+      tone: 'success'
+    });
+  }
+  if (ctx.objective && ctx.objective.toLowerCase().includes('lp')) {
+    recs.push({
+      title: 'Open your LP relationship map',
+      why: 'Eleanor has tracked every LP interaction — surfaces the warmest relationships to re-engage now.',
+      href: '/run/ir',
+      surface: 'Investor Relations',
+      tone: 'success'
+    });
+  }
+
+  // Then layer in answer-driven recommendations
   if (bottleneck === 'pipeline' || stage === 'pre') {
     recs.push({
       title: 'Run a deal-sourcing sweep',
@@ -148,7 +178,7 @@ function deriveRecommendations(answers: Record<string, string>, ctx: Context): R
       tone: 'success'
     });
   }
-  // Always add a catch-all
+  // Fallback when answers alone produce fewer than 2 recommendations
   if (recs.length < 2) {
     recs.push({
       title: 'Ask Earn for your top move',
@@ -158,7 +188,15 @@ function deriveRecommendations(answers: Record<string, string>, ctx: Context): R
       tone: 'gold'
     });
   }
-  return recs.slice(0, 4);
+  // Deduplicate by href before returning
+  const seen = new Set<string>();
+  return recs
+    .filter((r) => {
+      if (seen.has(r.href)) return false;
+      seen.add(r.href);
+      return true;
+    })
+    .slice(0, 4);
 }
 
 const TONE_CLASSES: Record<Recommendation['tone'], string> = {
@@ -175,7 +213,6 @@ export function RecommendationsFlow({ context }: { context: Context }) {
 
   const question = QUESTIONS[step];
   const totalSteps = QUESTIONS.length;
-  const done = step >= totalSteps;
 
   function answer(value: string) {
     const next = { ...answers, [QUESTIONS[step].id]: value };
