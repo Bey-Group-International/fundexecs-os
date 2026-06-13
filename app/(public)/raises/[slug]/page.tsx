@@ -23,13 +23,15 @@ export default async function RaisePage({ params }: { params: Promise<{ slug: st
   const raise = await getPublicRaise(slug);
   if (!raise) notFound();
 
+  const now = Date.now();
+
   const pct =
     raise.target_amount && raise.committed_amount
       ? Math.min(100, Math.round((raise.committed_amount / raise.target_amount) * 100))
       : 0;
 
   const daysLeft = raise.close_date
-    ? Math.max(0, Math.ceil((new Date(raise.close_date).getTime() - Date.now()) / 86_400_000))
+    ? Math.max(0, Math.ceil((new Date(raise.close_date).getTime() - now) / 86_400_000))
     : null;
 
   return (

@@ -19,7 +19,7 @@ export function InterestForm({ dealId }: { dealId: string }) {
       <div className="rounded-2xl border border-[rgba(52,211,153,0.25)] bg-[rgba(52,211,153,0.07)] p-6 text-center">
         <p className="text-sm font-medium text-[#34d399]">Interest noted!</p>
         <p className="mt-1 text-xs text-[#94a3b8]">
-          The GP team will be in touch if there's a fit.
+          The GP team will be in touch if there&apos;s a fit.
         </p>
       </div>
     );
