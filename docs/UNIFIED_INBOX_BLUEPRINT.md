@@ -1,10 +1,10 @@
 # Unified Inbox + In-App Video — Blueprint
 
-> Status: **proposed**. P1 scaffolding (this commit) is additive and inert —
-> a new `/inbox` route + empty-by-default read surface over a new
-> `inbox_items` table. No existing surface changes behaviour; the
-> Notifications page stays intact and is reachable from the Inbox "System"
-> tab.
+> Status: **P1 + P2 landed**. Additive throughout: a new `/inbox` route over a
+> new `inbox_items` table, plus ingestion that surfaces Gmail/Slack/call
+> conversations as triage items and a guarded accept/dismiss action. No
+> existing surface changes behaviour; the Notifications page stays intact and
+> is reachable from the Inbox "System" tab.
 
 ## Why this exists (the workflow lens)
 
@@ -69,11 +69,21 @@ the existing Notifications bell rather than new nav weight.
   `/notifications`.
 - Bell in `AppShell` relabelled **Inbox** → `/inbox`, unread badge retained.
 
-### P2 — Email + Slack ingest & route
+### P2 — Email + Slack ingest & route _(landed)_
 
-- Gmail/Slack sync normalizers write `inbox_items` (in addition to warmth).
-- `act_on_inbox_item` server action (accept → route to deal/CoT; dismiss).
-- Auto-resolution to `deal_id` / `contact_id` via the signal scorer pattern.
+- `lib/inbox/ingest.ts` — maps normalized Gmail/Slack/call interactions to
+  `inbox_items`, with a deterministic, explainable 0-100 score (recency ·
+  channel · relationship · responsiveness) in the `matches.rationale` shape.
+  Pure mapping + scoring are unit-tested.
+- `ingestSignals` now writes `inbox_items` alongside contacts/interactions on
+  every sync (idempotent on `(org_id, channel, external_id)`), reusing the
+  email→contact map so items auto-resolve to known contacts.
+- `act_on_inbox_item` SECURITY DEFINER RPC + server action: guarded
+  pending → accepted/dismissed, with optional deal routing (validated to the
+  org). Accept/Dismiss wired into the Inbox UI (optimistic, reverts on
+  rejection).
+- Deal auto-resolution beyond contact linking is deferred to a follow-up (a
+  deal picker / scorer-based routing on accept).
 
 ### P3 — Earn-drafted replies + send
 

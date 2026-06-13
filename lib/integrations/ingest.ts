@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
+import { ingestInboxItems } from '@/lib/inbox/ingest';
 import type { ProviderSignals } from './types';
 
 type Admin = SupabaseClient<Database>;
@@ -14,6 +15,8 @@ interface IngestTarget {
 export interface IngestResult {
   contacts: number;
   interactions: number;
+  /** Conversations surfaced into the Relationship Inbox for triage. */
+  inboxItems: number;
 }
 
 /**
@@ -85,5 +88,9 @@ export async function ingestSignals(
     interactions = data?.length ?? 0;
   }
 
-  return { contacts: uniqueContacts.length, interactions };
+  // 3. Surface the same conversations into the Relationship Inbox for triage,
+  // reusing the email -> contact map so items resolve to known contacts.
+  const inboxItems = await ingestInboxItems(admin, { orgId, provider }, signals, emailToId);
+
+  return { contacts: uniqueContacts.length, interactions, inboxItems };
 }

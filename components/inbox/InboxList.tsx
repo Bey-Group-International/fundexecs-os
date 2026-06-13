@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import {
   Inbox as InboxIcon,
@@ -11,10 +12,15 @@ import {
   MessageCircle,
   Bell,
   ArrowRight,
+  Check,
+  X,
+  Loader2,
+  TriangleAlert,
   type LucideIcon
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
+import { act_on_inbox_item, type InboxAction } from '@/lib/actions/inbox';
 import {
   COMING_SOON_CHANNELS,
   WIRED_CHANNELS,
@@ -23,9 +29,11 @@ import {
 } from '@/lib/queries/inbox';
 import { cn } from '@/lib/utils';
 
-/* The Relationship Inbox (P1). Channel-agnostic triage list with channel
- * filter chips + a "System" link back to notifications. Items arrive once
- * ingestion lands (P2); until then this renders a tasteful empty state. */
+/* The Relationship Inbox (P1-P2). Channel-agnostic triage list with channel
+ * filter chips + a "System" link back to notifications. Each pending item can
+ * be accepted (routed onto the deal loop) or dismissed via the guarded
+ * act_on_inbox_item RPC. Items arrive once ingestion runs (Gmail/Slack sync);
+ * until then this renders a tasteful empty state. */
 
 const CHANNEL_META: Record<InboxChannel, { label: string; icon: LucideIcon }> = {
   email: { label: 'Email', icon: Mail },
@@ -52,18 +60,45 @@ function relativeTime(iso: string | null): string {
 }
 
 export function InboxList({
-  items,
+  items: initialItems,
   countsByChannel
 }: {
   items: InboxItem[];
   countsByChannel: Record<InboxChannel, number>;
 }) {
+  const router = useRouter();
+  const [items, setItems] = useState(initialItems);
   const [filter, setFilter] = useState<Filter>('all');
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const visible = useMemo(
     () => (filter === 'all' ? items : items.filter((i) => i.channel === filter)),
     [items, filter]
   );
+
+  // Optimistically drop the item from the worklist; revert + surface an error
+  // if the guarded RPC rejects the transition.
+  async function act(item: InboxItem, action: InboxAction) {
+    setPending(item.id);
+    setError(null);
+    const snapshot = items;
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
+    try {
+      const res = await act_on_inbox_item(item.id, action);
+      if (res.ok) {
+        router.refresh();
+      } else {
+        setItems(snapshot);
+        setError(res.error ?? 'Could not update the conversation — try again.');
+      }
+    } catch {
+      setItems(snapshot);
+      setError('Could not update the conversation — check your connection and try again.');
+    } finally {
+      setPending(null);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -125,6 +160,13 @@ export function InboxList({
         })}
       </div>
 
+      {error && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[12.5px] text-danger">
+          <TriangleAlert size={15} aria-hidden />
+          {error}
+        </div>
+      )}
+
       {visible.length === 0 ? (
         <Card className="p-8 text-center">
           <InboxIcon size={22} className="mx-auto text-fg-4" aria-hidden />
@@ -138,7 +180,12 @@ export function InboxList({
       ) : (
         <div className="flex flex-col gap-2">
           {visible.map((item) => (
-            <InboxRow key={item.id} item={item} />
+            <InboxRow
+              key={item.id}
+              item={item}
+              busy={pending === item.id}
+              onAct={(action) => void act(item, action)}
+            />
           ))}
         </div>
       )}
@@ -172,8 +219,17 @@ function FilterChip({
   );
 }
 
-function InboxRow({ item }: { item: InboxItem }) {
+function InboxRow({
+  item,
+  busy,
+  onAct
+}: {
+  item: InboxItem;
+  busy: boolean;
+  onAct: (action: InboxAction) => void;
+}) {
   const meta = CHANNEL_META[item.channel];
+  const pendingItem = item.status === 'pending';
   return (
     <Card className="flex items-start gap-3 p-4">
       <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-[10px] border border-hairline bg-surface-1 text-fg-3">
@@ -206,6 +262,34 @@ function InboxRow({ item }: { item: InboxItem }) {
           </Link>
         )}
       </div>
+      {pendingItem && (
+        <div className="flex flex-none items-center gap-1">
+          <button
+            type="button"
+            title="Accept — route onto the deal loop"
+            aria-label={`Accept conversation "${item.subject || meta.label}"`}
+            disabled={busy}
+            onClick={() => onAct('accepted')}
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+          >
+            {busy ? (
+              <Loader2 size={13} className="motion-safe:animate-spin" aria-hidden />
+            ) : (
+              <Check size={13} aria-hidden />
+            )}
+          </button>
+          <button
+            type="button"
+            title="Dismiss"
+            aria-label={`Dismiss conversation "${item.subject || meta.label}"`}
+            disabled={busy}
+            onClick={() => onAct('dismissed')}
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
+          >
+            <X size={13} aria-hidden />
+          </button>
+        </div>
+      )}
     </Card>
   );
 }
