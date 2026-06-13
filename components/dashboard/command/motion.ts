@@ -71,20 +71,21 @@ export const fxStagger: Variants = {
   hidden: {},
   show: {
     transition: {
-      staggerChildren: 0.05,
-      delayChildren: 0.02
+      staggerChildren: 0.09,
+      delayChildren: 0.06
     }
   }
 };
 
-/* ── Stagger child — the JS twin of `fx-rise` ─────────────────────────────── */
+/* ── Stagger child — a pronounced rise + settle (JS twin of `fx-rise`) ─────── */
 export const fxRiseItem: Variants = {
-  hidden: { opacity: 0, y: 8 },
+  hidden: { opacity: 0, y: 24, scale: 0.97 },
   show: {
     opacity: 1,
     y: 0,
+    scale: 1,
     transition: {
-      duration: MOTION_DURATIONS_S.page,
+      duration: MOTION_DURATIONS_S.celebrate,
       ease: MOTION_EASING.entrance
     }
   }
@@ -111,6 +112,6 @@ export const fxCollapse: Variants = {
 // app-level `<MotionConfig reducedMotion="user">`, which neutralizes these
 // transforms; no per-call guard needed.
 export const fxPressable = {
-  whileHover: { y: -2, transition: FX_SPRING },
-  whileTap: { scale: 0.97, transition: FX_SPRING }
+  whileHover: { y: -4, scale: 1.02, transition: FX_SPRING },
+  whileTap: { scale: 0.95, transition: FX_SPRING }
 } as const;

@@ -22,7 +22,7 @@ import { MOTION_EASING } from '@/components/dashboard/command/motion';
 export function AnimatedNumber({
   value,
   format = (n) => String(Math.round(n)),
-  durationMs = 900,
+  durationMs = 1500,
   className
 }: {
   value: number;
