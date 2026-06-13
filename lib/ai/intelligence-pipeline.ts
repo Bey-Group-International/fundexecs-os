@@ -307,6 +307,15 @@ export async function generateBriefings(maxOrgs = 25): Promise<{ written: number
 /** Ingest the latest BotMemo market-pulse as a market signal. */
 export async function ingestBotMemo(): Promise<{ inserted: number }> {
   const pulse = await fetchBotMemoPulse();
+  const hasUsableSignal =
+    pulse.totalCapitalUsd !== null ||
+    pulse.dealCount !== null ||
+    pulse.startupCount !== null ||
+    pulse.period !== null ||
+    pulse.topVerticals.length > 0;
+
+  if (!hasUsableSignal) return { inserted: 0 };
+
   const externalId = pulseExternalId(pulse);
 
   const admin = createAdminClient();

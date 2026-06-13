@@ -25,12 +25,15 @@ export async function getMarketPulse(): Promise<MarketPulse | null> {
   if (!data) return null;
 
   const n = (data.normalized ?? {}) as Record<string, unknown>;
+  const topVerticals = Array.isArray(n.top_verticals)
+    ? n.top_verticals.filter((v): v is string => typeof v === 'string')
+    : [];
   return {
     period: (n.period as string | null) ?? null,
     totalCapitalUsd: (n.total_capital_usd as number | null) ?? null,
     dealCount: (n.deal_count as number | null) ?? null,
     startupCount: (n.startup_count as number | null) ?? null,
-    topVerticals: (n.top_verticals as string[] | null) ?? [],
+    topVerticals,
     fetchedAt: data.occurred_at ?? null,
   };
 }

@@ -28,6 +28,8 @@ const STARTUPS_URL = 'https://botmemo.com/startups/';
 
 async function fetchHtml(url: string): Promise<string | null> {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
     const res = await fetch(url, {
       headers: {
         'User-Agent':
@@ -35,9 +37,10 @@ async function fetchHtml(url: string): Promise<string | null> {
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
       },
-      // Always fresh — cron job, never reuse stale data.
       cache: 'no-store',
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!res.ok) return null;
     return await res.text();
   } catch {

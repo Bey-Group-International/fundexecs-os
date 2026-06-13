@@ -13,7 +13,11 @@ interface Props {
 }
 
 export function MarketPulseCard({ pulse }: Props) {
-  const hasData = pulse.totalCapitalUsd !== null || pulse.dealCount !== null;
+  const hasData =
+    pulse.totalCapitalUsd !== null ||
+    pulse.dealCount !== null ||
+    pulse.startupCount !== null ||
+    pulse.topVerticals.length > 0;
 
   return (
     <section className="rounded-2xl border border-[var(--azure-line)] bg-bg-1 p-[18px]">
