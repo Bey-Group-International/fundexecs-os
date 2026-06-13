@@ -11,6 +11,7 @@ import {
   Loader2,
   type LucideIcon,
   Radar,
+  ScrollText,
   ShieldCheck,
   Sparkles,
   Wand2,
@@ -491,6 +492,21 @@ export function EarnDock({
                   );
                 })}
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  router.push('/earn');
+                  onClose();
+                }}
+                className="mt-3 flex w-full items-center justify-between rounded-[12px] border border-hairline bg-surface-1 px-3.5 py-2.5 text-left transition hover:border-[var(--gold-line)] hover:bg-[var(--gold-soft)]"
+              >
+                <span className="flex items-center gap-2 text-[12px] font-semibold text-fg-2">
+                  <ScrollText size={14} className="text-gold-1" aria-hidden />
+                  Your Earn ledger — everything the team has done
+                </span>
+                <ArrowRight size={14} className="flex-none text-fg-4" aria-hidden />
+              </button>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
