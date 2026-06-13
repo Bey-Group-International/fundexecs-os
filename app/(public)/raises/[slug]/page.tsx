@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getPublicRaise } from '@/lib/public/actions';
+import { EarnCoin } from '@/components/ui/EarnCoin';
 import { InterestForm } from './InterestForm';
 import { RaiseProgress } from './RaiseProgress';
 
@@ -124,7 +125,7 @@ export default async function RaisePage({ params }: { params: Promise<{ slug: st
 
       {/* FundExecs trust badge */}
       <div className="mb-8 flex items-center gap-2 rounded-xl border border-[rgba(247,201,72,0.2)] bg-[rgba(247,201,72,0.06)] px-4 py-3">
-        <img src="/earn-coin.png" alt="" className="h-5 w-5" />
+        <EarnCoin size={20} />
         <span className="text-xs text-[#94a3b8]">
           Curated and verified by <span className="text-[#f7c948] font-medium">FundExecs OS</span>{' '}
           GPs

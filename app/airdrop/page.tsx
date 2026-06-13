@@ -136,8 +136,15 @@ export default function BookACallPage() {
         }}
       >
         <div style={{ width: '100%', maxWidth: 520, textAlign: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-            <EarnRunner size={88} glow />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              marginBottom: 18,
+              animation: 'float 3s ease-in-out infinite'
+            }}
+          >
+            <EarnRunner size={96} glow />
           </div>
           <div
             style={{
@@ -336,6 +343,12 @@ export default function BookACallPage() {
           </div>
         </div>
       </div>
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-8px); }
+        }
+      `}</style>
     </div>
   );
 }

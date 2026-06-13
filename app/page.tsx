@@ -573,7 +573,13 @@ export default function LandingPage() {
           }}
         >
           {/* Hero mascot — Earn orb */}
-          <div style={{ marginBottom: 20, position: 'relative' }}>
+          <div
+            style={{
+              marginBottom: 20,
+              position: 'relative',
+              animation: 'float 3s ease-in-out infinite'
+            }}
+          >
             {/* Outer glow ring */}
             <div
               aria-hidden
@@ -1197,6 +1203,10 @@ export default function LandingPage() {
         @keyframes ticker {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-10px); }
         }
       `}</style>
     </div>
