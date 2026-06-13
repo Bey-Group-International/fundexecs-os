@@ -86,8 +86,9 @@ export function CallRoom({ room, token, url }: { room: string; token: string; ur
       <div className="flex items-start gap-2 rounded-xl border border-hairline bg-surface-1 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-fg-4">
         <Info size={14} className="mt-0.5 flex-none text-fg-5" aria-hidden />
         <span>
-          This call isn’t recorded. A transcript you add at wrap-up is sent to Earn’s Meeting Copilot
-          to write findings onto the linked deal — let participants know they’re being transcribed.
+          This call isn’t recorded. A transcript you add at wrap-up is sent to Earn’s Meeting
+          Copilot to write findings onto the linked deal — let participants know they’re being
+          transcribed.
         </span>
       </div>
 

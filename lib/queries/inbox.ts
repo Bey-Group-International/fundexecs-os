@@ -163,14 +163,19 @@ export async function getInboxDealOptions(orgId: string): Promise<InboxDealOptio
       .order('updated_at', { ascending: false })
       .limit(100);
     if (error || !data) return [];
-    return (data as Array<{ id: string; name: string | null; stage: string | null; status: string | null }>).map(
-      (d) => ({
-        id: d.id,
-        name: d.name ?? 'Untitled deal',
-        stage: d.stage ?? '',
-        status: d.status ?? ''
-      })
-    );
+    return (
+      data as Array<{
+        id: string;
+        name: string | null;
+        stage: string | null;
+        status: string | null;
+      }>
+    ).map((d) => ({
+      id: d.id,
+      name: d.name ?? 'Untitled deal',
+      stage: d.stage ?? '',
+      status: d.status ?? ''
+    }));
   } catch {
     return [];
   }

@@ -601,7 +601,9 @@ function DealPicker({
                 <span
                   className={cn(
                     'flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border',
-                    isSel ? 'border-[var(--accent)] bg-[var(--accent)] text-white' : 'border-hairline'
+                    isSel
+                      ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                      : 'border-hairline'
                   )}
                 >
                   {isSel && <Check size={10} strokeWidth={3} aria-hidden />}
@@ -612,7 +614,9 @@ function DealPicker({
                     Suggested
                   </Badge>
                 )}
-                {deal.stage && <span className="flex-none text-[10px] text-fg-5">{deal.stage}</span>}
+                {deal.stage && (
+                  <span className="flex-none text-[10px] text-fg-5">{deal.stage}</span>
+                )}
               </button>
             );
           })
