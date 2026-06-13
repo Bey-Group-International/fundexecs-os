@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Flame,
   Handshake,
+  ListChecks,
   ListOrdered,
   MoonStar,
   Radar,
@@ -17,6 +18,7 @@ import {
 import { Cockpit } from '@/components/hubs/Cockpit';
 import { RunWithEarnButton } from '@/components/command-center/RunWithEarnButton';
 import { MarkVisited } from '@/components/command-center/MarkVisited';
+import { TaskletQueue } from '@/components/earn/TaskletQueue';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { MandateIcon } from '@/components/ui/MandateIcon';
@@ -36,6 +38,7 @@ import { readLastVisit } from '@/lib/dashboard/state';
 import { getShellIdentity } from '@/lib/queries/identity';
 import { getMandate } from '@/lib/queries/mandate';
 import { getActiveOrg } from '@/lib/queries/org';
+import { getTaskletQueue } from '@/lib/tasklets/queries';
 import { TEAM_ROSTER } from '@/lib/team';
 import { cn } from '@/lib/utils';
 
@@ -289,17 +292,27 @@ export default async function CommandCenterPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const [mandate, data, rail, identity, streak, activityFeed, lastVisit, pendingInbox] =
-    await Promise.all([
-      getMandate(org.orgId),
-      getCommandCenterData(org.orgId),
-      getLifecycleRail(org.orgId),
-      getShellIdentity(),
-      loadStreak(org.orgId),
-      loadActivityFeed(org.orgId),
-      readLastVisit(),
-      getPendingInboxCount(org.orgId)
-    ]);
+  const [
+    mandate,
+    data,
+    rail,
+    identity,
+    streak,
+    activityFeed,
+    lastVisit,
+    pendingInbox,
+    taskletQueue
+  ] = await Promise.all([
+    getMandate(org.orgId),
+    getCommandCenterData(org.orgId),
+    getLifecycleRail(org.orgId),
+    getShellIdentity(),
+    loadStreak(org.orgId),
+    loadActivityFeed(org.orgId),
+    readLastVisit(),
+    getPendingInboxCount(org.orgId),
+    getTaskletQueue(org.orgId)
+  ]);
 
   // Real autonomous work logged since the prior visit — the honest "worked
   // overnight". Only on a return visit (lastVisit set); a first-timer has no
@@ -426,6 +439,19 @@ export default async function CommandCenterPage() {
           </div>
         ))}
       </div>
+
+      {/* Today's tasklets — approve-ready work the team drafted from real
+          signals (inbox, pipeline, public inbound). Draft-only: each Approve
+          records to the Earn ledger + Chain of Trust. Only shown when armed. */}
+      {taskletQueue.length > 0 && (
+        <Panel
+          icon={ListChecks}
+          eyebrow="Approve-ready · drafted from real signals"
+          title={`Today's tasklets · ${taskletQueue.length}`}
+        >
+          <TaskletQueue initialTasklets={taskletQueue} variant="band" />
+        </Panel>
+      )}
 
       {/* What the team did while away (when there's real work), then what's
           waiting on you — autonomous work and proactive signals are distinct. */}
