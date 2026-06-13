@@ -2,6 +2,7 @@ import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { MAT_DOCS, MAT_LABEL, type MaterialValue } from './config';
 import { MATERIAL_DB_KIND, materialIdForDbKind, sanitizeMaterialSpec } from './persistence';
+import { emitHighLevelEvent } from '@/lib/integrations/highlevel';
 
 /**
  * lib/dataroom/public.ts — the read side of the public `/dr/[token]` route.
@@ -25,6 +26,68 @@ export interface PublicDataRoom {
     spec: Record<string, MaterialValue>;
     preparedAt: string | null;
   } | null;
+}
+
+/**
+ * Track a public data room view. Fires in parallel:
+ *   1. Upserts an inbox_item (channel: dataroom, inbound, high priority)
+ *   2. Emits a HighLevel `dataroom_viewed` event for contact tagging + nurture
+ *
+ * Idempotent on (org_id, linkId): one inbox item per link regardless of view
+ * count. Never throws — viewer experience must never 500.
+ */
+export async function trackDataRoomView(room: PublicDataRoom): Promise<void> {
+  if (room.expired) return;
+
+  const now = new Date().toISOString();
+  const admin = createAdminClient();
+
+  // 1. Upsert inbox item — dedup on linkId so repeat views don't flood the inbox.
+  try {
+    await (admin as unknown as {
+      from: (t: string) => {
+        upsert: (row: Record<string, unknown>, opts: { onConflict: string; ignoreDuplicates: boolean }) => Promise<unknown>;
+      };
+    })
+      .from('inbox_items')
+      .upsert(
+        {
+          org_id: room.orgId,
+          channel: 'dataroom',
+          direction: 'inbound',
+          external_id: `dr_view:${room.linkId}`,
+          thread_id: null,
+          reply_to_message_id: null,
+          contact_id: null,
+          subject: `Data room viewed — ${room.label}`,
+          preview: `Someone accessed your "${room.label}" data room.`,
+          score: 82,
+          status: 'pending',
+          rationale: [
+            { factor: 'channel', weight: 22, detail: 'Public data room access — high-intent signal.' },
+            { factor: 'recency', weight: 30, detail: 'Arrived in the last day.' },
+            { factor: 'relationship', weight: 5, detail: 'Viewer identity not yet verified.' },
+            { factor: 'responsiveness', weight: 10, detail: 'Inbound — may need follow-up.' }
+          ],
+          occurred_at: now
+        },
+        { onConflict: 'org_id,channel,external_id', ignoreDuplicates: true }
+      );
+  } catch {
+    // Never-block: inbox item failure doesn't cancel view.
+  }
+
+  // 2. Fire HL — never-block.
+  void emitHighLevelEvent({
+    type: 'dataroom_viewed',
+    occurredAt: now,
+    data: {
+      orgId: room.orgId,
+      linkId: room.linkId,
+      label: room.label,
+      firm: room.firm
+    }
+  });
 }
 
 /** Resolve a share token to its room. Null when the token doesn't exist. */

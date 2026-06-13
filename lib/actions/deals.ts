@@ -6,6 +6,7 @@ import { awardTrustXp } from '@/lib/actions/xp';
 import { recordLoopClose } from '@/lib/actions/loop';
 import { DEAL_STAGE_VERB, LOOP_EVENT_TYPES } from '@/lib/loop-events';
 import { emitLoopEvent } from '@/lib/loop-events.server';
+import { emitHighLevelEvent } from '@/lib/integrations/highlevel';
 import type { Database } from '@/lib/supabase/database.types';
 
 type DealRow = Database['public']['Tables']['deals']['Row'];
@@ -169,6 +170,20 @@ export async function updateDealStage(
     entityId: dealId,
     // Null means "unsized", not $0 — consumers can tell the two apart.
     metadata: { stage, amount: row.amount ?? null }
+  });
+
+  // Module 7: fire HighLevel stakeholder notification on every stage change.
+  // OS remains single source of truth; HL fires the outbound notification sequence.
+  void emitHighLevelEvent({
+    type: 'deal_stage_changed',
+    occurredAt: new Date().toISOString(),
+    data: {
+      dealId,
+      dealName: row.name,
+      stage,
+      amount: row.amount ?? null,
+      orgId: row.org_id
+    }
   });
 
   // Close the loop: a closed deal is proof of work — feed it back into the

@@ -6,6 +6,11 @@ import { getActiveOrg } from '@/lib/queries/org';
 import { discoverLeads } from '@/lib/ai/lead-discovery';
 import { meterAction } from '@/lib/credits/meter';
 import { isLeadStage, nextLeadStage, type LeadStageKey } from './engine';
+import { emitHighLevelEvent } from '@/lib/integrations/highlevel';
+import { emitTaskletsAiEvent } from '@/lib/integrations/tasklets-ai';
+
+/** Segments routed to HighLevel (inbound/lower-touch). Apollo handles the rest. */
+const HL_SEGMENTS = new Set(['inbound_web', 'lower_touch', 'inbound', 'web']);
 
 /**
  * lib/leads/actions.ts — the Lead Engine's mutations.
@@ -100,7 +105,7 @@ export async function advanceLead(input: {
   const supabase = await createClient();
   const { data: lead } = await supabase
     .from('leads')
-    .select('id, stage')
+    .select('id, stage, name, segment')
     .eq('id', input.leadId)
     .eq('org_id', org.orgId)
     .maybeSingle();
@@ -117,6 +122,37 @@ export async function advanceLead(input: {
     .eq('id', lead.id)
     .eq('org_id', org.orgId);
   if (error) return { ok: false, error: error.message };
+
+  // Module 4: on advance to Qualified, route to the correct execution platform.
+  // HL_SEGMENTS → HighLevel sequence. All others → Apollo (unchanged, no event needed).
+  // Tasklets.ai receives the routing event and applies the segment logic.
+  if (input.to === 'qualified') {
+    const segment = (lead as unknown as { segment: string | null }).segment ?? '';
+    const isHlSegment = HL_SEGMENTS.has(segment.toLowerCase().replace(/[^a-z_]/g, '_'));
+    void emitTaskletsAiEvent({
+      type: 'lead_routed_tasklets',
+      occurredAt: new Date().toISOString(),
+      data: {
+        leadId: lead.id,
+        leadName: (lead as unknown as { name: string }).name,
+        segment,
+        platform: isHlSegment ? 'highlevel' : 'apollo',
+        orgId: org.orgId
+      }
+    });
+    if (isHlSegment) {
+      void emitHighLevelEvent({
+        type: 'lead_routed_hl',
+        occurredAt: new Date().toISOString(),
+        data: {
+          leadId: lead.id,
+          leadName: (lead as unknown as { name: string }).name,
+          segment,
+          orgId: org.orgId
+        }
+      });
+    }
+  }
 
   revalidatePath('/source/leads');
   return { ok: true };

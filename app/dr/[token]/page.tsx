@@ -4,7 +4,7 @@ import { FileQuestion } from 'lucide-react';
 import { PublicRoomView } from '@/components/dataroom/PublicRoomView';
 import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
-import { getPublicDataRoom } from '@/lib/dataroom/public';
+import { getPublicDataRoom, trackDataRoomView } from '@/lib/dataroom/public';
 
 export const metadata: Metadata = {
   title: 'Shared data room',
@@ -25,6 +25,9 @@ export default async function PublicDataRoomPage({
 }) {
   const { token } = await params;
   const room = await getPublicDataRoom(token);
+
+  // Track the view: inbox item + HighLevel tag. Never-block, fires in background.
+  if (room) void trackDataRoomView(room);
 
   // This browser's prior verification for THIS link (set by the gate action).
   const store = await cookies();

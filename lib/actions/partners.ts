@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg } from '@/lib/queries/org';
 import type { Database, Json } from '@/lib/supabase/database.types';
+import { emitTaskletsAiEvent } from '@/lib/integrations/tasklets-ai';
 
 type PartnerIntroInsert = Database['public']['Tables']['partner_intro_requests']['Insert'];
 
@@ -183,6 +184,23 @@ export async function requestPartnerIntro(
   if (error || !data) {
     return { ok: false, error: error?.message ?? 'Could not submit request.' };
   }
+
+  // Module 6: fire Tasklets.ai to start 48h follow-up watch on new intro requests.
+  // Tasklets.ai monitors for no-response and triggers HL reminder sequence.
+  void emitTaskletsAiEvent({
+    type: 'partner_intro_submitted',
+    occurredAt: new Date().toISOString(),
+    data: {
+      introRequestId: data.id,
+      partnerId: input.partnerId,
+      partnerName: input.partnerName.trim(),
+      partnerType: input.partnerType,
+      orgId: org.orgId,
+      requesterId: org.userId,
+      rationale: input.rationale?.trim() ?? null
+    }
+  });
+
   return { ok: true, id: data.id, status: data.status };
 }
 
