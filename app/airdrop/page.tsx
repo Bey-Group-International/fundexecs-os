@@ -8,7 +8,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Check, PhoneCall, ShieldCheck } from 'lucide-react';
 import { EarnCoin } from '@/components/brand/BrandPrimitives';
-import { EarnRunner } from '@/components/ui/EarnRunner';
 import { submitAccessRequest } from '@/lib/actions/access-request';
 import { RAISING_RANGES, type RaisingRange } from '@/lib/landing/access-request';
 
@@ -140,7 +139,7 @@ export default function BookACallPage() {
             className="fx-coin-float"
             style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}
           >
-            <EarnRunner size={96} glow />
+            <EarnCoin size={96} glow />
           </div>
           <div
             style={{
