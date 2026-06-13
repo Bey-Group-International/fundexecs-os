@@ -33,38 +33,71 @@ const QUESTIONS: Question[] = [
     id: 'stage',
     text: 'Where are you in your current raise or deployment cycle?',
     options: [
-      { value: 'pre', label: 'Pre-launch', description: 'Forming the fund or building the pipeline' },
+      {
+        value: 'pre',
+        label: 'Pre-launch',
+        description: 'Forming the fund or building the pipeline'
+      },
       { value: 'active', label: 'Active raise', description: 'In market, taking LP meetings' },
-      { value: 'deploying', label: 'Deploying capital', description: 'First close done, writing checks' },
-      { value: 'managing', label: 'Managing portfolio', description: 'Focused on exits and LP relations' }
+      {
+        value: 'deploying',
+        label: 'Deploying capital',
+        description: 'First close done, writing checks'
+      },
+      {
+        value: 'managing',
+        label: 'Managing portfolio',
+        description: 'Focused on exits and LP relations'
+      }
     ]
   },
   {
     id: 'bottleneck',
     text: 'What is the biggest constraint on your velocity right now?',
     options: [
-      { value: 'pipeline', label: 'Deal pipeline', description: 'Not enough quality opportunities' },
+      {
+        value: 'pipeline',
+        label: 'Deal pipeline',
+        description: 'Not enough quality opportunities'
+      },
       { value: 'capital', label: 'Capital', description: 'LP commitments behind target' },
-      { value: 'operations', label: 'Operations', description: 'Process and compliance slowing us down' },
-      { value: 'relationships', label: 'Relationships', description: 'Need to warm the right people' }
+      {
+        value: 'operations',
+        label: 'Operations',
+        description: 'Process and compliance slowing us down'
+      },
+      {
+        value: 'relationships',
+        label: 'Relationships',
+        description: 'Need to warm the right people'
+      }
     ]
   },
   {
     id: 'horizon',
     text: 'What is your most urgent time horizon?',
     options: [
-      { value: 'this_week', label: 'This week', description: 'I have a meeting or deadline imminent' },
-      { value: 'this_month', label: 'This month', description: 'Working toward a 30-day milestone' },
-      { value: 'this_quarter', label: 'This quarter', description: 'Quarterly target is the focus' },
+      {
+        value: 'this_week',
+        label: 'This week',
+        description: 'I have a meeting or deadline imminent'
+      },
+      {
+        value: 'this_month',
+        label: 'This month',
+        description: 'Working toward a 30-day milestone'
+      },
+      {
+        value: 'this_quarter',
+        label: 'This quarter',
+        description: 'Quarterly target is the focus'
+      },
       { value: 'annual', label: 'Annual plan', description: 'Optimising for the year-end picture' }
     ]
   }
 ];
 
-function deriveRecommendations(
-  answers: Record<string, string>,
-  ctx: Context
-): Recommendation[] {
+function deriveRecommendations(answers: Record<string, string>, ctx: Context): Recommendation[] {
   const recs: Recommendation[] = [];
   const stage = answers['stage'];
   const bottleneck = answers['bottleneck'];

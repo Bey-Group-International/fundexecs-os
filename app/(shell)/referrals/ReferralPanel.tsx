@@ -40,7 +40,9 @@ export function ReferralPanel({
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       },
-      () => { /* ignore */ }
+      () => {
+        /* ignore */
+      }
     );
   }
 
@@ -67,11 +69,7 @@ export function ReferralPanel({
     <div className="flex flex-col gap-5">
       {/* Stats strip */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-        <StatCard
-          icon={Users}
-          label="People referred"
-          value={String(overview.referredCount)}
-        />
+        <StatCard icon={Users} label="People referred" value={String(overview.referredCount)} />
         <StatCard
           icon={TrendingUp}
           label="Credits earned"
@@ -106,7 +104,9 @@ export function ReferralPanel({
             </Button>
           </div>
         ) : (
-          <p className="text-[12.5px] text-danger">Could not generate your link — please refresh.</p>
+          <p className="text-[12.5px] text-danger">
+            Could not generate your link — please refresh.
+          </p>
         )}
       </section>
 

@@ -3,7 +3,17 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Award, ChevronLeft, Coins, Gift, Inbox, LayoutDashboard, LogOut, Settings, Sparkles } from 'lucide-react';
+import {
+  Award,
+  ChevronLeft,
+  Coins,
+  Gift,
+  Inbox,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  Sparkles
+} from 'lucide-react';
 import { EarnDock, type EarnContext } from '@/components/earn/EarnDock';
 import { EarnOrb } from '@/components/earn/EarnOrb';
 import { EARN_OPEN_EVENT, type EarnOpenDetail } from '@/lib/earn/launcher';
@@ -118,8 +128,8 @@ export function AppShell({
           : onRecs
             ? 'Recommendations'
             : pathname.startsWith('/settings')
-            ? 'Settings'
-            : null;
+              ? 'Settings'
+              : null;
   const isHome = !activeHub && !utility;
   const title = activeHub?.label ?? utility ?? 'Command Center';
 

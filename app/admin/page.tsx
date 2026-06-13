@@ -60,9 +60,13 @@ export default async function AdminPage({
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-[15px] font-semibold tracking-[-0.02em]">FundExecs OS</p>
-                <Badge tone="warning" className="text-[10px]">Admin</Badge>
+                <Badge tone="warning" className="text-[10px]">
+                  Admin
+                </Badge>
               </div>
-              <p className="text-[11.5px] text-fg-4">Private beta access control · Bey Group internal</p>
+              <p className="text-[11.5px] text-fg-4">
+                Private beta access control · Bey Group internal
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">

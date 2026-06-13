@@ -33,7 +33,9 @@ export default async function ReferralsPage() {
       <div className="mb-6 flex items-start gap-3">
         <EarnCoin size={40} online className="flex-none" />
         <div className="min-w-0">
-          <h1 className="text-[19px] font-semibold tracking-[-0.01em] text-fg-1">Refer &amp; Invite</h1>
+          <h1 className="text-[19px] font-semibold tracking-[-0.01em] text-fg-1">
+            Refer &amp; Invite
+          </h1>
           <p className="mt-0.5 text-[12.5px] text-fg-4">
             Invite peers to FundExecs OS — earn commission credits every time they take an approved
             action.
@@ -41,12 +43,7 @@ export default async function ReferralsPage() {
         </div>
       </div>
 
-      <ReferralPanel
-        referralUrl={referralUrl}
-        code={code}
-        overview={overview}
-        tiers={tiers}
-      />
+      <ReferralPanel referralUrl={referralUrl} code={code} overview={overview} tiers={tiers} />
     </div>
   );
 }

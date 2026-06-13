@@ -15,10 +15,7 @@ export default async function RecommendationsPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const [mandate, profile] = await Promise.all([
-    getMandate(org.orgId),
-    getMemberProfile()
-  ]);
+  const [mandate, profile] = await Promise.all([getMandate(org.orgId), getMemberProfile()]);
 
   const context = {
     memberType: profile?.memberType ?? null,

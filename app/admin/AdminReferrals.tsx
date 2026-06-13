@@ -29,7 +29,11 @@ export function AdminReferrals({ referrals }: { referrals: ReferralOverview | nu
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
           { icon: Users, label: 'Total referred', value: String(referredCount) },
-          { icon: TrendingUp, label: 'Total commission credits', value: totalEarned.toLocaleString() }
+          {
+            icon: TrendingUp,
+            label: 'Total commission credits',
+            value: totalEarned.toLocaleString()
+          }
         ].map(({ icon: Icon, label, value }) => (
           <div
             key={label}
