@@ -32,6 +32,7 @@ import { AuroraBackdrop } from '@/components/ui/AuroraBackdrop';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EarnCoin } from '@/components/ui/EarnCoin';
+import { EarnRunner } from '@/components/ui/EarnRunner';
 import { Field } from '@/components/ui/Field';
 
 const STEPS = ['Profile', 'Mandate', 'Thesis', 'Review'] as const;
@@ -268,7 +269,7 @@ export function MandateWizard({ initialName, onBrief }: MandateWizardProps) {
       {/* header + stepper */}
       <div className="relative z-10 px-[clamp(16px,4vw,28px)] pt-6">
         <div className="mx-auto flex w-full max-w-[640px] items-center gap-3">
-          <EarnCoin size={26} />
+          <EarnRunner size={40} />
           <p className="text-[12.5px] text-fg-3">
             <b className="font-semibold text-fg-1">Brief your team.</b> Earn turns this into action
             — you only ever approve.

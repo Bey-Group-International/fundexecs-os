@@ -4,8 +4,9 @@
 // Sprint Day 2 · 2026-06-12
 
 import Link from 'next/link';
-import { ArrowRight, Lock, Sparkles, Shield, Zap, BarChart3, Users } from 'lucide-react';
+import { ArrowRight, Lock, Sparkles, Shield, Zap, BarChart3, Users, PhoneCall } from 'lucide-react';
 import { EarnCoin, Wordmark } from '@/components/brand/BrandPrimitives';
+import { EarnRunner } from '@/components/ui/EarnRunner';
 
 /* ── Specialist chip ── */
 function Chip({ name, role, tone = 'azure' }: { name: string; role: string; tone?: string }) {
@@ -111,6 +112,26 @@ const STATS: [string, string][] = [
   ['7 hubs', 'full lifecycle']
 ];
 
+/** Done-for-you band — the raises.com-style "we do it for you" promise, in three
+ *  honest steps over what the OS actually does. */
+const DONE_FOR_YOU: [string, string, string][] = [
+  [
+    '01',
+    'You brief the mandate',
+    'A two-minute brief — who you are, what you’re raising, where you play.'
+  ],
+  [
+    '02',
+    'The executive team does it for you',
+    'Fifteen specialists source the deals, structure the vehicle, prep the data room, and run investor outreach.'
+  ],
+  [
+    '03',
+    'You approve and close',
+    'Every move waits on your sign-off behind a four-layer Chain of Trust — you approve, they execute, the raise closes.'
+  ]
+];
+
 export default function LandingPage() {
   return (
     <div
@@ -161,7 +182,7 @@ export default function LandingPage() {
               whiteSpace: 'nowrap'
             }}
           >
-            Check airdrop
+            Book a call
           </Link>
           <Link
             href="/login"
@@ -193,6 +214,11 @@ export default function LandingPage() {
             margin: '0 auto'
           }}
         >
+          {/* Hero mascot — Earn in motion */}
+          <div style={{ marginBottom: 24 }}>
+            <EarnRunner size={108} glow />
+          </div>
+
           {/* Beta badge */}
           <div
             style={{
@@ -293,7 +319,7 @@ export default function LandingPage() {
                 textDecoration: 'none'
               }}
             >
-              Check airdrop status
+              <PhoneCall size={16} /> Book a strategy call
             </Link>
           </div>
 
@@ -332,6 +358,63 @@ export default function LandingPage() {
                   {v}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--fg-4)', marginTop: 4 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Done-for-you band */}
+        <section
+          style={{ padding: '0 clamp(20px,5vw,52px) 72px', maxWidth: 1080, margin: '0 auto' }}
+        >
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--fg-5)',
+                marginBottom: 8
+              }}
+            >
+              Done for you
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>
+              You don&apos;t run the raise. Your team does.
+            </div>
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 16
+            }}
+          >
+            {DONE_FOR_YOU.map(([n, title, desc]) => (
+              <div
+                key={n}
+                style={{
+                  padding: '24px 22px',
+                  borderRadius: 16,
+                  border: '1px solid rgba(247,201,72,0.18)',
+                  background: 'rgba(247,201,72,0.04)'
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: '#F7C948',
+                    letterSpacing: '0.04em',
+                    marginBottom: 10
+                  }}
+                >
+                  {n}
+                </div>
+                <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 8 }}>{title}</div>
+                <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--fg-4)', margin: 0 }}>
+                  {desc}
+                </p>
               </div>
             ))}
           </div>
@@ -441,7 +524,9 @@ export default function LandingPage() {
               background: 'rgba(247,201,72,0.04)'
             }}
           >
-            <EarnCoin size={52} />
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <EarnRunner size={84} glow />
+            </div>
             <h2
               style={{
                 fontSize: 26,
@@ -450,29 +535,50 @@ export default function LandingPage() {
                 margin: '18px 0 10px'
               }}
             >
-              Ready to brief the team?
+              Brief the team. They do the rest.
             </h2>
             <p style={{ fontSize: 14, color: 'var(--fg-3)', lineHeight: 1.65, margin: '0 0 24px' }}>
-              Join the waitlist and reserve your desk. The first 100 operators get Founding Operator
-              access and airdrop eligibility.
+              Set your mandate once — the executive team sources, structures, and drives every
+              engagement to a signed close. Reserve your desk, or book a call and we&apos;ll map
+              your raise live.
             </p>
-            <Link
-              href="/waitlist"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '13px 26px',
-                borderRadius: 14,
-                fontSize: 15,
-                fontWeight: 600,
-                background: 'linear-gradient(135deg,#F7C948,#E5A823)',
-                color: '#070b14',
-                textDecoration: 'none'
-              }}
-            >
-              Join the waitlist <ArrowRight size={16} />
-            </Link>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <Link
+                href="/waitlist"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '13px 26px',
+                  borderRadius: 14,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  background: 'linear-gradient(135deg,#F7C948,#E5A823)',
+                  color: '#070b14',
+                  textDecoration: 'none'
+                }}
+              >
+                Claim your desk <ArrowRight size={16} />
+              </Link>
+              <Link
+                href="/airdrop"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '13px 26px',
+                  borderRadius: 14,
+                  fontSize: 15,
+                  fontWeight: 500,
+                  background: 'rgba(255,255,255,0.06)',
+                  color: '#f1f5f9',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  textDecoration: 'none'
+                }}
+              >
+                <PhoneCall size={15} /> Book a strategy call
+              </Link>
+            </div>
           </div>
         </section>
       </main>
@@ -513,7 +619,7 @@ export default function LandingPage() {
             Terms
           </Link>
           <Link href="/airdrop" style={{ color: 'inherit', textDecoration: 'none' }}>
-            Airdrop
+            Book a call
           </Link>
         </div>
       </footer>
