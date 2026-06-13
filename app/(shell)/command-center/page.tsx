@@ -16,6 +16,7 @@ import {
   Users
 } from 'lucide-react';
 import { Cockpit } from '@/components/hubs/Cockpit';
+import { MarketPulseCard } from '@/components/command-center/MarketPulseCard';
 import { RunWithEarnButton } from '@/components/command-center/RunWithEarnButton';
 import { MarkVisited } from '@/components/command-center/MarkVisited';
 import { TaskletQueue } from '@/components/earn/TaskletQueue';
@@ -31,7 +32,7 @@ import {
 } from '@/lib/command-center/moves';
 import { compactMoney } from '@/lib/format';
 import { getLifecycleRail } from '@/lib/hubs';
-import { getCommandCenterData } from '@/lib/queries/command-center';
+import { getCommandCenterData, getMarketPulse } from '@/lib/queries/command-center';
 import { getPendingInboxCount } from '@/lib/queries/inbox';
 import { loadActivityFeed, loadStreak, type ActivityItem } from '@/lib/queries/dashboard/lifecycle';
 import { readLastVisit } from '@/lib/dashboard/state';
@@ -301,7 +302,8 @@ export default async function CommandCenterPage() {
     activityFeed,
     lastVisit,
     pendingInbox,
-    taskletQueue
+    taskletQueue,
+    marketPulse
   ] = await Promise.all([
     getMandate(org.orgId),
     getCommandCenterData(org.orgId),
@@ -311,7 +313,8 @@ export default async function CommandCenterPage() {
     loadActivityFeed(org.orgId),
     readLastVisit(),
     getPendingInboxCount(org.orgId),
-    getTaskletQueue(org.orgId)
+    getTaskletQueue(org.orgId),
+    getMarketPulse()
   ]);
 
   // Real autonomous work logged since the prior visit — the honest "worked
@@ -439,6 +442,9 @@ export default async function CommandCenterPage() {
           </div>
         ))}
       </div>
+
+      {/* BotMemo market pulse — AI funding intelligence, synced every 6h */}
+      {marketPulse && <MarketPulseCard pulse={marketPulse} />}
 
       {/* Today's tasklets — approve-ready work the team drafted from real
           signals (inbox, pipeline, public inbound). Draft-only: each Approve

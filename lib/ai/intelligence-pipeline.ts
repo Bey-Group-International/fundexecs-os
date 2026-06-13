@@ -7,6 +7,7 @@ import { refreshOrgProfileEmbedding } from './profile-embedding';
 import { embedNetworkRecords } from './network-embeddings';
 import { AI_MODELS } from './models';
 import { fetchRecentFormD } from '@/lib/integrations/edgar';
+import { fetchBotMemoPulse, pulseExternalId } from '@/lib/integrations/botmemo';
 import {
   refreshComplianceTiers,
   type ComplianceRefreshSummary
@@ -36,6 +37,7 @@ const BRIEF_TIMEOUT_MS = 12_000;
 
 export interface CycleSummary {
   ingest: { fetched: number; inserted: number };
+  botmemo: { inserted: number };
   embed: { refreshed: number };
   network: { embedded: number; failed: number };
   score: { orgs: number; matchesCreated: number; failed: number };
@@ -302,6 +304,41 @@ export async function generateBriefings(maxOrgs = 25): Promise<{ written: number
   return { written };
 }
 
+/** Ingest the latest BotMemo market-pulse as a market signal. */
+export async function ingestBotMemo(): Promise<{ inserted: number }> {
+  const pulse = await fetchBotMemoPulse();
+  const externalId = pulseExternalId(pulse);
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from('market_signals')
+    .select('id')
+    .eq('source', 'botmemo')
+    .eq('source_external_id', externalId)
+    .limit(1);
+
+  if ((existing ?? []).length > 0) return { inserted: 0 };
+
+  const { error } = await admin.from('market_signals').insert({
+    source: 'botmemo',
+    source_external_id: externalId,
+    kind: 'market-pulse',
+    severity: 'info',
+    occurred_at: pulse.fetchedAt,
+    normalized: {
+      total_capital_usd: pulse.totalCapitalUsd,
+      deal_count: pulse.dealCount,
+      period: pulse.period,
+      startup_count: pulse.startupCount,
+      top_verticals: pulse.topVerticals,
+      source_url: pulse.sourceUrl,
+    },
+    raw_payload: pulse,
+  });
+
+  return { inserted: error ? 0 : 1 };
+}
+
 /** Run the full cycle. Each phase is isolated; errors are collected, not thrown. */
 export async function runIntelligenceCycle(): Promise<CycleSummary> {
   const errors: string[] = [];
@@ -315,6 +352,7 @@ export async function runIntelligenceCycle(): Promise<CycleSummary> {
   };
 
   const ingest = await safe('ingest', ingestFormD, { fetched: 0, inserted: 0 });
+  const botmemo = await safe('botmemo', ingestBotMemo, { inserted: 0 });
   const embed = await safe('embed', () => refreshStaleMandateEmbeddings(), { refreshed: 0 });
   const network = await safe('network', () => embedNetworkRecords(), { embedded: 0, failed: 0 });
   const score = await safe('score', scoreActiveOrgs, { orgs: 0, matchesCreated: 0, failed: 0 });
@@ -326,5 +364,5 @@ export async function runIntelligenceCycle(): Promise<CycleSummary> {
     failed: 0
   });
 
-  return { ingest, embed, network, score, judge, brief, compliance, errors };
+  return { ingest, botmemo, embed, network, score, judge, brief, compliance, errors };
 }
