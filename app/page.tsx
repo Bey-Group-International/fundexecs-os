@@ -573,7 +573,7 @@ export default function LandingPage() {
           }}
         >
           {/* Hero mascot — Earn orb */}
-          <div style={{ marginBottom: 20, position: 'relative' }}>
+          <div className="fx-coin-float" style={{ marginBottom: 20, position: 'relative' }}>
             {/* Outer glow ring */}
             <div
               aria-hidden

@@ -76,7 +76,19 @@ export default function WaitlistPage() {
             FundExecs <span style={{ color: '#475569', fontWeight: 500 }}>OS</span>
           </span>
         </Link>
-        <Link href="/login" style={{ fontSize: 13, color: '#64748b', textDecoration: 'none' }}>
+        <Link
+          href="/login"
+          style={{
+            fontSize: 13,
+            color: '#F7C948',
+            textDecoration: 'none',
+            fontWeight: 600,
+            padding: '7px 14px',
+            borderRadius: 9,
+            border: '1px solid rgba(247,201,72,0.25)',
+            background: 'rgba(247,201,72,0.07)'
+          }}
+        >
           Sign in
         </Link>
       </header>
@@ -105,23 +117,48 @@ export default function WaitlistPage() {
         >
           {/* Left: value prop */}
           <div>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '5px 13px',
-                borderRadius: 999,
-                border: '1px solid rgba(96,165,250,0.3)',
-                background: 'rgba(96,165,250,0.07)',
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#60a5fa',
-                marginBottom: 24
-              }}
-            >
-              <span style={{ width: 6, height: 6, borderRadius: 999, background: '#60a5fa' }} />
-              Invite-only private beta
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  padding: '5px 13px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(96,165,250,0.3)',
+                  background: 'rgba(96,165,250,0.07)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#60a5fa'
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 999,
+                    background: '#60a5fa',
+                    animation: 'pulse 2s infinite'
+                  }}
+                />
+                Invite-only private beta
+              </div>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  padding: '5px 13px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(247,201,72,0.3)',
+                  background: 'rgba(247,201,72,0.07)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#F7C948'
+                }}
+              >
+                247 operators on waitlist
+              </div>
             </div>
             <h1
               style={{
@@ -209,18 +246,18 @@ export default function WaitlistPage() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-              <div style={{ position: 'relative' }}>
+              <div className="fx-coin-float" style={{ position: 'relative' }}>
                 <div
                   style={{
                     position: 'absolute',
                     inset: -10,
                     borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(247,201,72,0.35), transparent 70%)',
-                    filter: 'blur(8px)'
+                    background: 'radial-gradient(circle, rgba(247,201,72,0.4), transparent 70%)',
+                    filter: 'blur(10px)'
                   }}
                 />
                 <div style={{ position: 'relative' }}>
-                  <EarnCoin size={52} />
+                  <EarnCoin size={56} />
                 </div>
               </div>
             </div>
@@ -242,6 +279,12 @@ export default function WaitlistPage() {
           </div>
         </div>
       </div>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
     </div>
   );
 }
