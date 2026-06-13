@@ -34,12 +34,14 @@ type TabId = (typeof NAV_TABS)[number]['id'];
 export default async function AdminPage({
   searchParams
 }: {
-  searchParams: Promise<Record<string, string>>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   if (!(await requirePlatformAdmin())) redirect('/command-center');
 
   const params = await searchParams;
-  const tab = (params.tab ?? 'applications') as TabId;
+  const rawTab = params.tab;
+  const tabParam = Array.isArray(rawTab) ? rawTab[0] : rawTab;
+  const tab: TabId = NAV_TABS.some((t) => t.id === tabParam) ? (tabParam as TabId) : 'applications';
 
   const org = await getActiveOrg();
   const [applicants, metrics, invites, referrals] = await Promise.all([

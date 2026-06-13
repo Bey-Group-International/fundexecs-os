@@ -35,6 +35,7 @@ export function ReferralPanel({
 
   function copyLink() {
     if (!referralUrl) return;
+    if (!navigator.clipboard) return;
     navigator.clipboard.writeText(referralUrl).then(
       () => {
         setCopied(true);
@@ -163,7 +164,7 @@ export function ReferralPanel({
                 <div className="text-[13px] font-medium text-fg-1">
                   Tier {t.tier}{' '}
                   <span className="text-[11.5px] font-normal text-fg-4">
-                    {t.tier === 1 ? '· direct referral' : `· ${t.tier}x removed`}
+                    {t.tier === 1 ? '· direct referral' : `· ${t.tier - 1}x removed`}
                   </span>
                 </div>
                 <Badge tone="success">{bpsToPercent(t.rateBps)}</Badge>
