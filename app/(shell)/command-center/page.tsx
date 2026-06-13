@@ -234,7 +234,7 @@ function OvernightPanel({ items }: { items: ActivityItem[] }) {
 
 function QueueList({ moves }: { moves: DeskMove[] }) {
   return (
-    <Panel icon={ListOrdered} eyebrow="Ranked by impact — one tap to open" title="Then, in order">
+    <Panel icon={ListOrdered} eyebrow="Ranked by impact — one tap to run" title="Then, in order">
       {moves.length === 0 ? (
         <p className="flex items-center gap-2 text-[13px] text-success">
           <CheckCircle2 size={16} aria-hidden />
@@ -248,25 +248,28 @@ function QueueList({ moves }: { moves: DeskMove[] }) {
               className="flex items-center gap-3 rounded-[12px] border border-[var(--border-faint)] bg-surface-1 px-3 py-2.5"
             >
               <span className="w-3 flex-none font-mono text-[11px] text-fg-5">{i + 2}</span>
-              <span
-                className={cn(
-                  'flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border',
-                  TONE_BOX[q.tone]
-                )}
-              >
-                <MandateIcon name={q.icon} size={15} strokeWidth={1.9} aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13.5px] font-semibold text-fg-1">{q.title}</div>
-                <div className="mt-0.5 truncate text-[11.5px] text-fg-4">{q.why}</div>
-              </div>
-              <Link
-                href={q.primary.href}
-                className="inline-flex flex-none items-center gap-1.5 rounded-xl border border-hairline bg-surface-2 px-3 py-1.5 text-[12.5px] font-medium text-fg-1 transition hover:bg-surface-3"
-              >
-                <Sparkles size={13} aria-hidden />
-                {q.primary.label}
+              {/* The body opens the live surface; the trailing button runs it with Earn. */}
+              <Link href={q.primary.href} className="flex min-w-0 flex-1 items-center gap-3">
+                <span
+                  className={cn(
+                    'flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border',
+                    TONE_BOX[q.tone]
+                  )}
+                >
+                  <MandateIcon name={q.icon} size={15} strokeWidth={1.9} aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-semibold text-fg-1">
+                    {q.title}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11.5px] text-fg-4">{q.why}</span>
+                </span>
               </Link>
+              <RunWithEarnButton
+                variant="compact"
+                label="Run"
+                ask={`Run this move: ${q.title}. ${q.why}`}
+              />
             </div>
           ))}
         </div>
