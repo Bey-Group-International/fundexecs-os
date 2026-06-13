@@ -136,8 +136,11 @@ export default function BookACallPage() {
         }}
       >
         <div style={{ width: '100%', maxWidth: 520, textAlign: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-            <EarnRunner size={88} glow />
+          <div
+            className="fx-coin-float"
+            style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}
+          >
+            <EarnRunner size={96} glow />
           </div>
           <div
             style={{

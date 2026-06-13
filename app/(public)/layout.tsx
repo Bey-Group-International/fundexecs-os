@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { EarnCoin } from '@/components/ui/EarnCoin';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.fundexecs.com')
@@ -9,7 +10,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
     <div className="min-h-screen bg-[#070b14] text-[#cbd5e1]">
       <header className="border-b border-white/[0.06] px-6 py-4">
         <a href="/" className="flex items-center gap-2 w-fit">
-          <img src="/earn-coin.png" alt="FundExecs OS" className="h-7 w-7" />
+          <EarnCoin size={28} />
           <span className="text-sm font-semibold text-white tracking-tight">FundExecs OS</span>
         </a>
       </header>
