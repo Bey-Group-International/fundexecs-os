@@ -35,7 +35,7 @@ import {
   WIRED_CHANNELS,
   type InboxChannel,
   type InboxItem
-} from '@/lib/queries/inbox';
+} from '@/lib/inbox/channels';
 import { cn } from '@/lib/utils';
 
 /* The Relationship Inbox (P1-P3). Channel-agnostic triage list with channel

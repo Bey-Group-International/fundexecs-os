@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import type { InteractionType, ProviderSignals } from '@/lib/integrations/types';
-import type { InboxChannel } from '@/lib/queries/inbox';
+import type { InboxChannel } from '@/lib/inbox/channels';
 
 /* ============================================================================
  * lib/inbox/ingest.ts — turn normalized provider interactions into Relationship

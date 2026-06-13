@@ -1,5 +1,12 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import {
+  type InboxChannel,
+  type InboxItem,
+  type InboxStatus,
+  WIRED_CHANNELS,
+  COMING_SOON_CHANNELS
+} from '@/lib/inbox/channels';
 
 /* ============================================================================
  * lib/queries/inbox.ts — Relationship Inbox read surface (P1).
@@ -10,40 +17,16 @@ import { createClient } from '@/lib/supabase/server';
  * yet in the generated Supabase types, so we read through a narrow typed
  * escape (same pattern as inbox-intelligence.ts's briefing reader).
  *
+ * Channel types + constants + the InboxItem shape live in the client-safe
+ * `@/lib/inbox/channels` module (this file is `server-only`); re-exported here
+ * so existing import sites keep working.
+ *
  * The table is empty until ingestion lands (P2). Every read fails OPEN to an
  * empty inbox so the surface never breaks the shell.
  * ========================================================================= */
 
-/** Communications channels the inbox can surface. */
-export type InboxChannel = 'email' | 'slack' | 'call' | 'linkedin' | 'sms' | 'webinar';
-
-export type InboxStatus = 'pending' | 'accepted' | 'dismissed' | 'sent' | 'snoozed';
-
-/** Channels with a live ingest path today vs. catalogued for soon. */
-export const WIRED_CHANNELS: InboxChannel[] = ['email', 'slack', 'call'];
-export const COMING_SOON_CHANNELS: InboxChannel[] = ['linkedin', 'sms'];
-
-export interface InboxItem {
-  id: string;
-  channel: InboxChannel;
-  direction: 'inbound' | 'outbound';
-  /** Provider id / room name — for 'call' items this is the LiveKit room. */
-  externalId: string | null;
-  threadId: string | null;
-  contactId: string | null;
-  dealId: string | null;
-  subject: string;
-  preview: string;
-  /** Earn's drafted reply, when one has been generated (P3). */
-  draftReply: string | null;
-  score: number;
-  status: InboxStatus;
-  /** [{ factor, weight, detail }] — same shape as `matches.rationale`. */
-  rationale: Record<string, unknown>[];
-  occurredAt: string | null;
-  createdAt: string;
-  actedAt: string | null;
-}
+export type { InboxChannel, InboxItem, InboxStatus };
+export { WIRED_CHANNELS, COMING_SOON_CHANNELS };
 
 export interface InboxData {
   pending: InboxItem[];
