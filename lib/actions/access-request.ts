@@ -2,6 +2,7 @@
 
 import { headers } from 'next/headers';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { emitOutboundEvent } from '@/lib/integrations/outbound';
 import {
   RAISING_RANGES,
   type AccessRequestInput,
@@ -16,15 +17,14 @@ import {
  * `submitAccessRequest()` — to change where leads land (CRM, webhook, email
  * notification), change THIS function only.
  *
- * Today it persists to `public.access_requests`
+ * It persists to `public.access_requests`
  * (supabase/migrations/20260610160000_access_requests.sql) via the
  * service-role admin client — the homepage is unauthenticated and the table
  * has no anon grants, mirroring the raise_interests public-write pattern
- * (lib/actions/raise-interest.ts).
- *
- * TODO(team): plug the real CRM / webhook / notification destination in at the
- * marked block below once one is chosen. Do not hardcode secrets — read any
- * endpoint or key from server env vars.
+ * (lib/actions/raise-interest.ts) — and then forwards the lead to the
+ * configured outbound webhook / CRM (`OUTBOUND_WEBHOOK_URL`, never-block) via
+ * lib/integrations/outbound.ts. To add another destination (a second CRM, an
+ * email notification), extend that emitter or add a call at the marked block.
  * ========================================================================= */
 
 const EMAIL_MAX = 254;
@@ -123,10 +123,23 @@ export async function submitAccessRequest(input: AccessRequestInput): Promise<Ac
   }
 
   // ── Integration point ──────────────────────────────────────────────────────
-  // TODO(team): forward the lead to the real CRM / webhook / email notification
-  // here once a destination is chosen (read the endpoint from a server env
-  // var). The row above is already persisted, so a forwarding failure must
-  // never fail the visitor's submission — wrap it in try/catch.
+  // Forward the lead to the configured CRM / webhook (OUTBOUND_WEBHOOK_URL). The
+  // row above is already persisted and `emitOutboundEvent` is never-block, so a
+  // forwarding failure (or no destination configured) never fails the visitor's
+  // submission. Fire-and-forget — don't make the prospect wait on the round-trip.
+  void emitOutboundEvent({
+    type: 'access_request',
+    occurredAt: new Date().toISOString(),
+    data: {
+      email,
+      fullName,
+      firm,
+      roleTitle,
+      raisingRange: input.raisingRange,
+      referralCode,
+      source
+    }
+  });
   // ───────────────────────────────────────────────────────────────────────────
 
   return { ok: true };
