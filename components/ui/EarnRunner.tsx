@@ -10,19 +10,18 @@ export interface EarnRunnerProps {
 }
 
 /**
- * EarnRunner — the running-coin mascot, Earn in motion. The hero brand mark for
- * the landing + onboarding (where it has room to breathe); the tight circular
- * {@link EarnCoin} stays in app chrome / nav.
+ * EarnRunner — the Earn mascot hero brand mark for the landing + onboarding
+ * (where it has room to breathe); the tight circular {@link EarnCoin} stays in
+ * app chrome / nav.
  *
- * Renders `public/earn-running.png` via a string `src` (not a static import) so
- * the build never fails if the asset hasn't been committed yet — it simply
- * 404s at runtime until the file lands. Ship a transparent PNG for the cleanest
- * look on the dark hero; the optional `glow` halo sits behind it either way.
+ * Renders `public/earn-coin.png` (the shipped coin asset) via a string `src`,
+ * sized larger than the chrome coin and wrapped in an optional gold `glow` halo
+ * for the hero treatment.
  */
 export function EarnRunner({ size = 96, glow = false, className }: EarnRunnerProps) {
   const mascot = (
     <Image
-      src="/earn-running.png"
+      src="/earn-coin.png"
       alt="Earn"
       width={size}
       height={size}
