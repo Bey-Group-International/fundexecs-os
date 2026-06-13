@@ -8,9 +8,11 @@ import {
   Check,
   FileSearch,
   Landmark,
+  ListChecks,
   Loader2,
   type LucideIcon,
   Radar,
+  ScrollText,
   ShieldCheck,
   Sparkles,
   Wand2,
@@ -21,6 +23,8 @@ import { EarnCoin } from '@/components/ui/EarnCoin';
 import { executeEarnAction } from '@/lib/actions/earn-actions';
 import { EARN_NAV_DESTINATIONS } from '@/lib/ai/earn-nav';
 import type { EarnOpenDetail } from '@/lib/earn/launcher';
+import { TaskletQueue } from '@/components/earn/TaskletQueue';
+import type { Tasklet } from '@/lib/tasklets/types';
 import { TEAM_ROSTER } from '@/lib/team';
 import { cn } from '@/lib/utils';
 
@@ -138,6 +142,8 @@ export function EarnDock({
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [tasklets, setTasklets] = useState<Tasklet[]>([]);
+  const [taskletsLoaded, setTaskletsLoaded] = useState(false);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [actionPending, setActionPending] = useState<string | null>(null);
@@ -169,6 +175,25 @@ export function EarnDock({
       cancelled = true;
     };
   }, [open, historyLoaded]);
+
+  // Load the approve-ready tasklet queue once per mount-open. Refreshed from
+  // live signals server-side; degrades to nothing if the queue is empty.
+  useEffect(() => {
+    if (!open || taskletsLoaded) return;
+    let cancelled = false;
+    fetch('/api/earn/tasklets')
+      .then((r) => r.json())
+      .then((data: { tasklets?: Tasklet[] }) => {
+        if (!cancelled && Array.isArray(data.tasklets)) setTasklets(data.tasklets);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setTaskletsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, taskletsLoaded]);
 
   // Dialog ergonomics.
   useEffect(() => {
@@ -402,6 +427,18 @@ export function EarnDock({
             </div>
           ) : messages.length === 0 ? (
             <div>
+              {/* Today's tasklets — approve-ready work armed from real signals,
+                  surfaced first so the operator's day opens on decisions. */}
+              {tasklets.length > 0 && (
+                <div className="mb-5">
+                  <div className="mb-2 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                    <ListChecks size={12} className="text-gold-1" aria-hidden />
+                    Today&apos;s tasklets · {tasklets.length}
+                  </div>
+                  <TaskletQueue initialTasklets={tasklets} variant="dock" />
+                </div>
+              )}
+
               {/* primary prompt + command-first grid */}
               <h2 className="text-[15.5px] font-semibold tracking-[-0.01em] text-fg-1">
                 What are we moving forward today?
@@ -491,6 +528,21 @@ export function EarnDock({
                   );
                 })}
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  router.push('/earn');
+                  onClose();
+                }}
+                className="mt-3 flex w-full items-center justify-between rounded-[12px] border border-hairline bg-surface-1 px-3.5 py-2.5 text-left transition hover:border-[var(--gold-line)] hover:bg-[var(--gold-soft)]"
+              >
+                <span className="flex items-center gap-2 text-[12px] font-semibold text-fg-2">
+                  <ScrollText size={14} className="text-gold-1" aria-hidden />
+                  Your Earn ledger — everything the team has done
+                </span>
+                <ArrowRight size={14} className="flex-none text-fg-4" aria-hidden />
+              </button>
             </div>
           ) : (
             <div className="flex flex-col gap-3">

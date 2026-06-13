@@ -61,7 +61,10 @@ export function getOAuthProviderConfig(provider: string): OAuthProviderConfig | 
         'im:read',
         'im:history',
         'users:read',
-        'users:read.email'
+        'users:read.email',
+        // chat:write lets the Relationship Inbox post Earn-drafted DM replies as
+        // the user. Existing connections must reconnect once to grant it.
+        'chat:write'
       ])
     };
   }

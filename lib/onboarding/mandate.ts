@@ -350,6 +350,13 @@ export function identityRoleFor(group: InvestorGroup): string {
 
 export interface Specialist {
   id: string;
+  /**
+   * Canonical brain slug in `lib/team/roster.ts` — the single source of truth
+   * for `name` + `title`. The `mandate.test` drift guard fails if either field
+   * diverges from the roster, so the activation desk can never disagree with
+   * the rest of the app.
+   */
+  slug: string;
   name: string;
   title: string;
   /** lucide-react icon name. */
@@ -358,9 +365,18 @@ export interface Specialist {
   build: string;
 }
 
+/**
+ * The activation desk — the specialists that "build your desk" once the mandate
+ * is briefed. `name` + `title` are the canonical roster wording (kept honest by
+ * the drift guard in `mandate.test.ts`, keyed on `slug`); `icon` is the
+ * `MandateIcon` glyph and `build` is the activation payoff copy, both local to
+ * onboarding. Earn (the COO) is intentionally absent — `ActsOn` renders the
+ * coin for the `'earn'` id directly. Ported 1:1 from the prototype data layer.
+ */
 export const TEAM: readonly Specialist[] = [
   {
     id: 'sterling',
+    slug: 'master-workflow',
     name: 'Sterling',
     title: 'Chief of Staff',
     icon: 'list-checks',
@@ -368,6 +384,7 @@ export const TEAM: readonly Specialist[] = [
   },
   {
     id: 'dalia',
+    slug: 'automater',
     name: 'Dalia',
     title: 'Head of Data Operations',
     icon: 'database',
@@ -375,6 +392,7 @@ export const TEAM: readonly Specialist[] = [
   },
   {
     id: 'theodore',
+    slug: 'executive-advisor',
     name: 'Theodore',
     title: 'Chief Strategy Advisor',
     icon: 'compass',
@@ -382,6 +400,7 @@ export const TEAM: readonly Specialist[] = [
   },
   {
     id: 'marcus',
+    slug: 'deal-sourcer',
     name: 'Marcus',
     title: 'Head of Deal Origination',
     icon: 'radar',
@@ -389,13 +408,15 @@ export const TEAM: readonly Specialist[] = [
   },
   {
     id: 'sloane',
+    slug: 'capital-raiser',
     name: 'Sloane',
-    title: 'MD, Capital Formation',
+    title: 'Managing Director, Capital Formation',
     icon: 'landmark',
     build: 'Drafted a 40-name institutional LP target list for the raise.'
   },
   {
     id: 'priya',
+    slug: 'capital-connector',
     name: 'Priya',
     title: 'Director of Capital Markets',
     icon: 'arrow-left-right',
@@ -403,6 +424,7 @@ export const TEAM: readonly Specialist[] = [
   },
   {
     id: 'adrian',
+    slug: 'legal-admin',
     name: 'Adrian',
     title: 'General Counsel & Compliance',
     icon: 'scale',
@@ -410,6 +432,7 @@ export const TEAM: readonly Specialist[] = [
   },
   {
     id: 'eleanor',
+    slug: 'investor-relations',
     name: 'Eleanor',
     title: 'Head of Investor Relations',
     icon: 'users',
@@ -417,13 +440,15 @@ export const TEAM: readonly Specialist[] = [
   },
   {
     id: 'vivian',
+    slug: 'rainmaker',
     name: 'Vivian',
-    title: 'MD, Demand Generation',
+    title: 'Managing Director, Demand Generation',
     icon: 'megaphone',
     build: 'Primed a demand engine to keep the pipeline full.'
   },
   {
     id: 'camille',
+    slug: 'lead-generator',
     name: 'Camille',
     title: 'Head of Top-of-Funnel',
     icon: 'filter',
@@ -431,10 +456,35 @@ export const TEAM: readonly Specialist[] = [
   },
   {
     id: 'sienna',
+    slug: 'pr-director',
     name: 'Sienna',
     title: 'Director of Communications',
     icon: 'pen-line',
     build: 'Framed your market narrative and positioning.'
+  },
+  {
+    id: 'noah',
+    slug: 'seo-disruptor',
+    name: 'Noah',
+    title: 'Head of Digital Presence',
+    icon: 'globe',
+    build: 'Began building your organic visibility.'
+  },
+  {
+    id: 'jasper',
+    slug: 'event-curator',
+    name: 'Jasper',
+    title: 'Director of Private Events',
+    icon: 'calendar-heart',
+    build: 'Lined up the rooms worth being in this quarter.'
+  },
+  {
+    id: 'felix',
+    slug: 'workflow-instructor',
+    name: 'Felix',
+    title: 'Director of Enablement',
+    icon: 'graduation-cap',
+    build: 'Prepared a playbook so you ramp in days, not quarters.'
   }
 ];
 

@@ -1722,38 +1722,142 @@ export type Database = {
           }
         ];
       };
+      deal_interest_captures: {
+        Row: {
+          created_at: string;
+          deal_id: string;
+          email: string;
+          id: string;
+          name: string;
+          note: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          deal_id: string;
+          email: string;
+          id?: string;
+          name: string;
+          note?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          deal_id?: string;
+          email?: string;
+          id?: string;
+          name?: string;
+          note?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'deal_interest_captures_deal_id_fkey';
+            columns: ['deal_id'];
+            isOneToOne: false;
+            referencedRelation: 'deals';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      deal_submissions: {
+        Row: {
+          company_name: string;
+          created_at: string;
+          deck_url: string | null;
+          description: string | null;
+          founder_email: string;
+          founder_name: string;
+          id: string;
+          raise_amount: number | null;
+          stage: string;
+          status: string;
+          website: string | null;
+        };
+        Insert: {
+          company_name: string;
+          created_at?: string;
+          deck_url?: string | null;
+          description?: string | null;
+          founder_email: string;
+          founder_name: string;
+          id?: string;
+          raise_amount?: number | null;
+          stage: string;
+          status?: string;
+          website?: string | null;
+        };
+        Update: {
+          company_name?: string;
+          created_at?: string;
+          deck_url?: string | null;
+          description?: string | null;
+          founder_email?: string;
+          founder_name?: string;
+          id?: string;
+          raise_amount?: number | null;
+          stage?: string;
+          status?: string;
+          website?: string | null;
+        };
+        Relationships: [];
+      };
       deals: {
         Row: {
           amount: number | null;
+          close_date: string | null;
+          committed_amount: number | null;
+          company_website: string | null;
           created_at: string;
+          deck_url: string | null;
+          founder_name: string | null;
           id: string;
           name: string;
           org_id: string;
           owner_id: string | null;
+          public_slug: string | null;
+          public_visible: boolean;
+          raise_summary: string | null;
           stage: string;
           status: string;
+          target_amount: number | null;
           updated_at: string;
         };
         Insert: {
           amount?: number | null;
+          close_date?: string | null;
+          committed_amount?: number | null;
+          company_website?: string | null;
           created_at?: string;
+          deck_url?: string | null;
+          founder_name?: string | null;
           id?: string;
           name: string;
           org_id: string;
           owner_id?: string | null;
+          public_slug?: string | null;
+          public_visible?: boolean;
+          raise_summary?: string | null;
           stage?: string;
           status?: string;
+          target_amount?: number | null;
           updated_at?: string;
         };
         Update: {
           amount?: number | null;
+          close_date?: string | null;
+          committed_amount?: number | null;
+          company_website?: string | null;
           created_at?: string;
+          deck_url?: string | null;
+          founder_name?: string | null;
           id?: string;
           name?: string;
           org_id?: string;
           owner_id?: string | null;
+          public_slug?: string | null;
+          public_visible?: boolean;
+          raise_summary?: string | null;
           stage?: string;
           status?: string;
+          target_amount?: number | null;
           updated_at?: string;
         };
         Relationships: [

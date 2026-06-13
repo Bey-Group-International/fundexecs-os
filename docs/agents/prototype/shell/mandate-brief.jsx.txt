@@ -1,0 +1,414 @@
+/* ===========================================================
+   FundExecs OS — Onboarding Prototype · The Mandate Brief
+   A short, staged wizard that reframes "make your profile" as
+   "brief your executive team" — then the team activates.
+   =========================================================== */
+
+const memberById = (id) => TEAM.find(t => t.id === id) || {};
+
+/* working-title suggestions for managers without a firm name yet */
+const NAME_SEEDS = ['Northgate Capital', 'Vantage Partners', 'Cedar Lane Capital', 'Meridian Ventures',
+  'Atlas Holdings', 'Granite Capital', 'Beacon Partners', 'Summit Lane Capital', 'Keystone Ventures', 'Harbor Point Capital'];
+function suggestName(seed) { return NAME_SEEDS[seed % NAME_SEEDS.length]; }
+
+/* ---- choice card (objective / vehicle) ---- */
+function ChoiceCard({ icon, label, sub, note, selected, recommended, onClick, compact }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button className="clickable" onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', width: '100%',
+        padding: compact ? '12px 13px' : '14px 15px', borderRadius: 14,
+        background: selected ? 'var(--accent-soft)' : hover ? 'var(--surface-2)' : 'var(--surface-1)',
+        border: `1px solid ${selected ? 'var(--accent-line)' : 'var(--border)'}`,
+        boxShadow: selected ? '0 0 0 1px var(--accent-line)' : 'none' }}>
+      <span style={{ width: 38, height: 38, borderRadius: 11, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: selected ? 'var(--accent)' : 'var(--surface-2)', color: selected ? '#fff' : 'var(--fg-3)',
+        border: selected ? 'none' : '1px solid var(--border)' }}>
+        <Icon name={icon} size={19} />
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg-1)' }}>{label}</span>
+          {recommended && <Badge tone="gold" style={{ fontSize: 9, padding: '1px 6px' }}>Recommended</Badge>}
+        </div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--fg-4)', marginTop: 2 }}>{sub}</div>}
+        {note && <div style={{ fontSize: 11, color: 'var(--gold-1)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="sparkles" size={11} />{note}</div>}
+      </div>
+      <span style={{ width: 20, height: 20, flex: 'none', borderRadius: '50%', border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border-strong)'}`,
+        background: selected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {selected && <Icon name="check" size={13} color="#fff" />}
+      </span>
+    </button>
+  );
+}
+
+function Chip({ label, selected, onClick }) {
+  return (
+    <button className="clickable" onClick={onClick}
+      style={{ fontSize: 13, fontWeight: 500, padding: '8px 14px', borderRadius: 999,
+        color: selected ? 'var(--fg-1)' : 'var(--fg-3)',
+        background: selected ? 'var(--accent-soft)' : 'var(--surface-1)',
+        border: `1px solid ${selected ? 'var(--accent-line)' : 'var(--border)'}` }}>
+      {selected && <Icon name="check" size={12} style={{ marginRight: 6, verticalAlign: '-1px' }} />}{label}
+    </button>
+  );
+}
+
+/* who acts on this step — teaches "the team does the work" (labeled so it reads as intentional) */
+function ActsOn({ ids, text }) {
+  return (
+    <div style={{ borderRadius: 13, background: 'var(--surface-1)', border: '1px solid var(--border)', padding: '12px 14px' }}>
+      <div className="t-eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 9 }}>
+        <Icon name="sparkles" size={12} color="var(--gold-1)" />Who acts on this
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+        <div style={{ display: 'flex' }}>
+          {ids.map((id, i) => (
+            <span key={id} style={{ marginLeft: i ? -8 : 0, borderRadius: '50%', border: '2px solid var(--bg-1)', display: 'inline-flex' }}>
+              <SpecialistMark member={memberById(id)} size={28} tone="azure" />
+            </span>
+          ))}
+        </div>
+        <span style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.5, flex: 1 }}>{text}</span>
+      </div>
+    </div>
+  );
+}
+
+const STEPS = [
+  { key: 'profile', label: 'Profile', icon: 'id-card' },
+  { key: 'mandate', label: 'Mandate', icon: 'target' },
+  { key: 'thesis', label: 'Thesis', icon: 'compass' },
+  { key: 'review', label: 'Review', icon: 'check-circle-2' },
+];
+
+function MandateWizard({ mandate, setMandate, onActivate, onExit, tw = {} }) {
+  const requireFirm = !!tw.requireFirm;
+  const gam = tw.gamification || 'quiet';
+  const [step, setStep] = useState(0);
+  const set = (k, v) => setMandate(p => ({ ...p, [k]: v }));
+  const toggleSector = (s) => setMandate(p => ({ ...p,
+    sectors: p.sectors.includes(s) ? p.sectors.filter(x => x !== s) : [...p.sectors, s] }));
+  const back = () => step === 0 ? onExit() : setStep(step - 1);
+  const next = () => step < STEPS.length - 1 ? setStep(step + 1) : onActivate();
+
+  const cfg = mandateCfg(mandate.investorGroup);
+  const sizeLabel = (cfg.sizes.find(s => s.id === mandate.size) || {}).label;
+  const vehLabel = (cfg.vehicles.find(v => v.id === mandate.vehicle) || {}).label;
+  const objLabel = (cfg.objectives.find(o => o.id === mandate.objective) || {}).label;
+
+  return (
+    <div data-screen-label="Mandate brief" style={{ minHeight: '100%', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+      <div className="bg-aurora" />
+      {/* header + stepper — the single source of direction */}
+      <div style={{ position: 'relative', zIndex: 1, padding: '22px clamp(16px,4vw,28px) 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, maxWidth: 640, margin: '0 auto', width: '100%' }}>
+          <EarnCoin size={26} />
+          <div style={{ fontSize: 12.5, color: 'var(--fg-3)' }}><b style={{ color: 'var(--fg-1)' }}>Brief your team.</b> Earn turns this into action — you only ever approve.</div>
+        </div>
+        {/* stepper */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: 640, margin: '18px auto 0', width: '100%' }}>
+          {STEPS.map((s, i) => {
+            const done = i < step, now = i === step;
+            return (
+              <React.Fragment key={s.key}>
+                <button className="clickable" onClick={() => i < step && setStep(i)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: i < step ? 'pointer' : 'default' }}>
+                  <span style={{ width: 26, height: 26, borderRadius: 999, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, fontWeight: 600, background: done || now ? 'linear-gradient(135deg,#3B74F0,#2152D8)' : 'var(--surface-2)',
+                    color: done || now ? '#fff' : 'var(--fg-4)', border: done || now ? 'none' : '1px solid var(--border)' }}>
+                    {done ? <Icon name="check" size={13} /> : i + 1}
+                  </span>
+                  <span style={{ fontSize: 12.5, fontWeight: 500, color: now ? 'var(--fg-1)' : 'var(--fg-4)', display: 'none' }} className="step-label">{s.label}</span>
+                </button>
+                {i < STEPS.length - 1 && <div style={{ flex: 1, height: 2, borderRadius: 999, background: i < step ? 'var(--accent)' : 'var(--border)' }} />}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* step body */}
+      <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px clamp(16px,4vw,28px) 24px' }}>
+        <div className="card fade-in" key={step} style={{ width: '100%', maxWidth: 640, padding: 'clamp(20px,4vw,30px)' }}>
+          <div className="t-eyebrow" style={{ marginBottom: 7 }}>Step {step + 1} of {STEPS.length}</div>
+
+          {step === 0 && <>
+            <div className="t-h2" style={{ fontSize: 22 }}>Your investor profile</div>
+            <p style={{ fontSize: 13.5, color: 'var(--fg-3)', margin: '7px 0 18px', lineHeight: 1.55 }}>This is where we start. Tell the team who you are as an investor — it calibrates everything they do for you. First-timers and students are welcome; the team carries the experience you don't have yet.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14, marginBottom: 18, alignItems: 'start' }}>
+              <Field label="Your name" icon="user" value={mandate.principal} onChange={v => set('principal', v)} placeholder="Jordan Avery" />
+              <div>
+                {!mandate.noFirm ? (
+                  <Field label="Fund or firm name" icon="building-2" value={mandate.firm} onChange={v => set('firm', v)} placeholder="Acme Capital" hint={requireFirm ? 'Required' : 'Optional — you can start without one'} />
+                ) : (
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={{ fontSize: 12.5, color: 'var(--fg-3)', fontWeight: 500 }}>Working title <span style={{ color: 'var(--gold-1)' }}>· named by Earn</span></span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)', borderRadius: 12, padding: '10px 10px 10px 12px' }}>
+                      <EarnCoin size={20} />
+                      <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--fg-1)' }}>{mandate.firm || suggestName(0)}</span>
+                      <button className="clickable" title="Suggest another" onClick={() => { const ns = (mandate.firmSeed || 0) + 1; setMandate(p => ({ ...p, firmSeed: ns, firm: suggestName(ns) })); }}
+                        style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-1)', border: '1px solid var(--gold-line)' }}><Icon name="shuffle" size={14} /></button>
+                    </div>
+                    <span style={{ fontSize: 11.5, color: 'var(--fg-5)' }}>You can rename it anytime — nothing's locked in.</span>
+                  </label>
+                )}
+                <button className="clickable" onClick={() => setMandate(p => p.noFirm ? { ...p, noFirm: false, firm: '' } : { ...p, noFirm: true, firmSeed: 0, firm: suggestName(0) })}
+                  style={{ marginTop: 8, fontSize: 12, color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Icon name={mandate.noFirm ? 'pencil' : 'sparkles'} size={13} />
+                  {mandate.noFirm ? 'Enter my own name instead' : "I don't have a fund name yet"}
+                </button>
+              </div>
+            </div>
+            <div className="t-eyebrow" style={{ marginBottom: 9 }}>Describe yourself</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }}>
+              {ROLE_GROUPS.map(g => (
+                <ChoiceCard key={g.id} icon={g.icon} label={g.label} sub={g.sub} compact selected={mandate.investorGroup === g.id}
+                  onClick={() => setMandate(p => ({ ...p, investorGroup: g.id, investorRole: g.roles[0], ...groupDefaults(g.id) }))} />
+              ))}
+            </div>
+            {(() => {
+              const grp = ROLE_GROUPS.find(g => g.id === mandate.investorGroup) || ROLE_GROUPS[0];
+              return (
+                <div style={{ marginTop: 16 }}>
+                  <div className="t-eyebrow" style={{ marginBottom: 9 }}>Which best fits?</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {grp.roles.map(r => <Chip key={r} label={r} selected={mandate.investorRole === r} onClick={() => set('investorRole', r)} />)}
+                  </div>
+                  {mandate.investorRole === 'Student-led fund' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 11, fontSize: 12, color: 'var(--gold-1)' }}>
+                      <Icon name="sparkles" size={13} />No experience needed — the team carries it. Students launch and run real vehicles here.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '0 28px' }}>
+              <div>
+                <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Experience</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{EXPERIENCE.map(e => <Chip key={e} label={e} selected={mandate.experience === e} onClick={() => set('experience', e)} />)}</div>
+              </div>
+              <div>
+                <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Standing</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{STANDING.map(s => <Chip key={s} label={s} selected={mandate.standing === s} onClick={() => set('standing', s)} />)}</div>
+              </div>
+            </div>
+              <div style={{ marginTop: 20 }}><ActsOn ids={['theodore', 'adrian', 'earn']} text="Theodore calibrates the playbook to your role and experience, Adrian sets the right compliance path for your standing, and Earn tunes how much it does for you." /></div>
+          </>}
+
+          {step === 1 && <>
+            <div className="t-h2" style={{ fontSize: 22 }}>{cfg.heading}</div>
+            <p style={{ fontSize: 13.5, color: 'var(--fg-3)', margin: '7px 0 18px', lineHeight: 1.55 }}>{cfg.sub}</p>
+            <div className="t-eyebrow" style={{ marginBottom: 9 }}>{cfg.objLabel}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 10 }}>
+              {cfg.objectives.map(o => <ChoiceCard key={o.id} {...o} selected={mandate.objective === o.id} onClick={() => set('objective', o.id)} />)}
+            </div>
+            <div className="t-eyebrow" style={{ margin: '22px 0 9px' }}>{cfg.vehLabel}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(165px,1fr))', gap: 10 }}>
+              {cfg.vehicles.map(v => <ChoiceCard key={v.id} icon={v.icon} label={v.label} note={v.note} compact selected={mandate.vehicle === v.id} onClick={() => set('vehicle', v.id)} />)}
+            </div>
+            <div className="t-eyebrow" style={{ margin: '22px 0 9px' }}>{cfg.sizeLabel}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+              {cfg.sizes.map(s => {
+                const on = mandate.size === s.id;
+                return (
+                  <button key={s.id} className="clickable" onClick={() => set('size', s.id)} style={{ textAlign: 'center', padding: '14px 8px', borderRadius: 13,
+                    background: on ? 'var(--gold-soft)' : 'var(--surface-1)', border: `1px solid ${on ? 'var(--gold-line)' : 'var(--border)'}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 600, color: on ? 'var(--gold-1)' : 'var(--fg-1)', fontFeatureSettings: "'tnum'" }}>{s.label}</div>
+                    <div style={{ fontSize: 10.5, color: 'var(--fg-4)', marginTop: 3 }}>{s.sub}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 18 }}><ActsOn ids={cfg.acts} text={cfg.actsText} /></div>
+          </>}
+
+          {step === 2 && <>
+            <div className="t-h2" style={{ fontSize: 22 }}>What's your thesis?</div>
+            <p style={{ fontSize: 13.5, color: 'var(--fg-3)', margin: '7px 0 18px', lineHeight: 1.55 }}>Where you'll hunt. Rough is fine — Earn sharpens it. This is how the team knows what to source and who to raise from.</p>
+            <div className="t-eyebrow" style={{ marginBottom: 9 }}>Sectors <span style={{ color: 'var(--fg-5)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· pick any</span></div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {SECTORS.map(s => <Chip key={s} label={s} selected={mandate.sectors.includes(s)} onClick={() => toggleSector(s)} />)}
+            </div>
+            <div className="t-eyebrow" style={{ margin: '22px 0 9px' }}>Stage</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {STAGES.map(s => <Chip key={s} label={s} selected={mandate.stage === s} onClick={() => set('stage', s)} />)}
+            </div>
+            <div className="t-eyebrow" style={{ margin: '22px 0 9px' }}>Geography</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {GEOS.map(g => <Chip key={g} label={g} selected={mandate.geo === g} onClick={() => set('geo', g)} />)}
+            </div>
+            <div style={{ marginTop: 20 }}><ActsOn ids={['marcus', 'theodore']} text="Marcus sources on-thesis deals against this. Theodore pressure-tests the thesis before anything reaches your desk." /></div>
+          </>}
+
+          {step === 3 && <>
+            <div className="t-h2" style={{ fontSize: 22 }}>Your mandate, ready to brief</div>
+            <p style={{ fontSize: 13.5, color: 'var(--fg-3)', margin: '7px 0 18px', lineHeight: 1.55 }}>Confirm and the whole team goes to work building your desk. You'll review everything before anything is sent.</p>
+            <div style={{ borderRadius: 14, border: '1px solid var(--border)', overflow: 'hidden' }}>
+              {[['Principal', mandate.principal || 'Jordan Avery'], ['Firm', mandate.firm || 'Acme Capital'],
+                ['Investor', `${mandate.investorRole} · ${mandate.experience}`], ['Standing', mandate.standing],
+                ['Objective', objLabel], [cfg.vehLabel, vehLabel], [cfg.sizeLabel, sizeLabel],
+                ['Thesis', `${mandate.sectors.join(', ') || 'Generalist'} · ${mandate.stage}`], ['Geography', mandate.geo]].map(([k, v], i) => (
+                <div key={k} style={{ display: 'flex', gap: 14, padding: '11px 15px', background: i % 2 ? 'transparent' : 'var(--surface-1)', borderTop: i ? '1px solid var(--border-faint)' : 'none' }}>
+                  <span style={{ width: 110, flex: 'none', fontSize: 12, color: 'var(--fg-4)' }}>{k}</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--fg-1)' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+            {gam !== 'off' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, padding: '10px 13px', borderRadius: 12, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)' }}>
+              <EarnCoin size={22} />
+              <span style={{ fontSize: 12, color: 'var(--gold-1)', fontWeight: 500 }}>Briefing the team earns your first +150 XP — Level 1: Operator.</span>
+            </div>
+            )}
+          </>}
+
+          {/* footer nav */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 26 }}>
+            <Button variant="ghost" icon="arrow-left" onClick={back}>{step === 0 ? 'Back' : 'Back'}</Button>
+            <Button variant={step === STEPS.length - 1 ? 'gold' : 'primary'} iconRight={step === STEPS.length - 1 ? 'sparkles' : 'arrow-right'} onClick={next}>
+              {step === STEPS.length - 1 ? 'Brief the team' : 'Continue'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================== ACTIVATION =========================== */
+function Activation({ mandate, onDone }) {
+  const order = ACTIVATION;
+  const [n, setN] = useState(0);          // specialists revealed
+  const [complete, setComplete] = useState(false);
+  useEffect(() => {
+    let i = 0;
+    const t = setInterval(() => {
+      i += 1; setN(i);
+      if (i >= order.length) { clearInterval(t); setTimeout(() => setComplete(true), 700); }
+    }, 720);
+    return () => clearInterval(t);
+  }, []);
+  const stats = workspaceStats(mandate);
+  const first = (mandate.principal || 'Jordan Avery').split(' ')[0];
+
+  return (
+    <div data-screen-label="Team activating" style={{ minHeight: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
+      <div className="bg-aurora" />
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(40% 34% at 50% 18%, rgba(247,201,72,0.10), transparent 70%)' }} />
+      <div className="fade-in" style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 640 }}>
+        {/* Earn */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 26 }}>
+          <div style={{ position: 'relative', marginBottom: 16 }}>
+            <div style={{ position: 'absolute', inset: -12, borderRadius: '50%', background: 'radial-gradient(circle, rgba(247,201,72,0.5), transparent 70%)', filter: 'blur(10px)' }} className={complete ? '' : 'pulse-dot'} />
+            <div style={{ position: 'relative' }}><EarnCoin size={66} /></div>
+          </div>
+          <h1 className="t-h1" style={{ fontSize: 26 }}>{complete ? `Your desk is ready, ${first}.` : 'Earn is briefing the team…'}</h1>
+          <p style={{ fontSize: 13.5, color: 'var(--fg-3)', marginTop: 8, maxWidth: 460 }}>
+            {complete ? 'The team built your workspace from the mandate. Everything below is a starting point you can change anytime.'
+              : 'No forms, no setup. Watch your executive team turn the mandate into a working desk.'}
+          </p>
+        </div>
+
+        {!complete ? (
+          <>
+            <ProgressBar value={Math.round((n / order.length) * 100)} gradient="linear-gradient(90deg,#F7C948,#E5A823)" height={6} />
+            <div className="card" style={{ marginTop: 16, padding: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {order.map((id, i) => {
+                const m = memberById(id);
+                const revealed = i < n;
+                if (i > n) return null;
+                return (
+                  <div key={id} className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px' }}>
+                    <SpecialistMark member={m} size={32} tone={revealed ? 'azure' : 'neutral'} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-1)' }}>{m.name} <span style={{ fontWeight: 400, color: 'var(--fg-5)', fontSize: 11.5 }}>· {m.title}</span></div>
+                      <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 1 }}>{m.build}</div>
+                    </div>
+                    {i === n - 1 && !complete ? <Icon name="loader" size={15} className="spin" color="var(--gold-1)" />
+                      : <Icon name="check-circle-2" size={16} color="var(--success)" />}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="fade-in">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12 }}>
+              {stats.map(s => (
+                <div key={s.label} className="card-flat" style={{ padding: '14px 15px' }}>
+                  <Icon name={s.icon} size={17} color={TONE[s.tone].c} />
+                  <div className="t-metric" style={{ fontSize: 24, marginTop: 9 }}>{s.value}</div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-2)', fontWeight: 500, marginTop: 3 }}>{s.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-5)', marginTop: 1 }}>{s.sub}</div>
+                </div>
+              ))}
+            </div>
+            <Button variant="gold" size="lg" iconRight="arrow-right" onClick={onDone} style={{ width: '100%', marginTop: 18 }}>Enter your command center</Button>
+            <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--fg-5)', marginTop: 12 }}>15 specialists now on your desk · the team works around the clock</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* =========================== AUTO-BUILD (alt mechanic) =========================== */
+function AutoBuild({ mandate, setMandate, onActivate, onExit, tw = {} }) {
+  const requireFirm = !!tw.requireFirm;
+  const set = (k, v) => setMandate(p => ({ ...p, [k]: v }));
+  const toggleSector = (s) => setMandate(p => ({ ...p, sectors: p.sectors.includes(s) ? p.sectors.filter(x => x !== s) : [...p.sectors, s] }));
+  return (
+    <div data-screen-label="Auto-build" style={{ minHeight: '100%', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22px clamp(16px,4vw,28px) 28px' }}>
+      <div className="bg-aurora" />
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 11, maxWidth: 620, width: '100%', marginBottom: 18 }}>
+        <EarnCoin size={26} />
+        <div style={{ fontSize: 12.5, color: 'var(--fg-3)' }}><b style={{ color: 'var(--fg-1)' }}>Tell Earn the essentials.</b> The team builds the rest — you fill in details later.</div>
+      </div>
+      <div className="card fade-in" style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 620, padding: 'clamp(20px,4vw,28px)' }}>
+        <div className="t-h2" style={{ fontSize: 22 }}>Build my workspace</div>
+        <p style={{ fontSize: 13.5, color: 'var(--fg-3)', margin: '7px 0 18px', lineHeight: 1.55 }}>One short brief. Earn fills the gaps with sensible defaults you can change anytime.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14, alignItems: 'start' }}>
+          <Field label="Your name" icon="user" value={mandate.principal} onChange={v => set('principal', v)} placeholder="Jordan Avery" />
+          <div>
+            {!mandate.noFirm
+              ? <Field label="Fund or firm name" icon="building-2" value={mandate.firm} onChange={v => set('firm', v)} placeholder="Acme Capital" hint={requireFirm ? 'Required' : 'Optional'} />
+              : <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--fg-3)', fontWeight: 500 }}>Working title <span style={{ color: 'var(--gold-1)' }}>· named by Earn</span></span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--gold-soft)', border: '1px solid var(--gold-line)', borderRadius: 12, padding: '10px 10px 10px 12px' }}>
+                    <EarnCoin size={20} /><span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{mandate.firm || suggestName(0)}</span>
+                    <button className="clickable" title="Suggest another" onClick={() => { const ns = (mandate.firmSeed || 0) + 1; setMandate(p => ({ ...p, firmSeed: ns, firm: suggestName(ns) })); }} style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-1)', border: '1px solid var(--gold-line)' }}><Icon name="shuffle" size={14} /></button>
+                  </div>
+                </label>}
+            <button className="clickable" onClick={() => setMandate(p => p.noFirm ? { ...p, noFirm: false, firm: '' } : { ...p, noFirm: true, firmSeed: 0, firm: suggestName(0) })}
+              style={{ marginTop: 8, fontSize: 12, color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Icon name={mandate.noFirm ? 'pencil' : 'sparkles'} size={13} />{mandate.noFirm ? 'Enter my own name instead' : "I don't have a fund name yet"}
+            </button>
+          </div>
+        </div>
+        <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>I want to</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 10 }}>
+          {OBJECTIVES.map(o => <ChoiceCard key={o.id} {...o} compact selected={mandate.objective === o.id} onClick={() => set('objective', o.id)} />)}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '0 24px' }}>
+          <div>
+            <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Vehicle</div>
+            <Field options={VEHICLES.map(v => v.label)} value={(VEHICLES.find(v => v.id === mandate.vehicle) || {}).label} onChange={lbl => set('vehicle', (VEHICLES.find(v => v.label === lbl) || {}).id)} />
+          </div>
+          <div>
+            <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Target raise</div>
+            <Field options={SIZES.map(s => s.label)} value={(SIZES.find(s => s.id === mandate.size) || {}).label} onChange={lbl => set('size', (SIZES.find(s => s.label === lbl) || {}).id)} />
+          </div>
+        </div>
+        <div className="t-eyebrow" style={{ margin: '20px 0 9px' }}>Thesis <span style={{ color: 'var(--fg-5)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· optional, Earn will sharpen it</span></div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{SECTORS.map(s => <Chip key={s} label={s} selected={mandate.sectors.includes(s)} onClick={() => toggleSector(s)} />)}</div>
+        <div style={{ marginTop: 20 }}><ActsOn ids={['sterling', 'marcus', 'sloane', 'adrian']} text="From this, the whole team builds your plan, target list, sourced deals and compliance baseline in one pass." /></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
+          <Button variant="ghost" icon="arrow-left" onClick={onExit}>Back</Button>
+          <Button variant="gold" iconRight="sparkles" onClick={onActivate}>Build my workspace</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { MandateWizard, AutoBuild, Activation });

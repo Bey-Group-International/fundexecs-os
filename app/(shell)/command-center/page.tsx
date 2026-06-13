@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Flame,
   Handshake,
+  ListChecks,
   ListOrdered,
   MoonStar,
   Radar,
@@ -15,6 +16,9 @@ import {
   Users
 } from 'lucide-react';
 import { Cockpit } from '@/components/hubs/Cockpit';
+import { RunWithEarnButton } from '@/components/command-center/RunWithEarnButton';
+import { MarkVisited } from '@/components/command-center/MarkVisited';
+import { TaskletQueue } from '@/components/earn/TaskletQueue';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { MandateIcon } from '@/components/ui/MandateIcon';
@@ -28,8 +32,13 @@ import {
 import { compactMoney } from '@/lib/format';
 import { getLifecycleRail } from '@/lib/hubs';
 import { getCommandCenterData } from '@/lib/queries/command-center';
+import { getPendingInboxCount } from '@/lib/queries/inbox';
+import { loadActivityFeed, loadStreak, type ActivityItem } from '@/lib/queries/dashboard/lifecycle';
+import { readLastVisit } from '@/lib/dashboard/state';
+import { getShellIdentity } from '@/lib/queries/identity';
 import { getMandate } from '@/lib/queries/mandate';
 import { getActiveOrg } from '@/lib/queries/org';
+import { getTaskletQueue } from '@/lib/tasklets/queries';
 import { TEAM_ROSTER } from '@/lib/team';
 import { cn } from '@/lib/utils';
 
@@ -104,18 +113,14 @@ function RightNowCard({ move }: { move: DeskMove }) {
         <h1 className="text-[21px] font-semibold tracking-[-0.015em] text-fg-1">{move.title}</h1>
         <p className="mt-2 max-w-[62ch] text-[13.5px] leading-relaxed text-fg-3">{move.why}</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
+          {/* The one move runs from the dashboard — handed to Earn (real
+              approve-before-write loop). The link stays as "open the surface". */}
+          <RunWithEarnButton ask={`Run my top move: ${move.title}. ${move.why}`} />
           <Link
             href={move.primary.href}
-            className="inline-flex items-center gap-2 rounded-xl bg-[linear-gradient(135deg,#F7C948,#E5A823)] px-4 py-2.5 text-[13.5px] font-semibold text-[#070b14] shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_20px_-8px_rgba(247,201,72,0.55)] transition hover:brightness-105"
-          >
-            <Sparkles size={15} aria-hidden />
-            {move.primary.label}
-          </Link>
-          <Link
-            href={move.secondary.href}
             className="inline-flex items-center gap-1.5 rounded-xl border border-hairline bg-surface-1 px-4 py-2.5 text-[13.5px] font-medium text-fg-2 transition hover:bg-surface-2 hover:text-fg-1"
           >
-            {move.secondary.label}
+            {move.primary.label}
             <ArrowRight size={14} aria-hidden />
           </Link>
           <span className="flex items-center gap-1.5 text-[11px] text-fg-5">
@@ -179,9 +184,61 @@ function SignalGrid({ signals }: { signals: DeskSignal[] }) {
   );
 }
 
+/** Where each kind of autonomous work opens, and its glyph. */
+const OVERNIGHT_HREF: Record<ActivityItem['kind'], string> = {
+  trust: '/execute/chain-of-trust',
+  diligence: '/run/diligence',
+  system: '/command-center'
+};
+const OVERNIGHT_ICON: Record<ActivityItem['kind'], string> = {
+  trust: 'shield-check',
+  diligence: 'cpu',
+  system: 'sparkles'
+};
+
+/**
+ * The prototype's "worked overnight" panel, on real data — the desk activity
+ * (Chain-of-Trust events, diligence runs) the AI team logged *since the
+ * operator's last visit*. Only rendered when there's genuine autonomous work
+ * to show; otherwise the SignalGrid (the read of the desk) takes its place, so
+ * the overnight claim is never empty theatre.
+ */
+function OvernightPanel({ items }: { items: ActivityItem[] }) {
+  return (
+    <Panel
+      icon={MoonStar}
+      eyebrow="Proactive — while you were away"
+      title="Your team worked overnight"
+    >
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        {items.map((it) => (
+          <Link
+            key={it.id}
+            href={OVERNIGHT_HREF[it.kind]}
+            className="flex items-start gap-2.5 rounded-[12px] border border-[var(--border-faint)] bg-surface-1 px-3 py-3 transition hover:-translate-y-0.5 hover:border-hairline hover:bg-surface-2"
+          >
+            <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg border border-[var(--azure-line)] bg-[var(--azure-soft)] text-azure-1">
+              <MandateIcon name={OVERNIGHT_ICON[it.kind]} size={15} strokeWidth={1.9} aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[12.5px] font-semibold leading-snug text-fg-1">
+                {it.title}
+              </span>
+              <span className="mt-1 flex items-center gap-1 text-[11px] text-fg-4">
+                <Sparkles size={11} aria-hidden />
+                {it.actor}
+              </span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 function QueueList({ moves }: { moves: DeskMove[] }) {
   return (
-    <Panel icon={ListOrdered} eyebrow="Ranked by impact — one tap to open" title="Then, in order">
+    <Panel icon={ListOrdered} eyebrow="Ranked by impact — one tap to run" title="Then, in order">
       {moves.length === 0 ? (
         <p className="flex items-center gap-2 text-[13px] text-success">
           <CheckCircle2 size={16} aria-hidden />
@@ -195,25 +252,28 @@ function QueueList({ moves }: { moves: DeskMove[] }) {
               className="flex items-center gap-3 rounded-[12px] border border-[var(--border-faint)] bg-surface-1 px-3 py-2.5"
             >
               <span className="w-3 flex-none font-mono text-[11px] text-fg-5">{i + 2}</span>
-              <span
-                className={cn(
-                  'flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border',
-                  TONE_BOX[q.tone]
-                )}
-              >
-                <MandateIcon name={q.icon} size={15} strokeWidth={1.9} aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13.5px] font-semibold text-fg-1">{q.title}</div>
-                <div className="mt-0.5 truncate text-[11.5px] text-fg-4">{q.why}</div>
-              </div>
-              <Link
-                href={q.primary.href}
-                className="inline-flex flex-none items-center gap-1.5 rounded-xl border border-hairline bg-surface-2 px-3 py-1.5 text-[12.5px] font-medium text-fg-1 transition hover:bg-surface-3"
-              >
-                <Sparkles size={13} aria-hidden />
-                {q.primary.label}
+              {/* The body opens the live surface; the trailing button runs it with Earn. */}
+              <Link href={q.primary.href} className="flex min-w-0 flex-1 items-center gap-3">
+                <span
+                  className={cn(
+                    'flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border',
+                    TONE_BOX[q.tone]
+                  )}
+                >
+                  <MandateIcon name={q.icon} size={15} strokeWidth={1.9} aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-semibold text-fg-1">
+                    {q.title}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11.5px] text-fg-4">{q.why}</span>
+                </span>
               </Link>
+              <RunWithEarnButton
+                variant="compact"
+                label="Run"
+                ask={`Run this move: ${q.title}. ${q.why}`}
+              />
             </div>
           ))}
         </div>
@@ -232,11 +292,34 @@ export default async function CommandCenterPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const [mandate, data, rail] = await Promise.all([
+  const [
+    mandate,
+    data,
+    rail,
+    identity,
+    streak,
+    activityFeed,
+    lastVisit,
+    pendingInbox,
+    taskletQueue
+  ] = await Promise.all([
     getMandate(org.orgId),
     getCommandCenterData(org.orgId),
-    getLifecycleRail(org.orgId)
+    getLifecycleRail(org.orgId),
+    getShellIdentity(),
+    loadStreak(org.orgId),
+    loadActivityFeed(org.orgId),
+    readLastVisit(),
+    getPendingInboxCount(org.orgId),
+    getTaskletQueue(org.orgId)
   ]);
+
+  // Real autonomous work logged since the prior visit — the honest "worked
+  // overnight". Only on a return visit (lastVisit set); a first-timer has no
+  // "while you were away" to show, so they see the desk read instead.
+  const overnight: ActivityItem[] = lastVisit
+    ? activityFeed.filter((it) => it.at > lastVisit).slice(0, 6)
+    : [];
 
   const firstName = (mandate?.principal ?? '').trim().split(/\s+/)[0] || 'there';
 
@@ -249,7 +332,7 @@ export default async function CommandCenterPage() {
     pct: rail.pct,
     objective: mandate?.objective ?? null
   });
-  const signals = deriveSignals({
+  const deskSignals = deriveSignals({
     activeDealsCount: data.activeDealsCount,
     capitalInMotion: data.capitalInMotion,
     hotRelationshipsCount: data.hotRelationshipsCount,
@@ -258,6 +341,23 @@ export default async function CommandCenterPage() {
     pct: rail.pct,
     objective: mandate?.objective ?? null
   });
+  // Surface real triage need from the Unified Inbox as the first proactive
+  // signal — the desk's conversations waiting on the operator. Real count,
+  // fail-open to 0, so it only appears when there's something to triage.
+  const signals: DeskSignal[] =
+    pendingInbox > 0
+      ? [
+          {
+            id: 'inbox-pending',
+            icon: 'inbox',
+            tone: 'azure',
+            label: `${pendingInbox} conversation${pendingInbox === 1 ? '' : 's'} waiting to triage`,
+            cta: 'Open the inbox',
+            href: '/inbox'
+          },
+          ...deskSignals
+        ]
+      : deskSignals;
   const hero = moves[0];
   const queue = moves.slice(1);
 
@@ -289,6 +389,29 @@ export default async function CommandCenterPage() {
             <>You&rsquo;re clear — Earn is sourcing your next move.</>
           )}
         </p>
+
+        {/* progression — real XP/level (from profiles.xp) + active-day streak */}
+        <span className="ml-auto inline-flex items-center gap-2 rounded-full border border-hairline bg-surface-1 px-3 py-1 text-[11.5px]">
+          <EarnCoin size={16} className="flex-none" />
+          <span className="font-semibold text-fg-1">Level {identity?.level ?? 1}</span>
+          <span className="text-fg-5" aria-hidden>
+            ·
+          </span>
+          <span className="text-fg-3 [font-feature-settings:'tnum']">
+            {(identity?.xp ?? 0).toLocaleString()} XP
+          </span>
+          {streak.current > 0 && (
+            <>
+              <span className="text-fg-5" aria-hidden>
+                ·
+              </span>
+              <span className="inline-flex items-center gap-1 text-gold-1">
+                <Flame size={12} aria-hidden />
+                {streak.current}-day
+              </span>
+            </>
+          )}
+        </span>
       </div>
 
       {/* lifecycle cockpit — the rail's reactive mirror */}
@@ -317,6 +440,22 @@ export default async function CommandCenterPage() {
         ))}
       </div>
 
+      {/* Today's tasklets — approve-ready work the team drafted from real
+          signals (inbox, pipeline, public inbound). Draft-only: each Approve
+          records to the Earn ledger + Chain of Trust. Only shown when armed. */}
+      {taskletQueue.length > 0 && (
+        <Panel
+          icon={ListChecks}
+          eyebrow="Approve-ready · drafted from real signals"
+          title={`Today's tasklets · ${taskletQueue.length}`}
+        >
+          <TaskletQueue initialTasklets={taskletQueue} variant="band" />
+        </Panel>
+      )}
+
+      {/* What the team did while away (when there's real work), then what's
+          waiting on you — autonomous work and proactive signals are distinct. */}
+      {overnight.length > 0 && <OvernightPanel items={overnight} />}
       <SignalGrid signals={signals} />
       <QueueList moves={queue} />
 
@@ -353,6 +492,9 @@ export default async function CommandCenterPage() {
         You set the mandate · the team works · you approve — everything routes through your
         approval.
       </p>
+
+      {/* Baseline this visit for the next "worked overnight" read (post-paint). */}
+      <MarkVisited />
     </div>
   );
 }

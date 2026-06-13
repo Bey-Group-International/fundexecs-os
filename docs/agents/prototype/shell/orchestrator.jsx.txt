@@ -1,0 +1,124 @@
+/* ===========================================================
+   FundExecs OS — Onboarding Prototype · Orchestrator
+   Journey: Landing → Invite → Sign in → Mandate Brief →
+   Team activates → Command Center.  Desktop + phone frame.
+   =========================================================== */
+
+const FLOW = [
+  { id: 'landing',    label: 'Landing' },
+  { id: 'invite',     label: 'Invite' },
+  { id: 'signin',     label: 'Sign in' },
+  { id: 'mandate',    label: 'Mandate brief' },
+  { id: 'activating', label: 'Team activates' },
+  { id: 'command',    label: 'Command Center' },
+];
+const STORE = 'fx-onboarding-proto';
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "mechanic": "Guided steps",
+  "rail": "Lifecycle",
+  "gamification": "Quiet",
+  "requireFirm": false,
+  "betaCopy": "Invite-only private beta"
+}/*EDITMODE-END*/;
+
+function App() {
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { return {}; } })();
+  const [step, setStep] = useState(saved.step || 'landing');
+  const [device, setDevice] = useState(saved.device || 'desktop');
+  const [mandate, setMandate] = useState({ ...DEFAULT_MANDATE, ...(saved.mandate || {}) });
+  const [tw, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const T = {
+    gamification: (tw.gamification || 'Quiet').toLowerCase(),
+    requireFirm: !!tw.requireFirm,
+    betaCopy: tw.betaCopy,
+    rail: tw.rail || 'Lifecycle',
+  };
+  const autoBuild = tw.mechanic === 'Auto-build';
+
+  useEffect(() => {
+    try { localStorage.setItem(STORE, JSON.stringify({ step, device, mandate })); } catch (e) {}
+  }, [step, device, mandate]);
+
+  const go = (id) => setStep(id);
+  const restart = () => { setMandate(DEFAULT_MANDATE); setStep('landing'); };
+  const mobile = device === 'mobile';
+
+  let screen;
+  switch (step) {
+    case 'landing':    screen = <Landing onNext={() => go('invite')} tw={T} />; break;
+    case 'invite':     screen = <Invite onNext={() => go('signin')} />; break;
+    case 'signin':     screen = <SignIn onNext={() => go('mandate')} />; break;
+    case 'mandate':    screen = autoBuild
+                         ? <AutoBuild mandate={mandate} setMandate={setMandate} onActivate={() => go('activating')} onExit={() => go('signin')} tw={T} />
+                         : <MandateWizard mandate={mandate} setMandate={setMandate} onActivate={() => go('activating')} onExit={() => go('signin')} tw={T} />; break;
+    case 'activating': screen = <Activation mandate={mandate} onDone={() => go('command')} />; break;
+    case 'command':    screen = <CommandCenter mandate={mandate} mobile={mobile} onRestart={restart} tw={T} />; break;
+    default:           screen = <Landing onNext={() => go('invite')} />;
+  }
+
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#05080f' }}>
+      {/* prototype chrome — the journey rail (gives reviewers direction + jump-to) */}
+      <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 14, padding: '0 16px', height: 48,
+        borderBottom: '1px solid var(--border)', background: 'rgba(7,11,20,0.9)', backdropFilter: 'blur(10px)', zIndex: 50 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>
+          <EarnCoin size={20} />
+          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }} className="rail-brand">Onboarding flow</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '1 1 auto', minWidth: 0, overflowX: 'auto', paddingBottom: 1 }}>
+          {FLOW.map((f, i) => {
+            const on = f.id === step;
+            const idx = FLOW.findIndex(x => x.id === step);
+            const done = i < idx;
+            return (
+              <React.Fragment key={f.id}>
+                <button className="clickable" onClick={() => go(f.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 11px', borderRadius: 999, flex: 'none',
+                  background: on ? 'var(--accent-soft)' : 'transparent', border: `1px solid ${on ? 'var(--accent-line)' : 'transparent'}`,
+                  color: on ? 'var(--fg-1)' : done ? 'var(--fg-3)' : 'var(--fg-4)' }}>
+                  <span style={{ width: 18, height: 18, borderRadius: 999, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700,
+                    background: on ? 'var(--accent)' : done ? 'var(--success-soft)' : 'var(--surface-2)', color: on ? '#fff' : done ? 'var(--success)' : 'var(--fg-4)', border: done && !on ? '1px solid var(--success-line)' : 'none' }}>
+                    {done ? '✓' : i + 1}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>{f.label}</span>
+                </button>
+                {i < FLOW.length - 1 && <Icon name="chevron-right" size={13} color="var(--fg-5)" style={{ flex: 'none' }} />}
+              </React.Fragment>
+            );
+          })}
+        </div>
+        <div style={{ flex: 'none' }}>
+          <SegTabs active={device} onChange={setDevice} tabs={[{ id: 'desktop', label: 'Desktop', icon: 'monitor' }, { id: 'mobile', label: 'Mobile', icon: 'smartphone' }]} />
+        </div>
+      </div>
+
+      {/* stage */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', alignItems: mobile ? 'center' : 'stretch', justifyContent: 'center',
+        padding: mobile ? '18px' : 0, background: mobile ? 'radial-gradient(70% 60% at 50% 0%, #0b1326, #05080f)' : 'transparent', overflow: 'hidden' }}>
+        {mobile ? (
+          <div style={{ width: 392, height: '100%', maxHeight: 812, flex: 'none', borderRadius: 44, padding: 11,
+            background: '#0c1322', border: '1px solid var(--border-strong)', boxShadow: '0 50px 90px -40px rgba(0,0,0,0.8)', position: 'relative' }}>
+            <div style={{ width: '100%', height: '100%', borderRadius: 34, overflow: 'hidden', position: 'relative', background: 'var(--bg-0)' }}>
+              {/* notch */}
+              <div style={{ position: 'absolute', top: 9, left: '50%', transform: 'translateX(-50%)', width: 116, height: 26, borderRadius: 999, background: '#05080f', zIndex: 20 }} />
+              <div key={step} style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>{screen}</div>
+            </div>
+          </div>
+        ) : (
+          <div key={step} style={{ position: 'absolute', inset: 0, overflowY: 'auto' }}>{screen}</div>
+        )}
+      </div>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Onboarding" />
+        <TweakRadio label="First-run mechanic" value={tw.mechanic} options={['Guided steps', 'Auto-build']} onChange={v => setTweak('mechanic', v)} />
+        <TweakRadio label="Side rail" value={tw.rail} options={['Lifecycle', 'Classic']} onChange={v => setTweak('rail', v)} />
+        <TweakToggle label="Require a firm name" value={tw.requireFirm} onChange={v => setTweak('requireFirm', v)} />
+        <TweakSection label="Tone" />
+        <TweakRadio label="Gamification" value={tw.gamification} options={['Off', 'Quiet', 'Prominent']} onChange={v => setTweak('gamification', v)} />
+        <TweakText label="Landing eyebrow" value={tw.betaCopy} onChange={v => setTweak('betaCopy', v)} />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);

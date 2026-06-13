@@ -1,45 +1,15 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getAuthUser } from '@/lib/queries/auth';
 import { createDeal } from '@/lib/actions/deals';
 import { earnReviewDeal } from '@/lib/diligence';
-import type { Json } from '@/lib/supabase/database.types';
+import { recordApprovedOutcome } from '@/lib/earn/record-outcome';
 
 export type EarnActionResult =
   | { ok: true; message: string; href?: string }
   | { ok: false; error: string };
-
-/**
- * Log an approved Earn action to the trust-event stream — the closing half of
- * the approve loop: the operator approved, it ran, and now it's on the record.
- * Best-effort: an audit write must never undo or block the action the operator
- * already approved. Surfaces automatically in the Command Center activity feed.
- */
-async function logEarnActionApproved(
-  orgId: string,
-  actorId: string,
-  entityType: string,
-  entityId: string | null,
-  action: string,
-  metadata: Record<string, unknown>
-): Promise<void> {
-  try {
-    const supabase = await createClient();
-    await supabase.from('trust_events').insert({
-      org_id: orgId,
-      actor_id: actorId,
-      entity_type: entityType,
-      entity_id: entityId,
-      action,
-      metadata: metadata as unknown as Json
-    });
-  } catch {
-    // Best-effort — never block the approved action on its audit row.
-  }
-}
 
 /**
  * Execute a tool action Earn proposed, after the operator confirmed it. Only
@@ -63,20 +33,22 @@ export async function executeEarnAction(
     const amount = typeof input.amount === 'number' ? input.amount : null;
     const res = await createDeal({ name: dealName, stage, amount });
     if (!res.ok) return { ok: false, error: res.error };
-    await logEarnActionApproved(
-      org.orgId,
-      user.id,
-      'deal',
-      res.deal.id,
-      'earn_create_deal_approved',
-      {
-        dealName: res.deal.name,
-        stage: stage ?? null,
-        amount
-      }
-    );
+    await recordApprovedOutcome({
+      orgId: org.orgId,
+      actorId: user.id,
+      entityType: 'deal',
+      entityId: res.deal.id,
+      action: 'earn_create_deal_approved',
+      kind: 'deal_sourced',
+      title: res.deal.name,
+      summary: 'On-thesis deal added to your pipeline.',
+      homeSurface: 'Deal Pipeline',
+      homeHref: '/source/pipeline',
+      metadata: { dealName: res.deal.name, stage: stage ?? null, amount }
+    });
     revalidatePath('/source/pipeline');
     revalidatePath('/command-center');
+    revalidatePath('/earn');
     return {
       ok: true,
       message: `Created “${res.deal.name}” in your pipeline.`,
@@ -94,14 +66,24 @@ export async function executeEarnAction(
       };
     }
     const res = await earnReviewDeal({ orgId: org.orgId, createdBy: user.id, dealId });
-    await logEarnActionApproved(
-      org.orgId,
-      user.id,
-      'diligence_run',
-      res.runId,
-      'earn_run_diligence_approved',
-      { dealId, conviction: res.conviction ?? null, status: res.status }
-    );
+    const convictionNote =
+      res.conviction != null
+        ? `Committee conviction ${res.conviction}/100.`
+        : 'Committee review run.';
+    await recordApprovedOutcome({
+      orgId: org.orgId,
+      actorId: user.id,
+      entityType: 'diligence_run',
+      entityId: res.runId,
+      action: 'earn_run_diligence_approved',
+      kind: 'diligence_run',
+      title: 'Diligence committee review',
+      summary: convictionNote,
+      homeSurface: 'Diligence',
+      homeHref: `/run/diligence/${res.runId}`,
+      metadata: { dealId, conviction: res.conviction ?? null, status: res.status }
+    });
+    revalidatePath('/earn');
     if (res.status === 'complete') {
       const conviction = res.conviction != null ? ` — conviction ${res.conviction}/100` : '';
       return {
