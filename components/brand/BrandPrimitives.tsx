@@ -4,8 +4,8 @@
 
 import { EarnCoin as EarnCoinUI } from '@/components/ui/EarnCoin';
 
-export function EarnCoin({ size = 40 }: { size?: number }) {
-  return <EarnCoinUI size={size} />;
+export function EarnCoin({ size = 40, glow = false }: { size?: number; glow?: boolean }) {
+  return <EarnCoinUI size={size} glow={glow} />;
 }
 
 export function Wordmark({ size = 19 }: { size?: number }) {
