@@ -23,6 +23,7 @@ export default async function RaisePage({ params }: { params: Promise<{ slug: st
   const raise = await getPublicRaise(slug);
   if (!raise) notFound();
 
+  // eslint-disable-next-line react-hooks/purity -- server component, not a hook
   const now = Date.now();
 
   const pct =
