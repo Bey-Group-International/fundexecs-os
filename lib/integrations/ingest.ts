@@ -89,8 +89,19 @@ export async function ingestSignals(
   }
 
   // 3. Surface the same conversations into the Relationship Inbox for triage,
-  // reusing the email -> contact map so items resolve to known contacts.
-  const inboxItems = await ingestInboxItems(admin, { orgId, provider }, signals, emailToId);
+  // reusing the email -> contact map so items resolve to known contacts. This
+  // is additive: an inbox write failure must never abort the core
+  // contacts/interactions sync (and its warmth trigger), so it's isolated.
+  let inboxItems = 0;
+  try {
+    inboxItems = await ingestInboxItems(admin, { orgId, provider }, signals, emailToId);
+  } catch (error) {
+    console.error('inbox_ingest_failed', {
+      orgId,
+      provider,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 
   return { contacts: uniqueContacts.length, interactions, inboxItems };
 }

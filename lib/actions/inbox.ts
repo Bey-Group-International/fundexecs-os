@@ -150,8 +150,18 @@ export async function send_inbox_reply(
       .eq('id', itemId)
       .maybeSingle();
     if (!item) return { ok: false, reason: 'not_authorized' };
-    if (asString(item.status) === 'dismissed') {
-      return { ok: false, reason: 'dismissed', error: 'This conversation was dismissed.' };
+    // Pending-only, server-enforced: mirrors the UI's reply contract so a
+    // crafted call can't resend an already-actioned or sent item.
+    const status = asString(item.status);
+    if (status !== 'pending') {
+      return {
+        ok: false,
+        reason: 'invalid_state',
+        error:
+          status === 'dismissed'
+            ? 'This conversation was dismissed.'
+            : 'This conversation is no longer sendable.'
+      };
     }
 
     const channel = asString(item.channel);
@@ -256,10 +266,19 @@ export async function send_inbox_reply(
         };
       };
     };
-    await writer
+    const { error: updateError } = await writer
       .from('inbox_items')
       .update({ status: 'sent', draft_reply: text, acted_at: new Date().toISOString() })
       .eq('id', itemId);
+    if (updateError) {
+      // The reply was sent but the row didn't flip to 'sent'. Surface it so the
+      // operator refreshes rather than re-sending a duplicate.
+      return {
+        ok: false,
+        reason: 'post_send_update_failed',
+        error: 'Reply sent, but the inbox didn’t update — refresh before resending.'
+      };
+    }
 
     revalidatePath('/inbox');
     return { ok: true };

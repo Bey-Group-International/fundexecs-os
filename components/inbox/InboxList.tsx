@@ -84,6 +84,16 @@ export function InboxList({
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
+  // A successful action calls router.refresh(), which re-runs the server query
+  // and passes fresh props. Resync during render (React's "adjust state on prop
+  // change" pattern) so refreshed rows + chip counts show without a full
+  // navigation — and without a setState-in-effect.
+  const [prevInitial, setPrevInitial] = useState(initialItems);
+  if (initialItems !== prevInitial) {
+    setPrevInitial(initialItems);
+    setItems(initialItems);
+  }
+
   // Spin up an in-app call room and jump into it. Surfaces a clear message when
   // LiveKit isn't configured rather than failing silently.
   async function startCall() {
@@ -117,6 +127,9 @@ export function InboxList({
   // Optimistically drop the item from the worklist; revert + surface an error
   // if the guarded RPC rejects the transition.
   async function act(item: InboxItem, action: InboxAction) {
+    // Serialize triage mutations: one in-flight RPC at a time, so an
+    // out-of-order failure can't roll the list back to a stale snapshot.
+    if (pending) return;
     setPending(item.id);
     setError(null);
     const snapshot = items;
@@ -233,7 +246,7 @@ export function InboxList({
             <InboxRow
               key={item.id}
               item={item}
-              busy={pending === item.id}
+              busy={pending !== null}
               onAct={(action) => void act(item, action)}
               onSent={() => removeItem(item.id)}
               onError={setError}
@@ -293,6 +306,9 @@ function InboxRow({
   const [draft, setDraft] = useState(item.draftReply ?? '');
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
+  // Lock the whole row while any of its mutations is in flight, so a reply
+  // can't race a triage transition on the same item.
+  const rowBusy = busy || drafting || sending;
 
   async function generate() {
     setDrafting(true);
@@ -377,7 +393,7 @@ function InboxRow({
                   type="button"
                   title="Reply with Earn"
                   aria-label={`Reply to "${item.subject || meta.label}"`}
-                  disabled={busy}
+                  disabled={rowBusy}
                   onClick={() => void openComposer()}
                   className="flex h-7 items-center gap-1 rounded-lg border border-hairline px-2 text-[11px] font-medium text-fg-3 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
                 >
@@ -391,7 +407,7 @@ function InboxRow({
                 type="button"
                 title="Accept — route onto the deal loop"
                 aria-label={`Accept conversation "${item.subject || meta.label}"`}
-                disabled={busy}
+                disabled={rowBusy}
                 onClick={() => onAct('accepted')}
                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
               >
@@ -406,7 +422,7 @@ function InboxRow({
               type="button"
               title="Dismiss"
               aria-label={`Dismiss conversation "${item.subject || meta.label}"`}
-              disabled={busy}
+              disabled={rowBusy}
               onClick={() => onAct('dismissed')}
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline text-fg-4 transition hover:bg-surface-2 hover:text-fg-1 disabled:opacity-50"
             >
@@ -434,7 +450,8 @@ function InboxRow({
             <button
               type="button"
               onClick={() => setComposing(false)}
-              className="rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium text-fg-4 transition hover:text-fg-1"
+              disabled={drafting || sending}
+              className="rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium text-fg-4 transition hover:text-fg-1 disabled:opacity-50"
             >
               Cancel
             </button>

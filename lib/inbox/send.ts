@@ -44,9 +44,14 @@ export async function sendGmailReply(opts: {
     ? opts.subject
     : `Re: ${opts.subject}`;
 
+  // Strip CR/LF so untrusted upstream subject/recipient values can't inject
+  // extra MIME headers.
+  const safeTo = opts.to.replace(/[\r\n]/g, '').trim();
+  const safeSubject = subject.replace(/[\r\n]/g, ' ').trim();
+
   const headers = [
-    `To: ${opts.to}`,
-    `Subject: ${subject}`,
+    `To: ${safeTo}`,
+    `Subject: ${safeSubject}`,
     'Content-Type: text/plain; charset="UTF-8"'
   ];
   // In-Reply-To + References thread the reply onto the original conversation
@@ -63,7 +68,8 @@ export async function sendGmailReply(opts: {
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: { Authorization: `Bearer ${opts.token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(12_000)
   });
 
   if (res.ok) return { ok: true };
@@ -95,7 +101,8 @@ export async function sendSlackReply(opts: {
       Authorization: `Bearer ${opts.token}`,
       'Content-Type': 'application/json; charset=utf-8'
     },
-    body: JSON.stringify({ channel: opts.channel, text: opts.text })
+    body: JSON.stringify({ channel: opts.channel, text: opts.text }),
+    signal: AbortSignal.timeout(12_000)
   });
 
   if (!res.ok)
