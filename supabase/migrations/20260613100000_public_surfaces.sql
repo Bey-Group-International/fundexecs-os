@@ -15,18 +15,18 @@ create table if not exists public.deal_submissions (
 
 -- Public raises: marks a deal as publicly shareable with a vanity slug
 alter table public.deals
-  add column if not exists public_slug    text unique,
-  add column if not exists public_visible boolean not null default false,
-  add column if not exists raise_summary  text,      -- short pitch for the public page
-  add column if not exists target_amount  numeric,   -- total raise target USD
+  add column if not exists public_slug      text unique,
+  add column if not exists public_visible   boolean not null default false,
+  add column if not exists raise_summary    text,      -- short pitch for the public page
+  add column if not exists target_amount    numeric,   -- total raise target USD
   add column if not exists committed_amount numeric default 0,
-  add column if not exists close_date     date,
-  add column if not exists deck_url       text,
-  add column if not exists founder_name   text,
-  add column if not exists company_website text;
+  add column if not exists close_date       date,
+  add column if not exists deck_url         text,
+  add column if not exists founder_name     text,
+  add column if not exists company_website  text;
 
--- Interest captures: anonymous LP interest on a public raise
-create table if not exists public.raise_interests (
+-- LP interest captures: anonymous interest on a public raise (separate from existing raise_interests)
+create table if not exists public.deal_interest_captures (
   id           uuid primary key default gen_random_uuid(),
   deal_id      uuid not null references public.deals(id) on delete cascade,
   name         text not null,
@@ -41,10 +41,10 @@ create policy "anon_insert_deal_submissions"
   on public.deal_submissions for insert
   to anon with check (true);
 
--- RLS: raise_interests insert-only for anon
-alter table public.raise_interests enable row level security;
-create policy "anon_insert_raise_interests"
-  on public.raise_interests for insert
+-- RLS: deal_interest_captures insert-only for anon
+alter table public.deal_interest_captures enable row level security;
+create policy "anon_insert_deal_interest_captures"
+  on public.deal_interest_captures for insert
   to anon with check (true);
 
 -- Public read for visible raise deals (no auth needed)

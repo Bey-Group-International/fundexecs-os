@@ -76,7 +76,11 @@ export default async function RaisePage({ params }: { params: Promise<{ slug: st
         </div>
 
         {raise.target_amount ? (
-          <RaiseProgress pct={pct} committed={raise.committed_amount ?? 0} target={raise.target_amount} />
+          <RaiseProgress
+            pct={pct}
+            committed={raise.committed_amount ?? 0}
+            target={raise.target_amount}
+          />
         ) : null}
       </div>
 
@@ -98,8 +102,18 @@ export default async function RaisePage({ params }: { params: Promise<{ slug: st
           rel="noopener noreferrer"
           className="mb-8 flex items-center gap-2 w-fit rounded-xl border border-white/[0.1] bg-white/[0.04] px-4 py-2.5 text-sm text-[#cbd5e1] transition hover:bg-white/[0.07]"
         >
-          <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            className="h-4 w-4"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
           </svg>
           View pitch deck
         </a>
@@ -109,7 +123,8 @@ export default async function RaisePage({ params }: { params: Promise<{ slug: st
       <div className="mb-8 flex items-center gap-2 rounded-xl border border-[rgba(247,201,72,0.2)] bg-[rgba(247,201,72,0.06)] px-4 py-3">
         <img src="/earn-coin.png" alt="" className="h-5 w-5" />
         <span className="text-xs text-[#94a3b8]">
-          Curated and verified by <span className="text-[#f7c948] font-medium">FundExecs OS</span> GPs
+          Curated and verified by <span className="text-[#f7c948] font-medium">FundExecs OS</span>{' '}
+          GPs
         </span>
       </div>
 
@@ -125,7 +140,9 @@ export default async function RaisePage({ params }: { params: Promise<{ slug: st
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[11px] font-medium uppercase tracking-widest text-[#7a899e] mb-1">{label}</div>
+      <div className="text-[11px] font-medium uppercase tracking-widest text-[#7a899e] mb-1">
+        {label}
+      </div>
       <div className="text-xl font-semibold text-white">{value}</div>
     </div>
   );

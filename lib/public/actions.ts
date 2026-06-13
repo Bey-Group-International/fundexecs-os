@@ -51,7 +51,7 @@ export async function expressInterest(formData: FormData): Promise<InterestResul
   }
 
   const db = createAdminClient();
-  const { error } = await db.from('raise_interests').insert(parsed.data);
+  const { error } = await db.from('deal_interest_captures').insert(parsed.data);
 
   if (error) return { ok: false, error: 'Could not submit interest. Please try again.' };
   return { ok: true };
