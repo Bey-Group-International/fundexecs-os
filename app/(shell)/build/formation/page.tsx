@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { FormationFlow } from '@/components/formation/FormationFlow';
+import { FundReadinessCard } from '@/components/build/FundReadinessCard';
 import { getFormationFiledSpecs, getFormationStepMeta } from '@/lib/formation/queries';
 import { personalizeFormationData } from '@/lib/formation/steps';
 import { mandateCfg, type InvestorGroup } from '@/lib/onboarding/mandate';
@@ -41,7 +42,8 @@ export default async function FormationPage() {
   const data = personalizeFormationData(formation.data, firm);
 
   return (
-    <div className="fx-rise">
+    <div className="fx-rise flex flex-col gap-4">
+      <FundReadinessCard />
       <FormationFlow
         firm={firm}
         sizeLabel={sizeLabel}

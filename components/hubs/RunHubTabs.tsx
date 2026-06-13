@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { FileSearch, ListChecks, ShieldCheck, Users } from 'lucide-react';
+import { FileSearch, ListChecks, MessageSquareWarning, ShieldCheck, Users } from 'lucide-react';
 import { SegTabs } from '@/components/ui/Tabs';
 
 /**
@@ -13,7 +13,8 @@ const TABS = [
   { id: '/run/diligence', label: 'Diligence', icon: FileSearch },
   { id: '/run/workflows', label: 'Workflows', icon: ListChecks },
   { id: '/run/compliance', label: 'Compliance', icon: ShieldCheck },
-  { id: '/run/ir', label: 'IR & reporting', icon: Users }
+  { id: '/run/ir', label: 'IR & reporting', icon: Users },
+  { id: '/run/objections', label: 'Objections', icon: MessageSquareWarning }
 ];
 
 export function RunHubTabs() {
