@@ -246,7 +246,7 @@ export default function WaitlistPage() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-              <div style={{ position: 'relative', animation: 'float 3s ease-in-out infinite' }}>
+              <div className="fx-coin-float" style={{ position: 'relative' }}>
                 <div
                   style={{
                     position: 'absolute',
@@ -280,10 +280,6 @@ export default function WaitlistPage() {
         </div>
       </div>
       <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-8px); }
-        }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
