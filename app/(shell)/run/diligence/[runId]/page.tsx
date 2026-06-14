@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { DiligenceDocumentsPanel } from '@/components/run/DiligenceDocumentsPanel';
+import { DraftMemoButton } from '@/components/run/DraftMemoButton';
 import { StartDiligence, type DiligenceDealOption } from '@/components/run/StartDiligence';
 import { getDiligenceDocuments, getDiligenceRun, getDiligenceRuns } from '@/lib/queries/diligence';
 import { getActiveOrg } from '@/lib/queries/org';
@@ -44,6 +45,9 @@ export default async function DiligenceRunPage({ params }: { params: Promise<{ r
   return (
     <div className="flex flex-col gap-4">
       <DiligenceRunView run={run} runs={runs} />
+      <div className="flex justify-end">
+        <DraftMemoButton runId={run.id} status={run.status} />
+      </div>
       <DiligenceDocumentsPanel
         runId={run.id}
         dealId={run.dealId}

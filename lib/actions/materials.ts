@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { getMaterialSourceSnapshot } from '@/lib/queries/materials';
+import { getDiligenceRun } from '@/lib/queries/diligence';
+import { composeMemo } from '@/lib/diligence/memo';
 import { awardTrustXp } from '@/lib/actions/xp';
 import type { Database, Json } from '@/lib/supabase/database.types';
 import {
@@ -207,6 +209,80 @@ export async function createMaterialDraft(
     materialId,
     action: 'capital_material_generated',
     metadata: { kind, audience, version_id: version.id }
+  });
+
+  revalidateMaterials();
+  return { ok: true, materialId, versionId: version.id };
+}
+
+/**
+ * Compose an IC memo from a completed diligence run and save it as a versioned
+ * `ic_memo` material. Deterministic (no LLM call): the memo is assembled from
+ * the run's recorded findings, so every claim cites a real lane. RLS-scoped —
+ * `getDiligenceRun` only returns a run the caller's org may see.
+ */
+export async function generateMemoFromDiligence(runId: string): Promise<MaterialActionResult> {
+  if (!runId) return { ok: false, error: 'Missing diligence run.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+
+  const run = await getDiligenceRun(runId);
+  if (!run) return { ok: false, error: 'Diligence run not found.' };
+  if (run.status !== 'complete' || !run.synthesis) {
+    return { ok: false, error: 'Run the diligence committee to completion first.' };
+  }
+
+  const memo = composeMemo(run);
+  const sourceSnapshot = {
+    diligence_run_id: run.id,
+    deal_id: run.dealId,
+    conviction: run.synthesis.conviction ?? run.conviction,
+    generated_at: new Date().toISOString()
+  };
+
+  const supabase = await createClient();
+  const insert: MaterialInsert = {
+    org_id: org.orgId,
+    created_by: org.userId,
+    kind: 'ic_memo',
+    audience: 'internal_ic',
+    title: memo.title.slice(0, 160),
+    status: 'draft',
+    last_generated_at: new Date().toISOString()
+  };
+
+  const { data: material, error } = await supabase
+    .from('capital_materials')
+    .insert(insert)
+    .select('id')
+    .single();
+
+  if (error || !material) {
+    return { ok: false, error: error?.message ?? 'Memo could not be created.' };
+  }
+
+  const materialId = (material as { id: string }).id;
+  const version = await insertVersion({
+    materialId,
+    orgId: org.orgId,
+    userId: org.userId,
+    title: memo.title.slice(0, 160),
+    body: memo.body,
+    source: 'deterministic_template',
+    sourceSnapshot
+  });
+
+  if (!version) {
+    return { ok: false, error: 'Memo shell was created, but the first version did not save.' };
+  }
+
+  await recordMaterialEvent({
+    orgId: org.orgId,
+    userId: org.userId,
+    materialId,
+    action: 'capital_material_generated',
+    metadata: { kind: 'ic_memo', diligence_run_id: run.id, version_id: version.id }
   });
 
   revalidateMaterials();
