@@ -12,6 +12,7 @@ import {
   Gift,
   Inbox,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Settings,
   Sparkles
@@ -120,19 +121,22 @@ export function AppShell({
   const onReferrals = pathname.startsWith('/referrals');
   const onRecs = pathname.startsWith('/recommendations');
   const onLpRoom = pathname.startsWith('/lp-room');
+  const onActionQueue = pathname.startsWith('/action-queue');
   const utility = pathname.startsWith('/inbox')
     ? 'Inbox'
     : pathname.startsWith('/notifications')
       ? 'Notifications'
-      : onEarn
-        ? 'Earn Ledger'
-        : onReferrals
-          ? 'Referrals'
-          : onRecs
-            ? 'Recommendations'
-            : pathname.startsWith('/settings')
-              ? 'Settings'
-              : null;
+      : onActionQueue
+        ? 'Action Queue'
+        : onEarn
+          ? 'Earn Ledger'
+          : onReferrals
+            ? 'Referrals'
+            : onRecs
+              ? 'Recommendations'
+              : pathname.startsWith('/settings')
+                ? 'Settings'
+                : null;
   const isHome = !activeHub && !utility;
   const title = activeHub?.label ?? utility ?? 'Command Center';
 
@@ -318,6 +322,19 @@ export function AppShell({
             >
               <Sparkles size={17} strokeWidth={1.9} aria-hidden />
               <span className="flex-1">Recommendations</span>
+            </Link>
+            <Link
+              href="/action-queue"
+              className={cn(
+                'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium transition',
+                onActionQueue
+                  ? 'bg-[linear-gradient(90deg,var(--accent-soft),var(--surface-1))] text-fg-1'
+                  : 'text-fg-3 hover:bg-surface-1 hover:text-fg-1'
+              )}
+              aria-current={onActionQueue ? 'page' : undefined}
+            >
+              <ListChecks size={17} strokeWidth={1.9} aria-hidden />
+              <span className="flex-1">Action Queue</span>
             </Link>
             <Link
               href="/inbox"
