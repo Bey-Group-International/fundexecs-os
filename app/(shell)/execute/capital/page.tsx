@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { CapitalCallsFlow } from '@/components/execute/CapitalCallsFlow';
+import { LpConcentrationPanel } from '@/components/execute/LpConcentrationPanel';
 import { getCapitalCallsData } from '@/lib/queries/capital-calls';
+import { getLpConcentration } from '@/lib/queries/lp-concentration';
 import { getActiveOrg } from '@/lib/queries/org';
 
 export const metadata: Metadata = {
@@ -23,10 +25,14 @@ export default async function ExecuteCapitalPage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const data = await getCapitalCallsData(org.orgId);
+  const [data, lpConcentration] = await Promise.all([
+    getCapitalCallsData(org.orgId),
+    getLpConcentration(org.orgId)
+  ]);
 
   return (
     <div className="fx-rise mx-auto max-w-[920px]">
+      <LpConcentrationPanel data={lpConcentration} />
       <CapitalCallsFlow
         calls={data.calls}
         committedLps={data.committedLps}
