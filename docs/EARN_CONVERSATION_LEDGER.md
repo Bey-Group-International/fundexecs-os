@@ -60,12 +60,12 @@ the _conversations_ that produce them.
 Rather than integrate the external conversation/routing tooling, the OS **adopts** each of its four
 capabilities as a native Earn/Executive-Team function — replacing the dependency outright:
 
-| Capability                                  | Becomes (native function)                                                                          | Built on                                                                  |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Capture a conversation thread               | **Conversation Ledger** — every Earn/specialist turn recorded to `earn_outcomes`                   | `lib/ai/earn.ts`, `recordApprovedOutcome` pattern                         |
-| Structure it (summary, turns, action items) | **Conversation digest** — a deterministic/Earn-written summary + extracted action items per thread | `lib/ai/earn.ts`, `lib/diligence/memo.ts` (deterministic-compose pattern) |
-| Route follow-ups                            | **Action-item → Action Queue** — extracted items become gated `task_runs` proposals                | `lib/agents/executors.ts`, `lib/actions/tasks.ts` (P1-A)                  |
-| Recall past context                         | **Conversation recall** — RAG over logged threads                                                  | `knowledge_chunks` + Voyage + `match_knowledge_chunks`                    |
+| Capability                                  | Becomes (native function)                                                                                 | Built on                                                                                             |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Capture a conversation thread               | **Conversation Ledger** — every Earn/specialist turn recorded to `earn_outcomes`                          | `lib/ai/earn.ts`, `recordApprovedOutcome` pattern                                                    |
+| Structure it (summary, turns, action items) | **Conversation digest** — a deterministic/Earn-written summary + extracted action items per thread        | `lib/ai/earn.ts`, `lib/diligence/memo.ts` (deterministic-compose pattern)                            |
+| Route follow-ups                            | **Action-item → Action Queue** — extracted items become gated `task_runs` proposals                       | `lib/agents/executors.ts`, `lib/actions/tasks.ts` (P1-A)                                             |
+| Recall past context                         | **Conversation recall** — key-free full-text/trigram search over logged digests; semantic rerank optional | Postgres FTS on the ledger (core); `match_knowledge_chunks` + Voyage rerank _only_ when a key is set |
 
 The conversation path becomes fully native and key-free; the external webhook is removed from it.
 Any remaining outbound scheduling is a separate concern slated to be brought in-house on the same
@@ -137,11 +137,16 @@ Each: **problem · function · flow · value · monetization · priority.**
 
 - **Data model (additive).** Add `conversation` to the `earn_outcomes` kind check constraint
   (`lib/earn/outcomes.ts` `OutcomeKind` + the `earn_outcomes_kind_valid` migration). Optional
-  `earn_conversations` table for full transcripts, linked from the ledger entry by id (keeps the
-  ledger row light). RLS org-scoped + idempotent, mirroring `sourcing_briefs`/`provider_cache`.
+  `earn_conversations` transcript table whose FK references **`earn_outcomes.id`** (the ledger entry
+  is the parent; the transcript hangs off it). A `unique(org_id, exchange_key)` on `earn_outcomes`
+  enforces one ledger row per exchange. RLS org-scoped + idempotent, mirroring
+  `sourcing_briefs`/`provider_cache`.
 - **Recorder.** `recordConversation()` in `lib/earn/record-outcome.ts` — a non-approval sibling of
-  `recordApprovedOutcome`: writes the `trust_events` audit row + the `earn_outcomes` ledger row
-  (kind `conversation`), best-effort/never-block, returns the audit id.
+  `recordApprovedOutcome`. Takes an **idempotency key** (`exchange_key`, e.g. a turn/thread id from
+  the capture hook); upserts the `earn_outcomes` ledger row on `(org_id, exchange_key)` so retries /
+  reconnects can't duplicate an entry ("one exchange → one record"), and writes the matching
+  `trust_events` audit row. Best-effort/never-block. **Returns `{ auditId, outcomeId }`** so the
+  optional transcript insert has the `earn_outcomes.id` it needs.
 - **Capture point.** Hook `lib/ai/earn.ts` (and the specialist invocation paths) to call
   `recordConversation()` on turn/thread completion. No change to the streaming UX.
 - **Ledger surface.** `getEarnLedger` already reads `earn_outcomes`; the `/earn` view renders the
@@ -156,8 +161,11 @@ Each: **problem · function · flow · value · monetization · priority.**
 
 ## 4. Guardrails
 
-- **On the record:** every conversation entry writes `trust_events` + `earn_outcomes` (one
-  recorder, one discipline).
+- **On the record:** every conversation entry _attempts to write_ both `trust_events` + `earn_outcomes`
+  through one recorder (one discipline). Because the recorder is best-effort/never-block, a partial
+  write is possible — one or both rows may fail to persist — and that is accepted by design: it never
+  interrupts the chat. The `(org_id, exchange_key)` upsert makes a later retry converge to a single
+  record rather than duplicate.
 - **Never-block:** logging is best-effort — a recorder failure never interrupts an Earn chat.
 - **Propose-only:** action items become _gated_ Action Queue proposals; nothing auto-executes.
 - **RLS-scoped** reads/writes; **additive + idempotent** migrations; **frozen** 15 roster slugs;
