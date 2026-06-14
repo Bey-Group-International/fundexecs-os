@@ -32,6 +32,8 @@ import { getLifecycleRail } from '@/lib/hubs';
 import { getCommandCenterData, getMarketPulse } from '@/lib/queries/command-center';
 import { getChiefOfStaffBrief } from '@/lib/queries/chief-of-staff-brief';
 import { DailyBrief } from '@/components/command-center/DailyBrief';
+import { getNextBestActions } from '@/lib/queries/next-best-action';
+import { NextBestActions } from '@/components/command-center/NextBestActions';
 import { getPendingInboxCount } from '@/lib/queries/inbox';
 import { loadActivityFeed, loadStreak, type ActivityItem } from '@/lib/queries/dashboard/lifecycle';
 import { readLastVisit } from '@/lib/dashboard/state';
@@ -303,7 +305,8 @@ export default async function CommandCenterPage() {
     pendingInbox,
     taskletQueue,
     marketPulse,
-    brief
+    brief,
+    nextActions
   ] = await Promise.all([
     getMandate(org.orgId),
     getCommandCenterData(org.orgId),
@@ -315,7 +318,8 @@ export default async function CommandCenterPage() {
     getPendingInboxCount(org.orgId),
     getTaskletQueue(org.orgId),
     getMarketPulse(),
-    getChiefOfStaffBrief(org.orgId)
+    getChiefOfStaffBrief(org.orgId),
+    getNextBestActions(org.orgId)
   ]);
 
   // Real autonomous work logged since the prior visit — the honest "worked
@@ -367,6 +371,8 @@ export default async function CommandCenterPage() {
 
   return (
     <div className="fx-rise flex flex-col gap-4">
+      {/* Next-best-actions — the desk's intelligence fused into a ranked worklist */}
+      <NextBestActions actions={nextActions} />
       {/* Chief-of-Staff brief — what the desk prepared + the next decision */}
       <DailyBrief brief={brief} />
       {/* greeting strip — the prototype's one-liner with the move count */}
