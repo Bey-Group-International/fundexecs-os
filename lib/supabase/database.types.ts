@@ -4289,6 +4289,38 @@ export type Database = {
           }
         ];
       };
+      intelligence_briefings: {
+        Row: {
+          body: string;
+          generated_at: string;
+          match_count: number;
+          org_id: string;
+          top_score: number | null;
+        };
+        Insert: {
+          body: string;
+          generated_at?: string;
+          match_count?: number;
+          org_id: string;
+          top_score?: number | null;
+        };
+        Update: {
+          body?: string;
+          generated_at?: string;
+          match_count?: number;
+          org_id?: string;
+          top_score?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'intelligence_briefings_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: true;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       sourcing_briefs: {
         Row: {
           active: boolean;

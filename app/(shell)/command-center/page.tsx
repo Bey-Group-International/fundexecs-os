@@ -30,6 +30,8 @@ import {
 } from '@/lib/command-center/moves';
 import { getLifecycleRail } from '@/lib/hubs';
 import { getCommandCenterData, getMarketPulse } from '@/lib/queries/command-center';
+import { getChiefOfStaffBrief } from '@/lib/queries/chief-of-staff-brief';
+import { DailyBrief } from '@/components/command-center/DailyBrief';
 import { getPendingInboxCount } from '@/lib/queries/inbox';
 import { loadActivityFeed, loadStreak, type ActivityItem } from '@/lib/queries/dashboard/lifecycle';
 import { readLastVisit } from '@/lib/dashboard/state';
@@ -300,7 +302,8 @@ export default async function CommandCenterPage() {
     lastVisit,
     pendingInbox,
     taskletQueue,
-    marketPulse
+    marketPulse,
+    brief
   ] = await Promise.all([
     getMandate(org.orgId),
     getCommandCenterData(org.orgId),
@@ -311,7 +314,8 @@ export default async function CommandCenterPage() {
     readLastVisit(),
     getPendingInboxCount(org.orgId),
     getTaskletQueue(org.orgId),
-    getMarketPulse()
+    getMarketPulse(),
+    getChiefOfStaffBrief(org.orgId)
   ]);
 
   // Real autonomous work logged since the prior visit — the honest "worked
@@ -363,6 +367,8 @@ export default async function CommandCenterPage() {
 
   return (
     <div className="fx-rise flex flex-col gap-4">
+      {/* Chief-of-Staff brief — what the desk prepared + the next decision */}
+      <DailyBrief brief={brief} />
       {/* greeting strip — the prototype's one-liner with the move count */}
       <div className="flex flex-wrap items-center gap-2.5">
         <EarnCoin size={22} className="flex-none" />
