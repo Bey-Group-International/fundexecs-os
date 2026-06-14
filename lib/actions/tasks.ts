@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getActiveOrg } from '@/lib/queries/org';
 import { TEAM_ROSTER, proposalForTask } from '@/lib/team';
 import { normalizeTaskStatus, type TaskRuntime } from '@/lib/queries/dashboard/team-tasks';
+import { dispatchRunExecutor } from '@/lib/agents/executors';
 
 /* ============================================================================
  * lib/actions/tasks.ts — write paths for the Team-tasks board.
@@ -185,6 +186,11 @@ export type DecideTaskRunResult = { ok: true } | { ok: false; error: string };
  * moves the task to 'running'; reject sends it to 'blocked'. The decision is
  * written conditionally (only a still-`proposed` run can be decided) and both
  * outcomes are recorded to the Chain-of-Trust audit.
+ *
+ * On approval, the run is handed to its registered executor (if any) to produce
+ * the low-stakes deliverable. Dispatch is NEVER-BLOCK: the approval has already
+ * committed, so an executor error is logged inside `dispatchRunExecutor` and
+ * never turns a successful decision into a failure.
  */
 export async function decideTaskRun(input: {
   runId: string;
@@ -212,5 +218,12 @@ export async function decideTaskRun(input: {
   });
 
   if (error) return { ok: false, error: error.message };
+
+  // The decision committed. On approval, run the executor to produce the
+  // deliverable — never-block, so any failure is contained and logged.
+  if (input.decision === 'approved') {
+    await dispatchRunExecutor(input.runId);
+  }
+
   return { ok: true };
 }
