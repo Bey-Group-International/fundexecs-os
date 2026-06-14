@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { DataRoomFlow } from '@/components/dataroom/DataRoomFlow';
+import { RaiseReviewCard } from '@/components/dataroom/RaiseReviewCard';
 import { getDataRoomState } from '@/lib/queries/data-room';
 import { getMandate } from '@/lib/queries/mandate';
 import { getActiveOrg } from '@/lib/queries/org';
@@ -25,7 +26,8 @@ export default async function BuildDataRoomPage() {
   const [mandate, room] = await Promise.all([getMandate(org.orgId), getDataRoomState(org.orgId)]);
 
   return (
-    <div className="fx-rise">
+    <div className="fx-rise flex flex-col gap-4">
+      <RaiseReviewCard />
       <DataRoomFlow
         firm={mandate?.firm ?? 'Your fund'}
         initialStages={room.stages}

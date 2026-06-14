@@ -4,9 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Building2,
+  Check,
   CheckCircle2,
+  Copy,
   DollarSign,
+  Gauge,
   Landmark,
+  Loader2,
+  Mail,
   ShieldCheck,
   Sparkles,
   X
@@ -19,6 +24,8 @@ import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
 import { Field } from '@/components/ui/Field';
 import { adoptLp } from '@/lib/actions/lp-pipeline';
+import { scoreLpFit } from '@/lib/actions/lp-fit';
+import { generateLpOutreach } from '@/lib/actions/outreach';
 import { advanceLpStage } from '@/lib/pipeline/actions';
 import { compactMoney } from '@/lib/format';
 import { LP_STAGES, lpValue, type LpEntry, type LpStageKey } from '@/lib/pipeline/lp-stages';
@@ -136,13 +143,60 @@ function useModalFocus(onClose: () => void) {
 function LpDrawer({
   lp,
   onClose,
-  onRun
+  onRun,
+  onScored
 }: {
   lp: LpEntry;
   onClose: () => void;
   onRun: (lp: LpEntry) => void;
+  onScored: (lpId: string, fit: number, warmth: string, rationale: string) => void;
 }) {
   const panelRef = useModalFocus(onClose);
+
+  const [scoring, setScoring] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [toolError, setToolError] = useState<string | null>(null);
+  const [outreach, setOutreach] = useState<{ subject: string; body: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function runScore() {
+    setScoring(true);
+    setToolError(null);
+    try {
+      const res = await scoreLpFit(lp.id);
+      if (res.ok) onScored(lp.id, res.result.fit, res.result.warmth, res.result.rationale);
+      else setToolError(res.error);
+    } catch {
+      setToolError('Could not score the fit — try again.');
+    } finally {
+      setScoring(false);
+    }
+  }
+
+  async function runOutreach() {
+    setDrafting(true);
+    setToolError(null);
+    try {
+      const res = await generateLpOutreach(lp.id);
+      if (res.ok) setOutreach({ subject: res.result.subject, body: res.result.body });
+      else setToolError(res.error);
+    } catch {
+      setToolError('Could not draft outreach — try again.');
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  function copyOutreach() {
+    if (!outreach || !navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(`Subject: ${outreach.subject}\n\n${outreach.body}`)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1800);
+      })
+      .catch(() => {});
+  }
 
   const move = lp.stage !== 'committed' ? NEXT_MOVE[lp.stage] : null;
   const stageLabel = LP_STAGES.find((s) => s.key === lp.stage)?.label ?? lp.stage;
@@ -238,6 +292,55 @@ function LpDrawer({
               ))}
             </div>
           )}
+
+          {/* Earn fast-win tools — score the fit, draft the outreach */}
+          <div className="rounded-[13px] border border-hairline bg-surface-1 px-4 py-3.5">
+            <div className="mb-2.5 flex items-center gap-2">
+              <EarnCoin size={22} />
+              <span className="text-[12.5px] font-semibold text-fg-1">Earn tools</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={scoring ? Loader2 : Gauge}
+                disabled={scoring}
+                onClick={runScore}
+              >
+                {scoring ? 'Scoring…' : lp.fit != null ? 'Re-score fit' : 'Score fit'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={drafting ? Loader2 : Mail}
+                disabled={drafting}
+                onClick={runOutreach}
+              >
+                {drafting ? 'Drafting…' : 'Draft outreach'}
+              </Button>
+            </div>
+            {toolError && <p className="mt-2 text-[11.5px] text-danger">{toolError}</p>}
+            {outreach && (
+              <div className="mt-3 rounded-[11px] border border-hairline bg-surface-2 p-3">
+                <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                  Draft outreach · review before sending
+                </div>
+                <div className="text-[12.5px] font-semibold text-fg-1">{outreach.subject}</div>
+                <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-relaxed text-fg-2">
+                  {outreach.body}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={copied ? Check : Copy}
+                  className="mt-2"
+                  onClick={copyOutreach}
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            )}
+          </div>
 
           {move ? (
             <div className="rounded-[13px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-4 py-3.5">
@@ -449,6 +552,15 @@ export function CapitalMapFlow({
     setToast(`${lp.name} advanced to ${label}`);
   }
 
+  function applyScore(lpId: string, fit: number, warmth: string, rationale: string) {
+    const w = warmth ? warmth[0].toUpperCase() + warmth.slice(1).toLowerCase() : null;
+    setLps((prev) =>
+      prev.map((l) => (l.id === lpId ? { ...l, fit, warmth: w, fitRationale: rationale } : l))
+    );
+    const scored = lps.find((l) => l.id === lpId);
+    setToast(`${scored?.name ?? 'LP'} scored ${fit} by Earn`);
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* the prototype's LpCapitalMap panel — thermometer, funnel and cards in one frame */}
@@ -613,6 +725,7 @@ export function CapitalMapFlow({
             setOpenId(null);
             setRunning(lp);
           }}
+          onScored={applyScore}
         />
       )}
 

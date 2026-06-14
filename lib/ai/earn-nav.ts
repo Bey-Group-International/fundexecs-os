@@ -29,6 +29,8 @@ export const EARN_NAV_DESTINATIONS = [
   '/run/workflows',
   '/run/compliance',
   '/run/ir',
+  '/run/objections',
+  '/lp-room',
   '/execute',
   '/execute/closings'
 ] as const;

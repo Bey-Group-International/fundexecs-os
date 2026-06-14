@@ -6,6 +6,11 @@ import { getAuthUser } from '@/lib/queries/auth';
 import { recordLoopClose } from '@/lib/actions/loop';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { embedQuery, toVectorLiteral } from '@/lib/ai/voyage';
+import { answerDiligenceQuestion } from '@/lib/ai/diligence-qa';
+import { getDiligenceRun } from '@/lib/queries/diligence';
+import { RETRIEVAL_MATCH_COUNT } from '@/lib/diligence/config';
+import type { DiligenceQaAnswer, QaFinding } from '@/lib/diligence/qa';
 import {
   earnReviewDeal,
   createDiligenceDocumentUpload,
@@ -59,6 +64,34 @@ export async function runDiligenceForDeal(dealId: string): Promise<RunDiligenceA
         });
       } catch {
         // Never block the diligence result on the flywheel write.
+      }
+
+      // Chain of Trust: the run itself is evidence. Record one real record per
+      // completed run (idempotent — same check-first shape as a resolved
+      // finding), distinct from the loop-close credit above. A finished
+      // committee review is a Proof of Concept; completion tracks conviction so
+      // a hesitant verdict reads as partial proof, not a clean pass.
+      try {
+        const supabase = await createClient();
+        const { data: existing } = await supabase
+          .from('chain_of_trust_records')
+          .select('id')
+          .eq('org_id', org.orgId)
+          .eq('entity_type', 'diligence_run')
+          .eq('entity_id', result.runId)
+          .maybeSingle();
+        if (!existing) {
+          await supabase.from('chain_of_trust_records').insert({
+            org_id: org.orgId,
+            entity_type: 'diligence_run',
+            entity_id: result.runId,
+            current_layer: 'Proof of Concept',
+            completion_percentage: result.conviction ?? 0,
+            status: 'active'
+          });
+        }
+      } catch {
+        // Best-effort — never block the diligence result on the trust write.
       }
     }
 
@@ -218,4 +251,77 @@ export async function resolveDiligenceFinding(input: {
   revalidatePath(`/run/diligence/${input.runId}`);
   revalidatePath('/run/diligence');
   return { ok: true };
+}
+
+export type AskDiligenceActionResult =
+  | { ok: true; answer: DiligenceQaAnswer }
+  | { ok: false; error: string };
+
+/**
+ * Ask Earn a question about a completed diligence run — the "ask Earn about
+ * this review" composer. Grounds the answer in the run's synthesis memo + the
+ * six analyst findings + (best-effort) document passages retrieved for the
+ * question via the same `match_diligence_chunks` RPC the orchestrator uses.
+ * Ephemeral: nothing is persisted. Degrades (never throws) so the composer
+ * always renders something.
+ */
+export async function askDiligenceQuestion(input: {
+  runId: string;
+  question: string;
+}): Promise<AskDiligenceActionResult> {
+  const question = input.question?.trim();
+  if (!input.runId || !question) return { ok: false, error: 'Ask a question first.' };
+
+  const org = await getActiveOrg();
+  if (!org) return { ok: false, error: 'No active organization.' };
+
+  const user = await getAuthUser();
+  if (!user) return { ok: false, error: 'Not authenticated.' };
+
+  // Load the run through the RLS-bound reader — also enforces visibility.
+  const run = await getDiligenceRun(input.runId);
+  if (!run) return { ok: false, error: 'Review not found.' };
+  if (run.status !== 'complete' || !run.synthesis) {
+    return { ok: false, error: 'Review is still in progress. Try again when complete.' };
+  }
+
+  // Best-effort retrieval of document passages for the question. The RPC is
+  // service_role-only; the run was already authorised above. A retrieval miss
+  // is non-fatal — Earn can still answer from the findings + memo.
+  let context: { fileName: string; content: string }[] = [];
+  try {
+    const vector = await embedQuery(question);
+    const admin = createAdminClient();
+    const { data } = await admin.rpc('match_diligence_chunks', {
+      run_id: input.runId,
+      query_embedding: toVectorLiteral(vector),
+      match_count: RETRIEVAL_MATCH_COUNT
+    });
+    context = (data ?? []).map((d) => ({ fileName: d.file_name, content: d.content }));
+  } catch {
+    context = [];
+  }
+
+  const findings: QaFinding[] = run.analysts.map((a) => ({
+    label: a.laneLabel,
+    score: a.score,
+    summary: a.summary,
+    detail: a.detail
+  }));
+
+  const answer = await answerDiligenceQuestion({
+    question,
+    subject: run.dealName ?? run.summary ?? null,
+    synthesis: run.synthesis
+      ? {
+          conviction: run.synthesis.conviction,
+          recommendation: run.synthesis.recommendation,
+          memo: run.synthesis.memo
+        }
+      : null,
+    findings,
+    context
+  });
+
+  return { ok: true, answer };
 }
