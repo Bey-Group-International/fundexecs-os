@@ -457,5 +457,22 @@ analyst a week.
   wording; tokens-only UI.
 - **Safe-subset** pattern for any public agent surface (rooms, raise pages) —
   zero sensitive fields in public payloads.
-  </content>
-  </invoke>
+
+---
+
+## 9. Locked decisions
+
+These were confirmed with the product owner and govern how this strategy
+converts into build work.
+
+| #   | Decision         | Locked choice                                                                                                                                                                                                |
+| --- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D1  | **Deliverable**  | This PR ships the **strategy + roadmap only**. Implementation lands in separate, scoped PRs per phase (mirrors the `docs/ADOPTION_PLAN.md` discipline).                                                      |
+| D2  | **First MVP**    | Build the full Phase-1 loop: **Action Queue spine → Sourcing → Diligence → Memo + Chief-of-Staff brief** (§6). Lowest liability, one complete loop an operator feels on day one.                             |
+| D3  | **Autonomy**     | **Propose-only, human approves.** Every agent output lands in the Action Queue for one-click approval; nothing sends, signs, moves money, or accepts an LP autonomously. (Trust-graded autonomy is Phase 3.) |
+| D4  | **Monetization** | Lead with **seat + usage + outcome** (§4): the Chief-of-Staff seat anchors price; usage meters and the per-portfolio-company fee drive expansion.                                                            |
+
+**Next step (separate PR):** convert the Phase-1 MVP (D2) into a file-level
+implementation spec — the Action Queue spine first (the control plane every
+agent reuses), then Sourcing → Diligence → Memo on top — under the §8
+guardrails.
