@@ -9,7 +9,8 @@ import {
   MessageSquareWarning,
   RotateCcw,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  TriangleAlert
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -38,7 +39,7 @@ export interface ObjectionsFlowProps {
 
 export function ObjectionsFlow({ data }: ObjectionsFlowProps) {
   const router = useRouter();
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; tone: 'success' | 'error' } | null>(null);
 
   // Composer state.
   const [lpId, setLpId] = useState('');
@@ -102,7 +103,7 @@ export function ObjectionsFlow({ data }: ObjectionsFlowProps) {
         rebuttal: rebuttal.trim() || undefined
       });
       if (res.ok) {
-        setToast('Objection logged');
+        setToast({ msg: 'Objection logged', tone: 'success' });
         setObjection('');
         setRebuttal('');
         setTalkingPoints([]);
@@ -122,13 +123,13 @@ export function ObjectionsFlow({ data }: ObjectionsFlowProps) {
     try {
       const res = await resolveObjection(item.id);
       if (res.ok) {
-        setToast('Objection resolved');
+        setToast({ msg: 'Objection resolved', tone: 'success' });
         router.refresh();
       } else {
-        setToast(res.error);
+        setToast({ msg: res.error, tone: 'error' });
       }
     } catch {
-      setToast('Could not resolve — try again.');
+      setToast({ msg: 'Could not resolve — try again.', tone: 'error' });
     } finally {
       setResolvingId(null);
     }
@@ -360,9 +361,18 @@ export function ObjectionsFlow({ data }: ObjectionsFlowProps) {
       </Card>
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2.5 rounded-[14px] border border-[var(--success-line)] bg-bg-2 px-4 py-3 shadow-[var(--shadow-lg)]">
-          <ShieldCheck size={17} className="text-success" aria-hidden />
-          <div className="text-[13px] font-semibold text-fg-1">{toast}</div>
+        <div
+          className={`fixed bottom-6 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2.5 rounded-[14px] border bg-bg-2 px-4 py-3 shadow-[var(--shadow-lg)] ${
+            toast.tone === 'error' ? 'border-[var(--danger-line)]' : 'border-[var(--success-line)]'
+          }`}
+          role={toast.tone === 'error' ? 'alert' : 'status'}
+        >
+          {toast.tone === 'error' ? (
+            <TriangleAlert size={17} className="text-danger" aria-hidden />
+          ) : (
+            <ShieldCheck size={17} className="text-success" aria-hidden />
+          )}
+          <div className="text-[13px] font-semibold text-fg-1">{toast.msg}</div>
         </div>
       )}
     </div>

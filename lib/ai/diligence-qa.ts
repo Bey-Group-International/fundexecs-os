@@ -16,10 +16,14 @@ const MODEL = AI_MODELS.chat;
 function strList(value: unknown, maxItems: number): string[] {
   if (!Array.isArray(value)) return [];
   const out: string[] = [];
+  const seen = new Set<string>();
   for (const raw of value) {
     if (typeof raw !== 'string') continue;
     const v = raw.trim().slice(0, 80);
-    if (v) out.push(v);
+    if (v && !seen.has(v)) {
+      seen.add(v);
+      out.push(v);
+    }
     if (out.length >= maxItems) break;
   }
   return out;

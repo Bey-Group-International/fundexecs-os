@@ -25,12 +25,18 @@ function strList(value: unknown, maxItems: number): string[] {
   return out;
 }
 
-/** Coerce/clamp the tool input into a safe draft; throw if unusable. */
-function normalize(input: unknown): Omit<LpAnswerDraft, 'degraded'> {
+/**
+ * Coerce/clamp the tool input into a safe draft; throw if unusable. Citations
+ * are filtered against the approved-materials list so a hallucinated or
+ * unapproved label can never be persisted downstream as a citation.
+ */
+function normalize(input: unknown, approvedDocs: string[]): Omit<LpAnswerDraft, 'degraded'> {
   const o = (input ?? {}) as Record<string, unknown>;
   const answer = typeof o.answer === 'string' ? o.answer.trim().slice(0, 4000) : '';
   if (!answer) throw new Error('Earn returned an unusable answer');
-  return { answer, citations: strList(o.citations, 8) };
+  const allowed = new Set(approvedDocs.map((d) => d.trim().toLowerCase()).filter(Boolean));
+  const citations = strList(o.citations, 8).filter((c) => allowed.has(c.toLowerCase()));
+  return { answer, citations };
 }
 
 /**
@@ -56,7 +62,7 @@ export async function draftLpAnswerWithEarn(input: LpAnswerInput): Promise<LpAns
       (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
     );
     if (!toolUse) throw new Error('Earn returned no answer');
-    return { ...normalize(toolUse.input), degraded: false };
+    return { ...normalize(toolUse.input, input.approvedDocs), degraded: false };
   } catch {
     return templatedLpAnswer(input);
   }

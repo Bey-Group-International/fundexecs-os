@@ -281,6 +281,9 @@ export async function askDiligenceQuestion(input: {
   // Load the run through the RLS-bound reader — also enforces visibility.
   const run = await getDiligenceRun(input.runId);
   if (!run) return { ok: false, error: 'Review not found.' };
+  if (run.status !== 'complete' || !run.synthesis) {
+    return { ok: false, error: 'Review is still in progress. Try again when complete.' };
+  }
 
   // Best-effort retrieval of document passages for the question. The RPC is
   // service_role-only; the run was already authorised above. A retrieval miss

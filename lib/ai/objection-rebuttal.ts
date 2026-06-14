@@ -30,7 +30,9 @@ function normalize(input: unknown): Omit<ObjectionRebuttalResult, 'degraded'> {
   const o = (input ?? {}) as Record<string, unknown>;
   const rebuttal = typeof o.rebuttal === 'string' ? o.rebuttal.trim().slice(0, 2000) : '';
   const talkingPoints = strList(o.talkingPoints, 4);
-  if (!rebuttal) throw new Error('Earn returned an unusable rebuttal');
+  if (!rebuttal || talkingPoints.length === 0) {
+    throw new Error('Earn returned an unusable rebuttal');
+  }
   return { rebuttal, talkingPoints };
 }
 

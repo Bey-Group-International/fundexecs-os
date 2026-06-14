@@ -62,7 +62,9 @@ export function templatedReadiness(input: FundReadinessInput): FundReadinessResu
   const materialsPct = input.materialsTotal
     ? Math.round((input.materialsReady / input.materialsTotal) * 100)
     : 0;
-  const pipelinePct = input.lpTotal ? Math.min(100, input.lpTotal * 8 + input.lpCommitted * 15) : 0;
+  const pipelinePct = input.lpTotal
+    ? Math.min(100, input.lpTotal * 8 + input.lpSoftCircled * 10 + input.lpCommitted * 15)
+    : 0;
 
   const dimensions: ReadinessDimension[] = [
     {

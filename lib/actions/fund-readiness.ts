@@ -27,11 +27,13 @@ export async function assessFundReadiness(): Promise<AssessReadinessResult> {
   if (!org) return { ok: false, error: 'No active organization.' };
 
   const [profile, formation, materials, pipeline] = await Promise.all([
-    getFundProfile(org.orgId),
+    getFundProfile(org.orgId).catch(() => null),
     getFormationState(org.orgId).catch(() => null),
     getMaterialsStudioData(org.orgId).catch(() => null),
     getLpPipeline(org.orgId).catch(() => null)
   ]);
+
+  if (!profile) return { ok: false, error: 'Could not load your fund profile.' };
 
   const committed = pipeline?.columns.find((c) => c.key === 'committed')?.lps.length ?? 0;
   const softCircled = pipeline?.columns.find((c) => c.key === 'soft_circled')?.lps.length ?? 0;

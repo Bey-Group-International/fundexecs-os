@@ -202,6 +202,9 @@ function AskEarnComposer({ runId }: { runId: string }) {
         setError(res.error);
         setAnswer(null);
       }
+    } catch {
+      setError('Could not reach Earn right now. Please try again.');
+      setAnswer(null);
     } finally {
       setBusy(false);
     }

@@ -439,6 +439,7 @@ function QaTab({
       <Card className="p-[18px]">
         <Eyebrow>Ask the GP</Eyebrow>
         <textarea
+          aria-label="Your question for the GP"
           className={`${inputClass} min-h-[72px] resize-y`}
           value={body}
           onChange={(e) => setBody(e.target.value)}

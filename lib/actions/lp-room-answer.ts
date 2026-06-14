@@ -47,9 +47,14 @@ export async function answerLpQuestionWithEarn(
 
   if (error) return { ok: false, error: error.message };
   if (!question) return { ok: false, error: 'Question not found.' };
+  if (question.status === 'answered') {
+    return { ok: false, error: 'This question has already been answered.' };
+  }
 
   // Approved materials: room documents the LP is entitled to (not admin-only).
-  const [{ data: docs }, profile] = await Promise.all([
+  // Fail closed if the materials can't be loaded — we don't answer "as if there
+  // are none" when the read errored.
+  const [{ data: docs, error: docsError }, profile] = await Promise.all([
     supabase
       .from('lp_room_documents')
       .select('id, name, access_level')
@@ -57,6 +62,8 @@ export async function answerLpQuestionWithEarn(
       .neq('access_level', 'admin-only'),
     getFundProfile(org.orgId).catch(() => null)
   ]);
+
+  if (docsError) return { ok: false, error: 'Could not load the approved materials.' };
 
   const docList = (docs ?? []) as Array<{ id: string; name: string }>;
 
@@ -91,7 +98,9 @@ export async function answerLpQuestionWithEarn(
     return { ok: false, error: answerError?.message ?? 'Could not post the answer.' };
   }
 
-  // Map cited labels back to room documents where the name matches.
+  // Map cited labels back to room documents where the name matches. Fail closed
+  // so a citation-tracking failure surfaces rather than silently shipping an
+  // uncited official answer.
   if (draft.citations.length > 0) {
     const docByName = new Map(docList.map((d) => [d.name.toLowerCase(), d.id]));
     const rows = draft.citations.map((label) => ({
@@ -100,15 +109,17 @@ export async function answerLpQuestionWithEarn(
       document_id: docByName.get(label.toLowerCase()) ?? null,
       label
     }));
-    await admin.from('lp_room_answer_citations').insert(rows);
+    const { error: citationError } = await admin.from('lp_room_answer_citations').insert(rows);
+    if (citationError) return { ok: false, error: 'Could not record the answer citations.' };
   }
 
-  // Mark the question answered.
-  await admin
+  // Mark the question answered — fail closed so the thread state stays accurate.
+  const { error: statusError } = await admin
     .from('lp_room_questions')
     .update({ status: 'answered' })
     .eq('id', question.id)
     .eq('org_id', org.orgId);
+  if (statusError) return { ok: false, error: 'Posted the answer but could not update status.' };
 
   revalidatePath('/lp-room');
   return { ok: true, answer: draft };
