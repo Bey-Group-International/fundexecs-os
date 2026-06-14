@@ -33,40 +33,48 @@ const EMPTY: ChiefOfStaffBrief = {
   briefing: null
 };
 
-/** Compose the brief for an org. Every read degrades independently to empty. */
+/** Compose the brief for an org. Fail-soft: any read error degrades to empty. */
 export async function getChiefOfStaffBrief(orgId: string): Promise<ChiefOfStaffBrief> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const [pending, matchesRes, overdueRes, briefingRes] = await Promise.all([
-    getPendingRuns(orgId).catch(() => [] as PendingRun[]),
-    supabase
-      .from('matches')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .eq('kind', 'signal')
-      .eq('status', 'new'),
-    supabase
-      .from('tasks')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .not('due_at', 'is', null)
-      .lt('due_at', new Date().toISOString())
-      .not('status', 'in', '(done,failed)'),
-    supabase
-      .from('intelligence_briefings')
-      .select('body, generated_at')
-      .eq('org_id', orgId)
-      .maybeSingle()
-  ]);
+    const [pending, matchesRes, overdueRes, briefingRes] = await Promise.all([
+      getPendingRuns(orgId).catch(() => [] as PendingRun[]),
+      // Signal matches use status 'new' (the matches_status_check constraint is
+      // new/accepted/dismissed/snoozed — there is no 'pending'); this mirrors
+      // how the intelligence cycle writes and reads them.
+      supabase
+        .from('matches')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('kind', 'signal')
+        .eq('status', 'new'),
+      supabase
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .not('due_at', 'is', null)
+        .lt('due_at', new Date().toISOString())
+        .not('status', 'in', '(done,failed)'),
+      supabase
+        .from('intelligence_briefings')
+        .select('body, generated_at')
+        .eq('org_id', orgId)
+        .maybeSingle()
+    ]);
 
-  return {
-    ...EMPTY,
-    pendingApprovals: pending.slice(0, 3),
-    pendingApprovalsCount: pending.length,
-    newMatchesCount: matchesRes.count ?? 0,
-    overdueCount: overdueRes.count ?? 0,
-    briefing: briefingRes.data
-      ? { body: briefingRes.data.body, generatedAt: briefingRes.data.generated_at }
-      : null
-  };
+    return {
+      ...EMPTY,
+      pendingApprovals: pending.slice(0, 3),
+      pendingApprovalsCount: pending.length,
+      newMatchesCount: matchesRes.count ?? 0,
+      overdueCount: overdueRes.count ?? 0,
+      briefing: briefingRes.data
+        ? { body: briefingRes.data.body, generatedAt: briefingRes.data.generated_at }
+        : null
+    };
+  } catch {
+    // Any read failure degrades to an empty brief — the surface never throws.
+    return EMPTY;
+  }
 }

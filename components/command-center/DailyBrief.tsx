@@ -6,11 +6,12 @@ import type { ChiefOfStaffBrief } from '@/lib/queries/chief-of-staff-brief';
  * and the operator's next decision. Every line deep-links to where the work is.
  * Renders nothing when there's nothing to surface (no empty noise). */
 export function DailyBrief({ brief }: { brief: ChiefOfStaffBrief }) {
+  const briefingBody = brief.briefing?.body?.trim() ?? '';
   const hasSomething =
     brief.pendingApprovalsCount > 0 ||
     brief.newMatchesCount > 0 ||
     brief.overdueCount > 0 ||
-    !!brief.briefing;
+    briefingBody.length > 0;
 
   if (!hasSomething) return null;
 
@@ -21,9 +22,7 @@ export function DailyBrief({ brief }: { brief: ChiefOfStaffBrief }) {
         <h2 className="text-[13.5px] font-semibold text-fg-1">Your desk brief</h2>
       </header>
 
-      {brief.briefing?.body && (
-        <p className="mt-2 text-[13px] leading-relaxed text-fg-2">{brief.briefing.body}</p>
-      )}
+      {briefingBody && <p className="mt-2 text-[13px] leading-relaxed text-fg-2">{briefingBody}</p>}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {brief.pendingApprovalsCount > 0 && (
