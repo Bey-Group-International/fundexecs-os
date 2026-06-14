@@ -12,6 +12,7 @@ import {
   refreshComplianceTiers,
   type ComplianceRefreshSummary
 } from '@/lib/strategy/compliance-refresh';
+import { proposalForTask } from '@/lib/team';
 
 /* ============================================================================
  * lib/ai/intelligence-pipeline.ts — the live self-aware loop.
@@ -43,6 +44,7 @@ export interface CycleSummary {
   score: { orgs: number; matchesCreated: number; failed: number };
   judge: { judged: number };
   brief: { written: number };
+  sourcing: { raised: number };
   compliance: ComplianceRefreshSummary;
   errors: string[];
 }
@@ -348,6 +350,93 @@ export async function ingestBotMemo(): Promise<{ inserted: number }> {
   return { inserted: error ? 0 : 1 };
 }
 
+/**
+ * 6. Raise a "scout targets" Action-Queue proposal for each ACTIVE sourcing
+ * brief. Idempotent: an org that already has an open (awaiting) sourcing
+ * proposal is skipped, so the cadence is "one pending scout at a time". On
+ * approval the sourcing executor runs target discovery against the brief.
+ *
+ * The task + proposed run + audit are inserted directly under the service role:
+ * the user-scoped `propose_task_run` RPC requires an `auth.uid()`, which a cron
+ * job doesn't have. proposed_by is therefore null (a system proposal).
+ */
+export async function raiseSourcingProposals(): Promise<{ raised: number }> {
+  const admin = createAdminClient();
+  const { data: briefs } = await admin
+    .from('sourcing_briefs')
+    .select('org_id, thesis')
+    .eq('active', true);
+
+  if (!briefs || briefs.length === 0) return { raised: 0 };
+
+  const TITLE = 'Scout new on-thesis targets';
+  let raised = 0;
+
+  for (const brief of briefs) {
+    try {
+      // Idempotency: one open sourcing proposal per org at a time.
+      const { data: open } = await admin
+        .from('tasks')
+        .select('id')
+        .eq('org_id', brief.org_id)
+        .eq('source', 'sourcing-brief')
+        .eq('status', 'awaiting')
+        .limit(1);
+      if (open && open.length > 0) continue;
+
+      const { data: task, error: taskErr } = await admin
+        .from('tasks')
+        .insert({
+          org_id: brief.org_id,
+          agent_slug: 'deal-sourcer',
+          title: TITLE,
+          description: brief.thesis,
+          status: 'awaiting',
+          source: 'sourcing-brief',
+          priority: 1
+        })
+        .select('id')
+        .single();
+      if (taskErr || !task) continue;
+
+      const plan = proposalForTask('deal-sourcer', TITLE);
+      const { data: run, error: runErr } = await admin
+        .from('task_runs')
+        .insert({
+          org_id: brief.org_id,
+          task_id: task.id,
+          agent_slug: 'deal-sourcer',
+          action: plan.action,
+          steps: plan.steps,
+          status: 'proposed'
+        })
+        .select('id')
+        .single();
+      if (runErr || !run) continue;
+
+      // Mirror propose_task_run's audit row (no actor — a system proposal).
+      await admin.from('trust_events').insert({
+        org_id: brief.org_id,
+        entity_type: 'task_run',
+        entity_id: run.id,
+        action: 'task_run_proposed',
+        metadata: {
+          task_id: task.id,
+          agent_slug: 'deal-sourcer',
+          run_action: plan.action,
+          source: 'sourcing-brief'
+        }
+      });
+
+      raised++;
+    } catch {
+      // never-block per org
+    }
+  }
+
+  return { raised };
+}
+
 /** Run the full cycle. Each phase is isolated; errors are collected, not thrown. */
 export async function runIntelligenceCycle(): Promise<CycleSummary> {
   const errors: string[] = [];
@@ -367,11 +456,12 @@ export async function runIntelligenceCycle(): Promise<CycleSummary> {
   const score = await safe('score', scoreActiveOrgs, { orgs: 0, matchesCreated: 0, failed: 0 });
   const judge = await safe('judge', () => proactiveJudge(), { judged: 0 });
   const brief = await safe('brief', () => generateBriefings(), { written: 0 });
+  const sourcing = await safe('sourcing', raiseSourcingProposals, { raised: 0 });
   const compliance = await safe('compliance', refreshComplianceTiers, {
     orgs: 0,
     touched: 0,
     failed: 0
   });
 
-  return { ingest, botmemo, embed, network, score, judge, brief, compliance, errors };
+  return { ingest, botmemo, embed, network, score, judge, brief, sourcing, compliance, errors };
 }

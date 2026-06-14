@@ -98,6 +98,11 @@ const sourcingExecutor: Executor = async (ctx) => {
     log.error('agent_executor_sourcing_stage_failed', { runId: ctx.runId, error });
     return;
   }
+
+  // The scout task's deliverable is staged — close it so a standing sourcing
+  // brief raises a fresh proposal next cycle instead of leaving it 'running'.
+  await supabase.from('tasks').update({ status: 'done' }).eq('id', ctx.taskId);
+
   log.info('agent_executor_sourcing_staged', { runId: ctx.runId, count: rows.length });
 };
 
