@@ -47,6 +47,7 @@ export type MeteredAction =
   | 'workflow_step'
   // Paid third-party integrations (real vendor cost) — plan-gated below.
   | 'apollo_enrich'
+  | 'enrichment'
   | 'meeting_copilot'
   | 'docusign_envelope'
   | 'carta_sync';
@@ -63,6 +64,7 @@ export const ACTION_COST: Record<MeteredAction, number> = {
   workflow_step: 2,
   diligence_run: 25,
   apollo_enrich: 5,
+  enrichment: 2,
   meeting_copilot: 10,
   docusign_envelope: 8,
   carta_sync: 6
