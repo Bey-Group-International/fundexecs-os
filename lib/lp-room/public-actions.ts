@@ -19,10 +19,10 @@ import { lpRoomTierFromKind } from '@/lib/lp-room/public';
  *    ONLY after re-resolving the token AND re-checking the document is within
  *    the link's tier (and never admin-only) — fail closed on every branch.
  *  - submitPublicLpQuestion: logs the LP's outreach as a REAL `data_room_views`
- *    row (the same access log the manager reads). The question BODY cannot be
- *    persisted to `lp_room_questions` without a schema change (asked_by is a
- *    NOT NULL FK to profiles), so the durable record here is "this LP reached
- *    out"; see the route/report for the migration that unlocks full bodies.
+ *    row (the same access log the manager reads, which also gates abuse), AND
+ *    persists the question body to `lp_room_questions` with a null asker (the
+ *    20260614 migration made asked_by nullable + added asker_email) so it shows
+ *    up in the manager Q&A for an Earn-drafted answer.
  */
 
 const SIGNED_URL_TTL_SECONDS = 5 * 60;
@@ -157,6 +157,21 @@ export async function submitPublicLpQuestion(input: {
       if (error && error.code !== '23505') {
         return { ok: false, error: 'Could not send your question — try again.' };
       }
+    }
+
+    // Persist the question body itself (anonymous asker — no profile) so the
+    // manager sees the real question in the LP Room Q&A. Service role bypasses
+    // the member-only insert policy; asked_by is null since the LP isn't a user.
+    const { error: questionError } = await admin.from('lp_room_questions').insert({
+      org_id: link.orgId,
+      asked_by: null,
+      asker_name: name,
+      asker_email: email,
+      body,
+      status: 'open'
+    });
+    if (questionError) {
+      return { ok: false, error: 'Could not send your question — try again.' };
     }
 
     (await cookies()).set(`fx_lp_${link.id}`, encodeURIComponent(name), {

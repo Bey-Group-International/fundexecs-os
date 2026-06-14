@@ -2987,7 +2987,8 @@ export type Database = {
       };
       lp_room_questions: {
         Row: {
-          asked_by: string;
+          asked_by: string | null;
+          asker_email: string | null;
           asker_name: string;
           body: string;
           created_at: string;
@@ -2997,7 +2998,8 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
-          asked_by: string;
+          asked_by?: string | null;
+          asker_email?: string | null;
           asker_name: string;
           body: string;
           created_at?: string;
@@ -3007,7 +3009,8 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
-          asked_by?: string;
+          asked_by?: string | null;
+          asker_email?: string | null;
           asker_name?: string;
           body?: string;
           created_at?: string;
