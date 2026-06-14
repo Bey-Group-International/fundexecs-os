@@ -82,6 +82,22 @@ test('an evenly spread book is Diversified', () => {
   assert.equal(r.hhi, 1000); // 10 × (0.1)² × 10000
 });
 
+test('band uses the unrounded top share: 49.6% does not escalate to Highly concentrated', () => {
+  // top deal is 49.6% of exposure — rounds to 50% for display but must stay sub-anchor.
+  const r = computeCapitalCoverage(
+    [
+      d({ id: 'a', amount: 496_000 }),
+      d({ id: 'b', amount: 254_000 }),
+      d({ id: 'c', amount: 250_000 })
+    ],
+    1_000_000,
+    0
+  );
+  assert.equal(r.topDeal?.share, 50); // display value is rounded
+  assert.notEqual(r.band, 'Highly concentrated'); // classification uses the real 49.6%
+  assert.equal(r.band, 'Concentrated');
+});
+
 test('empty pipeline yields a safe, headlined zero state', () => {
   const r = computeCapitalCoverage([], 0, 0);
   assert.equal(r.totalExposure, 0);
