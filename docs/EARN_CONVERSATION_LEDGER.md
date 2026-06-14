@@ -14,17 +14,20 @@ to **adopt that capability into the OS as a native function** — owned, on-bran
 Trust, and free of any third-party dependency or data leaving the platform. We absorb the behavior,
 we don't rent it:
 
-- **No vendor in the data path.** Conversation capture, structuring, recall, and routing run on the
-  OS's own spine (the Earn Ledger, the recorder chokepoint, the Action Queue, the RAG layer) — not
-  on an outbound webhook.
+- **Zero third-party APIs or keys.** Every function below runs on the OS's own spine (the Earn
+  Ledger, the recorder chokepoint, the Action Queue, deterministic text logic, and the existing
+  search layer). No external service is in the path, and **nothing requires an API key to work** —
+  any LLM or embedding step is an _optional, never-block enhancement_ that degrades to a fully
+  functional deterministic default.
+- **No vendor in the data path.** Conversation capture, structuring, recall, and routing are native
+  OS behavior — not an outbound webhook.
 - **Retire the external integration for this purpose.** `lib/integrations/tasklets-ai.ts` is
-  superseded for anything conversational; it retains only its narrow HighLevel calendar-scheduling
-  role (or is retired entirely once that, too, is brought in-house).
+  superseded for anything conversational; it is removed from the conversation path entirely.
 - **Own the record.** The desk's conversations are institutional memory and must live where the
   outcomes do — inside the OS, never in a third party's system of record.
 
 Every feature below is therefore framed as a function the desk _gains_, replacing a dependency it
-_sheds_.
+_sheds_ — and each is fully operable with **no keys configured**.
 
 ---
 
@@ -64,8 +67,9 @@ capabilities as a native Earn/Executive-Team function — replacing the dependen
 | Route follow-ups                            | **Action-item → Action Queue** — extracted items become gated `task_runs` proposals                | `lib/agents/executors.ts`, `lib/actions/tasks.ts` (P1-A)                  |
 | Recall past context                         | **Conversation recall** — RAG over logged threads                                                  | `knowledge_chunks` + Voyage + `match_knowledge_chunks`                    |
 
-External scheduling that genuinely belongs outside real-time approval (HighLevel calendar pushes)
-stays in `tasklets-ai.ts`; conversation _memory and record_ do not.
+The conversation path becomes fully native and key-free; the external webhook is removed from it.
+Any remaining outbound scheduling is a separate concern slated to be brought in-house on the same
+adoption-over-integration principle — not a dependency this function carries.
 
 ---
 
@@ -92,11 +96,15 @@ Each: **problem · function · flow · value · monetization · priority.**
 ### F2 — Conversation digest + action items
 
 - **Problem.** A logged transcript is noise without the gist and the to-dos.
-- **Function.** Per thread, produce a 1–3 sentence digest + extracted action items. Deterministic
-  assembly where possible; Earn-written summary as the reasoning-tier option (never-block).
-- **Flow.** On thread close/idle → digest written onto the ledger entry; action items surfaced.
-- **Value.** The ledger reads as decisions + next steps, not raw chat.
-- **Monetization.** Usage-metered when the reasoning-tier summary is used (`earn_chat`-class).
+- **Function.** **Key-free by default:** a deterministic digest (lead/last-turn extraction +
+  imperative/commitment detection for action items — pure text logic, no model). An Earn-written
+  summary is an _optional_ enhancement that only runs when an AI key is present and **degrades
+  silently to the deterministic digest otherwise** (never-block).
+- **Flow.** On thread close/idle → deterministic digest written onto the ledger entry; action items
+  surfaced.
+- **Value.** The ledger reads as decisions + next steps, not raw chat — with or without any key.
+- **Monetization.** Free at the deterministic tier; usage-metered only if the optional AI summary
+  is enabled.
 - **Priority: 4.**
 
 ### F3 — Action items → Action Queue (gated)
@@ -113,11 +121,14 @@ Each: **problem · function · flow · value · monetization · priority.**
 ### F4 — Conversation recall (RAG over the ledger)
 
 - **Problem.** "What did we decide about X three weeks ago?" is unanswerable today.
-- **Function.** Embed logged conversation digests into `knowledge_chunks`; Earn answers from prior
-  threads with citations back to ledger entries.
-- **Flow.** Ledger entry → embed → `match_knowledge_chunks` → Earn recall in any surface.
-- **Value.** The desk gets institutional memory; context compounds over time.
-- **Monetization.** Premium recall depth / retention window.
+- **Function.** **Key-free by default:** recall over logged digests via Postgres full-text /
+  trigram search on the ledger (no embeddings, no external model) — answers cite the ledger entry.
+  Semantic (vector) recall is an _optional_ upgrade that activates only if an embedding key is
+  configured, and the keyword recall remains the always-on baseline.
+- **Flow.** Ledger entry → indexed → full-text recall in any surface (optional vector rerank when
+  available).
+- **Value.** The desk gets institutional memory that works on day one, no keys required.
+- **Monetization.** Free keyword recall; premium semantic recall depth / retention window.
 - **Priority: 3.**
 
 ---
@@ -135,8 +146,11 @@ Each: **problem · function · flow · value · monetization · priority.**
   `recordConversation()` on turn/thread completion. No change to the streaming UX.
 - **Ledger surface.** `getEarnLedger` already reads `earn_outcomes`; the `/earn` view renders the
   new `conversation` kind with its label/chip (add to `OUTCOME_KINDS` + `outcome-icons`).
-- **Deprecate the integration for conversations.** `tasklets-ai.ts` retains only HighLevel
-  scheduling events; conversation capture/routing is removed from the external path.
+- **Key-free recall.** Index the digest text for Postgres full-text / trigram recall — the always-on
+  baseline. Vector recall (`knowledge_chunks`) is an optional add-on that only engages when an
+  embedding key exists; the function never depends on it.
+- **Remove the integration from the conversation path.** `tasklets-ai.ts` is taken out of
+  conversation capture/routing entirely; the function carries no external dependency or key.
 
 ---
 
@@ -156,4 +170,6 @@ Each: **problem · function · flow · value · monetization · priority.**
 The Earn Ledger already proves what the desk _did_. The Earn Conversation Ledger proves what the
 desk _thought_ — every exchange with Earn and the Executive Team, summarized, actioned, and recalled,
 on the record beside its outcomes. Conversation memory stops being an external integration and
-becomes a native function of the executive desk: the OS remembers, so the operator never has to.
+becomes a native function of the executive desk — **owned end to end, with no third-party API or
+key in the path**: the OS remembers, so the operator never has to, and never has to trust anyone
+else to.
