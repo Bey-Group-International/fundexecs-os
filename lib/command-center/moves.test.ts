@@ -107,6 +107,23 @@ test('raise-readiness fires when Build is thin, without displacing the hero', ()
   assert.equal(readiness?.hub, 'build');
 });
 
+test('raise-readiness respects the 70% boundary exactly', () => {
+  // The gate is `< 70`, so at precisely 70% the move must not appear.
+  const moves = deriveMoves(
+    state({
+      activeDealsCount: 3,
+      hotRelationshipsCount: 2,
+      topWarmConnections: [{ id: 'c1', name: 'A', company: null, status: 'hot' }],
+      pct: { build: 70, source: 80, run: 75, execute: 65 }
+    })
+  );
+  assert.equal(
+    moves.find((m) => m.id === 'raise-readiness'),
+    undefined,
+    'raise-readiness should not appear at exactly 70%'
+  );
+});
+
 test('raise-readiness stays quiet once Build is institutional', () => {
   const moves = deriveMoves(
     state({

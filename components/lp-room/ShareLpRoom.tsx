@@ -39,12 +39,16 @@ export function ShareLpRoom() {
     setUrl(null);
     setCopied(false);
     start(async () => {
-      const res = await generateLpRoomLink(tier, expiry);
-      if (res.ok) {
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        setUrl(`${origin}/lp/${res.token}`);
-      } else {
-        setError(res.error);
+      try {
+        const res = await generateLpRoomLink(tier, expiry);
+        if (res.ok) {
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          setUrl(`${origin}/lp/${res.token}`);
+        } else {
+          setError(res.error);
+        }
+      } catch {
+        setError('Could not generate link — try again.');
       }
     });
   }
