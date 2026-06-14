@@ -93,6 +93,13 @@ fail-soft RLS query, and a panel. Replicate this shape for new systems.
 - **Pipeline Velocity & Stuck-Deal Detector** (`lib/intelligence/velocity.ts`): time-in-stage from
   each deal's `loop_events` (`deal_stage` transitions); bands Moving/Slowing/Stuck. Query
   `lib/queries/velocity.ts`; `VelocityPanel` on Source → Pipeline.
+- **Next-Best-Action engine** (`lib/intelligence/next-best-action.ts`): fuses approvals · velocity ·
+  reconnect · conviction into one ranked worklist (per-kind priority helpers + deterministic
+  rank/tiebreak/cap). Query `lib/queries/next-best-action.ts`; `NextBestActions` on Command Center.
+- **Capital Coverage & Concentration** (`lib/intelligence/capital-coverage.ts`): portfolio-risk read
+  — coverage % (committed/pipeline value), per-stage exposure split, single-name + top-3 share, and
+  a Herfindahl (HHI) index → band Diversified/Balanced/Concentrated/Highly concentrated. Query
+  `lib/queries/capital-coverage.ts`; `CapitalCoveragePanel` on Source → Pipeline.
 
 ## Phase-2 external data (specs only; build behind adapters, metered, key-optional)
 
