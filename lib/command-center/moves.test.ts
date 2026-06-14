@@ -95,6 +95,33 @@ test('the plan is capped at four moves', () => {
   assert.ok(moves.length <= 4);
 });
 
+test('raise-readiness fires when Build is thin, without displacing the hero', () => {
+  // Empty desk, Build at 40% — readiness appears but never as the hero, and
+  // the pinned opening (first-deal, then lp-targets) is preserved.
+  const moves = deriveMoves(state({ pct: { build: 40, source: 10, run: 0, execute: 0 } }));
+  assert.equal(moves[0].id, 'first-deal');
+  assert.equal(moves[1].id, 'lp-targets');
+  const readiness = moves.find((m) => m.id === 'raise-readiness');
+  assert.ok(readiness, 'raise-readiness missing on a thin Build layer');
+  assert.equal(readiness?.primary.href, '/build/formation');
+  assert.equal(readiness?.hub, 'build');
+});
+
+test('raise-readiness stays quiet once Build is institutional', () => {
+  const moves = deriveMoves(
+    state({
+      activeDealsCount: 3,
+      hotRelationshipsCount: 2,
+      topWarmConnections: [{ id: 'c1', name: 'A', company: null, status: 'hot' }],
+      pct: { build: 90, source: 80, run: 70, execute: 5 }
+    })
+  );
+  assert.equal(
+    moves.find((m) => m.id === 'raise-readiness'),
+    undefined
+  );
+});
+
 test('signals reframe only real rows — an empty desk has none', () => {
   assert.deepEqual(deriveSignals(state()), []);
   const sigs = deriveSignals(
