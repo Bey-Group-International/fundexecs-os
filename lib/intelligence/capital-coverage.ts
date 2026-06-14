@@ -155,7 +155,11 @@ export function computeCapitalCoverage(
         )
       : 0;
 
-  const band = bandFor(topDeal?.share ?? 0, hhi);
+  // Classify on the UNROUNDED top-deal share so a 49.6% deal can't round up to
+  // 50% and falsely escalate the band. The rounded `share` is display-only.
+  const topShareRaw =
+    topDeal && totalExposure > 0 ? (amountOf(ranked[0]) / totalExposure) * 100 : 0;
+  const band = bandFor(topShareRaw, hhi);
   const coveragePct = pct(committed, pipelineValue);
   const uncommitted = Math.max(0, (pipelineValue || 0) - (committed || 0));
 
