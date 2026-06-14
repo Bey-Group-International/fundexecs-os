@@ -4289,6 +4289,47 @@ export type Database = {
           }
         ];
       };
+      provider_cache: {
+        Row: {
+          cache_key: string;
+          expires_at: string | null;
+          fetched_at: string;
+          id: string;
+          kind: string;
+          org_id: string;
+          payload: Json;
+          provider: string;
+        };
+        Insert: {
+          cache_key: string;
+          expires_at?: string | null;
+          fetched_at?: string;
+          id?: string;
+          kind: string;
+          org_id: string;
+          payload?: Json;
+          provider: string;
+        };
+        Update: {
+          cache_key?: string;
+          expires_at?: string | null;
+          fetched_at?: string;
+          id?: string;
+          kind?: string;
+          org_id?: string;
+          payload?: Json;
+          provider?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'provider_cache_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       intelligence_briefings: {
         Row: {
           body: string;
