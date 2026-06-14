@@ -54,6 +54,14 @@ test('top-3 share is the combined share of the three largest LPs', () => {
   assert.equal(r.top3Share, 90); // (5+2+2)/10
 });
 
+test('band uses the unrounded top share: 49.6% does not escalate to Single-anchor', () => {
+  // top LP is 49.6% of 1,000,000 — rounds to 50% for display but must stay sub-anchor.
+  const r = computeLpConcentration([lp('a', 496_000), lp('b', 254_000), lp('c', 250_000)]);
+  assert.equal(r.topLp?.share, 50); // display value is rounded
+  assert.notEqual(r.band, 'Single-anchor'); // classification uses the real 49.6%
+  assert.equal(r.band, 'Concentrated');
+});
+
 test('empty base is a safe, headlined zero state', () => {
   const r = computeLpConcentration([]);
   assert.equal(r.totalCommitted, 0);

@@ -108,7 +108,10 @@ export function computeLpConcentration(commitments: LpCommitment[]): LpConcentra
         )
       : 0;
 
-  const band = bandFor(topLp?.share ?? 0, hhi);
+  // Classify on the UNROUNDED top-LP share so a 49.6% LP can't round up to 50%
+  // and falsely escalate into Single-anchor. The rounded `share` is display-only.
+  const topShareRaw = topLp && totalCommitted > 0 ? (topLp.amount / totalCommitted) * 100 : 0;
+  const band = bandFor(topShareRaw, hhi);
   const lpCount = ranked.length;
 
   const headline =
