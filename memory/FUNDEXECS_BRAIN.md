@@ -100,6 +100,11 @@ fail-soft RLS query, and a panel. Replicate this shape for new systems.
   — coverage % (committed/pipeline value), per-stage exposure split, single-name + top-3 share, and
   a Herfindahl (HHI) index → band Diversified/Balanced/Concentrated/Highly concentrated. Query
   `lib/queries/capital-coverage.ts`; `CapitalCoveragePanel` on Source → Pipeline.
+- **Pipeline Conversion Analytics** (`lib/intelligence/conversion.ts`): formation funnel from the
+  current stage distribution — cumulative reach (a deal's stage implies it passed earlier ones),
+  stage-to-stage conversion, overall to-committed rate, and the biggest leak (steepest transition
+  where deals progressed downstream; the frontier is not a leak). Query `lib/queries/conversion.ts`;
+  `ConversionPanel` on Source → Pipeline.
 
 ## Phase-2 external data (specs only; build behind adapters, metered, key-optional)
 
