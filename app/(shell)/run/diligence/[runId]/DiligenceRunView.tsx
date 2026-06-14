@@ -8,11 +8,14 @@ import {
   Building2,
   CheckCircle2,
   CircleCheckBig,
+  Copy,
+  Download,
   FileSearch,
   Gauge,
   Info,
   ListChecks,
   Loader,
+  Send,
   Sparkles,
   X
 } from 'lucide-react';
@@ -21,7 +24,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EarnCoin } from '@/components/ui/EarnCoin';
-import { resolveDiligenceFinding } from '@/lib/actions/diligence';
+import { askDiligenceQuestion, resolveDiligenceFinding } from '@/lib/actions/diligence';
+import type { DiligenceQaAnswer } from '@/lib/diligence/qa';
+import type { DiligenceSynthesis } from '@/lib/queries/diligence';
 import {
   SEVERITY_TONE,
   WORKSTREAM_STATUS,
@@ -71,6 +76,194 @@ function formatDate(iso: string): string {
 function wsOf(f: DiligenceAnalystFinding) {
   const status = workstreamStatus(f.score, f.resolvedAt != null);
   return { status, severity: workstreamSeverity(f.score) };
+}
+
+/* ── synthesis memo export (self-contained, dependency-free) ─────────────── */
+
+/** Render the IC memo as portable markdown — the unit of work an LP reads. */
+function synthesisMarkdown(
+  synthesis: DiligenceSynthesis,
+  subject: string | null,
+  createdAt: string
+): string {
+  const lines: string[] = [
+    `# Diligence memo — ${subject ?? 'Committee review'}`,
+    '',
+    `_${formatDate(createdAt)} · Synthesis by ${synthesis.personaLabel}_`,
+    ''
+  ];
+  if (synthesis.recommendation) {
+    lines.push(`**Recommendation:** ${synthesis.recommendation}`, '');
+  }
+  if (synthesis.conviction != null) {
+    lines.push(`**Conviction:** ${synthesis.conviction}/100`, '');
+  }
+  if (synthesis.memo) {
+    lines.push('## Memo', '', synthesis.memo, '');
+  }
+  if (synthesis.followUpQuestions.length > 0) {
+    lines.push('## Follow-up questions', '');
+    synthesis.followUpQuestions.forEach((q, i) => lines.push(`${i + 1}. ${q}`));
+    lines.push('');
+  }
+  return lines.join('\n').trim() + '\n';
+}
+
+/** Slugify the subject into a safe download filename stem. */
+function memoFileStem(subject: string | null): string {
+  const base = (subject ?? 'diligence-memo').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return base.replace(/^-+|-+$/g, '') || 'diligence-memo';
+}
+
+function SynthesisExport({
+  synthesis,
+  subject,
+  createdAt
+}: {
+  synthesis: DiligenceSynthesis;
+  subject: string | null;
+  createdAt: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  function build(): string {
+    return synthesisMarkdown(synthesis, subject, createdAt);
+  }
+
+  async function onCopy() {
+    try {
+      await navigator.clipboard.writeText(build());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Clipboard blocked (insecure context / permissions) — fail quietly; the
+      // operator can still use Download .md.
+    }
+  }
+
+  function onDownload() {
+    try {
+      const blob = new Blob([build()], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${memoFileStem(subject)}-memo.md`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Best-effort — never throw out of an export click.
+    }
+  }
+
+  return (
+    <div className="flex flex-none items-center gap-1.5">
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={copied ? CheckCircle2 : Copy}
+        onClick={onCopy}
+        aria-label="Copy memo as markdown"
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={Download}
+        onClick={onDownload}
+        aria-label="Download memo as markdown"
+      >
+        .md
+      </Button>
+    </div>
+  );
+}
+
+/* ── ask Earn about this review (ephemeral Q&A composer) ─────────────────── */
+
+function AskEarnComposer({ runId }: { runId: string }) {
+  const [question, setQuestion] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState<DiligenceQaAnswer | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onAsk() {
+    const q = question.trim();
+    if (!q || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await askDiligenceQuestion({ runId, question: q });
+      if (res.ok) {
+        setAnswer(res.answer);
+      } else {
+        setError(res.error);
+        setAnswer(null);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-hairline pt-4">
+      <div className="mb-2 flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+        <EarnCoin size={18} />
+        Ask Earn about this review
+      </div>
+      <div className="flex items-end gap-2">
+        <textarea
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              void onAsk();
+            }
+          }}
+          rows={2}
+          placeholder="e.g. What's the biggest risk to conviction here?"
+          className="min-h-[44px] flex-1 resize-y rounded-xl border border-hairline bg-surface-1 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-fg-2 placeholder:text-fg-5 focus:border-[var(--accent-line)] focus:outline-none"
+        />
+        <Button
+          variant="gold"
+          size="sm"
+          icon={busy ? Loader : Send}
+          onClick={onAsk}
+          disabled={busy || !question.trim()}
+        >
+          {busy ? 'Asking' : 'Ask'}
+        </Button>
+      </div>
+
+      {error ? <p className="mt-2 text-[11.5px] text-danger">{error}</p> : null}
+
+      {answer ? (
+        <div className="mt-3 rounded-[13px] border border-[var(--gold-line)] bg-[var(--gold-soft)] px-4 py-3.5">
+          <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-2">
+            {answer.answer}
+          </p>
+          {answer.drewOn.length > 0 ? (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-fg-5">Drew on</span>
+              {answer.drewOn.map((label) => (
+                <Badge key={label} tone="neutral" className="px-2 py-0.5 text-[9.5px]">
+                  {label}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+          {answer.degraded ? (
+            <p className="mt-2 text-[10.5px] text-fg-5">
+              Earn is briefly unavailable — this is a holding answer.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /* ── modal focus management (mirrors the house drawer pattern) ───────────── */
@@ -533,7 +726,7 @@ export function DiligenceRunView({
       {synthesis ? (
         <Card className="bg-[linear-gradient(100deg,rgba(247,201,72,0.08),transparent_58%)] p-5">
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <div className="text-[10.5px] font-semibold uppercase tracking-[0.11em] text-fg-4">
                 Synthesis · {synthesis.personaLabel}
               </div>
@@ -541,16 +734,23 @@ export function DiligenceRunView({
                 {synthesis.recommendation || 'Recommendation pending'}
               </div>
             </div>
-            {synthesis.conviction != null ? (
-              <div className="flex-none text-right">
-                <div className="text-[28px] font-semibold tabular-nums tracking-[-0.02em] text-fg-1">
-                  {synthesis.conviction}
+            <div className="flex flex-none items-start gap-4">
+              <SynthesisExport
+                synthesis={synthesis}
+                subject={run.dealName ?? run.summary}
+                createdAt={run.createdAt}
+              />
+              {synthesis.conviction != null ? (
+                <div className="text-right">
+                  <div className="text-[28px] font-semibold tabular-nums tracking-[-0.02em] text-fg-1">
+                    {synthesis.conviction}
+                  </div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-4">
+                    Conviction
+                  </div>
                 </div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-4">
-                  Conviction
-                </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
           {synthesis.memo ? (
             <p className="mt-4 whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-2">
@@ -572,6 +772,7 @@ export function DiligenceRunView({
               </ul>
             </div>
           ) : null}
+          <AskEarnComposer runId={run.id} />
         </Card>
       ) : run.status === 'error' ? (
         <Card className="p-5">
