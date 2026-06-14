@@ -111,6 +111,11 @@ fail-soft RLS query, and a panel. Replicate this shape for new systems.
   from existing relationships, not the curated `warm_introductions` table or any graph API. Query
   `lib/queries/warm-intro.ts` (fuses `getPipelineData` + `getConnectionsData`); `WarmIntroPanel` on
   Source → Pipeline.
+- **LP Concentration & Commitment Health** (`lib/intelligence/lp-concentration.ts`): the
+  capital-raise-side counterpart to deal concentration — per-LP share of committed capital, top-3
+  share, HHI, and band Diversified/Balanced/Concentrated/Single-anchor. Query
+  `lib/queries/lp-concentration.ts` (reads `capital_commitments` + `capital_providers` directly,
+  RLS-scoped, no new schema); `LpConcentrationPanel` on Execute → Capital.
 
 ## Phase-2 external data (specs only; build behind adapters, metered, key-optional)
 
