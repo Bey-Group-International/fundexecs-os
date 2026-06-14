@@ -161,6 +161,28 @@ export function deriveMoves(state: DeskState): DeskMove[] {
     });
   }
 
+  // Raise-readiness — when the Build layer isn't institutional yet, Earn grades
+  // the fund the way an LP's IC would and ranks the gaps to close. Pushed after
+  // the flow/capital/committee moves so it never displaces the hero, and capped
+  // out on busy desks; gated on Build readiness, not objective, so it nudges
+  // managers toward "raise-ready" before they ask.
+  if (state.pct.build < 70) {
+    moves.push({
+      id: 'raise-readiness',
+      hub: 'build',
+      tag: 'Get raise-ready',
+      tone: 'gold',
+      icon: 'target',
+      title: `Check your raise readiness — Build is ${state.pct.build}% ready`,
+      why: "Earn grades your fund the way an LP's investment committee would — one institutional score, the gaps ranked, and the highest-leverage next moves — so you fix what blocks the raise before you ask for a check.",
+      specialist: 'Earn · Chief of Staff',
+      primary: { label: 'Assess readiness', href: '/build/formation' },
+      secondary: { label: 'Review my raise like an LP', href: '/build/data-room' },
+      earnNote:
+        'I read your profile, formation, materials, and pipeline and give you one honest score with the gaps in priority order. Close the top one and the score moves.'
+    });
+  }
+
   // The thinnest layer, always present — the prototype's fallback move.
   const hubs = Object.keys(state.pct) as HubId[];
   const thinnest = hubs.slice().sort((a, b) => state.pct[a] - state.pct[b])[0];

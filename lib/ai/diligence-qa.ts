@@ -29,12 +29,18 @@ function strList(value: unknown, maxItems: number): string[] {
   return out;
 }
 
-/** Coerce/clamp the tool input into a safe answer; throw if unusable. */
-function normalize(input: unknown): Omit<DiligenceQaAnswer, 'degraded'> {
+/**
+ * Coerce/clamp the tool input into a safe answer; throw if unusable. `drewOn`
+ * is filtered against the run's actual lane labels so a hallucinated lane can
+ * never appear as provenance (mirrors the allowlist in `lib/ai/lp-answer.ts`).
+ */
+function normalize(input: unknown, allowedLabels: string[]): Omit<DiligenceQaAnswer, 'degraded'> {
   const o = (input ?? {}) as Record<string, unknown>;
   const answer = typeof o.answer === 'string' ? o.answer.trim().slice(0, 4000) : '';
   if (!answer) throw new Error('Earn returned an unusable answer');
-  return { answer, drewOn: strList(o.drewOn, 8) };
+  const allowed = new Set(allowedLabels.map((l) => l.trim().toLowerCase()).filter(Boolean));
+  const drewOn = strList(o.drewOn, 8).filter((l) => allowed.has(l.toLowerCase()));
+  return { answer, drewOn };
 }
 
 /**
@@ -60,7 +66,8 @@ export async function answerDiligenceQuestion(input: DiligenceQaInput): Promise<
       (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
     );
     if (!toolUse) throw new Error('Earn returned no answer');
-    return { ...normalize(toolUse.input), degraded: false };
+    const allowedLabels = ['Synthesis', ...input.findings.map((f) => f.label)];
+    return { ...normalize(toolUse.input, allowedLabels), degraded: false };
   } catch {
     // Timeout / rate limit / malformed output — never block the composer.
     return templatedDiligenceQaAnswer(input);

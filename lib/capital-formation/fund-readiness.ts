@@ -56,20 +56,23 @@ export interface FundReadinessInput {
 
 /** Templated fallback — a defensible score from the raw signals; never throws. */
 export function templatedReadiness(input: FundReadinessInput): FundReadinessResult {
+  // Inputs can drift (e.g. completed > total), so clamp every derived score to
+  // the declared 0–100 contract rather than trust the raw ratios.
+  const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
   const formationPct = input.formationTotal
-    ? Math.round((input.formationCompleted / input.formationTotal) * 100)
+    ? clamp((input.formationCompleted / input.formationTotal) * 100)
     : 0;
   const materialsPct = input.materialsTotal
-    ? Math.round((input.materialsReady / input.materialsTotal) * 100)
+    ? clamp((input.materialsReady / input.materialsTotal) * 100)
     : 0;
   const pipelinePct = input.lpTotal
-    ? Math.min(100, input.lpTotal * 8 + input.lpSoftCircled * 10 + input.lpCommitted * 15)
+    ? clamp(input.lpTotal * 8 + input.lpSoftCircled * 10 + input.lpCommitted * 15)
     : 0;
 
   const dimensions: ReadinessDimension[] = [
     {
       label: 'Profile & narrative',
-      score: input.profileCompleteness,
+      score: clamp(input.profileCompleteness),
       note: input.thesisPresent ? 'Thesis on file.' : 'No clear thesis yet.'
     },
     {
@@ -88,7 +91,7 @@ export function templatedReadiness(input: FundReadinessInput): FundReadinessResu
       note: `${input.lpTotal} LPs · ${input.lpCommitted} committed.`
     }
   ];
-  const score = Math.round(dimensions.reduce((s, d) => s + d.score, 0) / dimensions.length);
+  const score = clamp(dimensions.reduce((s, d) => s + d.score, 0) / dimensions.length);
 
   const moves: ReadinessMove[] = [];
   for (const g of input.gaps.slice(0, 2)) {

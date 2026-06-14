@@ -111,12 +111,14 @@ const COMMANDS: EarnCommand[] = [
 ];
 
 const SUGGESTIONS = [
-  'Find me 3 on-thesis deals',
+  'Am I ready to raise?',
+  'Score my LPs and draft outreach',
+  'Review my raise like an LP',
+  'Help me handle an LP objection',
   'Who should I raise from next?',
-  'Draft my Q2 LP letter',
   'What should I do right now?',
-  'Is my fund formation on track?',
-  'Sharpen my investment thesis'
+  'Draft my Q2 LP letter',
+  'Is my fund formation on track?'
 ];
 
 const ACTION_LABEL: Record<string, string> = {
