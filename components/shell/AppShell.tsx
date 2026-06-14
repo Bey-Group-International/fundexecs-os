@@ -8,6 +8,7 @@ import {
   Award,
   ChevronLeft,
   Coins,
+  DoorOpen,
   Gift,
   Inbox,
   LayoutDashboard,
@@ -118,6 +119,7 @@ export function AppShell({
   const onEarn = pathname.startsWith('/earn');
   const onReferrals = pathname.startsWith('/referrals');
   const onRecs = pathname.startsWith('/recommendations');
+  const onLpRoom = pathname.startsWith('/lp-room');
   const utility = pathname.startsWith('/inbox')
     ? 'Inbox'
     : pathname.startsWith('/notifications')
@@ -256,6 +258,19 @@ export function AppShell({
             })}
 
             <div className="mx-1 my-3 h-px bg-[var(--border)]" aria-hidden />
+            <Link
+              href="/lp-room"
+              className={cn(
+                'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] font-medium transition',
+                onLpRoom
+                  ? 'bg-[linear-gradient(90deg,var(--accent-soft),var(--surface-1))] text-fg-1'
+                  : 'text-fg-3 hover:bg-surface-1 hover:text-fg-1'
+              )}
+              aria-current={onLpRoom ? 'page' : undefined}
+            >
+              <DoorOpen size={17} strokeWidth={1.9} aria-hidden />
+              <span className="flex-1">LP Room</span>
+            </Link>
             {onEarn && (
               <Link
                 href="/command-center"
