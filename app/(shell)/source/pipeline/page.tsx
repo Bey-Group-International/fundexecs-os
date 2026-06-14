@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { DealPipelineFlow } from '@/components/source/DealPipelineFlow';
+import { SourcingBriefCard } from '@/components/source/SourcingBriefCard';
 import { getPipelineData } from '@/lib/queries/pipeline';
+import { getSourcingBrief } from '@/lib/queries/sourcing-brief';
 import { getActiveOrg } from '@/lib/queries/org';
 
 export const metadata: Metadata = {
@@ -21,13 +23,19 @@ export default async function SourcePipelinePage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const data = await getPipelineData(org.orgId);
+  const [data, brief] = await Promise.all([
+    getPipelineData(org.orgId),
+    getSourcingBrief(org.orgId)
+  ]);
 
   return (
-    <DealPipelineFlow
-      stages={data.stages}
-      pipelineValue={data.pipelineValue}
-      committed={data.committed}
-    />
+    <div>
+      <SourcingBriefCard brief={brief} />
+      <DealPipelineFlow
+        stages={data.stages}
+        pipelineValue={data.pipelineValue}
+        committed={data.committed}
+      />
+    </div>
   );
 }

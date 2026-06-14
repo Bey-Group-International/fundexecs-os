@@ -4289,6 +4289,44 @@ export type Database = {
           }
         ];
       };
+      sourcing_briefs: {
+        Row: {
+          active: boolean;
+          created_at: string;
+          filters: Json;
+          id: string;
+          org_id: string;
+          thesis: string;
+          updated_at: string;
+        };
+        Insert: {
+          active?: boolean;
+          created_at?: string;
+          filters?: Json;
+          id?: string;
+          org_id: string;
+          thesis: string;
+          updated_at?: string;
+        };
+        Update: {
+          active?: boolean;
+          created_at?: string;
+          filters?: Json;
+          id?: string;
+          org_id?: string;
+          thesis?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'sourcing_briefs_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       task_runs: {
         Row: {
           action: string;
