@@ -105,6 +105,12 @@ fail-soft RLS query, and a panel. Replicate this shape for new systems.
   stage-to-stage conversion, overall to-committed rate, and the biggest leak (steepest transition
   where deals progressed downstream; the frontier is not a leak). Query `lib/queries/conversion.ts`;
   `ConversionPanel` on Source → Pipeline.
+- **Warm-Intro Pathfinder** (`lib/intelligence/warm-intro.ts`): for each live deal, the warmest path
+  in — derived from the desk's own relationship graph (strength × depth × recency) matched to the
+  deal's company via normalized containment/token-overlap. Adoption over integration: derives paths
+  from existing relationships, not the curated `warm_introductions` table or any graph API. Query
+  `lib/queries/warm-intro.ts` (fuses `getPipelineData` + `getConnectionsData`); `WarmIntroPanel` on
+  Source → Pipeline.
 
 ## Phase-2 external data (specs only; build behind adapters, metered, key-optional)
 

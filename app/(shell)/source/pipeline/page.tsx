@@ -6,12 +6,14 @@ import { ConvictionPanel } from '@/components/source/ConvictionPanel';
 import { VelocityPanel } from '@/components/source/VelocityPanel';
 import { CapitalCoveragePanel } from '@/components/source/CapitalCoveragePanel';
 import { ConversionPanel } from '@/components/source/ConversionPanel';
+import { WarmIntroPanel } from '@/components/source/WarmIntroPanel';
 import { getPipelineData } from '@/lib/queries/pipeline';
 import { getSourcingBrief } from '@/lib/queries/sourcing-brief';
 import { getPipelineConviction } from '@/lib/queries/conviction';
 import { getPipelineVelocity } from '@/lib/queries/velocity';
 import { getCapitalCoverage } from '@/lib/queries/capital-coverage';
 import { getPipelineConversion } from '@/lib/queries/conversion';
+import { getWarmIntroPaths } from '@/lib/queries/warm-intro';
 import { getActiveOrg } from '@/lib/queries/org';
 
 export const metadata: Metadata = {
@@ -31,13 +33,14 @@ export default async function SourcePipelinePage() {
   const org = await getActiveOrg();
   if (!org) redirect('/onboarding');
 
-  const [data, brief, conviction, velocity, coverage, conversion] = await Promise.all([
+  const [data, brief, conviction, velocity, coverage, conversion, introPaths] = await Promise.all([
     getPipelineData(org.orgId),
     getSourcingBrief(org.orgId),
     getPipelineConviction(org.orgId),
     getPipelineVelocity(org.orgId),
     getCapitalCoverage(org.orgId),
-    getPipelineConversion(org.orgId)
+    getPipelineConversion(org.orgId),
+    getWarmIntroPaths(org.orgId)
   ]);
 
   return (
@@ -47,6 +50,7 @@ export default async function SourcePipelinePage() {
       <VelocityPanel data={velocity} />
       <CapitalCoveragePanel data={coverage} />
       <ConversionPanel data={conversion} />
+      <WarmIntroPanel paths={introPaths} />
       <DealPipelineFlow
         stages={data.stages}
         pipelineValue={data.pipelineValue}
