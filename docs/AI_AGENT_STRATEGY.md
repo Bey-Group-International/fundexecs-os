@@ -20,8 +20,8 @@
 Fund I is the live institution — its mandate, its deals, its LPs, its
 compliance posture, its operating rhythm. Everything FundExecs OS knows how to
 do, it learned from running a real fund. The **Agentic Execution Layer** is what
-turns that knowledge into work: it transforms FundExecs from a *passive
-platform* — screens an operator looks at and forms an operator fills in — into
+turns that knowledge into work: it transforms FundExecs from a _passive
+platform_ — screens an operator looks at and forms an operator fills in — into
 an **active operating system** that performs institutional-grade work on the
 operator's behalf, on the record, and audit-ready.
 
@@ -29,7 +29,7 @@ Today the Executive Team **advises**: Earn and the 15 specialists answer
 questions, score matches, validate evidence, and route work (`app/earn`,
 `/inbox-intelligence`, `/match-inbox`, Chain-of-Trust validation). The shift
 this plan proposes is from **advice to autonomy** — the same desk that tells you
-what to do next now *does it*, drafts it, files it, follows up on it, and brings
+what to do next now _does it_, drafts it, files it, follows up on it, and brings
 you the finished work for one-click approval.
 
 We frame the new capability as a proprietary **Desk Agent** layer:
@@ -52,13 +52,13 @@ We are adopting a class of capability — **autonomous, tool-using AI agents tha
 plan multi-step work, call external systems, and run to a goal with
 human-in-the-loop checkpoints** — and expressing it entirely as FundExecs IP:
 
-| Layer | FundExecs name | What it is | Built on (already in repo) |
-| --- | --- | --- | --- |
-| Orchestration | **Earn Orchestrator** | The COO plans a goal, decomposes it into steps, routes each to the owning specialist, and assembles the result | `lib/ai/earn.ts`, `brain_routing_rules`, the 15-brain roster |
-| Workers | **Desk Agents** | One autonomous agent per specialist function (Sourcing, IR, Diligence, Compliance, …) | `lib/team/*` (frozen slugs), `lib/ai/brains.ts` |
-| Memory & retrieval | **Mandate Memory** | pgvector RAG over the org's mandate, knowledge, and signals so agents act on the *operator's* thesis | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()`, `org_profile_embeddings` |
-| Tools | **Connected Desk** | The agents' hands — read/write into Gmail, Calendar, Drive, Slack, QuickBooks, HubSpot, Salesforce, Carta, DocuSign | `lib/integrations/`, `integration_connections`, the Phase-6 adapter pattern |
-| Trust & control | **Chain of Trust + Action Queue** | Every autonomous action is proposed, approved, and logged as an auditable event | `trust_events`, Chain-of-Trust records, `/action-queue`, `tasks` |
+| Layer              | FundExecs name                    | What it is                                                                                                          | Built on (already in repo)                                                                      |
+| ------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Orchestration      | **Earn Orchestrator**             | The COO plans a goal, decomposes it into steps, routes each to the owning specialist, and assembles the result      | `lib/ai/earn.ts`, `brain_routing_rules`, the 15-brain roster                                    |
+| Workers            | **Desk Agents**                   | One autonomous agent per specialist function (Sourcing, IR, Diligence, Compliance, …)                               | `lib/team/*` (frozen slugs), `lib/ai/brains.ts`                                                 |
+| Memory & retrieval | **Mandate Memory**                | pgvector RAG over the org's mandate, knowledge, and signals so agents act on the _operator's_ thesis                | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()`, `org_profile_embeddings` |
+| Tools              | **Connected Desk**                | The agents' hands — read/write into Gmail, Calendar, Drive, Slack, QuickBooks, HubSpot, Salesforce, Carta, DocuSign | `lib/integrations/`, `integration_connections`, the Phase-6 adapter pattern                     |
+| Trust & control    | **Chain of Trust + Action Queue** | Every autonomous action is proposed, approved, and logged as an auditable event                                     | `trust_events`, Chain-of-Trust records, `/action-queue`, `tasks`                                |
 
 The **Action Queue** is the spine: agents never act silently on consequential
 steps. They produce a proposed action (a memo, an email, a wire instruction, a
@@ -84,7 +84,8 @@ funnel-side touchpoints.)
 ---
 
 ### Agent 1 — Sourcing Agent (target sourcing & screening)
-*Owner: Marcus (Head of Deal Origination), with Camille (Top-of-Funnel)*
+
+_Owner: Marcus (Head of Deal Origination), with Camille (Top-of-Funnel)_
 
 - **User problem.** Sourcing is manual, biased toward inbound, and inconsistent.
   Operators miss on-thesis targets and waste hours screening off-thesis ones.
@@ -106,7 +107,8 @@ funnel-side touchpoints.)
 - **Phase 1.**
 
 ### Agent 2 — Diligence Agent (CIMs, financials & documents)
-*Owner: Dalia (Head of Data Operations), with Adrian (Compliance)*
+
+_Owner: Dalia (Head of Data Operations), with Adrian (Compliance)_
 
 - **User problem.** Reading CIMs and tearing down financials is slow, and
   inconsistency between deals makes comparison unreliable.
@@ -127,7 +129,8 @@ funnel-side touchpoints.)
 - **Phase 1.**
 
 ### Agent 3 — Memo & Scorecard Agent (investment memos & acquisition scorecards)
-*Owner: Theodore (Chief Strategy Advisor), with Marcus*
+
+_Owner: Theodore (Chief Strategy Advisor), with Marcus_
 
 - **User problem.** Writing the IC memo and scorecard is the bottleneck between
   "interesting" and "decision." It's slow and varies by author.
@@ -135,7 +138,7 @@ funnel-side touchpoints.)
   a structured, house-style investment memo and a weighted acquisition
   scorecard, with the strategist's framing of trade-offs.
 - **FundExecs flow.** From a deal in **Source → Pipeline** or **Run →
-  Diligence**, the operator clicks *Draft memo*. The agent assembles the memo
+  Diligence**, the operator clicks _Draft memo_. The agent assembles the memo
   from Agent 2's record + Mandate Memory, scores the deal on the org's rubric,
   and drops it into the deal's **Build → Data Room** as a versioned, citable
   document. Theodore pressure-tests the thesis; the memo carries source
@@ -148,7 +151,8 @@ funnel-side touchpoints.)
 - **Phase 1.**
 
 ### Agent 4 — LP Onboarding Agent (onboarding, KYC, AML, accreditation)
-*Owner: Adrian (General Counsel & Compliance), with Eleanor (IR)*
+
+_Owner: Adrian (General Counsel & Compliance), with Eleanor (IR)_
 
 - **User problem.** LP onboarding is a high-friction, high-liability slog —
   collecting docs, running KYC/AML, verifying accreditation, chasing signatures.
@@ -170,7 +174,8 @@ funnel-side touchpoints.)
 - **Phase 2.** (Regulated workflow — ships after the Phase-1 spine proves out.)
 
 ### Agent 5 — Capital Calls & Notices Agent (calls, notices, follow-ups)
-*Owner: Eleanor (Head of Investor Relations), with Sloane (Capital Formation)*
+
+_Owner: Eleanor (Head of Investor Relations), with Sloane (Capital Formation)_
 
 - **User problem.** Capital calls and investor notices are manual, error-prone,
   and the follow-up on unfunded calls is inconsistent.
@@ -192,7 +197,8 @@ funnel-side touchpoints.)
 - **Phase 2.**
 
 ### Agent 6 — Portfolio Monitoring Agent (KPI monitoring via integrations)
-*Owner: Dalia (Data Operations), with Theodore (Strategy)*
+
+_Owner: Dalia (Data Operations), with Theodore (Strategy)_
 
 - **User problem.** Portfolio data lives in QuickBooks, HubSpot, Salesforce,
   Drive, and email. Pulling it together for monitoring is constant manual labor,
@@ -214,7 +220,8 @@ funnel-side touchpoints.)
 - **Phase 2.**
 
 ### Agent 7 — Deal & Diligence Rooms Agent (AI-powered rooms)
-*Owner: Sterling (Chief of Staff), with Adrian (Compliance)*
+
+_Owner: Sterling (Chief of Staff), with Adrian (Compliance)_
 
 - **User problem.** Data rooms are passive file folders. Counterparties can't get
   answers without emailing; operators can't see who's serious.
@@ -236,7 +243,8 @@ funnel-side touchpoints.)
 - **Phase 2.**
 
 ### Agent 8 — Chief of Staff Agent (AI Chief of Staff / Family Office Concierge)
-*Owner: Earn (COO) + Sterling (Chief of Staff)*
+
+_Owner: Earn (COO) + Sterling (Chief of Staff)_
 
 - **User problem.** The operator is the bottleneck — too many threads, decisions,
   and follow-ups across functions, with no one holding the operating rhythm.
@@ -259,7 +267,8 @@ funnel-side touchpoints.)
 - **Phase 1 (read + brief) → Phase 2 (delegate + dispatch).**
 
 ### Agent 9 — Outreach & CRM Agent (outreach, CRM updates, meeting prep, reporting)
-*Owner: Vivian (Demand Generation), with Camille + Sienna (Communications)*
+
+_Owner: Vivian (Demand Generation), with Camille + Sienna (Communications)_
 
 - **User problem.** Outreach is inconsistent, CRMs go stale, and meeting prep
   eats hours that should go to the meeting itself.
@@ -280,7 +289,8 @@ funnel-side touchpoints.)
 - **Phase 2.**
 
 ### Agent 10 — Reporting Agent (executive dashboards, LP updates, board reports)
-*Owner: Eleanor (IR), with Theodore (Strategy) + Sienna (Communications)*
+
+_Owner: Eleanor (IR), with Theodore (Strategy) + Sienna (Communications)_
 
 - **User problem.** Quarterly LP updates and board decks are a recurring fire
   drill — assembling numbers, writing narrative, formatting, every period.
@@ -304,18 +314,18 @@ funnel-side touchpoints.)
 
 ## 3. Coverage map — agents across the lifecycle
 
-| Lifecycle stage | Surfaces (`app/*`) | Agents primarily acting here |
-| --- | --- | --- |
-| **Source** | `pipeline`, `capital-map`, `leads`, `partners` | 1 Sourcing, 9 Outreach/CRM |
-| **Build** | `formation`, `data-room`, `governance`, `brand` | 3 Memo/Scorecard, 4 LP Onboarding, 7 Rooms |
-| **Execute** | `capital`, `wires`, `closings`, `chain-of-trust` | 5 Capital Calls, 4 Onboarding (close) |
-| **Run** | `diligence`, `compliance`, `ir`, `workflows`, `objections` | 2 Diligence, 4 Compliance, 6 Monitoring, 10 Reporting |
-| **Across (orchestration)** | `command-center`, `earn`, `inbox`, `action-queue` | 8 Chief of Staff / Concierge (dispatches all) |
+| Lifecycle stage            | Surfaces (`app/*`)                                         | Agents primarily acting here                          |
+| -------------------------- | ---------------------------------------------------------- | ----------------------------------------------------- |
+| **Source**                 | `pipeline`, `capital-map`, `leads`, `partners`             | 1 Sourcing, 9 Outreach/CRM                            |
+| **Build**                  | `formation`, `data-room`, `governance`, `brand`            | 3 Memo/Scorecard, 4 LP Onboarding, 7 Rooms            |
+| **Execute**                | `capital`, `wires`, `closings`, `chain-of-trust`           | 5 Capital Calls, 4 Onboarding (close)                 |
+| **Run**                    | `diligence`, `compliance`, `ir`, `workflows`, `objections` | 2 Diligence, 4 Compliance, 6 Monitoring, 10 Reporting |
+| **Across (orchestration)** | `command-center`, `earn`, `inbox`, `action-queue`          | 8 Chief of Staff / Concierge (dispatches all)         |
 
 Every agent strengthens the **Chain of Trust** rather than bypassing it: its
 output becomes evidence, its decisions become `trust_events`, and its
 consequential steps pass through human approval. The agent layer doesn't replace
-the operator's judgment — it removes everything *before* the judgment.
+the operator's judgment — it removes everything _before_ the judgment.
 
 ---
 
@@ -324,14 +334,14 @@ the operator's judgment — it removes everything *before* the judgment.
 The agent layer changes FundExecs's revenue shape from flat SaaS seats to
 **seat + usage + outcome**, which is how institutional buyers expect to pay.
 
-| Lever | What's metered | Why it fits |
-| --- | --- | --- |
-| **Agent seats** | Chief of Staff / Concierge per operator (flagship) | The headline value; clean per-seat anchor |
-| **Usage meters** | Screens, documents analyzed, LPs onboarded, calls sent, reports generated, portfolio cos connected | Scales with the work the desk performs — expansion revenue |
-| **Connected-company fee** | Per portfolio company monitored | The cleanest land-and-expand lever (Agent 6) |
-| **Fund-admin tier** | Onboarding + capital ops + reporting bundle (Agents 4, 5, 10) | Displaces fund-admin spend with software margin |
-| **Concierge SKU** | Premium family-office concierge (Agent 8) | High-touch FO segment, premium price |
-| **Marketplace passthrough** | KYC/AML, signatures, data sources | Passthrough + margin, no extra build risk |
+| Lever                       | What's metered                                                                                     | Why it fits                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Agent seats**             | Chief of Staff / Concierge per operator (flagship)                                                 | The headline value; clean per-seat anchor                  |
+| **Usage meters**            | Screens, documents analyzed, LPs onboarded, calls sent, reports generated, portfolio cos connected | Scales with the work the desk performs — expansion revenue |
+| **Connected-company fee**   | Per portfolio company monitored                                                                    | The cleanest land-and-expand lever (Agent 6)               |
+| **Fund-admin tier**         | Onboarding + capital ops + reporting bundle (Agents 4, 5, 10)                                      | Displaces fund-admin spend with software margin            |
+| **Concierge SKU**           | Premium family-office concierge (Agent 8)                                                          | High-touch FO segment, premium price                       |
+| **Marketplace passthrough** | KYC/AML, signatures, data sources                                                                  | Passthrough + margin, no extra build risk                  |
 
 Pricing posture: **agents are the reason to upgrade.** The advisory desk (chat,
 match scoring) anchors lower tiers; **autonomous execution** is the paid line.
@@ -341,8 +351,9 @@ match scoring) anchors lower tiers; **autonomous execution** is the paid line.
 ## 5. Recommended product roadmap
 
 ### Phase 1 — The spine + first proof (sourcing → decision)
-*Prove that autonomous work, gated by the Action Queue and logged to the Chain
-of Trust, is trustworthy on the lowest-liability functions.*
+
+_Prove that autonomous work, gated by the Action Queue and logged to the Chain
+of Trust, is trustworthy on the lowest-liability functions._
 
 - **Earn Orchestrator + Action Queue spine** — goal → plan → route → propose →
   approve → log. Extends `lib/ai/earn.ts`, `brain_routing_rules`, `/action-queue`,
@@ -355,11 +366,12 @@ of Trust, is trustworthy on the lowest-liability functions.*
 
 **Why this set:** all low-liability (no money moved, no LP accepted, nothing
 sent without approval), all built on surfaces and data that already ship, and
-together they deliver one complete loop — *source → screen → analyze → memo →
-brief* — that an operator can feel on day one.
+together they deliver one complete loop — _source → screen → analyze → memo →
+brief_ — that an operator can feel on day one.
 
 ### Phase 2 — The back office (capital ops + IR + monitoring)
-*Move into regulated and money-touching work once the spine is proven.*
+
+_Move into regulated and money-touching work once the spine is proven._
 
 - **Agent 4 — LP Onboarding** (KYC/AML/accreditation, 506(c) gating).
 - **Agent 5 — Capital Calls & Notices** (+ capital-account statements, §W3).
@@ -370,7 +382,8 @@ brief* — that an operator can feel on day one.
 - **Agent 10 (full)** — board-ready report + LP report automation.
 
 ### Phase 3 — The autonomous operating system
-*Compounding, cross-agent autonomy and the family-office concierge.*
+
+_Compounding, cross-agent autonomy and the family-office concierge._
 
 - **Multi-agent workflows** — standing playbooks that chain agents (e.g.
   "new on-thesis Form D → screen → memo → outreach → room") via `workflows`.
@@ -385,8 +398,8 @@ brief* — that an operator can feel on day one.
 
 ## 6. Ideal MVP (the first thing to ship)
 
-The smallest build that proves the thesis — *the platform performs
-institutional-grade work, on the record* — is the **Phase-1 sourcing-to-memo
+The smallest build that proves the thesis — _the platform performs
+institutional-grade work, on the record_ — is the **Phase-1 sourcing-to-memo
 loop with the Chief of Staff brief on top**:
 
 1. **Action Queue + approval spine** — the one piece everything else reuses.
@@ -403,7 +416,7 @@ This MVP is fully grounded in shipped surfaces (Source pipeline, Run diligence,
 Build data room, Command Center, the EDGAR cron, the match scorer, Chain of
 Trust). It moves **no money and accepts no LP**, so it clears the trust bar
 before the regulated Phase-2 work — yet it already demonstrates a desk that
-*works* rather than a dashboard that watches.
+_works_ rather than a dashboard that watches.
 
 **MVP success signal:** an operator wakes up to a screened pipeline, a finished
 teardown, and a draft memo they only had to approve — work that used to take an
@@ -444,5 +457,5 @@ analyst a week.
   wording; tokens-only UI.
 - **Safe-subset** pattern for any public agent surface (rooms, raise pages) —
   zero sensitive fields in public payloads.
-</content>
-</invoke>
+  </content>
+  </invoke>
