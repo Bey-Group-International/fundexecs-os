@@ -532,6 +532,21 @@ export type BrainDocument = {
   created_at: string;
 };
 
+// The Brain knowledge-base corpus (migration 0024). A SHARED, non-org-scoped
+// reference store: each Brain's KB (lib/brains/knowledge/<brain_key>.md) chunked
+// + embedded into pgvector. `embedding` is the pgvector column, surfaced as the
+// text literal "[..]" the client sends; cosine search runs through the
+// match_brain_kb_chunks RPC.
+export type BrainKbChunk = {
+  id: string;
+  brain_key: string;
+  source: string;
+  chunk_index: number;
+  content: string;
+  embedding: string | null;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -577,9 +592,28 @@ export type Database = {
       marketplace_listings: TableShape<MarketplaceListing>;
       brain_runs: TableShape<BrainRun>;
       brain_documents: TableShape<BrainDocument>;
+      brain_kb_chunks: TableShape<BrainKbChunk>;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      // Cosine-search a Brain's KB corpus (migration 0024). embedding args are
+      // sent as the pgvector text literal "[0.1,0.2,...]".
+      match_brain_kb_chunks: {
+        Args: {
+          query_embedding: string;
+          target_brain_key: string;
+          match_count?: number;
+        };
+        Returns: {
+          id: string;
+          brain_key: string;
+          source: string;
+          chunk_index: number;
+          content: string;
+          similarity: number;
+        }[];
+      };
+    };
     Enums: {
       hub: Hub;
       agent_key: AgentKey;
