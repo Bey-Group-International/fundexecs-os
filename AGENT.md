@@ -57,7 +57,9 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
   in the Copilot and Command Center
 - ✅ Workflow → record persistence — completed Source workflows seed a Deal
   (and adopt their artifacts); Execute workflows seed an Asset, so the Command
-  Center populates from real work (read/write `organizations`)
+  Center populates from real work. Fields (asset class, geography, target amount,
+  asset type, value) are Claude-extracted from the prompt + step deliverables,
+  with a deterministic fallback; idempotent on re-approval (updates in place) (read/write `organizations`)
 
 ### What has not been built yet
 - 🔧 Supabase schema **deployment** (migrations exist; applied to preview branch per PR, not a fixed live env)
@@ -347,6 +349,21 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Integrated, not yet tested.
              |  Next: structured field extraction for seeded deals/assets; the three-graph
              |  query layer (/graph/*); remaining Source/Run/Execute hub modules.
+
+2026-06-18  |  Structured extraction for seeded records  |  Deals/assets land with real fields.
+             |  Decisions (per founder): Claude-powered extraction with a deterministic
+             |  fallback; add an idempotency guard against duplicates.
+             |  Built: lib/claude.ts extractDealFields / extractAssetFields (json_schema,
+             |  effort low) reading the prompt + step deliverables → name, asset_class,
+             |  geography, target_amount (deals) / asset_type, current_value (assets);
+             |  deterministic fallback parses USD amounts and classifies asset class by
+             |  keyword. engine.persistOutcome now extracts fields and is idempotent — it
+             |  records the seeded deal_id/asset_id on tasks.result and updates that record
+             |  in place on re-approval instead of inserting a duplicate. Command Center deal
+             |  list shows asset class · geography · target (compact USD).
+             |  Confidence: Integrated, not yet tested.
+             |  Next: the three-graph query layer (/graph/*) + visualizations; remaining
+             |  Source/Run/Execute hub modules.
 ```
 
 ---

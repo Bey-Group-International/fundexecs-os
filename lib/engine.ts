@@ -8,7 +8,7 @@
 import { createServerClient } from "@/lib/supabase/server";
 import type { AgentKey, Hub, GraphKind, ArtifactType, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
-import { generatePlan, executeStep, type AgentPlan } from "@/lib/claude";
+import { generatePlan, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -175,48 +175,88 @@ async function materializePlan(
  * Persist a structured record from a completed workflow so the Command Center
  * populates from real work — not mock data. Source-hub workflows seed a Deal in
  * the pipeline (and adopt the workflow's artifacts); Execute-hub workflows seed
- * an Asset. Deterministic — no extra model call — so it holds in fallback mode.
- * Simpler-by-design per AGENT.md; richer field extraction is a future iteration.
+ * an Asset. Fields are extracted by Claude from the prompt + step deliverables,
+ * with a deterministic fallback so it holds with no API key.
+ *
+ * Idempotent: a workflow records its seeded record id on `tasks.result`. A
+ * re-approval updates that record in place instead of creating a duplicate.
  */
 async function persistOutcome(
   ctx: Ctx,
   workflow: Task,
   artifactIds: string[],
+  context: string,
 ): Promise<{ deal_id?: string; asset_id?: string }> {
-  const name = workflow.title.trim().slice(0, 120) || "Untitled";
-  const notes = workflow.description?.trim() || null;
+  const prior =
+    workflow.result && typeof workflow.result === "object"
+      ? (workflow.result as { deal_id?: string; asset_id?: string })
+      : {};
+  const prompt = (workflow.description?.trim() || workflow.title).slice(0, 4000);
 
   if (workflow.hub === "source") {
-    const { data: deal } = await ctx.supabase
-      .from("deals")
-      .insert({
-        organization_id: ctx.orgId,
-        name,
-        stage: "sourced",
-        source: "Copilot",
-        lead_principal: ctx.actorId,
-        notes,
-      })
-      .select("id")
-      .single();
-    if (deal?.id && artifactIds.length) {
-      await ctx.supabase.from("artifacts").update({ deal_id: deal.id }).in("id", artifactIds);
+    const fields = await extractDealFields({ title: workflow.title, prompt, context });
+    const row = {
+      organization_id: ctx.orgId,
+      name: fields.name,
+      asset_class: fields.asset_class,
+      geography: fields.geography,
+      target_amount: fields.target_amount,
+      source: "Copilot",
+      lead_principal: ctx.actorId,
+      notes: prompt.slice(0, 2000),
+    };
+    let dealId: string | undefined;
+    if (prior.deal_id) {
+      // Re-approval: update in place, but only trust the id if a row was hit.
+      const { data: updated, error } = await ctx.supabase
+        .from("deals")
+        .update(row)
+        .eq("id", prior.deal_id)
+        .eq("organization_id", ctx.orgId)
+        .select("id")
+        .maybeSingle();
+      if (!error && updated) dealId = updated.id;
     }
-    return deal?.id ? { deal_id: deal.id } : {};
+    if (!dealId) {
+      const { data: deal } = await ctx.supabase
+        .from("deals")
+        .insert({ ...row, stage: "sourced" })
+        .select("id")
+        .single();
+      dealId = deal?.id;
+    }
+    if (dealId && artifactIds.length) {
+      await ctx.supabase.from("artifacts").update({ deal_id: dealId }).in("id", artifactIds);
+    }
+    return dealId ? { deal_id: dealId } : {};
   }
 
   if (workflow.hub === "execute") {
-    const { data: asset } = await ctx.supabase
-      .from("assets")
-      .insert({
-        organization_id: ctx.orgId,
-        name,
-        asset_type: "other",
-        status: "active",
-      })
-      .select("id")
-      .single();
-    return asset?.id ? { asset_id: asset.id } : {};
+    const fields = await extractAssetFields({ title: workflow.title, prompt, context });
+    const row = {
+      organization_id: ctx.orgId,
+      name: fields.name,
+      asset_type: fields.asset_type,
+      current_value: fields.current_value,
+      status: "active",
+    };
+    let assetId: string | undefined;
+    if (prior.asset_id) {
+      // Re-approval: update in place, but only trust the id if a row was hit.
+      const { data: updated, error } = await ctx.supabase
+        .from("assets")
+        .update(row)
+        .eq("id", prior.asset_id)
+        .eq("organization_id", ctx.orgId)
+        .select("id")
+        .maybeSingle();
+      if (!error && updated) assetId = updated.id;
+    }
+    if (!assetId) {
+      const { data: asset } = await ctx.supabase.from("assets").insert(row).select("id").single();
+      assetId = asset?.id;
+    }
+    return assetId ? { asset_id: assetId } : {};
   }
 
   return {};
@@ -337,7 +377,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
   }
 
   // Turn the finished work into a structured record (Deal / Asset).
-  const outcome = await persistOutcome(ctx, workflow, artifactIds);
+  const outcome = await persistOutcome(ctx, workflow, artifactIds, priorOutputs.join("\n\n"));
 
   await ctx.supabase
     .from("tasks")
