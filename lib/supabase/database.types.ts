@@ -61,15 +61,15 @@ export type DiligenceStatus = "open" | "in_review" | "cleared" | "flagged" | "wa
 export type RiskSeverity = "low" | "medium" | "high" | "critical";
 export type MarketplaceStatus = "draft" | "listed" | "paused" | "closed";
 
-type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
+export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
 // Common audit columns present on most tables.
-interface Timestamps {
+type Timestamps = {
   created_at: string;
   updated_at: string;
 }
 
-export interface Principal {
+export type Principal = {
   id: string;
   email: string;
   full_name: string | null;
@@ -79,7 +79,7 @@ export interface Principal {
   updated_at: string;
 }
 
-export interface Organization extends Timestamps {
+export type Organization = Timestamps & {
   id: string;
   name: string;
   slug: string;
@@ -93,7 +93,7 @@ export interface Organization extends Timestamps {
   created_by: string | null;
 }
 
-export interface OrganizationMember {
+export type OrganizationMember = {
   id: string;
   organization_id: string;
   principal_id: string;
@@ -101,7 +101,7 @@ export interface OrganizationMember {
   created_at: string;
 }
 
-export interface InvestmentThesis extends Timestamps {
+export type InvestmentThesis = Timestamps & {
   id: string;
   organization_id: string;
   title: string;
@@ -115,7 +115,7 @@ export interface InvestmentThesis extends Timestamps {
   is_active: boolean;
 }
 
-export interface Investor extends Timestamps {
+export type Investor = Timestamps & {
   id: string;
   organization_id: string;
   name: string;
@@ -130,7 +130,7 @@ export interface Investor extends Timestamps {
   pipeline_stage: string;
 }
 
-export interface Fund extends Timestamps {
+export type Fund = Timestamps & {
   id: string;
   organization_id: string;
   name: string;
@@ -143,7 +143,7 @@ export interface Fund extends Timestamps {
   currency: string;
 }
 
-export interface Commitment extends Timestamps {
+export type Commitment = Timestamps & {
   id: string;
   organization_id: string;
   fund_id: string;
@@ -154,7 +154,7 @@ export interface Commitment extends Timestamps {
   committed_at: string | null;
 }
 
-export interface CapitalEvent extends Timestamps {
+export type CapitalEvent = Timestamps & {
   id: string;
   organization_id: string;
   fund_id: string;
@@ -168,7 +168,7 @@ export interface CapitalEvent extends Timestamps {
   notes: string | null;
 }
 
-export interface Deal extends Timestamps {
+export type Deal = Timestamps & {
   id: string;
   organization_id: string;
   name: string;
@@ -184,7 +184,7 @@ export interface Deal extends Timestamps {
   notes: string | null;
 }
 
-export interface Asset extends Timestamps {
+export type Asset = Timestamps & {
   id: string;
   organization_id: string;
   deal_id: string | null;
@@ -199,7 +199,7 @@ export interface Asset extends Timestamps {
   status: string;
 }
 
-export interface Underwriting extends Timestamps {
+export type Underwriting = Timestamps & {
   id: string;
   organization_id: string;
   deal_id: string;
@@ -212,7 +212,7 @@ export interface Underwriting extends Timestamps {
   created_by: string | null;
 }
 
-export interface DiligenceItem extends Timestamps {
+export type DiligenceItem = Timestamps & {
   id: string;
   organization_id: string;
   deal_id: string;
@@ -224,7 +224,7 @@ export interface DiligenceItem extends Timestamps {
   finding: string | null;
 }
 
-export interface Relationship extends Timestamps {
+export type Relationship = Timestamps & {
   id: string;
   organization_id: string;
   graph: GraphKind;
@@ -237,7 +237,7 @@ export interface Relationship extends Timestamps {
   metadata: Json;
 }
 
-export interface AiAgent {
+export type AiAgent = {
   key: AgentKey;
   name: string;
   hub: Hub | null;
@@ -248,7 +248,7 @@ export interface AiAgent {
   created_at: string;
 }
 
-export interface Task extends Timestamps {
+export type Task = Timestamps & {
   id: string;
   organization_id: string;
   prompt_id: string | null;
@@ -266,7 +266,7 @@ export interface Task extends Timestamps {
   completed_at: string | null;
 }
 
-export interface Approval extends Timestamps {
+export type Approval = Timestamps & {
   id: string;
   organization_id: string;
   task_id: string;
@@ -278,7 +278,7 @@ export interface Approval extends Timestamps {
   note: string | null;
 }
 
-export interface TaskEvent {
+export type TaskEvent = {
   id: string;
   organization_id: string;
   task_id: string | null;
@@ -289,7 +289,7 @@ export interface TaskEvent {
   created_at: string;
 }
 
-export interface MarketplaceListing extends Timestamps {
+export type MarketplaceListing = Timestamps & {
   id: string;
   organization_id: string;
   title: string;
@@ -303,6 +303,57 @@ export interface MarketplaceListing extends Timestamps {
   metadata: Json;
 }
 
+export type TrackRecord = Timestamps & {
+  id: string;
+  organization_id: string;
+  deal_name: string;
+  asset_class: string | null;
+  vintage_year: number | null;
+  invested_amount: number | null;
+  realized_value: number | null;
+  unrealized_value: number | null;
+  gross_irr: number | null;
+  gross_moic: number | null;
+  is_realized: boolean;
+  notes: string | null;
+};
+
+export type Document = {
+  id: string;
+  organization_id: string;
+  deal_id: string | null;
+  asset_id: string | null;
+  name: string;
+  doc_type: string | null;
+  storage_key: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  uploaded_by: string | null;
+  created_at: string;
+};
+
+export type Prompt = {
+  id: string;
+  organization_id: string;
+  principal_id: string;
+  body: string;
+  parsed_intent: Json | null;
+  routed_hub: Hub | null;
+  routed_agent: AgentKey | null;
+  created_at: string;
+};
+
+export type TaskHandoff = {
+  id: string;
+  organization_id: string;
+  task_id: string;
+  from_agent: AgentKey | null;
+  to_agent: AgentKey;
+  reason: string | null;
+  payload: Json;
+  created_at: string;
+};
+
 // Minimal Database shape compatible with @supabase/supabase-js generics.
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
@@ -312,24 +363,28 @@ type TableShape<Row> = {
   Relationships: [];
 };
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       principals: TableShape<Principal>;
       organizations: TableShape<Organization>;
       organization_members: TableShape<OrganizationMember>;
       investment_theses: TableShape<InvestmentThesis>;
+      track_records: TableShape<TrackRecord>;
       investors: TableShape<Investor>;
       funds: TableShape<Fund>;
       commitments: TableShape<Commitment>;
       capital_events: TableShape<CapitalEvent>;
       deals: TableShape<Deal>;
       assets: TableShape<Asset>;
+      documents: TableShape<Document>;
       underwritings: TableShape<Underwriting>;
       diligence_items: TableShape<DiligenceItem>;
       relationships: TableShape<Relationship>;
       ai_agents: TableShape<AiAgent>;
+      prompts: TableShape<Prompt>;
       tasks: TableShape<Task>;
+      task_handoffs: TableShape<TaskHandoff>;
       approvals: TableShape<Approval>;
       task_events: TableShape<TaskEvent>;
       marketplace_listings: TableShape<MarketplaceListing>;
