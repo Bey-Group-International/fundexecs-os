@@ -36,6 +36,13 @@ function text(formData: FormData, name: string): string | null {
   return v === "" ? null : v;
 }
 
+function num(formData: FormData, name: string): number | null {
+  const v = String(formData.get(name) ?? "").trim();
+  if (v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 // Insert a row into a table-backed module. Uses a per-module allow-list and a
 // switch on the literal key so each `.from(...)` stays typed against the table.
 export async function createModuleRow(hub: string, module: string, formData: FormData) {
@@ -107,6 +114,48 @@ export async function createModuleRow(hub: string, module: string, formData: For
             | "fund_interest"
             | "other"
             | null) ?? "real_estate",
+      });
+      break;
+    }
+    case "source/partners": {
+      const name = text(formData, "name");
+      if (!name) return;
+      await supabase.from("partners").insert({
+        organization_id: orgId,
+        name,
+        partner_type: text(formData, "partner_type") ?? "co_gp",
+        relationship: text(formData, "relationship"),
+        contact_name: text(formData, "contact_name"),
+        contact_email: text(formData, "contact_email"),
+        status: text(formData, "status") ?? "active",
+      });
+      break;
+    }
+    case "source/providers": {
+      const name = text(formData, "name");
+      if (!name) return;
+      await supabase.from("service_providers").insert({
+        organization_id: orgId,
+        name,
+        provider_type: text(formData, "provider_type") ?? "legal",
+        contact_name: text(formData, "contact_name"),
+        contact_email: text(formData, "contact_email"),
+        status: text(formData, "status") ?? "active",
+      });
+      break;
+    }
+    case "source/debt": {
+      const name = text(formData, "name");
+      if (!name) return;
+      await supabase.from("debt_facilities").insert({
+        organization_id: orgId,
+        name,
+        facility_type: text(formData, "facility_type") ?? "term_loan",
+        lender: text(formData, "lender"),
+        commitment_amount: num(formData, "commitment_amount"),
+        interest_rate: num(formData, "interest_rate"),
+        currency: text(formData, "currency") ?? "USD",
+        status: text(formData, "status") ?? "prospective",
       });
       break;
     }

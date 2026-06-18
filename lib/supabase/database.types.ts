@@ -320,6 +320,46 @@ export type Entity = Timestamps & {
   created_by: string | null;
 };
 
+export type Partner = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  partner_type: string;
+  relationship: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  status: string;
+  notes: string | null;
+  created_by: string | null;
+};
+
+export type ServiceProvider = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  provider_type: string;
+  contact_name: string | null;
+  contact_email: string | null;
+  status: string;
+  notes: string | null;
+  created_by: string | null;
+};
+
+export type DebtFacility = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  facility_type: string;
+  lender: string | null;
+  commitment_amount: number | null;
+  interest_rate: number | null;
+  currency: string;
+  status: string;
+  maturity_date: string | null;
+  notes: string | null;
+  created_by: string | null;
+};
+
 export type Wallet = Timestamps & {
   id: string;
   organization_id: string;
@@ -498,6 +538,9 @@ export type Database = {
       wallets: TableShape<Wallet>;
       session_shares: TableShape<SessionShare>;
       entities: TableShape<Entity>;
+      partners: TableShape<Partner>;
+      service_providers: TableShape<ServiceProvider>;
+      debt_facilities: TableShape<DebtFacility>;
       marketplace_listings: TableShape<MarketplaceListing>;
     };
     Views: Record<string, never>;
