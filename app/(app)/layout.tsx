@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
 import { AGENTS } from "@/lib/agents";
+import { HUBS } from "@/lib/hubs";
 
-// Authed shell. Gates every route in the (app) group: unauthenticated → login,
-// authenticated-but-no-org → onboarding. Warm-black/gold Command Center vibe.
+// Authed shell. Side rail exposes the Copilot, the Command Center, and the
+// four operational hubs (Build / Source / Run / Execute) with their modules.
 export default async function AppLayout({
   children,
 }: {
@@ -17,7 +18,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-0 text-fg-primary">
-      <aside className="flex w-[220px] shrink-0 flex-col border-r border-line bg-surface-1">
+      <aside className="flex w-[224px] shrink-0 flex-col border-r border-line bg-surface-1">
         <div className="flex h-12 items-center border-b border-line px-4">
           <Link href="/workspace">
             <span className="font-mono text-xs uppercase tracking-[0.22em] text-gold-400">
@@ -42,15 +43,27 @@ export default async function AppLayout({
             Command Center
           </Link>
 
-          <p className="mb-1 mt-5 px-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-            Build
-          </p>
-          <Link
-            href="/build/profile"
-            className="block rounded-md px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
-          >
-            Profile
-          </Link>
+          {HUBS.map((hub) => (
+            <div key={hub.key} className="mt-4">
+              <Link
+                href={`/${hub.key}`}
+                className="block rounded-md px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
+              >
+                {hub.label}
+              </Link>
+              <div className="mt-0.5 flex flex-col">
+                {hub.modules.map((mod) => (
+                  <Link
+                    key={mod.key}
+                    href={`/${hub.key}/${mod.key}`}
+                    className="rounded-md px-2 py-1 pl-3 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                  >
+                    {mod.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="border-t border-line p-3">
