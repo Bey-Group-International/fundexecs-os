@@ -205,10 +205,19 @@ async function persistOutcome(
       lead_principal: ctx.actorId,
       notes: prompt.slice(0, 2000),
     };
-    let dealId = prior.deal_id;
-    if (dealId) {
-      await ctx.supabase.from("deals").update(row).eq("id", dealId);
-    } else {
+    let dealId: string | undefined;
+    if (prior.deal_id) {
+      // Re-approval: update in place, but only trust the id if a row was hit.
+      const { data: updated, error } = await ctx.supabase
+        .from("deals")
+        .update(row)
+        .eq("id", prior.deal_id)
+        .eq("organization_id", ctx.orgId)
+        .select("id")
+        .maybeSingle();
+      if (!error && updated) dealId = updated.id;
+    }
+    if (!dealId) {
       const { data: deal } = await ctx.supabase
         .from("deals")
         .insert({ ...row, stage: "sourced" })
@@ -231,10 +240,19 @@ async function persistOutcome(
       current_value: fields.current_value,
       status: "active",
     };
-    let assetId = prior.asset_id;
-    if (assetId) {
-      await ctx.supabase.from("assets").update(row).eq("id", assetId);
-    } else {
+    let assetId: string | undefined;
+    if (prior.asset_id) {
+      // Re-approval: update in place, but only trust the id if a row was hit.
+      const { data: updated, error } = await ctx.supabase
+        .from("assets")
+        .update(row)
+        .eq("id", prior.asset_id)
+        .eq("organization_id", ctx.orgId)
+        .select("id")
+        .maybeSingle();
+      if (!error && updated) assetId = updated.id;
+    }
+    if (!assetId) {
       const { data: asset } = await ctx.supabase.from("assets").insert(row).select("id").single();
       assetId = asset?.id;
     }

@@ -283,7 +283,7 @@ export async function extractAssetFields(args: {
     return {
       name: cleanStr(raw.name) ?? fb.name,
       asset_type: ASSET_TYPES.includes(raw.asset_type as AssetType) ? (raw.asset_type as AssetType) : fb.asset_type,
-      current_value: cleanNum(raw.current_value),
+      current_value: cleanNum(raw.current_value) ?? fb.current_value,
     };
   } catch {
     return fallbackAssetFields(args);
@@ -338,12 +338,16 @@ function fallbackStepOutput(args: { stepTitle: string; agent: AgentKey }): strin
 }
 
 // Parse the first plausible USD figure ("$25M", "12.5 million", "$3,000,000").
+// Requires an explicit currency cue — a "$", a magnitude word, or "usd"/"dollars" —
+// so bare numbers (years, counts) aren't misread as monetary amounts.
 function parseUsdAmount(text: string): number | null {
-  const m = text.match(/\$?\s*([\d,]+(?:\.\d+)?)\s*(k|m|mm|bn?|thousand|million|billion)?/i);
+  const m = text.match(
+    /\$\s*([\d,]+(?:\.\d+)?)\s*(k|m|mm|bn?|thousand|million|billion)?\b|([\d,]+(?:\.\d+)?)\s*(k|m|mm|bn?|thousand|million|billion|usd|dollars?)\b/i,
+  );
   if (!m) return null;
-  const base = Number(m[1].replace(/,/g, ""));
+  const base = Number((m[1] ?? m[3]).replace(/,/g, ""));
   if (!Number.isFinite(base) || base <= 0) return null;
-  const unit = (m[2] ?? "").toLowerCase();
+  const unit = (m[2] ?? m[4] ?? "").toLowerCase();
   const mult =
     unit === "k" || unit === "thousand"
       ? 1e3
