@@ -2,11 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
-import { AGENTS } from "@/lib/agents";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
 import { startSession } from "@/app/(app)/sessions/actions";
+import { getWalletBalance } from "@/lib/wallet";
+import { ActiveSessionProvider } from "@/components/session/active-session";
+import { GlobalTopBar } from "@/components/GlobalTopBar";
 
 // The four hubs, in operating order, as shown in the side rail.
 const HUB_ORDER: Hub[] = ["build", "run", "source", "execute"];
@@ -22,6 +24,8 @@ export default async function AppLayout({
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
+
+  const balance = await getWalletBalance(ctx.orgId);
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-0 text-fg-primary">
@@ -112,33 +116,12 @@ export default async function AppLayout({
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-line px-5">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-fg-primary">
-              {ctx.email?.split("@")[0] ?? "Workspace"}
-            </span>
-            <span className="font-mono text-xs text-fg-muted">·</span>
-            <span className="font-mono text-xs text-fg-muted">Private Markets</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-fg-muted">Agents</span>
-            <div className="flex items-center gap-1.5">
-              {AGENTS.map((agent) => (
-                <span
-                  key={agent.key}
-                  title={agent.name}
-                  className="h-2 w-2 rounded-full opacity-50"
-                  style={{ backgroundColor: agent.color }}
-                  aria-label={agent.name}
-                />
-              ))}
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
-      </div>
+      <ActiveSessionProvider>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <GlobalTopBar balance={balance} />
+          <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
+        </div>
+      </ActiveSessionProvider>
 
       <GuidedTour />
     </div>
