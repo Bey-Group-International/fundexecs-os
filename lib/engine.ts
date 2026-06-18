@@ -6,7 +6,7 @@
 // task_events the live Copilot streams. Human approval gates automation; the
 // operator is never bypassed.
 import { createServerClient } from "@/lib/supabase/server";
-import type { AgentKey, Hub, GraphKind, Json, Task } from "@/lib/supabase/database.types";
+import type { AgentKey, Hub, GraphKind, ArtifactType, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
 import { generatePlan, executeStep, type AgentPlan } from "@/lib/claude";
 
@@ -23,6 +23,34 @@ function hubToGraph(hub: Hub): GraphKind | null {
   if (hub === "run") return "deal";
   if (hub === "execute") return "capital";
   return null;
+}
+
+/**
+ * Classify a step's deliverable into a first-class artifact type from the
+ * authoring agent and the step title. Deterministic so it holds in fallback
+ * mode (no API key) too. Coarse on purpose — enough to route and badge.
+ */
+function classifyArtifact(agent: AgentKey, stepTitle: string): ArtifactType {
+  const t = stepTitle.toLowerCase();
+  const has = (...w: string[]) => w.some((x) => t.includes(x));
+  if (has("ic memo", "ic ", "recommend", "committee")) return "ic_memo";
+  if (has("model", "lbo", "dcf", "underwrit", "pro forma", "valuation", "sensitivit"))
+    return "model";
+  if (has("risk", "flag", "diligence", "red flag")) return "risk_report";
+  if (has("summar", "recap", "synthes")) return "summary";
+  switch (agent) {
+    case "analyst":
+      return "analysis";
+    case "diligence":
+      return "risk_report";
+    case "investor_relations":
+      return "lp_update";
+    case "fund_admin":
+    case "portfolio_ops":
+    case "associate":
+    default:
+      return "memo";
+  }
 }
 
 async function recordEvent(
@@ -215,12 +243,38 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
         result: { output } as Json,
       })
       .eq("id", step.id);
+
+    // Promote the step output to a first-class, typed artifact.
+    const artifactType = classifyArtifact(step.assigned_agent, step.title);
+    const { data: artifact } = await ctx.supabase
+      .from("artifacts")
+      .insert({
+        organization_id: ctx.orgId,
+        workflow_id: workflow.id,
+        step_id: step.id,
+        title: step.title,
+        artifact_type: artifactType,
+        agent: step.assigned_agent,
+        hub: step.hub,
+        content: output,
+        created_by: ctx.actorId,
+      })
+      .select("id")
+      .single();
+
     await recordEvent(ctx, {
       taskId: workflow.id,
       type: "task.completed",
       agent: step.assigned_agent,
       hub: step.hub,
       payload: { step_id: step.id, message: `${step.title} — done` },
+    });
+    await recordEvent(ctx, {
+      taskId: workflow.id,
+      type: "artifact.created",
+      agent: step.assigned_agent,
+      hub: step.hub,
+      payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title },
     });
 
     await ctx.supabase

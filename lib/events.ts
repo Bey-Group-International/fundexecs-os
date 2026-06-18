@@ -1,7 +1,7 @@
 // WebSocket / Realtime event model. These types describe the payloads emitted
 // as the task engine runs and consumed by the live workspace. They correspond
 // to rows in the `task_events` table (the durable record behind Realtime).
-import type { AgentKey, Hub, GraphKind } from "./supabase/database.types";
+import type { AgentKey, Hub, GraphKind, ArtifactType } from "./supabase/database.types";
 
 export type TaskEventType =
   | "task.created"
@@ -10,6 +10,7 @@ export type TaskEventType =
   | "task.handoff"
   | "approval.requested"
   | "approval.response"
+  | "artifact.created"
   | "graph.update";
 
 interface BaseEvent {
@@ -56,6 +57,13 @@ export interface ApprovalResponseEvent extends BaseEvent {
   decision: "approved" | "rejected" | "regenerate";
 }
 
+export interface ArtifactCreatedEvent extends BaseEvent {
+  event: "artifact.created";
+  artifact_id: string;
+  artifact_type: ArtifactType;
+  title: string;
+}
+
 export interface GraphUpdateEvent extends BaseEvent {
   event: "graph.update";
   graph: GraphKind;
@@ -68,4 +76,5 @@ export type FundExecsEvent =
   | TaskHandoffEvent
   | ApprovalRequestedEvent
   | ApprovalResponseEvent
+  | ArtifactCreatedEvent
   | GraphUpdateEvent;
