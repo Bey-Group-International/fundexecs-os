@@ -1,0 +1,109 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createServerClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth";
+import type { MarketplaceStatus } from "@/lib/supabase/database.types";
+
+const STATUSES: MarketplaceStatus[] = ["draft", "listed", "paused", "closed"];
+
+// Create a marketplace listing for the active org. Only the title is required;
+// everything else defaults sensibly (draft, private) so a listing can be filled
+// in over time before it goes public.
+export async function createListing(formData: FormData): Promise<{ error?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "Not authenticated" };
+
+  const title = String(formData.get("title") ?? "").trim();
+  const listingType = String(formData.get("listing_type") ?? "").trim() || "deal";
+  const summary = String(formData.get("summary") ?? "").trim();
+  const amountRaw = String(formData.get("amount") ?? "").trim();
+  const statusRaw = String(formData.get("status") ?? "draft").trim();
+  const isPublic = formData.get("is_public") === "on";
+
+  if (!title) return { error: "Title is required" };
+
+  const status: MarketplaceStatus = STATUSES.includes(statusRaw as MarketplaceStatus)
+    ? (statusRaw as MarketplaceStatus)
+    : "draft";
+
+  let amount: number | null = null;
+  if (amountRaw) {
+    const parsed = Number(amountRaw.replace(/[^0-9.]/g, ""));
+    if (!Number.isNaN(parsed)) amount = parsed;
+  }
+
+  const supabase = createServerClient();
+  const { error } = await supabase.from("marketplace_listings").insert({
+    organization_id: ctx.orgId,
+    title,
+    listing_type: listingType,
+    summary: summary || null,
+    amount,
+    status,
+    is_public: isPublic,
+  });
+
+  if (error) return { error: error.message };
+  revalidatePath("/marketplace");
+  return {};
+}
+
+// Advance a listing through its lifecycle: draft → listed → paused → closed,
+// wrapping back to draft. A free-form `status` override is also accepted.
+export async function updateListingStatus(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  let next: MarketplaceStatus | null = null;
+  const explicit = String(formData.get("status") ?? "").trim();
+  if (STATUSES.includes(explicit as MarketplaceStatus)) {
+    next = explicit as MarketplaceStatus;
+  } else {
+    const current = String(formData.get("current") ?? "draft") as MarketplaceStatus;
+    const idx = STATUSES.indexOf(current);
+    next = STATUSES[(idx + 1) % STATUSES.length];
+  }
+  if (!next) return;
+
+  const supabase = createServerClient();
+  await supabase
+    .from("marketplace_listings")
+    .update({ status: next })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath("/marketplace");
+}
+
+export async function toggleListingPublic(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const id = String(formData.get("id") ?? "");
+  const isPublic = String(formData.get("is_public") ?? "") === "true";
+  if (!id) return;
+
+  const supabase = createServerClient();
+  await supabase
+    .from("marketplace_listings")
+    .update({ is_public: !isPublic })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath("/marketplace");
+}
+
+export async function deleteListing(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const supabase = createServerClient();
+  await supabase
+    .from("marketplace_listings")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath("/marketplace");
+}
