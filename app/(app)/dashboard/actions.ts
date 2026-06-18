@@ -74,6 +74,18 @@ const DEMO_SESSIONS: { name: string; origin: "earn" | "workflow"; grouped: boole
   { name: "Weekly pipeline digest", origin: "workflow", grouped: false },
 ];
 
+// Tie a couple of demo records to the session that "produced" them (migration
+// 0022), so opening a session's Deal Pipeline / Asset Management frame shows
+// only its scoped rows — while the hub views still show the whole book.
+const DEMO_SESSION_LINKS: { session: string; deals: string[]; assets: string[] }[] = [
+  { session: "Source multifamily targets in Texas", deals: ["Cedar Ridge Multifamily"], assets: [] },
+  {
+    session: "Underwrite Atlas Logistics Portfolio",
+    deals: ["Atlas Logistics Portfolio"],
+    assets: ["Atlas DC-1 Warehouse"],
+  },
+];
+
 function demoTaskTitles(): string[] {
   return DEMO_WORKFLOWS.flatMap((w) => [w.title, ...w.steps.map((s) => s.title)]);
 }
@@ -207,15 +219,40 @@ export async function seedDemoData(): Promise<void> {
     .insert({ organization_id: org, name: DEMO_SESSION_GROUP, created_by: by })
     .select("id")
     .single();
-  await supabase.from("sessions").insert(
-    DEMO_SESSIONS.map((s) => ({
-      organization_id: org,
-      name: s.name,
-      origin: s.origin,
-      group_id: s.grouped ? group?.id ?? null : null,
-      created_by: by,
-    })),
-  );
+  const { data: insertedSessions } = await supabase
+    .from("sessions")
+    .insert(
+      DEMO_SESSIONS.map((s) => ({
+        organization_id: org,
+        name: s.name,
+        origin: s.origin,
+        group_id: s.grouped ? group?.id ?? null : null,
+        created_by: by,
+      })),
+    )
+    .select("id, name");
+
+  // Scope a couple of demo deals/assets to their originating session so the
+  // in-session module frames show real, focused data.
+  const sessionIdByName = new Map((insertedSessions ?? []).map((s) => [s.name, s.id]));
+  for (const link of DEMO_SESSION_LINKS) {
+    const sid = sessionIdByName.get(link.session);
+    if (!sid) continue;
+    if (link.deals.length) {
+      await supabase
+        .from("deals")
+        .update({ session_id: sid })
+        .eq("organization_id", org)
+        .in("name", link.deals);
+    }
+    if (link.assets.length) {
+      await supabase
+        .from("assets")
+        .update({ session_id: sid })
+        .eq("organization_id", org)
+        .in("name", link.assets);
+    }
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/automations");

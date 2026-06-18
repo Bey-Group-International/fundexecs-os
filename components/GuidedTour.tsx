@@ -45,6 +45,12 @@ const STEPS: TourStep[] = [
     href: "/dashboard",
     cta: "Back to Command Center",
   },
+  {
+    title: "Open a session, see its work",
+    body: "In Sessions, open “Source multifamily targets in Texas,” then its Deal Pipeline. You’ll see only the deal that session produced — while the Source hub still shows the whole book.",
+    href: "/dashboard",
+    cta: "Open Sessions",
+  },
 ];
 
 const DONE_KEY = "fx_tour_done_v1";
