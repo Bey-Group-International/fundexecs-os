@@ -105,38 +105,10 @@ create type marketplace_status as enum ('draft', 'listed', 'paused', 'closed');
 -- ---------------------------------------------------------------------------
 -- Helper functions
 -- ---------------------------------------------------------------------------
-
--- Set of organization ids the current authenticated principal belongs to.
--- SECURITY DEFINER so RLS policies can call it without recursing into the
--- organization_members policy. Used by nearly every policy.
-create or replace function public.current_principal_org_ids()
-returns setof uuid
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select organization_id
-  from public.organization_members
-  where principal_id = auth.uid();
-$$;
-
--- True if the current principal has owner/admin rights in the given org.
-create or replace function public.is_org_admin(target_org uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.organization_members
-    where principal_id = auth.uid()
-      and organization_id = target_org
-      and role in ('owner', 'admin')
-  );
-$$;
+-- NOTE: Membership helper functions (current_principal_org_ids, is_org_admin,
+-- is_org_writer) reference `organization_members`, so they are defined after
+-- that table exists (see 0002_identity.sql / 0010_rls.sql). Postgres validates
+-- `language sql` function bodies at creation time, so they cannot live here.
 
 -- Generic updated_at maintenance trigger.
 create or replace function public.set_updated_at()

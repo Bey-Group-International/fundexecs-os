@@ -81,3 +81,41 @@ create table public.organization_members (
 
 create index organization_members_principal_idx on public.organization_members (principal_id);
 create index organization_members_org_idx on public.organization_members (organization_id);
+
+-- ---------------------------------------------------------------------------
+-- Membership helper functions. Defined here (not in 0001) because they read
+-- `organization_members`, which must exist before the function bodies are
+-- validated. Used by nearly every RLS policy in 0010_rls.sql.
+-- ---------------------------------------------------------------------------
+
+-- Set of organization ids the current authenticated principal belongs to.
+-- SECURITY DEFINER so RLS policies can call it without recursing into the
+-- organization_members policy.
+create or replace function public.current_principal_org_ids()
+returns setof uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select organization_id
+  from public.organization_members
+  where principal_id = auth.uid();
+$$;
+
+-- True if the current principal has owner/admin rights in the given org.
+create or replace function public.is_org_admin(target_org uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.organization_members
+    where principal_id = auth.uid()
+      and organization_id = target_org
+      and role in ('owner', 'admin')
+  );
+$$;
