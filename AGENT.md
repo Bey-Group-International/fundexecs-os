@@ -5,8 +5,8 @@
 > It is read by AI coding tools, executed by the Associate Agent, and updated by the system itself as it learns.
 > It is the first module of FundExecs OS. Treat it as source of truth.
 > **Last updated:** 2026-06-18
-> **Build phase:** Pre-Alpha — Scaffolding
-> **Confidence level:** Scaffolded, not yet functional (data model + repo scaffold landed)
+> **Build phase:** Pre-Alpha — Scaffolding (task-engine loop landed)
+> **Confidence level:** Integrated, not yet tested (loop builds end-to-end; not yet run against a live DB)
 
 ---
 
@@ -47,17 +47,20 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - ✅ RLS on every table, org-membership tenancy boundary, helper functions
 - ✅ Six-agent catalog seeded; hub/agent/event catalogs in `lib/`
 - ✅ Typed data layer (`lib/supabase/`) — browser, server, and service clients
-- ✅ Static architecture landing page rendered from the lib catalogs
+- ✅ Auth (email/password) + middleware session refresh + org onboarding
+- ✅ API layer: `/prompt`, `/task`, `/handoff`, `/approve`, `/report`, `/agents`
+- ✅ Task engine (`lib/engine.ts`) — mock agent execution driving the full loop
+- ✅ Realtime over `task_events` (the WebSocket event gateway) — live workspace feed
+- ✅ Build › Profile hub module (read/write `organizations`)
 
 ### What has not been built yet
-- 🔧 Supabase schema **deployment** (migrations exist; not applied to a live project)
-- 🔧 Node backend services / API layer (`/prompt → /task → /handoff → /approve`)
-- 🔧 AI agent engine
-- 🔧 WebSocket event gateway (event model defined in `lib/events.ts`; no emitter)
-- 🔧 Three.js avatar workspace
-- 🔧 Any functional hub module (Build, Source, Run, Execute)
+- 🔧 Supabase schema **deployment** (migrations exist; applied to preview branch per PR, not a fixed live env)
+- 🔧 Real AI agent execution (current execution is a deterministic mock)
+- 🔧 Intent parser beyond keyword routing
+- 🔧 Three.js avatar workspace (palette + event model ready; no 3D yet)
+- 🔧 Remaining hub modules (Source, Run, Execute; most of Build)
 - 🔧 Marketplace layer (schema exists; no logic/UI)
-- 🔧 Graph query layer
+- 🔧 Graph query layer (`/graph/*` endpoints + visualizations)
 
 ### What you must never do
 - ❌ Import external SDKs for core intelligence — all AI agents, graphs, and workflows run natively
@@ -254,10 +257,10 @@ Deployed, monitoring               →  live, observability active
 
 **Exit criteria for this phase:**
 - [x] Repo structure matches architecture
-- [~] Supabase schema authored as migrations + RLS policies (not yet deployed to a live project)
-- [ ] `/prompt` → `/task` → `/approve` loop functional (even with mock agents)
-- [ ] WebSocket gateway emitting at least `task.created` and `task.progress`
-- [ ] One hub panel rendered in Next.js (Build hub, Profile module)
+- [~] Supabase schema authored as migrations + RLS policies (applied to PR preview branches; not a fixed live env)
+- [x] `/prompt` → `/task` → `/approve` loop functional (mock agents)
+- [x] WebSocket gateway emitting at least `task.created` and `task.progress` (Realtime over `task_events`)
+- [x] One hub panel rendered in Next.js (Build hub, Profile module)
 
 **Next phase:** Alpha — Agent Implementation
 **After that:** Beta — Workspace + Avatar Layer
@@ -285,6 +288,20 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Scaffolded, not yet functional.
              |  Next: deploy schema to a Supabase project, then build the /prompt → /task →
              |  /handoff → /approve API loop with mock agents and Realtime task.* events.
+
+2026-06-18  |  Task-engine loop  |  Built the full sacred loop end-to-end (mock agents).
+             |  Decisions (per founder): full task-engine increment; stay migrations/preview-only.
+             |  Added: email/password auth + middleware session refresh + org onboarding;
+             |  API routes /prompt /task /handoff /approve /report /agents; lib/engine.ts
+             |  (keyword intent routing + mock execution + approval resolution); Realtime
+             |  over task_events (migration 0012) feeding a live workspace; Build › Profile module.
+             |  Notable fix: hand-written Database Row types were `interface`s, which are NOT
+             |  assignable to supabase-js's `Record<string, unknown>` table constraint — every
+             |  query collapsed to `never`. Converted all Row types to `type` aliases and added
+             |  the missing tables (prompts, task_handoffs, documents, track_records) to the
+             |  Database map. Aligned @supabase/ssr → ^0.12 with supabase-js ^2.108.
+             |  Confidence: Integrated, not yet tested.
+             |  Next: replace mock execution with real agents; intent parser; more hub modules.
 ```
 
 ---

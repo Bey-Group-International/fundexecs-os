@@ -231,12 +231,15 @@ migration workflow.
 
 - [x] Frontend scaffold (Next.js + Tailwind)
 - [x] Database schema + RLS (versioned migrations)
-- [ ] Supabase schema deployment (to a live project)
-- [ ] Backend services (Node)
-- [ ] AI agent engine (prompt → task → handoff → approve loop)
-- [ ] Three-graph data architecture (query layer)
-- [ ] WebSocket event gateway
+- [x] Auth + organization onboarding
+- [x] Backend API (prompt → task → handoff → approve loop, with mock agents)
+- [x] WebSocket event gateway (Realtime over `task_events`)
+- [x] Build Hub — Profile module
+- [ ] Supabase schema deployment (to a fixed live project)
+- [ ] Real AI agent engine (replace mock execution)
+- [ ] Three-graph data architecture (query layer + `/graph/*`)
 - [ ] Three.js avatar workspace
+- [ ] Source / Run / Execute hub modules
 - [ ] Build Hub — Profile, Thesis, Entity modules
 - [ ] Source Hub — LP Pipeline, Deal Pipeline
 - [ ] Run Hub — Underwriting, Diligence, Stress Test

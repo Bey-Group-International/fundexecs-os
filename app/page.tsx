@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { HUBS } from "@/lib/hubs";
 import { AGENTS } from "@/lib/agents";
 
@@ -20,6 +21,20 @@ export default function Home() {
           unifying relationships, deals, and capital into a single intelligence
           layer, with AI agents that execute workflows end-to-end.
         </p>
+        <div className="mt-6 flex gap-3">
+          <Link
+            href="/workspace"
+            className="rounded-md bg-agent-associate px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+          >
+            Launch workspace
+          </Link>
+          <Link
+            href="/login"
+            className="rounded-md border border-neutral-800 px-4 py-2 text-sm text-neutral-300 transition hover:bg-neutral-900"
+          >
+            Sign in
+          </Link>
+        </div>
       </header>
 
       <section className="mb-16">
