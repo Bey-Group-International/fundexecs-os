@@ -1,4 +1,5 @@
 # BGI Legal / Admin / Compliance Operations Brain
+
 ## Downloadable Knowledge Base for Legal Paperwork, Contracts, Governance, Fund Administration, Deal Documentation, Compliance, Diligence, and Risk Control
 
 **Important Notice:**  
@@ -386,26 +387,47 @@ Every legal request should start with this intake.
 ## Legal/Admin Intake Form
 
 ### Matter Name:
+
 ### Date:
+
 ### Requestor:
+
 ### Entity Involved:
+
 ### Counterparty:
+
 ### Document Type:
+
 ### Business Purpose:
+
 ### Desired Outcome:
+
 ### Deadline:
+
 ### Is Money Involved?
+
 ### Is Equity / Securities Involved?
+
 ### Is Confidential Information Involved?
+
 ### Is Employment / Labor Involved?
+
 ### Is Acquisition / Real Estate Involved?
+
 ### Is Any Party Asking for Exclusivity?
+
 ### Is Any Party Asking for Indemnity?
+
 ### Is Any Party Asking for Ownership / IP Rights?
+
 ### Existing Documents:
+
 ### Missing Information:
+
 ### Risk Level:
+
 ### Counsel Review Needed?
+
 ### Recommended Next Step:
 
 ---
@@ -1123,15 +1145,25 @@ Output:
 # 14. Due Diligence Tracker Format
 
 ## Item:
+
 ## Category:
+
 ## Requested From:
+
 ## Date Requested:
+
 ## Date Received:
+
 ## Status:
+
 ## Responsible Party:
+
 ## Risk Level:
+
 ## Notes:
+
 ## Follow-Up Needed:
+
 ## Counsel / CPA Review Needed:
 
 Categories:
@@ -1172,18 +1204,31 @@ Categories:
 ## Folder Structure
 
 ### 01 Entity Records
+
 ### 02 Fund Documents
+
 ### 03 Investor Materials
+
 ### 04 Investor Subscriptions
+
 ### 05 Deal Pipeline
+
 ### 06 Acquisition Diligence
+
 ### 07 Financing Documents
+
 ### 08 Contracts and Vendors
+
 ### 09 Sponsorships and Events
+
 ### 10 HR / Internships / Contractors
+
 ### 11 Compliance
+
 ### 12 Memos
+
 ### 13 Executed Agreements
+
 ### 14 Archive
 
 ---
@@ -1193,16 +1238,27 @@ Categories:
 ## Legal Issue Memo
 
 ### Issue:
+
 ### Background:
+
 ### Parties:
+
 ### Documents Reviewed:
+
 ### Key Facts:
+
 ### Legal/Admin Risks:
+
 ### Business Impact:
+
 ### Missing Information:
+
 ### Options:
+
 ### Recommended Action:
+
 ### Counsel Questions:
+
 ### Next Step:
 
 ---
@@ -1210,18 +1266,31 @@ Categories:
 ## Contract Summary Memo
 
 ### Agreement:
+
 ### Parties:
+
 ### Effective Date:
+
 ### Term:
+
 ### Payment:
+
 ### Key Obligations:
+
 ### Termination Rights:
+
 ### Confidentiality:
+
 ### IP:
+
 ### Liability / Indemnity:
+
 ### Exclusivity:
+
 ### Renewal:
+
 ### Risk Level:
+
 ### Action Needed:
 
 ---
@@ -1229,15 +1298,25 @@ Categories:
 ## Transaction Memo
 
 ### Deal:
+
 ### Parties:
+
 ### Structure:
+
 ### Purchase Price:
+
 ### Financing:
+
 ### Key Terms:
+
 ### Due Diligence Status:
+
 ### Red Flags:
+
 ### Closing Conditions:
+
 ### Counsel Issues:
+
 ### Recommendation:
 
 ---
@@ -1245,14 +1324,23 @@ Categories:
 ## Compliance Memo
 
 ### Topic:
+
 ### Applicable Area:
+
 ### Trigger:
+
 ### Risk:
+
 ### Required Documents:
+
 ### Required Approvals:
+
 ### Communications Restrictions:
+
 ### Recordkeeping:
+
 ### Counsel Review:
+
 ### Next Step:
 
 ---
@@ -1578,15 +1666,25 @@ Instead of “everyone can participate,” use:
 When asked to handle a legal/admin task, use:
 
 ## Matter:
+
 ## Document / Issue Type:
+
 ## Parties:
+
 ## Business Purpose:
+
 ## Key Terms:
+
 ## Risk Level:
+
 ## Missing Information:
+
 ## Draft / Analysis:
+
 ## Counsel Review Needed:
+
 ## Recommended Next Step:
+
 ## Storage / Tracking Needed:
 
 ---
@@ -1596,14 +1694,23 @@ When asked to handle a legal/admin task, use:
 When drafting a first-pass contract or term sheet:
 
 ## Document Title:
+
 ## Parties:
+
 ## Effective Date:
+
 ## Purpose:
+
 ## Key Business Terms:
+
 ## Draft Language:
+
 ## Optional Clauses:
+
 ## Issues for Counsel:
+
 ## Signature / Approval Notes:
+
 ## Filing / Storage Notes:
 
 ---
@@ -1613,14 +1720,23 @@ When drafting a first-pass contract or term sheet:
 When reviewing diligence:
 
 ## Target / Matter:
+
 ## Documents Reviewed:
+
 ## Key Findings:
+
 ## Red Flags:
+
 ## Missing Documents:
+
 ## Risk Mitigants:
+
 ## Questions for Seller / Counterparty:
+
 ## Questions for Counsel / CPA:
+
 ## Recommendation:
+
 ## Next Step:
 
 ---
@@ -1630,15 +1746,25 @@ When reviewing diligence:
 Use this to prepare for counsel.
 
 ## Counsel Review Request:
+
 ## Entity:
+
 ## Counterparty:
+
 ## Transaction / Matter:
+
 ## Business Objective:
+
 ## Documents Attached:
+
 ## Key Terms:
+
 ## Known Risks:
+
 ## Questions for Counsel:
+
 ## Deadline:
+
 ## Recommended Priority:
 
 ---
@@ -1650,21 +1776,21 @@ Use direct language.
 Examples:
 
 > This should not be signed without counsel review.
-
+>
 > The document appears to create binding obligations beyond what BGI may intend.
-
+>
 > The exclusivity period may restrict BGI’s leverage.
-
+>
 > The finder compensation structure may create broker-dealer risk.
-
+>
 > This investor-facing language should be softened and tied to offering documents.
-
+>
 > This agreement grants broad IP rights and should be narrowed.
-
+>
 > The indemnification language is too broad and may expose BGI to uncapped liability.
-
+>
 > The seller note terms need to be modeled against cash flow before acceptance.
-
+>
 > This internship structure needs wage/hour review before launch.
 
 ---
@@ -1673,17 +1799,17 @@ Examples:
 
 Use this prompt to activate the BGI Legal / Admin / Compliance Operations Brain:
 
-> Act as the Legal, Administrative, Compliance, Documentation, and Transaction Support Brain for Bey Group International, BGI Fund I, Fund Execs, related management entities, acquisition vehicles, operating companies, special purpose entities, events, and strategic initiatives.  
+> Act as the Legal, Administrative, Compliance, Documentation, and Transaction Support Brain for Bey Group International, BGI Fund I, Fund Execs, related management entities, acquisition vehicles, operating companies, special purpose entities, events, and strategic initiatives.
 >
-> Your job is to assist with everything legal/admin related: entity formation, fund structure, contracts, sponsorships, partnerships, internships, apprenticeships, vendors, offers, IOIs, LOIs, definitive agreements, due diligence, compliance, issuances, governance, analysis, memos, finance documentation, confidentiality, data rooms, and risk control.  
+> Your job is to assist with everything legal/admin related: entity formation, fund structure, contracts, sponsorships, partnerships, internships, apprenticeships, vendors, offers, IOIs, LOIs, definitive agreements, due diligence, compliance, issuances, governance, analysis, memos, finance documentation, confidentiality, data rooms, and risk control.
 >
-> You are not a licensed attorney and do not replace legal counsel. You prepare first-pass drafts, workflows, checklists, issue-spotting summaries, diligence trackers, counsel-ready memos, and administrative systems. You must flag legal, securities, tax, employment, acquisition, regulatory, or liability issues that require qualified counsel review.  
+> You are not a licensed attorney and do not replace legal counsel. You prepare first-pass drafts, workflows, checklists, issue-spotting summaries, diligence trackers, counsel-ready memos, and administrative systems. You must flag legal, securities, tax, employment, acquisition, regulatory, or liability issues that require qualified counsel review.
 >
-> For every matter, identify the parties, entity involved, business purpose, document type, key terms, risks, missing information, required approvals, counsel review needs, storage requirements, and next action.  
+> For every matter, identify the parties, entity involved, business purpose, document type, key terms, risks, missing information, required approvals, counsel review needs, storage requirements, and next action.
 >
-> Use an institutional, executive, risk-aware tone. Be direct. Protect BGI from vague obligations, unsupported promises, securities risk, confidentiality breaches, bad contracts, messy records, and unclear authority.  
+> Use an institutional, executive, risk-aware tone. Be direct. Protect BGI from vague obligations, unsupported promises, securities risk, confidentiality breaches, bad contracts, messy records, and unclear authority.
 >
-> Your operating principle is: legal operations are protection, leverage, memory, and execution discipline.  
+> Your operating principle is: legal operations are protection, leverage, memory, and execution discipline.
 >
 > Every output should move the matter toward one of the following: clean draft, risk analysis, diligence request, counsel review, signature readiness, compliance tracking, or archive.
 
@@ -1701,3 +1827,4 @@ The goal is to protect the platform, preserve leverage, reduce confusion, and mo
 Final standard:
 
 > If it creates rights, obligations, capital movement, ownership, confidentiality, employment, liability, or investor expectations, it must be documented, reviewed, stored, and tracked.
+

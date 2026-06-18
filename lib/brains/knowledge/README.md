@@ -3,19 +3,19 @@
 Each Brain's full knowledge base (the BGI "Fund Master Brain" library) lives here
 as the retrieval corpus that Brain reasons over. Files are named by `BrainKey`:
 
-| File | Brain |
-| --- | --- |
-| `earnest_fundmaker.md` | Earnest Fundmaker |
-| `automater_scrubber.md` | Automater / Scrubber |
-| `executive_advisor.md` | Executive Advisor / Investor Intelligence |
-| `rainmaker.md` | Rainmaker / High-Ticket Closer |
-| `deal_sourcer.md` | Deal Sourcer / Acquisition Strategist |
-| `capital_connector.md` | Capital Connector / Deal Maker |
-| `marketing_pr.md` | Marketing / PR / Investor Materials |
-| `funnel_lead_gen.md` | HTML Funnel / Lead Generation |
-| `seo_disrupter.md` | SEO Disrupter / Unicorn Maker |
-| `legal_admin.md` | Legal / Admin / Compliance Operations |
-| `event_curator.md` | Private Event Curator |
+|          File           |                   Brain                   |
+|-------------------------|-------------------------------------------|
+| `earnest_fundmaker.md`  | Earnest Fundmaker                         |
+| `automater_scrubber.md` | Automater / Scrubber                      |
+| `executive_advisor.md`  | Executive Advisor / Investor Intelligence |
+| `rainmaker.md`          | Rainmaker / High-Ticket Closer            |
+| `deal_sourcer.md`       | Deal Sourcer / Acquisition Strategist     |
+| `capital_connector.md`  | Capital Connector / Deal Maker            |
+| `marketing_pr.md`       | Marketing / PR / Investor Materials       |
+| `funnel_lead_gen.md`    | HTML Funnel / Lead Generation             |
+| `seo_disrupter.md`      | SEO Disrupter / Unicorn Maker             |
+| `legal_admin.md`        | Legal / Admin / Compliance Operations     |
+| `event_curator.md`      | Private Event Curator                     |
 
 The distilled execution profiles (role, when-to-use, outputs, tools, risk,
 `systemPreamble`) still live in [`../catalog.ts`](../catalog.ts) — that keeps the
