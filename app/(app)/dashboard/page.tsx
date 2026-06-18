@@ -27,6 +27,16 @@ const AGENT_GROUPS: { label: string; keys: AgentKey[] }[] = [
 const ACTIVE = new Set(["pending", "in_progress", "awaiting_approval", "blocked"]);
 const DEAL_STAGES = ["sourced", "screening", "diligence", "ic_review", "closing"] as const;
 
+function compactUsd(n: number | null): string | null {
+  if (!n || n <= 0) return null;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(n);
+}
+
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-xl border border-line bg-surface-1 p-4">
@@ -170,13 +180,23 @@ export default async function DashboardPage() {
               Deals created by Source-hub workflows appear here.
             </p>
           ) : (
-            <div className="mt-3 flex flex-col gap-1.5">
-              {deals.slice(0, 5).map((d) => (
-                <div key={d.id} className="flex items-center gap-2 text-sm">
-                  <span className="truncate text-fg-primary">{d.name}</span>
-                  <span className="ml-auto font-mono text-[10px] text-fg-muted">{d.stage}</span>
-                </div>
-              ))}
+            <div className="mt-3 flex flex-col gap-2">
+              {deals.slice(0, 5).map((d) => {
+                const detail = [d.asset_class, d.geography, compactUsd(d.target_amount)]
+                  .filter(Boolean)
+                  .join(" · ");
+                return (
+                  <div key={d.id} className="flex items-baseline gap-2 text-sm">
+                    <div className="min-w-0">
+                      <span className="block truncate text-fg-primary">{d.name}</span>
+                      {detail ? (
+                        <span className="block truncate text-[11px] text-fg-muted">{detail}</span>
+                      ) : null}
+                    </div>
+                    <span className="ml-auto shrink-0 font-mono text-[10px] text-fg-muted">{d.stage}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
