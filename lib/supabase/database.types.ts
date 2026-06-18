@@ -300,7 +300,27 @@ export type Session = Timestamps & {
   group_id: string | null;
   origin: SessionOrigin;
   automation_id: string | null;
+  color: string | null;
+  archived_at: string | null;
   created_by: string | null;
+};
+
+export type Wallet = Timestamps & {
+  id: string;
+  organization_id: string;
+  credits: number;
+  plan: string | null;
+  plan_interval: string | null;
+};
+
+export type SessionShare = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  token: string;
+  scope: "public" | "org";
+  created_by: string | null;
+  created_at: string;
 };
 
 export type Approval = Timestamps & {
@@ -460,6 +480,8 @@ export type Database = {
       automations: TableShape<Automation>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
+      wallets: TableShape<Wallet>;
+      session_shares: TableShape<SessionShare>;
       marketplace_listings: TableShape<MarketplaceListing>;
     };
     Views: Record<string, never>;

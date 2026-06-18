@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Session, SessionGroup } from "@/lib/supabase/database.types";
 import { createSessionGroup, renameSession, moveSessionToGroup } from "@/app/(app)/sessions/actions";
 
@@ -100,6 +101,13 @@ export function SessionsSection({
                         Move
                       </button>
                     </form>
+
+                    <Link
+                      href={`/session/${s.id}`}
+                      className="rounded-md bg-gold-500 px-2.5 py-1 text-xs font-medium text-surface-0 transition hover:bg-gold-400"
+                    >
+                      Open
+                    </Link>
                   </div>
                 ))}
               </div>
