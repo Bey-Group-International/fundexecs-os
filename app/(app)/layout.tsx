@@ -6,6 +6,7 @@ import { AGENTS } from "@/lib/agents";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
+import { startSession } from "@/app/(app)/sessions/actions";
 
 // The four hubs, in operating order, as shown in the side rail.
 const HUB_ORDER: Hub[] = ["build", "run", "source", "execute"];
@@ -37,13 +38,12 @@ export default async function AppLayout({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
-          <Link
-            href="/workspace"
-            className="flex items-center justify-center gap-2 rounded-md bg-gold-400 px-2 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
-          >
-            <span className="text-base leading-none">+</span>
-            New Session
-          </Link>
+          <form action={startSession}>
+            <button className="flex w-full items-center justify-center gap-2 rounded-md bg-gold-400 px-2 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
+              <span className="text-base leading-none">+</span>
+              New Session
+            </button>
+          </form>
 
           <div className="mt-3 flex flex-col gap-0.5">
             <Link
