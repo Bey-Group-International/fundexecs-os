@@ -48,6 +48,15 @@ const DEAL_STAGES = [
 
 const ASSET_TYPES = ["real_estate", "operating_company", "portfolio_company", "fund_interest", "other"];
 
+const PARTNER_TYPES = ["co_gp", "operating_partner", "advisor", "introducer", "other"];
+const PARTNER_STATUSES = ["active", "prospective", "dormant", "former"];
+
+const PROVIDER_TYPES = ["legal", "audit", "tax", "fund_admin", "placement", "bank", "other"];
+const PROVIDER_STATUSES = ["active", "prospective", "former"];
+
+const FACILITY_TYPES = ["term_loan", "revolver", "mezzanine", "sub_debt", "bridge", "preferred", "other"];
+const FACILITY_STATUSES = ["prospective", "term_sheet", "committed", "drawn", "repaid", "closed"];
+
 // Per-module allow-list keyed by the `${hub}/${module}` route key. Only these
 // columns are ever written by createModuleRow.
 export const ADD_ROW_CONFIGS: Record<string, AddRowConfig> = {
@@ -69,6 +78,36 @@ export const ADD_ROW_CONFIGS: Record<string, AddRowConfig> = {
     fields: [
       { name: "name", label: "Asset name", type: "text", required: true },
       { name: "asset_type", label: "Asset type", type: "select", options: ASSET_TYPES, defaultValue: "real_estate" },
+    ],
+  },
+  "source/partners": {
+    fields: [
+      { name: "name", label: "Partner name", type: "text", required: true },
+      { name: "partner_type", label: "Partner type", type: "select", options: PARTNER_TYPES, defaultValue: "co_gp" },
+      { name: "relationship", label: "Relationship", type: "text" },
+      { name: "contact_name", label: "Contact name", type: "text" },
+      { name: "contact_email", label: "Contact email", type: "text" },
+      { name: "status", label: "Status", type: "select", options: PARTNER_STATUSES, defaultValue: "active" },
+    ],
+  },
+  "source/providers": {
+    fields: [
+      { name: "name", label: "Provider name", type: "text", required: true },
+      { name: "provider_type", label: "Provider type", type: "select", options: PROVIDER_TYPES, defaultValue: "legal" },
+      { name: "contact_name", label: "Contact name", type: "text" },
+      { name: "contact_email", label: "Contact email", type: "text" },
+      { name: "status", label: "Status", type: "select", options: PROVIDER_STATUSES, defaultValue: "active" },
+    ],
+  },
+  "source/debt": {
+    fields: [
+      { name: "name", label: "Facility name", type: "text", required: true },
+      { name: "facility_type", label: "Facility type", type: "select", options: FACILITY_TYPES, defaultValue: "term_loan" },
+      { name: "lender", label: "Lender", type: "text" },
+      { name: "commitment_amount", label: "Commitment amount", type: "number" },
+      { name: "interest_rate", label: "Interest rate (%)", type: "number" },
+      { name: "currency", label: "Currency", type: "text", defaultValue: "USD" },
+      { name: "status", label: "Status", type: "select", options: FACILITY_STATUSES, defaultValue: "prospective" },
     ],
   },
 };

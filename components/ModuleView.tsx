@@ -63,6 +63,37 @@ const LIST_MODULES: Record<string, ListConfig> = {
     ],
     empty: "No deals yet. Source a deal in Earn to populate the pipeline.",
   },
+  "source/partners": {
+    table: "partners",
+    columns: [
+      { key: "name", label: "Partner" },
+      { key: "partner_type", label: "Type" },
+      { key: "relationship", label: "Relationship" },
+      { key: "status", label: "Status" },
+    ],
+    empty: "No partners yet. Add co-GPs, operating partners, and advisors here.",
+  },
+  "source/providers": {
+    table: "service_providers",
+    columns: [
+      { key: "name", label: "Provider" },
+      { key: "provider_type", label: "Type" },
+      { key: "contact_name", label: "Contact" },
+      { key: "status", label: "Status" },
+    ],
+    empty: "No service providers yet. Track legal, audit, and fund admin here.",
+  },
+  "source/debt": {
+    table: "debt_facilities",
+    columns: [
+      { key: "name", label: "Facility" },
+      { key: "facility_type", label: "Type" },
+      { key: "lender", label: "Lender" },
+      { key: "commitment_amount", label: "Commitment" },
+      { key: "status", label: "Status" },
+    ],
+    empty: "No debt facilities yet. Track credit lines, term loans, and mezz here.",
+  },
   "run/underwriting": {
     table: "underwritings",
     columns: [
