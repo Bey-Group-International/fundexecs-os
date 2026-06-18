@@ -204,6 +204,9 @@ async function persistOutcome(
     const fields = await extractDealFields({ title: workflow.title, prompt, context });
     const row = {
       organization_id: ctx.orgId,
+      // Tag the deal with the session that produced it (migration 0022) so it
+      // surfaces inside that session's Source › Deal Pipeline frame.
+      session_id: workflow.session_id ?? null,
       name: fields.name,
       asset_class: fields.asset_class,
       geography: fields.geography,
@@ -242,6 +245,9 @@ async function persistOutcome(
     const fields = await extractAssetFields({ title: workflow.title, prompt, context });
     const row = {
       organization_id: ctx.orgId,
+      // Tag the asset with the originating session (migration 0022) so it
+      // surfaces inside that session's Execute › Asset Management frame.
+      session_id: workflow.session_id ?? null,
       name: fields.name,
       asset_type: fields.asset_type,
       current_value: fields.current_value,

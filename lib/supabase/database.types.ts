@@ -148,6 +148,7 @@ export type Investor = Timestamps & {
   typical_check_max: number | null;
   notes: string | null;
   pipeline_stage: string;
+  session_id: string | null;
 }
 
 export type Fund = Timestamps & {
@@ -202,6 +203,7 @@ export type Deal = Timestamps & {
   thesis_fit: number | null;
   expected_close: string | null;
   notes: string | null;
+  session_id: string | null;
 }
 
 export type Asset = Timestamps & {
@@ -217,6 +219,7 @@ export type Asset = Timestamps & {
   noi: number | null;
   cap_rate: number | null;
   status: string;
+  session_id: string | null;
 }
 
 export type Underwriting = Timestamps & {

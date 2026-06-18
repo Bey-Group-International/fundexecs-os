@@ -45,7 +45,12 @@ function num(formData: FormData, name: string): number | null {
 
 // Insert a row into a table-backed module. Uses a per-module allow-list and a
 // switch on the literal key so each `.from(...)` stays typed against the table.
-export async function createModuleRow(hub: string, module: string, formData: FormData) {
+export async function createModuleRow(
+  hub: string,
+  module: string,
+  formData: FormData,
+  sessionId?: string,
+) {
   const auth = await requireOrgContext();
   if (!auth.ok) return;
 
@@ -55,12 +60,17 @@ export async function createModuleRow(hub: string, module: string, formData: For
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
 
+  // Session-scoped modules (migration 0022) tag new rows with the session when
+  // added from inside the session frame; null otherwise (org-wide).
+  const session_id = sessionId ?? null;
+
   switch (key) {
     case "source/lp_pipeline": {
       const name = text(formData, "name");
       if (!name) return;
       await supabase.from("investors").insert({
         organization_id: orgId,
+        session_id,
         name,
         investor_type:
           (text(formData, "investor_type") as
@@ -82,6 +92,7 @@ export async function createModuleRow(hub: string, module: string, formData: For
       if (!name) return;
       await supabase.from("deals").insert({
         organization_id: orgId,
+        session_id,
         name,
         stage:
           (text(formData, "stage") as
@@ -105,6 +116,7 @@ export async function createModuleRow(hub: string, module: string, formData: For
       if (!name) return;
       await supabase.from("assets").insert({
         organization_id: orgId,
+        session_id,
         name,
         asset_type:
           (text(formData, "asset_type") as
@@ -164,4 +176,5 @@ export async function createModuleRow(hub: string, module: string, formData: For
   }
 
   revalidatePath(`/${hub}/${module}`);
+  if (sessionId) revalidatePath(`/session/${sessionId}/${hub}/${module}`);
 }

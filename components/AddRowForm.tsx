@@ -10,10 +10,12 @@ export default function AddRowForm({
   hub,
   module,
   fields,
+  sessionId,
 }: {
   hub: string;
   module: string;
   fields: FieldConfig[];
+  sessionId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -34,7 +36,7 @@ export default function AddRowForm({
     <form
       ref={formRef}
       action={async (formData: FormData) => {
-        await createModuleRow(hub, module, formData);
+        await createModuleRow(hub, module, formData, sessionId);
         formRef.current?.reset();
         setOpen(false);
       }}
