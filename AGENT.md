@@ -50,7 +50,7 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - ✅ RLS on every table, org-membership tenancy boundary, helper functions
 - ✅ Six-agent catalog seeded; hub/agent/event catalogs in `lib/`
 - ✅ Typed data layer (`lib/supabase/`) — browser, server, and service clients
-- ✅ Auth (email/password) + middleware session refresh + org onboarding
+- ✅ Auth (email/password + Google OAuth via `/auth/callback`) + middleware session refresh + org onboarding
 - ✅ API layer: `/prompt`, `/task`, `/handoff`, `/approve`, `/report`, `/agents`
 - ✅ Task engine (`lib/engine.ts`) — mock agent execution driving the full loop
 - ✅ Realtime over `task_events` (the WebSocket event gateway) — live workspace feed
@@ -72,6 +72,11 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
   gate (autonomy is opt-in, the operator is never bypassed by default). Runs
   link back to their automation via `tasks.automation_id`. The live loop runs on
   Haiku 4.5 by default (`CLAUDE_MODEL`-overridable) to respect a tight budget.
+- ✅ Demo-readiness layer — investor-grade landing rework (leads with "agents
+  that own the work" + the loop visualized); one-click demo seed/reset on the
+  Command Center (deals, assets, deliverables, completed workflows, a sample
+  automation — org-scoped, idempotent); and a floating Guided Tour that walks a
+  tester through the full loop end-to-end (localStorage-persisted).
 
 ### What has not been built yet
 
@@ -418,6 +423,27 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Integrated, not yet tested.
              |  Next (investor-demo sprints): rework landing; Google sign-in; demo seed data;
              |  guided walkthrough; then the three-graph query layer (/graph/*).
+
+2026-06-18  |  Investor-demo readiness  |  Autonomous 30-min sprints toward a 7pm demo.
+             |  Decisions (per founder): make it ultra-high-value for an investor meeting;
+             |  run sprints every 30 min until 9am CST; centerpiece = Automations + live loop
+             |  + demo-seeded data + a guided walkthrough; add Google sign-in.
+             |  Built across sprints (all on PR #14, CI green throughout):
+             |  (2) Landing rework — leads with "agents that own the work" + the
+             |  prompt→plan→approve→deliver loop visualized; refreshed hero/stat strip.
+             |  (3) Google OAuth — signInWithGoogle server action + /auth/callback session
+             |  exchange + "Continue with Google" on login; email/password kept as fallback.
+             |  Provider Client ID/Secret live in Supabase Auth, never in the repo.
+             |  (4) One-click demo seed/reset on the Command Center — deals across stages,
+             |  assets, deliverables, two completed workflows + steps, a sample weekly
+             |  automation; org-scoped, name-tagged, idempotent, reversible.
+             |  (5) Guided Tour — floating, dismissible, localStorage-persisted walkthrough
+             |  of the full loop, mounted in the authed layout.
+             |  Ops: live scheduling needs CRON_SECRET + SUPABASE_SERVICE_ROLE_KEY set in
+             |  the deployment; "Run now" works without them.
+             |  Confidence: Integrated, not yet tested.
+             |  Next: three-graph query layer (/graph/*); email/webhook/event triggers;
+             |  retry/adapt-on-failure autonomy; external integrations (MCP/HTTP connections).
 ```
 
 ---
