@@ -9,6 +9,14 @@ const HUB_ICONS: Record<string, string> = {
   execute: "◆",
 };
 
+// The product loop, in four beats — the spine of every workflow and automation.
+const LOOP = [
+  { step: "Prompt", body: "Tell the Associate what you need, in plain English." },
+  { step: "Plan", body: "It routes the work to the right agents as ordered steps." },
+  { step: "Approve", body: "You review the plan. Nothing runs until you say so." },
+  { step: "Deliver", body: "Agents execute and leave durable artifacts — IC memos, models, LP updates." },
+];
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-surface-0 text-fg-primary">
@@ -36,22 +44,28 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-6 pb-24 pt-40">
+      <section className="relative mx-auto max-w-6xl px-6 pb-24 pt-40">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-24 -z-10 mx-auto h-72 max-w-3xl rounded-full bg-gold-500/10 blur-3xl"
+        />
         <div className="max-w-3xl">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
-            Private markets infrastructure
+          <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            AI-native · Private markets
           </p>
-          <h1 className="mt-4 text-5xl font-semibold leading-[1.1] tracking-tight lg:text-6xl">
-            The Operating System<br />
-            for Private Markets
+          <h1 className="mt-5 text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">
+            The operating system
+            <br />
+            for private capital
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-fg-secondary">
             PE funds, real estate investors, and family offices run on 30+ point
-            solutions. FundExecs OS replaces all of them — one AI-native platform
-            that unifies relationships, deals, and capital into a single
-            intelligence layer.
+            solutions. FundExecs OS replaces them with one AI-native platform —
+            and a workforce of six agents that source deals, underwrite, manage
+            LPs, and <span className="text-fg-primary">own the work on their own</span>.
           </p>
-          <div className="mt-8 flex gap-3">
+          <div className="mt-8 flex flex-wrap gap-3">
             <Link
               href="/login?mode=signup"
               className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
@@ -65,20 +79,78 @@ export default function LandingPage() {
               Sign in
             </Link>
           </div>
+          <p className="mt-4 font-mono text-xs text-fg-muted">
+            Born from 4+ years of advisory — and 3 hours a day lost to deals that were smoke and mirrors.
+          </p>
         </div>
 
         {/* Stat strip */}
-        <div className="mt-16 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line bg-surface-2">
+        <div className="mt-16 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-surface-2 sm:grid-cols-4">
           {[
             { label: "Point solutions replaced", value: "30+" },
-            { label: "AI agent workflows", value: "6" },
-            { label: "Hub modules", value: "22" },
+            { label: "AI agents", value: "6" },
+            { label: "Operational hubs", value: "4" },
+            { label: "Always-on automations", value: "24/7" },
           ].map((s) => (
             <div key={s.label} className="bg-surface-0 px-6 py-5">
               <p className="text-2xl font-semibold text-fg-primary">{s.value}</p>
               <p className="mt-0.5 text-xs text-fg-secondary">{s.label}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <div className="border-t border-line" />
+
+      {/* Agents that own the work — the differentiator */}
+      <section className="mx-auto max-w-6xl px-6 py-24">
+        <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+              Automations
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight">
+              Agents that own the work
+            </h2>
+            <p className="mt-4 text-fg-secondary">
+              Save an instruction once — <span className="text-fg-primary">&ldquo;Every Monday,
+              summarize what moved in our pipeline&rdquo;</span> — and it runs on a schedule,
+              plans itself, and executes end-to-end. Approval-gated by default; flip on
+              auto-approve only for the work you trust to run unattended.
+            </p>
+            <ul className="mt-6 space-y-3 text-sm text-fg-secondary">
+              {[
+                "Scheduled & on-demand triggers — daily, weekly, or run now",
+                "Opt-in autonomy — you stay in the loop until you choose not to",
+                "Every run leaves a durable, auditable deliverable",
+              ].map((f) => (
+                <li key={f} className="flex items-start gap-2.5">
+                  <span className="mt-1 text-gold-400">→</span>
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* The loop, visualized */}
+          <div className="rounded-2xl border border-line bg-surface-1 p-6">
+            <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+              The loop — every workflow, every automation
+            </p>
+            <div className="flex flex-col gap-3">
+              {LOOP.map((l, i) => (
+                <div key={l.step} className="flex items-start gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 font-mono text-xs text-gold-300">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-fg-primary">{l.step}</p>
+                    <p className="text-xs text-fg-secondary">{l.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -148,7 +220,7 @@ export default function LandingPage() {
           {AGENTS.map((agent) => (
             <div
               key={agent.key}
-              className="rounded-xl border border-line bg-surface-1 p-5 transition hover:border-line"
+              className="rounded-xl border border-line bg-surface-1 p-5 transition hover:border-gold-500/30"
             >
               <div className="flex items-center gap-2.5">
                 <span
@@ -188,7 +260,7 @@ export default function LandingPage() {
 
       <footer className="border-t border-line px-6 py-6">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <span className="font-mono text-xs text-fg-muted">FundExecs OS · Pre-Alpha</span>
+          <span className="font-mono text-xs text-fg-muted">FundExecs OS · Alpha</span>
           <span className="font-mono text-xs text-fg-muted">
             Data model first. API second. Agents third. UI last.
           </span>
