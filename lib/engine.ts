@@ -78,7 +78,12 @@ async function materializePlan(
   ctx: Ctx,
   body: string,
   plan: AgentPlan,
-  opts: { promptId?: string | null; workflowId?: string; automationId?: string | null },
+  opts: {
+    promptId?: string | null;
+    workflowId?: string;
+    automationId?: string | null;
+    sessionId?: string | null;
+  },
 ): Promise<{ workflow: Task; approvalId: string | null }> {
   let workflow: Task;
 
@@ -117,6 +122,7 @@ async function materializePlan(
         created_by: ctx.actorId,
         step_order: 0,
         automation_id: opts.automationId ?? null,
+        session_id: opts.sessionId ?? null,
       })
       .select("*")
       .single();
@@ -263,9 +269,35 @@ async function persistOutcome(
   return {};
 }
 
+/**
+ * Create a Session — the first-class unit of operation. An Earn prompt opens a
+ * session named from the prompt; an automated workflow opens one on each run.
+ */
+async function createSession(
+  ctx: Ctx,
+  args: { name: string; origin: "earn" | "workflow"; automationId?: string | null },
+): Promise<string | undefined> {
+  const { data } = await ctx.supabase
+    .from("sessions")
+    .insert({
+      organization_id: ctx.orgId,
+      name: args.name.trim().slice(0, 120) || "Untitled session",
+      origin: args.origin,
+      automation_id: args.automationId ?? null,
+      created_by: ctx.actorId,
+    })
+    .select("id")
+    .single();
+  return data?.id;
+}
+
 /** POST /prompt — plan the prompt into a workflow awaiting approval. */
-export async function handlePrompt(ctx: Ctx, body: string) {
+export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
   const plan = await generatePlan(body);
+
+  // Sessions are the first step in operations: an Earn prompt opens a session
+  // (named from the prompt) unless one was already provided.
+  const session = sessionId ?? (await createSession(ctx, { name: plan.title || body, origin: "earn" }));
 
   const { data: prompt } = await ctx.supabase
     .from("prompts")
@@ -282,9 +314,10 @@ export async function handlePrompt(ctx: Ctx, body: string) {
 
   const { workflow, approvalId } = await materializePlan(ctx, body, plan, {
     promptId: prompt?.id ?? null,
+    sessionId: session,
   });
 
-  return { plan, workflow, approval_id: approvalId };
+  return { plan, workflow, approval_id: approvalId, session_id: session };
 }
 
 /** Run every step of an approved workflow, each producing a deliverable. */
@@ -420,8 +453,15 @@ export async function runAutomation(
   automation: { id: string; prompt: string; auto_approve: boolean },
 ): Promise<{ workflowId: string; executed: boolean }> {
   const plan = await generatePlan(automation.prompt);
+  // A workflow is an automated session: each run opens one.
+  const session = await createSession(ctx, {
+    name: plan.title || automation.prompt,
+    origin: "workflow",
+    automationId: automation.id,
+  });
   const { workflow, approvalId } = await materializePlan(ctx, automation.prompt, plan, {
     automationId: automation.id,
+    sessionId: session,
   });
 
   if (automation.auto_approve && approvalId) {
