@@ -1,0 +1,84 @@
+name: Jest
+
+on:
+  # Run tests on PRs to verify code doesn't break before merge
+  pull_request:
+    types: [opened, synchronize]
+    # Your production branch. If not the default, update here and set Target Branch at https://gitauto.ai/dashboard/rules to match
+    branches: [main]
+    paths:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.jsx'
+      - package.json
+      - package-lock.json
+      - '!.github/workflows/**'
+  # Run tests after merge and collect coverage as canonical source of truth
+  push:
+    # Your production branch. If not the default, update here and set Target Branch at https://gitauto.ai/dashboard/rules to match
+    branches: [main]
+    paths:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.jsx'
+      - package.json
+      - package-lock.json
+  # Allow manual trigger for debugging
+  workflow_dispatch:
+
+# Cancel older runs when new commits are pushed to the same PR/branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Match your project's Node.js version
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Jest (if not present)
+        run: |
+          if ! npm ls jest >/dev/null 2>&1; then
+            npm install --no-save jest @types/jest ts-jest
+          fi
+
+      - name: Ensure Jest config exists
+        run: |
+          if [ ! -f jest.config.js ] && [ ! -f jest.config.ts ] && [ ! -f jest.config.mjs ] && [ ! -f jest.config.json ]; then
+            cat > jest.config.js <<'EOF'
+          module.exports = {
+            preset: 'ts-jest',
+            testEnvironment: 'node',
+            testPathIgnorePatterns: ['/node_modules/', '/.next/'],
+          };
+          EOF
+          fi
+
+      - name: Run tests
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            npx jest --passWithNoTests
+          else
+            npx jest --coverage --coverageReporters=lcov --passWithNoTests
+          fi
+
+      - name: Upload coverage report
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+          if-no-files-found: ignore
