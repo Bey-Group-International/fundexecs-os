@@ -52,7 +52,11 @@ export async function toggleAutomation(formData: FormData): Promise<void> {
   if (!id) return;
 
   const supabase = createServerClient();
-  await supabase.from("automations").update({ enabled: !enabled }).eq("id", id);
+  await supabase
+    .from("automations")
+    .update({ enabled: !enabled })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
   revalidatePath("/automations");
 }
 
@@ -63,7 +67,7 @@ export async function deleteAutomation(formData: FormData): Promise<void> {
   if (!id) return;
 
   const supabase = createServerClient();
-  await supabase.from("automations").delete().eq("id", id);
+  await supabase.from("automations").delete().eq("id", id).eq("organization_id", ctx.orgId);
   revalidatePath("/automations");
 }
 
@@ -77,7 +81,12 @@ export async function runAutomationNow(formData: FormData): Promise<void> {
   if (!id) return;
 
   const supabase = createServerClient();
-  const { data } = await supabase.from("automations").select("*").eq("id", id).single();
+  const { data } = await supabase
+    .from("automations")
+    .select("*")
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId)
+    .single();
   if (!data) return;
 
   await runAutomation(
@@ -91,6 +100,7 @@ export async function runAutomationNow(formData: FormData): Promise<void> {
       last_run_status: "ok (manual)",
       run_count: data.run_count + 1,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
   revalidatePath("/automations");
 }

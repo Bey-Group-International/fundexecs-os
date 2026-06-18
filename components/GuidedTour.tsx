@@ -175,9 +175,6 @@ export function GuidedTour() {
                       <p className="mt-1 text-xs leading-snug text-fg-secondary">{step.body}</p>
                       <Link
                         href={step.href}
-                        onClick={() => {
-                          if (!done.includes(i)) persistDone([...done, i]);
-                        }}
                         className="mt-2 inline-block rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20"
                       >
                         {step.cta} →

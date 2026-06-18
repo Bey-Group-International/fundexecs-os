@@ -100,13 +100,11 @@ export default async function DashboardPage() {
               Load demo data
             </button>
           </form>
-          {deals.length > 0 || assets.length > 0 ? (
-            <form action={clearDemoData}>
-              <button className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
-                Reset
-              </button>
-            </form>
-          ) : null}
+          <form action={clearDemoData}>
+            <button className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
+              Reset
+            </button>
+          </form>
         </div>
       </header>
 

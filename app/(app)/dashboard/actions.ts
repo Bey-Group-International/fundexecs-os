@@ -71,17 +71,23 @@ function demoTaskTitles(): string[] {
   return DEMO_WORKFLOWS.flatMap((w) => [w.title, ...w.steps.map((s) => s.title)]);
 }
 
-export async function clearDemoData(): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const supabase = createServerClient();
-  const org = ctx.orgId;
+type Client = ReturnType<typeof createServerClient>;
 
+// Delete all demo rows for an org. No revalidation — callers handle that so we
+// don't double-revalidate when seeding (which clears first).
+async function deleteDemoRows(supabase: Client, org: string): Promise<void> {
   await supabase.from("artifacts").delete().eq("organization_id", org).in("title", DEMO_ARTIFACTS.map((a) => a.title));
   await supabase.from("tasks").delete().eq("organization_id", org).in("title", demoTaskTitles());
   await supabase.from("deals").delete().eq("organization_id", org).in("name", DEMO_DEALS.map((d) => d.name));
   await supabase.from("assets").delete().eq("organization_id", org).in("name", DEMO_ASSETS.map((a) => a.name));
   await supabase.from("automations").delete().eq("organization_id", org).eq("name", DEMO_AUTOMATION.name);
+}
+
+export async function clearDemoData(): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const supabase = createServerClient();
+  await deleteDemoRows(supabase, ctx.orgId);
   revalidatePath("/dashboard");
   revalidatePath("/automations");
 }
@@ -93,8 +99,8 @@ export async function seedDemoData(): Promise<void> {
   const org = ctx.orgId;
   const by = ctx.userId;
 
-  // Idempotent: clear any prior demo rows first.
-  await clearDemoData();
+  // Idempotent: clear any prior demo rows first (revalidation happens once below).
+  await deleteDemoRows(supabase, org);
 
   const now = new Date().toISOString();
 

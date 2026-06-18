@@ -21,12 +21,17 @@ const MAX_PER_SWEEP = 10;
  * Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` automatically.
  */
 export async function GET(request: Request) {
+  // Require the secret — never run the sweep open, or any caller could trigger
+  // (paid) workflow runs. Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (!secret) {
+    return NextResponse.json(
+      { error: "CRON_SECRET is not configured — scheduled runs are disabled" },
+      { status: 503 },
+    );
+  }
+  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -52,6 +57,12 @@ export async function GET(request: Request) {
 
   const due = (data ?? []) as Automation[];
   const results: { id: string; status: string }[] = [];
+
+  // Known limitations (acceptable at hourly cadence + MAX_PER_SWEEP, revisit if
+  // cadence tightens): run_count is a read-then-write increment, and two
+  // overlapping sweeps could both select the same row. A future hardening is an
+  // atomic `UPDATE … RETURNING` claim (or a DB increment fn) to make this safe
+  // under concurrency.
 
   for (const a of due) {
     if (!a.created_by) {

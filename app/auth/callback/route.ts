@@ -8,7 +8,9 @@ import { createServerClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/workspace";
+  // Only allow internal, same-origin paths — never "//evil.com" or absolute URLs.
+  const rawNext = searchParams.get("next") ?? "/workspace";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/workspace";
 
   if (code) {
     const supabase = createServerClient();

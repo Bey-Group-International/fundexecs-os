@@ -82,9 +82,11 @@ export function nextRun(expr: string, after: Date = new Date()): Date | null {
     const dowOk = cron.dow.has(d.getUTCDay());
     const hourOk = cron.hour.has(d.getUTCHours());
     const minuteOk = cron.minute.has(d.getUTCMinutes());
-    // Standard cron semantics: when both day-of-month and day-of-week are
-    // restricted, either matching is sufficient.
-    const dayOk = domOk && dowOk;
+    // POSIX cron day semantics: if one of day-of-month / day-of-week is `*`, the
+    // other governs; if BOTH are restricted, either match is sufficient (OR).
+    const domWild = cron.dom.size === FIELD_BOUNDS[2][1] - FIELD_BOUNDS[2][0] + 1;
+    const dowWild = cron.dow.size === FIELD_BOUNDS[4][1] - FIELD_BOUNDS[4][0] + 1;
+    const dayOk = domWild ? dowOk : dowWild ? domOk : domOk || dowOk;
     if (monthOk && dayOk && hourOk && minuteOk) return d;
     d.setUTCMinutes(d.getUTCMinutes() + 1);
   }
