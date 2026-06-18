@@ -78,6 +78,13 @@ export default async function AppLayout({
               <span className="font-mono text-base leading-none text-gold-400">⟁</span>
               Graphs
             </Link>
+            <Link
+              href="/marketplace"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+            >
+              <span className="font-mono text-base leading-none text-gold-400">◇</span>
+              Marketplace
+            </Link>
           </div>
 
           <p className="mb-1 mt-5 px-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
