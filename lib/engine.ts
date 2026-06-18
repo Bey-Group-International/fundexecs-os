@@ -171,6 +171,57 @@ async function materializePlan(
   return { workflow, approvalId: approval?.id ?? null };
 }
 
+/**
+ * Persist a structured record from a completed workflow so the Command Center
+ * populates from real work — not mock data. Source-hub workflows seed a Deal in
+ * the pipeline (and adopt the workflow's artifacts); Execute-hub workflows seed
+ * an Asset. Deterministic — no extra model call — so it holds in fallback mode.
+ * Simpler-by-design per AGENT.md; richer field extraction is a future iteration.
+ */
+async function persistOutcome(
+  ctx: Ctx,
+  workflow: Task,
+  artifactIds: string[],
+): Promise<{ deal_id?: string; asset_id?: string }> {
+  const name = workflow.title.trim().slice(0, 120) || "Untitled";
+  const notes = workflow.description?.trim() || null;
+
+  if (workflow.hub === "source") {
+    const { data: deal } = await ctx.supabase
+      .from("deals")
+      .insert({
+        organization_id: ctx.orgId,
+        name,
+        stage: "sourced",
+        source: "Copilot",
+        lead_principal: ctx.actorId,
+        notes,
+      })
+      .select("id")
+      .single();
+    if (deal?.id && artifactIds.length) {
+      await ctx.supabase.from("artifacts").update({ deal_id: deal.id }).in("id", artifactIds);
+    }
+    return deal?.id ? { deal_id: deal.id } : {};
+  }
+
+  if (workflow.hub === "execute") {
+    const { data: asset } = await ctx.supabase
+      .from("assets")
+      .insert({
+        organization_id: ctx.orgId,
+        name,
+        asset_type: "other",
+        status: "active",
+      })
+      .select("id")
+      .single();
+    return asset?.id ? { asset_id: asset.id } : {};
+  }
+
+  return {};
+}
+
 /** POST /prompt — plan the prompt into a workflow awaiting approval. */
 export async function handlePrompt(ctx: Ctx, body: string) {
   const plan = await generatePlan(body);
@@ -210,6 +261,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
 
   const list = (steps ?? []) as Task[];
   const priorOutputs: string[] = [];
+  const artifactIds: string[] = [];
 
   for (let i = 0; i < list.length; i++) {
     const step = list[i];
@@ -261,6 +313,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
       })
       .select("id")
       .single();
+    if (artifact?.id) artifactIds.push(artifact.id);
 
     await recordEvent(ctx, {
       taskId: workflow.id,
@@ -283,13 +336,16 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
       .eq("id", workflow.id);
   }
 
+  // Turn the finished work into a structured record (Deal / Asset).
+  const outcome = await persistOutcome(ctx, workflow, artifactIds);
+
   await ctx.supabase
     .from("tasks")
     .update({
       status: "completed",
       progress: 1,
       completed_at: new Date().toISOString(),
-      result: { steps: list.map((s) => s.title) } as Json,
+      result: { steps: list.map((s) => s.title), ...outcome } as Json,
     })
     .eq("id", workflow.id);
 
@@ -298,14 +354,14 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
     type: "task.completed",
     agent: "associate",
     hub: workflow.hub,
-    payload: { message: `Completed: ${workflow.title}` },
+    payload: { message: `Completed: ${workflow.title}`, ...outcome },
   });
   if (workflow.graph_touched) {
     await recordEvent(ctx, {
       taskId: workflow.id,
       type: "graph.update",
       hub: workflow.hub,
-      payload: { graph: workflow.graph_touched },
+      payload: { graph: workflow.graph_touched, ...outcome },
     });
   }
 }

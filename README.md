@@ -239,8 +239,8 @@ migration workflow.
 - [x] **Command Center dashboard** — organizes the Copilot's output
 - [x] Product visual system (warm-black/gold, Space Grotesk / DM Sans / JetBrains Mono)
 - [x] Build Hub — Profile module
-- [ ] Surface step deliverables as first-class artifacts (IC memos, models)
-- [ ] Persist deals/assets from workflows so the Command Center populates from real work
+- [x] **Surface step deliverables as first-class artifacts** (IC memos, models, risk reports)
+- [x] **Persist deals/assets from workflows** so the Command Center populates from real work
 - [ ] Three-graph data architecture (query layer + `/graph/*`)
 - [ ] Three.js avatar workspace
 - [ ] Remaining Source / Run / Execute hub modules

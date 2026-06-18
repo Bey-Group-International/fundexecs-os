@@ -5,8 +5,8 @@
 > It is read by AI coding tools, executed by the Associate Agent, and updated by the system itself as it learns.
 > It is the first module of FundExecs OS. Treat it as source of truth.
 > **Last updated:** 2026-06-18
-> **Build phase:** Alpha — Agent Implementation (real Claude Copilot landed)
-> **Confidence level:** Integrated, not yet tested (Copilot + multi-step engine build end-to-end; live Claude wired)
+> **Build phase:** Alpha — Agent Implementation (real Claude Copilot landed; deliverables persist)
+> **Confidence level:** Integrated, not yet tested (Copilot + multi-step engine build end-to-end; live Claude wired; steps now leave durable artifacts and seed deals/assets)
 
 ---
 
@@ -51,7 +51,13 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - ✅ API layer: `/prompt`, `/task`, `/handoff`, `/approve`, `/report`, `/agents`
 - ✅ Task engine (`lib/engine.ts`) — mock agent execution driving the full loop
 - ✅ Realtime over `task_events` (the WebSocket event gateway) — live workspace feed
-- ✅ Build › Profile hub module (read/write `organizations`)
+- ✅ Build › Profile hub module
+- ✅ First-class artifacts — every step's output persists as a typed `artifacts`
+  row (IC memo, model, risk report, LP update…), streamed over Realtime, shown
+  in the Copilot and Command Center
+- ✅ Workflow → record persistence — completed Source workflows seed a Deal
+  (and adopt their artifacts); Execute workflows seed an Asset, so the Command
+  Center populates from real work (read/write `organizations`)
 
 ### What has not been built yet
 - 🔧 Supabase schema **deployment** (migrations exist; applied to preview branch per PR, not a fixed live env)
@@ -321,6 +327,26 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Integrated, not yet tested.
              |  Next: surface step deliverables as first-class artifacts; persist deals/assets
              |  from Source/Execute workflows so the Command Center populates from real work.
+
+2026-06-18  |  Artifacts + workflow persistence  |  Step output becomes durable; workflows seed records.
+             |  Decisions (per founder): build both next items in sequence.
+             |  Built (migration-first, per build-order discipline):
+             |  (1) 0015_artifacts.sql — `artifact_type` enum + `artifacts` table (links
+             |  workflow + step, optional deal), RLS (member-read / writer-write), added to
+             |  the supabase_realtime publication. Engine classifies each completed step's
+             |  output (deterministic, by agent + title) and persists a typed artifact;
+             |  new `artifact.created` event. /report returns a workflow's artifacts. Copilot
+             |  badges each step with its deliverable type and renders from the durable
+             |  artifact; Command Center gains a "Deliverables" stat + Latest deliverables panel.
+             |  (2) Workflow → record persistence: on completion, a Source-hub workflow seeds
+             |  a Deal (stage 'sourced', source 'Copilot') and links its artifacts; an
+             |  Execute-hub workflow seeds an Asset. Deterministic (no extra model call) so it
+             |  holds in fallback mode. Decision: kept field extraction simple — richer
+             |  structured extraction (target amount, asset class, geography) is a future
+             |  iteration; deduping repeated approvals likewise deferred.
+             |  Confidence: Integrated, not yet tested.
+             |  Next: structured field extraction for seeded deals/assets; the three-graph
+             |  query layer (/graph/*); remaining Source/Run/Execute hub modules.
 ```
 
 ---
