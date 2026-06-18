@@ -65,6 +65,13 @@ export default async function AppLayout({
               Earn
             </Link>
             <Link
+              href="/earn"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+            >
+              <span className="font-mono text-base leading-none text-gold-400">❖</span>
+              Brains
+            </Link>
+            <Link
               href="/dashboard"
               className="flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
             >

@@ -502,6 +502,36 @@ export type Artifact = Timestamps & {
 };
 
 // Minimal Database shape compatible with @supabase/supabase-js generics.
+// The Brain layer (migration 0023). brain_runs is the audit + session-
+// visualization log of every Brain activation; brain_documents holds the inline
+// source text a Brain reasons over.
+export type BrainRun = {
+  id: string;
+  organization_id: string;
+  session_id: string | null;
+  brain_key: string;
+  goal: string;
+  autonomy_mode: string;
+  status: string;
+  input: Json | null;
+  output: Json | null;
+  tools_used: string[] | null;
+  reasoning: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type BrainDocument = {
+  id: string;
+  organization_id: string;
+  session_id: string | null;
+  name: string;
+  doc_type: string | null;
+  content: string;
+  created_by: string | null;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -545,6 +575,8 @@ export type Database = {
       service_providers: TableShape<ServiceProvider>;
       debt_facilities: TableShape<DebtFacility>;
       marketplace_listings: TableShape<MarketplaceListing>;
+      brain_runs: TableShape<BrainRun>;
+      brain_documents: TableShape<BrainDocument>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
