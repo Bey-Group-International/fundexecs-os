@@ -50,11 +50,17 @@ It automates the **80% of time spent moving information** so you can focus on th
 - ✅ Avatar animation protocol
 - ✅ DevOps observability spec
 
+**What landed in the first build (2026-06-18):**
+- ✅ Next.js + TypeScript + Tailwind repo scaffold (single app: `app/` + `lib/`)
+- ✅ Full Postgres/Supabase schema as 11 versioned migrations, RLS on every table
+- ✅ Org-membership tenancy model + six-agent seed catalog
+- ✅ Typed data layer and hub/agent/event catalogs in `lib/`
+
 **What is being built next:**
-- 🔧 Next.js frontend scaffold
-- 🔧 Node/Python backend services
+- 🔧 Deploy schema to a live Supabase project
+- 🔧 Backend API services — the `/prompt → /task → /handoff → /approve` loop
 - 🔧 AI agent engine (Analyst, Associate, IR, Portfolio Ops, Diligence, Fund Admin)
-- 🔧 Three-graph data architecture (Relationship, Deal, Capital)
+- 🔧 WebSocket event gateway (Realtime over `task_events`)
 - 🔧 Animated 3D workspace (Three.js + GSAP)
 
 ---
@@ -119,7 +125,10 @@ principals · organizations · investors · deals
 assets · capital_events · relationships · ai_agents · tasks · marketplace
 ```
 
-Full schema available in [`/database/schema.sql`](./database/schema.sql)
+Full schema lives as versioned migrations in
+[`/supabase/migrations`](./supabase/migrations) — applied locally with
+`npm run db:start`. Every table is org-scoped and protected by row-level
+security.
 
 ---
 
@@ -201,13 +210,31 @@ Each avatar responds to WebSocket events in real time — spawning, executing, h
 
 ---
 
+## Local Development
+
+Prerequisites: **Node 20+**, **npm**, and the **Supabase CLI**.
+
+```bash
+npm install                 # install dependencies
+cp .env.example .env.local  # fill in Supabase URL + keys
+npm run db:start            # local Postgres + Auth + Realtime; applies migrations + seed
+npm run dev                 # http://localhost:3000
+```
+
+`npm run typecheck` and `npm run lint` keep the tree healthy. See
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) for the build-order discipline and
+migration workflow.
+
+---
+
 ## Roadmap
 
-- [ ] Frontend scaffold (Next.js + Tailwind)
-- [ ] Backend services (Node + Python)
-- [ ] Supabase schema deployment
+- [x] Frontend scaffold (Next.js + Tailwind)
+- [x] Database schema + RLS (versioned migrations)
+- [ ] Supabase schema deployment (to a live project)
+- [ ] Backend services (Node)
 - [ ] AI agent engine (prompt → task → handoff → approve loop)
-- [ ] Three-graph data architecture
+- [ ] Three-graph data architecture (query layer)
 - [ ] WebSocket event gateway
 - [ ] Three.js avatar workspace
 - [ ] Build Hub — Profile, Thesis, Entity modules
