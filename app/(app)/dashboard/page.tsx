@@ -5,6 +5,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import { AGENTS } from "@/lib/agents";
 import type { Task, Deal, Asset, Artifact, ArtifactType, AgentKey } from "@/lib/supabase/database.types";
 import { seedDemoData, clearDemoData } from "./actions";
+import { SessionsSection } from "./SessionsSection";
+import type { Session, SessionGroup } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
 
@@ -53,24 +55,29 @@ export default async function DashboardPage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = createServerClient();
-  const [allTasksRes, workflowsRes, dealsRes, assetsRes, artifactsRes] = await Promise.all([
-    supabase.from("tasks").select("*"),
-    supabase
-      .from("tasks")
-      .select("*")
-      .is("parent_task_id", null)
-      .order("created_at", { ascending: false })
-      .limit(6),
-    supabase.from("deals").select("*").order("created_at", { ascending: false }).limit(8),
-    supabase.from("assets").select("*").order("created_at", { ascending: false }).limit(8),
-    supabase.from("artifacts").select("*").order("created_at", { ascending: false }).limit(6),
-  ]);
+  const [allTasksRes, workflowsRes, dealsRes, assetsRes, artifactsRes, sessionsRes, groupsRes] =
+    await Promise.all([
+      supabase.from("tasks").select("*"),
+      supabase
+        .from("tasks")
+        .select("*")
+        .is("parent_task_id", null)
+        .order("created_at", { ascending: false })
+        .limit(6),
+      supabase.from("deals").select("*").order("created_at", { ascending: false }).limit(8),
+      supabase.from("assets").select("*").order("created_at", { ascending: false }).limit(8),
+      supabase.from("artifacts").select("*").order("created_at", { ascending: false }).limit(6),
+      supabase.from("sessions").select("*").order("created_at", { ascending: false }).limit(30),
+      supabase.from("session_groups").select("*").order("created_at", { ascending: true }),
+    ]);
 
   const tasks = (allTasksRes.data ?? []) as Task[];
   const workflows = (workflowsRes.data ?? []) as Task[];
   const deals = (dealsRes.data ?? []) as Deal[];
   const assets = (assetsRes.data ?? []) as Asset[];
   const artifacts = (artifactsRes.data ?? []) as Artifact[];
+  const sessions = (sessionsRes.data ?? []) as Session[];
+  const sessionGroups = (groupsRes.data ?? []) as SessionGroup[];
 
   const stepsCompleted = tasks.filter((t) => t.parent_task_id && t.status === "completed").length;
   const workload = new Map<AgentKey, number>();
@@ -91,7 +98,7 @@ export default async function DashboardPage() {
             Private Markets Command Center
           </h1>
           <p className="mt-1 text-sm text-fg-secondary">
-            Everything the Copilot produces, organized.
+            Everything Earn produces, organized.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -114,6 +121,8 @@ export default async function DashboardPage() {
         <Stat label="Deals in pipeline" value={deals.length} />
         <Stat label="Portfolio assets" value={assets.length} />
       </section>
+
+      <SessionsSection sessions={sessions} groups={sessionGroups} />
 
       <section className="mt-8">
         <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
@@ -155,7 +164,7 @@ export default async function DashboardPage() {
               <p className="text-sm text-fg-muted">
                 None yet —{" "}
                 <Link href="/workspace" className="text-gold-400 hover:underline">
-                  run one in the Copilot
+                  run one in Earn
                 </Link>
                 .
               </p>
@@ -224,7 +233,7 @@ export default async function DashboardPage() {
         {artifacts.length === 0 ? (
           <p className="text-sm text-fg-muted">
             Every workflow step now produces a first-class artifact — IC memos,
-            models, risk reports. They land here as the Copilot runs.
+            models, risk reports. They land here as Earn runs.
           </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">

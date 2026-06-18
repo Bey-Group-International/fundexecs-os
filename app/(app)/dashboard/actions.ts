@@ -67,6 +67,13 @@ const DEMO_AUTOMATION = {
   schedule: "0 13 * * 1",
 };
 
+const DEMO_SESSION_GROUP = "Texas Multifamily Raise";
+const DEMO_SESSIONS: { name: string; origin: "earn" | "workflow"; grouped: boolean }[] = [
+  { name: "Source multifamily targets in Texas", origin: "earn", grouped: true },
+  { name: "Underwrite Atlas Logistics Portfolio", origin: "earn", grouped: true },
+  { name: "Weekly pipeline digest", origin: "workflow", grouped: false },
+];
+
 function demoTaskTitles(): string[] {
   return DEMO_WORKFLOWS.flatMap((w) => [w.title, ...w.steps.map((s) => s.title)]);
 }
@@ -78,6 +85,8 @@ type Client = ReturnType<typeof createServerClient>;
 async function deleteDemoRows(supabase: Client, org: string): Promise<void> {
   await supabase.from("artifacts").delete().eq("organization_id", org).in("title", DEMO_ARTIFACTS.map((a) => a.title));
   await supabase.from("tasks").delete().eq("organization_id", org).in("title", demoTaskTitles());
+  await supabase.from("sessions").delete().eq("organization_id", org).in("name", DEMO_SESSIONS.map((s) => s.name));
+  await supabase.from("session_groups").delete().eq("organization_id", org).eq("name", DEMO_SESSION_GROUP);
   await supabase.from("deals").delete().eq("organization_id", org).in("name", DEMO_DEALS.map((d) => d.name));
   await supabase.from("assets").delete().eq("organization_id", org).in("name", DEMO_ASSETS.map((a) => a.name));
   await supabase.from("automations").delete().eq("organization_id", org).eq("name", DEMO_AUTOMATION.name);
@@ -191,6 +200,22 @@ export async function seedDemoData(): Promise<void> {
     next_run_at: nextRun(DEMO_AUTOMATION.schedule, new Date())?.toISOString() ?? null,
     created_by: by,
   });
+
+  // A named group + a few sessions so the Sessions panel shows the grouped model.
+  const { data: group } = await supabase
+    .from("session_groups")
+    .insert({ organization_id: org, name: DEMO_SESSION_GROUP, created_by: by })
+    .select("id")
+    .single();
+  await supabase.from("sessions").insert(
+    DEMO_SESSIONS.map((s) => ({
+      organization_id: org,
+      name: s.name,
+      origin: s.origin,
+      group_id: s.grouped ? group?.id ?? null : null,
+      created_by: by,
+    })),
+  );
 
   revalidatePath("/dashboard");
   revalidatePath("/automations");

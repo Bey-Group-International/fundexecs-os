@@ -47,14 +47,15 @@ export default async function AutomationsPage() {
     <div className="mx-auto max-w-4xl">
       <header className="mb-6">
         <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-          Automations
+          Workflows
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
-          Agents that own the work
+          Automated sessions
         </h1>
         <p className="mt-1 text-sm text-fg-secondary">
-          Save an instruction once. It runs on a schedule, plans itself with the Associate, and —
-          when you trust it — executes end-to-end without you. Approval-gated by default.
+          A workflow is an automated session: save an instruction once and it runs on a schedule,
+          plans itself with the Associate, and — when you trust it — executes end-to-end without
+          you. Approval-gated by default.
         </p>
       </header>
 
@@ -62,12 +63,12 @@ export default async function AutomationsPage() {
 
       <section className="mt-8">
         <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
-          Your automations
+          Your workflows
         </h2>
 
         {automations.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line bg-surface-1 p-6 text-center text-sm text-fg-muted">
-            No automations yet. Create one above — try{" "}
+            No workflows yet. Create one above — try{" "}
             <span className="text-fg-secondary">
               &ldquo;Every Monday, summarize what moved in our deal pipeline&rdquo;
             </span>
