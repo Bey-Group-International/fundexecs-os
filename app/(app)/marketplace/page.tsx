@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
@@ -78,6 +79,21 @@ export default async function MarketplacePage() {
           draft — move them to listed and public when they&rsquo;re ready for counterparties.
         </p>
       </header>
+
+      <nav className="mb-6 inline-flex rounded-lg border border-line bg-surface-1 p-1 font-mono text-xs uppercase tracking-wider">
+        <Link
+          href="/marketplace"
+          className="rounded-md bg-surface-2 px-3 py-1.5 text-fg-primary"
+        >
+          My listings
+        </Link>
+        <Link
+          href="/marketplace/browse"
+          className="rounded-md px-3 py-1.5 text-fg-muted transition hover:text-fg-primary"
+        >
+          Browse
+        </Link>
+      </nav>
 
       <NewListingForm />
 
