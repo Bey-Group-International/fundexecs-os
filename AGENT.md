@@ -1,4 +1,5 @@
 # AGENT.md — FundExecs OS
+
 ### The Living Development Prompt
 
 > This file is a self-aware, continuously updated prompt.
@@ -30,6 +31,7 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 ## 1. What You Know About Yourself
 
 ### What has been designed
+
 - ✅ Full database schema (PostgreSQL / Supabase)
 - ✅ API contract layer (REST + GraphQL)
 - ✅ WebSocket event stream architecture
@@ -42,6 +44,7 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - ✅ Design system governance model
 
 ### What has been built
+
 - ✅ Next.js + TypeScript + Tailwind repo scaffold (single app, `app/` + `lib/`)
 - ✅ Full Postgres/Supabase schema as versioned migrations (`supabase/migrations/`)
 - ✅ RLS on every table, org-membership tenancy boundary, helper functions
@@ -62,6 +65,7 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
   with a deterministic fallback; idempotent on re-approval (updates in place) (read/write `organizations`)
 
 ### What has not been built yet
+
 - 🔧 Supabase schema **deployment** (migrations exist; applied to preview branch per PR, not a fixed live env)
 - 🔧 Real AI agent execution (current execution is a deterministic mock)
 - 🔧 Intent parser beyond keyword routing
@@ -71,6 +75,7 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - 🔧 Graph query layer (`/graph/*` endpoints + visualizations)
 
 ### What you must never do
+
 - ❌ Import external SDKs for core intelligence — all AI agents, graphs, and workflows run natively
 - ❌ Build UI before the data model is stable
 - ❌ Skip the task engine — every user action flows through `/prompt → /task → /handoff → /approve`
@@ -91,31 +96,34 @@ You are operating in **private markets** — a world of:
 - **Diligence** — legal, financial, physical, market — that is document-heavy and risk-sensitive
 
 ### The operator's daily pain (never forget this)
+
 > *4+ years running advisory for PE funds and family offices. Spent 3 hours every day sourcing deals just to find out they were smoke and mirrors. There has to be a better way.*
 
 Every feature you build should reduce the time between **information arriving** and **a decision being made**.
 
 ### Domain vocabulary you must understand
-| Term | Meaning |
-|---|---|
-| LP | Limited Partner — passive investor in a fund |
-| GP | General Partner — the operator running the fund |
-| IC Memo | Investment Committee Memo — formal deal recommendation |
-| Waterfall | Distribution logic — how returns flow from fund to LPs |
-| Pro Forma | Forward-looking financial model for a deal |
-| SPV | Special Purpose Vehicle — entity formed for a single deal |
-| Mezz | Mezzanine debt — subordinated financing layer |
-| Cap Rate | Capitalization rate — NOI / asset value |
-| IRR | Internal Rate of Return — time-weighted return metric |
-| Co-GP | Co-General Partner — shared operational control |
-| Dry Powder | Uncalled committed capital |
-| Capital Call | Request to LPs to fund their committed capital |
+
+|     Term     |                          Meaning                          |
+|--------------|-----------------------------------------------------------|
+| LP           | Limited Partner — passive investor in a fund              |
+| GP           | General Partner — the operator running the fund           |
+| IC Memo      | Investment Committee Memo — formal deal recommendation    |
+| Waterfall    | Distribution logic — how returns flow from fund to LPs    |
+| Pro Forma    | Forward-looking financial model for a deal                |
+| SPV          | Special Purpose Vehicle — entity formed for a single deal |
+| Mezz         | Mezzanine debt — subordinated financing layer             |
+| Cap Rate     | Capitalization rate — NOI / asset value                   |
+| IRR          | Internal Rate of Return — time-weighted return metric     |
+| Co-GP        | Co-General Partner — shared operational control           |
+| Dry Powder   | Uncalled committed capital                                |
+| Capital Call | Request to LPs to fund their committed capital            |
 
 ---
 
 ## 3. What You Know About the Architecture
 
 ### The Four Hubs
+
 ```
 Build     →  Identity, thesis, brand, entity, track record, team
 Source    →  LP pipeline, debt, partners, providers, deal pipeline
@@ -124,6 +132,7 @@ Execute   →  Closing, capital events, asset management, reporting, exit
 ```
 
 ### The Six Agents
+
 ```
 Analyst           →  Deal data, pro formas, valuations, sensitivities
 Associate         →  Workflow coordination, task execution (YOU)
@@ -134,6 +143,7 @@ Fund Admin        →  Waterfall calculations, fund accounting, audit prep
 ```
 
 ### The Three Graphs
+
 ```
 Relationship Graph  →  upper hemisphere — who knows whom, who invested in what
 Deal Graph          →  mid-plane — active deals, targets, SPVs, funds
@@ -141,6 +151,7 @@ Capital Graph       →  lower hemisphere — LPs, lenders, family offices, bank
 ```
 
 ### The Task Flow (sacred — never bypass this)
+
 ```
 User prompt
   → Intent parser
@@ -157,6 +168,7 @@ User prompt
 ```
 
 ### The Tech Stack
+
 ```
 Frontend      →  Next.js · React · Tailwind CSS · Three.js · GSAP
 Backend       →  Node.js · Python · GraphQL · Event-driven task engine
@@ -172,6 +184,7 @@ Security      →  JWT · RLS · Encryption at rest · Audit logging
 ## 4. How You Think
 
 ### Before writing any code, ask:
+
 1. Which hub does this belong to?
 2. Which agent owns this task?
 3. Does this touch the Relationship, Deal, or Capital graph?
@@ -180,7 +193,9 @@ Security      →  JWT · RLS · Encryption at rest · Audit logging
 6. What does the operator see when this runs?
 
 ### Build order discipline
+
 Always build in this sequence:
+
 ```
 1. Data model first — schema, migrations, RLS policies
 2. API layer second — endpoints, GraphQL resolvers, auth
@@ -192,6 +207,7 @@ Always build in this sequence:
 Never invert this order. A beautiful UI on an unstable data model is a liability.
 
 ### When you are uncertain
+
 - State your uncertainty explicitly before proceeding
 - Propose two options with tradeoffs
 - Default to the simpler implementation and flag for future iteration
@@ -210,6 +226,7 @@ This file is a **living document**. It must be updated when:
 - A build phase is completed and the next phase begins
 
 ### Update protocol
+
 When updating this file:
 1. Move completed items from `🔧 not built` to `✅ designed` or `✅ built`
 2. Add new learnings to the relevant section
@@ -218,6 +235,7 @@ When updating this file:
 5. Never delete history — only append and promote
 
 ### Confidence levels
+
 ```
 Architected, not yet implemented   →  specs exist, no code
 Scaffolded, not yet functional     →  files exist, logic incomplete
@@ -234,23 +252,27 @@ Deployed, monitoring               →  live, observability active
 *This section grows as the system learns. It starts sparse and fills in over time.*
 
 ### Who they are
+
 - Private-market operators: PE fund managers, real estate investors, family office principals
 - Advisory professionals running deal sourcing, LP relations, and asset management
 - Analysts and associates supporting deal evaluation and reporting
 
 ### What they value
+
 - Speed of information synthesis — not raw data, but insight
 - Trust in the output — they will act on what this system tells them
 - Control — they approve automations, they are never bypassed
 - Simplicity of interface over complexity of capability
 
 ### What frustrates them
+
 - Tools that require manual data entry to function
 - Disconnected systems that don't share context
 - Reports that take hours to produce for a 10-minute meeting
 - Sourcing pipelines full of noise with no signal filtering
 
 ### What we have learned from users so far
+
 ```
 [ This section is empty. It fills in as feedback arrives. ]
 [ First entry will be added after first user interview or beta session. ]
@@ -261,6 +283,7 @@ Deployed, monitoring               →  live, observability active
 ## 7. Build Phase Log
 
 ### Current phase: Pre-Alpha Scaffolding
+
 **Goal:** Stand up the foundational repo structure, deploy the Supabase schema, and implement the core task engine loop.
 
 **Exit criteria for this phase:**
