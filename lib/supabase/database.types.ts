@@ -58,6 +58,15 @@ export type TaskStatus =
   | "cancelled";
 export type ApprovalDecision = "pending" | "approved" | "rejected" | "regenerate";
 export type DiligenceStatus = "open" | "in_review" | "cleared" | "flagged" | "waived";
+export type ArtifactType =
+  | "ic_memo"
+  | "model"
+  | "analysis"
+  | "risk_report"
+  | "lp_update"
+  | "memo"
+  | "summary"
+  | "other";
 export type RiskSeverity = "low" | "medium" | "high" | "critical";
 export type MarketplaceStatus = "draft" | "listed" | "paused" | "closed";
 
@@ -361,6 +370,21 @@ export type TaskHandoff = {
   created_at: string;
 };
 
+export type Artifact = Timestamps & {
+  id: string;
+  organization_id: string;
+  workflow_id: string | null;
+  step_id: string | null;
+  deal_id: string | null;
+  title: string;
+  artifact_type: ArtifactType;
+  agent: AgentKey | null;
+  hub: Hub | null;
+  content: string;
+  metadata: Json;
+  created_by: string | null;
+};
+
 // Minimal Database shape compatible with @supabase/supabase-js generics.
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
@@ -394,6 +418,7 @@ export type Database = {
       task_handoffs: TableShape<TaskHandoff>;
       approvals: TableShape<Approval>;
       task_events: TableShape<TaskEvent>;
+      artifacts: TableShape<Artifact>;
       marketplace_listings: TableShape<MarketplaceListing>;
     };
     Views: Record<string, never>;
@@ -412,6 +437,7 @@ export type Database = {
       approval_decision: ApprovalDecision;
       diligence_status: DiligenceStatus;
       risk_severity: RiskSeverity;
+      artifact_type: ArtifactType;
       marketplace_status: MarketplaceStatus;
     };
   };

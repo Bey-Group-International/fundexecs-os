@@ -4,13 +4,26 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
-import type { Task, Approval, AgentKey } from "@/lib/supabase/database.types";
+import type { Task, Approval, Artifact, ArtifactType, AgentKey } from "@/lib/supabase/database.types";
 
 export interface WorkflowBundle {
   workflow: Task;
   steps: Task[];
+  artifacts: Artifact[];
   approval: Approval | null;
 }
+
+// Short, human labels for the deliverable badge on each step.
+const ARTIFACT_LABEL: Record<ArtifactType, string> = {
+  ic_memo: "IC Memo",
+  model: "Model",
+  analysis: "Analysis",
+  risk_report: "Risk Report",
+  lp_update: "LP Update",
+  memo: "Memo",
+  summary: "Summary",
+  other: "Deliverable",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
@@ -72,15 +85,21 @@ export default function Copilot({
 
   useEffect(() => {
     const supabase = createClient();
+    const refresh = () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      refreshTimer.current = setTimeout(() => router.refresh(), 400);
+    };
     const channel = supabase
       .channel(`org-${orgId}-copilot`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "task_events", filter: `organization_id=eq.${orgId}` },
-        () => {
-          if (refreshTimer.current) clearTimeout(refreshTimer.current);
-          refreshTimer.current = setTimeout(() => router.refresh(), 400);
-        },
+        refresh,
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "artifacts", filter: `organization_id=eq.${orgId}` },
+        refresh,
       )
       .subscribe();
     return () => {
@@ -247,15 +266,20 @@ export default function Copilot({
 }
 
 function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
-  const { steps } = bundle;
+  const { steps, artifacts } = bundle;
+  const artifactByStep = new Map<string, Artifact>();
+  for (const a of artifacts) if (a.step_id) artifactByStep.set(a.step_id, a);
   return (
     <ol className="relative flex flex-col gap-3">
       {steps.map((step, i) => {
         const agent = AGENT_BY_KEY[step.assigned_agent];
+        const artifact = artifactByStep.get(step.id);
+        // Prefer the durable artifact; fall back to the step's inline result.
         const output =
-          step.result && typeof step.result === "object"
+          artifact?.content ??
+          (step.result && typeof step.result === "object"
             ? (step.result as { output?: string }).output
-            : undefined;
+            : undefined);
         return (
           <li key={step.id} className="flex gap-3">
             <div className="flex flex-col items-center">
@@ -265,6 +289,11 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
             <div className="flex-1 pb-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-fg-primary">{step.title}</span>
+                {artifact ? (
+                  <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                    {ARTIFACT_LABEL[artifact.artifact_type]}
+                  </span>
+                ) : null}
                 <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-fg-muted">
                   {STATUS_LABEL[step.status] ?? step.status}
                 </span>

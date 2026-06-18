@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   }
 
   const supabase = createServerClient();
-  const [task, events, approvals, handoffs] = await Promise.all([
+  const [task, events, approvals, handoffs, artifacts] = await Promise.all([
     supabase.from("tasks").select("*").eq("id", taskId).maybeSingle(),
     supabase
       .from("task_events")
@@ -23,6 +23,11 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: true }),
     supabase.from("approvals").select("*").eq("task_id", taskId),
     supabase.from("task_handoffs").select("*").eq("task_id", taskId),
+    supabase
+      .from("artifacts")
+      .select("*")
+      .eq("workflow_id", taskId)
+      .order("created_at", { ascending: true }),
   ]);
 
   if (!task.data) {
@@ -34,5 +39,6 @@ export async function GET(request: Request) {
     events: events.data ?? [],
     approvals: approvals.data ?? [],
     handoffs: handoffs.data ?? [],
+    artifacts: artifacts.data ?? [],
   });
 }
