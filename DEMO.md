@@ -12,13 +12,13 @@ work**, on top of an approval-gated operating system for private capital.
 
 **Environment variables** (Vercel project → Settings → Environment Variables):
 
-| Variable | Needed for | Notes |
-| --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the app | already set |
-| `SUPABASE_SERVICE_ROLE_KEY` | scheduled automations (`/api/cron`) | server-only |
-| `ANTHROPIC_API_KEY` | the live Copilot loop | already set |
-| `CLAUDE_MODEL` | optional model override | defaults to `claude-haiku-4-5-20251001` (cheap) |
-| `CRON_SECRET` | guards `/api/cron` | required for scheduled runs; "Run now" works without it |
+|                           Variable                           |             Needed for              |                          Notes                          |
+|--------------------------------------------------------------|-------------------------------------|---------------------------------------------------------|
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the app                             | already set                                             |
+| `SUPABASE_SERVICE_ROLE_KEY`                                  | scheduled automations (`/api/cron`) | server-only                                             |
+| `ANTHROPIC_API_KEY`                                          | the live Copilot loop               | already set                                             |
+| `CLAUDE_MODEL`                                               | optional model override             | defaults to `claude-haiku-4-5-20251001` (cheap)         |
+| `CRON_SECRET`                                                | guards `/api/cron`                  | required for scheduled runs; "Run now" works without it |
 
 **Google sign-in** (Supabase → Authentication → Providers → Google): paste the
 Google **Client ID** and **Client Secret**, and add the redirect URLs:
@@ -70,3 +70,4 @@ dashboard, pipeline, deliverables, and a sample automation populate instantly.
   not set, or the hourly Vercel cron hasn't ticked yet. Use **Run now** to demo.
 - **Google sign-in errors** → provider not enabled in Supabase, or the
   redirect URL isn't whitelisted. Fall back to email/password.
+
