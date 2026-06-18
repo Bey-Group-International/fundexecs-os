@@ -36,3 +36,6 @@ yarn-error.log*
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# Claude Code agent worktrees (transient)
+.claude/worktrees/
