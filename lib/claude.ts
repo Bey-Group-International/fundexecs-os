@@ -2,13 +2,16 @@
 //
 // A prompt becomes a multi-step PLAN (each step delegated to one of the six
 // agents), then each step is EXECUTED to produce a deliverable. Both use
-// Claude (claude-opus-4-8). When ANTHROPIC_API_KEY is absent, both fall back to
-// a deterministic result so the app — and CI/preview builds — keep working.
+// Claude. When ANTHROPIC_API_KEY is absent, both fall back to a deterministic
+// result so the app — and CI/preview builds — keep working.
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentKey, Hub, AssetType } from "@/lib/supabase/database.types";
 import { AGENTS } from "@/lib/agents";
 
-const MODEL = "claude-opus-4-8";
+// Default to Haiku 4.5 — fast and inexpensive, which keeps the live loop within
+// a tight Anthropic budget. Override with CLAUDE_MODEL to upgrade (e.g. to
+// claude-sonnet-4-6 or claude-opus-4-8) without a code change.
+const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
 
 export interface PlanStep {
   agent: AgentKey;

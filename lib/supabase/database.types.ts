@@ -69,6 +69,7 @@ export type ArtifactType =
   | "other";
 export type RiskSeverity = "low" | "medium" | "high" | "critical";
 export type MarketplaceStatus = "draft" | "listed" | "paused" | "closed";
+export type TriggerType = "schedule" | "manual" | "email" | "webhook" | "event";
 
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
@@ -280,6 +281,7 @@ export type Task = Timestamps & {
   created_by: string | null;
   completed_at: string | null;
   step_order: number;
+  automation_id: string | null;
 }
 
 export type Approval = Timestamps & {
@@ -370,6 +372,23 @@ export type TaskHandoff = {
   created_at: string;
 };
 
+export type Automation = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  prompt: string;
+  trigger_type: TriggerType;
+  schedule: string | null;
+  trigger_config: Json;
+  auto_approve: boolean;
+  enabled: boolean;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  next_run_at: string | null;
+  run_count: number;
+  created_by: string | null;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -419,6 +438,7 @@ export type Database = {
       approvals: TableShape<Approval>;
       task_events: TableShape<TaskEvent>;
       artifacts: TableShape<Artifact>;
+      automations: TableShape<Automation>;
       marketplace_listings: TableShape<MarketplaceListing>;
     };
     Views: Record<string, never>;
@@ -439,6 +459,7 @@ export type Database = {
       risk_severity: RiskSeverity;
       artifact_type: ArtifactType;
       marketplace_status: MarketplaceStatus;
+      trigger_type: TriggerType;
     };
   };
 }

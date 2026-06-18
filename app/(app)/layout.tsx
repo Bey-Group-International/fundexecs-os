@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
 import { AGENTS } from "@/lib/agents";
 import { HUBS } from "@/lib/hubs";
+import { GuidedTour } from "@/components/GuidedTour";
 
 // Authed shell. Side rail exposes the Copilot, the Command Center, and the
 // four operational hubs (Build / Source / Run / Execute) with their modules.
@@ -41,6 +42,13 @@ export default async function AppLayout({
           >
             <span className="font-mono text-base leading-none text-gold-400">◧</span>
             Command Center
+          </Link>
+          <Link
+            href="/automations"
+            className="mt-0.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+          >
+            <span className="font-mono text-base leading-none text-gold-400">↻</span>
+            Automations
           </Link>
 
           {HUBS.map((hub) => (
@@ -103,6 +111,8 @@ export default async function AppLayout({
 
         <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
       </div>
+
+      <GuidedTour />
     </div>
   );
 }
