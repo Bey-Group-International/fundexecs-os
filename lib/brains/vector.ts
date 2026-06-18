@@ -5,9 +5,10 @@
 // document text, which is enough to ground answers in the right passages for the
 // demo without any external service or spend.
 //
-// To go production: implement VectorStore against pgvector (Supabase) or a
-// hosted vector DB — embed on ingest, cosine-search here — and swap the export.
-// Nothing in the Brain layer changes.
+// Production path (now wired): the per-Brain knowledge corpus is embedded into
+// pgvector and retrieved via lib/brains/pgvector.ts. This keyword store remains
+// the always-available FALLBACK (no DB needed) and the retriever over the user's
+// inline documents. The two are complementary, not either/or.
 
 export interface RetrievedChunk {
   source: string;
@@ -42,6 +43,34 @@ function chunk(content: string): string[] {
     .split(/\n\s*\n+/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
+}
+
+// Public chunker for ingestion (lib/brains/embed pipeline + the ingest route).
+// Splits on paragraph boundaries, then coalesces very short paragraphs and caps
+// chunk length so embeddings stay focused. Shares the paragraph heuristic above.
+export function chunkText(content: string, maxChars = 1200): string[] {
+  const paras = chunk(content);
+  const out: string[] = [];
+  let buf = "";
+  for (const p of paras) {
+    if (p.length >= maxChars) {
+      // Flush the buffer, then hard-split the oversized paragraph.
+      if (buf) {
+        out.push(buf);
+        buf = "";
+      }
+      for (let i = 0; i < p.length; i += maxChars) out.push(p.slice(i, i + maxChars));
+      continue;
+    }
+    if (buf.length + p.length + 2 > maxChars) {
+      if (buf) out.push(buf);
+      buf = p;
+    } else {
+      buf = buf ? `${buf}\n\n${p}` : p;
+    }
+  }
+  if (buf) out.push(buf);
+  return out;
 }
 
 class KeywordVectorStore implements VectorStore {

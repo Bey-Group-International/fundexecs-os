@@ -11,15 +11,24 @@ import type { Json } from "@/lib/supabase/database.types";
 import { getBrain } from "@/lib/brains/catalog";
 import { complete, brainsLive } from "@/lib/brains/llm";
 import { vectorStore } from "@/lib/brains/vector";
+import { retrieveBrainKb } from "@/lib/brains/pgvector";
 import type { BrainContext, BrainGoal, BrainResult, BrainKey } from "@/lib/brains/types";
 
 function buildSystem(preamble: string, reasoningStyle: string): string {
   return `${preamble}\n\nReasoning style: ${reasoningStyle}\nBe concrete and useful. Lead with the outcome. No preamble, no filler.`;
 }
 
-function buildPrompt(goal: BrainGoal, retrieved: { source: string; text: string }[]): string {
+function buildPrompt(
+  goal: BrainGoal,
+  retrieved: { source: string; text: string }[],
+  kb: { source: string; text: string }[],
+): string {
   const parts: string[] = [`Goal: ${goal.objective}`];
   if (goal.context) parts.push(`\nContext:\n${goal.context}`);
+  if (kb.length) {
+    const ctx = kb.map((r) => `[${r.source}]\n${r.text}`).join("\n\n");
+    parts.push(`\nReference passages from your knowledge base:\n${ctx}`);
+  }
   if (retrieved.length) {
     const ctx = retrieved.map((r) => `[${r.source}]\n${r.text}`).join("\n\n");
     parts.push(`\nRelevant passages from the provided documents:\n${ctx}`);
@@ -67,22 +76,32 @@ export async function activateBrain(
   const docs = goal.documents ?? [];
   const retrieved = docs.length ? vectorStore.retrieve(goal.objective, docs) : [];
 
+  // Also retrieve a couple of passages from this Brain's OWN knowledge base
+  // (shared brain_kb_chunks corpus, migration 0024) so it answers in its full,
+  // grounded voice — in addition to the user's documents. Cheap (small k) and
+  // safe: returns [] when no KB is reachable/present, preserving prior behavior.
+  const kb = await retrieveBrainKb(ctx.supabase, brain.key, goal.objective, 2);
+
   // Tools the Brain "used" this run: its document-retrieval tool when docs were
-  // supplied, plus whatever the goal allowed (defaults to all of the Brain's).
+  // supplied (or KB passages were retrieved), plus whatever the goal allowed
+  // (defaults to all of the Brain's).
   const allowed = goal.allowedTools ?? brain.tools.map((t) => t.id);
+  const retrievedAny = retrieved.length > 0 || kb.length > 0;
   const toolsUsed = brain.tools
     .filter((t) => allowed.includes(t.id))
-    .filter((t) => t.id !== "vector_retrieve" || retrieved.length > 0)
+    .filter((t) => t.id !== "vector_retrieve" || retrievedAny)
     .map((t) => t.id);
 
   const system = buildSystem(brain.systemPreamble, brain.reasoningStyle);
-  const prompt = buildPrompt(goal, retrieved);
+  const prompt = buildPrompt(goal, retrieved, kb);
 
   const llmText = await complete({ system, prompt });
-  const output = llmText ?? stubOutput(brain.name, goal, retrieved);
+  const output = llmText ?? stubOutput(brain.name, goal, [...kb, ...retrieved]);
+  const totalPassages = retrieved.length + kb.length;
+  const kbNote = kb.length ? ` (${kb.length} from its knowledge base)` : "";
   const reasoning = brainsLive()
-    ? `${brain.name} reasoned over ${retrieved.length} retrieved passage(s) using a ${brain.riskProfile}-risk profile.`
-    : `${brain.name} ran in preview mode (no model key); ${retrieved.length} passage(s) retrieved.`;
+    ? `${brain.name} reasoned over ${totalPassages} retrieved passage(s)${kbNote} using a ${brain.riskProfile}-risk profile.`
+    : `${brain.name} ran in preview mode (no model key); ${totalPassages} passage(s) retrieved${kbNote}.`;
 
   let runId: string | null = null;
   if (options.log !== false) {
