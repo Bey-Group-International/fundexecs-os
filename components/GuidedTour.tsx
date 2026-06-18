@@ -22,16 +22,16 @@ const STEPS: TourStep[] = [
     cta: "Open Command Center",
   },
   {
-    title: "Give the Copilot a prompt",
-    body: "Open the Copilot and type, e.g. “Source multifamily targets in Texas under $50M.” The Associate plans it into steps.",
+    title: "Give Earn a prompt",
+    body: "Open Earn and type, e.g. “Source multifamily targets in Texas under $50M.” The Associate plans it into steps.",
     href: "/workspace",
-    cta: "Open Copilot",
+    cta: "Open Earn",
   },
   {
     title: "Approve & automate",
     body: "Review the plan, then Approve & automate. The agents execute each step and stream real deliverables.",
     href: "/workspace",
-    cta: "Go to Copilot",
+    cta: "Go to Earn",
   },
   {
     title: "Create an automation",

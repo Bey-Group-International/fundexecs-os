@@ -91,7 +91,7 @@ export default async function DashboardPage() {
             Private Markets Command Center
           </h1>
           <p className="mt-1 text-sm text-fg-secondary">
-            Everything the Copilot produces, organized.
+            Everything Earn produces, organized.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -155,7 +155,7 @@ export default async function DashboardPage() {
               <p className="text-sm text-fg-muted">
                 None yet —{" "}
                 <Link href="/workspace" className="text-gold-400 hover:underline">
-                  run one in the Copilot
+                  run one in Earn
                 </Link>
                 .
               </p>
@@ -224,7 +224,7 @@ export default async function DashboardPage() {
         {artifacts.length === 0 ? (
           <p className="text-sm text-fg-muted">
             Every workflow step now produces a first-class artifact — IC memos,
-            models, risk reports. They land here as the Copilot runs.
+            models, risk reports. They land here as Earn runs.
           </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">

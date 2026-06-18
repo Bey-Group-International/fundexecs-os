@@ -25,7 +25,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
       { key: "target_irr", label: "Target IRR" },
       { key: "is_active", label: "Active" },
     ],
-    empty: "Define your investment thesis — or ask the Copilot to draft one.",
+    empty: "Define your investment thesis — or ask Earn to draft one.",
   },
   "build/track_record": {
     table: "track_records",
@@ -53,7 +53,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
       { key: "stage", label: "Stage" },
       { key: "asset_class", label: "Asset class" },
     ],
-    empty: "No deals yet. Source a deal in the Copilot to populate the pipeline.",
+    empty: "No deals yet. Source a deal in Earn to populate the pipeline.",
   },
   "run/underwriting": {
     table: "underwritings",
@@ -127,19 +127,9 @@ export default async function ModulePage({
   const key = `${hub.key}/${mod.key}`;
   const supabase = createServerClient();
 
-  const Header = (
-    <header className="mb-6">
-      <Link
-        href={`/${hub.key}`}
-        className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400 hover:underline"
-      >
-        {hub.label}
-      </Link>
-      <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
-        {mod.label}
-      </h1>
-    </header>
-  );
+  // The hub layout renders the hub title + the module switcher (tabs); the
+  // active tab names the current module, so no per-module header is needed.
+  const Header = null;
 
   // --- Build › Profile: editable org identity ------------------------------
   if (key === "build/profile") {
@@ -198,7 +188,7 @@ export default async function ModulePage({
               href="/workspace"
               className="mt-3 inline-block font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline"
             >
-              Open the Copilot →
+              Open Earn →
             </Link>
           </div>
         ) : (
@@ -242,13 +232,13 @@ export default async function ModulePage({
         <p className="text-sm text-fg-secondary">
           The <span className="text-fg-primary">{mod.label}</span> module lives in
           the {hub.label} hub. It isn&apos;t wired up yet — describe the work in
-          the Copilot and the agents will handle it here.
+          Earn and the agents will handle it here.
         </p>
         <Link
           href="/workspace"
           className="mt-4 inline-block rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
         >
-          Open the Copilot
+          Open Earn
         </Link>
       </div>
     </div>

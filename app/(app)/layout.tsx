@@ -3,11 +3,16 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
 import { AGENTS } from "@/lib/agents";
-import { HUBS } from "@/lib/hubs";
+import { HUB_BY_KEY } from "@/lib/hubs";
+import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
 
-// Authed shell. Side rail exposes the Copilot, the Command Center, and the
-// four operational hubs (Build / Source / Run / Execute) with their modules.
+// The four hubs, in operating order, as shown in the side rail.
+const HUB_ORDER: Hub[] = ["build", "run", "source", "execute"];
+
+// Authed shell. Side rail: Earn (the copilot) + Workflows + Command Center, then
+// the four operational hubs (Build / Run / Source / Execute) whose modules
+// reveal on hover. Each hub has its own page with a top module switcher.
 export default async function AppLayout({
   children,
 }: {
@@ -20,8 +25,11 @@ export default async function AppLayout({
   return (
     <div className="flex h-screen overflow-hidden bg-surface-0 text-fg-primary">
       <aside className="flex w-[224px] shrink-0 flex-col border-r border-line bg-surface-1">
-        <div className="flex h-12 items-center border-b border-line px-4">
-          <Link href="/workspace">
+        <div className="flex h-12 items-center gap-2 border-b border-line px-4">
+          <Link href="/workspace" className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gold-400 font-display text-sm font-bold text-surface-0">
+              E
+            </span>
             <span className="font-mono text-xs uppercase tracking-[0.22em] text-gold-400">
               FundExecs OS
             </span>
@@ -31,47 +39,67 @@ export default async function AppLayout({
         <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
           <Link
             href="/workspace"
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+            className="flex items-center justify-center gap-2 rounded-md bg-gold-400 px-2 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
           >
-            <span className="font-mono text-base leading-none text-gold-400">⌘</span>
-            Copilot
-          </Link>
-          <Link
-            href="/dashboard"
-            className="mt-0.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
-          >
-            <span className="font-mono text-base leading-none text-gold-400">◧</span>
-            Command Center
-          </Link>
-          <Link
-            href="/automations"
-            className="mt-0.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
-          >
-            <span className="font-mono text-base leading-none text-gold-400">↻</span>
-            Automations
+            <span className="text-base leading-none">+</span>
+            New Session
           </Link>
 
-          {HUBS.map((hub) => (
-            <div key={hub.key} className="mt-4">
-              <Link
-                href={`/${hub.key}`}
-                className="block rounded-md px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
-              >
-                {hub.label}
-              </Link>
-              <div className="mt-0.5 flex flex-col">
-                {hub.modules.map((mod) => (
-                  <Link
-                    key={mod.key}
-                    href={`/${hub.key}/${mod.key}`}
-                    className="rounded-md px-2 py-1 pl-3 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
-                  >
-                    {mod.label}
-                  </Link>
-                ))}
+          <div className="mt-3 flex flex-col gap-0.5">
+            <Link
+              href="/automations"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+            >
+              <span className="font-mono text-base leading-none text-gold-400">↻</span>
+              Workflows
+            </Link>
+            <Link
+              href="/workspace"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+            >
+              <span className="font-mono text-base leading-none text-gold-400">⌘</span>
+              Earn
+            </Link>
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+            >
+              <span className="font-mono text-base leading-none text-gold-400">◧</span>
+              Command Center
+            </Link>
+          </div>
+
+          <p className="mb-1 mt-5 px-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+            Hubs
+          </p>
+          {HUB_ORDER.map((key) => {
+            const hub = HUB_BY_KEY[key];
+            return (
+              <div key={hub.key} className="group">
+                <Link
+                  href={`/${hub.key}`}
+                  className="flex items-center justify-between rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                >
+                  {hub.label}
+                  <span className="font-mono text-[10px] text-fg-muted transition group-hover:text-gold-400">
+                    {hub.modules.length}
+                  </span>
+                </Link>
+                {/* Modules reveal on hover. */}
+                <div className="hidden flex-col group-hover:flex">
+                  {hub.modules.map((mod) => (
+                    <Link
+                      key={mod.key}
+                      href={`/${hub.key}/${mod.key}`}
+                      className="rounded-md px-2 py-1 pl-7 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                    >
+                      {mod.label}
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="border-t border-line p-3">

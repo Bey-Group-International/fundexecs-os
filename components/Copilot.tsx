@@ -149,11 +149,11 @@ export default function Copilot({
         <header className="mb-5">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-gold-400">
-              Agent Copilot
+              Earn · Agent Copilot
             </span>
             <span className="flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
               <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-status-success" : "bg-fg-muted"}`} />
-              {live ? "Copilot ready" : "Fallback mode"}
+              {live ? "Earn ready" : "Fallback mode"}
             </span>
           </div>
           <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-fg-primary">

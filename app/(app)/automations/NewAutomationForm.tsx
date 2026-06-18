@@ -25,7 +25,7 @@ export function NewAutomationForm() {
       className="rounded-xl border border-line bg-surface-1 p-4"
     >
       <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
-        New automation
+        New workflow
       </p>
 
       <div className="flex flex-col gap-3">
@@ -71,14 +71,14 @@ export function NewAutomationForm() {
             disabled={pending}
             className="ml-auto rounded-md bg-gold-500 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-400 disabled:opacity-60"
           >
-            {pending ? "Saving…" : "Create automation"}
+            {pending ? "Saving…" : "Create workflow"}
           </button>
         </div>
 
         {error ? <p className="text-xs text-red-400">{error}</p> : null}
         <p className="text-[11px] leading-snug text-fg-muted">
           Leave <span className="text-fg-secondary">Auto-approve</span> off and each run waits for
-          your approval in the Copilot — exactly like a prompt. Turn it on only for automations you
+          your approval in Earn — exactly like a prompt. Turn it on only for workflows you
           trust to run on their own.
         </p>
       </div>
