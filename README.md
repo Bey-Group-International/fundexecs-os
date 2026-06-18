@@ -265,3 +265,5 @@ Questions, partnerships, or early access: **[your contact / email / Twitter]**
 ---
 
 *FundExecs OS is pre-alpha. The architecture is designed. The build has begun. If you see what this becomes — come build it.*
+
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/Bey-Group-International/fundexecs-os?utm_source=oss&utm_medium=github&utm_campaign=Bey-Group-International%2Ffundexecs-os&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
