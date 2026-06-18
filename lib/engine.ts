@@ -1,20 +1,14 @@
-// The task engine (mock). Implements the sacred loop without real LLM calls:
-// a prompt is routed to a hub + agent, a task is created, the assigned agent
-// "executes" (advances progress and emits events), then raises an approval
-// request. Human approval completes (or regenerates / cancels) the task.
+// The task engine — multi-step agent workflows (the Copilot choreography).
 //
-// Every state change writes a row to `task_events`, which Realtime streams to
-// the live workspace. When real agents land, only the execution body changes —
-// the surrounding contract stays put.
-import type { createServerClient } from "@/lib/supabase/server";
-import type {
-  AgentKey,
-  Hub,
-  GraphKind,
-  Json,
-  Task,
-} from "@/lib/supabase/database.types";
+// A prompt becomes a WORKFLOW (parent task) with ordered STEPS (child tasks),
+// planned by Claude (lib/claude.ts). The operator approves, then the engine
+// executes each step in turn — each producing a real deliverable — emitting
+// task_events the live Copilot streams. Human approval gates automation; the
+// operator is never bypassed.
+import { createServerClient } from "@/lib/supabase/server";
+import type { AgentKey, Hub, GraphKind, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
+import { generatePlan, executeStep, type AgentPlan } from "@/lib/claude";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -24,50 +18,11 @@ interface Ctx {
   actorId: string;
 }
 
-interface Routing {
-  hub: Hub;
-  agent: AgentKey;
-  title: string;
-  graph: GraphKind | null;
-}
-
-// Naive keyword intent parser. Deterministic and dependency-free — good enough
-// to exercise routing end-to-end until a real parser replaces it.
-export function routePrompt(body: string): Routing {
-  const t = body.toLowerCase();
-  const has = (...words: string[]) => words.some((w) => t.includes(w));
-
-  let hub: Hub = "run";
-  let agent: AgentKey = "associate";
-  let graph: GraphKind | null = null;
-
-  if (has("underwrit", "pro forma", "valuation", "irr", "model", "sensitiv")) {
-    hub = "run";
-    agent = "analyst";
-    graph = "deal";
-  } else if (has("diligence", "document", "risk", "legal", "lease")) {
-    hub = "run";
-    agent = "diligence";
-    graph = "deal";
-  } else if (has("waterfall", "fund accounting", "audit", "carry")) {
-    hub = "execute";
-    agent = "fund_admin";
-    graph = "capital";
-  } else if (has("capital call", "distribution", "lp ", "investor", "report")) {
-    hub = "execute";
-    agent = "investor_relations";
-    graph = "capital";
-  } else if (has("kpi", "budget", "capex", "variance", "asset")) {
-    hub = "execute";
-    agent = "portfolio_ops";
-  } else if (has("source", "pipeline", "deal", "relationship", "introduc")) {
-    hub = "source";
-    agent = "associate";
-    graph = "relationship";
-  }
-
-  const title = body.trim().slice(0, 80) || "Untitled task";
-  return { hub, agent, title, graph };
+function hubToGraph(hub: Hub): GraphKind | null {
+  if (hub === "source") return "relationship";
+  if (hub === "run") return "deal";
+  if (hub === "execute") return "capital";
+  return null;
 }
 
 async function recordEvent(
@@ -90,53 +45,107 @@ async function recordEvent(
   });
 }
 
-/** Mock execution: advance the task, then raise an approval request. */
-async function runMockExecution(
+/** Create workflow + step rows from a plan, plus the approval gate. */
+async function materializePlan(
   ctx: Ctx,
-  task: { id: string; hub: Hub; assigned_agent: AgentKey; title: string },
-) {
-  await ctx.supabase
-    .from("tasks")
-    .update({ status: "in_progress", progress: 0.5 })
-    .eq("id", task.id);
+  body: string,
+  plan: AgentPlan,
+  opts: { promptId?: string | null; workflowId?: string },
+): Promise<{ workflow: Task; approvalId: string | null }> {
+  let workflow: Task;
+
+  if (opts.workflowId) {
+    // Regenerate: clear prior steps, reset the workflow.
+    await ctx.supabase.from("tasks").delete().eq("parent_task_id", opts.workflowId);
+    const { data } = await ctx.supabase
+      .from("tasks")
+      .update({
+        title: plan.title,
+        hub: plan.hub,
+        status: "awaiting_approval",
+        progress: 0,
+        graph_touched: hubToGraph(plan.hub),
+        result: null,
+        completed_at: null,
+      })
+      .eq("id", opts.workflowId)
+      .select("*")
+      .single();
+    workflow = data as Task;
+  } else {
+    const { data, error } = await ctx.supabase
+      .from("tasks")
+      .insert({
+        organization_id: ctx.orgId,
+        prompt_id: opts.promptId ?? null,
+        title: plan.title,
+        description: body,
+        hub: plan.hub,
+        assigned_agent: "associate",
+        status: "awaiting_approval",
+        progress: 0,
+        graph_touched: hubToGraph(plan.hub),
+        requires_approval: true,
+        created_by: ctx.actorId,
+        step_order: 0,
+      })
+      .select("*")
+      .single();
+    if (error || !data) throw new Error(error?.message ?? "Failed to create workflow");
+    workflow = data as Task;
+  }
+
+  // Steps as child tasks.
+  for (let i = 0; i < plan.steps.length; i++) {
+    const step = plan.steps[i];
+    await ctx.supabase.from("tasks").insert({
+      organization_id: ctx.orgId,
+      parent_task_id: workflow.id,
+      title: step.title,
+      description: step.description,
+      hub: plan.hub,
+      assigned_agent: step.agent,
+      status: "pending",
+      progress: 0,
+      requires_approval: false,
+      created_by: ctx.actorId,
+      step_order: i + 1,
+    });
+  }
+
   await recordEvent(ctx, {
-    taskId: task.id,
-    type: "task.progress",
-    agent: task.assigned_agent,
-    hub: task.hub,
-    payload: { progress: 0.5, message: `${task.assigned_agent} is working…` },
+    taskId: workflow.id,
+    type: "task.created",
+    agent: "associate",
+    hub: plan.hub,
+    payload: { title: plan.title, steps: plan.steps.length },
   });
 
   const { data: approval } = await ctx.supabase
     .from("approvals")
     .insert({
       organization_id: ctx.orgId,
-      task_id: task.id,
-      requested_by_agent: task.assigned_agent,
-      summary: `Proposed result for: ${task.title}`,
+      task_id: workflow.id,
+      requested_by_agent: "associate",
+      summary: `Approve & automate: ${plan.title}`,
     })
     .select("id")
     .single();
 
-  await ctx.supabase
-    .from("tasks")
-    .update({ status: "awaiting_approval", progress: 0.8 })
-    .eq("id", task.id);
-
   await recordEvent(ctx, {
-    taskId: task.id,
+    taskId: workflow.id,
     type: "approval.requested",
-    agent: task.assigned_agent,
-    hub: task.hub,
-    payload: { approval_id: approval?.id, summary: `Proposed result for: ${task.title}` },
+    agent: "associate",
+    hub: plan.hub,
+    payload: { approval_id: approval?.id, summary: plan.summary },
   });
 
-  return approval?.id ?? null;
+  return { workflow, approvalId: approval?.id ?? null };
 }
 
-/** Entry point for POST /prompt: store the prompt, route it, create the task. */
+/** POST /prompt — plan the prompt into a workflow awaiting approval. */
 export async function handlePrompt(ctx: Ctx, body: string) {
-  const routing = routePrompt(body);
+  const plan = await generatePlan(body);
 
   const { data: prompt } = await ctx.supabase
     .from("prompts")
@@ -144,122 +153,113 @@ export async function handlePrompt(ctx: Ctx, body: string) {
       organization_id: ctx.orgId,
       principal_id: ctx.actorId,
       body,
-      routed_hub: routing.hub,
-      routed_agent: routing.agent,
-      parsed_intent: {
-        hub: routing.hub,
-        agent: routing.agent,
-        graph: routing.graph,
-      } as Json,
+      routed_hub: plan.hub,
+      routed_agent: plan.steps[0]?.agent ?? "associate",
+      parsed_intent: plan as unknown as Json,
     })
     .select("id")
     .single();
 
-  const task = await createTask(ctx, {
-    title: routing.title,
-    description: body,
-    hub: routing.hub,
-    agent: routing.agent,
-    graph: routing.graph,
+  const { workflow, approvalId } = await materializePlan(ctx, body, plan, {
     promptId: prompt?.id ?? null,
   });
 
-  return { routing, prompt_id: prompt?.id ?? null, task };
+  return { plan, workflow, approval_id: approvalId };
 }
 
-/** Entry point for POST /task. Also used internally by handlePrompt. */
-export async function createTask(
-  ctx: Ctx,
-  args: {
-    title: string;
-    description?: string | null;
-    hub: Hub;
-    agent: AgentKey;
-    graph?: GraphKind | null;
-    promptId?: string | null;
-    requiresApproval?: boolean;
-  },
-): Promise<Task> {
-  const { data: task, error } = await ctx.supabase
+/** Run every step of an approved workflow, each producing a deliverable. */
+async function executeWorkflow(ctx: Ctx, workflow: Task) {
+  await ctx.supabase
     .from("tasks")
-    .insert({
-      organization_id: ctx.orgId,
-      prompt_id: args.promptId ?? null,
-      title: args.title,
-      description: args.description ?? null,
-      hub: args.hub,
-      assigned_agent: args.agent,
-      graph_touched: args.graph ?? null,
-      requires_approval: args.requiresApproval ?? true,
-      status: "pending",
-      progress: 0,
-      created_by: ctx.actorId,
-    })
-    .select("*")
-    .single();
+    .update({ status: "in_progress", progress: 0.05 })
+    .eq("id", workflow.id);
 
-  if (error || !task) throw new Error(error?.message ?? "Failed to create task");
-
-  await recordEvent(ctx, {
-    taskId: task.id,
-    type: "task.created",
-    agent: args.agent,
-    hub: args.hub,
-    payload: { title: args.title },
-  });
-
-  await runMockExecution(ctx, {
-    id: task.id,
-    hub: args.hub,
-    assigned_agent: args.agent,
-    title: args.title,
-  });
-
-  return task;
-}
-
-/** POST /handoff: transfer a task to another agent. */
-export async function handoffTask(
-  ctx: Ctx,
-  args: { taskId: string; toAgent: AgentKey; reason?: string },
-) {
-  const { data: task } = await ctx.supabase
+  const { data: steps } = await ctx.supabase
     .from("tasks")
     .select("*")
-    .eq("id", args.taskId)
-    .single();
-  if (!task) throw new Error("Task not found");
+    .eq("parent_task_id", workflow.id)
+    .order("step_order", { ascending: true });
 
-  await ctx.supabase.from("task_handoffs").insert({
-    organization_id: ctx.orgId,
-    task_id: args.taskId,
-    from_agent: task.assigned_agent,
-    to_agent: args.toAgent,
-    reason: args.reason ?? null,
-  });
+  const list = (steps ?? []) as Task[];
+  const priorOutputs: string[] = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const step = list[i];
+    await ctx.supabase
+      .from("tasks")
+      .update({ status: "in_progress", progress: 0.5 })
+      .eq("id", step.id);
+    await recordEvent(ctx, {
+      taskId: workflow.id,
+      type: "task.progress",
+      agent: step.assigned_agent,
+      hub: step.hub,
+      payload: { step_id: step.id, message: `${step.title}…`, active_step: step.step_order },
+    });
+
+    const output = await executeStep({
+      workflowTitle: workflow.title,
+      agent: step.assigned_agent,
+      stepTitle: step.title,
+      stepDescription: step.description ?? "",
+      priorOutputs,
+    });
+    priorOutputs.push(`${step.title}:\n${output}`);
+
+    await ctx.supabase
+      .from("tasks")
+      .update({
+        status: "completed",
+        progress: 1,
+        completed_at: new Date().toISOString(),
+        result: { output } as Json,
+      })
+      .eq("id", step.id);
+    await recordEvent(ctx, {
+      taskId: workflow.id,
+      type: "task.completed",
+      agent: step.assigned_agent,
+      hub: step.hub,
+      payload: { step_id: step.id, message: `${step.title} — done` },
+    });
+
+    await ctx.supabase
+      .from("tasks")
+      .update({ progress: (i + 1) / Math.max(list.length, 1) })
+      .eq("id", workflow.id);
+  }
 
   await ctx.supabase
     .from("tasks")
-    .update({ assigned_agent: args.toAgent, status: "in_progress" })
-    .eq("id", args.taskId);
+    .update({
+      status: "completed",
+      progress: 1,
+      completed_at: new Date().toISOString(),
+      result: { steps: list.map((s) => s.title) } as Json,
+    })
+    .eq("id", workflow.id);
 
   await recordEvent(ctx, {
-    taskId: args.taskId,
-    type: "task.handoff",
-    agent: args.toAgent,
-    hub: task.hub,
-    payload: { from_agent: task.assigned_agent, to_agent: args.toAgent, reason: args.reason },
+    taskId: workflow.id,
+    type: "task.completed",
+    agent: "associate",
+    hub: workflow.hub,
+    payload: { message: `Completed: ${workflow.title}` },
   });
+  if (workflow.graph_touched) {
+    await recordEvent(ctx, {
+      taskId: workflow.id,
+      type: "graph.update",
+      hub: workflow.hub,
+      payload: { graph: workflow.graph_touched },
+    });
+  }
 }
 
-/** POST /approve: capture the human decision and resolve the loop. */
+/** POST /approve — capture the human decision and drive automation. */
 export async function decideApproval(
   ctx: Ctx,
-  args: {
-    approvalId: string;
-    decision: "approved" | "rejected" | "regenerate";
-    note?: string;
-  },
+  args: { approvalId: string; decision: "approved" | "rejected" | "regenerate"; note?: string },
 ) {
   const { data: approval } = await ctx.supabase
     .from("approvals")
@@ -278,58 +278,35 @@ export async function decideApproval(
     })
     .eq("id", args.approvalId);
 
-  const { data: task } = await ctx.supabase
+  const { data: workflow } = await ctx.supabase
     .from("tasks")
     .select("*")
     .eq("id", approval.task_id)
     .single();
-  if (!task) throw new Error("Task not found");
+  if (!workflow) throw new Error("Workflow not found");
+  const wf = workflow as Task;
 
   await recordEvent(ctx, {
-    taskId: task.id,
+    taskId: wf.id,
     type: "approval.response",
-    agent: task.assigned_agent,
-    hub: task.hub,
+    agent: "associate",
+    hub: wf.hub,
     payload: { approval_id: args.approvalId, decision: args.decision },
   });
 
   if (args.decision === "approved") {
+    await executeWorkflow(ctx, wf);
+  } else if (args.decision === "rejected") {
+    await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
     await ctx.supabase
       .from("tasks")
-      .update({
-        status: "completed",
-        progress: 1,
-        completed_at: new Date().toISOString(),
-        result: { approved: true, summary: `Completed: ${task.title}` } as Json,
-      })
-      .eq("id", task.id);
-    await recordEvent(ctx, {
-      taskId: task.id,
-      type: "task.completed",
-      agent: task.assigned_agent,
-      hub: task.hub,
-      payload: { message: `Completed: ${task.title}` },
-    });
-    if (task.graph_touched) {
-      await recordEvent(ctx, {
-        taskId: task.id,
-        type: "graph.update",
-        agent: task.assigned_agent,
-        hub: task.hub,
-        payload: { graph: task.graph_touched },
-      });
-    }
-  } else if (args.decision === "rejected") {
-    await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", task.id);
+      .update({ status: "cancelled" })
+      .eq("parent_task_id", wf.id);
   } else {
-    // regenerate: run another execution pass that raises a fresh approval.
-    await runMockExecution(ctx, {
-      id: task.id,
-      hub: task.hub,
-      assigned_agent: task.assigned_agent,
-      title: task.title,
-    });
+    // regenerate: build a fresh plan from the original prompt and re-gate.
+    const plan = await generatePlan(wf.description ?? wf.title);
+    await materializePlan(ctx, wf.description ?? wf.title, plan, { workflowId: wf.id });
   }
 
-  return { taskId: task.id, decision: args.decision };
+  return { workflowId: wf.id, decision: args.decision };
 }

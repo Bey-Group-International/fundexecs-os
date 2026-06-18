@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createOrganization } from "./actions";
 
 const TOTAL_STEPS = 4;
@@ -46,6 +47,7 @@ interface FormData {
 }
 
 export default function OnboardingWizard({ error }: { error?: string }) {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState(error ?? "");
@@ -84,7 +86,13 @@ export default function OnboardingWizard({ error }: { error?: string }) {
     fd.append("strategy", data.strategy);
     fd.append("first_hub", data.first_hub);
     try {
-      await createOrganization(fd);
+      const result = await createOrganization(fd);
+      if (result?.error) {
+        setFormError(result.error);
+        setPending(false);
+        return;
+      }
+      router.replace("/workspace");
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "Something went wrong");
       setPending(false);
@@ -92,13 +100,13 @@ export default function OnboardingWizard({ error }: { error?: string }) {
   };
 
   const inputCls =
-    "w-full rounded-md border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder-neutral-600 outline-none transition focus:border-agent-associate focus:bg-white/[0.07]";
+    "w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 text-sm text-fg-primary placeholder-fg-muted outline-none transition focus:border-gold-500 focus:bg-surface-2";
 
   const optionCls = (selected: boolean) =>
     `cursor-pointer rounded-lg border px-4 py-3 text-left transition ${
       selected
-        ? "border-agent-associate bg-agent-associate/10 text-white"
-        : "border-white/10 bg-white/[0.02] text-neutral-400 hover:border-white/20 hover:bg-white/5"
+        ? "border-gold-500 bg-gold-400/10 text-fg-primary"
+        : "border-line bg-surface-1 text-fg-secondary hover:border-gold-500/40 hover:bg-surface-2"
     }`;
 
   return (
@@ -106,16 +114,16 @@ export default function OnboardingWizard({ error }: { error?: string }) {
       {/* Progress bar */}
       <div className="mb-8">
         <div className="mb-2 flex justify-between">
-          <span className="font-mono text-xs text-neutral-600">
+          <span className="font-mono text-xs text-fg-muted">
             Step {step} of {TOTAL_STEPS}
           </span>
-          <span className="font-mono text-xs text-neutral-600">
+          <span className="font-mono text-xs text-fg-muted">
             {Math.round((step / TOTAL_STEPS) * 100)}%
           </span>
         </div>
-        <div className="h-0.5 w-full overflow-hidden rounded-full bg-white/5">
+        <div className="h-0.5 w-full overflow-hidden rounded-full bg-surface-2">
           <div
-            className="h-full rounded-full bg-agent-associate transition-all duration-500"
+            className="h-full rounded-full bg-gold-400 transition-all duration-500"
             style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
           />
         </div>
@@ -130,19 +138,19 @@ export default function OnboardingWizard({ error }: { error?: string }) {
       {/* Step 1 — Org identity */}
       {step === 1 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-agent-associate">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
             Build · Identity
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
             Name your organization
           </h2>
-          <p className="mt-1.5 text-sm text-neutral-500">
+          <p className="mt-1.5 text-sm text-fg-secondary">
             Your GP firm, fund, or family office. Everything you build lives
             inside this organization.
           </p>
           <div className="mt-6 flex flex-col gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-neutral-500">Organization name *</label>
+              <label className="text-xs text-fg-secondary">Organization name *</label>
               <input
                 className={inputCls}
                 placeholder="Apex Capital Partners"
@@ -152,7 +160,7 @@ export default function OnboardingWizard({ error }: { error?: string }) {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-neutral-500">Entity type</label>
+              <label className="text-xs text-fg-secondary">Entity type</label>
               <input
                 className={inputCls}
                 placeholder="LP, LLC, GP — optional"
@@ -161,7 +169,7 @@ export default function OnboardingWizard({ error }: { error?: string }) {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-neutral-500">Headquarters</label>
+              <label className="text-xs text-fg-secondary">Headquarters</label>
               <input
                 className={inputCls}
                 placeholder="New York, NY — optional"
@@ -176,13 +184,13 @@ export default function OnboardingWizard({ error }: { error?: string }) {
       {/* Step 2 — Operator role */}
       {step === 2 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-agent-associate">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
             Build · Role
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
             What best describes you?
           </h2>
-          <p className="mt-1.5 text-sm text-neutral-500">
+          <p className="mt-1.5 text-sm text-fg-secondary">
             This tells the agents how to configure your workspace.
           </p>
           <div className="mt-6 flex flex-col gap-2">
@@ -200,7 +208,7 @@ export default function OnboardingWizard({ error }: { error?: string }) {
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-neutral-500">AUM range</label>
+              <label className="text-xs text-fg-secondary">AUM range</label>
               <select
                 className={inputCls}
                 value={data.aum_range}
@@ -213,7 +221,7 @@ export default function OnboardingWizard({ error }: { error?: string }) {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-neutral-500">Active funds</label>
+              <label className="text-xs text-fg-secondary">Active funds</label>
               <input
                 className={inputCls}
                 type="number"
@@ -230,13 +238,13 @@ export default function OnboardingWizard({ error }: { error?: string }) {
       {/* Step 3 — Strategy */}
       {step === 3 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-agent-associate">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
             Build · Strategy
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
             What is your primary strategy?
           </h2>
-          <p className="mt-1.5 text-sm text-neutral-500">
+          <p className="mt-1.5 text-sm text-fg-secondary">
             Agents will calibrate deal templates, diligence checklists, and
             underwriting models to your asset class.
           </p>
@@ -259,13 +267,13 @@ export default function OnboardingWizard({ error }: { error?: string }) {
       {/* Step 4 — First hub */}
       {step === 4 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-agent-associate">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
             Activation
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
             Where do you want to start?
           </h2>
-          <p className="mt-1.5 text-sm text-neutral-500">
+          <p className="mt-1.5 text-sm text-fg-secondary">
             Your Associate Agent will activate this hub first. You can access
             all hubs at any time.
           </p>
@@ -291,7 +299,7 @@ export default function OnboardingWizard({ error }: { error?: string }) {
           <button
             onClick={() => setStep((s) => s - 1)}
             type="button"
-            className="rounded-md border border-white/10 px-4 py-2 text-sm text-neutral-400 transition hover:bg-white/5"
+            className="rounded-md border border-line px-4 py-2 text-sm text-fg-secondary transition hover:bg-surface-2"
           >
             Back
           </button>
@@ -304,7 +312,7 @@ export default function OnboardingWizard({ error }: { error?: string }) {
             onClick={() => setStep((s) => s + 1)}
             disabled={!canNext()}
             type="button"
-            className="rounded-md bg-agent-associate px-5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-30"
+            className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:opacity-30"
           >
             Continue
           </button>
@@ -313,7 +321,7 @@ export default function OnboardingWizard({ error }: { error?: string }) {
             onClick={handleSubmit}
             disabled={!canNext() || pending}
             type="button"
-            className="rounded-md bg-agent-associate px-5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-30"
+            className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:opacity-30"
           >
             {pending ? "Creating…" : "Launch workspace"}
           </button>

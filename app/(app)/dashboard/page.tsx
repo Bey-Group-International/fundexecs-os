@@ -1,0 +1,173 @@
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { getSessionContext } from "@/lib/auth";
+import { createServerClient } from "@/lib/supabase/server";
+import { AGENTS } from "@/lib/agents";
+import type { Task, Deal, Asset, AgentKey } from "@/lib/supabase/database.types";
+
+export const dynamic = "force-dynamic";
+
+const AGENT_GROUPS: { label: string; keys: AgentKey[] }[] = [
+  { label: "Research", keys: ["analyst", "diligence"] },
+  { label: "Workflow", keys: ["associate", "investor_relations"] },
+  { label: "Execution", keys: ["portfolio_ops", "fund_admin"] },
+];
+
+const ACTIVE = new Set(["pending", "in_progress", "awaiting_approval", "blocked"]);
+const DEAL_STAGES = ["sourced", "screening", "diligence", "ic_review", "closing"] as const;
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-1 p-4">
+      <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{label}</p>
+      <p className="mt-1 font-display text-2xl font-semibold text-fg-primary">{value}</p>
+    </div>
+  );
+}
+
+export default async function DashboardPage() {
+  const ctx = await getSessionContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.orgId) redirect("/onboarding");
+
+  const supabase = createServerClient();
+  const [allTasksRes, workflowsRes, dealsRes, assetsRes] = await Promise.all([
+    supabase.from("tasks").select("*"),
+    supabase
+      .from("tasks")
+      .select("*")
+      .is("parent_task_id", null)
+      .order("created_at", { ascending: false })
+      .limit(6),
+    supabase.from("deals").select("*").order("created_at", { ascending: false }).limit(8),
+    supabase.from("assets").select("*").order("created_at", { ascending: false }).limit(8),
+  ]);
+
+  const tasks = (allTasksRes.data ?? []) as Task[];
+  const workflows = (workflowsRes.data ?? []) as Task[];
+  const deals = (dealsRes.data ?? []) as Deal[];
+  const assets = (assetsRes.data ?? []) as Asset[];
+
+  const stepsCompleted = tasks.filter((t) => t.parent_task_id && t.status === "completed").length;
+  const workload = new Map<AgentKey, number>();
+  for (const t of tasks) {
+    if (ACTIVE.has(t.status)) workload.set(t.assigned_agent, (workload.get(t.assigned_agent) ?? 0) + 1);
+  }
+  const dealByStage = new Map<string, number>();
+  for (const d of deals) dealByStage.set(d.stage, (dealByStage.get(d.stage) ?? 0) + 1);
+
+  return (
+    <div className="mx-auto max-w-5xl">
+      <header className="mb-6">
+        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          Command Center
+        </span>
+        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
+          Private Markets Command Center
+        </h1>
+        <p className="mt-1 text-sm text-fg-secondary">
+          Everything the Copilot produces, organized.
+        </p>
+      </header>
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Workflows" value={workflows.length} />
+        <Stat label="Steps completed" value={stepsCompleted} />
+        <Stat label="Deals in pipeline" value={deals.length} />
+        <Stat label="Portfolio assets" value={assets.length} />
+      </section>
+
+      <section className="mt-8">
+        <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
+          AI Agent Workforce
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {AGENT_GROUPS.map((group) => (
+            <div key={group.label} className="rounded-xl border border-line bg-surface-1 p-4">
+              <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
+                {group.label}
+              </p>
+              <div className="flex flex-col gap-2.5">
+                {group.keys.map((key) => {
+                  const agent = AGENTS.find((a) => a.key === key)!;
+                  const count = workload.get(key) ?? 0;
+                  return (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: agent.color }} />
+                      <span className="text-sm text-fg-primary">{agent.name}</span>
+                      <span className="ml-auto font-mono text-[10px] text-fg-muted">
+                        {count > 0 ? `${count} active` : "idle"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div>
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
+            Recent workflows
+          </h2>
+          <div className="flex flex-col gap-2">
+            {workflows.length === 0 ? (
+              <p className="text-sm text-fg-muted">
+                None yet —{" "}
+                <Link href="/workspace" className="text-gold-400 hover:underline">
+                  run one in the Copilot
+                </Link>
+                .
+              </p>
+            ) : null}
+            {workflows.map((w) => (
+              <div
+                key={w.id}
+                className="flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-2"
+              >
+                <span className="truncate text-sm text-fg-primary">{w.title}</span>
+                <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  {w.hub} · {w.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
+            Deal pipeline
+          </h2>
+          <div className="grid grid-cols-5 gap-1.5">
+            {DEAL_STAGES.map((stage) => (
+              <div key={stage} className="rounded-lg border border-line bg-surface-1 p-2 text-center">
+                <p className="font-display text-lg font-semibold text-fg-primary">
+                  {dealByStage.get(stage) ?? 0}
+                </p>
+                <p className="font-mono text-[9px] uppercase tracking-wide text-fg-muted">
+                  {stage.replace("_", " ")}
+                </p>
+              </div>
+            ))}
+          </div>
+          {deals.length === 0 ? (
+            <p className="mt-3 text-xs text-fg-muted">
+              Deals created by Source-hub workflows appear here.
+            </p>
+          ) : (
+            <div className="mt-3 flex flex-col gap-1.5">
+              {deals.slice(0, 5).map((d) => (
+                <div key={d.id} className="flex items-center gap-2 text-sm">
+                  <span className="truncate text-fg-primary">{d.name}</span>
+                  <span className="ml-auto font-mono text-[10px] text-fg-muted">{d.stage}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}

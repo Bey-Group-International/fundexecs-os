@@ -5,8 +5,8 @@
 > It is read by AI coding tools, executed by the Associate Agent, and updated by the system itself as it learns.
 > It is the first module of FundExecs OS. Treat it as source of truth.
 > **Last updated:** 2026-06-18
-> **Build phase:** Pre-Alpha — Scaffolding (task-engine loop landed)
-> **Confidence level:** Integrated, not yet tested (loop builds end-to-end; not yet run against a live DB)
+> **Build phase:** Alpha — Agent Implementation (real Claude Copilot landed)
+> **Confidence level:** Integrated, not yet tested (Copilot + multi-step engine build end-to-end; live Claude wired)
 
 ---
 
@@ -302,6 +302,25 @@ Deployed, monitoring               →  live, observability active
              |  Database map. Aligned @supabase/ssr → ^0.12 with supabase-js ^2.108.
              |  Confidence: Integrated, not yet tested.
              |  Next: replace mock execution with real agents; intent parser; more hub modules.
+
+2026-06-18  |  AI Agent Copilot + Command Center  |  Real Claude, multi-step plans, new visual system.
+             |  Decisions (per founder): Copilot is the primary surface AND a Command Center
+             |  dashboard organizes its output; multi-step agent plans; REAL Claude now;
+             |  adopt the design's visual system globally (keep agent colors).
+             |  Built: global theme (warm-black/gold, Space Grotesk / DM Sans / JetBrains Mono
+             |  via next/font, Tailwind tokens); lib/claude.ts (claude-opus-4-8) — plan
+             |  generation via structured outputs + per-step execution with adaptive thinking,
+             |  deterministic fallback when ANTHROPIC_API_KEY is absent; engine reworked to
+             |  workflow (parent task) + ordered steps (child tasks), migration 0013 adds
+             |  step_order; /prompt plans, /approve executes each step (maxDuration raised);
+             |  Copilot UI (prompt → plan → step cards → approve & automate, Realtime) replaces
+             |  the minimal workspace; Command Center dashboard at /dashboard; restyled auth/
+             |  onboarding/profile/landing to the theme. Removed /api/handoff (handoffs are now
+             |  implicit in multi-agent step plans).
+             |  ANTHROPIC_API_KEY is configured in the deployment.
+             |  Confidence: Integrated, not yet tested.
+             |  Next: surface step deliverables as first-class artifacts; persist deals/assets
+             |  from Source/Execute workflows so the Command Center populates from real work.
 ```
 
 ---

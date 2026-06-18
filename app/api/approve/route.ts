@@ -3,6 +3,9 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { decideApproval } from "@/lib/engine";
 
+// Approval triggers step execution, which calls Claude per step.
+export const maxDuration = 300;
+
 const DECISIONS = ["approved", "rejected", "regenerate"] as const;
 type Decision = (typeof DECISIONS)[number];
 

@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 
@@ -14,32 +13,24 @@ function slugify(name: string): string {
   );
 }
 
-interface OrgInsert {
-  name: string;
-  slug: string;
-  entity_type: string | null;
-  hq_location: string | null;
-  operator_role: string | null;
-  aum_range: string | null;
-  fund_count: number | null;
-  primary_strategy: string | null;
-  first_hub: string | null;
-  created_by: string;
-}
-
-// Creates the organization. The DB trigger handle_new_organization adds the
-// creating principal as owner, so the new org is immediately accessible.
-export async function createOrganization(formData: FormData) {
+// Creates the organization and its firm profile. The DB trigger
+// handle_new_organization adds the creating principal as owner, so the new org
+// is immediately accessible. Returns a result instead of redirecting — the
+// client wizard navigates on success, so a redirect can't be swallowed by its
+// try/catch.
+export async function createOrganization(
+  formData: FormData,
+): Promise<{ error?: string }> {
   const ctx = await getSessionContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) return { error: "Not authenticated" };
 
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) redirect("/onboarding?error=Name+is+required");
+  if (!name) return { error: "Organization name is required" };
 
   const supabase = createServerClient();
   const slug = `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`;
 
-  const payload: OrgInsert = {
+  const { error } = await supabase.from("organizations").insert({
     name,
     slug,
     entity_type: String(formData.get("entity_type") ?? "") || null,
@@ -49,18 +40,9 @@ export async function createOrganization(formData: FormData) {
     fund_count: Number(formData.get("fund_count")) || null,
     primary_strategy: String(formData.get("strategy") ?? "") || null,
     first_hub: String(formData.get("first_hub") ?? "") || null,
-    created_by: ctx!.userId,
-  };
+    created_by: ctx.userId,
+  });
 
-  // Extra onboarding fields are not yet in the generated types — insert via unknown cast
-  // until the Supabase migration adding these columns is applied.
-  const table = supabase.from("organizations") as unknown as {
-    insert: (v: OrgInsert) => Promise<{ error: { message: string } | null }>;
-  };
-  const { error } = await table.insert(payload);
-
-  if (error) {
-    redirect(`/onboarding?error=${encodeURIComponent(error.message)}`);
-  }
-  redirect("/workspace");
+  if (error) return { error: error.message };
+  return {};
 }

@@ -91,6 +91,12 @@ export type Organization = Timestamps & {
   brand_color: string | null;
   description: string | null;
   created_by: string | null;
+  hq_location: string | null;
+  operator_role: string | null;
+  aum_range: string | null;
+  fund_count: number | null;
+  primary_strategy: string | null;
+  first_hub: string | null;
 }
 
 export type OrganizationMember = {
@@ -264,6 +270,7 @@ export type Task = Timestamps & {
   result: Json | null;
   created_by: string | null;
   completed_at: string | null;
+  step_order: number;
 }
 
 export type Approval = Timestamps & {
