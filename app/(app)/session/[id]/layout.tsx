@@ -1,14 +1,15 @@
 import { notFound, redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
-import { getWalletBalance } from "@/lib/wallet";
 import type { Session, Task } from "@/lib/supabase/database.types";
-import { SessionCommandBar, type BarTask } from "@/components/session/SessionCommandBar";
+import { ActiveSessionSetter } from "@/components/session/active-session";
+import type { BarTask } from "@/components/session/SessionCommandBar";
 
 export const dynamic = "force-dynamic";
 
-// The session frame. The command bar persists while nested module routes swap
-// below it, so switching modules never reloads the page or exits the session.
+// The session frame publishes its session into the global top bar (which then
+// shows Session Name + Share + ⋮ Session Actions). The bar itself lives in the
+// app shell, so switching modules below never reloads or exits the session.
 export default async function SessionLayout({
   children,
   params,
@@ -30,15 +31,12 @@ export default async function SessionLayout({
   if (!data) notFound();
   const session = data as Session;
 
-  const [{ data: taskData }, balance] = await Promise.all([
-    supabase
-      .from("tasks")
-      .select("*")
-      .eq("session_id", session.id)
-      .order("created_at", { ascending: false })
-      .limit(50),
-    getWalletBalance(ctx.orgId),
-  ]);
+  const { data: taskData } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("session_id", session.id)
+    .order("created_at", { ascending: false })
+    .limit(50);
   const tasks: BarTask[] = ((taskData ?? []) as Task[]).map((t) => ({
     id: t.id,
     title: t.title,
@@ -46,15 +44,12 @@ export default async function SessionLayout({
   }));
 
   return (
-    <div className="-mx-8 -my-8 flex min-h-full flex-col">
-      <SessionCommandBar
-        sessionId={session.id}
-        name={session.name}
-        color={session.color}
-        balance={balance}
+    <>
+      <ActiveSessionSetter
+        session={{ id: session.id, name: session.name, color: session.color }}
         tasks={tasks}
       />
-      <div className="flex-1 px-8 py-8">{children}</div>
-    </div>
+      {children}
+    </>
   );
 }
