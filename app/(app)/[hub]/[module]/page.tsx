@@ -5,6 +5,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { updateProfile } from "./actions";
+import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
+import AddRowForm from "@/components/AddRowForm";
 
 export const dynamic = "force-dynamic";
 
@@ -188,9 +190,13 @@ export default async function ModulePage({
       .order("created_at", { ascending: false })
       .limit(50);
     const rows = (data ?? []) as unknown as Record<string, unknown>[];
+    const addConfig = ADD_ROW_CONFIGS[key];
     return (
       <div className="mx-auto max-w-4xl">
         {Header}
+        {addConfig ? (
+          <AddRowForm hub={hub.key} module={mod.key} fields={addConfig.fields} />
+        ) : null}
         {rows.length === 0 ? (
           <div className="rounded-xl border border-line bg-surface-1 p-8 text-center">
             <p className="text-sm text-fg-secondary">{cfg.empty}</p>

@@ -167,6 +167,76 @@ export async function handlePrompt(ctx: Ctx, body: string) {
   return { plan, workflow, approval_id: approvalId };
 }
 
+/** Build a short, single-line summary from step outputs, truncated. */
+function summarize(priorOutputs: string[], max: number): string {
+  const text = priorOutputs.join(" ").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value;
+}
+
+/**
+ * Best-effort: turn the finished workflow into one real domain record so the
+ * hub modules populate from actual work. Failures are swallowed — they must
+ * never fail the workflow. "run" artifacts need a deal FK, so we skip them.
+ */
+async function persistArtifact(ctx: Ctx, workflow: Task, priorOutputs: string[]) {
+  try {
+    let created: string | null = null;
+
+    switch (workflow.hub) {
+      case "source": {
+        const { error } = await ctx.supabase.from("deals").insert({
+          organization_id: ctx.orgId,
+          name: truncate(workflow.title, 80),
+          stage: "sourced",
+          source: "copilot",
+          notes: summarize(priorOutputs, 500),
+          lead_principal: ctx.actorId,
+        });
+        if (!error) created = "deal";
+        break;
+      }
+      case "build": {
+        const { error } = await ctx.supabase.from("investment_theses").insert({
+          organization_id: ctx.orgId,
+          title: truncate(workflow.title, 80),
+          summary: summarize(priorOutputs, 240),
+          is_active: true,
+        });
+        if (!error) created = "thesis";
+        break;
+      }
+      case "execute": {
+        const { error } = await ctx.supabase.from("assets").insert({
+          organization_id: ctx.orgId,
+          name: truncate(workflow.title, 80),
+          asset_type: "other",
+          status: "active",
+        });
+        if (!error) created = "asset";
+        break;
+      }
+      case "run":
+      default:
+        break;
+    }
+
+    if (created) {
+      await recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "graph.update",
+        hub: workflow.hub,
+        payload: { created, graph: hubToGraph(workflow.hub) },
+      });
+    }
+  } catch {
+    // Best-effort persistence — never fail the workflow on an artifact error.
+  }
+}
+
 /** Run every step of an approved workflow, each producing a deliverable. */
 async function executeWorkflow(ctx: Ctx, workflow: Task) {
   await ctx.supabase
@@ -254,6 +324,9 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
       payload: { graph: workflow.graph_touched },
     });
   }
+
+  // Persist a real domain record so hub modules populate from actual work.
+  await persistArtifact(ctx, workflow, priorOutputs);
 }
 
 /** POST /approve — capture the human decision and drive automation. */
