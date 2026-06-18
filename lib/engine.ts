@@ -78,7 +78,7 @@ async function materializePlan(
   ctx: Ctx,
   body: string,
   plan: AgentPlan,
-  opts: { promptId?: string | null; workflowId?: string },
+  opts: { promptId?: string | null; workflowId?: string; automationId?: string | null },
 ): Promise<{ workflow: Task; approvalId: string | null }> {
   let workflow: Task;
 
@@ -116,6 +116,7 @@ async function materializePlan(
         requires_approval: true,
         created_by: ctx.actorId,
         step_order: 0,
+        automation_id: opts.automationId ?? null,
       })
       .select("*")
       .single();
@@ -404,6 +405,34 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
       payload: { graph: workflow.graph_touched, ...outcome },
     });
   }
+}
+
+/**
+ * Fire a saved automation. Plan its natural-language instruction into a
+ * workflow (same path as a Copilot prompt), link the run back to the
+ * automation, and — only if the automation opts into autonomy — auto-approve
+ * and execute it end-to-end, unattended. Otherwise the run queues an approval
+ * for the operator, exactly like any prompt. Autonomy is opt-in; the operator
+ * is never bypassed by default.
+ */
+export async function runAutomation(
+  ctx: Ctx,
+  automation: { id: string; prompt: string; auto_approve: boolean },
+): Promise<{ workflowId: string; executed: boolean }> {
+  const plan = await generatePlan(automation.prompt);
+  const { workflow, approvalId } = await materializePlan(ctx, automation.prompt, plan, {
+    automationId: automation.id,
+  });
+
+  if (automation.auto_approve && approvalId) {
+    await decideApproval(ctx, {
+      approvalId,
+      decision: "approved",
+      note: "Auto-approved by automation",
+    });
+    return { workflowId: workflow.id, executed: true };
+  }
+  return { workflowId: workflow.id, executed: false };
 }
 
 /** POST /approve — capture the human decision and drive automation. */

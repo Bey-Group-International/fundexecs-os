@@ -42,6 +42,13 @@ export default async function AppLayout({
             <span className="font-mono text-base leading-none text-gold-400">◧</span>
             Command Center
           </Link>
+          <Link
+            href="/automations"
+            className="mt-0.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+          >
+            <span className="font-mono text-base leading-none text-gold-400">↻</span>
+            Automations
+          </Link>
 
           {HUBS.map((hub) => (
             <div key={hub.key} className="mt-4">

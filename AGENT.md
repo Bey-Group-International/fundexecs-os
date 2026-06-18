@@ -63,6 +63,15 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
   Center populates from real work. Fields (asset class, geography, target amount,
   asset type, value) are Claude-extracted from the prompt + step deliverables,
   with a deterministic fallback; idempotent on re-approval (updates in place) (read/write `organizations`)
+- ✅ Automations — saved, trigger-driven workflows ("agents that own the work").
+  A natural-language instruction + a trigger + an opt-in `auto_approve` flag.
+  Schedule triggers (cron, swept hourly by `/api/cron` via Vercel Cron) and a
+  manual "Run now" trigger are live; the `trigger_type` enum also reserves
+  email / webhook / internal-event for later increments. Trusted automations
+  execute unattended end-to-end; untrusted ones still queue the normal approval
+  gate (autonomy is opt-in, the operator is never bypassed by default). Runs
+  link back to their automation via `tasks.automation_id`. The live loop runs on
+  Haiku 4.5 by default (`CLAUDE_MODEL`-overridable) to respect a tight budget.
 
 ### What has not been built yet
 
@@ -387,6 +396,28 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Integrated, not yet tested.
              |  Next: the three-graph query layer (/graph/*) + visualizations; remaining
              |  Source/Run/Execute hub modules.
+
+2026-06-18  |  Automations (agents that own the work)  |  Tasklet-style trigger-driven workflows.
+             |  Decisions (per founder): build all trigger types (schedule/email/webhook/event)
+             |  by design but ship a thin vertical slice now (schedule + manual); opt-in
+             |  auto-approve (trusted automations run unattended, the rest still gate); live
+             |  loop on Haiku 4.5 to respect a ~$20 Anthropic budget (CLAUDE_MODEL override).
+             |  Architecture: an `automation` = NL instruction + trigger + auto_approve. A
+             |  fired trigger plans the instruction into a workflow (same materializePlan path
+             |  as a Copilot prompt); if trusted, it auto-approves + executes end-to-end,
+             |  else it queues the normal approval. Future triggers (email/webhook/event) and
+             |  external integrations (per-org connections via MCP/HTTP) reuse this same
+             |  plan→(gate|auto)→execute spine; retry/adapt-on-failure is the next autonomy step.
+             |  Built (migration-first): 0016_automations.sql — `trigger_type` enum +
+             |  `automations` table (RLS member-read/writer-write), `tasks.automation_id`.
+             |  engine.runAutomation (plan + opt-in auto-approve); /api/cron service-role sweep
+             |  (CRON_SECRET-guarded, hourly via vercel.json crons, per-sweep cap to bound
+             |  spend) advancing next_run_at; lib/cron.ts (dependency-free cron parser +
+             |  nextRun + schedule presets); server actions (create/toggle/delete/run-now);
+             |  /automations page + nav. Default model → claude-haiku-4-5.
+             |  Confidence: Integrated, not yet tested.
+             |  Next (investor-demo sprints): rework landing; Google sign-in; demo seed data;
+             |  guided walkthrough; then the three-graph query layer (/graph/*).
 ```
 
 ---
