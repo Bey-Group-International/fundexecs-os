@@ -16,7 +16,7 @@ export default async function LoginPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
-      <p className="font-mono text-xs uppercase tracking-[0.2em] text-agent-associate">
+      <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
         FundExecs OS
       </p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">
@@ -30,7 +30,7 @@ export default async function LoginPage({
       ) : null}
 
       {searchParams.message ? (
-        <p className="mt-4 rounded-md border border-agent-associate/40 bg-agent-associate/10 px-3 py-2 text-sm text-indigo-200">
+        <p className="mt-4 rounded-md border border-gold-500/40 bg-gold-400/10 px-3 py-2 text-sm text-indigo-200">
           {searchParams.message}
         </p>
       ) : null}
@@ -41,7 +41,7 @@ export default async function LoginPage({
             name="full_name"
             placeholder="Full name"
             autoComplete="name"
-            className="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm outline-none focus:border-agent-associate"
+            className="rounded-md border border-line bg-surface-1 px-3 py-2 text-sm outline-none focus:border-gold-500"
           />
         ) : null}
         <input
@@ -50,7 +50,7 @@ export default async function LoginPage({
           required
           placeholder="Email"
           autoComplete="email"
-          className="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm outline-none focus:border-agent-associate"
+          className="rounded-md border border-line bg-surface-1 px-3 py-2 text-sm outline-none focus:border-gold-500"
         />
         <input
           name="password"
@@ -59,21 +59,21 @@ export default async function LoginPage({
           minLength={6}
           placeholder="Password"
           autoComplete={isSignup ? "new-password" : "current-password"}
-          className="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm outline-none focus:border-agent-associate"
+          className="rounded-md border border-line bg-surface-1 px-3 py-2 text-sm outline-none focus:border-gold-500"
         />
         <button
           formAction={isSignup ? signUp : signIn}
-          className="mt-1 rounded-md bg-agent-associate px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
+          className="mt-1 rounded-md bg-gold-400 px-3 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90"
         >
           {isSignup ? "Create account" : "Sign in"}
         </button>
       </form>
 
-      <p className="mt-6 text-sm text-neutral-500">
+      <p className="mt-6 text-sm text-fg-muted">
         {isSignup ? (
           <>
             Already have an account?{" "}
-            <Link href="/login" className="text-agent-associate hover:underline">
+            <Link href="/login" className="text-gold-400 hover:underline">
               Sign in
             </Link>
           </>
@@ -82,7 +82,7 @@ export default async function LoginPage({
             New here?{" "}
             <Link
               href="/login?mode=signup"
-              className="text-agent-associate hover:underline"
+              className="text-gold-400 hover:underline"
             >
               Create an account
             </Link>

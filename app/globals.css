@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --background: #0a0a0f;
-  --foreground: #e8e8f0;
+  --background: #0b0a08;
+  --foreground: #f5f1e8;
 }
 
 html {
@@ -14,4 +14,23 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: rgba(212, 175, 106, 0.3);
+}
+
+/* Thin, warm scrollbars to match the surface ramp */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2c2820 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2c2820;
+  border-radius: 4px;
 }

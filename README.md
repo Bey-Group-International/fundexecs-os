@@ -232,14 +232,18 @@ migration workflow.
 - [x] Frontend scaffold (Next.js + Tailwind)
 - [x] Database schema + RLS (versioned migrations)
 - [x] Auth + organization onboarding
-- [x] Backend API (prompt → task → handoff → approve loop, with mock agents)
+- [x] Backend API (prompt → plan → approve → automate loop)
 - [x] WebSocket event gateway (Realtime over `task_events`)
+- [x] **Real AI agent engine** — Claude-powered multi-step plans (`claude-opus-4-8`)
+- [x] **AI Agent Copilot** — primary surface (prompt → plan → step cards → approve & automate)
+- [x] **Command Center dashboard** — organizes the Copilot's output
+- [x] Product visual system (warm-black/gold, Space Grotesk / DM Sans / JetBrains Mono)
 - [x] Build Hub — Profile module
-- [ ] Supabase schema deployment (to a fixed live project)
-- [ ] Real AI agent engine (replace mock execution)
+- [ ] Surface step deliverables as first-class artifacts (IC memos, models)
+- [ ] Persist deals/assets from workflows so the Command Center populates from real work
 - [ ] Three-graph data architecture (query layer + `/graph/*`)
 - [ ] Three.js avatar workspace
-- [ ] Source / Run / Execute hub modules
+- [ ] Remaining Source / Run / Execute hub modules
 - [ ] Build Hub — Profile, Thesis, Entity modules
 - [ ] Source Hub — LP Pipeline, Deal Pipeline
 - [ ] Run Hub — Underwriting, Diligence, Stress Test

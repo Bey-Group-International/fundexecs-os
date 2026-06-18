@@ -13,13 +13,13 @@ export default async function OnboardingPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
-      <p className="font-mono text-xs uppercase tracking-[0.2em] text-agent-associate">
+      <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
         Build · Identity
       </p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">
         Create your organization
       </h1>
-      <p className="mt-2 text-sm text-neutral-400">
+      <p className="mt-2 text-sm text-fg-secondary">
         Your GP firm, fund, or family office. This is the tenancy root —
         everything you build lives inside it.
       </p>
@@ -35,14 +35,14 @@ export default async function OnboardingPage({
           name="name"
           required
           placeholder="Organization name"
-          className="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm outline-none focus:border-agent-associate"
+          className="rounded-md border border-line bg-surface-1 px-3 py-2 text-sm outline-none focus:border-gold-500"
         />
         <input
           name="entity_type"
           placeholder="Entity type (e.g. LLC, LP) — optional"
-          className="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm outline-none focus:border-agent-associate"
+          className="rounded-md border border-line bg-surface-1 px-3 py-2 text-sm outline-none focus:border-gold-500"
         />
-        <button className="mt-1 rounded-md bg-agent-associate px-3 py-2 text-sm font-medium text-white transition hover:opacity-90">
+        <button className="mt-1 rounded-md bg-gold-400 px-3 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90">
           Create organization
         </button>
       </form>

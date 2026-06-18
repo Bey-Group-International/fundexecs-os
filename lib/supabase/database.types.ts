@@ -264,6 +264,7 @@ export type Task = Timestamps & {
   result: Json | null;
   created_by: string | null;
   completed_at: string | null;
+  step_order: number;
 }
 
 export type Approval = Timestamps & {
