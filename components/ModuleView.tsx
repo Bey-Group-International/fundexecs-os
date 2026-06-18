@@ -5,6 +5,12 @@ import { createServerClient } from "@/lib/supabase/server";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { updateProfile } from "@/app/(app)/[hub]/[module]/actions";
+import { ThesisModule } from "@/components/build/ThesisModule";
+import { BrandModule } from "@/components/build/BrandModule";
+import { EntityModule } from "@/components/build/EntityModule";
+import { TrackRecordModule } from "@/components/build/TrackRecordModule";
+import { TeamModule } from "@/components/build/TeamModule";
+import { ModuleHeader } from "@/components/build/DraftWithEarn";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 
@@ -123,6 +129,16 @@ export async function ModuleView({ hub: hubKey, module: moduleKey }: { hub: stri
   const key = `${hub.key}/${mod.key}`;
   const supabase = createServerClient();
 
+  // --- Build hub: dedicated editable modules -------------------------------
+  if (hub.key === "build") {
+    if (mod.key === "thesis") return <ThesisModule />;
+    if (mod.key === "brand") return <BrandModule />;
+    if (mod.key === "entity") return <EntityModule />;
+    if (mod.key === "track_record") return <TrackRecordModule />;
+    if (mod.key === "team") return <TeamModule />;
+    // profile falls through to the editable org form below
+  }
+
   // --- Build › Profile: editable org identity ------------------------------
   if (key === "build/profile") {
     const { data: org } = await supabase
@@ -131,7 +147,13 @@ export async function ModuleView({ hub: hubKey, module: moduleKey }: { hub: stri
       .eq("id", ctx.orgId)
       .maybeSingle();
     return (
-      <form action={updateProfile} className="flex max-w-xl flex-col gap-4">
+      <div>
+        <ModuleHeader
+          title="Profile"
+          blurb="Your firm's identity and the basics every other module builds on."
+          module="profile"
+        />
+        <form action={updateProfile} className="flex max-w-xl flex-col gap-4">
         {PROFILE_FIELDS.map((f) => (
           <label key={f.name} className="flex flex-col gap-1.5 text-sm">
             <span className="text-fg-secondary">{f.label}</span>
@@ -154,7 +176,8 @@ export async function ModuleView({ hub: hubKey, module: moduleKey }: { hub: stri
         <button className="self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
           Save profile
         </button>
-      </form>
+        </form>
+      </div>
     );
   }
 
