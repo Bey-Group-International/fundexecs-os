@@ -108,6 +108,9 @@ export type Organization = Timestamps & {
   fund_count: number | null;
   primary_strategy: string | null;
   first_hub: string | null;
+  tagline: string | null;
+  brand_voice: string | null;
+  brand_palette: string[];
 }
 
 export type OrganizationMember = {
@@ -305,6 +308,18 @@ export type Session = Timestamps & {
   created_by: string | null;
 };
 
+export type Entity = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  entity_type: string;
+  jurisdiction: string | null;
+  parent_entity_id: string | null;
+  formation_date: string | null;
+  notes: string | null;
+  created_by: string | null;
+};
+
 export type Wallet = Timestamps & {
   id: string;
   organization_id: string;
@@ -482,6 +497,7 @@ export type Database = {
       sessions: TableShape<Session>;
       wallets: TableShape<Wallet>;
       session_shares: TableShape<SessionShare>;
+      entities: TableShape<Entity>;
       marketplace_listings: TableShape<MarketplaceListing>;
     };
     Views: Record<string, never>;
