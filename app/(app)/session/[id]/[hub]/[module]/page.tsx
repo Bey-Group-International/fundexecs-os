@@ -29,7 +29,7 @@ export default function SessionModulePage({
           </h1>
         </header>
       ) : null}
-      <ModuleView hub={params.hub} module={params.module} />
+      <ModuleView hub={params.hub} module={params.module} sessionId={params.id} />
     </div>
   );
 }

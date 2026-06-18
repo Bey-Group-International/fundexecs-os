@@ -143,7 +143,25 @@ const PROFILE_FIELDS = [
   { name: "website", label: "Website" },
 ];
 
-export async function ModuleView({ hub: hubKey, module: moduleKey }: { hub: string; module: string }) {
+// Modules whose rows can be scoped to a session (first pass — the key demo
+// path). When opened inside the session frame, the list filters to the session
+// and new rows are tagged with it; opened standalone, the full org-wide list
+// shows. Must match the columns added in migration 0022.
+const SESSION_SCOPED_MODULES = new Set([
+  "source/deal_pipeline",
+  "source/lp_pipeline",
+  "execute/asset_management",
+]);
+
+export async function ModuleView({
+  hub: hubKey,
+  module: moduleKey,
+  sessionId,
+}: {
+  hub: string;
+  module: string;
+  sessionId?: string;
+}) {
   if (!HUB_KEYS.includes(hubKey as Hub)) notFound();
   const hub = HUB_BY_KEY[hubKey as Hub];
   const mod = hub.modules.find((m) => m.key === moduleKey);
@@ -211,16 +229,28 @@ export async function ModuleView({ hub: hubKey, module: moduleKey }: { hub: stri
   // --- Table-backed modules ------------------------------------------------
   const cfg = LIST_MODULES[key];
   if (cfg) {
-    const { data } = await supabase
+    // Inside the session frame, a session-scoped module shows only this
+    // session's rows; standalone it shows the full org-wide list.
+    const scoped = sessionId && SESSION_SCOPED_MODULES.has(key);
+    let query = supabase
       .from(cfg.table as "investors")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50);
+    if (scoped) query = query.eq("session_id", sessionId);
+    const { data } = await query;
     const rows = (data ?? []) as unknown as Record<string, unknown>[];
     const addConfig = ADD_ROW_CONFIGS[key];
     return (
       <div>
-        {addConfig ? <AddRowForm hub={hub.key} module={mod.key} fields={addConfig.fields} /> : null}
+        {addConfig ? (
+          <AddRowForm
+            hub={hub.key}
+            module={mod.key}
+            fields={addConfig.fields}
+            sessionId={scoped ? sessionId : undefined}
+          />
+        ) : null}
         {rows.length === 0 ? (
           <div className="rounded-xl border border-line bg-surface-1 p-8 text-center">
             <p className="text-sm text-fg-secondary">{cfg.empty}</p>
