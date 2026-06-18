@@ -27,10 +27,17 @@ export async function createOrganization(formData: FormData) {
   // Disambiguate the slug with a short suffix to avoid unique collisions.
   const slug = `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`;
 
-  const { error } = await supabase.from("organizations").insert({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.from("organizations") as any).insert({
     name,
     slug,
     entity_type: String(formData.get("entity_type") ?? "") || null,
+    hq_location: String(formData.get("hq_location") ?? "") || null,
+    operator_role: String(formData.get("role") ?? "") || null,
+    aum_range: String(formData.get("aum_range") ?? "") || null,
+    fund_count: Number(formData.get("fund_count")) || null,
+    primary_strategy: String(formData.get("strategy") ?? "") || null,
+    first_hub: String(formData.get("first_hub") ?? "") || null,
     created_by: ctx!.userId,
   });
 
