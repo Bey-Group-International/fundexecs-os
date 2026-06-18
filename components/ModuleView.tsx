@@ -12,6 +12,7 @@ import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import AddRowForm from "@/components/AddRowForm";
+import ModuleTable from "@/components/ModuleTable";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
@@ -142,13 +143,6 @@ const PROFILE_FIELDS = [
   { name: "website", label: "Website" },
 ];
 
-function cell(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "object") return "—";
-  return String(value);
-}
-
 export async function ModuleView({ hub: hubKey, module: moduleKey }: { hub: string; module: string }) {
   if (!HUB_KEYS.includes(hubKey as Hub)) notFound();
   const hub = HUB_BY_KEY[hubKey as Hub];
@@ -238,33 +232,7 @@ export async function ModuleView({ hub: hubKey, module: moduleKey }: { hub: stri
             </Link>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-line">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line bg-surface-2 text-left">
-                  {cfg.columns.map((c) => (
-                    <th
-                      key={c.key}
-                      className="px-4 py-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
-                    >
-                      {c.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} className="border-b border-line/60 bg-surface-1">
-                    {cfg.columns.map((c) => (
-                      <td key={c.key} className="px-4 py-2.5 text-fg-secondary">
-                        {cell(row[c.key])}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ModuleTable columns={cfg.columns} rows={rows} />
         )}
       </div>
     );
