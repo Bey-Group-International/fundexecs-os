@@ -9,6 +9,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { AgentKey, Hub, GraphKind, ArtifactType, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
 import { generatePlan, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
+import { activateBrain } from "@/lib/brains";
+import { brainForAgent } from "@/lib/brain-routing";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -364,6 +366,24 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
       stepDescription: step.description ?? "",
       priorOutputs,
     });
+    // Attribute this step's work to a Brain: the engine ORCHESTRATES, Brains
+    // EXECUTE. This logs a brain_runs row tagged with the workflow's session so
+    // the step surfaces in the session "Brains at work" theater. Additive and
+    // defensive — a Brain failure must never break the workflow.
+    try {
+      await activateBrain(
+        { supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.actorId, sessionId: workflow.session_id ?? null },
+        brainForAgent(step.assigned_agent),
+        {
+          objective: step.description?.trim() || step.title,
+          context: priorOutputs.length ? priorOutputs.join("\n\n") : undefined,
+          autonomy: "semi",
+        },
+      );
+    } catch {
+      // Swallow: Brain attribution is supplementary to the deliverable flow.
+    }
+
     priorOutputs.push(`${step.title}:\n${output}`);
 
     await ctx.supabase
