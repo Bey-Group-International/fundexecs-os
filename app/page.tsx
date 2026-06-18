@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { HUBS } from "@/lib/hubs";
 import { AGENTS } from "@/lib/agents";
 
@@ -17,7 +18,21 @@ const LOOP = [
   { step: "Deliver", body: "Agents execute and leave durable artifacts — IC memos, models, LP updates." },
 ];
 
-export default function LandingPage() {
+export default function LandingPage({
+  searchParams,
+}: {
+  searchParams: { code?: string; error?: string; error_description?: string };
+}) {
+  // Safety net: if Supabase falls back to the Site URL after OAuth (because the
+  // app's /auth/callback wasn't allow-listed), the auth code lands here on "/".
+  // Forward it to the real callback so sign-in completes instead of bouncing.
+  if (searchParams.code) {
+    redirect(`/auth/callback?code=${encodeURIComponent(searchParams.code)}`);
+  }
+  if (searchParams.error) {
+    const msg = searchParams.error_description || searchParams.error;
+    redirect(`/login?error=${encodeURIComponent(msg)}`);
+  }
   return (
     <div className="min-h-screen bg-surface-0 text-fg-primary">
       {/* Top nav */}
