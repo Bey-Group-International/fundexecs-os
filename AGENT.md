@@ -4,9 +4,9 @@
 > This file is a self-aware, continuously updated prompt.
 > It is read by AI coding tools, executed by the Associate Agent, and updated by the system itself as it learns.
 > It is the first module of FundExecs OS. Treat it as source of truth.
-> **Last updated:** 2026-06-17
+> **Last updated:** 2026-06-18
 > **Build phase:** Pre-Alpha — Scaffolding
-> **Confidence level:** Architected, not yet implemented
+> **Confidence level:** Scaffolded, not yet functional (data model + repo scaffold landed)
 
 ---
 
@@ -41,15 +41,22 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - ✅ DevOps observability spec
 - ✅ Design system governance model
 
+### What has been built
+- ✅ Next.js + TypeScript + Tailwind repo scaffold (single app, `app/` + `lib/`)
+- ✅ Full Postgres/Supabase schema as versioned migrations (`supabase/migrations/`)
+- ✅ RLS on every table, org-membership tenancy boundary, helper functions
+- ✅ Six-agent catalog seeded; hub/agent/event catalogs in `lib/`
+- ✅ Typed data layer (`lib/supabase/`) — browser, server, and service clients
+- ✅ Static architecture landing page rendered from the lib catalogs
+
 ### What has not been built yet
-- 🔧 Next.js frontend scaffold
-- 🔧 Node/Python backend services
-- 🔧 Supabase schema deployment
+- 🔧 Supabase schema **deployment** (migrations exist; not applied to a live project)
+- 🔧 Node backend services / API layer (`/prompt → /task → /handoff → /approve`)
 - 🔧 AI agent engine
-- 🔧 WebSocket event gateway
+- 🔧 WebSocket event gateway (event model defined in `lib/events.ts`; no emitter)
 - 🔧 Three.js avatar workspace
-- 🔧 Any hub module (Build, Source, Run, Execute)
-- 🔧 Marketplace layer
+- 🔧 Any functional hub module (Build, Source, Run, Execute)
+- 🔧 Marketplace layer (schema exists; no logic/UI)
 - 🔧 Graph query layer
 
 ### What you must never do
@@ -246,8 +253,8 @@ Deployed, monitoring               →  live, observability active
 **Goal:** Stand up the foundational repo structure, deploy the Supabase schema, and implement the core task engine loop.
 
 **Exit criteria for this phase:**
-- [ ] Repo structure matches architecture
-- [ ] Supabase schema deployed and RLS policies active
+- [x] Repo structure matches architecture
+- [~] Supabase schema authored as migrations + RLS policies (not yet deployed to a live project)
 - [ ] `/prompt` → `/task` → `/approve` loop functional (even with mock agents)
 - [ ] WebSocket gateway emitting at least `task.created` and `task.progress`
 - [ ] One hub panel rendered in Next.js (Build hub, Profile module)
@@ -266,6 +273,18 @@ Deployed, monitoring               →  live, observability active
              |  Build phase: Pre-Alpha Scaffolding
              |  Confidence: Architected, not yet implemented
              |  Author: Founder / Associate Agent seed
+
+2026-06-18  |  Data model + repo scaffold  |  First code landed, honoring build-order discipline.
+             |  Decisions (per founder): single Next.js app (app/ + lib/); TypeScript/Node end-to-end;
+             |  Supabase migrations in-repo only (no live project provisioned yet).
+             |  Built: Next.js/TS/Tailwind scaffold; full schema across 11 migrations
+             |  (identity, build hub, capital, deals, relationship graph, task engine,
+             |  marketplace, audit log); RLS on every table with org-membership tenancy;
+             |  six-agent seed; typed lib/ data layer + hub/agent/event catalogs; static
+             |  architecture landing page.
+             |  Confidence: Scaffolded, not yet functional.
+             |  Next: deploy schema to a Supabase project, then build the /prompt → /task →
+             |  /handoff → /approve API loop with mock agents and Realtime task.* events.
 ```
 
 ---
