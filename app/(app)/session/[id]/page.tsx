@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
-import type { Task } from "@/lib/supabase/database.types";
+import type { Task, BrainRun } from "@/lib/supabase/database.types";
+import BrainFeed from "@/components/session/BrainFeed";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,13 @@ export default async function SessionHome({ params }: { params: { id: string } }
     .is("parent_task_id", null)
     .order("created_at", { ascending: false });
   const workflows = (data ?? []) as Task[];
+
+  const { data: brainData } = await supabase
+    .from("brain_runs")
+    .select("*")
+    .eq("session_id", params.id)
+    .order("created_at", { ascending: true });
+  const brainRuns = (brainData ?? []) as BrainRun[];
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -59,6 +67,8 @@ export default async function SessionHome({ params }: { params: { id: string } }
           ))}
         </div>
       )}
+
+      <BrainFeed runs={brainRuns} />
     </div>
   );
 }
