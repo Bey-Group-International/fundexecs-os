@@ -20,6 +20,17 @@ function relativeTime(iso: string | null): string {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
+function untilTime(iso: string | null): string | null {
+  if (!iso) return null;
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return "due now";
+  const mins = Math.round(diff / 60000);
+  if (mins < 60) return `in ${mins}m`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `in ${hrs}h`;
+  return `in ${Math.round(hrs / 24)}d`;
+}
+
 export default async function AutomationsPage() {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
@@ -93,8 +104,10 @@ export default async function AutomationsPage() {
                       {a.prompt}
                     </p>
                     <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                      {describeSchedule(a.schedule)} · {a.run_count} run
-                      {a.run_count === 1 ? "" : "s"} · last {relativeTime(a.last_run_at)}
+                      {describeSchedule(a.schedule)}
+                      {a.enabled && untilTime(a.next_run_at) ? ` · next ${untilTime(a.next_run_at)}` : ""}
+                      {" · "}
+                      {a.run_count} run{a.run_count === 1 ? "" : "s"} · last {relativeTime(a.last_run_at)}
                       {a.last_run_status ? ` · ${a.last_run_status}` : ""}
                     </p>
                   </div>

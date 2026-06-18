@@ -11,7 +11,7 @@ import { AGENTS } from "@/lib/agents";
 // Default to Haiku 4.5 — fast and inexpensive, which keeps the live loop within
 // a tight Anthropic budget. Override with CLAUDE_MODEL to upgrade (e.g. to
 // claude-sonnet-4-6 or claude-opus-4-8) without a code change.
-const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5";
+const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
 
 export interface PlanStep {
   agent: AgentKey;
