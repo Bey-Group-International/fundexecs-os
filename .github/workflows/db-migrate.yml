@@ -1,0 +1,59 @@
+# Apply database migrations to the PRODUCTION Supabase project on merge to main.
+#
+# Why this exists: preview branches (per-PR) always got their migrations, but the
+# production database fell ~11 migrations behind because nothing applied repo
+# migrations to prod on merge. This workflow closes that gap: every push to main
+# that touches supabase/migrations/** runs `supabase db push` against production,
+# so the live schema always matches the merged code.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  — a Supabase personal access token (account → tokens)
+#   SUPABASE_PROJECT_REF   — the production project ref: qhxcvvidhnwdgemjeaug
+#   SUPABASE_DB_PASSWORD   — the production database password
+#
+# `supabase db push` only applies migrations whose version is not already in the
+# remote migration history, so it is safe and idempotent — the history was
+# repaired to match the repo's 0001–0024 filenames, so the first run is a no-op
+# and only genuinely new migrations (0025+) will be applied going forward.
+name: DB Migrate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# Never let two production migration pushes run at once.
+concurrency:
+  group: db-migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Apply migrations to production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link production project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Push migrations to production
+        run: supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
