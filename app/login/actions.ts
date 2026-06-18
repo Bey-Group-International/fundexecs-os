@@ -23,14 +23,34 @@ export async function signUp(formData: FormData) {
   const fullName = String(formData.get("full_name") ?? "");
 
   const supabase = createServerClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: { data: { full_name: fullName } },
   });
   if (error) {
-    redirect(`/login?error=${encodeURIComponent(error.message)}`);
+    // Keep the user on the sign-up form so they can correct and retry.
+    redirect(`/login?mode=signup&error=${encodeURIComponent(error.message)}`);
   }
+
+  // When email confirmation is required, signUp returns no session. Attempt an
+  // immediate sign-in (this succeeds when confirmations are disabled — see
+  // supabase/config.toml). Only if that fails do we ask the user to confirm,
+  // rather than silently bouncing them back through onboarding → login.
+  if (!data.session) {
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (signInError) {
+      redirect(
+        `/login?message=${encodeURIComponent(
+          "Account created. Check your email to confirm, then sign in.",
+        )}`,
+      );
+    }
+  }
+
   // New principals have no org yet — onboarding handles creation.
   redirect("/onboarding");
 }

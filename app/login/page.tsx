@@ -6,7 +6,7 @@ import { signIn, signUp } from "./actions";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { error?: string; mode?: string };
+  searchParams: { error?: string; mode?: string; message?: string };
 }) {
   // Already signed in? Skip straight through.
   const ctx = await getSessionContext();
@@ -26,6 +26,12 @@ export default async function LoginPage({
       {searchParams.error ? (
         <p className="mt-4 rounded-md border border-agent-diligence/40 bg-agent-diligence/10 px-3 py-2 text-sm text-red-300">
           {searchParams.error}
+        </p>
+      ) : null}
+
+      {searchParams.message ? (
+        <p className="mt-4 rounded-md border border-agent-associate/40 bg-agent-associate/10 px-3 py-2 text-sm text-indigo-200">
+          {searchParams.message}
         </p>
       ) : null}
 
