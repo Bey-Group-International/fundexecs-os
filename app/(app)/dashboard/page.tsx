@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { AGENTS } from "@/lib/agents";
 import type { Task, Deal, Asset, Artifact, ArtifactType, AgentKey } from "@/lib/supabase/database.types";
+import { seedDemoData, clearDemoData } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -81,16 +82,32 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-          Command Center
-        </span>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
-          Private Markets Command Center
-        </h1>
-        <p className="mt-1 text-sm text-fg-secondary">
-          Everything the Copilot produces, organized.
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            Command Center
+          </span>
+          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
+            Private Markets Command Center
+          </h1>
+          <p className="mt-1 text-sm text-fg-secondary">
+            Everything the Copilot produces, organized.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <form action={seedDemoData}>
+            <button className="rounded-md bg-gold-500 px-3 py-1.5 text-xs font-medium text-surface-0 transition hover:bg-gold-400">
+              Load demo data
+            </button>
+          </form>
+          {deals.length > 0 || assets.length > 0 ? (
+            <form action={clearDemoData}>
+              <button className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
+                Reset
+              </button>
+            </form>
+          ) : null}
+        </div>
       </header>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
