@@ -11,6 +11,8 @@ import { EntityModule } from "@/components/build/EntityModule";
 import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
+import AddRowForm from "@/components/AddRowForm";
+import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 
@@ -190,46 +192,49 @@ export async function ModuleView({ hub: hubKey, module: moduleKey }: { hub: stri
       .order("created_at", { ascending: false })
       .limit(50);
     const rows = (data ?? []) as unknown as Record<string, unknown>[];
-    if (rows.length === 0) {
-      return (
-        <div className="rounded-xl border border-line bg-surface-1 p-8 text-center">
-          <p className="text-sm text-fg-secondary">{cfg.empty}</p>
-          <Link
-            href="/workspace"
-            className="mt-3 inline-block font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline"
-          >
-            Open Earn →
-          </Link>
-        </div>
-      );
-    }
+    const addConfig = ADD_ROW_CONFIGS[key];
     return (
-      <div className="overflow-hidden rounded-xl border border-line">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-line bg-surface-2 text-left">
-              {cfg.columns.map((c) => (
-                <th
-                  key={c.key}
-                  className="px-4 py-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
-                >
-                  {c.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i} className="border-b border-line/60 bg-surface-1">
-                {cfg.columns.map((c) => (
-                  <td key={c.key} className="px-4 py-2.5 text-fg-secondary">
-                    {cell(row[c.key])}
-                  </td>
+      <div>
+        {addConfig ? <AddRowForm hub={hub.key} module={mod.key} fields={addConfig.fields} /> : null}
+        {rows.length === 0 ? (
+          <div className="rounded-xl border border-line bg-surface-1 p-8 text-center">
+            <p className="text-sm text-fg-secondary">{cfg.empty}</p>
+            <Link
+              href="/workspace"
+              className="mt-3 inline-block font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline"
+            >
+              Open Earn →
+            </Link>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-line">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line bg-surface-2 text-left">
+                  {cfg.columns.map((c) => (
+                    <th
+                      key={c.key}
+                      className="px-4 py-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
+                    >
+                      {c.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr key={i} className="border-b border-line/60 bg-surface-1">
+                    {cfg.columns.map((c) => (
+                      <td key={c.key} className="px-4 py-2.5 text-fg-secondary">
+                        {cell(row[c.key])}
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     );
   }
