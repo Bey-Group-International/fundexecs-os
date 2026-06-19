@@ -317,6 +317,8 @@ export type Session = Timestamps & {
   automation_id: string | null;
   color: string | null;
   archived_at: string | null;
+  pinned_at: string | null;
+  unread: boolean;
   created_by: string | null;
 };
 

@@ -9,6 +9,11 @@ import {
   createSessionGroup,
   moveSessionToGroup,
   deleteSession,
+  renameSession,
+  createSessionShare,
+  setSessionArchived,
+  setSessionPinned,
+  setSessionUnread,
 } from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
 import { createServerClient } from "@/lib/supabase/server";
@@ -43,9 +48,10 @@ export default async function AppLayout({
       supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
       supabase
         .from("sessions")
-        .select("id, name, color, group_id")
+        .select("id, name, color, group_id, pinned_at, unread")
         .eq("organization_id", ctx.orgId)
         .is("archived_at", null)
+        .order("pinned_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(25),
       supabase
@@ -66,6 +72,8 @@ export default async function AppLayout({
     name: string;
     color: string | null;
     group_id: string | null;
+    pinned_at: string | null;
+    unread: boolean;
   }[];
   const candidateIds = candidates.map((s) => s.id);
   const { data: workflowRows } = candidateIds.length
@@ -79,7 +87,14 @@ export default async function AppLayout({
   const sessions = candidates
     .filter((s) => sessionsWithWork.has(s.id))
     .slice(0, 12)
-    .map((s) => ({ id: s.id, name: s.name, color: s.color, groupId: s.group_id }));
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      groupId: s.group_id,
+      pinned: s.pinned_at != null,
+      unread: s.unread,
+    }));
   const groups = (groupRows ?? []).map((g) => ({ id: g.id, name: g.name }));
 
   const hubs = HUB_ORDER.map((key) => {
@@ -106,6 +121,11 @@ export default async function AppLayout({
         createGroupAction={createSessionGroup}
         moveSessionAction={moveSessionToGroup}
         deleteSessionAction={deleteSession}
+        renameSessionAction={renameSession}
+        shareSessionAction={createSessionShare}
+        archiveSessionAction={setSessionArchived}
+        pinSessionAction={setSessionPinned}
+        unreadSessionAction={setSessionUnread}
       />
 
       <ActiveSessionProvider>

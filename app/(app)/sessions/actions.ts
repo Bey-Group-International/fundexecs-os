@@ -70,6 +70,39 @@ export async function setSessionColor(formData: FormData): Promise<void> {
   revalidatePath("/dashboard");
 }
 
+// Pin is reversible: toggles pinned_at so the session sorts to the top of the
+// side rail.
+export async function setSessionPinned(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const id = String(formData.get("id") ?? "");
+  const pinned = String(formData.get("pinned") ?? "") === "true";
+  if (!id) return;
+  const supabase = createServerClient();
+  await supabase
+    .from("sessions")
+    .update({ pinned_at: pinned ? new Date().toISOString() : null })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath("/dashboard");
+}
+
+// Unread is a manual flag the operator can toggle to revisit a session later.
+export async function setSessionUnread(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const id = String(formData.get("id") ?? "");
+  const unread = String(formData.get("unread") ?? "") === "true";
+  if (!id) return;
+  const supabase = createServerClient();
+  await supabase
+    .from("sessions")
+    .update({ unread })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath("/dashboard");
+}
+
 // Archive is reversible: toggles archived_at.
 export async function setSessionArchived(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
