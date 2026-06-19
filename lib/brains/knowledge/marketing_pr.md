@@ -1,4 +1,5 @@
 # BGI Marketing / PR / Investor Materials Brain
+
 ## Downloadable Knowledge Base for Executive Branding, Capital Materials, Decks, Summaries, CIMs, Financing Presentations, and Public Authority
 
 **Purpose:**  
@@ -648,9 +649,11 @@ A strong BGI deck should use this flow:
 ## Slide 1: Cover
 
 Title:
+
 > Bey Group International Fund I
 
 Subtitle:
+
 > Lower-Middle-Market Control Strategy | Culture-Driven Execution | Institutional Ownership
 
 Visual:
@@ -662,6 +665,7 @@ Visual:
 ## Slide 2: The Thesis
 
 Title:
+
 > Overlooked Assets. Institutional Execution.
 
 Message:
@@ -670,6 +674,7 @@ BGI targets lower-middle-market businesses where ownership transition, operation
 ## Slide 3: Why Now
 
 Title:
+
 > The Transfer of Ownership Is Already Underway.
 
 Message:
@@ -678,6 +683,7 @@ Founder-owned businesses need succession, liquidity, and institutional operating
 ## Slide 4: The Opportunity
 
 Title:
+
 > Lower-Middle-Market Businesses Are Too Small for Mega-Funds and Too Complex for Passive Capital.
 
 Message:
@@ -686,6 +692,7 @@ BGI sits in the gap.
 ## Slide 5: The BGI Strategy
 
 Title:
+
 > Acquire. Institutionalize. Integrate. Scale. Exit.
 
 Message:
@@ -694,6 +701,7 @@ Clear value creation process.
 ## Slide 6: The Edge
 
 Title:
+
 > Culture Is Not Decoration. It Is Governance.
 
 Message:
@@ -702,6 +710,7 @@ Introduce Moorish Customs Operating System.
 ## Slide 7: Target Verticals
 
 Title:
+
 > Cash-Flowing Sectors With Fragmentation and Control Potential.
 
 Include:
@@ -716,6 +725,7 @@ Include:
 ## Slide 8: Deal Sourcing
 
 Title:
+
 > Relationship-Sourced Opportunities Before They Become Auctions.
 
 Message:
@@ -724,6 +734,7 @@ Off-market networks, operators, brokers, sellers, connectors.
 ## Slide 9: Value Creation
 
 Title:
+
 > The Upside Comes From Execution, Not Hope.
 
 Include:
@@ -738,6 +749,7 @@ Include:
 ## Slide 10: Creative Financing
 
 Title:
+
 > Structure Protects the Downside.
 
 Include:
@@ -751,29 +763,35 @@ Include:
 ## Slide 11: Portfolio Construction
 
 Title:
+
 > Disciplined Exposure Across Platforms and Add-Ons.
 
 ## Slide 12: Pipeline / Examples
 
 Title:
+
 > BGI Is Building Around Actionable Opportunities.
 
 ## Slide 13: Team
 
 Title:
+
 > Operators, Builders, Connectors, and Capital Strategists.
 
 ## Slide 14: Terms / Capital Ask
 
 Title:
+
 > Controlled Access to an Emerging Ownership Platform.
 
 ## Slide 15: Next Step
 
 Title:
+
 > The Right Partners Enter Early.
 
 CTA:
+
 > Schedule a strategic allocation conversation.
 
 ---
@@ -866,9 +884,11 @@ The BGI website should quickly route visitors into the right funnel:
 ## Homepage Hero
 
 Headline:
+
 > Where Culture, Control & Capital Meet.
 
 Subheadline:
+
 > Bey Group International is a control-oriented investment platform acquiring and scaling lower-middle-market businesses and strategic real assets through disciplined ownership, creative financing, and culture-driven execution.
 
 CTA options:
@@ -963,29 +983,29 @@ BGI social content should establish authority around ownership, capital, and cul
 ### Post 1
 
 > Most people talk about access to capital.  
-> Serious operators talk about control.  
+> Serious operators talk about control.
 >
-> BGI is being built around a simple thesis: acquire cash-flowing businesses, install discipline, preserve legacy, and scale through execution.  
+> BGI is being built around a simple thesis: acquire cash-flowing businesses, install discipline, preserve legacy, and scale through execution.
 >
 > Culture is not decoration.  
 > Culture is governance.
 
 ### Post 2
 
-> The lower-middle market is full of businesses that are not broken.  
+> The lower-middle market is full of businesses that are not broken.
 >
-> They are under-institutionalized.  
+> They are under-institutionalized.
 >
 > The founder built value.  
-> The next owner must build systems.  
+> The next owner must build systems.
 >
 > That is where BGI is focused.
 
 ### Post 3
 
-> Ownership is not a slogan.  
+> Ownership is not a slogan.
 >
-> It requires capital, structure, governance, operators, discipline, and risk control.  
+> It requires capital, structure, governance, operators, discipline, and risk control.
 >
 > BGI exists to bring those pieces into one platform.
 
@@ -1173,9 +1193,11 @@ Best for:
 ## Executive Summary Template
 
 ### Title:
+
 Bey Group International
 
 ### Subtitle:
+
 Control-Oriented Lower-Middle-Market Acquisition Platform
 
 ### Sections:
@@ -1256,15 +1278,15 @@ Control-Oriented Lower-Middle-Market Acquisition Platform
 
 Use this prompt to activate the Marketing / PR / Investor Materials Brain:
 
-> Act as the Marketing, PR, Brand Strategy, and Investor Materials Expert for Bey Group International. Your job is to create, refine, and design executive-grade materials including investor decks, pitch decks, executive summaries, CIMs, financing presentations, acquisition teasers, one-pagers, PR kits, website copy, event materials, social content, and LP communications.  
+> Act as the Marketing, PR, Brand Strategy, and Investor Materials Expert for Bey Group International. Your job is to create, refine, and design executive-grade materials including investor decks, pitch decks, executive summaries, CIMs, financing presentations, acquisition teasers, one-pagers, PR kits, website copy, event materials, social content, and LP communications.
 >
-> BGI is a control-oriented investment platform acquiring and scaling lower-middle-market businesses, strategic real assets, founder-owned companies, CPG brands, manufacturing businesses, apparel platforms, hospitality concepts, food and beverage businesses, tech-enabled services, and cash-flowing operating assets.  
+> BGI is a control-oriented investment platform acquiring and scaling lower-middle-market businesses, strategic real assets, founder-owned companies, CPG brands, manufacturing businesses, apparel platforms, hospitality concepts, food and beverage businesses, tech-enabled services, and cash-flowing operating assets.
 >
-> The brand must draw from Moorish culture, Moorish customs, legacy, sovereignty, scholarship, commerce, architecture, and community stewardship — but translate those influences into an institutional, executive, minimal, investor-ready style. The result should feel like culture, control, and capital meeting inside a serious private equity platform.  
+> The brand must draw from Moorish culture, Moorish customs, legacy, sovereignty, scholarship, commerce, architecture, and community stewardship — but translate those influences into an institutional, executive, minimal, investor-ready style. The result should feel like culture, control, and capital meeting inside a serious private equity platform.
 >
-> Use restrained design direction: warm ivory, obsidian black, deep Moorish green, antique gold, bronze, sandstone, charcoal, and bone white. Use Moorish geometry, arches, lattice, manuscript, and architectural motifs sparingly as accents. Do not make the materials decorative, crowded, overly religious, or visually loud.  
+> Use restrained design direction: warm ivory, obsidian black, deep Moorish green, antique gold, bronze, sandstone, charcoal, and bone white. Use Moorish geometry, arches, lattice, manuscript, and architectural motifs sparingly as accents. Do not make the materials decorative, crowded, overly religious, or visually loud.
 >
-> Write with executive clarity, capital discipline, and cultural authority. Avoid hype, generic language, excessive jargon, unsupported claims, and weak fundraising language. Every material should establish trust, reduce risk, communicate BGI’s edge, and move the reader toward a meeting, commitment, introduction, or strategic action.  
+> Write with executive clarity, capital discipline, and cultural authority. Avoid hype, generic language, excessive jargon, unsupported claims, and weak fundraising language. Every material should establish trust, reduce risk, communicate BGI’s edge, and move the reader toward a meeting, commitment, introduction, or strategic action.
 >
 > For every material, define the audience, purpose, core message, structure, design direction, copy, visual hierarchy, and call to action.
 
@@ -1289,3 +1311,4 @@ Every deck, CIM, summary, presentation, and public message must make BGI feel:
 The final standard:
 
 > If the material does not increase trust, authority, clarity, or conversion, it should be rewritten or redesigned.
+
