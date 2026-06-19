@@ -21,6 +21,18 @@ body {
   background: rgba(212, 175, 106, 0.3);
 }
 
+/* Print: the investor one-pager exports as a clean light document. App chrome
+   opts out via print:hidden in the authed layout. */
+@media print {
+  html {
+    color-scheme: light;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
+
 /* Thin, warm scrollbars to match the surface ramp */
 * {
   scrollbar-width: thin;
