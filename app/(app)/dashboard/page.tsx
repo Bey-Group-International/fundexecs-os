@@ -7,7 +7,8 @@ import type { Task, Deal, Asset, Artifact, AgentKey } from "@/lib/supabase/datab
 import { seedDemoData, clearDemoData } from "./actions";
 import { SessionsSection } from "./SessionsSection";
 import { HottestCapital, PendingGates } from "./CapitalSignals";
-import type { Session, SessionGroup, Approval } from "@/lib/supabase/database.types";
+import { Outbox } from "./Outbox";
+import type { Session, SessionGroup, Approval, DispatchLog } from "@/lib/supabase/database.types";
 import { ArtifactCard } from "@/components/ArtifactViewer";
 import { buildCapitalMap } from "@/lib/capital-map";
 
@@ -56,6 +57,7 @@ export default async function DashboardPage() {
     sessionsRes,
     groupsRes,
     pendingGatesRes,
+    dispatchLogRes,
     capitalMap,
   ] = await Promise.all([
     supabase.from("tasks").select("*"),
@@ -76,6 +78,12 @@ export default async function DashboardPage() {
       .eq("decision", "pending")
       .order("created_at", { ascending: false })
       .limit(5),
+    // The dispatch audit log — most-recent first for the Outbox.
+    supabase
+      .from("dispatch_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(8),
     // The Capital Map is already org-scoped via RLS and pre-sorted hottest-first.
     buildCapitalMap(supabase),
   ]);
@@ -88,6 +96,7 @@ export default async function DashboardPage() {
   const sessions = (sessionsRes.data ?? []) as Session[];
   const sessionGroups = (groupsRes.data ?? []) as SessionGroup[];
   const pendingGates = (pendingGatesRes.data ?? []) as Approval[];
+  const dispatches = (dispatchLogRes.data ?? []) as DispatchLog[];
   // Top 5 investors by warmth — the entries arrive pre-sorted hottest-first.
   const hottestCapital = capitalMap.slice(0, 5);
 
@@ -138,6 +147,8 @@ export default async function DashboardPage() {
         <HottestCapital entries={hottestCapital} />
         <PendingGates approvals={pendingGates} />
       </section>
+
+      <Outbox rows={dispatches} />
 
       <SessionsSection sessions={sessions} groups={sessionGroups} />
 

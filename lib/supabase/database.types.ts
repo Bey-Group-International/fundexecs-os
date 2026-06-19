@@ -511,6 +511,24 @@ export type MandateRow = Timestamps & {
   created_by: string | null;
 };
 
+// An append-only dispatch audit row (migration 0030) — one record per action
+// dispatched through lib/integrations. Mirrors the DispatchResult fields the
+// integration layer returns. No `updated_at`: the ledger is never mutated, so
+// it uses an explicit `created_at` rather than the Timestamps pair.
+export type DispatchLog = {
+  id: string;
+  organization_id: string;
+  task_id: string | null;
+  action: string;
+  channel: string;
+  live: boolean;
+  ok: boolean;
+  detail: string | null;
+  reference: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -607,6 +625,7 @@ export type Database = {
       artifacts: TableShape<Artifact>;
       automations: TableShape<Automation>;
       mandates: TableShape<MandateRow>;
+      dispatch_log: TableShape<DispatchLog>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
       wallets: TableShape<Wallet>;

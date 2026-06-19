@@ -6,6 +6,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { gateDecision, type ActionKind } from "@/lib/gates";
 import { getActiveMandate } from "@/lib/mandates";
 import { dispatchAction } from "@/lib/integrations";
+import { recordDispatch } from "@/lib/integrations/log";
 import type { AgentKey, Json } from "@/lib/supabase/database.types";
 
 // Which executive owns each kind of next action. Determines who the queued task
@@ -140,6 +141,16 @@ export async function queueNextAction(
     actorId: auth.ctx.userId,
     action,
     target: { name: investor.name, email: investor.contact_email ?? undefined },
+  });
+
+  // Audit the dispatch (append-only). Keeps dispatchAction itself pure; this is
+  // where the DispatchResult becomes a durable record the Outbox surfaces.
+  await recordDispatch(supabase, {
+    orgId,
+    actorId: auth.ctx.userId,
+    taskId: task.id,
+    action,
+    result,
   });
 
   await supabase
