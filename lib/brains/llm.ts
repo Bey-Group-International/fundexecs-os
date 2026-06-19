@@ -12,6 +12,15 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
 
+// `output_config.effort` is GA but only on Opus 4.5+, Sonnet 4.6, and Fable/Mythos 5.
+// It returns a 400 on Haiku 4.5 and Sonnet 4.5 — and since our default model IS
+// Haiku 4.5, sending it unconditionally 400s every live call, which the catch below
+// swallows into a stub fallback (the loop silently drops to preview mode). Only attach
+// it when the configured model is known to support it; omitting it just uses default effort.
+function supportsEffort(model: string): boolean {
+  return /claude-(opus-4-(5|6|7|8)|sonnet-4-6|fable-5|mythos-5)/.test(model);
+}
+
 export function brainsLive(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
@@ -37,7 +46,7 @@ export async function complete({ system, prompt, maxTokens = 1200 }: CompleteArg
       model: MODEL,
       max_tokens: maxTokens,
       system,
-      output_config: { effort: "medium" },
+      ...(supportsEffort(MODEL) ? { output_config: { effort: "medium" } } : {}),
       messages: [{ role: "user", content: prompt }],
     });
     const text = message.content
@@ -46,7 +55,10 @@ export async function complete({ system, prompt, maxTokens = 1200 }: CompleteArg
       .join("\n")
       .trim();
     return text || null;
-  } catch {
+  } catch (err) {
+    // Fall back to the deterministic stub, but don't fail silently — a swallowed
+    // error here is exactly what made a degraded loop look like a healthy preview.
+    console.error(`[brains/llm] completion failed for model ${MODEL}:`, err);
     return null;
   }
 }
