@@ -7,7 +7,7 @@
 // bespoke editor. Build › Thesis and Build › Track Record are handled by their
 // own modules (components/build/*), so they're intentionally absent here.
 
-export type FieldType = "text" | "number" | "select" | "checkbox";
+export type FieldType = "text" | "number" | "select" | "checkbox" | "date";
 
 export interface FieldConfig {
   name: string;
@@ -48,6 +48,15 @@ const DEAL_STAGES = [
 
 const ASSET_TYPES = ["real_estate", "operating_company", "portfolio_company", "fund_interest", "other"];
 
+const CAPITAL_EVENT_TYPES = [
+  "capital_call",
+  "distribution",
+  "contribution",
+  "fee",
+  "return_of_capital",
+  "carry",
+];
+
 const PARTNER_TYPES = ["co_gp", "operating_partner", "advisor", "introducer", "other"];
 const PARTNER_STATUSES = ["active", "prospective", "dormant", "former"];
 
@@ -78,6 +87,15 @@ export const ADD_ROW_CONFIGS: Record<string, AddRowConfig> = {
     fields: [
       { name: "name", label: "Asset name", type: "text", required: true },
       { name: "asset_type", label: "Asset type", type: "select", options: ASSET_TYPES, defaultValue: "real_estate" },
+    ],
+  },
+  "execute/capital_events": {
+    fields: [
+      { name: "event_type", label: "Event type", type: "select", options: CAPITAL_EVENT_TYPES, defaultValue: "capital_call" },
+      { name: "amount", label: "Amount", type: "number", required: true },
+      { name: "effective_date", label: "Effective date", type: "date" },
+      { name: "currency", label: "Currency", type: "text", defaultValue: "USD" },
+      { name: "reference", label: "Reference", type: "text" },
     ],
   },
   "source/partners": {

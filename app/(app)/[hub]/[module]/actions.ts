@@ -131,6 +131,38 @@ export async function createModuleRow(
       });
       break;
     }
+    case "execute/capital_events": {
+      const amount = num(formData, "amount");
+      if (amount == null) return;
+      // Capital events belong to a fund (NOT NULL FK). Attach to the org's
+      // first fund; without one there's nothing to book the flow against.
+      const { data: fund } = await supabase
+        .from("funds")
+        .select("id")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (!fund) return;
+      await supabase.from("capital_events").insert({
+        organization_id: orgId,
+        fund_id: fund.id,
+        event_type:
+          (text(formData, "event_type") as
+            | "capital_call"
+            | "distribution"
+            | "contribution"
+            | "fee"
+            | "return_of_capital"
+            | "carry"
+            | null) ?? "capital_call",
+        amount,
+        currency: text(formData, "currency") ?? "USD",
+        effective_date: text(formData, "effective_date") ?? new Date().toISOString().slice(0, 10),
+        reference: text(formData, "reference"),
+      });
+      break;
+    }
     case "source/partners": {
       const name = text(formData, "name");
       if (!name) return;
