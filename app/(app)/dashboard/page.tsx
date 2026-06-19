@@ -6,8 +6,10 @@ import { AGENTS } from "@/lib/agents";
 import type { Task, Deal, Asset, Artifact, AgentKey } from "@/lib/supabase/database.types";
 import { seedDemoData, clearDemoData } from "./actions";
 import { SessionsSection } from "./SessionsSection";
-import type { Session, SessionGroup } from "@/lib/supabase/database.types";
+import { HottestCapital, PendingGates } from "./CapitalSignals";
+import type { Session, SessionGroup, Approval } from "@/lib/supabase/database.types";
 import { ArtifactCard } from "@/components/ArtifactViewer";
+import { buildCapitalMap } from "@/lib/capital-map";
 
 export const dynamic = "force-dynamic";
 
@@ -45,21 +47,38 @@ export default async function DashboardPage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = createServerClient();
-  const [allTasksRes, workflowsRes, dealsRes, assetsRes, artifactsRes, sessionsRes, groupsRes] =
-    await Promise.all([
-      supabase.from("tasks").select("*"),
-      supabase
-        .from("tasks")
-        .select("*")
-        .is("parent_task_id", null)
-        .order("created_at", { ascending: false })
-        .limit(6),
-      supabase.from("deals").select("*").order("created_at", { ascending: false }).limit(8),
-      supabase.from("assets").select("*").order("created_at", { ascending: false }).limit(8),
-      supabase.from("artifacts").select("*").order("created_at", { ascending: false }).limit(6),
-      supabase.from("sessions").select("*").order("created_at", { ascending: false }).limit(30),
-      supabase.from("session_groups").select("*").order("created_at", { ascending: true }),
-    ]);
+  const [
+    allTasksRes,
+    workflowsRes,
+    dealsRes,
+    assetsRes,
+    artifactsRes,
+    sessionsRes,
+    groupsRes,
+    pendingGatesRes,
+    capitalMap,
+  ] = await Promise.all([
+    supabase.from("tasks").select("*"),
+    supabase
+      .from("tasks")
+      .select("*")
+      .is("parent_task_id", null)
+      .order("created_at", { ascending: false })
+      .limit(6),
+    supabase.from("deals").select("*").order("created_at", { ascending: false }).limit(8),
+    supabase.from("assets").select("*").order("created_at", { ascending: false }).limit(8),
+    supabase.from("artifacts").select("*").order("created_at", { ascending: false }).limit(6),
+    supabase.from("sessions").select("*").order("created_at", { ascending: false }).limit(30),
+    supabase.from("session_groups").select("*").order("created_at", { ascending: true }),
+    supabase
+      .from("approvals")
+      .select("*")
+      .eq("decision", "pending")
+      .order("created_at", { ascending: false })
+      .limit(5),
+    // The Capital Map is already org-scoped via RLS and pre-sorted hottest-first.
+    buildCapitalMap(supabase),
+  ]);
 
   const tasks = (allTasksRes.data ?? []) as Task[];
   const workflows = (workflowsRes.data ?? []) as Task[];
@@ -68,6 +87,9 @@ export default async function DashboardPage() {
   const artifacts = (artifactsRes.data ?? []) as Artifact[];
   const sessions = (sessionsRes.data ?? []) as Session[];
   const sessionGroups = (groupsRes.data ?? []) as SessionGroup[];
+  const pendingGates = (pendingGatesRes.data ?? []) as Approval[];
+  // Top 5 investors by warmth — the entries arrive pre-sorted hottest-first.
+  const hottestCapital = capitalMap.slice(0, 5);
 
   const stepsCompleted = tasks.filter((t) => t.parent_task_id && t.status === "completed").length;
   const workload = new Map<AgentKey, number>();
@@ -110,6 +132,11 @@ export default async function DashboardPage() {
         <Stat label="Deliverables" value={stepsCompleted} />
         <Stat label="Deals in pipeline" value={deals.length} />
         <Stat label="Portfolio assets" value={assets.length} />
+      </section>
+
+      <section className="mt-8 grid gap-6 lg:grid-cols-2">
+        <HottestCapital entries={hottestCapital} />
+        <PendingGates approvals={pendingGates} />
       </section>
 
       <SessionsSection sessions={sessions} groups={sessionGroups} />
