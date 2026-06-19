@@ -5,7 +5,11 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
-import { startSession } from "@/app/(app)/sessions/actions";
+import {
+  startSession,
+  createSessionGroup,
+  moveSessionToGroup,
+} from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
@@ -15,9 +19,10 @@ import { AppSidebar } from "@/components/AppSidebar";
 // The four hubs, in operating order, as shown in the side rail.
 const HUB_ORDER: Hub[] = ["build", "run", "source", "execute"];
 
-// Authed shell. Side rail: Earn (the copilot) + Workflows + Command Center, then
-// the four operational hubs (Build / Run / Source / Execute) whose modules
-// reveal on hover. Each hub has its own page with a top module switcher.
+// Authed shell. Side rail (see AppSidebar): Logo · New Session · Workflows ·
+// More, the four operational hubs (Build / Run / Source / Execute) whose
+// modules expand on click, then Recent sessions filed under group names, and
+// the account footer. Each hub has its own page with a top module switcher.
 export default async function AppLayout({
   children,
 }: {
@@ -29,15 +34,36 @@ export default async function AppLayout({
 
   const balance = await getWalletBalance(ctx.orgId);
 
-  // Account display: principal's name + current plan for the side-rail footer.
+  // Account display + the rail's "Recent" sessions list (named groups and an
+  // ungrouped bucket), most-recently-touched first.
   const supabase = createServerClient();
-  const [{ data: principal }, { data: wallet }] = await Promise.all([
-    supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
-    supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
-  ]);
+  const [{ data: principal }, { data: wallet }, { data: sessionRows }, { data: groupRows }] =
+    await Promise.all([
+      supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
+      supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
+      supabase
+        .from("sessions")
+        .select("id, name, group_id")
+        .eq("organization_id", ctx.orgId)
+        .is("archived_at", null)
+        .order("updated_at", { ascending: false })
+        .limit(25),
+      supabase
+        .from("session_groups")
+        .select("id, name")
+        .eq("organization_id", ctx.orgId)
+        .order("created_at", { ascending: true }),
+    ]);
   const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
   const planKey = wallet?.plan as PlanKey | null;
   const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
+
+  const sessions = (sessionRows ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    groupId: s.group_id,
+  }));
+  const groups = (groupRows ?? []).map((g) => ({ id: g.id, name: g.name }));
 
   const hubs = HUB_ORDER.map((key) => {
     const hub = HUB_BY_KEY[key];
@@ -57,8 +83,12 @@ export default async function AppLayout({
         name={name}
         planName={planName}
         hubs={hubs}
+        sessions={sessions}
+        groups={groups}
         startSessionAction={startSession}
         signOutAction={signOut}
+        createGroupAction={createSessionGroup}
+        moveSessionAction={moveSessionToGroup}
       />
 
       <ActiveSessionProvider>

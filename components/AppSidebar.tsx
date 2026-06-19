@@ -20,6 +20,17 @@ interface HubItem {
   modules: NavItem[];
 }
 
+interface SessionItem {
+  id: string;
+  name: string;
+  groupId: string | null;
+}
+
+interface GroupItem {
+  id: string;
+  name: string;
+}
+
 // Secondary destinations folded under "More".
 const MORE_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Command Center" },
@@ -57,20 +68,50 @@ export function AppSidebar({
   name,
   planName,
   hubs,
+  sessions,
+  groups,
   startSessionAction,
   signOutAction,
+  createGroupAction,
+  moveSessionAction,
 }: {
   name: string;
   planName: string;
   hubs: HubItem[];
+  sessions: SessionItem[];
+  groups: GroupItem[];
   startSessionAction: () => void;
   signOutAction: () => void;
+  createGroupAction: (formData: FormData) => void;
+  moveSessionAction: (formData: FormData) => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [openHub, setOpenHub] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const [movingId, setMovingId] = useState<string | null>(null);
 
   const accountRef = useDismiss<HTMLDivElement>(() => setAccountOpen(false));
+  const recentRef = useDismiss<HTMLDivElement>(() => setMovingId(null));
+
+  // Group the recent sessions: named groups (in catalog order) that actually
+  // hold a session, then the ungrouped bucket last.
+  const byGroup = new Map<string, SessionItem[]>();
+  for (const s of sessions) {
+    const k = s.groupId ?? "";
+    const list = byGroup.get(k) ?? [];
+    list.push(s);
+    byGroup.set(k, list);
+  }
+  const recentSections: { key: string; label: string; sessions: SessionItem[] }[] = [
+    ...groups
+      .filter((g) => byGroup.has(g.id))
+      .map((g) => ({ key: g.id, label: g.name, sessions: byGroup.get(g.id) ?? [] })),
+    ...(byGroup.has("")
+      ? [{ key: "", label: "Ungrouped", sessions: byGroup.get("") ?? [] }]
+      : []),
+  ];
 
   const linkClass =
     "flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary";
@@ -173,6 +214,124 @@ export function AppSidebar({
             </div>
           );
         })}
+
+        {/* Recent — sessions, filed under group names with an Ungrouped bucket */}
+        <div ref={recentRef}>
+          <div className="mb-1 mt-5 flex items-center justify-between px-2">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+              Recent
+            </p>
+            <button
+              type="button"
+              onClick={() => setNewGroupOpen((v) => !v)}
+              aria-label="New group"
+              title="New group"
+              className="font-mono text-xs leading-none text-fg-muted transition hover:text-gold-400"
+            >
+              +
+            </button>
+          </div>
+
+          {newGroupOpen ? (
+            <form
+              action={createGroupAction}
+              onSubmit={() => setNewGroupOpen(false)}
+              className="mb-1.5 flex items-center gap-1 px-2"
+            >
+              <input
+                name="name"
+                autoFocus
+                placeholder="Group name…"
+                className="min-w-0 flex-1 rounded-md border border-line bg-surface-0 px-2 py-1 text-xs text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+              <button className="rounded-md border border-line px-1.5 py-1 text-[10px] text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
+                Add
+              </button>
+            </form>
+          ) : null}
+
+          {recentSections.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-fg-muted">No sessions yet.</p>
+          ) : (
+            recentSections.map((sec) => {
+              const isGroupCollapsed = collapsedGroups[sec.key];
+              return (
+                <div key={sec.key || "ungrouped"} className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCollapsedGroups((prev) => ({
+                        ...prev,
+                        [sec.key]: !prev[sec.key],
+                      }))
+                    }
+                    aria-expanded={!isGroupCollapsed}
+                    className="flex w-full items-center justify-between rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-gold-400 transition hover:bg-surface-2"
+                  >
+                    <span className="truncate">{sec.label}</span>
+                    <span className="text-fg-muted">{isGroupCollapsed ? "▸" : "▾"}</span>
+                  </button>
+
+                  {!isGroupCollapsed ? (
+                    <div className="flex flex-col">
+                      {sec.sessions.map((s) => (
+                        <div key={s.id} className="relative flex items-center">
+                          <Link
+                            href={`/session/${s.id}`}
+                            className="min-w-0 flex-1 truncate rounded-md px-2 py-1 pl-4 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                          >
+                            {s.name}
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => setMovingId(movingId === s.id ? null : s.id)}
+                            aria-label="File session in a group"
+                            title="Move to group"
+                            className="shrink-0 rounded-md px-1.5 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
+                          >
+                            ⋯
+                          </button>
+
+                          {movingId === s.id ? (
+                            <div className="absolute right-1 top-full z-10 mt-0.5 flex w-40 flex-col gap-0.5 rounded-lg border border-line bg-surface-1 p-1.5 shadow-2xl">
+                              <p className="px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+                                Move to
+                              </p>
+                              {[{ id: "", name: "Ungrouped" }, ...groups].map((g) => {
+                                const current = (s.groupId ?? "") === g.id;
+                                return (
+                                  <form
+                                    key={g.id || "ungrouped"}
+                                    action={moveSessionAction}
+                                    onSubmit={() => setMovingId(null)}
+                                  >
+                                    <input type="hidden" name="id" value={s.id} />
+                                    <input type="hidden" name="group_id" value={g.id} />
+                                    <button
+                                      disabled={current}
+                                      className={`w-full truncate rounded-md px-2 py-1 text-left text-xs transition ${
+                                        current
+                                          ? "text-gold-300"
+                                          : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                                      }`}
+                                    >
+                                      {current ? "✓ " : ""}
+                                      {g.name}
+                                    </button>
+                                  </form>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
       </nav>
 
       {/* Account — name + plan; menu pops out on click, Sign out pinned below */}
