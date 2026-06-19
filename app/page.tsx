@@ -236,31 +236,8 @@ export default function LandingPage({
             </div>
           </div>
 
-          {/* Right: video placeholder + loop */}
+          {/* Right: loop */}
           <div className="flex flex-col gap-4">
-            {/* Video placeholder — swap src for real video when ready */}
-            <div className="group relative aspect-video w-full overflow-hidden rounded-2xl border border-line bg-surface-1">
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 transition group-hover:bg-gold-500/20">
-                  <svg className="h-5 w-5 translate-x-0.5 text-gold-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                </div>
-                <p className="font-mono text-xs uppercase tracking-widest text-fg-muted">
-                  See Earn in action
-                </p>
-              </div>
-              {/* Decorative grid overlay */}
-              <div
-                aria-hidden
-                className="absolute inset-0 opacity-5"
-                style={{
-                  backgroundImage: "linear-gradient(rgba(234,179,8,1) 1px, transparent 1px), linear-gradient(90deg, rgba(234,179,8,1) 1px, transparent 1px)",
-                  backgroundSize: "40px 40px",
-                }}
-              />
-            </div>
-
             {/* Loop steps */}
             <div className="rounded-2xl border border-line bg-surface-1 p-6">
               <p className="mb-5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
