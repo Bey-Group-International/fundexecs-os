@@ -241,6 +241,8 @@ migration workflow.
 - [x] Build Hub — Profile module
 - [x] **Surface step deliverables as first-class artifacts** (IC memos, models, risk reports)
 - [x] **Persist deals/assets from workflows** so the Command Center populates from real work
+- [x] **Capital Map** — relationship temperature, thesis fit, warm-intro pathfinding + gated next actions (Affinity, rebuilt native)
+- [x] **Gate layer** — Tier 1/2/3 control primitive so no action reaches a counterparty without sign-off
 - [ ] Three-graph data architecture (query layer + `/graph/*`)
 - [ ] Three.js avatar workspace
 - [ ] Remaining Source / Run / Execute hub modules

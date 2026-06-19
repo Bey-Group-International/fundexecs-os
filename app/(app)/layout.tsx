@@ -79,6 +79,13 @@ export default async function AppLayout({
               Command Center
             </Link>
             <Link
+              href="/capital-map"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+            >
+              <span className="font-mono text-base leading-none text-gold-400">◈</span>
+              Capital Map
+            </Link>
+            <Link
               href="/graph"
               className="flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
             >
