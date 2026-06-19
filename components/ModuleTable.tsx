@@ -39,15 +39,15 @@ export default function ModuleTable({
   const [expanded, setExpanded] = useState<number | null>(null);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-line">
-      <table className="w-full text-sm">
+    <div className="overflow-hidden rounded-xl border border-line shadow-[0_1px_0_0_rgba(0,0,0,0.4)]">
+      <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b border-line bg-surface-2 text-left">
-            <th className="w-8 px-4 py-2.5" aria-hidden />
+          <tr className="border-b border-line bg-surface-2/80 text-left backdrop-blur">
+            <th className="w-9 px-4 py-3" aria-hidden />
             {columns.map((c) => (
               <th
                 key={c.key}
-                className="px-4 py-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
+                className="px-4 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted"
               >
                 {c.label}
               </th>
@@ -64,30 +64,43 @@ export default function ModuleTable({
               <Fragment key={i}>
                 <tr
                   onClick={() => setExpanded(isOpen ? null : i)}
-                  className="cursor-pointer border-b border-line/60 bg-surface-1 transition hover:bg-surface-2"
+                  className={`group cursor-pointer border-b border-line/50 transition-colors last:border-0 ${
+                    isOpen ? "bg-surface-2" : "bg-surface-1 hover:bg-surface-2/70"
+                  }`}
                 >
-                  <td className="px-4 py-2.5 font-mono text-[11px] text-fg-muted">
-                    {isOpen ? "▾" : "▸"}
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-block font-mono text-[11px] text-fg-muted transition-transform duration-200 group-hover:text-gold-400 ${
+                        isOpen ? "rotate-90 text-gold-400" : ""
+                      }`}
+                    >
+                      ▸
+                    </span>
                   </td>
-                  {columns.map((c) => (
-                    <td key={c.key} className="px-4 py-2.5 text-fg-secondary">
+                  {columns.map((c, ci) => (
+                    <td
+                      key={c.key}
+                      className={`px-4 py-3 ${ci === 0 ? "font-medium text-fg-primary" : "text-fg-secondary"}`}
+                    >
                       {cell(row[c.key])}
                     </td>
                   ))}
                 </tr>
                 {isOpen ? (
                   <tr className="bg-surface-2">
-                    <td colSpan={columns.length + 1} className="border-t border-line px-4 py-4">
-                      <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {detailEntries.map(([k, v]) => (
-                          <div key={k} className="flex flex-col gap-0.5">
-                            <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                              {humanize(k)}
-                            </dt>
-                            <dd className="text-sm text-fg-primary">{cell(v)}</dd>
-                          </div>
-                        ))}
-                      </dl>
+                    <td colSpan={columns.length + 1} className="border-b border-line px-4 py-5">
+                      <div className="border-l-2 border-gold-500/40 pl-4">
+                        <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {detailEntries.map(([k, v]) => (
+                            <div key={k} className="flex flex-col gap-0.5">
+                              <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                                {humanize(k)}
+                              </dt>
+                              <dd className="text-sm text-fg-primary">{cell(v)}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
                     </td>
                   </tr>
                 ) : null}
