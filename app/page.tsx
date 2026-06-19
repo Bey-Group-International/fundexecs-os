@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AGENTS } from "@/lib/agents";
+import { Logo } from "@/components/Logo";
 
 const CALENDLY = "https://calendly.com/fundexecs";
 
@@ -76,9 +77,7 @@ export default function LandingPage({
       {/* Nav */}
       <header className="fixed inset-x-0 top-0 z-50 border-b border-line bg-surface-0/80 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-          <span className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
-            FundExecs OS
-          </span>
+          <Logo />
           <div className="flex items-center gap-3">
             <Link
               href="/login"
