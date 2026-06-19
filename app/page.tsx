@@ -1,33 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { HUBS } from "@/lib/hubs";
 import { AGENTS } from "@/lib/agents";
-
-const HUB_ICONS: Record<string, string> = {
-  build: "◈",
-  source: "◎",
-  run: "◉",
-  execute: "◆",
-};
-
-// GP-facing hub descriptions — what an operator actually does in each hub.
-const HUB_COPY: Record<string, string> = {
-  build:
-    "Establish your firm identity — thesis, entity structure, brand, and track record. The foundation every deal and capital conversation rests on.",
-  source:
-    "Build and work your pipeline. Deals, equity capital, debt, co-invest, and advisory mandates. Every relationship tracked, every conversation logged.",
-  run: "Evaluate active opportunities from first look to IC. Diligence, underwriting, stress testing, and investment committee prep — in one place.",
-  execute:
-    "Operate from close to exit. Capital events, asset-level KPIs, investor reporting, and exit management. No off-platform workarounds.",
-};
-
-// Three core modules per hub — lead with the highest-signal work.
-const HUB_CORE_MODULES: Record<string, string[]> = {
-  build: ["Thesis", "Entity", "Track Record"],
-  source: ["Deal Pipeline", "LP Pipeline", "Debt & Hybrid"],
-  run: ["Diligence", "Underwriting", "Stress Test"],
-  execute: ["Capital Events", "Asset Management", "Reporting"],
-};
 
 // The capital workflow loop — institutional framing.
 const LOOP = [
@@ -254,56 +227,6 @@ export default function LandingPage({
         </div>
       </section>
 
-      <div className="border-t border-line" />
-
-      {/* The Four Hubs */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
-          Architecture
-        </p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-          Four hubs. One operating system.
-        </h2>
-        <p className="mt-3 max-w-xl text-fg-secondary">
-          Build your firm. Source deals and capital. Run active opportunities
-          through diligence and underwriting. Execute from close to exit.
-          Every workflow in one place.
-        </p>
-
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          {HUBS.map((hub, i) => (
-            <div
-              key={hub.key}
-              className="rounded-xl border border-line bg-surface-1 p-6 transition hover:border-gold-500/30 hover:bg-surface-2"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="font-mono text-lg text-gold-400">
-                    {HUB_ICONS[hub.key]}
-                  </span>
-                  <h3 className="mt-2 text-lg font-medium">{hub.label}</h3>
-                  <p className="mt-1 text-sm leading-relaxed text-fg-secondary">
-                    {HUB_COPY[hub.key] ?? hub.purpose}
-                  </p>
-                </div>
-                <span className="font-mono text-xs text-fg-muted">0{i + 1}</span>
-              </div>
-              <div className="mt-5 flex flex-wrap gap-1.5">
-                {(HUB_CORE_MODULES[hub.key] ?? hub.modules.slice(0, 3).map((m) => m.label)).map(
-                  (label) => (
-                    <span
-                      key={label}
-                      className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-fg-secondary"
-                    >
-                      {label}
-                    </span>
-                  ),
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
 
       <div className="border-t border-line" />
 
