@@ -13,12 +13,12 @@ const HUB_ICONS: Record<string, string> = {
 // GP-facing hub descriptions — what an operator actually does in each hub.
 const HUB_COPY: Record<string, string> = {
   build:
-    "Establish your GP identity — firm thesis, entity structure, brand, and track record. The foundation every deal and LP conversation rests on.",
+    "Establish your firm identity — thesis, entity structure, brand, and track record. The foundation every deal and capital conversation rests on.",
   source:
-    "Build and work your pipeline. Deals, LP capital, debt, and co-invest. Every relationship tracked, every conversation logged, nothing in a spreadsheet.",
+    "Build and work your pipeline. Deals, equity capital, debt, co-invest, and advisory mandates. Every relationship tracked, every conversation logged.",
   run: "Evaluate active opportunities from first look to IC. Diligence, underwriting, stress testing, and investment committee prep — in one place.",
   execute:
-    "Operate from close to exit. Capital events, asset-level KPIs, LP reporting, and exit management. No off-platform workarounds.",
+    "Operate from close to exit. Capital events, asset-level KPIs, investor reporting, and exit management. No off-platform workarounds.",
 };
 
 // Three core modules per hub — lead with the highest-signal work.
@@ -33,7 +33,7 @@ const HUB_CORE_MODULES: Record<string, string[]> = {
 const LOOP = [
   {
     step: "Instruct",
-    body: "Brief the Associate in plain language — a deal to evaluate, an LP to update, a report to produce.",
+    body: "Brief Earn in plain language — a deal to evaluate, an investor to update, a report to produce.",
   },
   {
     step: "Structure",
@@ -49,14 +49,14 @@ const LOOP = [
   },
 ];
 
-// Institutional agent descriptions — concrete, GP-facing.
+// Institutional agent descriptions — concrete, capital-markets facing.
 const AGENT_COPY: Record<string, string> = {
   analyst:
     "Produces pro formas, valuations, and sensitivity analyses from raw deal data. Your underwriting desk — without the headcount.",
   associate:
     "Coordinates every workflow across all four hubs. Routes tasks, manages agent handoffs, keeps nothing siloed.",
   investor_relations:
-    "Drafts LP updates, generates capital call notices, and manages the full investor communication cycle.",
+    "Manages the full capital relationship cycle — investor updates, capital call notices, subscription documents, and reporting across LPs, family offices, and institutional co-investors.",
   portfolio_ops:
     "Tracks KPIs, budgets, and capex variance across every asset. Flags problems before they surface in a board report.",
   diligence:
@@ -158,7 +158,7 @@ export default function LandingPage({
               Every instruction becomes a traceable, auditable deliverable.
             </h2>
             <p className="mt-4 text-fg-secondary">
-              Direct the Associate the way you would a senior analyst.{" "}
+              Direct Earn the way you would a senior analyst.{" "}
               <span className="text-fg-primary">
                 &ldquo;Produce a diligence memo on 123 Main Street by Thursday.&rdquo;
               </span>{" "}
@@ -211,9 +211,9 @@ export default function LandingPage({
           Six agents. Native to private markets.
         </h2>
         <p className="mt-3 max-w-xl text-fg-secondary">
-          Each agent owns a domain — deal analysis, LP relations, diligence,
+          Each agent owns a domain — deal analysis, capital relations, diligence,
           portfolio operations, fund administration, workflow coordination.
-          Coordinated by the Associate. Authorized by you.
+          Coordinated by Earn. Authorized by you.
         </p>
 
         <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
