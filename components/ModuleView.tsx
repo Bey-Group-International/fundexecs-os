@@ -14,7 +14,9 @@ import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { MandateStrip } from "@/components/build/MandateStrip";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
+import { ModuleDashboard } from "@/components/source/ModuleDashboard";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
+import { summarizeModule } from "@/lib/source-stats";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 
@@ -246,9 +248,13 @@ export async function ModuleView({
     const { data } = await query;
     const rows = (data ?? []) as unknown as Record<string, unknown>[];
     const addConfig = ADD_ROW_CONFIGS[key];
+    // Source modules read as live dashboards: a KPI strip + stage funnel over
+    // the table, derived from the rows already loaded (no extra queries).
+    const summary = summarizeModule(key, rows);
     return (
       <div>
         {mandateStrip}
+        {summary ? <ModuleDashboard summary={summary} empty={rows.length === 0} /> : null}
         {addConfig ? (
           <AddRowForm
             hub={hub.key}
