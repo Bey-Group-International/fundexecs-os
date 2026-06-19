@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { gateDecision, type ActionKind } from "@/lib/gates";
 import { getActiveMandate } from "@/lib/mandates";
+import { dispatchAction } from "@/lib/integrations";
 import type { AgentKey, Json } from "@/lib/supabase/database.types";
 
 // Which executive owns each kind of next action. Determines who the queued task
@@ -57,7 +58,7 @@ export async function queueNextAction(
 
   const { data: investor } = await supabase
     .from("investors")
-    .select("id, name")
+    .select("id, name, contact_email")
     .eq("id", investorId)
     .maybeSingle();
   if (!investor) return { ok: false, error: "Investor not found." };
@@ -118,17 +119,61 @@ export async function queueNextAction(
       hub: "source",
       payload: { approval_id: approval?.id, gate_tier: decision.tier, summary: title } as Json,
     });
+
+    revalidatePath("/capital-map");
+    revalidatePath("/dashboard");
+
+    return {
+      ok: true,
+      gated: true,
+      tier: decision.tier,
+      message: `Tier ${decision.tier} — sent to your approvals before it goes out.`,
+    };
   }
+
+  // Tier 1 runs free: dispatch it now through the integration layer and close
+  // the task. Gated actions instead wait for the operator's approval; once
+  // cleared, the approval-decision path calls dispatchAction with the same
+  // context (the seam the adapters plug into).
+  const result = await dispatchAction({
+    orgId,
+    actorId: auth.ctx.userId,
+    action,
+    target: { name: investor.name, email: investor.contact_email ?? undefined },
+  });
+
+  await supabase
+    .from("tasks")
+    .update({
+      status: result.ok ? "completed" : "failed",
+      progress: 1,
+      completed_at: new Date().toISOString(),
+      result: { dispatch: result } as unknown as Json,
+    })
+    .eq("id", task.id);
+
+  await supabase.from("task_events").insert({
+    organization_id: orgId,
+    task_id: task.id,
+    event_type: "task.completed",
+    agent: AGENT_FOR_ACTION[action],
+    hub: "source",
+    payload: {
+      ok: result.ok,
+      channel: result.channel,
+      live: result.live,
+      detail: result.detail,
+    } as Json,
+  });
 
   revalidatePath("/capital-map");
   revalidatePath("/dashboard");
 
   return {
-    ok: true,
-    gated: decision.requiresApproval,
+    ok: result.ok,
+    gated: false,
     tier: decision.tier,
-    message: decision.requiresApproval
-      ? `Tier ${decision.tier} — sent to your approvals before it goes out.`
-      : "Queued for Earn to run.",
+    message: result.detail,
+    error: result.ok ? undefined : result.error,
   };
 }
