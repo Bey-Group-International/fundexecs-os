@@ -254,7 +254,32 @@ export type DiligenceItem = Timestamps & {
   status: DiligenceStatus;
   risk_severity: RiskSeverity | null;
   finding: string | null;
+  likelihood: RiskSeverity | null;
+  mitigation: string | null;
+  residual_severity: RiskSeverity | null;
 }
+
+export type IcDecisionKind = "go" | "conditional" | "hold" | "no_go";
+
+export type IcDecision = {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  decision: IcDecisionKind;
+  rationale: string | null;
+  conviction: number | null;
+  decided_by: string | null;
+  created_at: string;
+};
+
+export type ConvictionSnapshot = {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  score: number;
+  stage: string;
+  captured_at: string;
+};
 
 export type Relationship = Timestamps & {
   id: string;
@@ -617,6 +642,8 @@ export type Database = {
       documents: TableShape<Document>;
       underwritings: TableShape<Underwriting>;
       diligence_items: TableShape<DiligenceItem>;
+      ic_decisions: TableShape<IcDecision>;
+      conviction_snapshots: TableShape<ConvictionSnapshot>;
       relationships: TableShape<Relationship>;
       ai_agents: TableShape<AiAgent>;
       prompts: TableShape<Prompt>;
