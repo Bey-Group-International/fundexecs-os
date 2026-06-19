@@ -25,7 +25,7 @@ export const AGENTS: AgentDefinition[] = [
   },
   {
     key: "associate",
-    name: "Associate",
+    name: "Earn",
     hub: null,
     role: "Coordinates workflows and task execution across all hubs.",
     color: "#6366f1",
