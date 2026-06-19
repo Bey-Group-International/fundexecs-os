@@ -232,21 +232,34 @@ export default function LandingPage({
 
       {/* Bottom CTA */}
       <section className="mx-auto max-w-6xl px-6 py-24 text-center">
-        <h2 className="text-3xl font-semibold tracking-tight">
-          3 hours a day on smoke-and-mirrors deals.<br />
-          There had to be a better way.
-        </h2>
-        <p className="mx-auto mt-3 max-w-md text-fg-secondary">
-          FundExecs OS was built by operators who lived the problem — sourcing
-          pipelines full of noise, LP comms running on email threads, IC memos
-          assembled at midnight. This is the system we needed and could not find.
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+          Early access
         </p>
-        <Link
-          href="/login?mode=signup"
-          className="mt-8 inline-block rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
-        >
-          Request access
-        </Link>
+        <h2 className="mt-4 text-3xl font-semibold tracking-tight">
+          Built for the operators<br />running real capital.
+        </h2>
+        <p className="mx-auto mt-4 max-w-lg text-fg-secondary">
+          FundExecs OS is invite-only. We're onboarding GPs, family offices, and
+          advisory professionals who are ready to replace their fragmented stack
+          with one intelligent system.
+        </p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/login?mode=signup"
+            className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
+          >
+            Request access
+          </Link>
+          <Link
+            href="/login"
+            className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
+          >
+            Sign in
+          </Link>
+        </div>
+        <p className="mt-6 font-mono text-xs text-fg-muted">
+          Pre-Alpha · Invite only · No credit card required
+        </p>
       </section>
 
       <footer className="border-t border-line px-6 py-6">
