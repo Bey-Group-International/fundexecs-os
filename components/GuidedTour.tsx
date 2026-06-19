@@ -70,6 +70,13 @@ export function GuidedTour() {
     } catch {
       // ignore malformed storage
     }
+
+    // The account menu's "Walkthrough" item re-opens the tour from anywhere.
+    function openTour() {
+      persistCollapsed(false);
+    }
+    window.addEventListener("fx:open-tour", openTour);
+    return () => window.removeEventListener("fx:open-tour", openTour);
   }, []);
 
   function persistDone(next: number[]) {
