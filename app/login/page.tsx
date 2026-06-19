@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { Logo } from "@/components/Logo";
 import { signIn, signUp, signInWithGoogle } from "./actions";
 
 export default async function LoginPage({
@@ -17,9 +18,7 @@ export default async function LoginPage({
     <div className="flex min-h-screen bg-surface-0">
       {/* Left branding panel */}
       <div className="hidden w-2/5 flex-col justify-between border-r border-line p-12 lg:flex">
-        <Link href="/" className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
-          FundExecs OS
-        </Link>
+        <Logo />
         <div>
           <p className="text-2xl font-semibold leading-snug tracking-tight text-fg-primary">
             The Operating System<br />for Private Markets
@@ -36,9 +35,7 @@ export default async function LoginPage({
       {/* Right form panel */}
       <div className="flex flex-1 flex-col items-center justify-center px-6">
         <div className="w-full max-w-sm">
-          <Link href="/" className="mb-8 block font-mono text-xs uppercase tracking-[0.2em] text-gold-400 lg:hidden">
-            FundExecs OS
-          </Link>
+          <Logo className="mb-8 block lg:hidden" />
 
           <h1 className="text-2xl font-semibold tracking-tight text-fg-primary">
             {isSignup ? "Create your account" : "Welcome back"}
