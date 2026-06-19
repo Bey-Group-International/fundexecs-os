@@ -8,6 +8,7 @@ import { GuidedTour } from "@/components/GuidedTour";
 import {
   createSessionGroup,
   moveSessionToGroup,
+  deleteSession,
 } from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
 import { createServerClient } from "@/lib/supabase/server";
@@ -104,6 +105,7 @@ export default async function AppLayout({
         signOutAction={signOut}
         createGroupAction={createSessionGroup}
         moveSessionAction={moveSessionToGroup}
+        deleteSessionAction={deleteSession}
       />
 
       <ActiveSessionProvider>
