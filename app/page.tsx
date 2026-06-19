@@ -10,13 +10,60 @@ const HUB_ICONS: Record<string, string> = {
   execute: "◆",
 };
 
-// The product loop, in four beats — the spine of every workflow and automation.
+// GP-facing hub descriptions — what an operator actually does in each hub.
+const HUB_COPY: Record<string, string> = {
+  build:
+    "Establish your GP identity — firm thesis, entity structure, brand, and track record. The foundation every deal and LP conversation rests on.",
+  source:
+    "Build and work your pipeline. Deals, LP capital, debt, and co-invest. Every relationship tracked, every conversation logged, nothing in a spreadsheet.",
+  run: "Evaluate active opportunities from first look to IC. Diligence, underwriting, stress testing, and investment committee prep — in one place.",
+  execute:
+    "Operate from close to exit. Capital events, asset-level KPIs, LP reporting, and exit management. No off-platform workarounds.",
+};
+
+// Three core modules per hub — lead with the highest-signal work.
+const HUB_CORE_MODULES: Record<string, string[]> = {
+  build: ["Thesis", "Entity", "Track Record"],
+  source: ["Deal Pipeline", "LP Pipeline", "Debt & Hybrid"],
+  run: ["Diligence", "Underwriting", "Stress Test"],
+  execute: ["Capital Events", "Asset Management", "Reporting"],
+};
+
+// The capital workflow loop — institutional framing.
 const LOOP = [
-  { step: "Prompt", body: "Tell the Associate what you need, in plain English." },
-  { step: "Plan", body: "It routes the work to the right agents as ordered steps." },
-  { step: "Approve", body: "You review the plan. Nothing runs until you say so." },
-  { step: "Deliver", body: "Agents execute and leave durable artifacts — IC memos, models, LP updates." },
+  {
+    step: "Instruct",
+    body: "Brief the Associate in plain language — a deal to evaluate, an LP to update, a report to produce.",
+  },
+  {
+    step: "Structure",
+    body: "It builds an ordered plan and assigns the right agents to each step.",
+  },
+  {
+    step: "Authorize",
+    body: "You review the plan. No agent executes without your explicit sign-off.",
+  },
+  {
+    step: "Deliver",
+    body: "Agents execute and leave durable, auditable artifacts — IC memos, capital call notices, variance reports.",
+  },
 ];
+
+// Institutional agent descriptions — concrete, GP-facing.
+const AGENT_COPY: Record<string, string> = {
+  analyst:
+    "Produces pro formas, valuations, and sensitivity analyses from raw deal data. Your underwriting desk — without the headcount.",
+  associate:
+    "Coordinates every workflow across all four hubs. Routes tasks, manages agent handoffs, keeps nothing siloed.",
+  investor_relations:
+    "Drafts LP updates, generates capital call notices, and manages the full investor communication cycle.",
+  portfolio_ops:
+    "Tracks KPIs, budgets, and capex variance across every asset. Flags problems before they surface in a board report.",
+  diligence:
+    "Parses offering memoranda, leases, and financials. Surfaces risks and produces diligence memos ready for IC.",
+  fund_admin:
+    "Runs waterfall calculations, fund accounting, and audit prep. Back-office coverage without the back office.",
+};
 
 export default function LandingPage({
   searchParams,
@@ -96,46 +143,32 @@ export default function LandingPage({
             Born from 4+ years of advisory — and 3 hours a day lost to deals that were smoke and mirrors.
           </p>
         </div>
-
-        {/* Stat strip */}
-        <div className="mt-16 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-surface-2 sm:grid-cols-4">
-          {[
-            { label: "Point solutions replaced", value: "30+" },
-            { label: "AI agents", value: "6" },
-            { label: "Operational hubs", value: "4" },
-            { label: "Always-on automations", value: "24/7" },
-          ].map((s) => (
-            <div key={s.label} className="bg-surface-0 px-6 py-5">
-              <p className="text-2xl font-semibold text-fg-primary">{s.value}</p>
-              <p className="mt-0.5 text-xs text-fg-secondary">{s.label}</p>
-            </div>
-          ))}
-        </div>
       </section>
 
       <div className="border-t border-line" />
 
-      {/* Agents that own the work — the differentiator */}
+      {/* The capital workflow loop */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
-              Automations
+              How it works
             </p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-              Agents that own the work
+              Every instruction becomes a traceable, auditable deliverable.
             </h2>
             <p className="mt-4 text-fg-secondary">
-              Save an instruction once — <span className="text-fg-primary">&ldquo;Every Monday,
-              summarize what moved in our pipeline&rdquo;</span> — and it runs on a schedule,
-              plans itself, and executes end-to-end. Approval-gated by default; flip on
-              auto-approve only for the work you trust to run unattended.
+              Direct the Associate the way you would a senior analyst.{" "}
+              <span className="text-fg-primary">
+                &ldquo;Produce a diligence memo on 123 Main Street by Thursday.&rdquo;
+              </span>{" "}
+              It structures the work, assigns agents, and presents a plan for your approval before a single action is taken.
             </p>
             <ul className="mt-6 space-y-3 text-sm text-fg-secondary">
               {[
-                "Scheduled & on-demand triggers — daily, weekly, or run now",
-                "Opt-in autonomy — you stay in the loop until you choose not to",
-                "Every run leaves a durable, auditable deliverable",
+                "Approval-gated by default — nothing executes without your sign-off",
+                "Every run leaves a timestamped, version-controlled artifact",
+                "Full audit trail from instruction to deliverable",
               ].map((f) => (
                 <li key={f} className="flex items-start gap-2.5">
                   <span className="mt-1 text-gold-400">→</span>
@@ -148,9 +181,9 @@ export default function LandingPage({
           {/* The loop, visualized */}
           <div className="rounded-2xl border border-line bg-surface-1 p-6">
             <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
-              The loop — every workflow, every automation
+              The capital workflow loop
             </p>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               {LOOP.map((l, i) => (
                 <div key={l.step} className="flex items-start gap-3">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 font-mono text-xs text-gold-300">
@@ -158,7 +191,7 @@ export default function LandingPage({
                   </span>
                   <div>
                     <p className="text-sm font-medium text-fg-primary">{l.step}</p>
-                    <p className="text-xs text-fg-secondary">{l.body}</p>
+                    <p className="text-xs leading-relaxed text-fg-secondary">{l.body}</p>
                   </div>
                 </div>
               ))}
@@ -169,64 +202,18 @@ export default function LandingPage({
 
       <div className="border-t border-line" />
 
-      {/* The Four Hubs */}
+      {/* The Agents — moved above hubs, institutional presentation */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
-          Architecture
+          Agent Roster
         </p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-          Four hubs. One operating system.
+          Six agents. Native to private markets.
         </h2>
         <p className="mt-3 max-w-xl text-fg-secondary">
-          Every action an operator takes — from building their identity to
-          exiting an asset — belongs to one of four hubs. Nothing falls through
-          the cracks.
-        </p>
-
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          {HUBS.map((hub, i) => (
-            <div
-              key={hub.key}
-              className="rounded-xl border border-line bg-surface-1 p-6 transition hover:border-gold-500/30 hover:bg-surface-2"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="font-mono text-lg text-gold-400">
-                    {HUB_ICONS[hub.key]}
-                  </span>
-                  <h3 className="mt-2 text-lg font-medium">{hub.label}</h3>
-                  <p className="mt-1 text-sm text-fg-secondary">{hub.purpose}</p>
-                </div>
-                <span className="font-mono text-xs text-fg-muted">0{i + 1}</span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {hub.modules.map((m) => (
-                  <span
-                    key={m.key}
-                    className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-fg-secondary"
-                  >
-                    {m.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="border-t border-line" />
-
-      {/* The Six Agents */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
-          AI Agents
-        </p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-          Six agents. Every workflow covered.
-        </h2>
-        <p className="mt-3 max-w-xl text-fg-secondary">
-          Each agent owns a domain of private-market expertise. They operate
-          natively — no third-party AI SDKs. You approve, they execute.
+          Each agent owns a domain — deal analysis, LP relations, diligence,
+          portfolio operations, fund administration, workflow coordination.
+          Coordinated by the Associate. Authorized by you.
         </p>
 
         <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -244,8 +231,59 @@ export default function LandingPage({
                 <h3 className="font-medium">{agent.name}</h3>
               </div>
               <p className="mt-2.5 text-xs leading-relaxed text-fg-secondary">
-                {agent.role}
+                {AGENT_COPY[agent.key] ?? agent.role}
               </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="border-t border-line" />
+
+      {/* The Four Hubs */}
+      <section className="mx-auto max-w-6xl px-6 py-24">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
+          Architecture
+        </p>
+        <h2 className="mt-3 text-3xl font-semibold tracking-tight">
+          Four hubs. One operating system.
+        </h2>
+        <p className="mt-3 max-w-xl text-fg-secondary">
+          Build your firm. Source deals and capital. Run active opportunities
+          through diligence and underwriting. Execute from close to exit.
+          Every workflow in one place.
+        </p>
+
+        <div className="mt-10 grid gap-4 sm:grid-cols-2">
+          {HUBS.map((hub, i) => (
+            <div
+              key={hub.key}
+              className="rounded-xl border border-line bg-surface-1 p-6 transition hover:border-gold-500/30 hover:bg-surface-2"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="font-mono text-lg text-gold-400">
+                    {HUB_ICONS[hub.key]}
+                  </span>
+                  <h3 className="mt-2 text-lg font-medium">{hub.label}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-fg-secondary">
+                    {HUB_COPY[hub.key] ?? hub.purpose}
+                  </p>
+                </div>
+                <span className="font-mono text-xs text-fg-muted">0{i + 1}</span>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-1.5">
+                {(HUB_CORE_MODULES[hub.key] ?? hub.modules.slice(0, 3).map((m) => m.label)).map(
+                  (label) => (
+                    <span
+                      key={label}
+                      className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-fg-secondary"
+                    >
+                      {label}
+                    </span>
+                  ),
+                )}
+              </div>
             </div>
           ))}
         </div>
