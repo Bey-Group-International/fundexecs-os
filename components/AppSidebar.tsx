@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-// Client-side side rail. Modeled on Claude Code's sidebar: a minimal top level
-// (Logo · New Session · Workflows · More), the operational hubs whose modules
-// expand on click, and a bottom account button whose menu pops out on click
-// with Sign out pinned to the very bottom. All reveal-on-click — no hover.
+// Client-side side rail, Claude Code style. Minimal top level (Logo · New
+// Session · Workflows · More), the operational hubs whose modules expand on
+// click, then a "Recent" conversation list below the hubs — sessions filed
+// under group names with an Ungrouped bucket — and a bottom account button
+// whose menu pops out on click with Sign out pinned to the very bottom.
 
 interface NavItem {
   href: string;
@@ -23,6 +25,7 @@ interface HubItem {
 interface SessionItem {
   id: string;
   name: string;
+  color: string | null;
   groupId: string | null;
 }
 
@@ -70,7 +73,6 @@ export function AppSidebar({
   hubs,
   sessions,
   groups,
-  startSessionAction,
   signOutAction,
   createGroupAction,
   moveSessionAction,
@@ -80,11 +82,11 @@ export function AppSidebar({
   hubs: HubItem[];
   sessions: SessionItem[];
   groups: GroupItem[];
-  startSessionAction: () => void;
   signOutAction: () => void;
   createGroupAction: (formData: FormData) => void;
   moveSessionAction: (formData: FormData) => void;
 }) {
+  const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [openHub, setOpenHub] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -116,6 +118,72 @@ export function AppSidebar({
   const linkClass =
     "flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary";
 
+  // A single conversation row, Claude Code style: color dot, active highlight,
+  // and a "⋯" menu to file it under a group.
+  function SessionRow({ s }: { s: SessionItem }) {
+    const active = pathname === `/session/${s.id}`;
+    return (
+      <div className="relative flex items-center">
+        <Link
+          href={`/session/${s.id}`}
+          title={s.name}
+          className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 pl-4 transition ${
+            active
+              ? "bg-surface-2 text-fg-primary"
+              : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+          }`}
+        >
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: s.color ?? "#a1a1aa" }}
+          />
+          <span className="min-w-0 flex-1 truncate text-[13px]">{s.name}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setMovingId(movingId === s.id ? null : s.id)}
+          aria-label="File session in a group"
+          title="Move to group"
+          className="shrink-0 rounded-md px-1.5 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
+        >
+          ⋯
+        </button>
+
+        {movingId === s.id ? (
+          <div className="absolute right-1 top-full z-10 mt-0.5 flex w-40 flex-col gap-0.5 rounded-lg border border-line bg-surface-1 p-1.5 shadow-2xl">
+            <p className="px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+              Move to
+            </p>
+            {[{ id: "", name: "Ungrouped" }, ...groups].map((g) => {
+              const current = (s.groupId ?? "") === g.id;
+              return (
+                <form
+                  key={g.id || "ungrouped"}
+                  action={moveSessionAction}
+                  onSubmit={() => setMovingId(null)}
+                >
+                  <input type="hidden" name="id" value={s.id} />
+                  <input type="hidden" name="group_id" value={g.id} />
+                  <button
+                    disabled={current}
+                    className={`w-full truncate rounded-md px-2 py-1 text-left text-xs transition ${
+                      current
+                        ? "text-gold-300"
+                        : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                    }`}
+                  >
+                    {current ? "✓ " : ""}
+                    {g.name}
+                  </button>
+                </form>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <aside className="flex w-[224px] shrink-0 flex-col border-r border-line bg-surface-1">
       {/* Logo — Earn coin mark + wordmark */}
@@ -136,12 +204,15 @@ export function AppSidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
-        <form action={startSessionAction}>
-          <button className="flex w-full items-center justify-center gap-2 rounded-md bg-gold-400 px-2 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
-            <span className="text-base leading-none">+</span>
-            New Session
-          </button>
-        </form>
+        {/* New Session opens a blank conversation. The session row is created
+            lazily on the first prompt, so clicking this never leaves empties. */}
+        <Link
+          href="/workspace"
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-gold-400 px-2 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
+        >
+          <span className="text-base leading-none">+</span>
+          New Session
+        </Link>
 
         <div className="mt-3 flex flex-col gap-0.5">
           <Link href="/automations" className={linkClass}>
@@ -215,7 +286,8 @@ export function AppSidebar({
           );
         })}
 
-        {/* Recent — sessions, filed under group names with an Ungrouped bucket */}
+        {/* Recent — conversation list below the hubs, filed under group names
+            with an Ungrouped bucket. */}
         <div ref={recentRef}>
           <div className="mb-1 mt-5 flex items-center justify-between px-2">
             <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
@@ -273,57 +345,9 @@ export function AppSidebar({
                   </button>
 
                   {!isGroupCollapsed ? (
-                    <div className="flex flex-col">
+                    <div className="flex flex-col gap-0.5">
                       {sec.sessions.map((s) => (
-                        <div key={s.id} className="relative flex items-center">
-                          <Link
-                            href={`/session/${s.id}`}
-                            className="min-w-0 flex-1 truncate rounded-md px-2 py-1 pl-4 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
-                          >
-                            {s.name}
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => setMovingId(movingId === s.id ? null : s.id)}
-                            aria-label="File session in a group"
-                            title="Move to group"
-                            className="shrink-0 rounded-md px-1.5 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
-                          >
-                            ⋯
-                          </button>
-
-                          {movingId === s.id ? (
-                            <div className="absolute right-1 top-full z-10 mt-0.5 flex w-40 flex-col gap-0.5 rounded-lg border border-line bg-surface-1 p-1.5 shadow-2xl">
-                              <p className="px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-fg-muted">
-                                Move to
-                              </p>
-                              {[{ id: "", name: "Ungrouped" }, ...groups].map((g) => {
-                                const current = (s.groupId ?? "") === g.id;
-                                return (
-                                  <form
-                                    key={g.id || "ungrouped"}
-                                    action={moveSessionAction}
-                                    onSubmit={() => setMovingId(null)}
-                                  >
-                                    <input type="hidden" name="id" value={s.id} />
-                                    <input type="hidden" name="group_id" value={g.id} />
-                                    <button
-                                      disabled={current}
-                                      className={`w-full truncate rounded-md px-2 py-1 text-left text-xs transition ${
-                                        current
-                                          ? "text-gold-300"
-                                          : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
-                                      }`}
-                                    >
-                                      {current ? "✓ " : ""}
-                                      {g.name}
-                                    </button>
-                                  </form>
-                                );
-                              })}
-                            </div>
-                          ) : null}
-                        </div>
+                        <SessionRow key={s.id} s={s} />
                       ))}
                     </div>
                   ) : null}

@@ -12,15 +12,17 @@ export async function POST(request: Request) {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const { body } = await request.json().catch(() => ({ body: "" }));
+  const { body, session_id } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return NextResponse.json({ error: "Missing 'body'" }, { status: 400 });
   }
+  const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
 
   const supabase = createServerClient();
   const result = await handlePrompt(
     { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId },
     body,
+    sessionId,
   );
   return NextResponse.json(result, { status: 201 });
 }

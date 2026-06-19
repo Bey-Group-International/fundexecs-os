@@ -6,7 +6,6 @@ import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
 import {
-  startSession,
   createSessionGroup,
   moveSessionToGroup,
 } from "@/app/(app)/sessions/actions";
@@ -34,19 +33,19 @@ export default async function AppLayout({
 
   const balance = await getWalletBalance(ctx.orgId);
 
-  // Account display + the rail's "Recent" sessions list (named groups and an
-  // ungrouped bucket), most-recently-touched first.
+  // Account display + the rail's "Recent" conversation list (Claude Code
+  // style): sessions filed under group names with an Ungrouped bucket.
   const supabase = createServerClient();
-  const [{ data: principal }, { data: wallet }, { data: sessionRows }, { data: groupRows }] =
+  const [{ data: principal }, { data: wallet }, { data: recentSessions }, { data: groupRows }] =
     await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
       supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
       supabase
         .from("sessions")
-        .select("id, name, group_id")
+        .select("id, name, color, group_id")
         .eq("organization_id", ctx.orgId)
         .is("archived_at", null)
-        .order("updated_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(25),
       supabase
         .from("session_groups")
@@ -58,11 +57,28 @@ export default async function AppLayout({
   const planKey = wallet?.plan as PlanKey | null;
   const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
 
-  const sessions = (sessionRows ?? []).map((s) => ({
-    id: s.id,
-    name: s.name,
-    groupId: s.group_id,
-  }));
+  // Only surface sessions that actually hold work. A session is created lazily
+  // on the first prompt (which also creates its workflow), so empty rows never
+  // appear in the conversation list.
+  const candidates = (recentSessions ?? []) as {
+    id: string;
+    name: string;
+    color: string | null;
+    group_id: string | null;
+  }[];
+  const candidateIds = candidates.map((s) => s.id);
+  const { data: workflowRows } = candidateIds.length
+    ? await supabase
+        .from("tasks")
+        .select("session_id")
+        .is("parent_task_id", null)
+        .in("session_id", candidateIds)
+    : { data: [] as { session_id: string | null }[] };
+  const sessionsWithWork = new Set((workflowRows ?? []).map((w) => w.session_id));
+  const sessions = candidates
+    .filter((s) => sessionsWithWork.has(s.id))
+    .slice(0, 12)
+    .map((s) => ({ id: s.id, name: s.name, color: s.color, groupId: s.group_id }));
   const groups = (groupRows ?? []).map((g) => ({ id: g.id, name: g.name }));
 
   const hubs = HUB_ORDER.map((key) => {
@@ -85,7 +101,6 @@ export default async function AppLayout({
         hubs={hubs}
         sessions={sessions}
         groups={groups}
-        startSessionAction={startSession}
         signOutAction={signOut}
         createGroupAction={createSessionGroup}
         moveSessionAction={moveSessionToGroup}

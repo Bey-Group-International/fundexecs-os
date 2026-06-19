@@ -55,11 +55,13 @@ const STEPS: TourStep[] = [
 
 const DONE_KEY = "fx_tour_done_v1";
 const COLLAPSED_KEY = "fx_tour_collapsed_v1";
+const HIDDEN_KEY = "fx_tour_hidden_v1";
 
 export function GuidedTour() {
   const [mounted, setMounted] = useState(false);
   const [done, setDone] = useState<number[]>([]);
   const [collapsed, setCollapsed] = useState(false);
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -67,16 +69,27 @@ export function GuidedTour() {
       const d = JSON.parse(localStorage.getItem(DONE_KEY) ?? "[]");
       if (Array.isArray(d)) setDone(d);
       setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
+      setHidden(localStorage.getItem(HIDDEN_KEY) === "1");
     } catch {
       // ignore malformed storage
     }
 
-    // The account menu's "Walkthrough" item re-opens the tour from anywhere.
+    // The account menu's "Walkthrough" item — and the Settings toggle —
+    // re-open the tour from anywhere: unhide it and expand it.
     function openTour() {
+      persistHidden(false);
       persistCollapsed(false);
     }
+    // Settings can also dismiss the tour entirely.
+    function hideTour() {
+      persistHidden(true);
+    }
     window.addEventListener("fx:open-tour", openTour);
-    return () => window.removeEventListener("fx:open-tour", openTour);
+    window.addEventListener("fx:hide-tour", hideTour);
+    return () => {
+      window.removeEventListener("fx:open-tour", openTour);
+      window.removeEventListener("fx:hide-tour", hideTour);
+    };
   }, []);
 
   function persistDone(next: number[]) {
@@ -97,6 +110,21 @@ export function GuidedTour() {
     }
   }
 
+  function persistHidden(v: boolean) {
+    setHidden(v);
+    try {
+      localStorage.setItem(HIDDEN_KEY, v ? "1" : "0");
+    } catch {
+      // ignore
+    }
+    // Let any open Settings panel reflect the new state immediately.
+    try {
+      window.dispatchEvent(new Event("fx:tour-visibility-changed"));
+    } catch {
+      // ignore
+    }
+  }
+
   function toggleStep(i: number) {
     persistDone(done.includes(i) ? done.filter((x) => x !== i) : [...done, i]);
   }
@@ -104,20 +132,33 @@ export function GuidedTour() {
   // Avoid hydration mismatch — render nothing until we've read localStorage.
   if (!mounted) return null;
 
+  // Fully dismissed — the tester can bring it back from Settings → Guided tour.
+  if (hidden) return null;
+
   const completed = done.length;
   const nextIdx = STEPS.findIndex((_, i) => !done.includes(i));
 
   if (collapsed) {
     return (
-      <button
-        onClick={() => persistCollapsed(false)}
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full border border-gold-500/40 bg-surface-1 px-3.5 py-2 text-xs font-medium text-gold-300 shadow-lg transition hover:bg-surface-2"
-      >
-        <span className="font-mono">◆ Guided tour</span>
-        <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] text-gold-300">
-          {completed}/{STEPS.length}
-        </span>
-      </button>
+      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-1 rounded-full border border-gold-500/40 bg-surface-1 pr-1 shadow-lg">
+        <button
+          onClick={() => persistCollapsed(false)}
+          className="flex items-center gap-2 rounded-full py-2 pl-3.5 pr-1 text-xs font-medium text-gold-300 transition hover:text-gold-200"
+        >
+          <span className="font-mono">◆ Guided tour</span>
+          <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] text-gold-300">
+            {completed}/{STEPS.length}
+          </span>
+        </button>
+        <button
+          onClick={() => persistHidden(true)}
+          aria-label="Close the tour — bring it back from Settings → Guided tour"
+          title="Close the tour — bring it back from Settings → Guided tour"
+          className="flex h-6 w-6 items-center justify-center rounded-full text-fg-muted transition hover:bg-surface-2 hover:text-fg-primary"
+        >
+          ✕
+        </button>
+      </div>
     );
   }
 
@@ -141,6 +182,13 @@ export function GuidedTour() {
               Reset
             </button>
           ) : null}
+          <button
+            onClick={() => persistHidden(true)}
+            title="Hide the tour — bring it back from Settings → Guided tour"
+            className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+          >
+            Hide
+          </button>
           <button
             onClick={() => persistCollapsed(true)}
             aria-label="Collapse tour"
