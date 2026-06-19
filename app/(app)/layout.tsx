@@ -5,7 +5,6 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
-import { startSession } from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
@@ -40,9 +39,19 @@ export default async function AppLayout({
       .select("id, name, color")
       .is("archived_at", null)
       .order("created_at", { ascending: false })
-      .limit(8),
+      .limit(20),
   ]);
-  const sessions = (recentSessions ?? []) as { id: string; name: string; color: string | null }[];
+
+  // Only surface sessions that actually hold work. A session is created lazily
+  // on the first prompt (which also creates its workflow), so empty rows never
+  // appear in the conversation list.
+  const candidates = (recentSessions ?? []) as { id: string; name: string; color: string | null }[];
+  const candidateIds = candidates.map((s) => s.id);
+  const { data: workflowRows } = candidateIds.length
+    ? await supabase.from("tasks").select("session_id").is("parent_task_id", null).in("session_id", candidateIds)
+    : { data: [] as { session_id: string | null }[] };
+  const sessionsWithWork = new Set((workflowRows ?? []).map((w) => w.session_id));
+  const sessions = candidates.filter((s) => sessionsWithWork.has(s.id)).slice(0, 8);
   const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
   const planKey = wallet?.plan as PlanKey | null;
   const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
@@ -66,7 +75,6 @@ export default async function AppLayout({
         planName={planName}
         hubs={hubs}
         sessions={sessions}
-        startSessionAction={startSession}
         signOutAction={signOut}
       />
 
