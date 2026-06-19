@@ -6,6 +6,7 @@ import { signOut } from "@/app/login/actions";
 import type { MandateRow } from "@/lib/supabase/database.types";
 import { NewMandateForm } from "./NewMandateForm";
 import { Connections } from "./Connections";
+import { GuidedTourSetting } from "./GuidedTourSetting";
 import { TIER_2_ACTIONS } from "./tier2-actions";
 import { deactivateMandate } from "./actions";
 
@@ -120,6 +121,13 @@ export default async function SettingsPage() {
       </section>
 
       <Connections />
+
+      <section className="mt-8">
+        <header className="mb-3">
+          <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">Guided tour</h2>
+        </header>
+        <GuidedTourSetting />
+      </section>
 
       <form action={signOut} className="mt-6">
         <button className="rounded-md border border-line px-3 py-1.5 text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
