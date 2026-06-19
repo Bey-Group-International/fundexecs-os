@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
-import type { Task, Approval, Artifact, ArtifactType, AgentKey, Session } from "@/lib/supabase/database.types";
+import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 
 export interface WorkflowBundle {
@@ -13,24 +12,6 @@ export interface WorkflowBundle {
   steps: Task[];
   artifacts: Artifact[];
   approval: Approval | null;
-}
-
-// Short, human relative time ("just now", "3h ago", "2d ago") for the recent
-// sessions rail — mirrors how Claude Code stamps its recent conversations.
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (secs < 60) return "just now";
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  const weeks = Math.round(days / 7);
-  if (weeks < 5) return `${weeks}w ago`;
-  return new Date(iso).toLocaleDateString();
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -42,13 +23,6 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "Failed",
   cancelled: "Declined",
 };
-
-// Agent workforce groupings (matches the Command Center).
-const GROUPS: { label: string; keys: AgentKey[] }[] = [
-  { label: "Research", keys: ["analyst", "diligence"] },
-  { label: "Workflow", keys: ["associate", "investor_relations"] },
-  { label: "Execution", keys: ["portfolio_ops", "fund_admin"] },
-];
 
 function StepNode({ status, color }: { status: string; color?: string }) {
   if (status === "completed") {
@@ -79,15 +53,13 @@ export default function Copilot({
   orgId,
   live,
   bundles,
-  recentSessions = [],
   sessionId,
 }: {
   orgId: string;
   live: boolean;
   bundles: WorkflowBundle[];
-  recentSessions?: Session[];
-  // When set, prompts run inside this session (Earn keeps the work together)
-  // and the recent-sessions rail is hidden — we're already inside one.
+  // When set, prompts run inside this session and Earn plans with the session's
+  // earlier turns in mind. The composer reads as a reply rather than a launch.
   sessionId?: string;
 }) {
   const router = useRouter();
@@ -96,6 +68,12 @@ export default function Copilot({
   const [planning, setPlanning] = useState(false);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  // Keep the newest turn in view as the conversation grows — chat behavior.
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [bundles.length, planning]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -160,173 +138,86 @@ export default function Copilot({
     startTransition(() => router.refresh());
   }
 
-  // Which agents are currently executing a step (drives the workforce rail).
-  const activeAgents = new Set<AgentKey>();
-  for (const b of bundles) {
-    for (const s of b.steps) if (s.status === "in_progress") activeAgents.add(s.assigned_agent);
-  }
-
-  const [activeBundle, ...history] = bundles;
+  // Conversation order: oldest turn first, newest nearest the composer.
+  const turns = [...bundles].reverse();
+  const empty = turns.length === 0 && !planning;
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1fr_280px]">
-      <div>
-        {/* Recent sessions — sits above the chat, Claude Code style, for
-            one-click resume. The chat itself always opens fresh. */}
-        {recentSessions.length > 0 ? (
-          <section className="mb-6">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                Recent sessions
-              </p>
-              <Link
-                href="/dashboard"
-                className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
-              >
-                View all
-              </Link>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {recentSessions.map((s) => (
-                <Link
-                  key={s.id}
-                  href={`/session/${s.id}`}
-                  className="group flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-2 transition hover:border-gold-500/40 hover:bg-surface-2"
-                >
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: s.color ?? "#a1a1aa" }}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm text-fg-primary">
-                    {s.name}
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                    {relativeTime(s.created_at)}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </section>
+    <div className="mx-auto flex min-h-full max-w-3xl flex-col">
+      <header className="flex items-center gap-2 pb-4">
+        <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-gold-400">
+          Earn · Agent Copilot
+        </span>
+        <span className="flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-status-success" : "bg-fg-muted"}`} />
+          {live ? "Earn ready" : "Fallback mode"}
+        </span>
+      </header>
+
+      {/* Transcript — each turn is the operator's prompt and Earn's response. */}
+      <div className="flex flex-1 flex-col gap-6 pb-4">
+        {empty ? (
+          <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-fg-primary">
+              What should we run?
+            </h1>
+            <p className="mt-2 max-w-md text-sm text-fg-secondary">
+              Describe the work. The Associate drafts a plan, delegates to agents,
+              and asks before it automates. Follow-ups stay in this conversation.
+            </p>
+          </div>
         ) : null}
 
-        <header className="mb-5">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-gold-400">
-              Earn · Agent Copilot
-            </span>
-            <span className="flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-              <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-status-success" : "bg-fg-muted"}`} />
-              {live ? "Earn ready" : "Fallback mode"}
-            </span>
+        {turns.map((b) => (
+          <div key={b.workflow.id} className="flex flex-col gap-3">
+            {/* Operator's prompt */}
+            <div className="flex justify-end">
+              <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-surface-2 px-4 py-2.5 text-sm text-fg-primary">
+                {b.workflow.description || b.workflow.title}
+              </div>
+            </div>
+            {/* Earn's response */}
+            <WorkflowCard
+              bundle={b}
+              busy={busy}
+              decide={decide}
+              primary={b.approval?.decision === "pending"}
+            />
           </div>
-          <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-fg-primary">
-            What should we run?
-          </h1>
-          <p className="mt-1 text-sm text-fg-secondary">
-            Describe the work. The Associate drafts a plan, delegates to agents,
-            and asks before it automates.
-          </p>
-        </header>
-
-        <form onSubmit={submit} className="flex gap-2">
-          <input
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g. Build the LBO model and test debt capacity…"
-            className="flex-1 rounded-lg border border-line bg-surface-1 px-4 py-3 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
-          />
-          <button
-            disabled={busy}
-            className="rounded-lg bg-gold-400 px-5 py-3 text-sm font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
-          >
-            {planning ? "Planning…" : "Run"}
-          </button>
-        </form>
+        ))}
 
         {planning ? (
-          <div className="mt-4 flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">
+          <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">
             <span className="h-2 w-2 animate-pulse rounded-full bg-gold-400" />
             Reading your prompt · drafting a plan…
           </div>
         ) : null}
 
-        <div className="mt-7 flex flex-col gap-5">
-          {/* On the launcher the recent-sessions rail already fills the space,
-              so the empty hint only shows inside an empty session or a brand
-              new account. */}
-          {bundles.length === 0 && !planning && recentSessions.length === 0 ? (
-            <p className="text-sm text-fg-muted">No workflows yet. Enter a prompt to begin.</p>
-          ) : null}
-
-          {activeBundle ? (
-            <WorkflowCard bundle={activeBundle} busy={busy} decide={decide} primary />
-          ) : null}
-
-          {history.length > 0 ? (
-            <div>
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                Earlier workflows
-              </p>
-              <div className="flex flex-col gap-2">
-                {history.map((b) => (
-                  <details key={b.workflow.id} className="rounded-lg border border-line bg-surface-1">
-                    <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm text-fg-secondary">
-                      <span className="truncate text-fg-primary">{b.workflow.title}</span>
-                      <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                        {b.workflow.hub} · {STATUS_LABEL[b.workflow.status] ?? b.workflow.status}
-                      </span>
-                    </summary>
-                    <div className="border-t border-line px-4 py-3">
-                      <WorkflowSteps bundle={b} />
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <div ref={bottomRef} />
       </div>
 
-      {/* AI Agent Workforce rail */}
-      <aside className="lg:border-l lg:border-line lg:pl-5">
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-          AI Agent Workforce
-        </p>
-        <div className="flex flex-col gap-4">
-          {GROUPS.map((group) => (
-            <div key={group.label}>
-              <p className="mb-1.5 font-mono text-[9px] uppercase tracking-widest text-gold-400">
-                {group.label}
-              </p>
-              <div className="flex flex-col gap-1.5">
-                {group.keys.map((key) => {
-                  const agent = AGENT_BY_KEY[key];
-                  const active = activeAgents.has(key);
-                  return (
-                    <div key={key} className="rounded-lg border border-line bg-surface-1 p-2.5">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`h-2 w-2 rounded-full ${active ? "animate-pulse" : "opacity-50"}`}
-                          style={{ backgroundColor: agent.color }}
-                        />
-                        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-primary">
-                          {agent.name}
-                        </span>
-                        <span className="ml-auto font-mono text-[9px] uppercase text-fg-muted">
-                          {active ? "active" : "ready"}
-                        </span>
-                      </div>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-fg-muted">
-                        {agent.role}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      </aside>
+      {/* Composer — pinned to the bottom of the conversation. */}
+      <form
+        onSubmit={submit}
+        className="sticky bottom-0 flex gap-2 border-t border-line bg-surface-0/90 pb-1 pt-3 backdrop-blur supports-[backdrop-filter]:bg-surface-0/75"
+      >
+        <input
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder={
+            sessionId
+              ? "Reply to Earn — this stays in the conversation…"
+              : "e.g. Build the LBO model and test debt capacity…"
+          }
+          className="flex-1 rounded-lg border border-line bg-surface-1 px-4 py-3 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
+        />
+        <button
+          disabled={busy}
+          className="rounded-lg bg-gold-400 px-5 py-3 text-sm font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+        >
+          {planning ? "Planning…" : sessionId ? "Send" : "Run"}
+        </button>
+      </form>
     </div>
   );
 }

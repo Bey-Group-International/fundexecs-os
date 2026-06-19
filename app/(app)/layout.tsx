@@ -30,11 +30,19 @@ export default async function AppLayout({
   const balance = await getWalletBalance(ctx.orgId);
 
   // Account display: principal's name + current plan for the side-rail footer.
+  // The recent sessions feed the sidebar's conversation list (Claude Code style).
   const supabase = createServerClient();
-  const [{ data: principal }, { data: wallet }] = await Promise.all([
+  const [{ data: principal }, { data: wallet }, { data: recentSessions }] = await Promise.all([
     supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
     supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
+    supabase
+      .from("sessions")
+      .select("id, name, color")
+      .is("archived_at", null)
+      .order("created_at", { ascending: false })
+      .limit(8),
   ]);
+  const sessions = (recentSessions ?? []) as { id: string; name: string; color: string | null }[];
   const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
   const planKey = wallet?.plan as PlanKey | null;
   const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
@@ -57,6 +65,7 @@ export default async function AppLayout({
         name={name}
         planName={planName}
         hubs={hubs}
+        sessions={sessions}
         startSessionAction={startSession}
         signOutAction={signOut}
       />

@@ -128,16 +128,25 @@ function normalizePlan(raw: Partial<AgentPlan> | null, prompt: string): AgentPla
   };
 }
 
-export async function generatePlan(prompt: string): Promise<AgentPlan> {
+export async function generatePlan(
+  prompt: string,
+  priorContext: string[] = [],
+): Promise<AgentPlan> {
   const anthropic = client();
   if (!anthropic) return fallbackPlan(prompt);
+  // Earn remembers the session: earlier turns are replayed as conversation
+  // history so a follow-up like "now stress the downside" builds on what came
+  // before instead of being read in isolation.
+  const history = priorContext
+    .slice(-6)
+    .map((turn) => ({ role: "user" as const, content: turn }));
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 2000,
       system: PLAN_SYSTEM,
       output_config: { effort: "low", format: { type: "json_schema", schema: PLAN_SCHEMA } },
-      messages: [{ role: "user", content: prompt }],
+      messages: [...history, { role: "user", content: prompt }],
     });
     const json = textOf(message);
     return normalizePlan(json ? (JSON.parse(json) as AgentPlan) : null, prompt);
