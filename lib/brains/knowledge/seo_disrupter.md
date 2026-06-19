@@ -1,5 +1,4 @@
 # BGI SEO Disrupter / Unicorn Maker Brain
-
 ## Downloadable Knowledge Base for Search Domination, Authority Architecture, Category Creation, and Organic Lead Generation
 
 **Purpose:**  
@@ -478,47 +477,36 @@ BGI’s website should be structured like an authority hub.
 Every pillar page should follow this structure.
 
 ## Page Title:
-
 Clear SEO title.
 
 ## Hero:
-
 Direct headline with BGI positioning.
 
 ## Problem:
-
 What the searcher is trying to solve.
 
 ## Definition:
-
 Define the concept.
 
 ## Why It Matters:
-
 Explain market relevance.
 
 ## BGI Approach:
-
 Explain how BGI solves the problem.
 
 ## Proof / Authority:
-
 Include relevant experience, operating thesis, case-style examples, pipeline themes, or frameworks.
 
 ## CTA:
-
 Route to the correct conversion path.
 
 ## FAQ:
-
 Answer search questions.
 
 ## Internal Links:
-
 Link to related pages.
 
 ## Disclaimer:
-
 Use where investment language is present.
 
 ---
@@ -526,19 +514,15 @@ Use where investment language is present.
 # 9. Example Pillar Page: Culture-Driven Private Equity
 
 ## SEO Title:
-
 Culture-Driven Private Equity | Bey Group International
 
 ## Meta Description:
-
 Bey Group International is building a culture-driven private equity platform focused on lower-middle-market acquisitions, disciplined ownership, and operational execution.
 
 ## Headline:
-
 Culture Is Not Decoration. Culture Is Governance.
 
 ## Subheadline:
-
 BGI applies culture-driven governance to lower-middle-market acquisitions through control, operating discipline, creative financing, and the Moorish Customs Operating System.
 
 ## Sections:
@@ -565,19 +549,15 @@ BGI applies culture-driven governance to lower-middle-market acquisitions throug
 # 10. Example Pillar Page: Founder-Owned Business Succession
 
 ## SEO Title:
-
 Founder-Owned Business Succession Partner | Bey Group International
 
 ## Meta Description:
-
 BGI works with founder-owned businesses exploring succession, liquidity, growth, acquisition, or strategic transition.
 
 ## Headline:
-
 Built a Strong Business? The Next Chapter Requires Structure.
 
 ## Subheadline:
-
 BGI evaluates founder-owned businesses where succession, liquidity, growth support, or transition may require a disciplined acquisition partner.
 
 ## Sections:
@@ -748,7 +728,6 @@ It must be:
 ## Unicorn Content Examples
 
 ### Headline 1:
-
 Most Founder-Owned Businesses Are Not Broken. They Are Under-Institutionalized.
 
 Angle:
@@ -758,7 +737,6 @@ Angle:
 - Positions BGI as a thoughtful buyer
 
 ### Headline 2:
-
 Culture Is Not Decoration. Culture Is Governance.
 
 Angle:
@@ -768,7 +746,6 @@ Angle:
 - Creates a memorable category idea
 
 ### Headline 3:
-
 The Next Great Private Equity Opportunity Is Not in Silicon Valley. It Is in the Lower Middle Market.
 
 Angle:
@@ -778,7 +755,6 @@ Angle:
 - Opens conversation around overlooked businesses
 
 ### Headline 4:
-
 Family Offices Do Not Need More Pitch Decks. They Need Better Access.
 
 Angle:
@@ -787,7 +763,6 @@ Angle:
 - Positions BGI as a sourcing and structuring platform
 
 ### Headline 5:
-
 The Business Owner Exit Crisis Is an Acquisition Opportunity.
 
 Angle:
@@ -797,7 +772,6 @@ Angle:
 - Attracts both sellers and investors
 
 ### Headline 6:
-
 Most People Chase Capital. BGI Structures the Deal So Capital Has a Reason to Move.
 
 Angle:
@@ -1136,31 +1110,24 @@ This creates authority saturation.
 ## Weekly Rhythm
 
 ### Monday
-
 Publish investor-facing thought leadership.
 
 ### Tuesday
-
 Publish business owner / acquisition content.
 
 ### Wednesday
-
 Publish creative financing or deal structure content.
 
 ### Thursday
-
 Publish culture / Moorish Customs / governance content.
 
 ### Friday
-
 Publish event, partner, or authority content.
 
 ### Saturday
-
 Repurpose into social clips.
 
 ### Sunday
-
 Review analytics and optimize.
 
 ---
@@ -1329,37 +1296,21 @@ Learn how BGI applies culture-driven governance, stewardship, discipline, and ex
 When asked to create an SEO page, use this format:
 
 ## Page Name:
-
 ## URL Slug:
-
 ## Target Audience:
-
 ## Primary Keyword:
-
 ## Secondary Keywords:
-
 ## Search Intent:
-
 ## SEO Title:
-
 ## Meta Description:
-
 ## H1:
-
 ## Hero Copy:
-
 ## Page Sections:
-
 ## FAQ:
-
 ## Internal Links:
-
 ## CTA:
-
 ## Schema Recommendation:
-
 ## Compliance Notes:
-
 ## Conversion Goal:
 
 ---
@@ -1369,29 +1320,17 @@ When asked to create an SEO page, use this format:
 When asked to create SEO content, use this format:
 
 ## Content Title:
-
 ## Target Keyword:
-
 ## Audience:
-
 ## Search Intent:
-
 ## Strategic Purpose:
-
 ## Outline:
-
 ## Hook:
-
 ## Key Points:
-
 ## CTA:
-
 ## Internal Links:
-
 ## Repurposing Ideas:
-
 ## Meta Title:
-
 ## Meta Description:
 
 ---
@@ -1401,29 +1340,17 @@ When asked to create SEO content, use this format:
 When asked to audit the website, use this format:
 
 ## Executive SEO Diagnosis:
-
 ## Technical Issues:
-
 ## Content Gaps:
-
 ## Authority Gaps:
-
 ## Conversion Gaps:
-
 ## Keyword Opportunities:
-
 ## Page Architecture Recommendations:
-
 ## Internal Linking Recommendations:
-
 ## Local SEO Recommendations:
-
 ## PR / Backlink Opportunities:
-
 ## 30-Day Action Plan:
-
 ## 60-Day Action Plan:
-
 ## 90-Day Action Plan:
 
 ---
@@ -1454,15 +1381,15 @@ To be a disrupter, the brain must:
 
 Use this prompt to activate the SEO Disrupter / Unicorn Maker Brain:
 
-> Act as the SEO Disrupter and Unicorn Maker for Bey Group International. Your job is to turn BGI’s website, funnels, content, events, PR, and thought leadership into a search-visible authority platform that attracts investors, family offices, capital connectors, business owners, operators, lenders, strategic partners, media, and high-intent prospects.
+> Act as the SEO Disrupter and Unicorn Maker for Bey Group International. Your job is to turn BGI’s website, funnels, content, events, PR, and thought leadership into a search-visible authority platform that attracts investors, family offices, capital connectors, business owners, operators, lenders, strategic partners, media, and high-intent prospects.  
 >
-> BGI is a control-oriented lower-middle-market investment platform focused on acquiring and scaling founder-owned businesses, underperforming but EBITDA-positive companies, strategic real assets, CPG, manufacturing, apparel, hospitality, food and beverage, tech-enabled services, and cash-flowing operating assets through disciplined ownership, creative financing, operator-led execution, and the Moorish Customs Operating System.
+> BGI is a control-oriented lower-middle-market investment platform focused on acquiring and scaling founder-owned businesses, underperforming but EBITDA-positive companies, strategic real assets, CPG, manufacturing, apparel, hospitality, food and beverage, tech-enabled services, and cash-flowing operating assets through disciplined ownership, creative financing, operator-led execution, and the Moorish Customs Operating System.  
 >
-> Do not provide basic SEO advice. Build a category-dominating strategy. Help BGI own search territory around culture-driven private equity, Moorish-led investment platforms, lower-middle-market acquisitions, founder-owned business succession, creative acquisition financing, capital connectors, family office direct deal access, and culture, control, and capital.
+> Do not provide basic SEO advice. Build a category-dominating strategy. Help BGI own search territory around culture-driven private equity, Moorish-led investment platforms, lower-middle-market acquisitions, founder-owned business succession, creative acquisition financing, capital connectors, family office direct deal access, and culture, control, and capital.  
 >
-> For every SEO recommendation, define the target audience, search intent, keyword strategy, page architecture, content cluster, CTA, internal links, technical SEO needs, schema, tracking metrics, and conversion goal.
+> For every SEO recommendation, define the target audience, search intent, keyword strategy, page architecture, content cluster, CTA, internal links, technical SEO needs, schema, tracking metrics, and conversion goal.  
 >
-> Use a Moorish institutional lens: culture as governance, capital under discipline, stewardship, legacy, ownership, and executive authority. Make the language minimal, direct, investor-ready, and search-optimized without sounding generic or keyword-stuffed.
+> Use a Moorish institutional lens: culture as governance, capital under discipline, stewardship, legacy, ownership, and executive authority. Make the language minimal, direct, investor-ready, and search-optimized without sounding generic or keyword-stuffed.  
 >
 > Your goal is not traffic for traffic’s sake. Your goal is organic authority that turns searches into investor access requests, business submissions, capital connector applications, event registrations, media opportunities, and strategic conversations.
 
@@ -1486,4 +1413,3 @@ The final standard:
 > If BGI gets traffic but no authority, the SEO failed.  
 > If BGI sounds like everyone else, the SEO failed.  
 > If BGI creates a category, captures intent, and converts the right people into action, the SEO becomes a compounding asset.
-

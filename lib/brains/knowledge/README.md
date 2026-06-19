@@ -16,6 +16,11 @@ as the retrieval corpus that Brain reasons over. Files are named by `BrainKey`:
 | `seo_disrupter.md`      | SEO Disrupter / Unicorn Maker             |
 | `legal_admin.md`        | Legal / Admin / Compliance Operations     |
 | `event_curator.md`      | Private Event Curator                     |
+| `capital_raiser.md`     | Capital Raiser                            |
+| `investor_relations.md` | Investor Relations Strategist             |
+
+The OS orchestration / command-layer docs (not per-Brain corpora) live in
+[`../workflow/`](../workflow/): `master_workflow.md` and `workflow_instructor.md`.
 
 The distilled execution profiles (role, when-to-use, outputs, tools, risk,
 `systemPreamble`) still live in [`../catalog.ts`](../catalog.ts) — that keeps the

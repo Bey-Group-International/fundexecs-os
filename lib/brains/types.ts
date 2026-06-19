@@ -26,7 +26,9 @@ export type BrainKey =
   | "funnel_lead_gen"
   | "seo_disrupter"
   | "legal_admin"
-  | "event_curator";
+  | "event_curator"
+  | "capital_raiser"
+  | "investor_relations";
 
 // A tool/module a Brain is allowed to reach for. Real adapters (search, CRM,
 // enrichment, vector retrieval) plug in behind this id later.
