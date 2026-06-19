@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
-import type { Task, Approval, Artifact, ArtifactType, AgentKey } from "@/lib/supabase/database.types";
+import type { Task, Approval, Artifact, ArtifactType, AgentKey, Session } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 
 export interface WorkflowBundle {
@@ -12,6 +13,24 @@ export interface WorkflowBundle {
   steps: Task[];
   artifacts: Artifact[];
   approval: Approval | null;
+}
+
+// Short, human relative time ("just now", "3h ago", "2d ago") for the recent
+// sessions rail — mirrors how Claude Code stamps its recent conversations.
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return "just now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.round(days / 7);
+  if (weeks < 5) return `${weeks}w ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -60,10 +79,12 @@ export default function Copilot({
   orgId,
   live,
   bundles,
+  recentSessions = [],
 }: {
   orgId: string;
   live: boolean;
   bundles: WorkflowBundle[];
+  recentSessions?: Session[];
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -135,6 +156,44 @@ export default function Copilot({
   return (
     <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1fr_280px]">
       <div>
+        {/* Recent sessions — sits above the chat, Claude Code style, for
+            one-click resume. The chat itself always opens fresh. */}
+        {recentSessions.length > 0 ? (
+          <section className="mb-6">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                Recent sessions
+              </p>
+              <Link
+                href="/dashboard"
+                className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+              >
+                View all
+              </Link>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {recentSessions.map((s) => (
+                <Link
+                  key={s.id}
+                  href={`/session/${s.id}`}
+                  className="group flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-2 transition hover:border-gold-500/40 hover:bg-surface-2"
+                >
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: s.color ?? "#a1a1aa" }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm text-fg-primary">
+                    {s.name}
+                  </span>
+                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    {relativeTime(s.created_at)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <header className="mb-5">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-gold-400">
