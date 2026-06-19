@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { gateDecision, type ActionKind } from "@/lib/gates";
+import { getActiveMandate } from "@/lib/mandates";
 import type { AgentKey, Json } from "@/lib/supabase/database.types";
 
 // Which executive owns each kind of next action. Determines who the queued task
@@ -61,10 +62,12 @@ export async function queueNextAction(
     .maybeSingle();
   if (!investor) return { ok: false, error: "Investor not found." };
 
-  // No active-mandate lookup yet: gate with operator-sign-off defaults. When the
-  // Mandate primitive is persisted, pass the org's active mandate here to let
-  // pre-authorized Tier-2 actions run unattended.
-  const decision = gateDecision(action);
+  // Load the org's active mandate and let it relax the gate: pre-authorized
+  // Tier-2 actions run unattended, everything else still needs operator sign-off.
+  // Tier 1 is always free and Tier 3 always gated — the gate enforces both
+  // regardless of what any mandate claims.
+  const mandate = await getActiveMandate(supabase, orgId);
+  const decision = gateDecision(action, mandate);
 
   const title = `${label} — ${investor.name}`;
   const { data: task, error } = await supabase
