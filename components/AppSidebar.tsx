@@ -76,6 +76,7 @@ export function AppSidebar({
   signOutAction,
   createGroupAction,
   moveSessionAction,
+  deleteSessionAction,
 }: {
   name: string;
   planName: string;
@@ -85,6 +86,7 @@ export function AppSidebar({
   signOutAction: () => void;
   createGroupAction: (formData: FormData) => void;
   moveSessionAction: (formData: FormData) => void;
+  deleteSessionAction: (formData: FormData) => void;
 }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -142,8 +144,8 @@ export function AppSidebar({
         <button
           type="button"
           onClick={() => setMovingId(movingId === s.id ? null : s.id)}
-          aria-label="File session in a group"
-          title="Move to group"
+          aria-label="Session actions"
+          title="Session actions"
           className="shrink-0 rounded-md px-1.5 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
         >
           ⋯
@@ -178,6 +180,23 @@ export function AppSidebar({
                 </form>
               );
             })}
+
+            <div className="my-0.5 border-t border-line" />
+            <form
+              action={deleteSessionAction}
+              onSubmit={(e) => {
+                if (!window.confirm(`Delete “${s.name}”? This can't be undone.`)) {
+                  e.preventDefault();
+                  return;
+                }
+                setMovingId(null);
+              }}
+            >
+              <input type="hidden" name="id" value={s.id} />
+              <button className="w-full truncate rounded-md px-2 py-1 text-left text-xs text-red-400 transition hover:bg-red-500/10 hover:text-red-300">
+                Delete
+              </button>
+            </form>
           </div>
         ) : null}
       </div>
