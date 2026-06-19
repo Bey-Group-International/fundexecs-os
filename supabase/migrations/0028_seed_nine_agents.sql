@@ -1,15 +1,4 @@
--- Expand agent roster from 6 to 15 by adding 9 new BGI brain agents.
--- Enum values must be added before inserting rows.
-ALTER TYPE agent_key ADD VALUE IF NOT EXISTS 'executive_advisor';
-ALTER TYPE agent_key ADD VALUE IF NOT EXISTS 'capital_raiser';
-ALTER TYPE agent_key ADD VALUE IF NOT EXISTS 'capital_connector';
-ALTER TYPE agent_key ADD VALUE IF NOT EXISTS 'deal_sourcer';
-ALTER TYPE agent_key ADD VALUE IF NOT EXISTS 'rainmaker';
-ALTER TYPE agent_key ADD VALUE IF NOT EXISTS 'lead_generator';
-ALTER TYPE agent_key ADD VALUE IF NOT EXISTS 'pr_director';
-ALTER TYPE agent_key ADD VALUE IF NOT EXISTS 'seo_disruptor';
-ALTER TYPE agent_key ADD VALUE IF NOT EXISTS 'curator';
-
+-- Step 2 of 2: seed the 9 new agents (enum values added in 0027).
 INSERT INTO public.ai_agents (key, name, hub, role, color, motion_style, capabilities) VALUES
   ('executive_advisor', 'Executive Advisor', 'source', 'Researches investors, family offices, and strategic partners before first contact. Surfaces intelligence on motivations, portfolio fit, and ideal entry approach.', '#a855f7', 'precise, strategic', array['investor_research','targeting','relationship_intel','first_contact']),
   ('capital_raiser', 'Capital Raiser', 'source', 'Drives LP fundraising and capital formation campaigns. Manages the Founding Capital Circle, anchor LP pipeline, and high-trust investor rooms.', '#ec4899', 'assertive, relationship-driven', array['lp_fundraising','capital_formation','founding_circle','investor_pipeline']),
