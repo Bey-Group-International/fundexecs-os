@@ -128,13 +128,24 @@ export default function Copilot({
     setBusy(true);
     setPlanning(true);
     setPrompt("");
-    await fetch("/api/prompt", {
+    const res = await fetch("/api/prompt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(sessionId ? { body, session_id: sessionId } : { body }),
-    }).catch(() => {});
+    }).catch(() => null);
     setBusy(false);
     setPlanning(false);
+
+    // From the launcher (no session yet), the prompt opens a session — follow
+    // it in, Claude Code style, so the work continues at /session/<id>. Inside
+    // a session we just refresh to surface the new workflow in place.
+    if (!sessionId && res?.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.session_id) {
+        router.push(`/session/${data.session_id}`);
+        return;
+      }
+    }
     startTransition(() => router.refresh());
   }
 
@@ -240,7 +251,10 @@ export default function Copilot({
         ) : null}
 
         <div className="mt-7 flex flex-col gap-5">
-          {bundles.length === 0 && !planning ? (
+          {/* On the launcher the recent-sessions rail already fills the space,
+              so the empty hint only shows inside an empty session or a brand
+              new account. */}
+          {bundles.length === 0 && !planning && recentSessions.length === 0 ? (
             <p className="text-sm text-fg-muted">No workflows yet. Enter a prompt to begin.</p>
           ) : null}
 
