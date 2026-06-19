@@ -51,15 +51,10 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
-  // icon.svg + apple-icon.tsx are picked up automatically as app/ file
-  // conventions; this also declares the classic favicon and a mask icon.
-  icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    shortcut: ["/favicon.ico"],
-  },
+  // Icons are driven by the app/ file conventions (favicon.ico, icon.png,
+  // apple-icon.png) — all rendered from the Earn coin brand mark.
   manifest: "/manifest.webmanifest",
-  // opengraph-image.tsx / the same file feeds twitter — images are added
-  // automatically by Next from those file conventions.
+  // app/opengraph-image.png feeds both OG and Twitter cards automatically.
   openGraph: {
     type: "website",
     siteName: SITE_NAME,

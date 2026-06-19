@@ -1,26 +1,31 @@
 # Static assets (`/public`)
 
-Files here are served from the site root (e.g. `public/logo.svg` → `/logo.svg`).
+Files here are served from the site root (e.g. `earn-coin.png` → `/earn-coin.png`).
 
 ## Brand / logo
 
-The wordmark is centralized in [`components/Logo.tsx`](../components/Logo.tsx).
-To use a logo image instead of the text wordmark:
+The brand mark is the **Earn coin** (`public/earn-coin.png`, 1024×1024).
 
-1. Drop the file here, e.g. `public/logo.svg` (preferred) or `public/logo.png`
-   (use a transparent background; min 512×512 for raster).
-2. In `components/Logo.tsx`, render it with `next/image` instead of the text.
+- In-app avatar: rendered via `next/image` (e.g. the landing hero orb in
+  `app/page.tsx`); the text wordmark lives in `components/Logo.tsx`.
+- PWA icons: `icon-192.png` / `icon-512.png` (coin on the brand background,
+  maskable-safe) — referenced from `app/manifest.ts`.
 
-## Icons & social card (handled in `app/`, not here)
+All derived assets below are generated from `earn-coin.png`. To refresh them
+after replacing the source, re-run the generation step in the PR that added
+them (Pillow: circle-crop for icons, 1200×630 composite for the OG card).
 
-These are generated as Next.js file conventions — override by adding a static
-file with the same name:
+## Icons & social card (Next.js `app/` file conventions)
 
-|      Purpose      |      Current source       |           Static override            |
-|-------------------|---------------------------|--------------------------------------|
-| Favicon           | `app/icon.svg`            | `app/favicon.ico`                    |
-| Apple touch icon  | `app/apple-icon.tsx`      | `app/apple-icon.png` (180²)          |
-| OG / Twitter card | `app/opengraph-image.tsx` | `app/opengraph-image.png` (1200×630) |
+These live in `app/` and are emitted automatically into `<head>`. Replace the
+file to override:
 
-The runtime-rendered versions use the brand palette from `lib/site.ts`, so
-social previews and icons work today even before final artwork is dropped in.
+|      Purpose      |        Source            |  Size   |
+|-------------------|--------------------------|---------|
+| Favicon           | `app/favicon.ico`        | 16/32/48 |
+| Icon (modern)     | `app/icon.png`           | 48²     |
+| Apple touch icon  | `app/apple-icon.png`     | 180²    |
+| OG / Twitter card | `app/opengraph-image.png`| 1200×630 |
+
+Keeping the favicon as a small `.ico`/`.png` (a few KB) rather than pointing at
+the full 1024² `earn-coin.png` avoids shipping ~750 KB just to paint a tab icon.
