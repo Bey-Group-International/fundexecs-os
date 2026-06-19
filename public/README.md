@@ -16,11 +16,11 @@ To use a logo image instead of the text wordmark:
 These are generated as Next.js file conventions — override by adding a static
 file with the same name:
 
-| Purpose            | Current source            | Static override            |
-| ------------------ | ------------------------- | -------------------------- |
-| Favicon            | `app/icon.svg`            | `app/favicon.ico`          |
-| Apple touch icon   | `app/apple-icon.tsx`      | `app/apple-icon.png` (180²)|
-| OG / Twitter card  | `app/opengraph-image.tsx` | `app/opengraph-image.png` (1200×630) |
+|      Purpose      |      Current source       |           Static override            |
+|-------------------|---------------------------|--------------------------------------|
+| Favicon           | `app/icon.svg`            | `app/favicon.ico`                    |
+| Apple touch icon  | `app/apple-icon.tsx`      | `app/apple-icon.png` (180²)          |
+| OG / Twitter card | `app/opengraph-image.tsx` | `app/opengraph-image.png` (1200×630) |
 
 The runtime-rendered versions use the brand palette from `lib/site.ts`, so
 social previews and icons work today even before final artwork is dropped in.
