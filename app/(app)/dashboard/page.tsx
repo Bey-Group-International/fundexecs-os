@@ -3,23 +3,13 @@ import Link from "next/link";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { AGENTS } from "@/lib/agents";
-import type { Task, Deal, Asset, Artifact, ArtifactType, AgentKey } from "@/lib/supabase/database.types";
+import type { Task, Deal, Asset, Artifact, AgentKey } from "@/lib/supabase/database.types";
 import { seedDemoData, clearDemoData } from "./actions";
 import { SessionsSection } from "./SessionsSection";
 import type { Session, SessionGroup } from "@/lib/supabase/database.types";
+import { ArtifactCard } from "@/components/ArtifactViewer";
 
 export const dynamic = "force-dynamic";
-
-const ARTIFACT_LABEL: Record<ArtifactType, string> = {
-  ic_memo: "IC Memo",
-  model: "Model",
-  analysis: "Analysis",
-  risk_report: "Risk Report",
-  lp_update: "LP Update",
-  memo: "Memo",
-  summary: "Summary",
-  other: "Deliverable",
-};
 
 const AGENT_GROUPS: { label: string; keys: AgentKey[] }[] = [
   { label: "Research", keys: ["analyst", "diligence"] },
@@ -238,17 +228,16 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
             {artifacts.map((a) => (
-              <div key={a.id} className="rounded-lg border border-line bg-surface-1 p-3">
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
-                    {ARTIFACT_LABEL[a.artifact_type]}
-                  </span>
-                  <span className="truncate text-sm text-fg-primary">{a.title}</span>
-                </div>
-                <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-fg-muted">
-                  {a.content}
-                </p>
-              </div>
+              <ArtifactCard
+                key={a.id}
+                id={a.id}
+                title={a.title}
+                content={a.content}
+                artifact_type={a.artifact_type}
+                agent={a.agent ?? undefined}
+                created_at={a.created_at ?? undefined}
+                compact
+              />
             ))}
           </div>
         )}

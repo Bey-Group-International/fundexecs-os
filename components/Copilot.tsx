@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact, ArtifactType, AgentKey } from "@/lib/supabase/database.types";
+import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 
 export interface WorkflowBundle {
   workflow: Task;
@@ -12,18 +13,6 @@ export interface WorkflowBundle {
   artifacts: Artifact[];
   approval: Approval | null;
 }
-
-// Short, human labels for the deliverable badge on each step.
-const ARTIFACT_LABEL: Record<ArtifactType, string> = {
-  ic_memo: "IC Memo",
-  model: "Model",
-  analysis: "Analysis",
-  risk_report: "Risk Report",
-  lp_update: "LP Update",
-  memo: "Memo",
-  summary: "Summary",
-  other: "Deliverable",
-};
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
@@ -302,9 +291,7 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
                 <span className="font-mono uppercase text-fg-muted">{agent?.name}</span> · {step.description}
               </p>
               {output ? (
-                <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-surface-0 p-3 font-sans text-xs leading-relaxed text-fg-secondary">
-                  {output}
-                </pre>
+                <ArtifactInline content={output} artifactType={artifact?.artifact_type} />
               ) : null}
             </div>
           </li>

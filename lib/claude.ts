@@ -1,17 +1,16 @@
 // Claude-powered planning + execution for the AI Agent Copilot.
 //
-// A prompt becomes a multi-step PLAN (each step delegated to one of the six
-// agents), then each step is EXECUTED to produce a deliverable. Both use
-// Claude. When ANTHROPIC_API_KEY is absent, both fall back to a deterministic
-// result so the app — and CI/preview builds — keep working.
+// A prompt becomes a multi-step PLAN (each step delegated to the best-fit agent),
+// then each step is EXECUTED to produce a deliverable. Both use Claude.
+// When ANTHROPIC_API_KEY is absent, both fall back to deterministic results
+// so the app — and CI/preview builds — keep working.
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentKey, Hub, AssetType } from "@/lib/supabase/database.types";
 import { AGENTS } from "@/lib/agents";
 
-// Default to Haiku 4.5 — fast and inexpensive, which keeps the live loop within
-// a tight Anthropic budget. Override with CLAUDE_MODEL to upgrade (e.g. to
-// claude-sonnet-4-6 or claude-opus-4-8) without a code change.
-const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
+// Default to Sonnet 4.6 for institutional-quality deliverables.
+// Override with CLAUDE_MODEL env var (e.g. claude-opus-4-8 or claude-haiku-4-5-20251001).
+const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 
 export interface PlanStep {
   agent: AgentKey;
@@ -82,14 +81,23 @@ const PLAN_SCHEMA = {
   required: ["title", "hub", "summary", "steps"],
 } as const;
 
-const PLAN_SYSTEM = `You are the Associate — the orchestration agent of FundExecs OS, an operating system for private-market investors (PE funds, family offices, real estate).
+const PLAN_SYSTEM = `You are Earn — the command layer of FundExecs OS, an AI operating system for private-market operators (PE funds, family offices, real estate, private credit).
 Given an operator's prompt, produce a concise multi-step plan. Delegate each step to the single most appropriate agent:
-- analyst: deal data, pro formas, valuations, LBO/DCF models, sensitivities
-- associate: coordination, sourcing, pipeline intake, drafting
-- investor_relations: LP communications, capital calls, fundraising, reporting
-- portfolio_ops: asset KPIs, budgets, capex, variance
-- diligence: document parsing, data-room indexing, risk flags, diligence memos
-- fund_admin: waterfalls, fund accounting, audit prep, closing mechanics
+- analyst: deal data, pro formas, valuations, LBO/DCF models, sensitivities, underwriting
+- associate: coordination, pipeline intake, drafting, general workflow management
+- investor_relations: LP communications, capital calls, subscription docs, fundraising, reporting
+- portfolio_ops: asset KPIs, budgets, capex variance, operational monitoring
+- diligence: document parsing, data-room indexing, risk flags, IC-ready diligence memos
+- fund_admin: waterfalls, fund accounting, audit prep, closing mechanics, back-office
+- executive_advisor: investor research, family office intelligence, relationship targeting, pre-meeting prep
+- capital_raiser: LP fundraising campaigns, founding capital circles, anchor LP pipeline, commitment tracking
+- capital_connector: capital stack structuring, lender sourcing, equity partner matching, financing vehicles
+- deal_sourcer: acquisition target identification, off-market sourcing, thesis-fit screening, creative financing structures
+- rainmaker: prospect conversion, closing sequences, terms negotiation, commitment execution
+- lead_generator: digital funnels, CRM workflows, investor capture, lead scoring, pipeline from click to conversation
+- pr_director: investor decks, CIMs, executive summaries, brand positioning, PR narratives
+- seo_disruptor: content strategy, thought leadership, organic authority, category-defining search presence
+- curator: private investor event design, capital formation salons, room curation, relationship follow-up
 Choose the hub (build/source/run/execute) that best fits the work. Keep to 2-4 steps. Titles are short and imperative.`;
 
 function textOf(message: Anthropic.Message): string {
