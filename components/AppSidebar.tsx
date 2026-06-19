@@ -65,14 +65,12 @@ export function AppSidebar({
   planName,
   hubs,
   sessions,
-  startSessionAction,
   signOutAction,
 }: {
   name: string;
   planName: string;
   hubs: HubItem[];
   sessions: SessionItem[];
-  startSessionAction: () => void;
   signOutAction: () => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
@@ -105,12 +103,15 @@ export function AppSidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
-        <form action={startSessionAction}>
-          <button className="flex w-full items-center justify-center gap-2 rounded-md bg-gold-400 px-2 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
-            <span className="text-base leading-none">+</span>
-            New Session
-          </button>
-        </form>
+        {/* New Session opens a blank conversation. The session row is created
+            lazily on the first prompt, so clicking this never leaves empties. */}
+        <Link
+          href="/workspace"
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-gold-400 px-2 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
+        >
+          <span className="text-base leading-none">+</span>
+          New Session
+        </Link>
 
         {/* Recent conversations — the session list, Claude Code style. */}
         {sessions.length > 0 ? (

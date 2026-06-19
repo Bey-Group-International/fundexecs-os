@@ -54,19 +54,6 @@ export async function moveSessionToGroup(formData: FormData): Promise<void> {
   revalidatePath("/dashboard");
 }
 
-// Create a fresh session and open it (the rail's "New Session").
-export async function startSession(): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from("sessions")
-    .insert({ organization_id: ctx.orgId, name: "New session", origin: "earn", created_by: ctx.userId })
-    .select("id")
-    .single();
-  redirect(data?.id ? `/session/${data.id}` : "/workspace");
-}
-
 export async function setSessionColor(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
