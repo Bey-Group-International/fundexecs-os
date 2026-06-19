@@ -67,7 +67,7 @@ const TEMPERATURE_WEIGHT: Record<Temperature, number> = {
 
 // Map the lightweight investors.pipeline_stage free-text into a temperature.
 // Unknown stages fall back to cold — the conservative read.
-function stageToTemperature(stage: string): Temperature {
+export function stageToTemperature(stage: string): Temperature {
   const s = stage.toLowerCase();
   if (/(committed|closed|funded|signed)/.test(s)) return "committed";
   if (/(soft.?circle|diligence|meeting|term|negotiat)/.test(s)) return "active";
@@ -78,7 +78,7 @@ function stageToTemperature(stage: string): Temperature {
 // --- Thesis fit -------------------------------------------------------------
 // Score an investor against the active thesis from the signals both records
 // actually carry: check-size overlap, geography, and investor type.
-function scoreThesisFit(investor: Investor, thesis: InvestmentThesis | null): ThesisFit | null {
+export function scoreThesisFit(investor: Investor, thesis: InvestmentThesis | null): ThesisFit | null {
   if (!thesis) return null;
   const reasons: string[] = [];
   let score = 0;
@@ -144,7 +144,7 @@ function humanizeType(t: string): string {
 // --- Next actions -----------------------------------------------------------
 // The recommended move per temperature. Each carries its gate tier so the UI
 // can badge it honestly (Internal / External / Capital-binding).
-function nextActionsFor(
+export function nextActionsFor(
   temperature: Temperature,
   hasIntroPath: boolean,
 ): NextAction[] {
@@ -190,13 +190,13 @@ function nextActionsFor(
 // any node the operator controls (the org + its principals) to a target
 // investor. Edges are treated as undirected — an introduction can travel either
 // way along a known relationship.
-type Adjacency = Map<string, Set<string>>;
+export type Adjacency = Map<string, Set<string>>;
 
 function polyId(type: string, id: string): string {
   return `${type}:${id}`;
 }
 
-function findIntroPath(
+export function findIntroPath(
   targetInvestorId: string,
   selfNodes: string[],
   adjacency: Adjacency,
