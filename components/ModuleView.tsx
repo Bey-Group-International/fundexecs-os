@@ -12,6 +12,17 @@ import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { MandateStrip } from "@/components/build/MandateStrip";
+import {
+  RunStrategyModule,
+  RunRiskModule,
+  RunStressTestModule,
+  RunCommsModule,
+} from "@/components/run/RunModules";
+import {
+  ExecuteClosingModule,
+  ExecuteReportingModule,
+  ExecuteExitModule,
+} from "@/components/execute/ExecuteModules";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
@@ -193,9 +204,32 @@ export async function ModuleView({
   const key = `${hub.key}/${mod.key}`;
   const supabase = createServerClient();
 
-  // Carry the firm's mandate (Build › Thesis) into the hubs that act on it.
-  const mandateStrip =
-    hub.key === "source" || hub.key === "run" ? <MandateStrip orgId={ctx.orgId} /> : null;
+  // Carry the firm's mandate (Build › Thesis) into the Source hub. The Run hub
+  // gets the richer command center (in the hub layout) instead, which already
+  // carries the mandate alongside live conviction.
+  const mandateStrip = hub.key === "source" ? <MandateStrip orgId={ctx.orgId} /> : null;
+
+  // --- Run hub: derived evaluation modules ---------------------------------
+  // Strategy, Risk, Stress Test, and Comms are synthesized from the live deal
+  // working set (deals + underwriting + diligence); Diligence and Underwriting
+  // fall through to their table-backed views below.
+  if (hub.key === "run") {
+    if (mod.key === "strategy") return <RunStrategyModule orgId={ctx.orgId} />;
+    if (mod.key === "risk") return <RunRiskModule orgId={ctx.orgId} />;
+    if (mod.key === "stress_test") return <RunStressTestModule orgId={ctx.orgId} />;
+    if (mod.key === "comms") return <RunCommsModule orgId={ctx.orgId} />;
+  }
+
+  // --- Execute hub: derived operating modules ------------------------------
+  // Closing, Reporting, and Exit are synthesized from the operating record
+  // (deals heading to close, the portfolio performance roll-up, and realized
+  // assets); Capital Events and Asset Management fall through to their table-
+  // backed views below.
+  if (hub.key === "execute") {
+    if (mod.key === "closing") return <ExecuteClosingModule orgId={ctx.orgId} />;
+    if (mod.key === "reporting") return <ExecuteReportingModule orgId={ctx.orgId} />;
+    if (mod.key === "exit") return <ExecuteExitModule orgId={ctx.orgId} />;
+  }
 
   // --- Build hub: dedicated editable modules -------------------------------
   if (hub.key === "build") {

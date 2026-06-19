@@ -3,9 +3,13 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { getSessionContext } from "@/lib/auth";
 import { getBuildReadiness, type ModuleStatus } from "@/lib/build-readiness";
+import { getRunConviction } from "@/lib/run-conviction";
 import { getSourceMomentum } from "@/lib/source-readiness";
+import { getExecutePerformance } from "@/lib/execute-performance";
 import { ReadinessPanel } from "@/components/build/ReadinessPanel";
+import { RunCommandCenter } from "@/components/run/RunCommandCenter";
 import { SourceMomentumPanel } from "@/components/source/SourceMomentumPanel";
+import { ExecuteCommandCenter } from "@/components/execute/ExecuteCommandCenter";
 import { HubTabs } from "./HubTabs";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
@@ -38,6 +42,18 @@ export default async function HubLayout({
     if (ctx?.orgId) {
       const momentum = await getSourceMomentum(ctx.orgId);
       momentumPanel = <SourceMomentumPanel momentum={momentum} />;
+    }
+  } else if (hub.key === "run") {
+    const ctx = await getSessionContext();
+    if (ctx?.orgId) {
+      const conviction = await getRunConviction(ctx.orgId);
+      momentumPanel = <RunCommandCenter conviction={conviction} />;
+    }
+  } else if (hub.key === "execute") {
+    const ctx = await getSessionContext();
+    if (ctx?.orgId) {
+      const perf = await getExecutePerformance(ctx.orgId);
+      momentumPanel = <ExecuteCommandCenter perf={perf} />;
     }
   }
 
