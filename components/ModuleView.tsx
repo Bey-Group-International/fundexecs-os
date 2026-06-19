@@ -21,7 +21,9 @@ import {
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
+import { ModuleDashboard } from "@/components/source/ModuleDashboard";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
+import { summarizeModule } from "@/lib/source-stats";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 
@@ -276,28 +278,39 @@ export async function ModuleView({
     if (scoped) query = query.eq("session_id", sessionId);
     const { data } = await query;
     const rows = (data ?? []) as unknown as Record<string, unknown>[];
-
-    // Momentum: accurate total + last-7-day counts, scoped the same way as the
-    // list. Cheap head-only count queries, run alongside the page load.
-    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
-    let totalQ = supabase.from(cfg.table as "investors").select("*", { count: "exact", head: true });
-    let weekQ = supabase
-      .from(cfg.table as "investors")
-      .select("*", { count: "exact", head: true })
-      .gte("created_at", weekAgo);
-    if (scoped) {
-      totalQ = totalQ.eq("session_id", sessionId);
-      weekQ = weekQ.eq("session_id", sessionId);
-    }
-    const [{ count: total }, { count: thisWeek }] = await Promise.all([totalQ, weekQ]);
-    const lastUpdated = (rows[0]?.created_at as string | undefined) ?? null;
-
     const addConfig = ADD_ROW_CONFIGS[key];
+
+    // Source modules read as live dashboards: a KPI strip + stage funnel
+    // derived from the rows already loaded. Every other list module gets the
+    // generic momentum strip (volume, recent adds, last activity).
+    const summary = summarizeModule(key, rows);
+
+    let statBar = null;
+    if (!summary) {
+      // Momentum: accurate total + last-7-day counts, scoped the same way as
+      // the list. Cheap head-only count queries, run alongside the page load.
+      const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      let totalQ = supabase.from(cfg.table as "investors").select("*", { count: "exact", head: true });
+      let weekQ = supabase
+        .from(cfg.table as "investors")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", weekAgo);
+      if (scoped) {
+        totalQ = totalQ.eq("session_id", sessionId);
+        weekQ = weekQ.eq("session_id", sessionId);
+      }
+      const [{ count: total }, { count: thisWeek }] = await Promise.all([totalQ, weekQ]);
+      const lastUpdated = (rows[0]?.created_at as string | undefined) ?? null;
+      statBar = (
+        <ModuleStatBar total={total ?? rows.length} thisWeek={thisWeek ?? 0} lastUpdated={lastUpdated} />
+      );
+    }
+
     return (
       <div>
         {mandateStrip}
         <ModuleHeader title={mod.label} blurb={cfg.blurb} />
-        <ModuleStatBar total={total ?? rows.length} thisWeek={thisWeek ?? 0} lastUpdated={lastUpdated} />
+        {summary ? <ModuleDashboard summary={summary} empty={rows.length === 0} /> : statBar}
         {addConfig ? (
           <AddRowForm
             hub={hub.key}
