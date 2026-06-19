@@ -24,14 +24,14 @@ FundExecs OS is the **system of record for private-market operators** — combin
 
 It automates the **80% of time spent moving information** so you can focus on the **20% that drives decisions**.
 
-| What it replaces | What it becomes |
-|---|---|
-| DealCloud / Dynamo | Native deal pipeline + graph |
-| Carta / Juniper Square | Fund admin + waterfall engine |
-| Affinity / HubSpot | Relationship intelligence graph |
-| Hebbia / AlphaSense | AI-native document analysis |
-| Notion + Slack + Zapier | Unified workflow + agent layer |
-| Visible / Passthrough | LP reporting + capital events |
+|    What it replaces     |         What it becomes         |
+|-------------------------|---------------------------------|
+| DealCloud / Dynamo      | Native deal pipeline + graph    |
+| Carta / Juniper Square  | Fund admin + waterfall engine   |
+| Affinity / HubSpot      | Relationship intelligence graph |
+| Hebbia / AlphaSense     | AI-native document analysis     |
+| Notion + Slack + Zapier | Unified workflow + agent layer  |
+| Visible / Passthrough   | LP reporting + capital events   |
 
 ---
 
@@ -71,23 +71,23 @@ FundExecs OS is structured around four operational hubs, six AI agents, and thre
 
 ### The Four Hubs
 
-| Hub | Purpose | Key Modules |
-|---|---|---|
-| **Build** | Define identity and foundation | Profile · Thesis · Brand · Entity · Track Record · Team |
-| **Source** | Manage pipelines and relationships | LP Pipeline · Debt & Hybrid · Partners · Providers · Deal Pipeline |
-| **Run** | Evaluate and manage active deals | Strategy · Diligence · Underwriting · Stress Test · Comms · Risk |
-| **Execute** | Operate assets post-closing | Closing · Capital Events · Asset Management · Reporting · Exit |
+|     Hub     |              Purpose               |                            Key Modules                             |
+|-------------|------------------------------------|--------------------------------------------------------------------|
+| **Build**   | Define identity and foundation     | Profile · Thesis · Brand · Entity · Track Record · Team            |
+| **Source**  | Manage pipelines and relationships | LP Pipeline · Debt & Hybrid · Partners · Providers · Deal Pipeline |
+| **Run**     | Evaluate and manage active deals   | Strategy · Diligence · Underwriting · Stress Test · Comms · Risk   |
+| **Execute** | Operate assets post-closing        | Closing · Capital Events · Asset Management · Reporting · Exit     |
 
 ### The Six AI Agents
 
-| Agent | Role |
-|---|---|
-| **Analyst** | Ingests deal data, financials, market comps — produces pro formas and valuations |
-| **Associate** | Coordinates workflows and task execution across all hubs |
-| **Investor Relations** | Manages LP communications, capital calls, and reporting |
-| **Portfolio Ops** | Monitors asset KPIs, budgets, capex, and variance alerts |
-| **Diligence** | Parses documents, flags risks, produces diligence memos |
-| **Fund Admin** | Handles waterfall calculations, fund accounting, and audit prep |
+|         Agent          |                                       Role                                       |
+|------------------------|----------------------------------------------------------------------------------|
+| **Analyst**            | Ingests deal data, financials, market comps — produces pro formas and valuations |
+| **Associate**          | Coordinates workflows and task execution across all hubs                         |
+| **Investor Relations** | Manages LP communications, capital calls, and reporting                          |
+| **Portfolio Ops**      | Monitors asset KPIs, budgets, capex, and variance alerts                         |
+| **Diligence**          | Parses documents, flags risks, produces diligence memos                          |
+| **Fund Admin**         | Handles waterfall calculations, fund accounting, and audit prep                  |
 
 ### The Three Graphs
 
@@ -103,15 +103,15 @@ All graphs are **native, first-party data structures** — no external dependenc
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | Next.js · React · Tailwind CSS · Three.js · GSAP |
-| Backend | Node.js · Python · GraphQL · Event-driven task engine |
-| Database | PostgreSQL · Supabase · Redis |
-| Storage | S3 for documents |
-| Infrastructure | Vercel · Cloudflare · AWS · GitHub Actions |
-| Observability | Prometheus · Grafana · OpenTelemetry · Sentry |
-| Security | JWT · Row-level security · Encryption at rest · Audit logging |
+|     Layer      |                          Technology                           |
+|----------------|---------------------------------------------------------------|
+| Frontend       | Next.js · React · Tailwind CSS · Three.js · GSAP              |
+| Backend        | Node.js · Python · GraphQL · Event-driven task engine         |
+| Database       | PostgreSQL · Supabase · Redis                                 |
+| Storage        | S3 for documents                                              |
+| Infrastructure | Vercel · Cloudflare · AWS · GitHub Actions                    |
+| Observability  | Prometheus · Grafana · OpenTelemetry · Sentry                 |
+| Security       | JWT · Row-level security · Encryption at rest · Audit logging |
 
 ---
 
@@ -136,17 +136,17 @@ security.
 
 All endpoints are native REST + GraphQL. No external SDKs.
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/prompt` | POST | Accepts user prompt; routes to hub and agent |
-| `/task` | POST | Creates task; assigns to agent; returns status |
-| `/handoff` | POST | Transfers task between agents |
-| `/approve` | POST | Captures user approval; triggers automation |
-| `/report` | GET | Retrieves task output and analytics |
-| `/agents` | GET | Lists active agents and workloads |
-| `/graph/relationship` | GET | Returns relationship graph |
-| `/graph/deal` | GET | Returns deal graph |
-| `/graph/capital` | GET | Returns capital graph |
+|       Endpoint        | Method |                  Description                   |
+|-----------------------|--------|------------------------------------------------|
+| `/prompt`             | POST   | Accepts user prompt; routes to hub and agent   |
+| `/task`               | POST   | Creates task; assigns to agent; returns status |
+| `/handoff`            | POST   | Transfers task between agents                  |
+| `/approve`            | POST   | Captures user approval; triggers automation    |
+| `/report`             | GET    | Retrieves task output and analytics            |
+| `/agents`             | GET    | Lists active agents and workloads              |
+| `/graph/relationship` | GET    | Returns relationship graph                     |
+| `/graph/deal`         | GET    | Returns deal graph                             |
+| `/graph/capital`      | GET    | Returns capital graph                          |
 
 Full API spec available in [`/docs/api-contract.md`](./docs/api-contract.md)
 
@@ -197,14 +197,14 @@ Key event types: `task.created` · `task.progress` · `task.completed` · `task.
 
 Agents are visualized as avatars in a 3D spatial workspace built with **Three.js + GSAP**.
 
-| Agent | Color | Motion Style |
-|---|---|---|
-| Analyst | Cyan | Precise, analytical |
-| Associate | Indigo | Coordinated, rhythmic |
-| Investor Relations | Gold | Smooth, communicative |
-| Portfolio Ops | Green | Grounded, operational |
-| Diligence | Red | Sharp, investigative |
-| Fund Admin | Silver | Structured, methodical |
+|       Agent        | Color  |      Motion Style      |
+|--------------------|--------|------------------------|
+| Analyst            | Cyan   | Precise, analytical    |
+| Associate          | Indigo | Coordinated, rhythmic  |
+| Investor Relations | Gold   | Smooth, communicative  |
+| Portfolio Ops      | Green  | Grounded, operational  |
+| Diligence          | Red    | Sharp, investigative   |
+| Fund Admin         | Silver | Structured, methodical |
 
 Each avatar responds to WebSocket events in real time — spawning, executing, handing off, and awaiting approval visually.
 
@@ -241,6 +241,8 @@ migration workflow.
 - [x] Build Hub — Profile module
 - [x] **Surface step deliverables as first-class artifacts** (IC memos, models, risk reports)
 - [x] **Persist deals/assets from workflows** so the Command Center populates from real work
+- [x] **Capital Map** — relationship temperature, thesis fit, warm-intro pathfinding + gated next actions (Affinity, rebuilt native)
+- [x] **Gate layer** — Tier 1/2/3 control primitive so no action reaches a counterparty without sign-off
 - [ ] Three-graph data architecture (query layer + `/graph/*`)
 - [ ] Three.js avatar workspace
 - [ ] Remaining Source / Run / Execute hub modules
@@ -264,6 +266,7 @@ This is an **open build**. If you've felt the same pain in private markets — o
 - Designers with experience in data-dense interfaces
 
 ### To contribute:
+
 1. Fork the repository
 2. Check open issues and the roadmap
 3. Open a discussion before starting large features
