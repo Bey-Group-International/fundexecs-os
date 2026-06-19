@@ -12,6 +12,7 @@ import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
 import { OnePagerModule } from "@/components/build/OnePagerModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
+import { AutosaveForm } from "@/components/build/AutosaveForm";
 import { MandateStrip } from "@/components/build/MandateStrip";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
@@ -218,7 +219,7 @@ export async function ModuleView({
           blurb="Your firm's identity and the basics every other module builds on."
           module="profile"
         />
-        <form action={updateProfile} className="flex max-w-xl flex-col gap-4">
+        <AutosaveForm action={updateProfile} className="flex max-w-xl flex-col gap-4 pt-5">
         {PROFILE_FIELDS.map((f) => (
           <label key={f.name} className="flex flex-col gap-1.5 text-sm">
             <span className="text-fg-secondary">{f.label}</span>
@@ -238,10 +239,7 @@ export async function ModuleView({
             className="rounded-md border border-line bg-surface-1 px-3 py-2 outline-none focus:border-gold-500"
           />
         </label>
-        <button className="self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
-          Save profile
-        </button>
-        </form>
+        </AutosaveForm>
       </div>
     );
   }
