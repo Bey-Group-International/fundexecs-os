@@ -22,6 +22,11 @@ const num = (v: number | null | undefined): number =>
 // Asset states that have left the held portfolio — they no longer carry NAV.
 const EXITED_STATES = new Set(["exited", "sold", "realized", "divested", "written_off"]);
 
+/** Whether an asset's status puts it outside the held portfolio (a realized exit). */
+export function isExited(status: string | null | undefined): boolean {
+  return EXITED_STATES.has((status ?? "").toLowerCase());
+}
+
 // Capital flowing in (paid-in) vs back out (returned), by event type.
 const INFLOW = new Set(["capital_call", "contribution"]);
 const OUTFLOW = new Set(["distribution", "return_of_capital", "carry"]);
