@@ -4,6 +4,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { InvestmentThesis } from "@/lib/supabase/database.types";
 import { ModuleHeader, inputClass } from "./DraftWithEarn";
 import { createThesis, deleteThesis } from "./actions";
+import { updateThesis } from "./edit-actions";
+import { RecordEditor, EditInput } from "./RecordEditor";
 
 export async function ThesisModule() {
   const ctx = await getSessionContext();
@@ -53,29 +55,53 @@ export async function ThesisModule() {
         <div className="flex flex-col gap-2">
           {theses.map((t) => (
             <div key={t.id} className="rounded-xl border border-line bg-surface-1 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-fg-primary">{t.title}</span>
-                    {t.is_active ? (
-                      <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300">
-                        Active
-                      </span>
-                    ) : null}
-                  </div>
-                  {t.summary ? (
-                    <p className="mt-1 text-xs leading-snug text-fg-secondary">{t.summary}</p>
-                  ) : null}
-                  <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                    {[
-                      t.asset_classes?.join(", "),
-                      t.geographies?.join(", "),
-                      t.target_irr ? `${t.target_irr}% IRR` : null,
-                      t.target_moic ? `${t.target_moic}x MOIC` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || "—"}
-                  </p>
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <RecordEditor
+                    id={t.id}
+                    action={updateThesis}
+                    layout="grid"
+                    display={
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-fg-primary">{t.title}</span>
+                          {t.is_active ? (
+                            <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300">
+                              Active
+                            </span>
+                          ) : null}
+                        </div>
+                        {t.summary ? (
+                          <p className="mt-1 text-xs leading-snug text-fg-secondary">{t.summary}</p>
+                        ) : null}
+                        <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                          {[
+                            t.asset_classes?.join(", "),
+                            t.geographies?.join(", "),
+                            t.target_irr ? `${t.target_irr}% IRR` : null,
+                            t.target_moic ? `${t.target_moic}x MOIC` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "—"}
+                        </p>
+                      </div>
+                    }
+                  >
+                    <EditInput name="title" defaultValue={t.title} placeholder="Thesis title" className="sm:col-span-2" />
+                    <textarea
+                      name="summary"
+                      rows={2}
+                      defaultValue={t.summary ?? ""}
+                      placeholder="One-paragraph summary"
+                      className={`${inputClass} resize-none sm:col-span-2`}
+                    />
+                    <EditInput name="asset_classes" defaultValue={t.asset_classes?.join(", ") ?? ""} placeholder="Asset classes (comma-separated)" />
+                    <EditInput name="geographies" defaultValue={t.geographies?.join(", ") ?? ""} placeholder="Geographies (comma-separated)" />
+                    <EditInput name="check_size_min" type="number" defaultValue={t.check_size_min ?? ""} placeholder="Check size min ($)" />
+                    <EditInput name="check_size_max" type="number" defaultValue={t.check_size_max ?? ""} placeholder="Check size max ($)" />
+                    <EditInput name="target_irr" type="number" step="0.1" defaultValue={t.target_irr ?? ""} placeholder="Target IRR (%)" />
+                    <EditInput name="target_moic" type="number" step="0.1" defaultValue={t.target_moic ?? ""} placeholder="Target MOIC (x)" />
+                  </RecordEditor>
                 </div>
                 <form action={deleteThesis}>
                   <input type="hidden" name="id" value={t.id} />

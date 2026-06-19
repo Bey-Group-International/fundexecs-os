@@ -1,0 +1,299 @@
+"use client";
+
+import { useRef, useState, useTransition } from "react";
+import type { MemberRole } from "@/lib/supabase/database.types";
+import { inputClass } from "./DraftWithEarn";
+import {
+  updateMyProfile,
+  changeMemberRole,
+  removeMember,
+  inviteMember,
+} from "./team-actions";
+
+export interface TeamMemberView {
+  memberId: string;
+  principalId: string;
+  name: string;
+  email: string;
+  title: string | null;
+  role: MemberRole;
+}
+
+interface TeamControlsProps {
+  members: TeamMemberView[];
+  currentUserId: string;
+  currentRole: MemberRole | null;
+  ownProfile: { full_name: string | null; title: string | null };
+}
+
+const ROLE_OPTIONS: MemberRole[] = ["owner", "admin", "member"];
+
+function Avatar({ name }: { name: string }) {
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-2 text-sm font-medium text-fg-primary">
+      {(name || "M").charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+function RoleBadge({ role }: { role: MemberRole }) {
+  return (
+    <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+      {role}
+    </span>
+  );
+}
+
+export function TeamControls({
+  members,
+  currentUserId,
+  currentRole,
+  ownProfile,
+}: TeamControlsProps) {
+  const isAdmin = currentRole === "owner" || currentRole === "admin";
+  const ownerCount = members.filter((m) => m.role === "owner").length;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <YourProfile ownProfile={ownProfile} />
+
+      {isAdmin ? <InviteForm /> : null}
+
+      <div className="flex flex-col gap-2">
+        {members.map((m) => {
+          const isSelf = m.principalId === currentUserId;
+          const isLastOwner = m.role === "owner" && ownerCount <= 1;
+          return isAdmin ? (
+            <AdminMemberRow
+              key={m.memberId}
+              member={m}
+              isSelf={isSelf}
+              canRemove={!isSelf && !isLastOwner}
+              isLastOwner={isLastOwner}
+            />
+          ) : (
+            <ReadOnlyMemberRow key={m.memberId} member={m} />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// --- Your profile ---------------------------------------------------------
+function YourProfile({
+  ownProfile,
+}: {
+  ownProfile: { full_name: string | null; title: string | null };
+}) {
+  const [pending, startTransition] = useTransition();
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <form
+      action={(fd) => {
+        setSaved(false);
+        startTransition(async () => {
+          await updateMyProfile(fd);
+          setSaved(true);
+        });
+      }}
+      className="grid gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-2"
+    >
+      <div className="sm:col-span-2">
+        <p className="text-sm font-medium text-fg-primary">Your profile</p>
+        <p className="mt-0.5 text-xs text-fg-muted">
+          Update how your name and title appear across the firm.
+        </p>
+      </div>
+      <input
+        name="full_name"
+        defaultValue={ownProfile.full_name ?? ""}
+        placeholder="Full name"
+        className={inputClass}
+      />
+      <input
+        name="title"
+        defaultValue={ownProfile.title ?? ""}
+        placeholder="Title"
+        className={inputClass}
+      />
+      <div className="flex items-center gap-3 sm:col-span-2">
+        <button
+          disabled={pending}
+          className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+        >
+          {pending ? "Saving…" : "Save profile"}
+        </button>
+        {saved && !pending ? (
+          <span className="text-xs text-status-success">Saved.</span>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+// --- Invite ---------------------------------------------------------------
+function InviteForm() {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  return (
+    <form
+      ref={formRef}
+      action={(fd) => {
+        setError(null);
+        setSuccess(false);
+        startTransition(async () => {
+          const res = await inviteMember(fd);
+          if (res.error) {
+            setError(res.error);
+          } else {
+            setSuccess(true);
+            formRef.current?.reset();
+          }
+        });
+      }}
+      className="grid gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-[1fr_auto_auto]"
+    >
+      <div className="sm:col-span-3">
+        <p className="text-sm font-medium text-fg-primary">Invite member</p>
+        <p className="mt-0.5 text-xs text-fg-muted">
+          Add an existing FundExecs user to the firm by email.
+        </p>
+      </div>
+      <input
+        name="email"
+        type="email"
+        required
+        placeholder="name@firm.com"
+        className={inputClass}
+      />
+      <select name="role" defaultValue="member" className={inputClass}>
+        {ROLE_OPTIONS.map((r) => (
+          <option key={r} value={r}>
+            {r}
+          </option>
+        ))}
+      </select>
+      <button
+        disabled={pending}
+        className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+      >
+        {pending ? "Adding…" : "Add"}
+      </button>
+      {error ? (
+        <p className="text-xs text-status-danger sm:col-span-3">{error}</p>
+      ) : null}
+      {success ? (
+        <p className="text-xs text-status-success sm:col-span-3">
+          Member added.
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+// --- Admin member row -----------------------------------------------------
+function AdminMemberRow({
+  member,
+  isSelf,
+  canRemove,
+  isLastOwner,
+}: {
+  member: TeamMemberView;
+  isSelf: boolean;
+  canRemove: boolean;
+  isLastOwner: boolean;
+}) {
+  const [rolePending, startRole] = useTransition();
+  const [removePending, startRemove] = useTransition();
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 p-3">
+      <Avatar name={member.name} />
+      <div className="min-w-0">
+        <p className="truncate text-sm text-fg-primary">
+          {member.name}
+          {isSelf ? (
+            <span className="ml-1.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+              you
+            </span>
+          ) : null}
+        </p>
+        <p className="truncate text-xs text-fg-muted">
+          {member.title || member.email}
+        </p>
+      </div>
+
+      <div className="ml-auto flex items-center gap-2">
+        <form
+          action={(fd) => {
+            fd.set("memberId", member.memberId);
+            startRole(async () => {
+              await changeMemberRole(fd);
+            });
+          }}
+        >
+          <select
+            name="role"
+            defaultValue={member.role}
+            disabled={rolePending || isLastOwner}
+            title={
+              isLastOwner ? "The last owner's role cannot be changed." : undefined
+            }
+            onChange={(e) => e.currentTarget.form?.requestSubmit()}
+            className="rounded-md border border-line bg-surface-0 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-secondary focus:border-gold-500/60 focus:outline-none disabled:opacity-50"
+          >
+            {ROLE_OPTIONS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </form>
+
+        {canRemove ? (
+          <form
+            action={(fd) => {
+              fd.set("memberId", member.memberId);
+              startRemove(async () => {
+                await removeMember(fd);
+              });
+            }}
+          >
+            <button
+              disabled={removePending}
+              title="Remove member"
+              className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-50"
+            >
+              ✕
+            </button>
+          </form>
+        ) : (
+          <span className="w-7" aria-hidden />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Read-only member row -------------------------------------------------
+function ReadOnlyMemberRow({ member }: { member: TeamMemberView }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 p-3">
+      <Avatar name={member.name} />
+      <div className="min-w-0">
+        <p className="truncate text-sm text-fg-primary">{member.name}</p>
+        {member.title ? (
+          <p className="truncate text-xs text-fg-muted">{member.title}</p>
+        ) : null}
+      </div>
+      <span className="ml-auto">
+        <RoleBadge role={member.role} />
+      </span>
+    </div>
+  );
+}

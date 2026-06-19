@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { Organization } from "@/lib/supabase/database.types";
 import { ModuleHeader, inputClass } from "./DraftWithEarn";
 import { updateBrand } from "./actions";
+import { AutosaveForm } from "./AutosaveForm";
 
 export async function BrandModule() {
   const ctx = await getSessionContext();
@@ -21,7 +22,7 @@ export async function BrandModule() {
         module="brand"
       />
 
-      <form action={updateBrand} className="grid max-w-xl gap-4">
+      <AutosaveForm action={updateBrand} className="grid max-w-xl gap-4 pt-5">
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="text-fg-secondary">Tagline</span>
           <input name="tagline" defaultValue={org?.tagline ?? ""} placeholder="One line that captures the firm" className={inputClass} />
@@ -51,10 +52,7 @@ export async function BrandModule() {
           <span className="text-fg-secondary">Brand voice</span>
           <textarea name="brand_voice" rows={3} defaultValue={org?.brand_voice ?? ""} placeholder="How the firm sounds in writing — tone, what to avoid." className={`${inputClass} resize-none`} />
         </label>
-        <button className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
-          Save brand
-        </button>
-      </form>
+      </AutosaveForm>
     </div>
   );
 }
