@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AGENTS } from "@/lib/agents";
 
+const CALENDLY = "https://calendly.com/fundexecs";
+
 const LOOP = [
   {
     step: "Instruct",
@@ -99,44 +101,78 @@ export default function LandingPage({
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-24 -z-10 mx-auto h-72 max-w-3xl rounded-full bg-gold-500/10 blur-3xl"
         />
-        <div className="max-w-3xl">
-          <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Private equity · Real estate · Private credit · Family office
-          </p>
-          <h1 className="mt-5 text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">
-            The Operating System<br />
-            for Private Markets
-          </h1>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-fg-secondary">
-            One platform. Fifteen AI agents. Every workflow from deal sourcing
-            to capital formation to exit — unified, auditable, and under your control.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="/login?mode=signup"
-              className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
-            >
-              Request access
-            </Link>
-            <Link
-              href="/login"
-              className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
-            >
-              Sign in
-            </Link>
+        <div className="grid items-center gap-16 lg:grid-cols-2">
+          {/* Text */}
+          <div>
+            <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Private equity · Real estate · Private credit · Family office
+            </p>
+            <h1 className="mt-5 text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">
+              The Operating System<br />
+              for Private Markets
+            </h1>
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-fg-secondary">
+              One platform. Fifteen AI agents. Every workflow from deal sourcing
+              to capital formation to exit — unified, auditable, and under your control.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/login?mode=signup"
+                className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
+              >
+                Request access
+              </Link>
+              <Link
+                href={CALENDLY}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
+              >
+                Book a demo
+              </Link>
+            </div>
+            <p className="mt-4 font-mono text-xs text-fg-muted">
+              Pre-Alpha · Invite only · Built for operators running real capital
+            </p>
           </div>
-          <p className="mt-4 font-mono text-xs text-fg-muted">
-            Pre-Alpha · Invite only · Built for operators running real capital
-          </p>
+
+          {/* Earn Orb */}
+          {/* To use the real coin image: add earn-coin.png to /public and replace the inner div with:
+              <Image src="/earn-coin.png" alt="Earn" fill className="object-cover" /> */}
+          <div className="flex items-center justify-center lg:justify-end">
+            <div className="relative flex items-center justify-center">
+              {/* Outer glow */}
+              <div
+                aria-hidden
+                className="absolute h-72 w-72 rounded-full bg-gold-500/15 blur-3xl"
+                style={{ animation: "pulse 4s cubic-bezier(0.4,0,0.6,1) infinite" }}
+              />
+              {/* Mid ring */}
+              <div
+                aria-hidden
+                className="absolute h-56 w-56 rounded-full border border-gold-500/20 bg-gradient-to-br from-gold-500/10 to-transparent"
+                style={{ animation: "pulse 3s cubic-bezier(0.4,0,0.6,1) infinite 0.5s" }}
+              />
+              {/* Orb body */}
+              <div className="relative flex h-48 w-48 items-center justify-center overflow-hidden rounded-full border border-gold-500/40 shadow-[0_0_60px_-10px_rgba(234,179,8,0.4)]"
+                style={{
+                  background: "radial-gradient(circle at 35% 35%, #fbbf24, #d97706 55%, #92400e 100%)",
+                }}>
+                {/* Coin face detail */}
+                <div className="absolute inset-4 rounded-full border border-amber-300/30" />
+                <span className="font-mono text-4xl font-bold text-amber-900/80 select-none">E</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       <div className="border-t border-line" />
 
-      {/* How it works */}
+      {/* How it works — video placeholder + loop */}
       <section className="mx-auto max-w-6xl px-6 py-24">
-        <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+        <div className="grid gap-12 lg:grid-cols-2 lg:items-start">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
               How it works
@@ -163,25 +199,69 @@ export default function LandingPage({
                 </li>
               ))}
             </ul>
+
+            {/* Booking CTA */}
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href={CALENDLY}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
+              >
+                Book a demo
+              </Link>
+              <Link
+                href="/login?mode=signup"
+                className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
+              >
+                Request access
+              </Link>
+            </div>
           </div>
 
-          {/* Workflow loop card */}
-          <div className="rounded-2xl border border-line bg-surface-1 p-6">
-            <p className="mb-5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
-              The capital workflow loop
-            </p>
-            <div className="flex flex-col gap-5">
-              {LOOP.map((l, i) => (
-                <div key={l.step} className="flex items-start gap-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 font-mono text-xs text-gold-300">
-                    {i + 1}
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-fg-primary">{l.step}</p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-fg-secondary">{l.body}</p>
-                  </div>
+          {/* Right: video placeholder + loop */}
+          <div className="flex flex-col gap-4">
+            {/* Video placeholder — swap src for real video when ready */}
+            <div className="group relative aspect-video w-full overflow-hidden rounded-2xl border border-line bg-surface-1">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 transition group-hover:bg-gold-500/20">
+                  <svg className="h-5 w-5 translate-x-0.5 text-gold-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
                 </div>
-              ))}
+                <p className="font-mono text-xs uppercase tracking-widest text-fg-muted">
+                  See Earn in action
+                </p>
+              </div>
+              {/* Decorative grid overlay */}
+              <div
+                aria-hidden
+                className="absolute inset-0 opacity-5"
+                style={{
+                  backgroundImage: "linear-gradient(rgba(234,179,8,1) 1px, transparent 1px), linear-gradient(90deg, rgba(234,179,8,1) 1px, transparent 1px)",
+                  backgroundSize: "40px 40px",
+                }}
+              />
+            </div>
+
+            {/* Loop steps */}
+            <div className="rounded-2xl border border-line bg-surface-1 p-6">
+              <p className="mb-5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+                The capital workflow loop
+              </p>
+              <div className="flex flex-col gap-5">
+                {LOOP.map((l, i) => (
+                  <div key={l.step} className="flex items-start gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 font-mono text-xs text-gold-300">
+                      {i + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-fg-primary">{l.step}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-fg-secondary">{l.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -266,16 +346,18 @@ export default function LandingPage({
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
-            href="/login?mode=signup"
+            href={CALENDLY}
+            target="_blank"
+            rel="noopener noreferrer"
             className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
           >
-            Request access
+            Book a demo
           </Link>
           <Link
-            href="/login"
+            href="/login?mode=signup"
             className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
           >
-            Sign in
+            Request access
           </Link>
         </div>
         <p className="mt-6 font-mono text-xs text-fg-muted">
