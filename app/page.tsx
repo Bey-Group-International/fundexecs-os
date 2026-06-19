@@ -63,6 +63,24 @@ const AGENT_COPY: Record<string, string> = {
     "Parses offering memoranda, leases, and financials. Surfaces risks and produces diligence memos ready for IC.",
   fund_admin:
     "Runs waterfall calculations, fund accounting, and audit prep. Back-office coverage without the back office.",
+  executive_advisor:
+    "Builds deep intelligence on every investor, family office, and strategic partner before first contact — who they are, what they need, and how to position BGI perfectly.",
+  capital_raiser:
+    "Runs LP fundraising and capital formation campaigns from first outreach to commitment. Manages the Founding Capital Circle and anchor LP pipeline.",
+  capital_connector:
+    "Structures the capital stack for every transaction. Identifies the right lender, equity partner, or financing vehicle — and closes the relationship.",
+  deal_sourcer:
+    "Finds acquisition targets: underperforming, founder-owned, or transitioning businesses. Builds the thesis, structures the creative financing, and positions BGI as the buyer.",
+  rainmaker:
+    "Converts qualified prospects into capital commitments. Runs the closing sequence — from first conversation to signed terms — with precision.",
+  lead_generator:
+    "Designs and operates digital funnels that capture investors, business owners, operators, and connectors. Measurable pipeline from click to conversation.",
+  pr_director:
+    "Produces investor decks, CIMs, executive summaries, and PR narratives that position BGI as an institutional, culturally distinct platform.",
+  seo_disruptor:
+    "Turns BGI content and thought leadership into category-defining search authority — attracting the right capital and deal flow without paid acquisition.",
+  curator:
+    "Designs private investor rooms and capital formation salons. Curates the room, the experience, and the follow-up so every gathering produces durable relationships.",
 };
 
 export default function LandingPage({
@@ -202,18 +220,16 @@ export default function LandingPage({
 
       <div className="border-t border-line" />
 
-      {/* The Agents — moved above hubs, institutional presentation */}
+      {/* The Fifteen Agents */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
           Agent Roster
         </p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-          Six agents. Native to private markets.
+          Fifteen agents. Native to private markets.
         </h2>
         <p className="mt-3 max-w-xl text-fg-secondary">
-          Each agent owns a domain — deal analysis, capital relations, diligence,
-          portfolio operations, fund administration, workflow coordination.
-          Coordinated by Earn. Authorized by you.
+          Each agent owns a domain — analysis, sourcing, capital formation, diligence, investor relations, event curation, brand, digital growth, fund operations. Coordinated by Earn. Authorized by you.
         </p>
 
         <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

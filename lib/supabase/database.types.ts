@@ -10,7 +10,16 @@ export type AgentKey =
   | "investor_relations"
   | "portfolio_ops"
   | "diligence"
-  | "fund_admin";
+  | "fund_admin"
+  | "executive_advisor"
+  | "capital_raiser"
+  | "capital_connector"
+  | "deal_sourcer"
+  | "rainmaker"
+  | "lead_generator"
+  | "pr_director"
+  | "seo_disruptor"
+  | "curator";
 
 export type GraphKind = "relationship" | "deal" | "capital";
 export type MemberRole = "owner" | "admin" | "member" | "viewer";

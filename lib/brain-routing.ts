@@ -15,6 +15,15 @@ export const AGENT_TO_BRAIN: Record<AgentKey, BrainKey> = {
   portfolio_ops: "capital_connector",
   diligence: "legal_admin",
   fund_admin: "legal_admin",
+  executive_advisor: "executive_advisor",
+  capital_raiser: "earnest_fundmaker",
+  capital_connector: "capital_connector",
+  deal_sourcer: "deal_sourcer",
+  rainmaker: "rainmaker",
+  lead_generator: "funnel_lead_gen",
+  pr_director: "marketing_pr",
+  seo_disruptor: "seo_disrupter",
+  curator: "event_curator",
 };
 
 export function brainForAgent(agent: AgentKey): BrainKey {
