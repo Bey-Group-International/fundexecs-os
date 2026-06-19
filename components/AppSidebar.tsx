@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 // Client-side side rail. Modeled on Claude Code's sidebar: a minimal top level
 // (Logo · New Session · Workflows · More), the operational hubs whose modules
@@ -18,6 +19,12 @@ interface HubItem {
   key: string;
   label: string;
   modules: NavItem[];
+}
+
+interface SessionItem {
+  id: string;
+  name: string;
+  color: string | null;
 }
 
 // Secondary destinations folded under "More".
@@ -57,18 +64,21 @@ export function AppSidebar({
   name,
   planName,
   hubs,
+  sessions,
   startSessionAction,
   signOutAction,
 }: {
   name: string;
   planName: string;
   hubs: HubItem[];
+  sessions: SessionItem[];
   startSessionAction: () => void;
   signOutAction: () => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [openHub, setOpenHub] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
+  const pathname = usePathname();
 
   const accountRef = useDismiss<HTMLDivElement>(() => setAccountOpen(false));
 
@@ -101,6 +111,38 @@ export function AppSidebar({
             New Session
           </button>
         </form>
+
+        {/* Recent conversations — the session list, Claude Code style. */}
+        {sessions.length > 0 ? (
+          <div className="mt-3">
+            <p className="mb-1 px-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+              Recent
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {sessions.map((s) => {
+                const active = pathname === `/session/${s.id}`;
+                return (
+                  <Link
+                    key={s.id}
+                    href={`/session/${s.id}`}
+                    title={s.name}
+                    className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition ${
+                      active
+                        ? "bg-surface-2 text-fg-primary"
+                        : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                    }`}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: s.color ?? "#a1a1aa" }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[13px]">{s.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-3 flex flex-col gap-0.5">
           <Link href="/automations" className={linkClass}>

@@ -301,7 +301,22 @@ async function createSession(
 
 /** POST /prompt — plan the prompt into a workflow awaiting approval. */
 export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
-  const plan = await generatePlan(body);
+  // Inside an existing session, replay its earlier prompts so Earn plans the
+  // follow-up with the conversation in mind (oldest first).
+  let priorContext: string[] = [];
+  if (sessionId) {
+    const { data: prior } = await ctx.supabase
+      .from("tasks")
+      .select("description")
+      .eq("session_id", sessionId)
+      .is("parent_task_id", null)
+      .order("created_at", { ascending: true });
+    priorContext = ((prior ?? []) as { description: string | null }[])
+      .map((t) => t.description?.trim() ?? "")
+      .filter(Boolean);
+  }
+
+  const plan = await generatePlan(body, priorContext);
 
   // Sessions are the first step in operations: an Earn prompt opens a session
   // (named from the prompt) unless one was already provided.
