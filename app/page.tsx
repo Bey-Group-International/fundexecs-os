@@ -182,15 +182,33 @@ export default function LandingPage({
             <p className="mt-4 text-fg-secondary">
               Direct Earn the way you would a senior operator.{" "}
               <span className="text-fg-primary">
-                &ldquo;Produce a diligence memo on 123 Main Street by Thursday.&rdquo;
+                &ldquo;Run diligence on the acquisition target and get me an IC memo by Thursday.&rdquo;
               </span>{" "}
-              It structures the work, coordinates the agents, and presents a plan for your approval — before anything executes.
+              Earn structures the work across the right agents — analyst, diligence, IR, fund admin — and presents a plan for your sign-off before anything moves.
             </p>
+
+            {/* Use case examples */}
+            <div className="mt-6 space-y-3">
+              {[
+                { label: "PE & Credit", example: "Model the LBO, stress-test debt capacity, draft the IC memo." },
+                { label: "Capital Formation", example: "Build the LP outreach, track commitments, send the capital call." },
+                { label: "Deal Sourcing", example: "Screen acquisition targets, score thesis fit, produce the screening report." },
+                { label: "Portfolio Ops", example: "Pull KPIs across every asset, flag variances, deliver the board pack." },
+              ].map((uc) => (
+                <div key={uc.label} className="flex items-start gap-3 rounded-lg border border-line bg-surface-1 px-4 py-3">
+                  <span className="mt-0.5 shrink-0 rounded-full border border-gold-500/30 bg-gold-500/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                    {uc.label}
+                  </span>
+                  <span className="text-sm text-fg-secondary">{uc.example}</span>
+                </div>
+              ))}
+            </div>
+
             <ul className="mt-6 space-y-3 text-sm text-fg-secondary">
               {[
                 "Nothing executes without your explicit sign-off",
                 "Every run produces a timestamped, version-controlled artifact",
-                "Full audit trail from instruction to deliverable",
+                "Full audit trail — from instruction to deliverable",
               ].map((f) => (
                 <li key={f} className="flex items-start gap-2.5">
                   <span className="mt-1 text-gold-400">→</span>
