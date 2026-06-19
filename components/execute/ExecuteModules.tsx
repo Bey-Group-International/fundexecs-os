@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { getExecutePerformance, isExited, type ExecutePerformance } from "@/lib/execute-performance";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
+import { promoteDealToAsset } from "@/components/execute/actions";
 import type { Asset, Deal, Artifact } from "@/lib/supabase/database.types";
 
 // Shared helpers --------------------------------------------------------------
@@ -156,6 +157,14 @@ export async function ExecuteClosingModule({ orgId }: { orgId: string }) {
                   <span>no close date set</span>
                 )}
               </div>
+              {d.stage === "closing" ? (
+                <form action={promoteDealToAsset} className="mt-3">
+                  <input type="hidden" name="deal_id" value={d.id} />
+                  <button className="inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 hover:text-gold-200">
+                    → Promote to portfolio
+                  </button>
+                </form>
+              ) : null}
             </div>
           );
         })}
