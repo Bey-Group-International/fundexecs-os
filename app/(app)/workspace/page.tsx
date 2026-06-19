@@ -3,7 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { copilotLive } from "@/lib/claude";
 import Copilot, { type WorkflowBundle } from "@/components/Copilot";
-import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
+import type { Task, Approval, Artifact, Session } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +14,25 @@ export default async function WorkspacePage() {
 
   const supabase = createServerClient();
 
-  const { data: workflows } = await supabase
-    .from("tasks")
-    .select("*")
-    .is("parent_task_id", null)
-    .order("created_at", { ascending: false })
-    .limit(8);
+  // Earn opens fresh — like Claude Code's home screen. The chat starts clean
+  // and the operator's most recent sessions sit above it for one-click resume.
+  const [{ data: workflows }, { data: recentSessions }] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("*")
+      .is("parent_task_id", null)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("sessions")
+      .select("*")
+      .is("archived_at", null)
+      .order("created_at", { ascending: false })
+      .limit(6),
+  ]);
 
   const workflowList = (workflows ?? []) as Task[];
+  const sessions = (recentSessions ?? []) as Session[];
   const ids = workflowList.map((w) => w.id);
 
   const [stepsRes, approvalsRes, artifactsRes] = await Promise.all([
@@ -51,5 +62,12 @@ export default async function WorkspacePage() {
         .sort((a, b) => (a.decision === "pending" ? -1 : 1))[0] ?? null,
   }));
 
-  return <Copilot orgId={ctx.orgId} live={copilotLive()} bundles={bundles} />;
+  return (
+    <Copilot
+      orgId={ctx.orgId}
+      live={copilotLive()}
+      bundles={bundles}
+      recentSessions={sessions}
+    />
+  );
 }
