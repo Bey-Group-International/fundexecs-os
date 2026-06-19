@@ -1,20 +1,4 @@
 {
-  "name": "fundexecs-os",
-  "version": "0.0.1",
-  "private": true,
-  "description": "An AI-native operating system for private-market participants.",
-  "license": "MIT",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "db:start": "supabase start",
-    "db:reset": "supabase db reset",
-    "db:diff": "supabase db diff",
-    "db:types": "supabase gen types typescript --local > lib/supabase/database.types.ts"
-  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.0",
     "@supabase/ssr": "^0.12.0",
@@ -23,15 +7,35 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
+  "description": "An AI-native operating system for private-market participants.",
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.16.11",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.35",
+    "jest": "^30.4.2",
     "postcss": "^8.5.10",
     "tailwindcss": "^3.4.13",
+    "ts-jest": "^29.4.11",
     "typescript": "^5.6.3"
-  }
+  },
+  "license": "MIT",
+  "name": "fundexecs-os",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "db:diff": "supabase db diff",
+    "db:reset": "supabase db reset",
+    "db:start": "supabase start",
+    "db:types": "supabase gen types typescript --local > lib/supabase/database.types.ts",
+    "dev": "next dev",
+    "lint": "next lint",
+    "start": "next start",
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
+  },
+  "version": "0.0.1"
 }
