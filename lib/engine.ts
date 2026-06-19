@@ -555,6 +555,33 @@ export async function decideApproval(
   });
 
   if (args.decision === "approved") {
+    // Persist the approved instruction as a saved Workflow so the operator can
+    // re-run, edit, or — to conserve credits — stop it later from the Workflows
+    // page. Skip when this run was itself spawned by an automation (no dupes).
+    if (!wf.automation_id) {
+      const { data: automation } = await ctx.supabase
+        .from("automations")
+        .insert({
+          organization_id: ctx.orgId,
+          name: wf.title,
+          prompt: wf.description ?? wf.title,
+          trigger_type: "manual",
+          schedule: null,
+          // They clicked "Approve & automate" — future Run-now executions go
+          // end-to-end. Editable (and pausable) from the Workflows page.
+          auto_approve: true,
+          enabled: true,
+          created_by: ctx.actorId,
+        })
+        .select("id")
+        .single();
+      if (automation?.id) {
+        await ctx.supabase
+          .from("tasks")
+          .update({ automation_id: automation.id })
+          .eq("id", wf.id);
+      }
+    }
     await executeWorkflow(ctx, wf);
   } else if (args.decision === "rejected") {
     await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
