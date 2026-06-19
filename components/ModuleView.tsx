@@ -18,6 +18,11 @@ import {
   RunStressTestModule,
   RunCommsModule,
 } from "@/components/run/RunModules";
+import {
+  ExecuteClosingModule,
+  ExecuteReportingModule,
+  ExecuteExitModule,
+} from "@/components/execute/ExecuteModules";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
@@ -210,6 +215,17 @@ export async function ModuleView({
     if (mod.key === "risk") return <RunRiskModule orgId={ctx.orgId} />;
     if (mod.key === "stress_test") return <RunStressTestModule orgId={ctx.orgId} />;
     if (mod.key === "comms") return <RunCommsModule orgId={ctx.orgId} />;
+  }
+
+  // --- Execute hub: derived operating modules ------------------------------
+  // Closing, Reporting, and Exit are synthesized from the operating record
+  // (deals heading to close, the portfolio performance roll-up, and realized
+  // assets); Capital Events and Asset Management fall through to their table-
+  // backed views below.
+  if (hub.key === "execute") {
+    if (mod.key === "closing") return <ExecuteClosingModule orgId={ctx.orgId} />;
+    if (mod.key === "reporting") return <ExecuteReportingModule orgId={ctx.orgId} />;
+    if (mod.key === "exit") return <ExecuteExitModule orgId={ctx.orgId} />;
   }
 
   // --- Build hub: dedicated editable modules -------------------------------
