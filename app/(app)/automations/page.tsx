@@ -5,7 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { describeSchedule } from "@/lib/cron";
 import type { Automation } from "@/lib/supabase/database.types";
 import { NewAutomationForm } from "./NewAutomationForm";
-import { toggleAutomation, deleteAutomation, runAutomationNow } from "./actions";
+import { toggleAutomation, deleteAutomation, runAutomationNow, updateAutomation } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -53,9 +53,9 @@ export default async function AutomationsPage() {
           Automated sessions
         </h1>
         <p className="mt-1 text-sm text-fg-secondary">
-          A workflow is an automated session: save an instruction once and it runs on a schedule,
-          plans itself with the Associate, and — when you trust it — executes end-to-end without
-          you. Approval-gated by default.
+          A workflow is an automated session: save an instruction once — on a schedule or whenever
+          you approve &amp; automate a run — and it plans itself with the Associate and executes
+          end-to-end. Edit any workflow inline, or pause it to stop spending credits.
         </p>
       </header>
 
@@ -105,12 +105,46 @@ export default async function AutomationsPage() {
                       {a.prompt}
                     </p>
                     <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                      {describeSchedule(a.schedule)}
+                      {a.trigger_type === "manual" && !a.schedule
+                        ? "Manual · run on demand"
+                        : describeSchedule(a.schedule)}
                       {a.enabled && untilTime(a.next_run_at) ? ` · next ${untilTime(a.next_run_at)}` : ""}
                       {" · "}
                       {a.run_count} run{a.run_count === 1 ? "" : "s"} · last {relativeTime(a.last_run_at)}
                       {a.last_run_status ? ` · ${a.last_run_status}` : ""}
                     </p>
+
+                    {/* Edit in place — name, instruction, and unattended autonomy. */}
+                    <details className="group mt-2">
+                      <summary className="inline-flex cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary">
+                        Edit
+                      </summary>
+                      <form action={updateAutomation} className="mt-3 flex flex-col gap-2">
+                        <input type="hidden" name="id" value={a.id} />
+                        <input
+                          name="name"
+                          defaultValue={a.name}
+                          required
+                          placeholder="Workflow name"
+                          className="rounded-md border border-line bg-surface-0 px-3 py-1.5 text-xs text-fg-primary outline-none focus:border-gold-500"
+                        />
+                        <textarea
+                          name="prompt"
+                          defaultValue={a.prompt}
+                          required
+                          rows={2}
+                          placeholder="Instruction in plain English"
+                          className="rounded-md border border-line bg-surface-0 px-3 py-1.5 text-xs text-fg-secondary outline-none focus:border-gold-500"
+                        />
+                        <label className="flex items-center gap-2 text-xs text-fg-secondary">
+                          <input type="checkbox" name="auto_approve" defaultChecked={a.auto_approve} />
+                          Auto-approve (run unattended)
+                        </label>
+                        <button className="self-start rounded-md bg-gold-500 px-2.5 py-1 text-xs font-medium text-surface-0 transition hover:bg-gold-400">
+                          Save changes
+                        </button>
+                      </form>
+                    </details>
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1.5">

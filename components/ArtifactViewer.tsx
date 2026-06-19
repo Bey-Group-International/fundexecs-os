@@ -25,6 +25,39 @@ const TYPE_COLOR: Record<ArtifactType, string> = {
   other: "text-fg-muted border-line bg-surface-2",
 };
 
+// Render inline emphasis (**bold** / __bold__) so the markers never leak into
+// the displayed copy — the institutional read is the words, not the syntax.
+function formatInline(text: string, keyPrefix: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__)/g);
+  return parts.map((part, idx) => {
+    const bold = part.match(/^(?:\*\*|__)([\s\S]+?)(?:\*\*|__)$/);
+    if (bold) {
+      return (
+        <strong key={`${keyPrefix}-${idx}`} className="font-semibold text-fg-primary">
+          {bold[1]}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
+// A pipe table row is `| ... |`; the separator under the header is `|---|---|`.
+const isTableRow = (line: string) => {
+  const t = line.trim();
+  return t.startsWith("|") && t.indexOf("|", 1) !== -1;
+};
+const isTableSeparator = (line: string) => {
+  const t = line.trim();
+  return t.includes("-") && /^\|?[\s:|-]+\|?$/.test(t);
+};
+const splitRow = (line: string): string[] => {
+  let t = line.trim();
+  if (t.startsWith("|")) t = t.slice(1);
+  if (t.endsWith("|")) t = t.slice(0, -1);
+  return t.split("|").map((c) => c.trim());
+};
+
 function renderContent(content: string): React.ReactNode[] {
   const lines = content.split("\n");
   const nodes: React.ReactNode[] = [];
@@ -38,11 +71,52 @@ function renderContent(content: string): React.ReactNode[] {
       continue;
     }
 
+    // Pipe table — lift the grid out of the raw markdown into a real table.
+    if (isTableRow(line) && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+      const header = splitRow(line);
+      i += 2; // consume the header and its separator
+      const rows: string[][] = [];
+      while (i < lines.length && isTableRow(lines[i]) && !isTableSeparator(lines[i])) {
+        rows.push(splitRow(lines[i]));
+        i++;
+      }
+      nodes.push(
+        <div key={`tbl-${i}`} className="mt-3 overflow-x-auto rounded-lg border border-line">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-line bg-surface-2">
+                {header.map((h, hi) => (
+                  <th
+                    key={hi}
+                    className="px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
+                  >
+                    {formatInline(h, `th-${i}-${hi}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => (
+                <tr key={ri} className="border-b border-line/60 last:border-0">
+                  {header.map((_, ci) => (
+                    <td key={ci} className="px-3 py-2 align-top text-fg-secondary">
+                      {formatInline(r[ci] ?? "", `td-${i}-${ri}-${ci}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
     // H1 / H2 / H3
     if (line.startsWith("### ")) {
       nodes.push(
         <h3 key={i} className="mt-4 text-sm font-semibold text-fg-primary">
-          {line.slice(4)}
+          {formatInline(line.slice(4), `h3-${i}`)}
         </h3>
       );
       i++;
@@ -51,7 +125,7 @@ function renderContent(content: string): React.ReactNode[] {
     if (line.startsWith("## ")) {
       nodes.push(
         <h2 key={i} className="mt-5 text-base font-semibold text-fg-primary">
-          {line.slice(3)}
+          {formatInline(line.slice(3), `h2-${i}`)}
         </h2>
       );
       i++;
@@ -60,7 +134,7 @@ function renderContent(content: string): React.ReactNode[] {
     if (line.startsWith("# ")) {
       nodes.push(
         <h1 key={i} className="mt-2 text-lg font-semibold text-fg-primary">
-          {line.slice(2)}
+          {formatInline(line.slice(2), `h1-${i}`)}
         </h1>
       );
       i++;
@@ -79,7 +153,7 @@ function renderContent(content: string): React.ReactNode[] {
           {items.map((item, j) => (
             <li key={j} className="flex gap-2 text-sm text-fg-secondary">
               <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gold-400" />
-              <span>{item}</span>
+              <span>{formatInline(item, `li-${i}-${j}`)}</span>
             </li>
           ))}
         </ul>
@@ -94,7 +168,7 @@ function renderContent(content: string): React.ReactNode[] {
         nodes.push(
           <div key={i} className="mt-2 flex gap-2 text-sm">
             <span className="font-semibold text-fg-primary shrink-0">{match[1]}:</span>
-            <span className="text-fg-secondary">{match[2]}</span>
+            <span className="text-fg-secondary">{formatInline(match[2], `kv-${i}`)}</span>
           </div>
         );
         i++;
@@ -102,8 +176,21 @@ function renderContent(content: string): React.ReactNode[] {
       }
     }
 
-    // Horizontal rule
-    if (/^[-*]{3,}$/.test(line.trim())) {
+    // Whole-line bold (e.g. "**Outreach Templates**") reads as a section title,
+    // not literal asterisks around the text.
+    const wholeBold = line.trim().match(/^\*\*([\s\S]+)\*\*$/);
+    if (wholeBold) {
+      nodes.push(
+        <h3 key={i} className="mt-4 text-sm font-semibold text-fg-primary">
+          {wholeBold[1]}
+        </h3>
+      );
+      i++;
+      continue;
+    }
+
+    // Horizontal rule (---, ***, ___)
+    if (/^[-*_]{3,}$/.test(line.trim())) {
       nodes.push(<hr key={i} className="my-4 border-line" />);
       i++;
       continue;
@@ -112,7 +199,7 @@ function renderContent(content: string): React.ReactNode[] {
     // Plain paragraph
     nodes.push(
       <p key={i} className="mt-2 text-sm leading-relaxed text-fg-secondary">
-        {line}
+        {formatInline(line, `p-${i}`)}
       </p>
     );
     i++;
