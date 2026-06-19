@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AGENTS } from "@/lib/agents";
@@ -138,8 +139,6 @@ export default function LandingPage({
           </div>
 
           {/* Earn Orb */}
-          {/* To use the real coin image: add earn-coin.png to /public and replace the inner div with:
-              <Image src="/earn-coin.png" alt="Earn" fill className="object-cover" /> */}
           <div className="flex items-center justify-center lg:justify-end">
             <div className="relative flex items-center justify-center">
               {/* Outer glow */}
@@ -154,14 +153,15 @@ export default function LandingPage({
                 className="absolute h-56 w-56 rounded-full border border-gold-500/20 bg-gradient-to-br from-gold-500/10 to-transparent"
                 style={{ animation: "pulse 3s cubic-bezier(0.4,0,0.6,1) infinite 0.5s" }}
               />
-              {/* Orb body */}
-              <div className="relative flex h-48 w-48 items-center justify-center overflow-hidden rounded-full border border-gold-500/40 shadow-[0_0_60px_-10px_rgba(234,179,8,0.4)]"
-                style={{
-                  background: "radial-gradient(circle at 35% 35%, #fbbf24, #d97706 55%, #92400e 100%)",
-                }}>
-                {/* Coin face detail */}
-                <div className="absolute inset-4 rounded-full border border-amber-300/30" />
-                <span className="font-mono text-4xl font-bold text-amber-900/80 select-none">E</span>
+              {/* Orb body — coin image cropped into circle */}
+              <div className="relative h-48 w-48 overflow-hidden rounded-full border border-gold-500/40 shadow-[0_0_60px_-10px_rgba(234,179,8,0.4)]">
+                <Image
+                  src="/earn-coin.png"
+                  alt="Earn"
+                  fill
+                  className="object-contain"
+                  priority
+                />
               </div>
             </div>
           </div>
