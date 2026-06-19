@@ -140,15 +140,25 @@ export function GuidedTour() {
 
   if (collapsed) {
     return (
-      <button
-        onClick={() => persistCollapsed(false)}
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full border border-gold-500/40 bg-surface-1 px-3.5 py-2 text-xs font-medium text-gold-300 shadow-lg transition hover:bg-surface-2"
-      >
-        <span className="font-mono">◆ Guided tour</span>
-        <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] text-gold-300">
-          {completed}/{STEPS.length}
-        </span>
-      </button>
+      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-1 rounded-full border border-gold-500/40 bg-surface-1 pr-1 shadow-lg">
+        <button
+          onClick={() => persistCollapsed(false)}
+          className="flex items-center gap-2 rounded-full py-2 pl-3.5 pr-1 text-xs font-medium text-gold-300 transition hover:text-gold-200"
+        >
+          <span className="font-mono">◆ Guided tour</span>
+          <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] text-gold-300">
+            {completed}/{STEPS.length}
+          </span>
+        </button>
+        <button
+          onClick={() => persistHidden(true)}
+          aria-label="Close the tour — bring it back from Settings → Guided tour"
+          title="Close the tour — bring it back from Settings → Guided tour"
+          className="flex h-6 w-6 items-center justify-center rounded-full text-fg-muted transition hover:bg-surface-2 hover:text-fg-primary"
+        >
+          ✕
+        </button>
+      </div>
     );
   }
 
