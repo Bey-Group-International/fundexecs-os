@@ -25,11 +25,12 @@ export default async function LoginPage({
             The Operating System<br />for Private Markets
           </p>
           <p className="mt-3 text-sm text-fg-secondary">
-            PE funds, real estate investors, and family offices — unified in one
-            AI-native platform.
+            One OS for deal sourcing, LP relations, diligence, underwriting,
+            capital events, and exit. Built for GPs, family offices, and
+            advisory professionals.
           </p>
         </div>
-        <p className="font-mono text-xs text-fg-muted">Alpha · Invite only</p>
+        <p className="font-mono text-xs text-fg-muted">Pre-Alpha · Invite only</p>
       </div>
 
       {/* Right form panel */}
@@ -44,8 +45,8 @@ export default async function LoginPage({
           </h1>
           <p className="mt-1.5 text-sm text-fg-secondary">
             {isSignup
-              ? "Start your private-markets OS."
-              : "Sign in to your workspace."}
+              ? "Your firm, your fund, your OS."
+              : "Back to your workspace."}
           </p>
 
           {searchParams.error && (
