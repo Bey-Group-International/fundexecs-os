@@ -260,7 +260,7 @@ export default function LandingPage({
           Built for operators<br />running real capital.
         </h2>
         <p className="mx-auto mt-4 max-w-md text-fg-secondary">
-          Invite-only. We're onboarding GPs, family offices, and advisory
+          Invite-only. We&rsquo;re onboarding GPs, family offices, and advisory
           professionals ready to move off fragmented tools and onto one
           intelligent system.
         </p>
