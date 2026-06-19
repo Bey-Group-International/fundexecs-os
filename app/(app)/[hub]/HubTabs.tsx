@@ -30,7 +30,7 @@ export function HubTabs({
 }) {
   const pathname = usePathname();
   return (
-    <div className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
+    <div className="mb-6 flex gap-0.5 overflow-x-auto border-b border-line">
       {modules.map((m) => {
         const href = `/${hubKey}/${m.key}`;
         const active = pathname === href;
@@ -39,14 +39,21 @@ export function HubTabs({
           <Link
             key={m.key}
             href={href}
-            className={`-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm transition ${
+            aria-current={active ? "page" : undefined}
+            className={`group relative -mb-px flex items-center gap-1.5 whitespace-nowrap rounded-t-md px-3 py-2.5 text-sm transition ${
               active
-                ? "border-gold-400 font-medium text-fg-primary"
-                : "border-transparent text-fg-secondary hover:text-fg-primary"
+                ? "font-medium text-fg-primary"
+                : "text-fg-secondary hover:bg-surface-1 hover:text-fg-primary"
             }`}
           >
             {status ? <StatusDot status={status} /> : null}
             {m.label}
+            <span
+              aria-hidden
+              className={`absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-gradient-to-r from-gold-300 to-gold-500 transition-opacity ${
+                active ? "opacity-100" : "opacity-0 group-hover:opacity-30"
+              }`}
+            />
           </Link>
         );
       })}

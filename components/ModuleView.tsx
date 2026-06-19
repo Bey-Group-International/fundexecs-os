@@ -12,6 +12,7 @@ import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { MandateStrip } from "@/components/build/MandateStrip";
+import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
@@ -24,12 +25,14 @@ const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 // the rest render a scaffold pointing back to Earn.
 interface ListConfig {
   table: string;
+  blurb: string;
   columns: { key: string; label: string }[];
   empty: string;
 }
 const LIST_MODULES: Record<string, ListConfig> = {
   "build/thesis": {
     table: "investment_theses",
+    blurb: "What you invest in, where, and the returns you target.",
     columns: [
       { key: "title", label: "Thesis" },
       { key: "target_irr", label: "Target IRR" },
@@ -39,6 +42,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "build/track_record": {
     table: "track_records",
+    blurb: "Prior deals and performance — the proof behind the thesis.",
     columns: [
       { key: "deal_name", label: "Deal" },
       { key: "vintage_year", label: "Vintage" },
@@ -49,6 +53,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "source/lp_pipeline": {
     table: "investors",
+    blurb: "Prospective and committed LPs, ranked by where they sit in your raise.",
     columns: [
       { key: "name", label: "Investor" },
       { key: "investor_type", label: "Type" },
@@ -58,6 +63,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "source/deal_pipeline": {
     table: "deals",
+    blurb: "Every opportunity in flight, from first look to close.",
     columns: [
       { key: "name", label: "Deal" },
       { key: "stage", label: "Stage" },
@@ -67,6 +73,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "source/partners": {
     table: "partners",
+    blurb: "Co-GPs, operating partners, and advisors who extend your reach.",
     columns: [
       { key: "name", label: "Partner" },
       { key: "partner_type", label: "Type" },
@@ -77,6 +84,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "source/providers": {
     table: "service_providers",
+    blurb: "Legal, audit, fund admin, and the rest of your service bench.",
     columns: [
       { key: "name", label: "Provider" },
       { key: "provider_type", label: "Type" },
@@ -87,6 +95,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "source/debt": {
     table: "debt_facilities",
+    blurb: "Credit lines, term loans, and mezzanine that lever your equity.",
     columns: [
       { key: "name", label: "Facility" },
       { key: "facility_type", label: "Type" },
@@ -98,6 +107,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "run/underwriting": {
     table: "underwritings",
+    blurb: "Base, bull, and bear cases behind every investment decision.",
     columns: [
       { key: "name", label: "Model" },
       { key: "scenario", label: "Scenario" },
@@ -108,6 +118,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "run/diligence": {
     table: "diligence_items",
+    blurb: "Open questions and findings that gate conviction.",
     columns: [
       { key: "title", label: "Item" },
       { key: "category", label: "Category" },
@@ -118,6 +129,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "execute/capital_events": {
     table: "capital_events",
+    blurb: "Calls, distributions, and every flow of capital post-close.",
     columns: [
       { key: "event_type", label: "Type" },
       { key: "amount", label: "Amount" },
@@ -127,6 +139,7 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
   "execute/asset_management": {
     table: "assets",
+    blurb: "Portfolio holdings and their current marks.",
     columns: [
       { key: "name", label: "Asset" },
       { key: "asset_type", label: "Type" },
@@ -245,10 +258,28 @@ export async function ModuleView({
     if (scoped) query = query.eq("session_id", sessionId);
     const { data } = await query;
     const rows = (data ?? []) as unknown as Record<string, unknown>[];
+
+    // Momentum: accurate total + last-7-day counts, scoped the same way as the
+    // list. Cheap head-only count queries, run alongside the page load.
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    let totalQ = supabase.from(cfg.table as "investors").select("*", { count: "exact", head: true });
+    let weekQ = supabase
+      .from(cfg.table as "investors")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", weekAgo);
+    if (scoped) {
+      totalQ = totalQ.eq("session_id", sessionId);
+      weekQ = weekQ.eq("session_id", sessionId);
+    }
+    const [{ count: total }, { count: thisWeek }] = await Promise.all([totalQ, weekQ]);
+    const lastUpdated = (rows[0]?.created_at as string | undefined) ?? null;
+
     const addConfig = ADD_ROW_CONFIGS[key];
     return (
       <div>
         {mandateStrip}
+        <ModuleHeader title={mod.label} blurb={cfg.blurb} />
+        <ModuleStatBar total={total ?? rows.length} thisWeek={thisWeek ?? 0} lastUpdated={lastUpdated} />
         {addConfig ? (
           <AddRowForm
             hub={hub.key}
@@ -258,13 +289,19 @@ export async function ModuleView({
           />
         ) : null}
         {rows.length === 0 ? (
-          <div className="rounded-xl border border-line bg-surface-1 p-8 text-center">
-            <p className="text-sm text-fg-secondary">{cfg.empty}</p>
+          <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
+            <span
+              aria-hidden
+              className="mb-3 flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/5 font-mono text-sm text-gold-400"
+            >
+              +
+            </span>
+            <p className="max-w-sm text-sm text-fg-secondary">{cfg.empty}</p>
             <Link
               href="/workspace"
-              className="mt-3 inline-block font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
             >
-              Open Earn →
+              ✶ Open Earn
             </Link>
           </div>
         ) : (
@@ -278,17 +315,24 @@ export async function ModuleView({
   return (
     <div>
       {mandateStrip}
-      <div className="rounded-xl border border-line bg-surface-1 p-8">
-      <p className="text-sm text-fg-secondary">
-        The <span className="text-fg-primary">{mod.label}</span> module lives in the {hub.label} hub.
-        It isn&apos;t wired up yet — describe the work in Earn and the agents will handle it here.
-      </p>
-      <Link
-        href="/workspace"
-        className="mt-4 inline-block rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
-      >
-        Open Earn
-      </Link>
+      <ModuleHeader title={mod.label} blurb={`Part of the ${hub.label} hub.`} />
+      <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
+        <span
+          aria-hidden
+          className="mb-3 flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/5 font-mono text-sm text-gold-400"
+        >
+          ✶
+        </span>
+        <p className="max-w-sm text-sm text-fg-secondary">
+          The <span className="text-fg-primary">{mod.label}</span> module isn&apos;t wired up yet —
+          describe the work in Earn and the agents will handle it here.
+        </p>
+        <Link
+          href="/workspace"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+        >
+          ✶ Open Earn
+        </Link>
       </div>
     </div>
   );

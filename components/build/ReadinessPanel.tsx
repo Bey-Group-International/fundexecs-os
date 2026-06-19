@@ -51,6 +51,8 @@ function ModuleChip({ m }: { m: ModuleReadiness }) {
 // switcher so progress is always in view as the foundation is filled in.
 export function ReadinessPanel({ readiness }: { readiness: BuildReadiness }) {
   const { overall, stage, stages, modules, nextAction } = readiness;
+  const nextStage = stages.find((s) => !s.unlocked);
+  const gap = nextStage ? nextStage.threshold - overall : 0;
 
   return (
     <div className="mb-6 rounded-2xl border border-line bg-surface-1 p-5">
@@ -72,6 +74,11 @@ export function ReadinessPanel({ readiness }: { readiness: BuildReadiness }) {
             </span>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
+          {nextStage ? (
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-gold-400">
+              {gap} {gap === 1 ? "point" : "points"} to {nextStage.label}
+            </p>
+          ) : null}
 
           {/* Unlock track */}
           <div className="mt-3 flex items-center gap-1.5">
