@@ -495,6 +495,22 @@ export type Automation = Timestamps & {
   created_by: string | null;
 };
 
+// A persisted Mandate (migration 0029) — the operator's standing delegation
+// that the gate layer consumes. Named MandateRow to avoid clashing with the
+// gate-layer `Mandate` interface in lib/gates.ts. `auto_approve` stores
+// ActionKind values; `autonomy_ceiling` is capped at 2 in the DB (Tier 3 is
+// never delegable).
+export type MandateRow = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  goal: string | null;
+  auto_approve: string[];
+  autonomy_ceiling: number;
+  is_active: boolean;
+  created_by: string | null;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -590,6 +606,7 @@ export type Database = {
       task_events: TableShape<TaskEvent>;
       artifacts: TableShape<Artifact>;
       automations: TableShape<Automation>;
+      mandates: TableShape<MandateRow>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
       wallets: TableShape<Wallet>;
