@@ -2,58 +2,56 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AGENTS } from "@/lib/agents";
 
-// The capital workflow loop — institutional framing.
 const LOOP = [
   {
     step: "Instruct",
-    body: "Brief Earn in plain language — a deal to evaluate, an investor to update, a report to produce.",
+    body: "Tell Earn what needs to happen — in plain language. A deal to underwrite. A capital call to send. A memo due Thursday.",
   },
   {
     step: "Structure",
-    body: "It builds an ordered plan and assigns the right agents to each step.",
+    body: "Earn builds an ordered plan and assigns the right agents. You see exactly what will happen before anything does.",
   },
   {
     step: "Authorize",
-    body: "You review the plan. No agent executes without your explicit sign-off.",
+    body: "You approve the plan. No agent moves without your sign-off. Control stays with you.",
   },
   {
     step: "Deliver",
-    body: "Agents execute and leave durable, auditable artifacts — IC memos, capital call notices, variance reports.",
+    body: "Agents execute in sequence and produce timestamped, version-controlled artifacts — IC memos, cap call notices, diligence reports.",
   },
 ];
 
-// Institutional agent descriptions — concrete, capital-markets facing.
 const AGENT_COPY: Record<string, string> = {
   analyst:
-    "Produces pro formas, valuations, and sensitivity analyses from raw deal data. Your underwriting desk — without the headcount.",
+    "Pro formas, valuations, and sensitivity analyses from raw deal data. Institutional-grade underwriting on demand.",
   associate:
-    "Coordinates every workflow across all four hubs. Routes tasks, manages agent handoffs, keeps nothing siloed.",
+    "The command layer. Earn routes every task, coordinates every agent, and keeps every workflow moving — across all domains.",
   investor_relations:
-    "Manages the full capital relationship cycle — investor updates, capital call notices, subscription documents, and reporting across LPs, family offices, and institutional co-investors.",
+    "Capital relationship management — updates, capital calls, subscription docs, and reporting across LPs, family offices, and institutional co-investors.",
   portfolio_ops:
-    "Tracks KPIs, budgets, and capex variance across every asset. Flags problems before they surface in a board report.",
+    "KPIs, budgets, and capex variance tracked across every asset. Flags problems before they reach a board report.",
   diligence:
-    "Parses offering memoranda, leases, and financials. Surfaces risks and produces diligence memos ready for IC.",
+    "Parses OMs, leases, and financials. Surfaces risk and produces IC-ready diligence memos.",
   fund_admin:
-    "Runs waterfall calculations, fund accounting, and audit prep. Back-office coverage without the back office.",
+    "Waterfall calculations, fund accounting, and audit prep. Back-office coverage — without the back office.",
   executive_advisor:
-    "Builds deep intelligence on every investor, family office, and strategic partner before first contact — who they are, what they need, and how to position BGI perfectly.",
+    "Deep intelligence on every investor, family office, and strategic partner before first contact. Know who they are, what they want, and exactly how to position.",
   capital_raiser:
-    "Runs LP fundraising and capital formation campaigns from first outreach to commitment. Manages the Founding Capital Circle and anchor LP pipeline.",
+    "LP fundraising and capital formation from first outreach to signed commitment. Manages the Founding Capital Circle and anchor LP pipeline.",
   capital_connector:
-    "Structures the capital stack for every transaction. Identifies the right lender, equity partner, or financing vehicle — and closes the relationship.",
+    "Structures the capital stack for every transaction. Finds the right lender, equity partner, or financing vehicle — and closes the relationship.",
   deal_sourcer:
-    "Finds acquisition targets: underperforming, founder-owned, or transitioning businesses. Builds the thesis, structures the creative financing, and positions BGI as the buyer.",
+    "Identifies acquisition targets: underperforming, founder-owned, or transitioning businesses. Builds the thesis. Structures creative financing.",
   rainmaker:
-    "Converts qualified prospects into capital commitments. Runs the closing sequence — from first conversation to signed terms — with precision.",
+    "Converts qualified prospects into commitments. Runs the closing sequence — from first conversation to signed terms.",
   lead_generator:
-    "Designs and operates digital funnels that capture investors, business owners, operators, and connectors. Measurable pipeline from click to conversation.",
+    "Digital funnels that capture investors, business owners, operators, and connectors. Measurable pipeline from click to conversation.",
   pr_director:
-    "Produces investor decks, CIMs, executive summaries, and PR narratives that position BGI as an institutional, culturally distinct platform.",
+    "Investor decks, CIMs, executive summaries, and PR narratives. Positions the platform as institutional, culturally distinct, and serious.",
   seo_disruptor:
-    "Turns BGI content and thought leadership into category-defining search authority — attracting the right capital and deal flow without paid acquisition.",
+    "Turns content and thought leadership into category-defining search authority. The right capital and deal flow — without paid acquisition.",
   curator:
-    "Designs private investor rooms and capital formation salons. Curates the room, the experience, and the follow-up so every gathering produces durable relationships.",
+    "Designs private investor rooms and capital formation salons. Curates the room, the experience, and the follow-up that turns gatherings into relationships.",
 };
 
 export default function LandingPage({
@@ -61,9 +59,6 @@ export default function LandingPage({
 }: {
   searchParams: { code?: string; error?: string; error_description?: string };
 }) {
-  // Safety net: if Supabase falls back to the Site URL after OAuth (because the
-  // app's /auth/callback wasn't allow-listed), the auth code lands here on "/".
-  // Forward it to the real callback so sign-in completes instead of bouncing.
   if (searchParams.code) {
     redirect(`/auth/callback?code=${encodeURIComponent(searchParams.code)}`);
   }
@@ -71,9 +66,11 @@ export default function LandingPage({
     const msg = searchParams.error_description || searchParams.error;
     redirect(`/login?error=${encodeURIComponent(msg)}`);
   }
+
   return (
     <div className="min-h-screen bg-surface-0 text-fg-primary">
-      {/* Top nav */}
+
+      {/* Nav */}
       <header className="fixed inset-x-0 top-0 z-50 border-b border-line bg-surface-0/80 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <span className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
@@ -105,16 +102,15 @@ export default function LandingPage({
         <div className="max-w-3xl">
           <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            For GPs, family offices, and advisory professionals
+            Private equity · Real estate · Private credit · Family office
           </p>
           <h1 className="mt-5 text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">
             The Operating System<br />
             for Private Markets
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-fg-secondary">
-            Stop managing 30 tools. Start running your fund. FundExecs OS
-            replaces your fragmented stack with one AI-native platform —
-            unifying relationships, deals, and capital into a single intelligence layer.
+            One platform. Fifteen AI agents. Every workflow from deal sourcing
+            to capital formation to exit — unified, auditable, and under your control.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -131,14 +127,14 @@ export default function LandingPage({
             </Link>
           </div>
           <p className="mt-4 font-mono text-xs text-fg-muted">
-            Born from 4+ years of advisory — and 3 hours a day lost to deals that were smoke and mirrors.
+            Pre-Alpha · Invite only · Built for operators running real capital
           </p>
         </div>
       </section>
 
       <div className="border-t border-line" />
 
-      {/* The capital workflow loop */}
+      {/* How it works */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
@@ -146,19 +142,19 @@ export default function LandingPage({
               How it works
             </p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-              Every instruction becomes a traceable, auditable deliverable.
+              Say it once.<br />Earn handles the rest.
             </h2>
             <p className="mt-4 text-fg-secondary">
-              Direct Earn the way you would a senior analyst.{" "}
+              Direct Earn the way you would a senior operator.{" "}
               <span className="text-fg-primary">
                 &ldquo;Produce a diligence memo on 123 Main Street by Thursday.&rdquo;
               </span>{" "}
-              It structures the work, assigns agents, and presents a plan for your approval before a single action is taken.
+              It structures the work, coordinates the agents, and presents a plan for your approval — before anything executes.
             </p>
             <ul className="mt-6 space-y-3 text-sm text-fg-secondary">
               {[
-                "Approval-gated by default — nothing executes without your sign-off",
-                "Every run leaves a timestamped, version-controlled artifact",
+                "Nothing executes without your explicit sign-off",
+                "Every run produces a timestamped, version-controlled artifact",
                 "Full audit trail from instruction to deliverable",
               ].map((f) => (
                 <li key={f} className="flex items-start gap-2.5">
@@ -169,20 +165,20 @@ export default function LandingPage({
             </ul>
           </div>
 
-          {/* The loop, visualized */}
+          {/* Workflow loop card */}
           <div className="rounded-2xl border border-line bg-surface-1 p-6">
-            <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+            <p className="mb-5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
               The capital workflow loop
             </p>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-5">
               {LOOP.map((l, i) => (
                 <div key={l.step} className="flex items-start gap-3">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 font-mono text-xs text-gold-300">
                     {i + 1}
                   </span>
                   <div>
-                    <p className="text-sm font-medium text-fg-primary">{l.step}</p>
-                    <p className="text-xs leading-relaxed text-fg-secondary">{l.body}</p>
+                    <p className="text-sm font-semibold text-fg-primary">{l.step}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-fg-secondary">{l.body}</p>
                   </div>
                 </div>
               ))}
@@ -193,20 +189,46 @@ export default function LandingPage({
 
       <div className="border-t border-line" />
 
-      {/* The Fifteen Agents */}
+      {/* Agent Roster */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
           Agent Roster
         </p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-          Fifteen agents. Native to private markets.
+          Fifteen agents. One command layer.
         </h2>
         <p className="mt-3 max-w-xl text-fg-secondary">
-          Each agent owns a domain — analysis, sourcing, capital formation, diligence, investor relations, event curation, brand, digital growth, fund operations. Coordinated by Earn. Authorized by you.
+          Each agent owns a domain. Earn coordinates them all.
+          You authorize every move.
         </p>
 
-        <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {AGENTS.map((agent) => (
+        {/* Earn — featured */}
+        {(() => {
+          const earn = AGENTS.find((a) => a.key === "associate");
+          if (!earn) return null;
+          return (
+            <div className="mt-8 rounded-2xl border border-gold-500/30 bg-surface-1 p-6">
+              <div className="flex items-center gap-3">
+                <span
+                  className="h-3 w-3 rounded-full ring-2 ring-gold-500/30"
+                  style={{ backgroundColor: earn.color }}
+                  aria-hidden
+                />
+                <h3 className="text-lg font-semibold">{earn.name}</h3>
+                <span className="rounded-full border border-gold-500/20 bg-gold-500/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-gold-400">
+                  Command layer
+                </span>
+              </div>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg-secondary">
+                {AGENT_COPY[earn.key] ?? earn.role}
+              </p>
+            </div>
+          );
+        })()}
+
+        {/* Remaining 14 agents */}
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {AGENTS.filter((a) => a.key !== "associate").map((agent) => (
             <div
               key={agent.key}
               className="rounded-xl border border-line bg-surface-1 p-5 transition hover:border-gold-500/30"
@@ -217,9 +239,9 @@ export default function LandingPage({
                   style={{ backgroundColor: agent.color }}
                   aria-hidden
                 />
-                <h3 className="font-medium">{agent.name}</h3>
+                <h3 className="text-sm font-medium">{agent.name}</h3>
               </div>
-              <p className="mt-2.5 text-xs leading-relaxed text-fg-secondary">
+              <p className="mt-2 text-xs leading-relaxed text-fg-secondary">
                 {AGENT_COPY[agent.key] ?? agent.role}
               </p>
             </div>
@@ -227,36 +249,49 @@ export default function LandingPage({
         </div>
       </section>
 
-
       <div className="border-t border-line" />
 
-      {/* Bottom CTA */}
+      {/* CTA */}
       <section className="mx-auto max-w-6xl px-6 py-24 text-center">
-        <h2 className="text-3xl font-semibold tracking-tight">
-          3 hours a day on smoke-and-mirrors deals.<br />
-          There had to be a better way.
-        </h2>
-        <p className="mx-auto mt-3 max-w-md text-fg-secondary">
-          FundExecs OS was built by operators who lived the problem — sourcing
-          pipelines full of noise, LP comms running on email threads, IC memos
-          assembled at midnight. This is the system we needed and could not find.
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+          Early access
         </p>
-        <Link
-          href="/login?mode=signup"
-          className="mt-8 inline-block rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
-        >
-          Request access
-        </Link>
+        <h2 className="mt-4 text-3xl font-semibold tracking-tight">
+          Built for operators<br />running real capital.
+        </h2>
+        <p className="mx-auto mt-4 max-w-md text-fg-secondary">
+          Invite-only. We&rsquo;re onboarding GPs, family offices, and advisory
+          professionals ready to move off fragmented tools and onto one
+          intelligent system.
+        </p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/login?mode=signup"
+            className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
+          >
+            Request access
+          </Link>
+          <Link
+            href="/login"
+            className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
+          >
+            Sign in
+          </Link>
+        </div>
+        <p className="mt-6 font-mono text-xs text-fg-muted">
+          Pre-Alpha · No credit card required
+        </p>
       </section>
 
       <footer className="border-t border-line px-6 py-6">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <span className="font-mono text-xs text-fg-muted">FundExecs OS · Alpha</span>
           <span className="font-mono text-xs text-fg-muted">
-            Data model first. API second. Agents third. UI last.
+            Data model first. Agents second. Capital third.
           </span>
         </div>
       </footer>
+
     </div>
   );
 }
