@@ -5,10 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Client-side side rail. Modeled on Claude Code's sidebar: a minimal top level
-// (Logo · New Session · Workflows · More), the operational hubs whose modules
-// expand on click, and a bottom account button whose menu pops out on click
-// with Sign out pinned to the very bottom. All reveal-on-click — no hover.
+// Client-side side rail, Claude Code style. Minimal top level (Logo · New
+// Session · Workflows · More), the operational hubs whose modules expand on
+// click, then a "Recent" conversation list below the hubs — sessions filed
+// under group names with an Ungrouped bucket — and a bottom account button
+// whose menu pops out on click with Sign out pinned to the very bottom.
 
 interface NavItem {
   href: string;
@@ -25,6 +26,12 @@ interface SessionItem {
   id: string;
   name: string;
   color: string | null;
+  groupId: string | null;
+}
+
+interface GroupItem {
+  id: string;
+  name: string;
 }
 
 // Secondary destinations folded under "More".
@@ -65,23 +72,117 @@ export function AppSidebar({
   planName,
   hubs,
   sessions,
+  groups,
   signOutAction,
+  createGroupAction,
+  moveSessionAction,
 }: {
   name: string;
   planName: string;
   hubs: HubItem[];
   sessions: SessionItem[];
+  groups: GroupItem[];
   signOutAction: () => void;
+  createGroupAction: (formData: FormData) => void;
+  moveSessionAction: (formData: FormData) => void;
 }) {
+  const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [openHub, setOpenHub] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
-  const pathname = usePathname();
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const [movingId, setMovingId] = useState<string | null>(null);
 
   const accountRef = useDismiss<HTMLDivElement>(() => setAccountOpen(false));
+  const recentRef = useDismiss<HTMLDivElement>(() => setMovingId(null));
+
+  // Group the recent sessions: named groups (in catalog order) that actually
+  // hold a session, then the ungrouped bucket last.
+  const byGroup = new Map<string, SessionItem[]>();
+  for (const s of sessions) {
+    const k = s.groupId ?? "";
+    const list = byGroup.get(k) ?? [];
+    list.push(s);
+    byGroup.set(k, list);
+  }
+  const recentSections: { key: string; label: string; sessions: SessionItem[] }[] = [
+    ...groups
+      .filter((g) => byGroup.has(g.id))
+      .map((g) => ({ key: g.id, label: g.name, sessions: byGroup.get(g.id) ?? [] })),
+    ...(byGroup.has("")
+      ? [{ key: "", label: "Ungrouped", sessions: byGroup.get("") ?? [] }]
+      : []),
+  ];
 
   const linkClass =
     "flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary";
+
+  // A single conversation row, Claude Code style: color dot, active highlight,
+  // and a "⋯" menu to file it under a group.
+  function SessionRow({ s }: { s: SessionItem }) {
+    const active = pathname === `/session/${s.id}`;
+    return (
+      <div className="relative flex items-center">
+        <Link
+          href={`/session/${s.id}`}
+          title={s.name}
+          className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 pl-4 transition ${
+            active
+              ? "bg-surface-2 text-fg-primary"
+              : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+          }`}
+        >
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: s.color ?? "#a1a1aa" }}
+          />
+          <span className="min-w-0 flex-1 truncate text-[13px]">{s.name}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setMovingId(movingId === s.id ? null : s.id)}
+          aria-label="File session in a group"
+          title="Move to group"
+          className="shrink-0 rounded-md px-1.5 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
+        >
+          ⋯
+        </button>
+
+        {movingId === s.id ? (
+          <div className="absolute right-1 top-full z-10 mt-0.5 flex w-40 flex-col gap-0.5 rounded-lg border border-line bg-surface-1 p-1.5 shadow-2xl">
+            <p className="px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+              Move to
+            </p>
+            {[{ id: "", name: "Ungrouped" }, ...groups].map((g) => {
+              const current = (s.groupId ?? "") === g.id;
+              return (
+                <form
+                  key={g.id || "ungrouped"}
+                  action={moveSessionAction}
+                  onSubmit={() => setMovingId(null)}
+                >
+                  <input type="hidden" name="id" value={s.id} />
+                  <input type="hidden" name="group_id" value={g.id} />
+                  <button
+                    disabled={current}
+                    className={`w-full truncate rounded-md px-2 py-1 text-left text-xs transition ${
+                      current
+                        ? "text-gold-300"
+                        : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                    }`}
+                  >
+                    {current ? "✓ " : ""}
+                    {g.name}
+                  </button>
+                </form>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <aside className="flex w-[224px] shrink-0 flex-col border-r border-line bg-surface-1">
@@ -112,38 +213,6 @@ export function AppSidebar({
           <span className="text-base leading-none">+</span>
           New Session
         </Link>
-
-        {/* Recent conversations — the session list, Claude Code style. */}
-        {sessions.length > 0 ? (
-          <div className="mt-3">
-            <p className="mb-1 px-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
-              Recent
-            </p>
-            <div className="flex flex-col gap-0.5">
-              {sessions.map((s) => {
-                const active = pathname === `/session/${s.id}`;
-                return (
-                  <Link
-                    key={s.id}
-                    href={`/session/${s.id}`}
-                    title={s.name}
-                    className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition ${
-                      active
-                        ? "bg-surface-2 text-fg-primary"
-                        : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
-                    }`}
-                  >
-                    <span
-                      className="h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: s.color ?? "#a1a1aa" }}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-[13px]">{s.name}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
 
         <div className="mt-3 flex flex-col gap-0.5">
           <Link href="/automations" className={linkClass}>
@@ -216,6 +285,77 @@ export function AppSidebar({
             </div>
           );
         })}
+
+        {/* Recent — conversation list below the hubs, filed under group names
+            with an Ungrouped bucket. */}
+        <div ref={recentRef}>
+          <div className="mb-1 mt-5 flex items-center justify-between px-2">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+              Recent
+            </p>
+            <button
+              type="button"
+              onClick={() => setNewGroupOpen((v) => !v)}
+              aria-label="New group"
+              title="New group"
+              className="font-mono text-xs leading-none text-fg-muted transition hover:text-gold-400"
+            >
+              +
+            </button>
+          </div>
+
+          {newGroupOpen ? (
+            <form
+              action={createGroupAction}
+              onSubmit={() => setNewGroupOpen(false)}
+              className="mb-1.5 flex items-center gap-1 px-2"
+            >
+              <input
+                name="name"
+                autoFocus
+                placeholder="Group name…"
+                className="min-w-0 flex-1 rounded-md border border-line bg-surface-0 px-2 py-1 text-xs text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+              <button className="rounded-md border border-line px-1.5 py-1 text-[10px] text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
+                Add
+              </button>
+            </form>
+          ) : null}
+
+          {recentSections.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-fg-muted">No sessions yet.</p>
+          ) : (
+            recentSections.map((sec) => {
+              const isGroupCollapsed = collapsedGroups[sec.key];
+              return (
+                <div key={sec.key || "ungrouped"} className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCollapsedGroups((prev) => ({
+                        ...prev,
+                        [sec.key]: !prev[sec.key],
+                      }))
+                    }
+                    aria-expanded={!isGroupCollapsed}
+                    className="flex w-full items-center justify-between rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-gold-400 transition hover:bg-surface-2"
+                  >
+                    <span className="truncate">{sec.label}</span>
+                    <span className="text-fg-muted">{isGroupCollapsed ? "▸" : "▾"}</span>
+                  </button>
+
+                  {!isGroupCollapsed ? (
+                    <div className="flex flex-col gap-0.5">
+                      {sec.sessions.map((s) => (
+                        <SessionRow key={s.id} s={s} />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
       </nav>
 
       {/* Account — name + plan; menu pops out on click, Sign out pinned below */}
