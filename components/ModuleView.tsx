@@ -11,6 +11,7 @@ import { EntityModule } from "@/components/build/EntityModule";
 import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
+import { MandateStrip } from "@/components/build/MandateStrip";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
@@ -174,6 +175,10 @@ export async function ModuleView({
   const key = `${hub.key}/${mod.key}`;
   const supabase = createServerClient();
 
+  // Carry the firm's mandate (Build › Thesis) into the hubs that act on it.
+  const mandateStrip =
+    hub.key === "source" || hub.key === "run" ? <MandateStrip orgId={ctx.orgId} /> : null;
+
   // --- Build hub: dedicated editable modules -------------------------------
   if (hub.key === "build") {
     if (mod.key === "thesis") return <ThesisModule />;
@@ -243,6 +248,7 @@ export async function ModuleView({
     const addConfig = ADD_ROW_CONFIGS[key];
     return (
       <div>
+        {mandateStrip}
         {addConfig ? (
           <AddRowForm
             hub={hub.key}
@@ -270,7 +276,9 @@ export async function ModuleView({
 
   // --- Scaffold for not-yet-built modules ----------------------------------
   return (
-    <div className="rounded-xl border border-line bg-surface-1 p-8">
+    <div>
+      {mandateStrip}
+      <div className="rounded-xl border border-line bg-surface-1 p-8">
       <p className="text-sm text-fg-secondary">
         The <span className="text-fg-primary">{mod.label}</span> module lives in the {hub.label} hub.
         It isn&apos;t wired up yet — describe the work in Earn and the agents will handle it here.
@@ -281,6 +289,7 @@ export async function ModuleView({
       >
         Open Earn
       </Link>
+      </div>
     </div>
   );
 }

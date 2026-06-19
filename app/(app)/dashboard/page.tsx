@@ -11,6 +11,7 @@ import { Outbox } from "./Outbox";
 import type { Session, SessionGroup, Approval, DispatchLog } from "@/lib/supabase/database.types";
 import { ArtifactCard } from "@/components/ArtifactViewer";
 import { buildCapitalMap } from "@/lib/capital-map";
+import { getBuildReadiness } from "@/lib/build-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,7 @@ export default async function DashboardPage() {
     pendingGatesRes,
     dispatchLogRes,
     capitalMap,
+    readiness,
   ] = await Promise.all([
     supabase.from("tasks").select("*"),
     supabase
@@ -86,6 +88,9 @@ export default async function DashboardPage() {
       .limit(8),
     // The Capital Map is already org-scoped via RLS and pre-sorted hottest-first.
     buildCapitalMap(supabase),
+    // Build-hub foundation readiness — surfaced here so progress is visible
+    // from the Command Center, not just inside the Build hub.
+    getBuildReadiness(ctx.orgId),
   ]);
 
   const tasks = (allTasksRes.data ?? []) as Task[];
@@ -142,6 +147,31 @@ export default async function DashboardPage() {
         <Stat label="Deals in pipeline" value={deals.length} />
         <Stat label="Portfolio assets" value={assets.length} />
       </section>
+
+      <Link
+        href="/build"
+        className="mt-3 flex items-center gap-4 rounded-xl border border-line bg-surface-1 p-4 transition hover:border-gold-500/40"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+              Foundation readiness
+            </span>
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+              {readiness.stage.label}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+            <div className="h-full rounded-full bg-gold-400" style={{ width: `${readiness.overall}%` }} />
+          </div>
+          <p className="mt-1.5 truncate text-xs text-fg-muted">
+            {readiness.nextAction
+              ? `Next: ${readiness.nextAction.label} →`
+              : "Foundation complete — fundraising-ready."}
+          </p>
+        </div>
+        <span className="font-display text-2xl font-semibold text-fg-primary">{readiness.overall}%</span>
+      </Link>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
         <HottestCapital entries={hottestCapital} />
