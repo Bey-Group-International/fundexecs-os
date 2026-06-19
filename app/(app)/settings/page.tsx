@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import type { MandateRow } from "@/lib/supabase/database.types";
 import { NewMandateForm } from "./NewMandateForm";
+import { Connections } from "./Connections";
 import { TIER_2_ACTIONS } from "./tier2-actions";
 import { deactivateMandate } from "./actions";
 
@@ -117,6 +118,8 @@ export default async function SettingsPage() {
 
         <NewMandateForm tier2Actions={TIER_2_ACTIONS} />
       </section>
+
+      <Connections />
 
       <form action={signOut} className="mt-6">
         <button className="rounded-md border border-line px-3 py-1.5 text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
