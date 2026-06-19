@@ -16,8 +16,11 @@ import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
 import { ModuleDashboard } from "@/components/source/ModuleDashboard";
+import { AiSourcingPanel } from "@/components/source/AiSourcingPanel";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { summarizeModule } from "@/lib/source-stats";
+import { sourceConfigFor, sourcingLive } from "@/lib/source-ai";
+import { AGENT_BY_KEY } from "@/lib/agents";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 
@@ -267,6 +270,11 @@ export async function ModuleView({
     // generic momentum strip (volume, recent adds, last activity).
     const summary = summarizeModule(key, rows);
 
+    // AI Sourcing surface — only on the standalone hub view (not the session
+    // frame, whose rows are session-scoped). Generate/score/act against the
+    // mandate, with the operator's gate on every outbound move.
+    const aiCfg = sessionId ? null : sourceConfigFor(key);
+
     let statBar = null;
     if (!summary) {
       // Momentum: accurate total + last-7-day counts, scoped the same way as
@@ -292,6 +300,15 @@ export async function ModuleView({
       <div>
         {mandateStrip}
         <ModuleHeader title={mod.label} blurb={cfg.blurb} />
+        {aiCfg ? (
+          <AiSourcingPanel
+            hub={hub.key}
+            module={mod.key}
+            entities={aiCfg.entities}
+            agentName={AGENT_BY_KEY[aiCfg.agent]?.name ?? "Sourcing"}
+            live={sourcingLive()}
+          />
+        ) : null}
         {summary ? <ModuleDashboard summary={summary} empty={rows.length === 0} /> : statBar}
         {addConfig ? (
           <AddRowForm
