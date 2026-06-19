@@ -80,11 +80,15 @@ export default function Copilot({
   live,
   bundles,
   recentSessions = [],
+  sessionId,
 }: {
   orgId: string;
   live: boolean;
   bundles: WorkflowBundle[];
   recentSessions?: Session[];
+  // When set, prompts run inside this session (Earn keeps the work together)
+  // and the recent-sessions rail is hidden — we're already inside one.
+  sessionId?: string;
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -127,7 +131,7 @@ export default function Copilot({
     await fetch("/api/prompt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body }),
+      body: JSON.stringify(sessionId ? { body, session_id: sessionId } : { body }),
     }).catch(() => {});
     setBusy(false);
     setPlanning(false);
