@@ -286,13 +286,10 @@ export function AppSidebar({
           );
         })}
 
-        {/* Recent — conversation list below the hubs, filed under group names
-            with an Ungrouped bucket. */}
-        <div ref={recentRef}>
-          <div className="mb-1 mt-5 flex items-center justify-between px-2">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
-              Recent
-            </p>
+        {/* Conversation list below the hubs, filed under group names with an
+            Ungrouped bucket. */}
+        <div ref={recentRef} className="mt-5 border-t border-line pt-3">
+          <div className="mb-1 flex items-center justify-end px-2">
             <button
               type="button"
               onClick={() => setNewGroupOpen((v) => !v)}
