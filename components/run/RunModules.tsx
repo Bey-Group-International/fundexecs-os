@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getRunConviction, toPercent, type DealConviction } from "@/lib/run-conviction";
+import { getRunConviction, toPercent, effectiveSeverity, type DealConviction } from "@/lib/run-conviction";
 import type { Mandate } from "@/lib/build-readiness";
 import type { DiligenceItem } from "@/lib/supabase/database.types";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
@@ -98,9 +98,10 @@ export async function RunStrategyModule({ orgId }: { orgId: string }) {
             d.projectedIrr != null && m?.targetIrr != null ? d.projectedIrr >= m.targetIrr : null;
           const thesisFitPct = d.deal.thesis_fit != null ? Math.round(d.deal.thesis_fit * 100) : null;
           return (
-            <div
+            <Link
               key={d.deal.id}
-              className="rounded-xl border border-line bg-surface-1 p-4 transition hover:border-gold-500/30"
+              href={`/deal/${d.deal.id}`}
+              className="block rounded-xl border border-line bg-surface-1 p-4 transition hover:border-gold-500/30"
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="truncate font-medium text-fg-primary">{d.deal.name}</span>
@@ -122,7 +123,7 @@ export async function RunStrategyModule({ orgId }: { orgId: string }) {
                   d.projectedIrr != null ? `${d.projectedIrr}% IRR` : "return",
                 )}
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>
@@ -157,7 +158,8 @@ export async function RunRiskModule({ orgId }: { orgId: string }) {
   const nameById = new Map(deals.map((d) => [d.deal.id, d.deal.name]));
 
   // Flatten flagged / severity-scored diligence findings across the working set
-  // into one register, unresolved-and-severe first.
+  // into one register, unresolved-and-severe first. Severity is the residual
+  // (post-mitigation) severity, so a mitigated finding drops down the register.
   const register: DiligenceItem[] = deals
     .flatMap((d) => d.diligence)
     .filter((i) => i.risk_severity != null || i.status === "flagged");
@@ -165,11 +167,15 @@ export async function RunRiskModule({ orgId }: { orgId: string }) {
     const aOpen = !RESOLVED.has(a.status) ? 0 : 1;
     const bOpen = !RESOLVED.has(b.status) ? 0 : 1;
     if (aOpen !== bOpen) return aOpen - bOpen;
-    return (SEVERITY_RANK[a.risk_severity ?? "low"] ?? 9) - (SEVERITY_RANK[b.risk_severity ?? "low"] ?? 9);
+    return (
+      (SEVERITY_RANK[effectiveSeverity(a) ?? "low"] ?? 9) -
+      (SEVERITY_RANK[effectiveSeverity(b) ?? "low"] ?? 9)
+    );
   });
 
   const counts = register.reduce<Record<string, number>>((acc, i) => {
-    if (!RESOLVED.has(i.status) && i.risk_severity) acc[i.risk_severity] = (acc[i.risk_severity] ?? 0) + 1;
+    const sev = effectiveSeverity(i);
+    if (!RESOLVED.has(i.status) && sev) acc[sev] = (acc[sev] ?? 0) + 1;
     return acc;
   }, {});
 
@@ -200,23 +206,30 @@ export async function RunRiskModule({ orgId }: { orgId: string }) {
           <div className="overflow-hidden rounded-xl border border-line">
             {register.map((i, idx) => {
               const resolved = RESOLVED.has(i.status);
+              const mitigated = !!i.mitigation && i.residual_severity != null;
               return (
-                <div
+                <Link
+                  href={`/deal/${i.deal_id}`}
                   key={i.id}
-                  className={`flex items-start gap-3 px-4 py-3 ${
+                  className={`flex items-start gap-3 px-4 py-3 transition hover:bg-surface-2 ${
                     idx > 0 ? "border-t border-line/50" : ""
                   } ${resolved ? "opacity-50" : "bg-surface-1"}`}
                 >
-                  <SeverityPill sev={i.risk_severity ?? "low"} />
+                  <SeverityPill sev={effectiveSeverity(i) ?? "low"} />
                   <div className="min-w-0 flex-1">
                     <p className={`text-sm ${resolved ? "text-fg-muted line-through" : "text-fg-primary"}`}>
                       {i.title}
+                      {mitigated ? (
+                        <span className="ml-2 rounded-full border border-status-info/40 px-1.5 py-0.5 align-middle font-mono text-[9px] uppercase tracking-wider text-status-info">
+                          mitigated
+                        </span>
+                      ) : null}
                     </p>
                     <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                       {nameById.get(i.deal_id) ?? "—"} · {i.category} · {i.status.replace("_", " ")}
                     </p>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
