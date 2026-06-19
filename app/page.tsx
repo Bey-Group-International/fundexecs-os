@@ -67,18 +67,16 @@ export default function LandingPage({
         <div className="max-w-3xl">
           <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            AI-native · Private markets
+            For GPs, family offices, and advisory professionals
           </p>
           <h1 className="mt-5 text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">
-            The operating system
-            <br />
-            for private capital
+            The Operating System<br />
+            for Private Markets
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-fg-secondary">
-            PE funds, real estate investors, and family offices run on 30+ point
-            solutions. FundExecs OS replaces them with one AI-native platform —
-            and a workforce of six agents that source deals, underwrite, manage
-            LPs, and <span className="text-fg-primary">own the work on their own</span>.
+            Stop managing 30 tools. Start running your fund. FundExecs OS
+            replaces your fragmented stack with one AI-native platform —
+            unifying relationships, deals, and capital into a single intelligence layer.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -258,18 +256,19 @@ export default function LandingPage({
       {/* Bottom CTA */}
       <section className="mx-auto max-w-6xl px-6 py-24 text-center">
         <h2 className="text-3xl font-semibold tracking-tight">
-          Built for operators who move capital.
+          3 hours a day on smoke-and-mirrors deals.<br />
+          There had to be a better way.
         </h2>
         <p className="mx-auto mt-3 max-w-md text-fg-secondary">
-          If you spend hours every week sourcing deals that go nowhere, managing
-          LP comms in spreadsheets, or waiting on reports — FundExecs OS is
-          built for you.
+          FundExecs OS was built by operators who lived the problem — sourcing
+          pipelines full of noise, LP comms running on email threads, IC memos
+          assembled at midnight. This is the system we needed and could not find.
         </p>
         <Link
           href="/login?mode=signup"
           className="mt-8 inline-block rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
         >
-          Request early access
+          Request access
         </Link>
       </section>
 
