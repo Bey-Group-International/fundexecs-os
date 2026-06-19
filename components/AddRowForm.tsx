@@ -25,9 +25,10 @@ export default function AddRowForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mb-4 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
+        className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3.5 py-2 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20 hover:text-gold-200"
       >
-        + Add
+        <span className="font-mono text-base leading-none">+</span>
+        Add record
       </button>
     );
   }

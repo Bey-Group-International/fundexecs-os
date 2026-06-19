@@ -43,11 +43,19 @@ export default async function HubLayout({
 
   return (
     <div className="mx-auto max-w-4xl">
-      <header className="mb-4">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-          {hub.label} Hub
-        </span>
-        <p className="mt-1 text-sm text-fg-secondary">{hub.purpose}</p>
+      <header className="mb-5">
+        <div className="flex items-center gap-2.5">
+          <span
+            aria-hidden
+            className="h-5 w-1 rounded-full bg-gradient-to-b from-gold-300 to-gold-500"
+          />
+          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            {hub.label} Hub
+          </span>
+        </div>
+        <p className="mt-2 max-w-prose text-[15px] leading-snug text-fg-secondary">
+          {hub.purpose}
+        </p>
       </header>
       {momentumPanel}
       <HubTabs hubKey={hub.key} modules={hub.modules} statuses={moduleStatuses} />
