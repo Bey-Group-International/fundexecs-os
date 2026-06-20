@@ -45,6 +45,26 @@ export async function updateThesis(formData: FormData): Promise<void> {
   revalidatePath(`${BUILD}/thesis`);
 }
 
+// Make one thesis active and deactivate every other thesis for the org.
+export async function setActiveThesis(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const supabase = createServerClient();
+  // Deactivate all theses for the org, then activate the chosen one.
+  await supabase
+    .from("investment_theses")
+    .update({ is_active: false })
+    .eq("organization_id", ctx.orgId);
+  await supabase
+    .from("investment_theses")
+    .update({ is_active: true })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath(`${BUILD}/thesis`);
+}
+
 // --- Entity ----------------------------------------------------------------
 export async function updateEntity(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
