@@ -1,10 +1,9 @@
-// FundExecs-issued API credentials. This module owns the credential *shape* and
-// the verification path; the Settings server actions (api-keys-actions.ts) own
-// persistence. Kept free of `server-only` and of cookie-bound clients so the
-// pure helpers (generation, hashing, masking) stay unit-testable — only
-// verifyApiKey/requireApiKey reach the database, and only ever from the server.
-import { createHash, randomBytes } from "crypto";
-import { createServiceClient } from "@/lib/supabase/server";
+// FundExecs-issued API credentials — the credential *shape*: generation,
+// hashing, masking, and request parsing. Deliberately dependency-light (only
+// node `crypto`): no Supabase client and no `next/headers`, so it is safe to
+// import from client components (e.g. ApiKeys.tsx uses maskedSecret) and stays
+// unit-testable. The database-backed verifier lives in api-keys-verify.ts.
+import { createHmac, randomBytes } from "crypto";
 import type { ApiKeyMode } from "@/lib/supabase/database.types";
 
 export const API_KEY_MODES: readonly ApiKeyMode[] = ["test", "live"] as const;
@@ -34,9 +33,21 @@ export function generateKeyPair(mode: ApiKeyMode): GeneratedKeyPair {
   };
 }
 
-/** One-way SHA-256 hex digest of a secret — what we actually persist. */
+// Keyed HMAC-SHA256, not a bare hash. Secret keys are 192-bit random tokens, so
+// brute-forcing the input is already infeasible and a slow KDF (bcrypt/scrypt)
+// would buy nothing — but those use a per-row salt, which is incompatible with
+// the O(1) "look up the row by its hash" verification path. A keyed HMAC keeps
+// the digest deterministic (so lookup works) while making a leaked database
+// useless to an attacker who lacks the server-side pepper. The pepper is
+// optional (FUNDEXECS_API_KEY_PEPPER); unset, it degrades to an empty key,
+// which is still an HMAC and still not a plain password hash.
+function pepper(): string {
+  return process.env.FUNDEXECS_API_KEY_PEPPER ?? "";
+}
+
+/** Deterministic keyed digest of a secret — what we actually persist. */
 export function hashSecret(secret: string): string {
-  return createHash("sha256").update(secret.trim()).digest("hex");
+  return createHmac("sha256", pepper()).update(secret.trim()).digest("hex");
 }
 
 /** The non-secret leading namespace of a key, e.g. "fxsk_live". */
@@ -65,42 +76,6 @@ export interface VerifiedKey {
   mode: ApiKeyMode;
 }
 
-/**
- * Resolve a presented secret key to its org, or null if it is malformed,
- * unknown, or revoked. Uses the service-role client (the caller is an external
- * API consumer with no Supabase session) and best-effort stamps last_used_at.
- * Returns null — never throws — when the service role is unconfigured, so the
- * route layer can map the absence cleanly.
- */
-export async function verifyApiKey(
-  secret: string | null | undefined,
-): Promise<VerifiedKey | null> {
-  if (!secret || !looksLikeSecretKey(secret)) return null;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
-
-  const supabase = createServiceClient();
-  const { data } = await supabase
-    .from("api_keys")
-    .select("id, organization_id, mode")
-    .eq("secret_hash", hashSecret(secret))
-    .is("revoked_at", null)
-    .maybeSingle();
-
-  if (!data) return null;
-
-  // Best-effort usage stamp — never block verification on the write.
-  await supabase
-    .from("api_keys")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", data.id);
-
-  return {
-    keyId: data.id,
-    orgId: data.organization_id,
-    mode: data.mode as ApiKeyMode,
-  };
-}
-
 /** Pull the presented secret from a request: `Authorization: Bearer …` or `x-api-key`. */
 export function extractApiKey(request: Request): string | null {
   const auth = request.headers.get("authorization");
@@ -108,26 +83,4 @@ export function extractApiKey(request: Request): string | null {
     return auth.slice(7).trim();
   }
   return request.headers.get("x-api-key")?.trim() ?? null;
-}
-
-/**
- * Gate an inbound API route on a valid secret key. Mirrors requireOrgContext's
- * tagged-result shape so handlers can map the reason to an HTTP status.
- */
-export async function requireApiKey(
-  request: Request,
-): Promise<
-  | { ok: true; key: VerifiedKey }
-  | { ok: false; status: 401 | 503; error: string }
-> {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      ok: false,
-      status: 503,
-      error: "API key verification is unavailable (service role not configured)",
-    };
-  }
-  const key = await verifyApiKey(extractApiKey(request));
-  if (!key) return { ok: false, status: 401, error: "Invalid or missing API key" };
-  return { ok: true, key };
 }

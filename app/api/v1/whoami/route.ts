@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireApiKey } from "@/lib/api-keys";
+import { requireApiKey } from "@/lib/api-keys-verify";
 
 // GET /api/v1/whoami — the reference endpoint that proves the issued-key
 // verifier works end-to-end. Authenticate with an issued secret key, e.g.:
