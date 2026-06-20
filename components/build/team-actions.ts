@@ -43,6 +43,7 @@ export async function updateMyProfile(formData: FormData): Promise<void> {
     .update({
       full_name: String(formData.get("full_name") ?? "").trim() || null,
       title: String(formData.get("title") ?? "").trim() || null,
+      avatar_url: String(formData.get("avatar_url") ?? "").trim() || null,
     })
     .eq("id", ctx.userId);
 

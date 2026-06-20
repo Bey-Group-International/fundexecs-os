@@ -16,6 +16,7 @@ export interface TeamMemberView {
   name: string;
   email: string;
   title: string | null;
+  avatarUrl: string | null;
   role: MemberRole;
 }
 
@@ -23,22 +24,69 @@ interface TeamControlsProps {
   members: TeamMemberView[];
   currentUserId: string;
   currentRole: MemberRole | null;
-  ownProfile: { full_name: string | null; title: string | null };
+  ownProfile: {
+    full_name: string | null;
+    title: string | null;
+    avatar_url: string | null;
+  };
 }
 
 const ROLE_OPTIONS: MemberRole[] = ["owner", "admin", "member"];
 
-function Avatar({ name }: { name: string }) {
+// Only allow user-supplied avatar URLs that resolve to a real http(s)
+// resource. Parsing with the URL constructor and re-emitting `.href` breaks the
+// taint flow into the <img> sink and rejects javascript:/data:/other-scheme
+// payloads (CodeQL js/xss-through-dom). Falls back to initials when unsafe.
+function safeImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url.trim());
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.href;
+    }
+  } catch {
+    // not a valid absolute URL
+  }
+  return null;
+}
+
+function Avatar({
+  name,
+  avatarUrl,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+}) {
+  const safe = safeImageUrl(avatarUrl);
+  if (safe) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={safe}
+        alt={name}
+        className="h-9 w-9 shrink-0 rounded-full object-cover"
+      />
+    );
+  }
   return (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-2 text-sm font-medium text-fg-primary">
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold-500/20 text-sm font-medium text-gold-300">
       {(name || "M").charAt(0).toUpperCase()}
     </span>
   );
 }
 
+const ROLE_BADGE_CLASS: Record<MemberRole, string> = {
+  owner: "border-gold-500/40 bg-gold-500/15 text-gold-300",
+  admin: "border-line bg-surface-2 text-fg-secondary",
+  member: "border-line text-fg-muted",
+  viewer: "border-line text-fg-muted",
+};
+
 function RoleBadge({ role }: { role: MemberRole }) {
   return (
-    <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+    <span
+      className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${ROLE_BADGE_CLASS[role]}`}
+    >
       {role}
     </span>
   );
@@ -53,29 +101,54 @@ export function TeamControls({
   const isAdmin = currentRole === "owner" || currentRole === "admin";
   const ownerCount = members.filter((m) => m.role === "owner").length;
 
+  const byName = (a: TeamMemberView, b: TeamMemberView) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  const leaders = members
+    .filter((m) => m.role === "owner" || m.role === "admin")
+    .sort(byName);
+  const regular = members
+    .filter((m) => m.role !== "owner" && m.role !== "admin")
+    .sort(byName);
+
+  const renderMember = (m: TeamMemberView) => {
+    const isSelf = m.principalId === currentUserId;
+    const isLastOwner = m.role === "owner" && ownerCount <= 1;
+    return isAdmin ? (
+      <AdminMemberRow
+        key={m.memberId}
+        member={m}
+        isSelf={isSelf}
+        canRemove={!isSelf && !isLastOwner}
+        isLastOwner={isLastOwner}
+      />
+    ) : (
+      <ReadOnlyMemberRow key={m.memberId} member={m} isSelf={isSelf} />
+    );
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <YourProfile ownProfile={ownProfile} />
 
       {isAdmin ? <InviteForm /> : null}
 
-      <div className="flex flex-col gap-2">
-        {members.map((m) => {
-          const isSelf = m.principalId === currentUserId;
-          const isLastOwner = m.role === "owner" && ownerCount <= 1;
-          return isAdmin ? (
-            <AdminMemberRow
-              key={m.memberId}
-              member={m}
-              isSelf={isSelf}
-              canRemove={!isSelf && !isLastOwner}
-              isLastOwner={isLastOwner}
-            />
-          ) : (
-            <ReadOnlyMemberRow key={m.memberId} member={m} />
-          );
-        })}
-      </div>
+      {leaders.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <p className="px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            Owners &amp; Admins
+          </p>
+          {leaders.map(renderMember)}
+        </div>
+      ) : null}
+
+      {regular.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <p className="px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            Members
+          </p>
+          {regular.map(renderMember)}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -84,10 +157,17 @@ export function TeamControls({
 function YourProfile({
   ownProfile,
 }: {
-  ownProfile: { full_name: string | null; title: string | null };
+  ownProfile: {
+    full_name: string | null;
+    title: string | null;
+    avatar_url: string | null;
+  };
 }) {
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(ownProfile.avatar_url ?? "");
+
+  const trimmedAvatar = avatarUrl.trim();
 
   return (
     <form
@@ -103,7 +183,7 @@ function YourProfile({
       <div className="sm:col-span-2">
         <p className="text-sm font-medium text-fg-primary">Your profile</p>
         <p className="mt-0.5 text-xs text-fg-muted">
-          Update how your name and title appear across the firm.
+          Update how your name, title, and photo appear across the firm.
         </p>
       </div>
       <input
@@ -118,6 +198,16 @@ function YourProfile({
         placeholder="Title"
         className={inputClass}
       />
+      <div className="flex items-center gap-3 sm:col-span-2">
+        <Avatar name={ownProfile.full_name ?? ""} avatarUrl={trimmedAvatar} />
+        <input
+          name="avatar_url"
+          value={avatarUrl}
+          onChange={(e) => setAvatarUrl(e.target.value)}
+          placeholder="Avatar image URL"
+          className={`${inputClass} flex-1`}
+        />
+      </div>
       <div className="flex items-center gap-3 sm:col-span-2">
         <button
           disabled={pending}
@@ -213,22 +303,26 @@ function AdminMemberRow({
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 p-3">
-      <Avatar name={member.name} />
+      <Avatar name={member.name} avatarUrl={member.avatarUrl} />
       <div className="min-w-0">
-        <p className="truncate text-sm text-fg-primary">
-          {member.name}
+        <p className="flex items-center gap-1.5 truncate text-sm text-fg-primary">
+          <span className="truncate">{member.name}</span>
           {isSelf ? (
-            <span className="ml-1.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-gold-300">
               you
             </span>
           ) : null}
         </p>
-        <p className="truncate text-xs text-fg-muted">
-          {member.title || member.email}
-        </p>
+        {member.title ? (
+          <p className="truncate text-xs text-fg-secondary">{member.title}</p>
+        ) : null}
+        {member.email ? (
+          <p className="truncate text-xs text-fg-muted">{member.email}</p>
+        ) : null}
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <RoleBadge role={member.role} />
         <form
           action={(fd) => {
             fd.set("memberId", member.memberId);
@@ -281,14 +375,30 @@ function AdminMemberRow({
 }
 
 // --- Read-only member row -------------------------------------------------
-function ReadOnlyMemberRow({ member }: { member: TeamMemberView }) {
+function ReadOnlyMemberRow({
+  member,
+  isSelf,
+}: {
+  member: TeamMemberView;
+  isSelf: boolean;
+}) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 p-3">
-      <Avatar name={member.name} />
+      <Avatar name={member.name} avatarUrl={member.avatarUrl} />
       <div className="min-w-0">
-        <p className="truncate text-sm text-fg-primary">{member.name}</p>
+        <p className="flex items-center gap-1.5 truncate text-sm text-fg-primary">
+          <span className="truncate">{member.name}</span>
+          {isSelf ? (
+            <span className="font-mono text-[9px] uppercase tracking-wider text-gold-300">
+              you
+            </span>
+          ) : null}
+        </p>
         {member.title ? (
-          <p className="truncate text-xs text-fg-muted">{member.title}</p>
+          <p className="truncate text-xs text-fg-secondary">{member.title}</p>
+        ) : null}
+        {member.email ? (
+          <p className="truncate text-xs text-fg-muted">{member.email}</p>
         ) : null}
       </div>
       <span className="ml-auto">

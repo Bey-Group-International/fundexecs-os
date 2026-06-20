@@ -31,6 +31,7 @@ export async function TeamModule() {
       name: p?.full_name || p?.email || "Member",
       email: p?.email || "",
       title: p?.title ?? null,
+      avatarUrl: p?.avatar_url ?? null,
       role: m.role,
     };
   });
@@ -39,6 +40,7 @@ export async function TeamModule() {
   const ownProfile = {
     full_name: self?.full_name ?? null,
     title: self?.title ?? null,
+    avatar_url: self?.avatar_url ?? null,
   };
 
   return (
