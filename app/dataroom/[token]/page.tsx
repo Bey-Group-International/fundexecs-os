@@ -1,4 +1,4 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { blendTrackRecord } from "@/lib/track-record";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import type {
@@ -52,7 +52,7 @@ function Unavailable() {
 }
 
 export default async function PublicDataRoom({ params }: { params: { token: string } }) {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return <Unavailable />;
+  if (!hasSupabaseServiceEnv()) return <Unavailable />;
   const supabase = createServiceClient();
 
   const { data: shareRow } = await supabase

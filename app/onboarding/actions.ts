@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { sanitizeMandateActions } from "@/lib/mandate-options";
@@ -34,11 +35,13 @@ export async function createOrganization(
   if (!name) return { error: "Organization name is required" };
 
   const supabase = createServerClient();
+  const orgId = randomUUID();
   const slug = `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`;
 
-  const { data: org, error } = await supabase
+  const { error } = await supabase
     .from("organizations")
     .insert({
+      id: orgId,
       name,
       slug,
       entity_type: String(formData.get("entity_type") ?? "") || null,
@@ -49,9 +52,7 @@ export async function createOrganization(
       primary_strategy: String(formData.get("strategy") ?? "") || null,
       first_hub: String(formData.get("first_hub") ?? "") || null,
       created_by: ctx.userId,
-    })
-    .select("id")
-    .single();
+    });
 
   if (error) return { error: error.message };
 
@@ -61,33 +62,31 @@ export async function createOrganization(
   // sanitized down to valid Tier-2 kinds, and the ceiling is clamped to 1–2
   // (Tier 3 is never delegable). A non-blocking failure here must not strand the
   // operator outside their freshly created org, so we ignore the mandate error.
-  if (org) {
-    const autoApprove = sanitizeMandateActions(
-      formData.getAll("auto_approve").map((v) => String(v)),
-    );
-    const rawCeiling = Number(formData.get("autonomy_ceiling"));
-    const autonomyCeiling = Number.isFinite(rawCeiling)
-      ? Math.min(2, Math.max(1, Math.trunc(rawCeiling)))
-      : 1;
+  const autoApprove = sanitizeMandateActions(
+    formData.getAll("auto_approve").map((v) => String(v)),
+  );
+  const rawCeiling = Number(formData.get("autonomy_ceiling"));
+  const autonomyCeiling = Number.isFinite(rawCeiling)
+    ? Math.min(2, Math.max(1, Math.trunc(rawCeiling)))
+    : 1;
 
-    await supabase.from("mandates").insert({
-      organization_id: org.id,
-      name: STANDING_MANDATE_NAME,
-      auto_approve: autoApprove,
-      autonomy_ceiling: autonomyCeiling,
-      is_active: true,
-      created_by: ctx.userId,
-    });
+  await supabase.from("mandates").insert({
+    organization_id: orgId,
+    name: STANDING_MANDATE_NAME,
+    auto_approve: autoApprove,
+    autonomy_ceiling: autonomyCeiling,
+    is_active: true,
+    created_by: ctx.userId,
+  });
 
-    // The profile is live — let Earn match it across the ecosystem and fan out
-    // professional alerts to matching orgs (and a reciprocal digest back). This
-    // is a delight, not a gate: a never-block call so a matchmaking hiccup can
-    // never strand the operator outside the org they just created.
-    try {
-      await matchNewOrgAndNotify(org.id);
-    } catch {
-      // ignore — onboarding succeeds regardless of matchmaking
-    }
+  // The profile is live — let Earn match it across the ecosystem and fan out
+  // professional alerts to matching orgs (and a reciprocal digest back). This
+  // is a delight, not a gate: a never-block call so a matchmaking hiccup can
+  // never strand the operator outside the org they just created.
+  try {
+    await matchNewOrgAndNotify(orgId);
+  } catch {
+    // ignore — onboarding succeeds regardless of matchmaking
   }
 
   return {};
