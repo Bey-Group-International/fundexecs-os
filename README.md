@@ -39,6 +39,11 @@ without adding video binaries or capture tooling.
 
 ![FundExecs OS Earn copilot demo loop](./public/fundexecs-earn-copilot-demo.svg)
 
+Visual implementation guardrails live in
+[`docs/VISUAL_SYSTEM.md`](./docs/VISUAL_SYSTEM.md): gold for the operating shell,
+neural green for compute/copilot surfaces, status tokens for semantic states,
+and centralized logo usage.
+
 |    What it replaces     |         What it becomes         |
 |-------------------------|---------------------------------|
 | DealCloud / Dynamo      | Native deal pipeline + graph    |

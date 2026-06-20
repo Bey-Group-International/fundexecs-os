@@ -22,7 +22,7 @@ export default async function SearchPage({
   const results = await searchAll(ctx.orgId, query);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="fx-ambient mx-auto max-w-3xl">
       <ModuleHeader
         title="Search"
         blurb="Find deals, LPs, and assets — jump straight to their war rooms."

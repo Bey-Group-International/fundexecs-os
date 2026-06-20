@@ -41,7 +41,7 @@ function moicLabel(n: number | null | undefined): string {
 
 function gainClass(n: number | null | undefined): string {
   if (n == null || n === 0) return "text-fg-secondary";
-  return n > 0 ? "text-emerald-400" : "text-status-danger";
+  return n > 0 ? "text-status-success" : "text-status-danger";
 }
 
 const ALERT_TONE: Record<AlertTone, { dot: string; label: string; tag: string }> = {

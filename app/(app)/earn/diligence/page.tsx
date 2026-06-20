@@ -12,7 +12,7 @@ export default async function DiligencePage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="fx-ambient mx-auto max-w-3xl">
       <header className="mb-6">
         <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
           Earn · Diligence Brain
