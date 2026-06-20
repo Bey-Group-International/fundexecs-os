@@ -168,9 +168,9 @@ export default function LandingPage({
                   </div>
                 ))}
               </div>
-              <div className="relative z-10 mt-9 flex h-40 items-center justify-center">
-                <span className="absolute h-32 w-32 rounded-full border border-gold-400/25" />
-                <span className="absolute h-48 w-48 rounded-full border border-gold-400/10" />
+              <div className="relative z-10 mt-9 flex h-32 items-center justify-center sm:h-40">
+                <span className="absolute h-24 w-24 rounded-full border border-gold-400/25 sm:h-32 sm:w-32" />
+                <span className="absolute h-36 w-36 rounded-full border border-gold-400/10 sm:h-48 sm:w-48" />
                 <span className="absolute h-3 w-3 rounded-full bg-gold-300 shadow-[0_0_24px_rgb(var(--fx-accent-rgb)/0.9)]" />
                 {[
                   "Analyst",
@@ -180,14 +180,14 @@ export default function LandingPage({
                 ].map((label, index) => (
                   <span
                     key={label}
-                    className={`absolute rounded-full border border-gold-500/35 bg-surface-1 px-2 py-1 font-mono text-[10px] text-fg-secondary shadow-[0_0_22px_-10px_rgb(var(--fx-accent-rgb)/0.9)] ${
+                    className={`absolute rounded-full border border-gold-500/35 bg-surface-1 px-1.5 py-1 font-mono text-[9px] text-fg-secondary shadow-[0_0_22px_-10px_rgb(var(--fx-accent-rgb)/0.9)] sm:px-2 sm:text-[10px] ${
                       index === 0
                         ? "-top-1 left-1/2 -translate-x-1/2"
                         : index === 1
-                          ? "right-2 top-1/2 -translate-y-1/2"
+                          ? "right-0 top-1/2 -translate-y-1/2 sm:right-2"
                           : index === 2
                             ? "bottom-0 left-1/2 -translate-x-1/2"
-                            : "left-2 top-1/2 -translate-y-1/2"
+                            : "left-0 top-1/2 -translate-y-1/2 sm:left-2"
                     }`}
                   >
                     {label}
@@ -228,11 +228,11 @@ export default function LandingPage({
                 { label: "Deal Sourcing", example: "Screen acquisition targets, score thesis fit, produce the screening report." },
                 { label: "Portfolio Ops", example: "Pull KPIs across every asset, flag variances, deliver the board pack." },
               ].map((uc) => (
-                <div key={uc.label} className="fx-glass flex items-start gap-3 px-4 py-3">
+                <div key={uc.label} className="fx-glass flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-3">
                   <span className="mt-0.5 shrink-0 rounded-full border border-gold-500/30 bg-gold-500/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-gold-400">
                     {uc.label}
                   </span>
-                  <span className="text-sm text-fg-secondary">{uc.example}</span>
+                  <span className="min-w-0 flex-1 text-sm text-fg-secondary">{uc.example}</span>
                 </div>
               ))}
             </div>
