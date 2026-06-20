@@ -27,7 +27,10 @@ export function SessionsSection({
   return (
     <section className="mt-8">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">Sessions</h2>
+        <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fg-muted">
+          <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
+          Sessions
+        </h2>
         <form action={createSessionGroup} className="flex items-center gap-1.5">
           <input
             name="name"
@@ -56,7 +59,7 @@ export function SessionsSection({
                 {(byGroup.get(sec.key) ?? []).map((s) => (
                   <div
                     key={s.id}
-                    className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-2"
+                    className="fx-card flex flex-wrap items-center gap-2 px-3 py-2.5"
                   >
                     <span
                       className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
