@@ -17,18 +17,7 @@ function humanizeKind(kind: string): string {
 
 export function Connections() {
   return (
-    <section className="mt-8">
-      <header className="mb-3">
-        <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">Connections</h2>
-        <p className="mt-1 text-sm text-fg-secondary">
-          Dispatch channels carry approved external actions to the outside world. A channel that is
-          connected sends for real; an unconnected one still runs in mock mode — the action is
-          prepared and queued, not sent — so the gate → dispatch loop works end-to-end before any
-          provider is wired up.
-        </p>
-      </header>
-
-      <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
         {ADAPTERS.map(({ adapter, handles }) => {
           const live = adapter.isConfigured();
           return (
@@ -98,6 +87,5 @@ export function Connections() {
           </div>
         </div>
       </div>
-    </section>
   );
 }

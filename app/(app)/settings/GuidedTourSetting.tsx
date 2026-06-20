@@ -39,7 +39,7 @@ export function GuidedTourSetting() {
   }
 
   return (
-    <div className="rounded-xl border border-line bg-surface-1 p-4">
+    <div className="fx-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-fg-primary">Guided tour</p>
