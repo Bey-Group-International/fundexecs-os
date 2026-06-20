@@ -55,39 +55,50 @@ export function ExecuteSearch({
     setSteps([]);
     setActiveAgent("associate");
 
-    const res = await startExecuteSearch(clean);
-    if (!res.ok || !res.workflowId || !res.steps) {
-      setError(res.error ?? "Could not start the workflow.");
-      setPhase("idle");
+    try {
+      const res = await startExecuteSearch(clean);
+      if (!res.ok || !res.workflowId || !res.steps) {
+        setError(res.error ?? "Could not start the workflow.");
+        setPhase("idle");
+        setActiveAgent(null);
+        return;
+      }
+      setSummary(res.summary ?? "");
+      setSteps(res.steps.map((s) => ({ ...s, status: "queued" as StepStatus })));
+      setPhase("running");
+
+      for (const s of res.steps) {
+        setActiveAgent(s.agent);
+        setSteps((prev) => prev.map((x) => (x.id === s.id ? { ...x, status: "running" } : x)));
+        let r: Awaited<ReturnType<typeof runExecuteStep>>;
+        try {
+          r = await runExecuteStep({
+            workflowId: res.workflowId,
+            stepId: s.id,
+            agent: s.agent,
+            title: s.title,
+            instruction: s.instruction,
+          });
+        } catch {
+          r = { ok: false };
+        }
+        setSteps((prev) =>
+          prev.map((x) =>
+            x.id === s.id
+              ? { ...x, status: r.ok ? "done" : "error", deliverable: r.deliverable }
+              : x,
+          ),
+        );
+      }
+
       setActiveAgent(null);
-      return;
+      await completeExecuteSearch(res.workflowId);
+      setPhase("done");
+    } catch {
+      setError("The workflow did not finish. Please try again.");
+      setActiveAgent(null);
+      setPhase("idle");
     }
-    setSummary(res.summary ?? "");
-    setSteps(res.steps.map((s) => ({ ...s, status: "queued" as StepStatus })));
-    setPhase("running");
-
-    for (const s of res.steps) {
-      setActiveAgent(s.agent);
-      setSteps((prev) => prev.map((x) => (x.id === s.id ? { ...x, status: "running" } : x)));
-      const r = await runExecuteStep({
-        workflowId: res.workflowId,
-        stepId: s.id,
-        agent: s.agent,
-        title: s.title,
-        instruction: s.instruction,
-      });
-      setSteps((prev) =>
-        prev.map((x) =>
-          x.id === s.id
-            ? { ...x, status: r.ok ? "done" : "error", deliverable: r.deliverable }
-            : x,
-        ),
-      );
-    }
-
-    setActiveAgent(null);
-    await completeExecuteSearch(res.workflowId);
-    setPhase("done");
   }
 
   // Auto-run when arriving with a prefilled query (e.g. from a command center).

@@ -57,6 +57,7 @@ export function SourceSearch({
   const [activeAgent, setActiveAgent] = useState<AgentKey | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [added, setAdded] = useState<Record<string, number>>({});
+  const [adding, setAdding] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const ranInitial = useRef(false);
 
@@ -73,51 +74,62 @@ export function SourceSearch({
     setAdded({});
     setActiveAgent("associate");
 
-    const res = await startSourceSearch(clean);
-    if (!res.ok || !res.workflowId || !res.steps) {
-      setError(res.error ?? "Could not start the search.");
-      setPhase("idle");
-      setActiveAgent(null);
-      return;
-    }
-    setSummary(res.summary ?? "");
-    setSteps(res.steps.map((s) => ({ ...s, status: "queued" as StepStatus })));
-    setPhase("running");
-
-    for (const s of res.steps) {
-      setActiveAgent(s.agent);
-      setSteps((prev) => prev.map((x) => (x.id === s.id ? { ...x, status: "running" } : x)));
-      const r = await runSourceStep({
-        workflowId: res.workflowId,
-        stepId: s.id,
-        module: s.module,
-        query: s.query,
-      });
-      setSteps((prev) =>
-        prev.map((x) =>
-          x.id === s.id
-            ? {
-                ...x,
-                status: r.ok ? "done" : "error",
-                count: r.candidates?.length ?? 0,
-                candidates: r.candidates ?? [],
-              }
-            : x,
-        ),
-      );
-      // Pre-select every returned candidate for quick accept.
-      if (r.ok && r.candidates) {
-        setSelected((prev) => {
-          const next = new Set(prev);
-          r.candidates!.forEach((_, i) => next.add(`${s.id}:${i}`));
-          return next;
-        });
+    try {
+      const res = await startSourceSearch(clean);
+      if (!res.ok || !res.workflowId || !res.steps) {
+        setError(res.error ?? "Could not start the search.");
+        setPhase("idle");
+        setActiveAgent(null);
+        return;
       }
-    }
+      setSummary(res.summary ?? "");
+      setSteps(res.steps.map((s) => ({ ...s, status: "queued" as StepStatus })));
+      setPhase("running");
 
-    setActiveAgent(null);
-    await completeSourceSearch(res.workflowId);
-    setPhase("done");
+      for (const s of res.steps) {
+        setActiveAgent(s.agent);
+        setSteps((prev) => prev.map((x) => (x.id === s.id ? { ...x, status: "running" } : x)));
+        let r: Awaited<ReturnType<typeof runSourceStep>>;
+        try {
+          r = await runSourceStep({
+            workflowId: res.workflowId,
+            stepId: s.id,
+            module: s.module,
+            query: s.query,
+          });
+        } catch {
+          r = { ok: false };
+        }
+        setSteps((prev) =>
+          prev.map((x) =>
+            x.id === s.id
+              ? {
+                  ...x,
+                  status: r.ok ? "done" : "error",
+                  count: r.candidates?.length ?? 0,
+                  candidates: r.candidates ?? [],
+                }
+              : x,
+          ),
+        );
+        // Pre-select every returned candidate for quick accept.
+        if (r.ok && r.candidates) {
+          setSelected((prev) => {
+            const next = new Set(prev);
+            r.candidates!.forEach((_, i) => next.add(`${s.id}:${i}`));
+            return next;
+          });
+        }
+      }
+
+      setActiveAgent(null);
+      await completeSourceSearch(res.workflowId);
+      setPhase("done");
+    } catch {
+      setError("The search did not finish. Please try again.");
+      setActiveAgent(null);
+      setPhase("idle");
+    }
   }
 
   // Auto-run when arriving with a prefilled query (e.g. from a module panel).
@@ -138,15 +150,26 @@ export function SourceSearch({
     });
 
   async function addGroup(step: LiveStep) {
-    if (!step.candidates) return;
+    if (!step.candidates || added[step.id] != null || adding.has(step.id)) return;
     const picks = step.candidates
       .filter((_, i) => selected.has(`${step.id}:${i}`))
       .map((c) => ({ name: c.name, category: c.category, rationale: c.rationale, sourceUrl: c.sourceUrl }));
     if (picks.length === 0) return;
     const moduleKey = step.module.replace(/^source\//, "");
-    const res = await addSourcedTargets("source", moduleKey, picks);
-    if (res.ok) setAdded((prev) => ({ ...prev, [step.id]: res.added ?? picks.length }));
-    else setError(res.error ?? "Could not add to pipeline.");
+    setAdding((prev) => new Set(prev).add(step.id));
+    try {
+      const res = await addSourcedTargets("source", moduleKey, picks);
+      if (res.ok) setAdded((prev) => ({ ...prev, [step.id]: res.added ?? picks.length }));
+      else setError(res.error ?? "Could not add to pipeline.");
+    } catch {
+      setError("Could not add to pipeline.");
+    } finally {
+      setAdding((prev) => {
+        const next = new Set(prev);
+        next.delete(step.id);
+        return next;
+      });
+    }
   }
 
   return (
@@ -347,9 +370,9 @@ export function SourceSearch({
                       type="button"
                       onClick={() => addGroup(s)}
                       className="mt-3 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
-                      disabled={groupSel === 0}
+                      disabled={groupSel === 0 || adding.has(s.id)}
                     >
-                      Add {groupSel} to pipeline
+                      {adding.has(s.id) ? "Adding…" : `Add ${groupSel} to pipeline`}
                     </button>
                   ) : null}
                 </div>

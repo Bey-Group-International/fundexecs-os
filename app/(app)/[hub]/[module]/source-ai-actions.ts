@@ -60,6 +60,7 @@ export async function sourceTargets(hub: string, module: string): Promise<Source
   const { data } = await supabase
     .from(cfg.table as "investors")
     .select("name")
+    .eq("organization_id", auth.ctx.orgId)
     .is("archived_at", null)
     .limit(60);
   const existing = ((data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
@@ -211,6 +212,7 @@ export async function scorePipeline(hub: string, module: string): Promise<ScoreP
   const { data } = await supabase
     .from(cfg.table as "investors")
     .select("*")
+    .eq("organization_id", auth.ctx.orgId)
     .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(30);
