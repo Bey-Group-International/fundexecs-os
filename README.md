@@ -24,6 +24,21 @@ FundExecs OS is the **system of record for private-market operators** — combin
 
 It automates the **80% of time spent moving information** so you can focus on the **20% that drives decisions**.
 
+### Wallet and Earn Copilot Visual Refresh
+
+The Wallet, Credits & Plans dashboard now has a black-and-neural-green enterprise
+console treatment: compute-grid balance panels, glowing Pro-tier hierarchy,
+CSS-only activation streams, and an Earn copilot drawer that reads like an
+active operating-agent terminal.
+
+![FundExecs OS wallet neural preview](./public/fundexecs-wallet-neural-preview.svg)
+
+The animated SVG below is a lightweight demo placeholder for the README and
+marketing surfaces. It shows the Pro selection flow and Earn routing feedback
+without adding video binaries or capture tooling.
+
+![FundExecs OS Earn copilot demo loop](./public/fundexecs-earn-copilot-demo.svg)
+
 |    What it replaces     |         What it becomes         |
 |-------------------------|---------------------------------|
 | DealCloud / Dynamo      | Native deal pipeline + graph    |

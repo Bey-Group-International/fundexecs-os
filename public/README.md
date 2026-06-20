@@ -29,3 +29,16 @@ file to override:
 
 Keeping the favicon as a small `.ico`/`.png` (a few KB) rather than pointing at
 the full 1024² `earn-coin.png` avoids shipping ~750 KB just to paint a tab icon.
+
+## Marketing / demo placeholders
+
+The wallet visual-refresh assets are intentionally lightweight SVGs so they can
+ship in the repo without capture tooling or large binaries:
+
+|          Purpose          |                Source                 |
+|---------------------------|---------------------------------------|
+| Wallet preview screenshot | `fundexecs-wallet-neural-preview.svg` |
+| Earn copilot demo loop    | `fundexecs-earn-copilot-demo.svg`     |
+
+Both assets are brand-inspired FundExecs OS artwork. They do not use third-party
+logos or trademarks.

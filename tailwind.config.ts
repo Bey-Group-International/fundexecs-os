@@ -1,9 +1,9 @@
 import type { Config } from "tailwindcss";
 
 // Visual system adopted from the FundExecs OS Command Center / Agent Copilot
-// designs: warm near-black surfaces, a gold accent, and the Space Grotesk /
-// DM Sans / JetBrains Mono type stack. The six per-agent colors are preserved
-// for agent identity.
+// designs: warm near-black surfaces, premium accent colors, and the Space
+// Grotesk / DM Sans / JetBrains Mono type stack. The six per-agent colors are
+// preserved for agent identity.
 const config: Config = {
   content: [
     "./app/**/*.{ts,tsx}",
@@ -25,6 +25,11 @@ const config: Config = {
           300: "#E4CD93",
           400: "#D4AF6A",
           500: "#C2974A",
+        },
+        neural: {
+          300: "#C7FF6B",
+          400: "#76B900",
+          500: "#4F8F00",
         },
         fg: {
           primary: "#F5F1E8",
@@ -68,6 +73,17 @@ const config: Config = {
           "0%, 100%": { opacity: "0.55" },
           "50%": { opacity: "1" },
         },
+        // Thin data streams used by the wallet purchase/activation states.
+        fxDataStream: {
+          "0%": { transform: "translateX(-120%)", opacity: "0" },
+          "20%": { opacity: "1" },
+          "100%": { transform: "translateX(120%)", opacity: "0" },
+        },
+        // Terminal boot aura for the Earn copilot reveal and launcher.
+        fxBoot: {
+          "0%, 100%": { transform: "scale(1)", opacity: "0.45" },
+          "50%": { transform: "scale(1.08)", opacity: "0.9" },
+        },
         // One-shot wiggle for the mailbox when a new message arrives.
         fxShake: {
           "0%, 100%": { transform: "translateX(0) rotate(0deg)" },
@@ -86,6 +102,8 @@ const config: Config = {
         pulse: "fxPulse 1.6s ease-in-out infinite",
         "fade-up": "fxFadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
         glow: "fxGlow 3.2s ease-in-out infinite",
+        "data-stream": "fxDataStream 1.35s cubic-bezier(0.22, 1, 0.36, 1) infinite",
+        boot: "fxBoot 2.8s ease-in-out infinite",
         shake: "fxShake 0.6s ease-in-out",
         nudge: "fxNudge 0.5s ease-in-out",
       },
