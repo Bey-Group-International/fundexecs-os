@@ -151,7 +151,10 @@ export default async function AppLayout({
       <ActiveSessionProvider>
         <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
           <div className="print:hidden">
-            <GlobalTopBar balance={balance} inboxCount={inboxCount} />
+            {/* The bell reflects both the action queue ("needs you") and unread
+                Communications threads — ecosystem match alerts land here, so a
+                fresh match lights the bell. */}
+            <GlobalTopBar balance={balance} inboxCount={inboxCount + (inboxUnread ?? 0)} />
           </div>
           <main className="flex-1 overflow-y-auto px-8 py-8 print:overflow-visible print:p-0">
             {children}

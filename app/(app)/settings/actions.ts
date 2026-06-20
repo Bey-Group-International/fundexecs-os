@@ -51,6 +51,19 @@ export async function createMandate(formData: FormData): Promise<{ error?: strin
   return {};
 }
 
+// Toggle the org's ecosystem discoverability. When on, a matching newcomer's
+// profile can surface to this org and Earn delivers it match alerts; when off,
+// the org goes dark — no broadcast out, no match alerts in. Admin-gated by RLS
+// (organizations_update → is_org_admin), so a non-admin submit is a silent no-op.
+export async function setDiscoverable(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const next = String(formData.get("discoverable") ?? "") === "true";
+  const supabase = createServerClient();
+  await supabase.from("organizations").update({ discoverable: next }).eq("id", ctx.orgId);
+  revalidatePath("/settings");
+}
+
 // Stand down the active mandate — every Tier-2 action falls back to operator
 // sign-off until a new mandate is activated.
 export async function deactivateMandate(formData: FormData): Promise<void> {

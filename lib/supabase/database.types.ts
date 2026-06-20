@@ -89,7 +89,8 @@ export type InboxChannel =
   | "google_calendar"
   | "zoom"
   | "google_meet"
-  | "docusign";
+  | "docusign"
+  | "ecosystem";
 export type InboxCategory = "messaging" | "booking" | "video" | "signing";
 export type InboxThreadStatus = "open" | "snoozed" | "done";
 export type InboxDirection = "inbound" | "outbound";
@@ -141,6 +142,7 @@ export type Organization = Timestamps & {
   fund_count: number | null;
   primary_strategy: string | null;
   first_hub: string | null;
+  discoverable: boolean;
   tagline: string | null;
   brand_voice: string | null;
   brand_palette: string[];
