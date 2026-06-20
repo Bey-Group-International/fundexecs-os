@@ -13,6 +13,9 @@ import type { Session, SessionGroup, Approval, DispatchLog } from "@/lib/supabas
 import { ArtifactCard } from "@/components/ArtifactViewer";
 import { buildCapitalMap } from "@/lib/capital-map";
 import { getBuildReadiness } from "@/lib/build-readiness";
+import { getInboxThreads } from "@/lib/inbox/data";
+import { buildDigest, priorityBucket, type DigestThread } from "@/lib/inbox/intelligence";
+import { channelMeta } from "@/lib/inbox/channels";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +93,7 @@ export default async function DashboardPage() {
     dispatchLogRes,
     capitalMap,
     readiness,
+    inboxViews,
   ] = await Promise.all([
     supabase.from("tasks").select("*"),
     supabase
@@ -120,6 +124,9 @@ export default async function DashboardPage() {
     // Build-hub foundation readiness — surfaced here so progress is visible
     // from the Command Center, not just inside the Build hub.
     getBuildReadiness(ctx.orgId),
+    // Unified Inbox threads — surfaced as a digest so the Command Center shows
+    // what's waiting on the operator, not just what Earn produced.
+    getInboxThreads(supabase),
   ]);
 
   const tasks = (allTasksRes.data ?? []) as Task[];
@@ -141,6 +148,27 @@ export default async function DashboardPage() {
   }
   const dealByStage = new Map<string, number>();
   for (const d of deals) dealByStage.set(d.stage, (dealByStage.get(d.stage) ?? 0) + 1);
+
+  // Unified Inbox digest + the few threads that actually need attention today.
+  const inboxDigest = buildDigest(
+    inboxViews.map(({ thread }): DigestThread => ({
+      category: thread.category,
+      status: thread.status,
+      unread: thread.unread,
+      priority: thread.priority,
+    })),
+  );
+  const inboxTop = inboxViews
+    .filter(({ thread }) => thread.status === "open")
+    .slice(0, 4)
+    .map(({ thread, context }) => ({
+      id: thread.id,
+      subject: thread.subject,
+      counterparty: thread.counterparty_name ?? thread.counterparty_email ?? "Unknown",
+      icon: channelMeta(thread.channel).icon,
+      bucket: priorityBucket(thread.priority),
+      contextName: context?.name ?? null,
+    }));
 
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
@@ -217,6 +245,60 @@ export default async function DashboardPage() {
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
         <HottestCapital entries={hottestCapital} />
         <PendingGates approvals={pendingGates} />
+      </section>
+
+      <section className="mt-8">
+        <SectionHeading
+          action={
+            <Link href="/inbox" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+              Open inbox →
+            </Link>
+          }
+        >
+          Unified Inbox
+        </SectionHeading>
+        {inboxTop.length === 0 ? (
+          <p className="text-sm text-fg-muted">
+            Booking, messaging, and video threads land in your{" "}
+            <Link href="/inbox" className="text-gold-400 hover:underline">
+              unified inbox
+            </Link>
+            , triaged and ranked. Nothing waiting right now.
+          </p>
+        ) : (
+          <div className="fx-card p-4">
+            <p className="mb-3 text-sm text-fg-secondary">{inboxDigest.headline}</p>
+            <div className="flex flex-col gap-2">
+              {inboxTop.map((t) => (
+                <Link
+                  key={t.id}
+                  href="/inbox"
+                  className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-surface-2"
+                >
+                  <span className="font-mono text-base leading-none text-gold-400">{t.icon}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-fg-primary">{t.subject}</span>
+                    <span className="block truncate text-[11px] text-fg-muted">
+                      {t.counterparty}
+                      {t.contextName ? ` · ${t.contextName}` : ""}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 font-mono text-[9px] uppercase tracking-wider ${
+                      t.bucket === "now"
+                        ? "text-status-success"
+                        : t.bucket === "soon"
+                          ? "text-gold-400"
+                          : "text-fg-muted"
+                    }`}
+                  >
+                    {t.bucket}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <Outbox rows={dispatches} />
