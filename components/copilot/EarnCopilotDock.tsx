@@ -11,8 +11,15 @@ import {
   suggestionsFor,
   suggestionTier,
 } from "@/lib/copilot";
-import { askEarn, launchCopilotSuggestion, type AskEarnResult } from "@/components/copilot/actions";
+import {
+  askEarn,
+  launchCopilotSuggestion,
+  getCopilotBriefing,
+  type CopilotBriefing,
+} from "@/components/copilot/actions";
+import type { AgentKey } from "@/lib/supabase/database.types";
 
+/** A small colored dot used to tag a message or chip with its agent's identity. */
 function AgentDot({ color }: { color: string }) {
   return <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden />;
 }
@@ -23,19 +30,99 @@ const TIER_TONE: Record<number, string> = {
   3: "border-status-danger/40 text-status-danger",
 };
 
+const STORE_KEY = "earn-copilot-thread";
+
+// One turn in the in-dock conversation: the operator's message, or Earn's
+// routed plan in reply.
+type Turn =
+  | { role: "user"; text: string }
+  | {
+      role: "earn";
+      planTitle?: string;
+      steps?: { agent: AgentKey; title: string }[];
+      sessionId?: string;
+    };
+
+/**
+ * The app-wide Earn copilot dock: a ⌘K slide-over present on every page that
+ * reads the operator's current location, surfaces the on-point specialist plus
+ * a live briefing and context suggestions, and maintains a multi-turn
+ * conversation with Earn (persisted across reloads and in-app navigation).
+ */
 export function EarnCopilotDock({ name }: { name: string }) {
   const pathname = usePathname() || "/";
   const ctx = copilotContextFromPath(pathname);
-  const earn = AGENT_BY_KEY.associate;
   const specialist = AGENT_BY_KEY[onPointAgent(ctx)];
   const suggestions = suggestionsFor(ctx);
   const team = ctx.hub ? AGENTS.filter((a) => a.hub === ctx.hub) : [];
 
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
-  const [result, setResult] = useState<AskEarnResult | null>(null);
+  const [thread, setThread] = useState<Turn[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [briefing, setBriefing] = useState<CopilotBriefing | null>(null);
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
+  // Gates the persist effect until the initial hydrate has run, so the empty
+  // mount-time state never overwrites a previously saved conversation.
+  const hydrated = useRef(false);
+
+  // Hydrate the running conversation from this tab's storage so the dock keeps
+  // the session across reloads, then persist on every change.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(STORE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { sessionId: string | null; thread: Turn[] };
+        setSessionId(saved.sessionId ?? null);
+        setThread(saved.thread ?? []);
+      }
+    } catch {
+      /* ignore malformed storage */
+    }
+    hydrated.current = true;
+  }, []);
+  useEffect(() => {
+    if (!hydrated.current) return;
+    try {
+      sessionStorage.setItem(STORE_KEY, JSON.stringify({ sessionId, thread }));
+    } catch {
+      /* storage may be unavailable */
+    }
+  }, [sessionId, thread]);
+
+  // Run any prompt through Earn, continuing the current session so the
+  // conversation is multi-turn and maintained in the dock.
+  function ask(text: string) {
+    const t = text.trim();
+    if (!t || pending) return;
+    setError(null);
+    setThread((prev) => [...prev, { role: "user", text: t }]);
+    start(async () => {
+      const r = await askEarn({ body: t, pathname, sessionId: sessionId ?? undefined });
+      if (r.ok) {
+        if (r.sessionId) setSessionId(r.sessionId);
+        setThread((prev) => [
+          ...prev,
+          { role: "earn", planTitle: r.planTitle, steps: r.steps, sessionId: r.sessionId },
+        ]);
+        setBody("");
+      } else {
+        setError(r.error ?? "Something went wrong.");
+      }
+    });
+  }
+
+  /** Start a fresh conversation: drop the current thread and session. */
+  function newConversation() {
+    setThread([]);
+    setSessionId(null);
+    setError(null);
+    setBody("");
+    inputRef.current?.focus();
+  }
 
   // ⌘/Ctrl-K toggles the dock; Esc closes it.
   useEffect(() => {
@@ -55,18 +142,32 @@ export function EarnCopilotDock({ name }: { name: string }) {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
   }, [open]);
 
-  // A fresh location resets the inline plan result.
+  // A fresh location refreshes the briefing, but the conversation persists —
+  // the dock maintains the session as the operator moves around the app.
   useEffect(() => {
-    setResult(null);
+    setBriefing(null);
   }, [pathname]);
 
-  function submitAsk() {
-    if (!body.trim() || pending) return;
-    start(async () => {
-      const r = await askEarn({ body, pathname });
-      setResult(r);
-      if (r.ok) setBody("");
+  // Keep the latest turn in view.
+  useEffect(() => {
+    if (open) threadEndRef.current?.scrollIntoView({ block: "end" });
+  }, [thread, open]);
+
+  // Pull the live briefing for this location when the dock is open.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    getCopilotBriefing(pathname).then((b) => {
+      if (active) setBriefing(b);
     });
+    return () => {
+      active = false;
+    };
+  }, [open, pathname]);
+
+  /** Send the current composer contents to Earn. */
+  function submitAsk() {
+    ask(body);
   }
 
   return (
@@ -123,6 +224,53 @@ export function EarnCopilotDock({ name }: { name: string }) {
         </div>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+          {/* Live briefing — where things stand in this context */}
+          {briefing ? (
+            <div className="rounded-xl border border-line bg-surface-0/40 p-3">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Where things stand</p>
+              <p className="mt-1 text-sm font-medium text-fg-primary">{briefing.headline}</p>
+              {briefing.stats.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {briefing.stats.map((st) => (
+                    <span key={st.label} className="inline-flex items-baseline gap-1 text-xs">
+                      <span
+                        className={`font-mono font-semibold ${
+                          st.tone === "good"
+                            ? "text-emerald-300"
+                            : st.tone === "bad"
+                              ? "text-status-danger"
+                              : st.tone === "warn"
+                                ? "text-gold-300"
+                                : "text-fg-primary"
+                        }`}
+                      >
+                        {st.value}
+                      </span>
+                      <span className="text-fg-muted">{st.label}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {briefing.nextAction ? (
+                <button
+                  onClick={() => ask(briefing.nextAction!.prompt)}
+                  disabled={pending}
+                  className="mt-2.5 flex w-full items-center gap-2 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2 text-left transition hover:bg-gold-500/10 disabled:opacity-50"
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-[11px] text-surface-0">
+                    →
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                      Do this next
+                    </span>
+                    <span className="block truncate text-sm text-fg-primary">{briefing.nextAction.label}</span>
+                  </span>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Suggestions */}
           <div>
             <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400">
@@ -159,39 +307,69 @@ export function EarnCopilotDock({ name }: { name: string }) {
             </div>
           </div>
 
-          {/* Inline plan result from an ask */}
-          {result?.ok && result.steps ? (
-            <div className="rounded-xl border border-gold-500/30 bg-gold-500/5 p-3">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
-                Earn routed your ask
-              </p>
-              <p className="mt-1 text-sm font-medium text-fg-primary">{result.planTitle}</p>
-              <ul className="mt-2 flex flex-col gap-1">
-                {result.steps.map((st, i) => {
-                  const a = AGENT_BY_KEY[st.agent];
-                  return (
-                    <li key={i} className="flex items-center gap-2 text-xs text-fg-secondary">
-                      <AgentDot color={a?.color ?? "#888"} />
-                      <span className="text-fg-muted">{a?.name ?? st.agent}</span>
-                      <span className="truncate">{st.title}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-              {result.sessionId ? (
-                <Link
-                  href={`/session/${result.sessionId}`}
-                  onClick={() => setOpen(false)}
-                  className="mt-2 inline-block rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20"
-                >
-                  Open session →
-                </Link>
-              ) : null}
+          {/* Conversation — the maintained, multi-turn session in the dock */}
+          {thread.length > 0 ? (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Conversation</p>
+                <div className="flex items-center gap-2">
+                  {sessionId ? (
+                    <Link
+                      href={`/session/${sessionId}`}
+                      onClick={() => setOpen(false)}
+                      className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
+                    >
+                      Open full →
+                    </Link>
+                  ) : null}
+                  <button
+                    onClick={newConversation}
+                    className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+                  >
+                    New
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                {thread.map((turn, i) =>
+                  turn.role === "user" ? (
+                    <div key={i} className="ml-6 rounded-lg rounded-br-sm border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary">
+                      {turn.text}
+                    </div>
+                  ) : (
+                    <div key={i} className="mr-6 rounded-lg rounded-bl-sm border border-gold-500/30 bg-gold-500/5 px-3 py-2">
+                      {turn.planTitle ? (
+                        <p className="text-sm font-medium text-fg-primary">{turn.planTitle}</p>
+                      ) : null}
+                      {turn.steps?.length ? (
+                        <ul className="mt-1.5 flex flex-col gap-1">
+                          {turn.steps.map((st, j) => {
+                            const a = AGENT_BY_KEY[st.agent];
+                            return (
+                              <li key={j} className="flex items-center gap-2 text-xs text-fg-secondary">
+                                <AgentDot color={a?.color ?? "#888"} />
+                                <span className="text-fg-muted">{a?.name ?? st.agent}</span>
+                                <span className="truncate">{st.title}</span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ),
+                )}
+                {pending ? (
+                  <div className="mr-6 inline-flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-fg-muted">
+                    <span className="animate-pulse">✶</span> Earn is routing your ask…
+                  </div>
+                ) : null}
+                <div ref={threadEndRef} />
+              </div>
             </div>
           ) : null}
-          {result && !result.ok ? (
+          {error ? (
             <p className="rounded-lg border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-xs text-status-danger">
-              {result.error}
+              {error}
             </p>
           ) : null}
 

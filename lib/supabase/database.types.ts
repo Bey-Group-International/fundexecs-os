@@ -372,6 +372,40 @@ export type Entity = Timestamps & {
   created_by: string | null;
 };
 
+export type Stakeholder = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  kind: string; // person | entity | investor | fund | pool | other
+  email: string | null;
+  notes: string | null;
+  created_by: string | null;
+  principal_id: string | null;
+  investor_id: string | null;
+};
+
+export type ShareClass = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  name: string;
+  kind: string; // common | preferred | lp_interest | gp_interest | membership | option | safe | note | other
+  authorized_units: number | null;
+};
+
+export type EquityHolding = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  stakeholder_id: string;
+  share_class_id: string | null;
+  units: number | null;
+  ownership_pct: number | null;
+  invested_amount: number | null;
+  notes: string | null;
+  created_by: string | null;
+};
+
 export type Partner = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
@@ -515,6 +549,37 @@ export type DataRoomView = {
   share_id: string | null;
   document_id: string | null;
   kind: "room" | "document";
+  created_at: string;
+};
+
+export type InvestorPortalShare = {
+  id: string;
+  organization_id: string;
+  investor_id: string;
+  token: string;
+  label: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type InvestorPortalView = {
+  id: string;
+  organization_id: string;
+  share_id: string | null;
+  created_at: string;
+};
+
+export type ValuationMark = {
+  id: string;
+  organization_id: string;
+  asset_id: string;
+  value: number;
+  as_of: string;
+  method: string | null;
+  note: string | null;
+  created_by: string | null;
   created_at: string;
 };
 
@@ -704,6 +769,12 @@ export type Database = {
       brain_kb_chunks: TableShape<BrainKbChunk>;
       data_room_shares: TableShape<DataRoomShare>;
       data_room_views: TableShape<DataRoomView>;
+      investor_portal_shares: TableShape<InvestorPortalShare>;
+      investor_portal_views: TableShape<InvestorPortalView>;
+      valuation_marks: TableShape<ValuationMark>;
+      stakeholders: TableShape<Stakeholder>;
+      share_classes: TableShape<ShareClass>;
+      equity_holdings: TableShape<EquityHolding>;
     };
     Views: Record<string, never>;
     Functions: {

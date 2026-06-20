@@ -1,7 +1,10 @@
 import { getCapTable } from "@/lib/cap-table";
 import { compactUsd, usd, multiple } from "@/lib/format";
+import { createServerClient } from "@/lib/supabase/server";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile, EarnAction } from "@/components/execute/ui";
+import { createInvestorPortalShare } from "@/components/execute/actions";
+import CopyLink from "@/components/execute/CopyLink";
 
 function humanize(s: string): string {
   return s.replace(/_/g, " ");
@@ -13,6 +16,18 @@ function humanize(s: string): string {
 // Ops reconciles the accounts.
 export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
   const t = await getCapTable(orgId);
+
+  // Live portal links per holder, for the shareable read-only statements.
+  const supabase = createServerClient();
+  const { data: shareRows } = await supabase
+    .from("investor_portal_shares")
+    .select("investor_id, token")
+    .eq("organization_id", orgId)
+    .is("revoked_at", null);
+  const tokenByInvestor = new Map<string, string>();
+  for (const s of (shareRows ?? []) as { investor_id: string; token: string }[]) {
+    if (!tokenByInvestor.has(s.investor_id)) tokenByInvestor.set(s.investor_id, s.token);
+  }
 
   const header = (
     <ModuleHeader
@@ -72,7 +87,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-surface-2/80 text-left">
-              {["Holder", "Type", "Committed", "Own %", "Called", "Unfunded", "Distributed", "NAV", "DPI", "TVPI"].map(
+              {["Holder", "Type", "Committed", "Own %", "Called", "Unfunded", "Distributed", "NAV", "DPI", "TVPI", "Portal"].map(
                 (h, i) => (
                   <th
                     key={h}
@@ -102,6 +117,18 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
                   }`}
                 >
                   {multiple(h.tvpi)}
+                </td>
+                <td className="whitespace-nowrap px-3 py-3 text-right">
+                  {tokenByInvestor.has(h.investorId) ? (
+                    <CopyLink path={`/portal/${tokenByInvestor.get(h.investorId)}`} />
+                  ) : (
+                    <form action={createInvestorPortalShare} className="inline">
+                      <input type="hidden" name="investor_id" value={h.investorId} />
+                      <button className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
+                        + Create link
+                      </button>
+                    </form>
+                  )}
                 </td>
               </tr>
             ))}
