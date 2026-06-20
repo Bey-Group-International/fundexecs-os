@@ -46,16 +46,17 @@ const MORE_ITEMS: NavItem[] = [
 ];
 
 // Account menu, in display order. Items with a real destination are links;
-// Walkthrough has no href and instead re-opens the guided tour overlay.
-const ACCOUNT_ITEMS: { label: string; href?: string }[] = [
-  { label: "Settings", href: "/settings" },
-  { label: "Get help", href: "/settings#help" },
-  { label: "Walkthrough" },
-  { label: "View plans", href: "/wallet" },
-  { label: "Integrations", href: "/settings#integrations" },
-  { label: "Gift Earn", href: "/wallet" },
-  { label: "Learn more", href: "/" },
-  { label: "Brains", href: "/earn" },
+// Walkthrough has no href and instead re-opens the guided tour overlay. Each
+// carries a glyph so the popout reads at a glance.
+const ACCOUNT_ITEMS: { label: string; href?: string; icon: string }[] = [
+  { label: "Settings", href: "/settings", icon: "⚙" },
+  { label: "Integrations", href: "/settings#integrations", icon: "⇆" },
+  { label: "Get help", href: "/settings#help", icon: "?" },
+  { label: "Walkthrough", icon: "✷" },
+  { label: "Learn more", href: "/settings#about", icon: "ℹ" },
+  { label: "View plans", href: "/wallet", icon: "◆" },
+  { label: "Gift Earn", href: "/wallet", icon: "✦" },
+  { label: "Brains", href: "/earn", icon: "✧" },
 ];
 
 function useDismiss<T extends HTMLElement>(onDismiss: () => void) {
@@ -544,16 +545,26 @@ export function AppSidebar({
           </button>
 
           {accountOpen ? (
-            <div className="absolute bottom-full left-0 right-0 mb-2 flex flex-col gap-0.5 rounded-lg border border-line bg-surface-1 p-1.5 shadow-2xl">
-              {ACCOUNT_ITEMS.map((item) =>
-                item.href ? (
+            <div className="absolute bottom-full left-0 right-0 mb-2 flex flex-col gap-0.5 rounded-xl border border-line/80 bg-surface-1/95 p-1.5 shadow-2xl backdrop-blur-xl">
+              {ACCOUNT_ITEMS.map((item) => {
+                const inner = (
+                  <>
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-surface-2 font-mono text-[11px] leading-none text-gold-400/90 transition group-hover:bg-gold-500/15 group-hover:text-gold-300">
+                      {item.icon}
+                    </span>
+                    {item.label}
+                  </>
+                );
+                const cls =
+                  "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary";
+                return item.href ? (
                   <Link
                     key={item.label}
                     href={item.href}
                     onClick={() => setAccountOpen(false)}
-                    className="rounded-md px-2 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                    className={cls}
                   >
-                    {item.label}
+                    {inner}
                   </Link>
                 ) : (
                   <button
@@ -563,12 +574,12 @@ export function AppSidebar({
                       setAccountOpen(false);
                       window.dispatchEvent(new Event("fx:open-tour"));
                     }}
-                    className="rounded-md px-2 py-1.5 text-left text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                    className={`${cls} text-left`}
                   >
-                    {item.label}
+                    {inner}
                   </button>
-                ),
-              )}
+                );
+              })}
             </div>
           ) : null}
         </div>
