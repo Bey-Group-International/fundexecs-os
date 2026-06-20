@@ -138,3 +138,14 @@ create policy attestations_select on public.attestations
     organization_id in (select public.current_principal_org_ids())
     or witness_org_id in (select public.current_principal_org_ids())
   );
+
+-- ---------------------------------------------------------------------------
+-- Data API grants. Supabase stopped auto-granting Data API privileges on new
+-- public tables (CLI default flipped 2026-05-30), so we grant them explicitly to
+-- the standard roles here. RLS (enabled above) is what actually governs row
+-- access; these grants only make the tables reachable through PostgREST.
+-- ---------------------------------------------------------------------------
+grant select, insert, update, delete on public.reputation_scores to anon, authenticated, service_role;
+grant select, insert, update, delete on public.reputation_ledger to anon, authenticated, service_role;
+grant select, insert, update, delete on public.stake_positions   to anon, authenticated, service_role;
+grant select, insert, update, delete on public.attestations      to anon, authenticated, service_role;
