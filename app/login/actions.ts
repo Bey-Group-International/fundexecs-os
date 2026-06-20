@@ -2,12 +2,19 @@
 
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, hasSupabaseServerEnv } from "@/lib/supabase/server";
+
+const SUPABASE_CONFIG_ERROR =
+  "Authentication is not configured for this environment. Add Supabase URL and anon key, then try again.";
 
 // Google OAuth. The Google provider's Client ID/Secret live in Supabase Auth
 // (Authentication → Providers → Google), never in this repo. We only kick off
 // the redirect; /auth/callback exchanges the returned code for a session.
 export async function signInWithGoogle() {
+  if (!hasSupabaseServerEnv()) {
+    redirect(`/login?error=${encodeURIComponent(SUPABASE_CONFIG_ERROR)}`);
+  }
+
   const supabase = createServerClient();
   const origin =
     headers().get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -26,6 +33,10 @@ export async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
 
+  if (!hasSupabaseServerEnv()) {
+    redirect(`/login?error=${encodeURIComponent(SUPABASE_CONFIG_ERROR)}`);
+  }
+
   const supabase = createServerClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
@@ -38,6 +49,10 @@ export async function signUp(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("full_name") ?? "");
+
+  if (!hasSupabaseServerEnv()) {
+    redirect(`/login?mode=signup&error=${encodeURIComponent(SUPABASE_CONFIG_ERROR)}`);
+  }
 
   const supabase = createServerClient();
   const { data, error } = await supabase.auth.signUp({
@@ -73,6 +88,8 @@ export async function signUp(formData: FormData) {
 }
 
 export async function signOut() {
+  if (!hasSupabaseServerEnv()) redirect("/login");
+
   const supabase = createServerClient();
   await supabase.auth.signOut();
   redirect("/login");

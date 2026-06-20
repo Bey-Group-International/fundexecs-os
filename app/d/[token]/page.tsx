@@ -1,4 +1,4 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { dealTeaser } from "@/lib/deal-share";
 import { logDealShareView } from "@/lib/deal-share.server";
 import type { Deal, DealShare } from "@/lib/supabase/database.types";
@@ -28,7 +28,7 @@ function Unavailable() {
 
 export default async function SharedDealPage({ params }: { params: { token: string } }) {
   // No service role key (e.g. a preview without secrets) — fail closed.
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return <Unavailable />;
+  if (!hasSupabaseServiceEnv()) return <Unavailable />;
 
   const supabase = createServiceClient();
 
