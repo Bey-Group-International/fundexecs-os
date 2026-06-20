@@ -15,7 +15,7 @@ import {
   LOYALTY_STEP,
   LOYALTY_CAP,
 } from "@/lib/billing";
-import { stripeConfigured } from "@/lib/stripe";
+import { stripeConfigured, stripePublishableKeyValue } from "@/lib/stripe";
 import { PlanSelector, type PlanView } from "./PlanSelector";
 import { CreditPacks } from "./CreditPacks";
 import { CheckoutBanner } from "./CheckoutBanner";
@@ -44,7 +44,7 @@ export default async function WalletPage({
   const live = stripeConfigured();
   // Publishable key is client-safe; passed to the embedded checkout so Stripe.js
   // can mount the in-app form without exposing it via NEXT_PUBLIC_.
-  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
+  const publishableKey = stripePublishableKeyValue();
 
   const [wallet, spend30d] = await Promise.all([
     getWallet(ctx.orgId),

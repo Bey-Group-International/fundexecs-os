@@ -29,35 +29,43 @@ function randomCode(len = 8): string {
 }
 
 // The org's shareable referral code, created on first read. Idempotent under the
-// org-unique constraint, so a race just returns the existing code.
+// org-unique constraint, so a race just returns the existing code. Returns null
+// (never throws) if it can't be read or allocated — e.g. the table isn't
+// migrated yet or the service role isn't configured — so callers can degrade
+// gracefully instead of crashing the page.
 export async function getOrCreateReferralCode(
   orgId: string,
   createdBy: string | null,
-): Promise<string> {
-  const supabase = createServerClient();
-  const { data: existing } = await supabase
-    .from("referral_codes")
-    .select("code")
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (existing?.code) return existing.code;
-
-  const service = createServiceClient();
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const code = randomCode();
-    const { error } = await service
-      .from("referral_codes")
-      .insert({ organization_id: orgId, code, created_by: createdBy });
-    if (!error) return code;
-    // Either the org already has a code (unique org) or the code collided.
-    const { data } = await service
+): Promise<string | null> {
+  try {
+    const supabase = createServerClient();
+    const { data: existing } = await supabase
       .from("referral_codes")
       .select("code")
       .eq("organization_id", orgId)
       .maybeSingle();
-    if (data?.code) return data.code;
+    if (existing?.code) return existing.code;
+
+    const service = createServiceClient();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = randomCode();
+      const { error } = await service
+        .from("referral_codes")
+        .insert({ organization_id: orgId, code, created_by: createdBy });
+      if (!error) return code;
+      // Either the org already has a code (unique org) or the code collided.
+      const { data } = await service
+        .from("referral_codes")
+        .select("code")
+        .eq("organization_id", orgId)
+        .maybeSingle();
+      if (data?.code) return data.code;
+    }
+    return null;
+  } catch (err) {
+    console.error("[gift-earn] getOrCreateReferralCode failed:", err);
+    return null;
   }
-  throw new Error("Could not allocate a referral code");
 }
 
 export interface DownlineRow {
@@ -79,7 +87,24 @@ export interface ReferralSummary {
 // Walk DOWN the referral forest from `orgId` to MAX_LEVEL, with org names and
 // total referral earnings from the ledger. Uses the service client because the
 // downline crosses orgs the caller can't read under RLS.
+const EMPTY_SUMMARY: ReferralSummary = {
+  directCount: 0,
+  totalDownline: 0,
+  levelCounts: {},
+  downline: [],
+  earnedTotal: 0,
+};
+
 export async function getReferralSummary(orgId: string): Promise<ReferralSummary> {
+  try {
+    return await computeReferralSummary(orgId);
+  } catch (err) {
+    console.error("[gift-earn] getReferralSummary failed:", err);
+    return EMPTY_SUMMARY;
+  }
+}
+
+async function computeReferralSummary(orgId: string): Promise<ReferralSummary> {
   const service = createServiceClient();
   const downline: DownlineRow[] = [];
   const levelCounts: Record<number, number> = {};
@@ -288,13 +313,18 @@ export async function purchaseGift(args: {
 }
 
 export async function getSentGifts(orgId: string): Promise<CreditGift[]> {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from("credit_gifts")
-    .select("*")
-    .eq("sender_organization_id", orgId)
-    .order("created_at", { ascending: false });
-  return (data ?? []) as CreditGift[];
+  try {
+    const supabase = createServerClient();
+    const { data } = await supabase
+      .from("credit_gifts")
+      .select("*")
+      .eq("sender_organization_id", orgId)
+      .order("created_at", { ascending: false });
+    return (data ?? []) as CreditGift[];
+  } catch (err) {
+    console.error("[gift-earn] getSentGifts failed:", err);
+    return [];
+  }
 }
 
 export interface RedeemGiftResult {
