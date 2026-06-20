@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AGENTS } from "@/lib/agents";
 import { Logo } from "@/components/Logo";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 const CALENDLY = "https://calendly.com/fundexecs";
 
@@ -79,7 +78,6 @@ export default function LandingPage({
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <Logo />
           <div className="flex items-center gap-3">
-            <ThemeToggle compact />
             <Link
               href="/login"
               className="hidden rounded-md px-3 py-1.5 text-sm text-fg-secondary transition hover:text-fg-primary sm:inline-flex"
