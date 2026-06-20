@@ -10,13 +10,15 @@ import type {
   OrganizationMember,
   Principal,
   Document,
+  DataRoomShare,
+  DataRoomView,
 } from "@/lib/supabase/database.types";
 import { blendTrackRecord } from "@/lib/track-record";
-import { getBuildReadiness } from "@/lib/build-readiness";
+import { computeBuildReadiness } from "@/lib/build-readiness";
 import { DATA_ROOM_SECTIONS, summarizeDataRoom } from "@/lib/data-room";
 import { PrintButton } from "./PrintButton";
-import { AddDocumentForm } from "./DataRoomDocuments";
-import { deleteDocument } from "./materials-actions";
+import { DocumentLibrary } from "./DataRoomDocuments";
+import { ShareControls } from "./ShareControls";
 
 // Render a stored document link only when it is a real http(s) URL.
 function safeHref(url: string | null): string | null {
@@ -73,31 +75,53 @@ export async function MaterialsModule() {
   if (!ctx?.orgId) redirect("/login");
   const supabase = createServerClient();
 
-  const [orgRes, thesisRes, recordsRes, entitiesRes, membersRes, readiness] = await Promise.all([
-    supabase.from("organizations").select("*").eq("id", ctx.orgId).maybeSingle(),
-    supabase
-      .from("investment_theses")
-      .select("*")
-      .eq("organization_id", ctx.orgId)
-      .order("is_active", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("track_records")
-      .select("*")
-      .eq("organization_id", ctx.orgId)
-      .order("vintage_year", { ascending: false }),
-    supabase.from("entities").select("*").eq("organization_id", ctx.orgId),
-    supabase.from("organization_members").select("*").eq("organization_id", ctx.orgId),
-    getBuildReadiness(ctx.orgId),
-  ]);
+  // Single pass over the foundation tables — reused for both the rendered
+  // materials and the readiness scoring (computeBuildReadiness), so the module
+  // no longer double-fetches via getBuildReadiness.
+  const [orgRes, thesesRes, recordsRes, entitiesRes, membersRes, docsRes, sharesRes, viewsRes] =
+    await Promise.all([
+      supabase.from("organizations").select("*").eq("id", ctx.orgId).maybeSingle(),
+      supabase
+        .from("investment_theses")
+        .select("*")
+        .eq("organization_id", ctx.orgId)
+        .order("is_active", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("track_records")
+        .select("*")
+        .eq("organization_id", ctx.orgId)
+        .order("vintage_year", { ascending: false }),
+      supabase.from("entities").select("*").eq("organization_id", ctx.orgId),
+      supabase.from("organization_members").select("*").eq("organization_id", ctx.orgId),
+      supabase
+        .from("documents")
+        .select("*")
+        .eq("organization_id", ctx.orgId)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("data_room_shares")
+        .select("*")
+        .eq("organization_id", ctx.orgId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("data_room_views")
+        .select("*")
+        .eq("organization_id", ctx.orgId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+    ]);
 
   const org = orgRes.data as Organization | null;
-  const thesis = thesisRes.data as InvestmentThesis | null;
+  const theses = (thesesRes.data ?? []) as InvestmentThesis[];
+  const thesis = theses.find((t) => t.is_active) ?? theses[0] ?? null;
   const records = (recordsRes.data ?? []) as TrackRecord[];
   const entities = (entitiesRes.data ?? []) as Entity[];
   const members = (membersRes.data ?? []) as OrganizationMember[];
+  const documents = (docsRes.data ?? []) as Document[];
+  const shares = (sharesRes.data ?? []) as DataRoomShare[];
+  const views = (viewsRes.data ?? []) as DataRoomView[];
 
   let principals: Principal[] = [];
   if (members.length) {
@@ -109,12 +133,7 @@ export async function MaterialsModule() {
   }
   const byId = new Map(principals.map((p) => [p.id, p]));
 
-  const { data: docData } = await supabase
-    .from("documents")
-    .select("*")
-    .eq("organization_id", ctx.orgId)
-    .order("created_at", { ascending: false });
-  const documents = (docData ?? []) as Document[];
+  const readiness = computeBuildReadiness({ org, theses, entities, records, members, principals });
   const docsBySection = new Map<string, Document[]>();
   for (const d of documents) {
     const k = d.doc_type ?? "other";
@@ -125,6 +144,12 @@ export async function MaterialsModule() {
   const docCounts: Record<string, number> = {};
   for (const [k, v] of docsBySection) docCounts[k] = v.length;
   const summary = summarizeDataRoom(readiness.statuses, docCounts);
+
+  const roomOpens = views.filter((v) => v.kind === "room").length;
+  const docOpens = views.filter((v) => v.kind === "document").length;
+  const lastViewed = views[0]?.created_at
+    ? new Date(views[0].created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+    : "—";
 
   const blended = blendTrackRecord(records);
   const accent = org?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color) ? org.brand_color : null;
@@ -173,7 +198,10 @@ export async function MaterialsModule() {
               What everyone you bring to the table — LPs, co-investors, lenders, partners — expects to see.
             </p>
           </div>
-          <span className="font-display text-2xl font-semibold text-fg-primary">{summary.percent}%</span>
+          <div className="text-right">
+            <span className="font-display text-2xl font-semibold text-fg-primary">{summary.weightedPercent}%</span>
+            <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">weighted</p>
+          </div>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {summary.items.map((item) => (
@@ -197,6 +225,12 @@ export async function MaterialsModule() {
             </div>
           ))}
         </div>
+        {summary.suggestions.length > 0 ? (
+          <div className="mt-3 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Next best to add</span>
+            <span className="ml-2 text-sm text-fg-primary">{summary.suggestions[0].suggestion}</span>
+          </div>
+        ) : null}
       </div>
 
       {/* The sheet */}
@@ -360,56 +394,51 @@ export async function MaterialsModule() {
         </footer>
       </article>
 
-      {/* Document library — interactive; hidden in print */}
+      {/* Interactive document library — search, create, link, edit, reorder */}
+      <DocumentLibrary
+        documents={documents.map((d) => ({
+          id: d.id,
+          name: d.name,
+          doc_type: d.doc_type,
+          storage_key: d.storage_key,
+          content: d.content,
+          created_at: d.created_at,
+        }))}
+      />
+
+      {/* Shareable read-only links */}
+      <ShareControls
+        shares={shares.map((s) => ({
+          id: s.id,
+          token: s.token,
+          label: s.label,
+          expires_at: s.expires_at,
+          revoked_at: s.revoked_at,
+          created_at: s.created_at,
+        }))}
+      />
+
+      {/* Access log */}
       <div className="mx-auto mt-8 max-w-2xl print:hidden">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">Documents</h3>
-          <AddDocumentForm />
-        </div>
-        {documents.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-line bg-surface-1 px-4 py-8 text-center text-sm text-fg-muted">
-            No documents yet. Add links to decks, financials, legal docs, and DDQs to build out the room.
+        <h3 className="mb-3 font-display text-lg font-semibold tracking-tight text-fg-primary">Access</h3>
+        {views.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-line bg-surface-1 px-4 py-6 text-center text-sm text-fg-muted">
+            No views yet. Shared links record when the room and its documents are opened.
           </p>
         ) : (
-          <div className="flex flex-col gap-4">
-            {DATA_ROOM_SECTIONS.map((s) => {
-              const docs = docsBySection.get(s.key);
-              if (!docs?.length) return null;
-              return (
-                <div key={s.key}>
-                  <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-400">{s.label}</p>
-                  <div className="flex flex-col gap-1.5">
-                    {docs.map((d) => {
-                      const href = safeHref(d.storage_key);
-                      return (
-                        <div
-                          key={d.id}
-                          className="flex items-center gap-3 rounded-lg border border-line bg-surface-1 px-3 py-2"
-                        >
-                          <span className="min-w-0 flex-1 truncate text-sm text-fg-primary">{d.name}</span>
-                          {href ? (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline"
-                            >
-                              Open →
-                            </a>
-                          ) : null}
-                          <form action={deleteDocument}>
-                            <input type="hidden" name="id" value={d.id} />
-                            <button className="rounded-md border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400">
-                              ✕
-                            </button>
-                          </form>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="flex items-center gap-6 rounded-xl border border-line bg-surface-1 px-4 py-3">
+            <div>
+              <p className="font-display text-xl font-semibold text-fg-primary">{roomOpens}</p>
+              <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Room opens</p>
+            </div>
+            <div>
+              <p className="font-display text-xl font-semibold text-fg-primary">{docOpens}</p>
+              <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Document opens</p>
+            </div>
+            <div className="ml-auto text-right">
+              <p className="text-sm text-fg-primary">{lastViewed}</p>
+              <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Last viewed</p>
+            </div>
           </div>
         )}
       </div>

@@ -122,6 +122,26 @@ export async function getBuildReadiness(orgId: string): Promise<BuildReadiness> 
       .in("id", members.map((m) => m.principal_id));
     principals = (data ?? []) as Principal[];
   }
+
+  return computeBuildReadiness({ org, theses, entities, records, members, principals });
+}
+
+export interface BuildReadinessInput {
+  org: Organization | null;
+  theses: InvestmentThesis[];
+  entities: Entity[];
+  records: TrackRecord[];
+  members: OrganizationMember[];
+  principals: Principal[];
+}
+
+/**
+ * Pure readiness computation over already-fetched foundation data. Callers that
+ * have loaded these tables for another purpose (e.g. the Materials & Data Room)
+ * can reuse them here instead of re-querying via getBuildReadiness.
+ */
+export function computeBuildReadiness(input: BuildReadinessInput): BuildReadiness {
+  const { org, theses, entities, records, members, principals } = input;
   const titleById = new Map(principals.map((p) => [p.id, p.title]));
 
   const thesis = theses.find((t) => t.is_active) ?? theses[0] ?? null;

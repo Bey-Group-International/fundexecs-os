@@ -480,6 +480,28 @@ export type Document = {
   mime_type: string | null;
   size_bytes: number | null;
   uploaded_by: string | null;
+  content: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type DataRoomShare = {
+  id: string;
+  organization_id: string;
+  token: string;
+  label: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type DataRoomView = {
+  id: string;
+  organization_id: string;
+  share_id: string | null;
+  document_id: string | null;
+  kind: "room" | "document";
   created_at: string;
 };
 
@@ -667,6 +689,8 @@ export type Database = {
       brain_runs: TableShape<BrainRun>;
       brain_documents: TableShape<BrainDocument>;
       brain_kb_chunks: TableShape<BrainKbChunk>;
+      data_room_shares: TableShape<DataRoomShare>;
+      data_room_views: TableShape<DataRoomView>;
     };
     Views: Record<string, never>;
     Functions: {
