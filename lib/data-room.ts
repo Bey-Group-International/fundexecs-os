@@ -25,6 +25,7 @@ export interface DataRoomSection {
 // so coverage scoring pushes operators toward institution-ready materials.
 export const DATA_ROOM_SECTIONS: DataRoomSection[] = [
   { key: "overview", label: "Firm Overview", description: "Firm summary, history, and positioning.", buildModule: "profile", weight: 2, suggestion: "Add a firm overview / summary deck." },
+  { key: "marketing", label: "Marketing & Materials", description: "Executive summary, investor deck, one-pager, and teasers.", weight: 2, suggestion: "Add core materials — executive summary, investor deck, one-pager." },
   { key: "thesis", label: "Investment Strategy & Thesis", description: "Mandate, strategy, edge, and target returns.", buildModule: "thesis", weight: 3, suggestion: "Add your strategy / thesis materials." },
   { key: "track_record", label: "Track Record & Performance", description: "Realized/unrealized performance, attribution, and benchmarks.", buildModule: "track_record", weight: 3, suggestion: "Add a track-record / performance summary." },
   { key: "portfolio", label: "Portfolio & Case Studies", description: "Holdings, marks, and representative deal case studies.", weight: 2, suggestion: "Add portfolio case studies." },
@@ -40,6 +41,31 @@ export const DATA_ROOM_SECTIONS: DataRoomSection[] = [
   { key: "references", label: "References", description: "LP, portfolio, and counterparty references.", weight: 1, suggestion: "Add references." },
   { key: "other", label: "Other Materials", description: "Anything else worth sharing.", catchAll: true },
 ];
+
+export interface KeyMaterial {
+  name: string;
+  /** Section (doc_type) the material is filed under. */
+  section: string;
+  /** Match aliases (lowercased) used to detect an existing document. */
+  aliases: string[];
+}
+
+// The core fundraising collateral an institutional room is expected to carry.
+// Surfaced as one-click presets that prefill the create form and show whether
+// the material is already present.
+export const KEY_MATERIALS: KeyMaterial[] = [
+  { name: "Executive Summary", section: "marketing", aliases: ["executive summary", "exec summary"] },
+  { name: "Investor Deck", section: "marketing", aliases: ["investor deck", "pitch deck", "deck"] },
+  { name: "One-Pager", section: "marketing", aliases: ["one-pager", "one pager", "onepager", "tear sheet", "tearsheet"] },
+  { name: "Teaser", section: "marketing", aliases: ["teaser"] },
+  { name: "Fact Sheet", section: "marketing", aliases: ["fact sheet", "factsheet"] },
+];
+
+/** Match a key material against existing document names (case-insensitive). */
+export function hasMaterial(material: KeyMaterial, docNames: string[]): boolean {
+  const names = docNames.map((n) => n.toLowerCase());
+  return names.some((n) => material.aliases.some((a) => n.includes(a)));
+}
 
 export interface ChecklistItem {
   key: string;

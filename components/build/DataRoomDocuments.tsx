@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
-import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
+import { DATA_ROOM_SECTIONS, KEY_MATERIALS, hasMaterial } from "@/lib/data-room";
 import {
   addDocument,
   createDocument,
@@ -131,7 +131,10 @@ function DocRow({ doc, isFirst, isLast }: { doc: DocView; isFirst: boolean; isLa
 export function DocumentLibrary({ documents }: { documents: DocView[] }) {
   const [mode, setMode] = useState<null | "link" | "create">(null);
   const [query, setQuery] = useState("");
+  const [prefill, setPrefill] = useState<{ name: string; section: string } | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const docNames = useMemo(() => documents.map((d) => d.name), [documents]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -169,12 +172,37 @@ export function DocumentLibrary({ documents }: { documents: DocView[] }) {
           </button>
           <button
             type="button"
-            onClick={() => setMode(mode === "create" ? null : "create")}
+            onClick={() => { setPrefill(null); setMode(mode === "create" ? null : "create"); }}
             className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1.5 text-xs font-medium text-gold-300 hover:bg-gold-500/20"
           >
             + Create
           </button>
         </div>
+      </div>
+
+      {/* Key materials — one-click presets for core fundraising collateral */}
+      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Key materials</span>
+        {KEY_MATERIALS.map((m) => {
+          const present = hasMaterial(m, docNames);
+          return (
+            <button
+              key={m.name}
+              type="button"
+              disabled={present}
+              onClick={() => { setPrefill({ name: m.name, section: m.section }); setMode("create"); }}
+              title={present ? `${m.name} is in the room` : `Create ${m.name}`}
+              className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
+                present
+                  ? "border-emerald-400/40 text-emerald-300"
+                  : "border-line text-fg-secondary hover:border-gold-500/40 hover:text-gold-300"
+              }`}
+            >
+              <span className="font-mono text-[10px]">{present ? "✓" : "+"}</span>
+              {m.name}
+            </button>
+          );
+        })}
       </div>
 
       {mode === "link" ? (
@@ -195,11 +223,12 @@ export function DocumentLibrary({ documents }: { documents: DocView[] }) {
 
       {mode === "create" ? (
         <form
-          action={(fd) => startTransition(async () => { await createDocument(fd); setMode(null); })}
+          key={prefill?.name ?? "blank"}
+          action={(fd) => startTransition(async () => { await createDocument(fd); setMode(null); setPrefill(null); })}
           className="mb-4 grid gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-2"
         >
-          <input name="name" required placeholder="Document name" className={`${inputClass} sm:col-span-2`} />
-          <SectionSelect />
+          <input name="name" required defaultValue={prefill?.name} placeholder="Document name" className={`${inputClass} sm:col-span-2`} />
+          <SectionSelect defaultValue={prefill?.section} />
           <textarea name="content" required rows={5} placeholder="Write the document…" className={`${inputClass} sm:col-span-2`} />
           <div className="sm:col-span-2">
             <button disabled={pending} className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 hover:bg-gold-300 disabled:opacity-60">
