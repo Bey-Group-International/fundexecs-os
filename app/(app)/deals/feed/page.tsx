@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { getDealFeed } from "@/lib/deal-share.server";
+import { DealsSeen } from "@/components/inbox/DealsSeen";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ export default async function DealFeedPage() {
 
   return (
     <div className="fx-ambient mx-auto max-w-4xl">
+      {/* Opening the feed clears the lightbulb's unread badge. */}
+      <DealsSeen />
       <header className="mb-8">
         <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
           Ecosystem
