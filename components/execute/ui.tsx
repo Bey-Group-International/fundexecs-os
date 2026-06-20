@@ -1,6 +1,37 @@
 import Link from "next/link";
+import { runWithEarn } from "@/components/execute/actions";
 
 // Shared Execute-hub presentational primitives, server-rendered (no client JS).
+
+// "Run with Earn" launcher — posts a task kind to the runWithEarn server action,
+// which seeds an agent-team session on the firm's live books and opens it.
+export function EarnAction({
+  kind,
+  label,
+  subject,
+  subtle,
+}: {
+  kind: string;
+  label: string;
+  subject?: string;
+  subtle?: boolean;
+}) {
+  return (
+    <form action={runWithEarn} className="inline">
+      <input type="hidden" name="kind" value={kind} />
+      {subject ? <input type="hidden" name="subject" value={subject} /> : null}
+      <button
+        className={
+          subtle
+            ? "inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+            : "inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 hover:text-gold-200"
+        }
+      >
+        ✶ {label}
+      </button>
+    </form>
+  );
+}
 
 // Empty-state scaffold, pointed at wherever the module's data is sourced.
 export function EmptyState({ note, href, cta }: { note: string; href: string; cta: string }) {
