@@ -1,5 +1,6 @@
 import { ModuleView } from "@/components/ModuleView";
 import { SourceSearch } from "@/components/source/SourceSearch";
+import { SourceTriage } from "@/components/source/SourceTriage";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,15 @@ export default function ModulePage({
       <SourceSearch
         live={sourcingLive()}
         webEnrichment={sourcingEnrichmentEnabled()}
+        initialPrompt={typeof q === "string" && q.trim() ? q : undefined}
+      />
+    );
+  }
+  if (params.hub === "source" && params.module === "triage") {
+    const q = Array.isArray(searchParams?.q) ? searchParams?.q[0] : searchParams?.q;
+    return (
+      <SourceTriage
+        live={sourcingLive()}
         initialPrompt={typeof q === "string" && q.trim() ? q : undefined}
       />
     );
