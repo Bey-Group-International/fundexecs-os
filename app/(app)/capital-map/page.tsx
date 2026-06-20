@@ -18,15 +18,16 @@ export default async function CapitalMapPage() {
   const entries = await buildCapitalMap(supabase);
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+    <div className="fx-ambient mx-auto max-w-5xl">
+      <header className="mb-6 animate-fade-up">
+        <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-gold-400 shadow-[0_0_10px_2px_rgba(212,175,106,0.6)]" />
           Capital Map
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
           Turn your network into a capital map
         </h1>
-        <p className="mt-1 text-sm text-fg-secondary">
+        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-fg-secondary">
           Every investor scored by temperature and thesis fit, with the warm path
           in and the next move — each routed through the gate so nothing reaches a
           counterparty without your sign-off.
