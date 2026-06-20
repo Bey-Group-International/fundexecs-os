@@ -3,7 +3,13 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { getSessionContext } from "@/lib/auth";
 import { getBuildReadiness, type ModuleStatus } from "@/lib/build-readiness";
+import { getRunConviction } from "@/lib/run-conviction";
+import { getSourceMomentum } from "@/lib/source-readiness";
+import { getExecutePerformance } from "@/lib/execute-performance";
 import { ReadinessPanel } from "@/components/build/ReadinessPanel";
+import { RunCommandCenter } from "@/components/run/RunCommandCenter";
+import { SourceMomentumPanel } from "@/components/source/SourceMomentumPanel";
+import { ExecuteCommandCenter } from "@/components/execute/ExecuteCommandCenter";
 import { HubTabs } from "./HubTabs";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
@@ -23,13 +29,31 @@ export default async function HubLayout({
   const hub = HUB_BY_KEY[params.hub as Hub];
 
   let moduleStatuses: Record<string, ModuleStatus> | undefined;
-  let readinessPanel = null;
+  let momentumPanel = null;
   if (hub.key === "build") {
     const ctx = await getSessionContext();
     if (ctx?.orgId) {
       const readiness = await getBuildReadiness(ctx.orgId);
       moduleStatuses = readiness.statuses;
-      readinessPanel = <ReadinessPanel readiness={readiness} />;
+      momentumPanel = <ReadinessPanel readiness={readiness} />;
+    }
+  } else if (hub.key === "source") {
+    const ctx = await getSessionContext();
+    if (ctx?.orgId) {
+      const momentum = await getSourceMomentum(ctx.orgId);
+      momentumPanel = <SourceMomentumPanel momentum={momentum} />;
+    }
+  } else if (hub.key === "run") {
+    const ctx = await getSessionContext();
+    if (ctx?.orgId) {
+      const conviction = await getRunConviction(ctx.orgId);
+      momentumPanel = <RunCommandCenter conviction={conviction} />;
+    }
+  } else if (hub.key === "execute") {
+    const ctx = await getSessionContext();
+    if (ctx?.orgId) {
+      const perf = await getExecutePerformance(ctx.orgId);
+      momentumPanel = <ExecuteCommandCenter perf={perf} />;
     }
   }
 
@@ -49,7 +73,7 @@ export default async function HubLayout({
           {hub.purpose}
         </p>
       </header>
-      {readinessPanel}
+      {momentumPanel}
       <HubTabs hubKey={hub.key} modules={hub.modules} statuses={moduleStatuses} />
       {children}
     </div>

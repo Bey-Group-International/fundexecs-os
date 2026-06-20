@@ -147,6 +147,8 @@ const DRAFT_PROMPTS: Record<string, string> = {
   track_record:
     "Turn our deals into an investor-ready track record summary: highlight realized vs. unrealized, gross IRR/MOIC, and notable outcomes.",
   team: "Draft concise, professional bios for our team based on their roles and the firm's focus.",
+  reporting:
+    "Draft a quarterly LP update from our live portfolio: NAV and value created, capital account (committed / called / distributed), the headline multiples (TVPI, DPI, gross MOIC), notable holdings and any realized exits, and a measured outlook — institutional and confident.",
 };
 
 export async function draftWithEarn(formData: FormData): Promise<void> {

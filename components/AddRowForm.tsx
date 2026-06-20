@@ -72,7 +72,7 @@ export default function AddRowForm({
             ) : (
               <input
                 name={f.name}
-                type={f.type === "number" ? "number" : "text"}
+                type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
                 step={f.type === "number" ? "any" : undefined}
                 required={f.required}
                 defaultValue={typeof f.defaultValue === "string" ? f.defaultValue : undefined}
