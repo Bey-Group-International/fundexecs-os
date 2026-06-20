@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useActiveSession } from "@/components/session/active-session";
 import { SessionCommandBar } from "@/components/session/SessionCommandBar";
 import { TopNavAlerts } from "@/components/TopNavAlerts";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatCredits } from "@/lib/billing";
 
 // The global top bar. Inside a session it renders the full command surface
@@ -37,7 +36,6 @@ export function GlobalTopBar({
     <div className="flex min-h-12 items-center gap-2 border-b border-line bg-surface-0/82 px-3 py-2 backdrop-blur-xl sm:h-12 sm:px-4">
       <span className="font-mono text-xs uppercase tracking-wider text-fg-muted">Workspace</span>
       <div className="ml-auto flex items-center gap-1">
-        <ThemeToggle compact />
         <TopNavAlerts initialMessages={messagesUnread} initialDeals={dealsUnread} />
         <Link
           href="/wallet"

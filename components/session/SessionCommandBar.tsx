@@ -5,7 +5,6 @@ import Link from "next/link";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { formatCredits } from "@/lib/billing";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   renameSession,
   setSessionColor,
@@ -82,7 +81,6 @@ export function SessionCommandBar({
       )}
 
       <div className="ml-auto flex items-center gap-1">
-        <ThemeToggle compact />
         {/* Notifications */}
         <div className="relative">
           <button

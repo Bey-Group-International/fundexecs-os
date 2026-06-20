@@ -2,7 +2,6 @@ import Link from "next/link";
 import { getSessionContext } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { signIn, signUp, signInWithGoogle } from "./actions";
 
 export default async function LoginPage({
@@ -17,9 +16,6 @@ export default async function LoginPage({
 
   return (
     <div className="fx-blueprint flex min-h-screen bg-surface-0">
-      <div className="fixed right-4 top-4 z-20">
-        <ThemeToggle />
-      </div>
       {/* Left branding panel */}
       <div className="hidden w-2/5 flex-col justify-between border-r border-line bg-surface-1/55 p-12 backdrop-blur-xl lg:flex">
         <Logo />
