@@ -40,4 +40,19 @@ describe("summarizeDataRoom", () => {
     expect(s.readyCount).toBe(3); // overview, team, financials
     expect(s.percent).toBe(Math.round((3 / s.total) * 100));
   });
+
+  it("orders suggestions by weight (heaviest missing first)", () => {
+    const s = summarizeDataRoom({}, {});
+    // Nothing ready → thesis & track_record (weight 3) lead the suggestions.
+    expect(s.suggestions.length).toBe(s.total);
+    expect(["thesis", "track_record"]).toContain(s.suggestions[0].key);
+    expect(s.suggestions[0].weight).toBe(3);
+  });
+
+  it("computes a weighted percentage distinct from the count percentage", () => {
+    // Only the two weight-3 sections ready out of total weight.
+    const s = summarizeDataRoom({ thesis: "complete", track_record: "complete" }, {});
+    expect(s.weightedPercent).toBeGreaterThan(0);
+    expect(s.suggestions.every((i) => i.key !== "thesis")).toBe(true);
+  });
 });
