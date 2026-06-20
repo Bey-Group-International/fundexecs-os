@@ -717,6 +717,53 @@ export type BrainKbChunk = {
   created_at: string;
 };
 
+// Gift Earn (migration 0038). A shareable referral code per org; the referral
+// forest (each org referred at most once, so referrer edges form a downline
+// tree); an append-only credit ledger recording every credit movement; and
+// purchased credit gifts redeemable by token.
+export type ReferralCode = {
+  id: string;
+  organization_id: string;
+  code: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type Referral = {
+  id: string;
+  referrer_organization_id: string;
+  referred_organization_id: string;
+  code: string;
+  status: "pending" | "joined" | "subscribed";
+  created_at: string;
+};
+
+export type CreditLedgerEntry = {
+  id: string;
+  organization_id: string;
+  amount: number;
+  reason: string;
+  source_organization_id: string | null;
+  level: number | null;
+  note: string | null;
+  created_at: string;
+};
+
+export type CreditGift = {
+  id: string;
+  sender_organization_id: string;
+  recipient_email: string;
+  credits: number;
+  amount_usd: number;
+  message: string | null;
+  status: "pending" | "redeemed" | "cancelled";
+  redeem_token: string;
+  redeemed_by_organization_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  redeemed_at: string | null;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -775,6 +822,10 @@ export type Database = {
       stakeholders: TableShape<Stakeholder>;
       share_classes: TableShape<ShareClass>;
       equity_holdings: TableShape<EquityHolding>;
+      referral_codes: TableShape<ReferralCode>;
+      referrals: TableShape<Referral>;
+      credit_ledger: TableShape<CreditLedgerEntry>;
+      credit_gifts: TableShape<CreditGift>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -794,6 +845,15 @@ export type Database = {
           content: string;
           similarity: number;
         }[];
+      };
+      // Atomically credit an org's wallet (creating it if absent), clamped at 0
+      // (migration 0038). Returns the new balance.
+      increment_org_credits: {
+        Args: {
+          p_org: string;
+          p_delta: number;
+        };
+        Returns: number;
       };
     };
     Enums: {
