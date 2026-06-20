@@ -1,0 +1,56 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { CREDIT_PACKS, formatCredits, formatUsd } from "@/lib/billing";
+import { purchasePackAction } from "./actions";
+
+// One-off credit packs (no subscription). Buying is mocked — it grants the
+// pack's credits to the org's wallet so the flow is real end-to-end.
+export function CreditPacks() {
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function buy(packKey: string) {
+    setError(null);
+    setPendingKey(packKey);
+    const fd = new FormData();
+    fd.set("pack_key", packKey);
+    startTransition(async () => {
+      const res = await purchasePackAction(fd);
+      if (res?.error) setError(res.error);
+      setPendingKey(null);
+    });
+  }
+
+  return (
+    <div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {CREDIT_PACKS.map((pack) => {
+          const busy = pending && pendingKey === pack.key;
+          return (
+            <div key={pack.key} className="fx-card flex items-center justify-between p-4">
+              <div>
+                <p className="font-display text-lg font-semibold text-fg-primary">
+                  {formatCredits(pack.credits)}
+                </p>
+                <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  credits
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => buy(pack.key)}
+                className="rounded-md border border-line px-3 py-1.5 text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:opacity-60"
+              >
+                {busy ? "Adding…" : formatUsd(pack.price)}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {error ? <p className="mt-3 text-xs text-status-danger">{error}</p> : null}
+    </div>
+  );
+}

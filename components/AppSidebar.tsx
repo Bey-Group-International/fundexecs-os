@@ -56,7 +56,7 @@ const ACCOUNT_ITEMS: { label: string; href?: string; icon: string }[] = [
   { label: "Walkthrough", icon: "✷" },
   { label: "Learn more", href: "/settings#about", icon: "ℹ" },
   { label: "View plans", href: "/wallet", icon: "◆" },
-  { label: "Gift Earn", href: "/wallet", icon: "✦" },
+  { label: "Gift Earn", href: "/gift", icon: "✦" },
   { label: "Brains", href: "/earn", icon: "✧" },
 ];
 

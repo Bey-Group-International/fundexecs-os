@@ -7,7 +7,10 @@ import type { GraphKind } from "@/lib/supabase/database.types";
 // Dependency-free graph visualization. Nodes are laid out on a circle (radial)
 // and edges drawn as straight SVG lines between them. No external SDKs — pure
 // SVG + a tiny bit of trig, per AGENT.md's "no external SDKs for core" rule.
-// Hovering a node highlights its immediate neighborhood and dims the rest.
+//
+// Interactions, all client-side: hover lights a node's neighborhood; click opens
+// a detail panel and lets you trace the shortest path between two nodes; search
+// and type filters keep large graphs legible; edge weight reflects tie strength.
 
 const TABS: { key: GraphKind; label: string; hint: string }[] = [
   { key: "relationship", label: "Relationship", hint: "Who knows whom, who invested in what" },
@@ -15,7 +18,6 @@ const TABS: { key: GraphKind; label: string; hint: string }[] = [
   { key: "capital", label: "Capital", hint: "LPs, lenders, family offices, banks" },
 ];
 
-// Node category -> color. Falls back to a neutral tone for unknown types.
 const TYPE_COLOR: Record<string, string> = {
   fund: "#d4a843",
   deal: "#5b9bd5",
@@ -39,12 +41,11 @@ function colorFor(type: string): string {
 const SIZE = 720;
 const CENTER = SIZE / 2;
 
-function layout(data: GraphData) {
-  const n = data.nodes.length;
-  // Keep nodes off the very edge so labels have room.
+function layout(nodes: GraphData["nodes"]) {
+  const n = nodes.length;
   const radius = Math.min(CENTER - 90, 60 + n * 8);
   const positions = new Map<string, { x: number; y: number }>();
-  data.nodes.forEach((node, i) => {
+  nodes.forEach((node, i) => {
     const angle = (i / Math.max(n, 1)) * Math.PI * 2 - Math.PI / 2;
     positions.set(node.id, {
       x: CENTER + radius * Math.cos(angle),
@@ -54,19 +55,59 @@ function layout(data: GraphData) {
   return positions;
 }
 
-export function GraphExplorer({
-  graphs,
-}: {
-  graphs: Record<GraphKind, GraphData>;
-}) {
+// Shortest path between two nodes over the undirected adjacency (BFS). Returns
+// the node-id chain, or null when unreachable.
+function shortestPath(from: string, to: string, neighbors: Map<string, Set<string>>): string[] | null {
+  if (from === to) return [from];
+  const prev = new Map<string, string | null>([[from, null]]);
+  const queue = [from];
+  while (queue.length) {
+    const node = queue.shift()!;
+    for (const next of neighbors.get(node) ?? []) {
+      if (!prev.has(next)) {
+        prev.set(next, node);
+        if (next === to) {
+          const chain: string[] = [];
+          let cur: string | null = to;
+          while (cur != null) {
+            chain.unshift(cur);
+            cur = prev.get(cur) ?? null;
+          }
+          return chain;
+        }
+        queue.push(next);
+      }
+    }
+  }
+  return null;
+}
+
+export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData> }) {
   const [active, setActive] = useState<GraphKind>("relationship");
   const [hovered, setHovered] = useState<string | null>(null);
-  const data = graphs[active];
-  const positions = layout(data);
-  const tab = TABS.find((t) => t.key === active)!;
+  const [selected, setSelected] = useState<string | null>(null);
+  const [traceFrom, setTraceFrom] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
 
-  // Adjacency for the hover highlight: the hovered node plus everything one hop
-  // away stays lit; the rest dims back.
+  const fullData = graphs[active];
+  const tab = TABS.find((t) => t.key === active)!;
+  const presentTypes = useMemo(() => [...new Set(fullData.nodes.map((n) => n.type))], [fullData]);
+
+  // Visible subgraph after type filtering — both nodes and any edge touching a
+  // hidden node drop out.
+  const data = useMemo(() => {
+    if (!hiddenTypes.size) return fullData;
+    const keep = new Set(fullData.nodes.filter((n) => !hiddenTypes.has(n.type)).map((n) => n.id));
+    return {
+      nodes: fullData.nodes.filter((n) => keep.has(n.id)),
+      edges: fullData.edges.filter((e) => keep.has(e.source) && keep.has(e.target)),
+    };
+  }, [fullData, hiddenTypes]);
+
+  const positions = layout(data.nodes);
+  const nodeById = useMemo(() => new Map(data.nodes.map((n) => [n.id, n])), [data]);
+
   const neighbors = useMemo(() => {
     const map = new Map<string, Set<string>>();
     for (const e of data.edges) {
@@ -78,11 +119,47 @@ export function GraphExplorer({
     return map;
   }, [data]);
 
-  const isLit = (id: string) =>
-    !hovered || id === hovered || neighbors.get(hovered)?.has(id);
+  // Trace path: active when a node is pinned as the source and a different node
+  // is selected as the target.
+  const tracePath = useMemo(() => {
+    if (traceFrom && selected && traceFrom !== selected) {
+      return shortestPath(traceFrom, selected, neighbors);
+    }
+    return null;
+  }, [traceFrom, selected, neighbors]);
+  const tracedSet = useMemo(() => (tracePath ? new Set(tracePath) : null), [tracePath]);
+  const tracedEdge = (a: string, b: string) => {
+    if (!tracePath) return false;
+    for (let i = 0; i < tracePath.length - 1; i++) {
+      if (
+        (tracePath[i] === a && tracePath[i + 1] === b) ||
+        (tracePath[i] === b && tracePath[i + 1] === a)
+      )
+        return true;
+    }
+    return false;
+  };
 
-  // Distinct legend entries for the types actually present.
-  const presentTypes = [...new Set(data.nodes.map((n) => n.type))];
+  const q = query.trim().toLowerCase();
+  const focus = hovered ?? selected;
+
+  // Whether a node reads as lit, given the active context (trace > focus > search).
+  function nodeLit(id: string): boolean {
+    if (tracedSet) return tracedSet.has(id);
+    if (focus) return id === focus || !!neighbors.get(focus)?.has(id);
+    if (q) return (nodeById.get(id)?.label ?? "").toLowerCase().includes(q);
+    return true;
+  }
+
+  const selectedNode = selected ? nodeById.get(selected) : null;
+
+  function onNodeClick(id: string) {
+    setSelected((cur) => (cur === id ? null : id));
+  }
+  function clearSelection() {
+    setSelected(null);
+    setTraceFrom(null);
+  }
 
   return (
     <div>
@@ -93,6 +170,8 @@ export function GraphExplorer({
             onClick={() => {
               setActive(t.key);
               setHovered(null);
+              clearSelection();
+              setHiddenTypes(new Set());
             }}
             className={`rounded-md px-4 py-1.5 text-sm transition ${
               active === t.key
@@ -107,45 +186,114 @@ export function GraphExplorer({
 
       <p className="mb-4 text-sm text-fg-secondary">{tab.hint}.</p>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-        {presentTypes.map((t) => (
-          <span key={t} className="flex items-center gap-1.5">
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: colorFor(t), boxShadow: `0 0 8px ${colorFor(t)}66` }}
-            />
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-              {t.replace(/_/g, " ")}
-            </span>
-          </span>
-        ))}
+      {/* Controls: search + type filters */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search nodes…"
+          className="min-w-[160px] flex-1 rounded-lg border border-line bg-surface-0 px-3 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+        />
         <span className="ml-auto font-mono text-[10px] text-fg-muted">
           {data.nodes.length} nodes · {data.edges.length} edges
         </span>
+      </div>
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {presentTypes.map((t) => {
+          const off = hiddenTypes.has(t);
+          return (
+            <button
+              key={t}
+              onClick={() =>
+                setHiddenTypes((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(t)) next.delete(t);
+                  else next.add(t);
+                  return next;
+                })
+              }
+              className={`flex items-center gap-1.5 transition ${off ? "opacity-35" : ""}`}
+              title={off ? "Show" : "Hide"}
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: colorFor(t), boxShadow: off ? "none" : `0 0 8px ${colorFor(t)}66` }}
+              />
+              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                {t.replace(/_/g, " ")}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {data.nodes.length === 0 ? (
         <div className="fx-card mt-6 p-10 text-center">
           <p className="text-sm text-fg-muted">
-            No {tab.label.toLowerCase()} graph data yet. As deals, funds,
-            investors and relationships accrue, they appear here.
+            No {tab.label.toLowerCase()} graph data yet. As deals, funds, investors and
+            relationships accrue, they appear here.
           </p>
         </div>
       ) : (
-        <div className="fx-card mt-4 overflow-hidden">
-          <svg
-            viewBox={`0 0 ${SIZE} ${SIZE}`}
-            className="h-auto w-full"
-            role="img"
-            aria-label={`${tab.label} graph`}
-          >
+        <div className="fx-card relative mt-4 overflow-hidden">
+          {/* Detail panel for the selected node. */}
+          {selectedNode ? (
+            <div className="absolute right-3 top-3 z-10 w-60 rounded-xl border border-line bg-surface-1/95 p-3 shadow-xl shadow-black/40 backdrop-blur">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: colorFor(selectedNode.type) }} />
+                    <p className="truncate text-sm font-medium text-fg-primary">{selectedNode.label || "—"}</p>
+                  </div>
+                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    {selectedNode.type.replace(/_/g, " ")} · {neighbors.get(selectedNode.id)?.size ?? 0} ties
+                  </p>
+                </div>
+                <button onClick={clearSelection} className="text-fg-muted transition hover:text-fg-primary" aria-label="Close">
+                  ✕
+                </button>
+              </div>
+
+              {tracePath ? (
+                <div className="mt-2 rounded-lg border border-gold-500/30 bg-gold-500/[0.06] px-2 py-1.5">
+                  <p className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                    Path · {tracePath.length - 1} hop{tracePath.length - 1 === 1 ? "" : "s"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-fg-secondary">
+                    {tracePath.map((id) => nodeById.get(id)?.label || "—").join(" → ")}
+                  </p>
+                </div>
+              ) : traceFrom === selectedNode.id ? (
+                <p className="mt-2 text-xs text-fg-muted">Pinned as source — click another node to trace a path.</p>
+              ) : traceFrom ? (
+                <p className="mt-2 text-xs text-status-danger">No path from the pinned source.</p>
+              ) : null}
+
+              <div className="mt-2 flex gap-1.5">
+                <button
+                  onClick={() => setTraceFrom(selectedNode.id)}
+                  className="flex-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary"
+                >
+                  Trace from here
+                </button>
+                {traceFrom ? (
+                  <button
+                    onClick={() => setTraceFrom(null)}
+                    className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
+                  >
+                    Reset
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-auto w-full" role="img" aria-label={`${tab.label} graph`}>
             <defs>
-              {/* Soft vignette so the radial layout sits in a lit well. */}
               <radialGradient id="fx-graph-bg" cx="50%" cy="42%" r="65%">
                 <stop offset="0%" stopColor="#1C1A16" />
                 <stop offset="100%" stopColor="#0B0A08" />
               </radialGradient>
-              {/* Gentle glow used on the focused node. */}
               <filter id="fx-node-glow" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur stdDeviation="3" result="b" />
                 <feMerge>
@@ -157,12 +305,22 @@ export function GraphExplorer({
 
             <rect x="0" y="0" width={SIZE} height={SIZE} fill="url(#fx-graph-bg)" />
 
-            {/* Edges first so nodes render on top. */}
             {data.edges.map((e, i) => {
               const a = positions.get(e.source);
               const b = positions.get(e.target);
               if (!a || !b) return null;
-              const lit = !hovered || e.source === hovered || e.target === hovered;
+              const onTrace = tracedEdge(e.source, e.target);
+              const lit = tracedSet
+                ? onTrace
+                : focus
+                  ? e.source === focus || e.target === focus
+                  : q
+                    ? nodeLit(e.source) || nodeLit(e.target)
+                    : true;
+              // Tie strength → stroke weight (relationship graph); structural
+              // edges fall back to a hairline.
+              const baseWidth = e.strength != null ? 0.75 + (Math.min(100, e.strength) / 100) * 2 : 1;
+              const highlight = onTrace || (!!focus && lit);
               return (
                 <line
                   key={i}
@@ -170,34 +328,37 @@ export function GraphExplorer({
                   y1={a.y}
                   x2={b.x}
                   y2={b.y}
-                  stroke={lit && hovered ? "#D4AF6A" : "#4a4a4a"}
-                  strokeWidth={lit && hovered ? 1.5 : 1}
-                  strokeOpacity={hovered ? (lit ? 0.7 : 0.08) : 0.45}
+                  stroke={highlight ? "#D4AF6A" : "#4a4a4a"}
+                  strokeWidth={highlight ? baseWidth + 0.75 : baseWidth}
+                  strokeOpacity={lit ? (highlight ? 0.85 : 0.45) : 0.07}
                   style={{ transition: "stroke 0.2s, stroke-opacity 0.2s" }}
                 />
               );
             })}
+
             {data.nodes.map((node) => {
               const p = positions.get(node.id)!;
               const onRight = p.x >= CENTER;
-              const lit = isLit(node.id);
-              const focused = hovered === node.id;
+              const lit = nodeLit(node.id);
+              const focused = focus === node.id || selected === node.id;
+              const pinned = traceFrom === node.id || (tracedSet?.has(node.id) ?? false);
               return (
                 <g
                   key={node.id}
                   onMouseEnter={() => setHovered(node.id)}
                   onMouseLeave={() => setHovered(null)}
+                  onClick={() => onNodeClick(node.id)}
                   style={{ cursor: "pointer", transition: "opacity 0.2s" }}
-                  opacity={lit ? 1 : 0.25}
+                  opacity={lit ? 1 : 0.22}
                 >
                   <circle
                     cx={p.x}
                     cy={p.y}
-                    r={focused ? 9 : 6}
+                    r={focused ? 9 : pinned ? 8 : 6}
                     fill={colorFor(node.type)}
-                    stroke={focused ? "#F5F1E8" : "#1a1a1a"}
-                    strokeWidth={focused ? 2 : 1.5}
-                    filter={focused ? "url(#fx-node-glow)" : undefined}
+                    stroke={focused || pinned ? "#F5F1E8" : "#1a1a1a"}
+                    strokeWidth={focused || pinned ? 2 : 1.5}
+                    filter={focused || pinned ? "url(#fx-node-glow)" : undefined}
                     style={{ transition: "r 0.15s ease" }}
                   />
                   <text
@@ -207,9 +368,7 @@ export function GraphExplorer({
                     className={focused ? "fill-fg-primary" : "fill-fg-secondary"}
                     style={{ fontSize: focused ? 11 : 10, fontWeight: focused ? 600 : 400 }}
                   >
-                    {node.label.length > 28
-                      ? `${node.label.slice(0, 27)}…`
-                      : node.label}
+                    {node.label.length > 28 ? `${node.label.slice(0, 27)}…` : node.label}
                   </text>
                 </g>
               );

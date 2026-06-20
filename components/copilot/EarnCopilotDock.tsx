@@ -20,6 +20,7 @@ import {
   type CopilotBriefing,
 } from "@/components/copilot/actions";
 import { ReviewFeed } from "@/components/copilot/ReviewFeed";
+import { EarnOrb } from "@/components/copilot/EarnOrb";
 import type { Mandate } from "@/lib/gates";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
@@ -48,6 +49,20 @@ type Turn =
     };
 
 /**
+ * Routes where the Earn dock is suppressed: the session/workspace surfaces
+ * (which *are* an Earn conversation, so the floating dock is redundant) and the
+ * Workflows screen. Matched against the pathname.
+ */
+function dockHiddenOn(pathname: string): boolean {
+  return (
+    pathname === "/workspace" ||
+    pathname === "/sessions" ||
+    pathname === "/automations" ||
+    pathname.startsWith("/session/")
+  );
+}
+
+/**
  * The app-wide Earn copilot dock: a ⌘K slide-over present on every page that
  * reads the operator's current location, surfaces the on-point specialist plus
  * a live briefing and context suggestions, and maintains a multi-turn
@@ -55,6 +70,7 @@ type Turn =
  */
 export function EarnCopilotDock({ name }: { name: string }) {
   const pathname = usePathname() || "/";
+  const hidden = dockHiddenOn(pathname);
   const ctx = copilotContextFromPath(pathname);
   const specialist = AGENT_BY_KEY[onPointAgent(ctx)];
   const suggestions = suggestionsFor(ctx);
@@ -129,8 +145,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
     inputRef.current?.focus();
   }
 
-  // ⌘/Ctrl-K toggles the dock; Esc closes it.
+  // ⌘/Ctrl-K toggles the dock; Esc closes it. Inert where the dock is hidden.
   useEffect(() => {
+    if (hidden) return;
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -141,7 +158,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [hidden]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
@@ -187,6 +204,10 @@ export function EarnCopilotDock({ name }: { name: string }) {
     ask(body);
   }
 
+  // Suppressed on the session/workspace and Workflows screens (hooks above run
+  // unconditionally to satisfy the rules of hooks).
+  if (hidden) return null;
+
   return (
     <>
       {/* Launcher */}
@@ -196,7 +217,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
           title="Ask Earn (⌘K)"
           className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-gold-500/40 bg-surface-1 px-4 py-2.5 text-sm font-medium text-gold-300 shadow-lg shadow-black/40 transition hover:bg-surface-2 print:hidden"
         >
-          <span className="text-base leading-none">✶</span>
+          <EarnOrb size={22} pulse />
           Ask Earn
           <kbd className="ml-1 hidden rounded border border-line px-1 font-mono text-[10px] text-fg-muted sm:inline">⌘K</kbd>
         </button>
@@ -214,9 +235,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
         <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 text-sm text-gold-300">
-                ✶
-              </span>
+              <EarnOrb size={28} />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-fg-primary">Earn</p>
                 <p className="truncate font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -395,7 +414,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                 )}
                 {pending ? (
                   <div className="mr-6 inline-flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-fg-muted">
-                    <span className="animate-pulse">✶</span> Earn is routing your ask…
+                    <EarnOrb size={16} pulse /> Earn is routing your ask…
                   </div>
                 ) : null}
                 <div ref={threadEndRef} />

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { getInbox } from "@/lib/inbox";
+import { InboxView } from "@/components/inbox/InboxView";
 import { getInboxThreads } from "@/lib/inbox/data";
 import {
   buildDigest,
@@ -15,16 +17,32 @@ import { InboxBoard, type InboxCardData } from "./InboxBoard";
 
 export const dynamic = "force-dynamic";
 
+// Standardized section heading — a short gold tick before a mono-cased label.
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="mb-3 flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fg-muted">
+      <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
+      {children}
+    </h2>
+  );
+}
+
 export default async function InboxPage() {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = createServerClient();
-  const views = await getInboxThreads(supabase);
+  // Two lanes, one inbox: the action queue ("needs you" — approvals, overdue
+  // diligence, IC-ready deals, open risks) and the unified communications
+  // stream (booking / messaging / video), each fetched in parallel.
+  const [inbox, views] = await Promise.all([
+    getInbox(ctx.orgId),
+    getInboxThreads(supabase),
+  ]);
 
-  // Prepare every display field on the server so the client board never imports
-  // the intelligence module (and its AI SDK) into the browser bundle.
+  // Prepare every comms display field on the server so the client board never
+  // imports the intelligence module (and its AI SDK) into the browser bundle.
   const cards: InboxCardData[] = views.map(({ thread, context }) => {
     const meta = channelMeta(thread.channel);
     const move = suggestedAction(thread);
@@ -73,7 +91,10 @@ export default async function InboxPage() {
           <h1 className="mt-2.5 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-[2rem]">
             One inbox, triaged
           </h1>
-          <p className="mt-1.5 text-sm text-fg-secondary">{digest.headline}</p>
+          <p className="mt-1.5 text-sm text-fg-secondary">
+            What needs you — and every booking, message, and video thread — in one
+            ranked place. {digest.headline}
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <form action={seedInboxDemo}>
@@ -89,7 +110,17 @@ export default async function InboxPage() {
         </div>
       </header>
 
-      <InboxBoard cards={cards} />
+      {/* Lane 1 — the action queue: what the operator must act on. */}
+      <section className="mb-8">
+        <SectionHeading>Needs you</SectionHeading>
+        <InboxView inbox={inbox} />
+      </section>
+
+      {/* Lane 2 — unified communications: booking, messaging, video. */}
+      <section>
+        <SectionHeading>Communications</SectionHeading>
+        <InboxBoard cards={cards} />
+      </section>
     </div>
   );
 }

@@ -1,4 +1,4 @@
--- 0038_inbox.sql
+-- 0040_inbox.sql
 -- The Unified Inbox — one intelligence-ranked stream for every counterparty
 -- touchpoint that today lives across a dozen disconnected tools: email/chat
 -- messages, booking requests, and video meetings. It is the inbound counterpart

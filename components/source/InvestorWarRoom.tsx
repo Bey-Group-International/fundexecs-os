@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PrintButton } from "@/components/PrintButton";
 import type { InvestorWarRoom as WarRoom } from "@/lib/source-war-room";
 import { formatCompactCurrency } from "@/lib/source-war-room";
 import type { Temperature, NextAction } from "@/lib/capital-map";
@@ -76,7 +77,7 @@ function Header({ data }: { data: WarRoom }) {
   const fit = thesisFit?.score ?? 0;
   const temp = TEMP_META[temperature];
   return (
-    <div className="rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-4 sm:gap-5">
         <div className="relative shrink-0">
           <Ring value={fit} />
@@ -151,7 +152,7 @@ function Commitments({ data }: { data: WarRoom }) {
   const { commitments, committedTotal, calledTotal, distributedTotal } = data;
   const uncalled = committedTotal - calledTotal;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
           <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -198,7 +199,7 @@ function Commitments({ data }: { data: WarRoom }) {
 function CapitalFlows({ data }: { data: WarRoom }) {
   const { capitalEvents } = data;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
           <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{capitalEvents.length} events</span>
@@ -252,7 +253,7 @@ function NextActionItem({ action }: { action: NextAction }) {
 function NextActions({ data }: { data: WarRoom }) {
   const { nextActions } = data;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Next best actions</SectionTitle>
       {nextActions.length ? (
         <ul className="flex flex-col gap-2.5">
@@ -271,7 +272,7 @@ function Relationships({ data }: { data: WarRoom }) {
   const { relationships, introPath } = data;
   if (!relationships.length && !introPath) return null;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Relationships & intro path</SectionTitle>
       {introPath ? (
         <div className="mb-3 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2.5">
@@ -313,12 +314,15 @@ function Relationships({ data }: { data: WarRoom }) {
 export function InvestorWarRoom({ data }: { data: WarRoom }) {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
-      <Link
-        href="/source/lp_pipeline"
-        className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
-      >
-        ← LP pipeline
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/source/lp_pipeline"
+          className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
+        >
+          ← LP pipeline
+        </Link>
+        <PrintButton />
+      </div>
       <Header data={data} />
       <Commitments data={data} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

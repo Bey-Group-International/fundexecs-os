@@ -71,6 +71,44 @@ export function planPrice(plan: Plan, interval: PlanInterval): number {
   return interval === "annual" ? plan.annual : plan.monthly;
 }
 
+// Credits granted up front when starting a plan on the given interval. Annual
+// plans front-load the full year (12 months) of credits — and since unused
+// credits roll over while the plan is active, that compounds in the operator's
+// favor.
+export function planGrantCredits(plan: Plan, interval: PlanInterval): number {
+  return interval === "annual" ? plan.creditsPerMonth * 12 : plan.creditsPerMonth;
+}
+
+// Annual billing saves two months versus paying monthly (annual ≈ 10× monthly).
+export function annualSavingsUsd(plan: Plan): number {
+  return plan.monthly * 12 - plan.annual;
+}
+export function annualSavingsPct(plan: Plan): number {
+  const monthlyYear = plan.monthly * 12;
+  return monthlyYear === 0 ? 0 : Math.round((annualSavingsUsd(plan) / monthlyYear) * 100);
+}
+
+// Loyalty bonus — a standing reward that grows with continuous-subscription
+// tenure, capped so it stays sustainable. Every full month on a plan adds
+// LOYALTY_STEP to the monthly bonus credits, up to LOYALTY_CAP. This makes
+// staying subscribed compound: the longer you run on FundExecs, the more credits
+// each month quietly delivers.
+export const LOYALTY_STEP = 50; // bonus credits added per month of tenure
+export const LOYALTY_CAP = 1_000; // max monthly loyalty bonus
+
+export function loyaltyBonus(tenureMonths: number): number {
+  return Math.min(LOYALTY_CAP, Math.max(0, Math.floor(tenureMonths)) * LOYALTY_STEP);
+}
+
+/** Whole months between `since` and now (0 if missing/future). */
+export function tenureMonths(since: string | null | undefined): number {
+  if (!since) return 0;
+  const start = new Date(since).getTime();
+  if (!Number.isFinite(start)) return 0;
+  const months = (Date.now() - start) / (1000 * 60 * 60 * 24 * 30.44);
+  return Math.max(0, Math.floor(months));
+}
+
 export function formatUsd(n: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }

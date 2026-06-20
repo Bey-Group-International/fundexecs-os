@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
-import type { MarketplaceListing, MarketplaceStatus } from "@/lib/supabase/database.types";
+import type { Investor, MarketplaceListing, MarketplaceStatus } from "@/lib/supabase/database.types";
+import { rankInvestorsForListing, type InvestorMatch, type ListingContext } from "@/lib/matching";
 import { NewListingForm } from "./NewListingForm";
-import { updateListingStatus, toggleListingPublic, deleteListing } from "./actions";
+import { updateListingStatus, toggleListingPublic, deleteListing, queueListingOutreach } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -54,11 +55,27 @@ export default async function MarketplacePage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = createServerClient();
-  const { data } = await supabase
-    .from("marketplace_listings")
-    .select("*")
-    .order("created_at", { ascending: false });
-  const listings = (data ?? []) as MarketplaceListing[];
+  const [listingsRes, investorsRes, dealsRes] = await Promise.all([
+    supabase.from("marketplace_listings").select("*").order("created_at", { ascending: false }),
+    supabase.from("investors").select("*").limit(500),
+    supabase.from("deals").select("id, name, geography, asset_class").limit(500),
+  ]);
+  const listings = (listingsRes.data ?? []) as MarketplaceListing[];
+  const investors = (investorsRes.data ?? []) as Investor[];
+  const deals = (dealsRes.data ?? []) as { id: string; name: string; geography: string | null; asset_class: string | null }[];
+
+  // Score every listing against this firm's investors so each card can show
+  // "who should I take this to?" — the inverse of the Capital Map's view.
+  const dealCtx = new Map<string, ListingContext>();
+  for (const d of deals) dealCtx.set(d.id, { geography: d.geography, assetClass: d.asset_class });
+  const matchesByListing: Record<string, InvestorMatch[]> = {};
+  if (investors.length) {
+    for (const l of listings) {
+      const ctx = (l.deal_id && dealCtx.get(l.deal_id)) || {};
+      const m = rankInvestorsForListing(l, investors, { ctx, limit: 3 });
+      if (m.length) matchesByListing[l.id] = m;
+    }
+  }
 
   const grouped = STATUS_ORDER.map((status) => ({
     status,
@@ -133,7 +150,7 @@ export default async function MarketplacePage() {
         </div>
       ) : null}
 
-      <NewListingForm />
+      <NewListingForm deals={deals.map((d) => ({ id: d.id, name: d.name }))} />
 
       <section className="mt-8">
         <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
@@ -217,6 +234,33 @@ export default async function MarketplacePage() {
                             </form>
                           </div>
                         </div>
+
+                        {/* Best-fit investors for this listing — take it straight
+                            to them through a gated outreach. */}
+                        {matchesByListing[l.id]?.length ? (
+                          <div className="mt-3 rounded-lg border border-gold-500/25 bg-gold-500/[0.05] p-3">
+                            <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                              Best-fit investors
+                            </p>
+                            <div className="mt-1.5 flex flex-col gap-1.5">
+                              {matchesByListing[l.id].map((m) => (
+                                <div key={m.investor.id} className="flex items-center justify-between gap-2">
+                                  <span className="min-w-0 truncate text-sm text-fg-primary">
+                                    {m.investor.name}
+                                    <span className="ml-1.5 font-mono text-[11px] text-gold-300">{m.score} fit</span>
+                                  </span>
+                                  <form action={queueListingOutreach} className="shrink-0">
+                                    <input type="hidden" name="investor_id" value={m.investor.id} />
+                                    <input type="hidden" name="listing_title" value={l.title} />
+                                    <button className="rounded-md border border-line px-2.5 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary">
+                                      Queue outreach
+                                    </button>
+                                  </form>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
