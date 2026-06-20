@@ -132,6 +132,7 @@ export async function runTriage(prompt: string): Promise<RunTriageResult> {
     const { data } = await supabase
       .from(cfg.table as "investors")
       .select("*")
+      .eq("organization_id", orgId)
       .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(30);

@@ -44,6 +44,7 @@ export function SourceTriage({
   const [summary, setSummary] = useState("");
   const [groups, setGroups] = useState<TriageGroup[]>([]);
   const [queued, setQueued] = useState<Set<string>>(new Set());
+  const [queueing, setQueueing] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const ranInitial = useRef(false);
@@ -60,15 +61,20 @@ export function SourceTriage({
     setQueued(new Set());
     setNotes({});
 
-    const res = await runTriage(clean);
-    if (!res.ok || !res.groups) {
-      setError(res.error ?? "Could not run the triage.");
+    try {
+      const res = await runTriage(clean);
+      if (!res.ok || !res.groups) {
+        setError(res.error ?? "Could not run the triage.");
+        setPhase("idle");
+        return;
+      }
+      setSummary(res.summary ?? "");
+      setGroups(res.groups);
+      setPhase("done");
+    } catch {
+      setError("Could not run the triage.");
       setPhase("idle");
-      return;
     }
-    setSummary(res.summary ?? "");
-    setGroups(res.groups);
-    setPhase("done");
   }
 
   // Auto-run when arriving with a prefilled query (e.g. from a module panel).
@@ -82,20 +88,32 @@ export function SourceTriage({
 
   async function queue(group: TriageGroup, id: string, name: string, action: ActionKind, label: string) {
     const key = `${group.module}:${id}`;
-    const res = await queueSourceAction({
-      hub: "source",
-      module: group.module.replace(/^source\//, ""),
-      name,
-      email: group.rowEmail[id],
-      action,
-      label,
-    });
-    if (!res.ok) {
-      setNotes((prev) => ({ ...prev, [key]: res.error ?? "Could not queue the action." }));
-      return;
+    if (queued.has(key) || queueing.has(key)) return;
+    setQueueing((prev) => new Set(prev).add(key));
+    try {
+      const res = await queueSourceAction({
+        hub: "source",
+        module: group.module.replace(/^source\//, ""),
+        name,
+        email: group.rowEmail[id],
+        action,
+        label,
+      });
+      if (!res.ok) {
+        setNotes((prev) => ({ ...prev, [key]: res.error ?? "Could not queue the action." }));
+        return;
+      }
+      setQueued((prev) => new Set(prev).add(key));
+      setNotes((prev) => ({ ...prev, [key]: res.message ?? "Queued." }));
+    } catch {
+      setNotes((prev) => ({ ...prev, [key]: "Could not queue the action." }));
+    } finally {
+      setQueueing((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
-    setQueued((prev) => new Set(prev).add(key));
-    setNotes((prev) => ({ ...prev, [key]: res.message ?? "Queued." }));
   }
 
   const hasResults = groups.some((g) => g.scores.length > 0);
@@ -220,6 +238,7 @@ export function SourceTriage({
                   {g.scores.map((s) => {
                     const key = `${g.module}:${s.id}`;
                     const isQueued = queued.has(key);
+                    const isQueueing = queueing.has(key);
                     return (
                       <div
                         key={s.id}
@@ -242,10 +261,10 @@ export function SourceTriage({
                         <button
                           type="button"
                           onClick={() => queue(g, s.id, s.name, s.action as ActionKind, s.actionLabel)}
-                          disabled={isQueued}
+                          disabled={isQueued || isQueueing}
                           className="shrink-0 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-200 transition hover:bg-gold-500/20 disabled:opacity-50"
                         >
-                          {isQueued ? "Queued ✓" : `Queue: ${s.actionLabel}`}
+                          {isQueued ? "Queued ✓" : isQueueing ? "Queueing…" : `Queue: ${s.actionLabel}`}
                         </button>
                       </div>
                     );

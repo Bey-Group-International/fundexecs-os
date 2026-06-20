@@ -177,6 +177,7 @@ export async function runSourceStep(args: {
   const { data } = await supabase
     .from(cfg.table as "investors")
     .select("name")
+    .eq("organization_id", orgId)
     .is("archived_at", null)
     .limit(60);
   const existing = ((data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
