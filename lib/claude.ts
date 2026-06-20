@@ -423,6 +423,82 @@ function fallbackAssetFields(args: { title: string; prompt: string; context: str
 }
 
 // ---------------------------------------------------------------------------
+// Entity ownership extraction — Earn drafts a cap table for a firm vehicle from
+// a plain-language description. Deterministic regex fallback when no API key.
+// ---------------------------------------------------------------------------
+export interface OwnershipDraftRow {
+  stakeholder: string;
+  kind: string;
+  share_class: string | null;
+  ownership_pct: number | null;
+  units: number | null;
+}
+
+const OWNERSHIP_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    rows: {
+      type: "array",
+      description: "One row per stakeholder/holder named in the description.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          stakeholder: { type: "string", description: "Holder name" },
+          kind: { type: "string", enum: ["person", "entity", "investor", "fund", "pool", "other"] },
+          share_class: { type: ["string", "null"], description: "e.g. Common, GP interest, Option pool" },
+          ownership_pct: { type: ["number", "null"], description: "Ownership percentage if stated" },
+          units: { type: ["number", "null"], description: "Unit/share count if stated" },
+        },
+        required: ["stakeholder", "kind", "share_class", "ownership_pct", "units"],
+      },
+    },
+  },
+  required: ["rows"],
+} as const;
+
+function fallbackOwnership(description: string): OwnershipDraftRow[] {
+  const rows: OwnershipDraftRow[] = [];
+  const re = /([A-Za-z][\w&.'\- ]{1,60}?)\s*[—:\-–]?\s*(\d{1,3}(?:\.\d+)?)\s*%/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(description)) !== null) {
+    const name = m[1].trim().replace(/\s+/g, " ");
+    const pct = Number(m[2]);
+    if (name && Number.isFinite(pct)) {
+      rows.push({ stakeholder: name, kind: /pool|option/i.test(name) ? "pool" : "person", share_class: null, ownership_pct: pct, units: null });
+    }
+  }
+  return rows;
+}
+
+export async function extractOwnership(args: {
+  description: string;
+  entityName: string;
+}): Promise<OwnershipDraftRow[]> {
+  const anthropic = client();
+  if (!anthropic) return fallbackOwnership(args.description);
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 1500,
+      system:
+        `Extract the ownership/cap-table of the firm vehicle "${args.entityName}" from the description. ` +
+        `Return rows of holders with ownership % and/or units and a share class where stated. ` +
+        `Do not invent holders or numbers; omit what isn't stated.`,
+      output_config: { effort: "low", format: { type: "json_schema", schema: OWNERSHIP_SCHEMA } },
+      messages: [{ role: "user", content: args.description }],
+    });
+    const json = textOf(message);
+    if (!json) return fallbackOwnership(args.description);
+    const parsed = JSON.parse(json) as { rows?: OwnershipDraftRow[] };
+    return Array.isArray(parsed.rows) ? parsed.rows : fallbackOwnership(args.description);
+  } catch {
+    return fallbackOwnership(args.description);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Conversational document drafting — the Earn mode in the data-room builder.
 // Earn drafts/revises a document through chat, grounded in the firm's data.
 // Returns a short reply plus the full revised document content (markdown).
