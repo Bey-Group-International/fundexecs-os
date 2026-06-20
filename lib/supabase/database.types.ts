@@ -65,7 +65,7 @@ export type TaskStatus =
   | "completed"
   | "failed"
   | "cancelled";
-export type ApprovalDecision = "pending" | "approved" | "rejected" | "regenerate";
+export type ApprovalDecision = "pending" | "approved" | "rejected" | "regenerate" | "accepted";
 export type DiligenceStatus = "open" | "in_review" | "cleared" | "flagged" | "waived";
 export type ArtifactType =
   | "ic_memo"

@@ -155,6 +155,48 @@ export async function generatePlan(
   }
 }
 
+const QUESTIONS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    questions: {
+      type: "array",
+      description: "0-3 short clarifying questions. Empty if the request is already clear.",
+      items: { type: "string" },
+    },
+  },
+  required: ["questions"],
+} as const;
+
+// Earn asks the operator: surface the few things it genuinely needs to know to
+// complete the work well. Returns [] when the request is clear — or when there's
+// no API key, so fallback mode never blocks the loop.
+export async function generateClarifyingQuestions(prompt: string): Promise<string[]> {
+  const anthropic = client();
+  if (!anthropic) return [];
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      system:
+        "You are Earn, the command layer of FundExecs OS. Before executing an operator's request, ask only the clarifying questions that materially change the work (scope, constraints, targets, definitions). Ask nothing if the request is already actionable. Never ask more than 3. Keep each question to one short sentence.",
+      output_config: { effort: "low", format: { type: "json_schema", schema: QUESTIONS_SCHEMA } },
+      messages: [{ role: "user", content: prompt }],
+    });
+    const json = textOf(message);
+    if (!json) return [];
+    const raw = JSON.parse(json) as { questions?: unknown };
+    if (!Array.isArray(raw.questions)) return [];
+    return raw.questions
+      .filter((q): q is string => typeof q === "string")
+      .map((q) => q.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
 export async function executeStep(args: {
   workflowTitle: string;
   agent: AgentKey;

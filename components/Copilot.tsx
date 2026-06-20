@@ -66,6 +66,8 @@ export default function Copilot({
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [clarifying, setClarifying] = useState(false);
+  const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -127,15 +129,35 @@ export default function Copilot({
     startTransition(() => router.refresh());
   }
 
-  async function decide(approvalId: string, decision: "approved" | "rejected" | "regenerate") {
+  async function decide(
+    approvalId: string,
+    decision: "approved" | "rejected" | "regenerate" | "accepted",
+    note?: string,
+  ) {
     setBusy(true);
     await fetch("/api/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approval_id: approvalId, decision }),
+      body: JSON.stringify({ approval_id: approvalId, decision, note }),
     }).catch(() => {});
+    setClarify(null);
     setBusy(false);
     startTransition(() => router.refresh());
+  }
+
+  // "Ask questions to complete" — Earn surfaces what it needs to know. The
+  // operator's answers refine the plan (a re-gated regenerate).
+  async function askQuestions(workflowId: string) {
+    setClarifying(true);
+    const res = await fetch("/api/clarify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workflow_id: workflowId }),
+    }).catch(() => null);
+    const data = res?.ok ? await res.json().catch(() => null) : null;
+    const questions: string[] = Array.isArray(data?.questions) ? data.questions : [];
+    setClarify({ workflowId, questions, answer: "" });
+    setClarifying(false);
   }
 
   // Conversation order: oldest turn first, newest nearest the composer.
@@ -182,6 +204,11 @@ export default function Copilot({
               busy={busy}
               decide={decide}
               primary={b.approval?.decision === "pending"}
+              clarifying={clarifying}
+              clarify={clarify?.workflowId === b.workflow.id ? clarify : null}
+              onAsk={() => askQuestions(b.workflow.id)}
+              onAnswerChange={(v) => setClarify((c) => (c ? { ...c, answer: v } : c))}
+              onCancelClarify={() => setClarify(null)}
             />
           </div>
         ))}
@@ -274,13 +301,24 @@ function WorkflowCard({
   busy,
   decide,
   primary,
+  clarifying,
+  clarify,
+  onAsk,
+  onAnswerChange,
+  onCancelClarify,
 }: {
   bundle: WorkflowBundle;
   busy: boolean;
-  decide: (id: string, d: "approved" | "rejected" | "regenerate") => void;
+  decide: (id: string, d: "approved" | "rejected" | "regenerate" | "accepted", note?: string) => void;
   primary?: boolean;
+  clarifying: boolean;
+  clarify: { questions: string[]; answer: string } | null;
+  onAsk: () => void;
+  onAnswerChange: (v: string) => void;
+  onCancelClarify: () => void;
 }) {
   const { workflow, approval } = bundle;
+  const pending = approval && approval.decision === "pending";
   return (
     <article className={`rounded-xl border bg-surface-1 p-5 ${primary ? "border-gold-500/30" : "border-line"}`}>
       <div className="flex items-start justify-between gap-3">
@@ -299,16 +337,77 @@ function WorkflowCard({
         <WorkflowSteps bundle={bundle} />
       </div>
 
-      {approval && approval.decision === "pending" ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
-          <span className="text-xs text-fg-secondary">{approval.summary}</span>
-          <div className="ml-auto flex gap-2">
+      {pending ? (
+        <div className="mt-4 border-t border-line pt-4">
+          <p className="text-xs text-fg-secondary">{approval.summary}</p>
+
+          {/* Clarify panel — Earn's questions for the operator. */}
+          {clarify ? (
+            <div className="mt-3 rounded-lg border border-gold-500/30 bg-surface-2 p-3">
+              {clarify.questions.length > 0 ? (
+                <>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                    Earn needs to know
+                  </p>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-fg-secondary">
+                    {clarify.questions.map((q, i) => (
+                      <li key={i}>{q}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="text-xs text-fg-secondary">
+                  Earn has no blocking questions — add any extra detail to refine the plan, or just approve.
+                </p>
+              )}
+              <textarea
+                value={clarify.answer}
+                onChange={(e) => onAnswerChange(e.target.value)}
+                rows={3}
+                placeholder="Answer Earn — your reply refines the plan…"
+                className="mt-2 w-full rounded-md border border-line bg-surface-1 px-3 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
+              />
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  disabled={busy}
+                  onClick={onCancelClarify}
+                  className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface-3 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={busy || !clarify.answer.trim()}
+                  onClick={() => decide(approval.id, "regenerate", clarify.answer.trim())}
+                  className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 hover:bg-gold-300 disabled:opacity-50"
+                >
+                  Submit &amp; refine
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               disabled={busy}
               onClick={() => decide(approval.id, "approved")}
               className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 hover:bg-gold-300 disabled:opacity-50"
             >
               Approve &amp; automate
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => decide(approval.id, "accepted")}
+              title="Accept the plan as the recommendation — agents won't run"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 hover:bg-gold-500/20 disabled:opacity-50"
+            >
+              Accept recommendation
+            </button>
+            <button
+              disabled={busy || clarifying}
+              onClick={onAsk}
+              className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface-3 disabled:opacity-50"
+            >
+              {clarifying ? "Asking…" : "Ask questions"}
             </button>
             <button
               disabled={busy}

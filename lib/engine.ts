@@ -9,6 +9,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { AgentKey, Hub, GraphKind, ArtifactType, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
 import { generatePlan, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
+import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
 
@@ -516,10 +517,69 @@ export async function runAutomation(
   return { workflowId: workflow.id, executed: false };
 }
 
+/**
+ * Accept a plan as the recommendation: no agents execute. The plan (summary +
+ * ordered steps) is promoted to a memo artifact so it's a durable deliverable,
+ * and the workflow is marked complete.
+ */
+async function acceptRecommendation(ctx: Ctx, wf: Task) {
+  const { data: stepData } = await ctx.supabase
+    .from("tasks")
+    .select("*")
+    .eq("parent_task_id", wf.id)
+    .order("step_order", { ascending: true });
+  const steps = (stepData ?? []) as Task[];
+
+  const body =
+    `# ${wf.title}\n\n` +
+    `Accepted as the recommendation — agents were not run.\n\n` +
+    `## Recommended approach\n` +
+    steps
+      .map((s, i) => {
+        const agent = AGENTS.find((a) => a.key === s.assigned_agent)?.name ?? s.assigned_agent;
+        return `${i + 1}. **${s.title}** — ${s.description ?? ""} _(${agent})_`;
+      })
+      .join("\n");
+
+  const { data: artifact } = await ctx.supabase
+    .from("artifacts")
+    .insert({
+      organization_id: ctx.orgId,
+      workflow_id: wf.id,
+      step_id: null,
+      title: `${wf.title} — Recommendation`,
+      artifact_type: "memo",
+      agent: "associate",
+      hub: wf.hub,
+      content: body,
+      created_by: ctx.actorId,
+    })
+    .select("id")
+    .single();
+
+  await ctx.supabase
+    .from("tasks")
+    .update({
+      status: "completed",
+      progress: 1,
+      completed_at: new Date().toISOString(),
+      result: { accepted: true, recommendation: true } as Json,
+    })
+    .eq("id", wf.id);
+
+  await recordEvent(ctx, {
+    taskId: wf.id,
+    type: "artifact.created",
+    agent: "associate",
+    hub: wf.hub,
+    payload: { artifact_id: artifact?.id, artifact_type: "memo", title: `${wf.title} — Recommendation` },
+  });
+}
+
 /** POST /approve — capture the human decision and drive automation. */
 export async function decideApproval(
   ctx: Ctx,
-  args: { approvalId: string; decision: "approved" | "rejected" | "regenerate"; note?: string },
+  args: { approvalId: string; decision: "approved" | "rejected" | "regenerate" | "accepted"; note?: string },
 ) {
   const { data: approval } = await ctx.supabase
     .from("approvals")
@@ -556,6 +616,10 @@ export async function decideApproval(
 
   if (args.decision === "approved") {
     await executeWorkflow(ctx, wf);
+  } else if (args.decision === "accepted") {
+    // Accept: the plan stands as the recommendation — no agents run. Capture it
+    // as a first-class artifact and mark the workflow done.
+    await acceptRecommendation(ctx, wf);
   } else if (args.decision === "rejected") {
     await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
     await ctx.supabase
@@ -563,9 +627,12 @@ export async function decideApproval(
       .update({ status: "cancelled" })
       .eq("parent_task_id", wf.id);
   } else {
-    // regenerate: build a fresh plan from the original prompt and re-gate.
-    const plan = await generatePlan(wf.description ?? wf.title);
-    await materializePlan(ctx, wf.description ?? wf.title, plan, { workflowId: wf.id });
+    // regenerate: build a fresh plan from the original prompt and re-gate. A note
+    // (e.g. answers to Earn's clarifying questions) refines the new plan.
+    const base = wf.description ?? wf.title;
+    const context = args.note?.trim() ? [`Operator clarification: ${args.note.trim()}`] : [];
+    const plan = await generatePlan(base, context);
+    await materializePlan(ctx, base, plan, { workflowId: wf.id });
   }
 
   return { workflowId: wf.id, decision: args.decision };
