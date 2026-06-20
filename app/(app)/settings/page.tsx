@@ -11,7 +11,7 @@ import { SecretVault, type OrgSecretView } from "./SecretVault";
 import { GuidedTourSetting } from "./GuidedTourSetting";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { TIER_2_ACTIONS } from "./tier2-actions";
-import { deactivateMandate } from "./actions";
+import { deactivateMandate, setDiscoverable } from "./actions";
 import { vaultConfigured } from "@/lib/vault";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +76,15 @@ export default async function SettingsPage() {
     updated_at: s.updated_at,
   }));
 
+  // Ecosystem discoverability — drives the toggle below. Defaults to on for a
+  // freshly onboarded org (the column default), so treat a null as discoverable.
+  const { data: orgRow } = await supabase
+    .from("organizations")
+    .select("discoverable")
+    .eq("id", ctx.orgId)
+    .maybeSingle();
+  const discoverable = (orgRow as { discoverable: boolean | null } | null)?.discoverable !== false;
+
   const labelFor = (kind: string) =>
     TIER_2_ACTIONS.find((a) => a.kind === kind)?.label ?? kind;
 
@@ -115,6 +124,30 @@ export default async function SettingsPage() {
               <Link href="/build/profile" className="fx-card fx-card-hover group p-4">
                 <RowLink label="Organization profile" hint="Name, focus, and public details" />
               </Link>
+              <div className="fx-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-fg-primary">Ecosystem discoverability</p>
+                    <p className="mt-1 text-xs leading-snug text-fg-secondary">
+                      {discoverable
+                        ? "On — Earn matches your profile across the ecosystem and alerts matching LPs, capital, partners, providers, and deals."
+                        : "Off — your firm is dark. No match alerts go out about you, and you receive none."}
+                    </p>
+                  </div>
+                  <form action={setDiscoverable} className="shrink-0">
+                    <input type="hidden" name="discoverable" value={discoverable ? "false" : "true"} />
+                    <button
+                      className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
+                        discoverable
+                          ? "border-line text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                          : "border-gold-500/40 bg-gold-500/10 text-gold-300 hover:bg-gold-500/20"
+                      }`}
+                    >
+                      {discoverable ? "Go dark" : "Make discoverable"}
+                    </button>
+                  </form>
+                </div>
+              </div>
               <Link href="/wallet" className="fx-card fx-card-hover group p-4">
                 <RowLink label="Wallet & credits" hint="Balance, plan, and billing" />
               </Link>

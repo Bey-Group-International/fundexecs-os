@@ -14,6 +14,8 @@ import {
   REFERRAL_WELCOME_BONUS,
   rankFor,
 } from "@/lib/referrals";
+import { stripeConfigured } from "@/lib/stripe";
+import { CheckoutBanner } from "../wallet/CheckoutBanner";
 import { ReferralLink } from "./ReferralLink";
 import { GiftForm } from "./GiftForm";
 import { RedeemBox } from "./RedeemBox";
@@ -23,10 +25,17 @@ export const dynamic = "force-dynamic";
 
 const LEVEL_LABEL: Record<number, string> = { 1: "Direct", 2: "2nd level", 3: "3rd level" };
 
-export default async function GiftEarnPage() {
+export default async function GiftEarnPage({
+  searchParams,
+}: {
+  searchParams: { checkout?: string };
+}) {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
+
+  const live = stripeConfigured();
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
 
   const [code, summary, gifts, balance] = await Promise.all([
     getOrCreateReferralCode(ctx.orgId, ctx.userId),
@@ -58,6 +67,8 @@ export default async function GiftEarnPage() {
           and keep earning when they invite others, up to three levels deep. It compounds.
         </p>
       </header>
+
+      <CheckoutBanner status={searchParams.checkout} />
 
       {/* Stat strip */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -208,7 +219,7 @@ export default async function GiftEarnPage() {
             </p>
           </div>
           <div className="fx-card p-5">
-            <GiftForm />
+            <GiftForm live={live} publishableKey={publishableKey} />
           </div>
 
           {gifts.length > 0 ? (

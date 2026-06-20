@@ -1,11 +1,12 @@
--- 0042_api_keys.sql
+-- 0043_api_keys.sql
 -- Settings → APIs. Two related but distinct subsystems:
 --
 --   1. api_keys  — FundExecs-ISSUED credentials. Each row is a Stripe-style
 --      publishable/secret pair an org generates to authenticate to the FundExecs
 --      OS API. The publishable key is stored in the clear (it is meant to be
 --      shared); the secret key is shown to the operator exactly once at creation
---      and only its SHA-256 hash is persisted, so a leaked database never yields a
+--      and only a keyed HMAC-SHA256 of it is persisted, so a leaked database
+--      never yields a
 --      working secret. `mode` separates test from live credentials.
 --
 --   2. org_secrets — a vault for THIRD-PARTY secrets an org pastes in (their own
@@ -27,7 +28,7 @@ create table if not exists public.api_keys (
   mode            text not null default 'test' check (mode in ('test', 'live')),
   -- Public by design (e.g. fxpk_live_…); safe to display in full.
   publishable_key text not null unique,
-  -- SHA-256 hex of the secret. The secret itself is never stored.
+  -- Keyed HMAC-SHA256 hex of the secret. The secret itself is never stored.
   secret_hash     text not null unique,
   -- Non-secret display fragments so the UI can show "fxsk_live_••••1234".
   secret_prefix   text not null,

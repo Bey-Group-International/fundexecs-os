@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { formatCredits, formatUsd, type Plan, type PlanInterval } from "@/lib/billing";
+import { StripeCheckoutModal } from "@/components/StripeCheckoutModal";
 import { selectPlanAction } from "./actions";
 
 export interface PlanView extends Plan {
@@ -11,19 +12,25 @@ export interface PlanView extends Plan {
 
 // The plans grid with a monthly/annual toggle. Annual surfaces the two-months-
 // free saving; the recommended plan and the current plan are badged. Choosing a
-// plan activates it (payment mocked) so the badges reflect a live choice.
+// plan opens an in-app embedded Stripe Checkout (or mock-activates when Stripe
+// isn't configured).
 export function PlanSelector({
   plans,
   currentPlan,
   recommendedKey,
+  live = false,
+  publishableKey = "",
 }: {
   plans: PlanView[];
   currentPlan: string | null;
   recommendedKey: string | null;
+  live?: boolean;
+  publishableKey?: string;
 }) {
   const [interval, setInterval] = useState<PlanInterval>("annual");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function choose(planKey: string) {
@@ -34,13 +41,24 @@ export function PlanSelector({
     fd.set("interval", interval);
     startTransition(async () => {
       const res = await selectPlanAction(fd);
-      if (res?.error) setError(res.error);
+      if (res?.clientSecret) {
+        setClientSecret(res.clientSecret); // open in-app embedded checkout
+      } else if (res?.error) {
+        setError(res.error);
+      }
       setPendingKey(null);
     });
   }
 
   return (
     <div>
+      {clientSecret ? (
+        <StripeCheckoutModal
+          clientSecret={clientSecret}
+          publishableKey={publishableKey}
+          onClose={() => setClientSecret(null)}
+        />
+      ) : null}
       {/* Billing interval toggle */}
       <div className="mb-4 flex items-center gap-3">
         <div className="inline-flex rounded-lg border border-line bg-surface-1 p-0.5">
@@ -136,9 +154,9 @@ export function PlanSelector({
 
       {error ? <p className="mt-3 text-xs text-status-danger">{error}</p> : null}
       <p className="mt-3 text-xs text-fg-muted">
-        Checkout isn’t wired yet — no card is charged. Choosing a plan activates it and front-loads
-        its credits so you can see the value flow. Unused credits roll over while your plan is
-        active.
+        {live
+          ? "Secure checkout by Stripe. Your plan activates and credits are granted the moment payment completes. Unused credits roll over while your plan is active."
+          : "Stripe isn’t configured here — no card is charged. Choosing a plan activates it and front-loads its credits so you can see the value flow. Unused credits roll over while your plan is active."}
       </p>
     </div>
   );
