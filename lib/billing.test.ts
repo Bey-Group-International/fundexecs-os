@@ -6,6 +6,9 @@ import {
   annualSavingsPct,
   loyaltyBonus,
   tenureMonths,
+  planSeatLimit,
+  seatLimitReached,
+  FREE_PLAN_SEATS,
   LOYALTY_STEP,
   LOYALTY_CAP,
 } from "@/lib/billing";
@@ -37,6 +40,40 @@ describe("loyaltyBonus", () => {
   it("ignores fractional and negative months", () => {
     expect(loyaltyBonus(2.9)).toBe(LOYALTY_STEP * 2);
     expect(loyaltyBonus(-5)).toBe(0);
+  });
+});
+
+describe("planSeatLimit", () => {
+  it("returns each plan's seat allotment", () => {
+    expect(planSeatLimit("starter")).toBe(1);
+    expect(planSeatLimit("pro")).toBe(10);
+    expect(planSeatLimit("scale")).toBeNull(); // unlimited
+  });
+
+  it("falls back to the free allotment for no plan or unknown keys", () => {
+    expect(planSeatLimit(null)).toBe(FREE_PLAN_SEATS);
+    expect(planSeatLimit(undefined)).toBe(FREE_PLAN_SEATS);
+    expect(planSeatLimit("enterprise")).toBe(FREE_PLAN_SEATS);
+  });
+});
+
+describe("seatLimitReached", () => {
+  it("blocks at or above the plan's seat count", () => {
+    expect(seatLimitReached("starter", 0)).toBe(false);
+    expect(seatLimitReached("starter", 1)).toBe(true);
+    expect(seatLimitReached("pro", 9)).toBe(false);
+    expect(seatLimitReached("pro", 10)).toBe(true);
+    expect(seatLimitReached("pro", 12)).toBe(true); // over (e.g. after downgrade)
+  });
+
+  it("never blocks on an unlimited plan", () => {
+    expect(seatLimitReached("scale", 0)).toBe(false);
+    expect(seatLimitReached("scale", 10_000)).toBe(false);
+  });
+
+  it("treats no plan as the free allotment", () => {
+    expect(seatLimitReached(null, 0)).toBe(false);
+    expect(seatLimitReached(null, FREE_PLAN_SEATS)).toBe(true);
   });
 });
 
