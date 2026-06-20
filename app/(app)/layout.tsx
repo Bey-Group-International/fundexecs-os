@@ -164,7 +164,7 @@ export default async function AppLayout({
   });
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-0 text-fg-primary print:block print:h-auto print:overflow-visible">
+    <div className="flex h-dvh overflow-hidden bg-surface-0 text-fg-primary print:block print:h-auto print:overflow-visible">
       <div className="contents print:hidden">
       <AppSidebar
         name={name}
@@ -199,7 +199,7 @@ export default async function AppLayout({
                 match — click to open, or let it fade and read it later. */}
             <MatchToast alert={matchAlert} />
           </div>
-          <main className="flex-1 overflow-y-auto px-8 py-8 print:overflow-visible print:p-0">
+          <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 print:overflow-visible print:p-0">
             {children}
           </main>
         </div>

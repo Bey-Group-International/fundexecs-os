@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Space_Grotesk, DM_Sans, JetBrains_Mono } from "next/font/google";
 import {
   SITE_DESCRIPTION,
@@ -84,9 +85,25 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: "#0B0A08",
-  colorScheme: "dark" as const,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#EEF4FC" },
+    { media: "(prefers-color-scheme: dark)", color: "#050912" },
+  ],
+  colorScheme: "dark light" as const,
 };
+
+const themeBootstrap = `
+try {
+  var stored = window.localStorage.getItem("fx-theme");
+  var prefersDay = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+  var mode = stored === "day" || stored === "night" ? stored : (prefersDay ? "day" : "night");
+  var root = document.documentElement;
+  root.classList.remove("theme-day", "theme-night");
+  root.classList.add(mode === "day" ? "theme-day" : "theme-night");
+  root.dataset.theme = mode;
+  root.style.colorScheme = mode === "day" ? "light" : "dark";
+} catch (_) {}
+`;
 
 export default function RootLayout({
   children,
@@ -97,8 +114,14 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${display.variable} ${sans.variable} ${mono.variable}`}
+      suppressHydrationWarning
     >
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        <Script id="fx-theme-bootstrap" strategy="beforeInteractive">
+          {themeBootstrap}
+        </Script>
+        {children}
+      </body>
     </html>
   );
 }

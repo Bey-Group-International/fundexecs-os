@@ -26,10 +26,10 @@ It automates the **80% of time spent moving information** so you can focus on th
 
 ### Wallet and Earn Copilot Visual Refresh
 
-The Wallet, Credits & Plans dashboard now has a black-and-neural-green enterprise
-console treatment: compute-grid balance panels, glowing Pro-tier hierarchy,
-CSS-only activation streams, and an Earn copilot drawer that reads like an
-active operating-agent terminal.
+The visual system now has an electric-blue enterprise console treatment:
+day/night themes, compute-grid panels, glowing hierarchy, CSS-only activation
+streams, and an Earn copilot drawer that reads like an active operating-agent
+terminal.
 
 ![FundExecs OS wallet neural preview](./public/fundexecs-wallet-neural-preview.svg)
 
@@ -40,9 +40,9 @@ without adding video binaries or capture tooling.
 ![FundExecs OS Earn copilot demo loop](./public/fundexecs-earn-copilot-demo.svg)
 
 Visual implementation guardrails live in
-[`docs/VISUAL_SYSTEM.md`](./docs/VISUAL_SYSTEM.md): gold for the operating shell,
-neural green for compute/copilot surfaces, status tokens for semantic states,
-and centralized logo usage.
+[`docs/VISUAL_SYSTEM.md`](./docs/VISUAL_SYSTEM.md): blue accents for the
+operating shell, neural blue for compute/copilot surfaces, status tokens for
+semantic states, and centralized logo usage.
 
 |    What it replaces     |         What it becomes         |
 |-------------------------|---------------------------------|

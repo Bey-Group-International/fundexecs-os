@@ -355,7 +355,7 @@ export function AppSidebar({
   }
 
   return (
-    <aside className="flex w-[224px] shrink-0 flex-col border-r border-line bg-surface-1">
+    <aside className="hidden w-[224px] shrink-0 flex-col border-r border-line bg-surface-1/95 backdrop-blur-xl md:flex">
       {/* Logo — centralized coin mark + wordmark */}
       <div className="flex h-12 items-center gap-2 border-b border-line px-4">
         <Logo href="/workspace" variant="coin-wordmark" />
