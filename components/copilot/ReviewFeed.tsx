@@ -8,7 +8,7 @@ import type { TaskStatus } from "@/lib/supabase/database.types";
 // Map a workflow's status to a tone + label for its pill. Statuses outside this
 // map (pending/blocked/cancelled) fall through to a neutral default.
 const STATUS_PILL: Partial<Record<TaskStatus, { label: string; cls: string }>> = {
-  awaiting_approval: { label: "needs you", cls: "border-gold-500/40 text-gold-300" },
+  awaiting_approval: { label: "needs you", cls: "border-neural-400/45 text-neural-300" },
   in_progress: { label: "running", cls: "border-status-info/40 text-status-info" },
   completed: { label: "done", cls: "border-emerald-400/40 text-emerald-300" },
   failed: { label: "failed", cls: "border-status-danger/40 text-status-danger" },
@@ -64,10 +64,10 @@ export function ReviewFeed({ open, onClose }: { open: boolean; onClose: () => vo
 
   return (
     <div>
-      <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400">Recent runs</p>
+      <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Recent runs</p>
       <div className="flex flex-col gap-2">
         {runs.map((run, i) => (
-          <div key={run.sessionId ?? `run-${i}`} className="rounded-xl border border-line bg-surface-0/40 p-3">
+          <div key={run.sessionId ?? `run-${i}`} className="rounded-xl border border-neural-400/15 bg-black/55 p-3">
             <div className="flex items-start justify-between gap-2">
               <span className="min-w-0 text-sm font-medium text-fg-primary">{run.title}</span>
               <StatusPill status={run.status} />
@@ -77,7 +77,7 @@ export function ReviewFeed({ open, onClose }: { open: boolean; onClose: () => vo
                 <Link
                   href={`/session/${run.sessionId}`}
                   onClick={onClose}
-                  className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
+                  className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300"
                 >
                   Open →
                 </Link>
@@ -98,7 +98,7 @@ export function ReviewFeed({ open, onClose }: { open: boolean; onClose: () => vo
                     type="button"
                     onClick={() => act(approveRun, run.approvalId!)}
                     disabled={pending}
-                    className="rounded-md bg-gold-400 px-2.5 py-1 text-[11px] font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+                    className="rounded-md bg-neural-400 px-2.5 py-1 text-[11px] font-medium text-black transition hover:bg-neural-300 disabled:opacity-50"
                   >
                     Approve
                   </button>

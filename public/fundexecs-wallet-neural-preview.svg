@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">FundExecs OS wallet neural preview</title>
+  <desc id="desc">A marketing preview showing the FundExecs OS wallet refreshed with black surfaces, green compute grids, plan cards, and the Earn copilot launcher.</desc>
+  <defs>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f170a"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="12%" r="65%">
+      <stop offset="0" stop-color="#76B900" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#76B900" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse">
+      <path d="M36 0H0V36" fill="none" stroke="#76B900" stroke-opacity="0.11"/>
+    </pattern>
+    <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="1440" height="900" fill="#000"/>
+  <rect width="1440" height="900" fill="url(#grid)"/>
+  <rect width="1440" height="420" fill="url(#glow)"/>
+  <text x="96" y="92" fill="#C7FF6B" font-family="JetBrains Mono, monospace" font-size="14" letter-spacing="6">FUNDEXECS WALLET CORE</text>
+  <text x="96" y="142" fill="#F5F1E8" font-family="Space Grotesk, Arial, sans-serif" font-size="54" font-weight="700">Credits and plans</text>
+  <text x="96" y="178" fill="#B7B0A1" font-family="DM Sans, Arial, sans-serif" font-size="20">Institutional compute credits for AI-native private-market workflows.</text>
+  <g transform="translate(96 226)">
+    <rect width="1248" height="242" rx="28" fill="#000" stroke="#76B900" stroke-opacity="0.34"/>
+    <rect x="1" y="1" width="1246" height="240" rx="27" fill="url(#grid)" opacity="0.32"/>
+    <circle cx="835" cy="8" r="230" fill="#76B900" opacity="0.18" filter="url(#softGlow)"/>
+    <text x="42" y="62" fill="#C7FF6B" font-family="JetBrains Mono, monospace" font-size="13" letter-spacing="4">AVAILABLE BALANCE</text>
+    <text x="42" y="132" fill="#F5F1E8" font-family="Space Grotesk, Arial, sans-serif" font-size="72" font-weight="700">Ç 48,000</text>
+    <text x="46" y="166" fill="#7E7869" font-family="JetBrains Mono, monospace" font-size="14" letter-spacing="4">LIVE COMPUTE CREDITS</text>
+    <g transform="translate(760 48)">
+      <rect width="400" height="64" rx="16" fill="#76B900" fill-opacity="0.07" stroke="#76B900" stroke-opacity="0.3"/>
+      <text x="24" y="26" fill="#C7FF6B" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="3">RECOMMENDED ROUTING</text>
+      <text x="24" y="48" fill="#F5F1E8" font-family="DM Sans, Arial, sans-serif" font-size="18">Pro fits current operating load</text>
+      <circle cx="364" cy="32" r="7" fill="#76B900" filter="url(#softGlow)"/>
+    </g>
+    <g transform="translate(760 132)">
+      <rect width="184" height="72" rx="16" fill="#fff" fill-opacity="0.03" stroke="#fff" stroke-opacity="0.12"/>
+      <text x="18" y="28" fill="#7E7869" font-family="JetBrains Mono, monospace" font-size="10" letter-spacing="3">30D BURN</text>
+      <text x="18" y="54" fill="#F5F1E8" font-family="Space Grotesk, Arial, sans-serif" font-size="28" font-weight="700">7,240</text>
+    </g>
+    <g transform="translate(976 132)">
+      <rect width="184" height="72" rx="16" fill="#fff" fill-opacity="0.03" stroke="#fff" stroke-opacity="0.12"/>
+      <text x="18" y="28" fill="#7E7869" font-family="JetBrains Mono, monospace" font-size="10" letter-spacing="3">LOYALTY</text>
+      <text x="18" y="54" fill="#F5F1E8" font-family="Space Grotesk, Arial, sans-serif" font-size="28" font-weight="700">+450/mo</text>
+    </g>
+  </g>
+  <g transform="translate(96 526)">
+    <text x="0" y="0" fill="#C7FF6B" font-family="JetBrains Mono, monospace" font-size="13" letter-spacing="5">PLAN COMPUTE TIERS</text>
+    <g transform="translate(0 32)">
+      <rect width="384" height="248" rx="24" fill="url(#card)" stroke="#76B900" stroke-opacity="0.22"/>
+      <text x="28" y="46" fill="#C7FF6B" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="4">STARTER TIER</text>
+      <text x="28" y="84" fill="#F5F1E8" font-family="Space Grotesk, Arial, sans-serif" font-size="32" font-weight="700">Starter</text>
+      <path d="M28 156h70l26-32h86l30-42h102" stroke="#76B900" stroke-opacity="0.42" fill="none"/>
+      <circle cx="124" cy="124" r="5" fill="#76B900"/>
+      <text x="28" y="216" fill="#B7B0A1" font-family="DM Sans, Arial, sans-serif" font-size="18">$5/mo - 500 credits</text>
+    </g>
+    <g transform="translate(432 16)">
+      <rect width="384" height="280" rx="24" fill="url(#card)" stroke="#76B900" stroke-opacity="0.78" filter="url(#softGlow)"/>
+      <text x="248" y="0" fill="#C7FF6B" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="3">RECOMMENDED</text>
+      <text x="28" y="62" fill="#C7FF6B" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="4">PRO TIER</text>
+      <text x="28" y="104" fill="#F5F1E8" font-family="Space Grotesk, Arial, sans-serif" font-size="38" font-weight="700">Pro</text>
+      <path d="M28 178h76l30-36h90l32-54h100" stroke="#C7FF6B" stroke-opacity="0.72" fill="none" stroke-width="2"/>
+      <circle cx="134" cy="142" r="6" fill="#C7FF6B"/>
+      <circle cx="256" cy="88" r="6" fill="#C7FF6B"/>
+      <text x="28" y="242" fill="#F5F1E8" font-family="DM Sans, Arial, sans-serif" font-size="20">$30/mo - 4,000 credits</text>
+    </g>
+    <g transform="translate(864 32)">
+      <rect width="384" height="248" rx="24" fill="url(#card)" stroke="#76B900" stroke-opacity="0.22"/>
+      <text x="28" y="46" fill="#C7FF6B" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="4">SCALE TIER</text>
+      <text x="28" y="84" fill="#F5F1E8" font-family="Space Grotesk, Arial, sans-serif" font-size="32" font-weight="700">Scale</text>
+      <path d="M28 150h92l34-44h72l40 36h86" stroke="#76B900" stroke-opacity="0.42" fill="none"/>
+      <circle cx="154" cy="106" r="5" fill="#76B900"/>
+      <text x="28" y="216" fill="#B7B0A1" font-family="DM Sans, Arial, sans-serif" font-size="18">$100/mo - 15,000 credits</text>
+    </g>
+  </g>
+  <g transform="translate(1138 788)">
+    <rect width="206" height="54" rx="27" fill="#000" stroke="#76B900" stroke-opacity="0.64"/>
+    <circle cx="33" cy="27" r="14" fill="#76B900" fill-opacity="0.35" stroke="#76B900"/>
+    <text x="60" y="33" fill="#C7FF6B" font-family="DM Sans, Arial, sans-serif" font-size="18" font-weight="700">Ask Earn</text>
+  </g>
+</svg>
