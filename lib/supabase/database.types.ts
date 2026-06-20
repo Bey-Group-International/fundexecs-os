@@ -518,6 +518,37 @@ export type DataRoomView = {
   created_at: string;
 };
 
+export type InvestorPortalShare = {
+  id: string;
+  organization_id: string;
+  investor_id: string;
+  token: string;
+  label: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type InvestorPortalView = {
+  id: string;
+  organization_id: string;
+  share_id: string | null;
+  created_at: string;
+};
+
+export type ValuationMark = {
+  id: string;
+  organization_id: string;
+  asset_id: string;
+  value: number;
+  as_of: string;
+  method: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 export type Prompt = {
   id: string;
   organization_id: string;
@@ -704,6 +735,9 @@ export type Database = {
       brain_kb_chunks: TableShape<BrainKbChunk>;
       data_room_shares: TableShape<DataRoomShare>;
       data_room_views: TableShape<DataRoomView>;
+      investor_portal_shares: TableShape<InvestorPortalShare>;
+      investor_portal_views: TableShape<InvestorPortalView>;
+      valuation_marks: TableShape<ValuationMark>;
     };
     Views: Record<string, never>;
     Functions: {

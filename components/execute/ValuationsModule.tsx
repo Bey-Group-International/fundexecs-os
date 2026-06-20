@@ -1,8 +1,10 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { getExecutePerformance, isExited } from "@/lib/execute-performance";
-import { compactUsd, usd, multiple, num } from "@/lib/format";
+import { getValuationMarks, summarizeMarks } from "@/lib/valuation-history";
+import { compactUsd, usd, multiple, num, shortDate } from "@/lib/format";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile, EarnAction } from "@/components/execute/ui";
+import RecordMarkForm from "@/components/execute/RecordMarkForm";
 import type { Asset } from "@/lib/supabase/database.types";
 
 function humanize(s: string): string {
@@ -20,11 +22,15 @@ function mark(a: Asset): number | null {
 // portfolio or any single holding.
 export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
   const supabase = createServerClient();
-  const [perf, assetsRes] = await Promise.all([
+  const [perf, assetsRes, marks] = await Promise.all([
     getExecutePerformance(orgId),
     supabase.from("assets").select("*").eq("organization_id", orgId).order("current_value", { ascending: false, nullsFirst: false }),
+    getValuationMarks(orgId),
   ]);
-  const held = ((assetsRes.data ?? []) as Asset[]).filter((a) => !isExited(a.status));
+  const allAssets = (assetsRes.data ?? []) as Asset[];
+  const held = allAssets.filter((a) => !isExited(a.status));
+  const markByAsset = summarizeMarks(marks);
+  const nameById = new Map(allAssets.map((a) => [a.id, a.name]));
 
   const header = (
     <ModuleHeader title="Valuations" blurb="Fair-value marks across the book — value created, and the Analyst to re-mark it." />
@@ -62,18 +68,20 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
         />
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <EarnAction kind="valuation_run" label="Run valuation pass" />
       </div>
+
+      <RecordMarkForm assets={held.map((a) => ({ id: a.id, name: a.name }))} />
 
       <div className="overflow-x-auto rounded-xl border border-line">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-surface-2/80 text-left">
-              {["Holding", "Type", "Cost", "Fair value", "Gain", "MOIC", "Yield", ""].map((h, i) => (
+              {["Holding", "Type", "Cost", "Fair value", "Gain", "MOIC", "Yield", "Marks", ""].map((h, i) => (
                 <th
                   key={h || "act"}
-                  className={`whitespace-nowrap px-3 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 && i <= 6 ? "text-right" : ""}`}
+                  className={`whitespace-nowrap px-3 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 && i <= 7 ? "text-right" : ""}`}
                 >
                   {h}
                 </th>
@@ -118,6 +126,12 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
                   <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-fg-secondary">
                     {yieldPct != null ? `${yieldPct}%` : "—"}
                   </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-[11px] text-fg-muted">
+                    {(() => {
+                      const s = markByAsset.get(a.id);
+                      return s ? `${s.count} · ${shortDate(s.latest?.as_of)}` : "—";
+                    })()}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right">
                     <EarnAction kind="valuation_asset" label="Re-mark" subject={a.name} subtle />
                   </td>
@@ -127,6 +141,28 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
           </tbody>
         </table>
       </div>
+
+      {/* Audit trail */}
+      {marks.length > 0 ? (
+        <>
+          <h3 className="mb-3 mt-6 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+            Valuation audit trail
+          </h3>
+          <div className="overflow-hidden rounded-xl border border-line">
+            {marks.slice(0, 12).map((m, i) => (
+              <div
+                key={m.id}
+                className={`flex items-center gap-3 bg-surface-1 px-4 py-2.5 text-sm ${i > 0 ? "border-t border-line/50" : ""}`}
+              >
+                <span className="w-24 shrink-0 font-mono text-[11px] text-fg-muted">{shortDate(m.as_of)}</span>
+                <span className="min-w-0 flex-1 truncate text-fg-primary">{nameById.get(m.asset_id) ?? "—"}</span>
+                {m.method ? <span className="hidden shrink-0 font-mono text-[10px] text-fg-muted sm:block">{m.method}</span> : null}
+                <span className="shrink-0 font-mono text-fg-secondary">{usd(num(m.value))}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
