@@ -8,6 +8,13 @@ port = 54321
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
+# The migrations rely on Supabase's legacy behavior of auto-granting Data API
+# privileges (SELECT/INSERT/UPDATE/DELETE) on new `public` tables to the anon,
+# authenticated, and service_role roles. The Supabase CLI flipped this implicit
+# default to false on 2026-05-30, which otherwise yields "permission denied for
+# table ..." (42501) at runtime. Keep the legacy behavior so the schema is
+# reachable without per-table grant migrations.
+auto_expose_new_tables = true
 
 [db]
 port = 54322
