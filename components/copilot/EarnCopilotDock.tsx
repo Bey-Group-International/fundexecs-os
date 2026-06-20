@@ -31,7 +31,7 @@ function AgentDot({ color }: { color: string }) {
 
 const TIER_TONE: Record<number, string> = {
   1: "border-emerald-400/40 text-emerald-300",
-  2: "border-gold-500/40 text-gold-300",
+  2: "border-neural-400/45 text-neural-300",
   3: "border-status-danger/40 text-status-danger",
 };
 
@@ -215,11 +215,12 @@ export function EarnCopilotDock({ name }: { name: string }) {
         <button
           onClick={() => setOpen(true)}
           title="Ask Earn (⌘K)"
-          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-gold-500/40 bg-surface-1 px-4 py-2.5 text-sm font-medium text-gold-300 shadow-lg shadow-black/40 transition hover:bg-surface-2 print:hidden"
+          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-neural-400/45 bg-black/85 px-4 py-2.5 text-sm font-medium text-neural-300 shadow-[0_18px_48px_-24px_rgba(118,185,0,0.95)] backdrop-blur transition hover:border-neural-300/70 hover:bg-neural-400/10 print:hidden"
         >
           <EarnOrb size={22} pulse />
           Ask Earn
-          <kbd className="ml-1 hidden rounded border border-line px-1 font-mono text-[10px] text-fg-muted sm:inline">⌘K</kbd>
+          <span className="h-1.5 w-1.5 rounded-full bg-neural-400 shadow-[0_0_12px_rgba(118,185,0,0.95)] animate-glow" aria-hidden />
+          <kbd className="ml-1 hidden rounded border border-neural-400/25 px-1 font-mono text-[10px] text-fg-muted sm:inline">⌘K</kbd>
         </button>
       ) : null}
 
@@ -227,18 +228,20 @@ export function EarnCopilotDock({ name }: { name: string }) {
       <div
         role="dialog"
         aria-label="Earn copilot"
-        className={`fixed inset-y-0 right-0 z-50 flex w-[380px] max-w-[92vw] flex-col border-l border-line bg-surface-1 shadow-2xl shadow-black/50 transition-transform duration-200 print:hidden ${
+        className={`fixed inset-y-0 right-0 z-50 flex w-[400px] max-w-[92vw] flex-col overflow-hidden border-l border-neural-400/30 bg-black shadow-[0_0_80px_-40px_rgba(118,185,0,0.95)] transition-transform duration-200 print:hidden ${
           open ? "translate-x-0" : "pointer-events-none translate-x-full"
         }`}
       >
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(118,185,0,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(118,185,0,0.045)_1px,transparent_1px)] bg-[length:26px_26px]" aria-hidden />
+        <div className="pointer-events-none absolute -top-20 right-6 h-56 w-56 rounded-full bg-neural-400/20 blur-3xl" aria-hidden />
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+        <div className="relative z-10 flex items-start justify-between gap-3 border-b border-neural-400/20 bg-black/80 px-4 py-3 backdrop-blur">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <EarnOrb size={28} />
+              <EarnOrb size={28} pulse />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-fg-primary">Earn</p>
-                <p className="truncate font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <p className="truncate font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">
                   {specialist.key !== "associate" ? (
                     <span className="inline-flex items-center gap-1">
                       <AgentDot color={specialist.color} /> {specialist.name} on point
@@ -252,18 +255,18 @@ export function EarnCopilotDock({ name }: { name: string }) {
           </div>
           <button
             onClick={() => setOpen(false)}
-            className="rounded-md px-2 py-1 text-fg-muted transition hover:text-fg-primary"
+            className="rounded-md px-2 py-1 text-fg-muted transition hover:text-neural-300"
             aria-label="Close"
           >
             ✕
           </button>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+        <div className="relative z-10 flex-1 space-y-5 overflow-y-auto px-4 py-4">
           {/* Live briefing — where things stand in this context */}
           {briefing ? (
-            <div className="rounded-xl border border-line bg-surface-0/40 p-3">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Where things stand</p>
+            <div className="fx-neural-card p-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Where things stand</p>
               <p className="mt-1 text-sm font-medium text-fg-primary">{briefing.headline}</p>
               {briefing.stats.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
@@ -276,7 +279,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                             : st.tone === "bad"
                               ? "text-status-danger"
                               : st.tone === "warn"
-                                ? "text-gold-300"
+                                ? "text-neural-300"
                                 : "text-fg-primary"
                         }`}
                       >
@@ -291,13 +294,13 @@ export function EarnCopilotDock({ name }: { name: string }) {
                 <button
                   onClick={() => ask(briefing.nextAction!.prompt)}
                   disabled={pending}
-                  className="mt-2.5 flex w-full items-center gap-2 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2 text-left transition hover:bg-gold-500/10 disabled:opacity-50"
+                  className="mt-2.5 flex w-full items-center gap-2 rounded-lg border border-neural-400/30 bg-neural-400/5 px-3 py-2 text-left transition hover:bg-neural-400/10 disabled:opacity-50"
                 >
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-[11px] text-surface-0">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neural-400 font-mono text-[11px] text-black shadow-[0_0_12px_rgba(118,185,0,0.55)]">
                     →
                   </span>
                   <span className="min-w-0">
-                    <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                    <span className="block font-mono text-[9px] uppercase tracking-wider text-neural-300">
                       Do this next
                     </span>
                     <span className="block truncate text-sm text-fg-primary">{briefing.nextAction.label}</span>
@@ -309,7 +312,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
 
           {/* Suggestions */}
           <div>
-            <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400">
+            <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">
               Next best · {ctx.module ? ctx.module.replace(/_/g, " ") : ctx.hub ?? "workspace"}
             </p>
             <div className="flex flex-col gap-2">
@@ -321,7 +324,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                   <form key={s.id} action={launchCopilotSuggestion}>
                     <input type="hidden" name="pathname" value={pathname} />
                     <input type="hidden" name="suggestion_id" value={s.id} />
-                    <button className="group w-full rounded-xl border border-line bg-surface-0/40 p-3 text-left transition hover:border-gold-500/40 hover:bg-surface-2">
+                    <button className="group w-full rounded-xl border border-neural-400/15 bg-black/55 p-3 text-left transition hover:border-neural-400/45 hover:bg-neural-400/[0.06]">
                       <div className="flex items-center justify-between gap-2">
                         <span className="min-w-0 text-sm font-medium text-fg-primary">{s.label}</span>
                         {tier ? (
@@ -348,7 +351,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                               : "Earn drafts the plan; you approve before it runs"
                           }
                         >
-                          {auto ? "✶ Earn runs it" : "needs approval"}
+                          {auto ? "Earn runs it" : "needs approval"}
                         </span>
                       </div>
                     </button>
@@ -365,20 +368,20 @@ export function EarnCopilotDock({ name }: { name: string }) {
           {thread.length > 0 ? (
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Conversation</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Conversation</p>
                 <div className="flex items-center gap-2">
                   {sessionId ? (
                     <Link
                       href={`/session/${sessionId}`}
                       onClick={() => setOpen(false)}
-                      className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
+                      className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300"
                     >
                       Open full →
                     </Link>
                   ) : null}
                   <button
                     onClick={newConversation}
-                    className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+                    className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300"
                   >
                     New
                   </button>
@@ -387,11 +390,11 @@ export function EarnCopilotDock({ name }: { name: string }) {
               <div className="flex flex-col gap-2">
                 {thread.map((turn, i) =>
                   turn.role === "user" ? (
-                    <div key={i} className="ml-6 break-words rounded-lg rounded-br-sm border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary">
+                    <div key={i} className="ml-6 break-words rounded-lg rounded-br-sm border border-white/10 bg-surface-2/80 px-3 py-2 text-sm text-fg-primary">
                       {turn.text}
                     </div>
                   ) : (
-                    <div key={i} className="mr-6 rounded-lg rounded-bl-sm border border-gold-500/30 bg-gold-500/5 px-3 py-2">
+                    <div key={i} className="mr-6 rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
                       {turn.planTitle ? (
                         <p className="break-words text-sm font-medium text-fg-primary">{turn.planTitle}</p>
                       ) : null}
@@ -413,8 +416,11 @@ export function EarnCopilotDock({ name }: { name: string }) {
                   ),
                 )}
                 {pending ? (
-                  <div className="mr-6 inline-flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-fg-muted">
-                    <EarnOrb size={16} pulse /> Earn is routing your ask…
+                  <div className="relative mr-6 inline-flex overflow-hidden rounded-lg border border-neural-400/25 bg-black/70 px-3 py-2 text-xs text-fg-muted">
+                    <span className="inline-flex items-center gap-2">
+                      <EarnOrb size={16} pulse /> Earn is routing your ask...
+                    </span>
+                    <span className="fx-data-stream" aria-hidden />
                   </div>
                 ) : null}
                 <div ref={threadEndRef} />
@@ -430,7 +436,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
           {/* The team on point here */}
           {team.length > 0 ? (
             <div>
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400">Your team here</p>
+              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Your team here</p>
               <div className="flex flex-wrap gap-1.5">
                 {team.map((a) => (
                   <button
@@ -440,7 +446,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                       inputRef.current?.focus();
                     }}
                     title={a.role}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[11px] text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-neural-400/15 bg-black/35 px-2.5 py-1 text-[11px] text-fg-secondary transition hover:border-neural-400/45 hover:text-fg-primary"
                   >
                     <AgentDot color={a.color} />
                     {a.name}
@@ -452,7 +458,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
         </div>
 
         {/* Ask box */}
-        <div className="border-t border-line p-3">
+        <div className="relative z-10 border-t border-neural-400/20 bg-black/80 p-3 backdrop-blur">
           <textarea
             ref={inputRef}
             value={body}
@@ -465,14 +471,14 @@ export function EarnCopilotDock({ name }: { name: string }) {
             }}
             rows={2}
             placeholder={`Ask Earn to help, ${name.split(" ")[0]}…`}
-            className="w-full resize-none rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+            className="w-full resize-none rounded-lg border border-neural-400/20 bg-black/80 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-neural-400/70 focus:outline-none"
           />
           <div className="mt-2 flex items-center justify-between">
             <span className="font-mono text-[10px] text-fg-muted">⌘↵ to send</span>
             <button
               onClick={submitAsk}
               disabled={pending || !body.trim()}
-              className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-40"
+              className="rounded-md bg-neural-400 px-3 py-1.5 text-sm font-medium text-black shadow-[0_0_18px_rgba(118,185,0,0.24)] transition hover:bg-neural-300 disabled:opacity-40"
             >
               {pending ? "Routing…" : "Ask Earn"}
             </button>
@@ -481,7 +487,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
             <Link
               href="/settings/mandate"
               onClick={() => setOpen(false)}
-              className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
+              className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300"
             >
               ⚙ What Earn can do
             </Link>

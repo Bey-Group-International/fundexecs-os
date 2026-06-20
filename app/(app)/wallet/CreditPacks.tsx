@@ -49,22 +49,24 @@ export function CreditPacks({
         {CREDIT_PACKS.map((pack) => {
           const busy = pending && pendingKey === pack.key;
           return (
-            <div key={pack.key} className="fx-card flex items-center justify-between p-4">
-              <div>
+            <div key={pack.key} className="fx-neural-card group flex items-center justify-between gap-3 p-4">
+              <div className="relative z-10">
                 <p className="font-display text-lg font-semibold text-fg-primary">
                   {formatCredits(pack.credits)}
                 </p>
-                <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                  credits
+                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">
+                  burst credits
                 </p>
               </div>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => buy(pack.key)}
-                className="rounded-md border border-line px-3 py-1.5 text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:opacity-60"
+                aria-busy={busy}
+                className="relative z-10 overflow-hidden rounded-lg border border-neural-400/25 px-3 py-1.5 text-sm text-fg-secondary transition hover:border-neural-400/50 hover:bg-neural-400/10 hover:text-fg-primary disabled:opacity-60"
               >
                 {busy ? "Adding…" : formatUsd(pack.price)}
+                {busy ? <span className="fx-data-stream" aria-hidden /> : null}
               </button>
             </div>
           );
