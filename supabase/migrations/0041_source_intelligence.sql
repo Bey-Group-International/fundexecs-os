@@ -14,7 +14,12 @@
 -- Append-only, like dispatch_log (0030): rows are never updated or deleted by the
 -- app, so there is no updated_at / trigger.
 
-create table public.source_feedback (
+-- Idempotent DDL: this migration was renumbered (0038 → 0040 → 0041) while its
+-- branch preview database persisted, so the table/indexes/policies may already
+-- exist there from an earlier-numbered run. The guards below make re-application
+-- a no-op rather than an error ("relation already exists"); on a fresh DB the
+-- migration still runs exactly once, creating everything.
+create table if not exists public.source_feedback (
   id              uuid primary key default extensions.gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete cascade,
   -- the operator whose behavior this records — the per-user personalization key.
@@ -44,16 +49,19 @@ create table public.source_feedback (
   created_at      timestamptz not null default now()
 );
 
-create index source_feedback_org_idx on public.source_feedback (organization_id);
+create index if not exists source_feedback_org_idx on public.source_feedback (organization_id);
 -- The digest reads the most-recent feedback for an org+user+module with this index.
-create index source_feedback_lookup_idx
+create index if not exists source_feedback_lookup_idx
   on public.source_feedback (organization_id, principal_id, module, created_at desc);
 
 -- RLS: same member-read / writer-write org tenancy as the rest of the domain.
 alter table public.source_feedback enable row level security;
 
+-- CREATE POLICY has no IF NOT EXISTS, so drop-then-create to stay idempotent.
+drop policy if exists source_feedback_select on public.source_feedback;
 create policy source_feedback_select on public.source_feedback
   for select using (organization_id in (select public.current_principal_org_ids()));
+drop policy if exists source_feedback_write on public.source_feedback;
 create policy source_feedback_write on public.source_feedback
   for all using (public.is_org_writer(organization_id))
   with check (public.is_org_writer(organization_id));
