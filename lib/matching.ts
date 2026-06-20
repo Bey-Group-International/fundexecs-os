@@ -131,22 +131,33 @@ export function rankInvestorsForListing(
 
 // Rank live listings for one investor — the inverse view used on the Capital
 // Map to show "what current opportunities fit this LP?". `contextFor` resolves a
-// listing's geography/asset class when available.
+// listing's geography/asset class when available. `boostFor` lets the caller add
+// the listing owner's compounding match-boost (see lib/compounding.ts), so that
+// among comparable fits, listings from reputable, proven operators surface first
+// — quality compounds in discovery, not just in access. The boost is applied
+// AFTER fit so it only ever breaks ties between genuinely-suitable listings; the
+// final score stays clamped to 100.
 export function rankListingsForInvestor(
   investor: Investor,
   listings: MarketplaceListing[],
   opts: {
     contextFor?: (listing: MarketplaceListing) => ListingContext;
+    boostFor?: (listing: MarketplaceListing) => number;
     minScore?: number;
     limit?: number;
   } = {},
 ): ListingMatch[] {
-  const { contextFor, minScore = 45, limit = 3 } = opts;
+  const { contextFor, boostFor, minScore = 45, limit = 3 } = opts;
   return listings
     .map((listing) => {
       const ctx = contextFor ? contextFor(listing) : {};
       const { score, reasons } = scoreInvestorForListing(investor, listing, ctx);
-      return { listing, score, reasons };
+      // Only reward reputation on listings that already clear the fit bar, so it
+      // surfaces good operators rather than rescuing poor matches.
+      const boost = score >= minScore ? Math.max(0, boostFor?.(listing) ?? 0) : 0;
+      const boosted = Math.min(100, score + boost);
+      if (boost > 0) reasons.push("Proven operator — boosted by track record.");
+      return { listing, score: boosted, reasons };
     })
     .filter((m) => m.score >= minScore)
     .sort((a, b) => b.score - a.score)
