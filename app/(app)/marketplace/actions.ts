@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { queueNextAction } from "@/app/(app)/capital-map/actions";
 import type { MarketplaceStatus } from "@/lib/supabase/database.types";
 
 const STATUSES: MarketplaceStatus[] = ["draft", "listed", "paused", "closed"];
@@ -20,6 +21,7 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
   const amountRaw = String(formData.get("amount") ?? "").trim();
   const statusRaw = String(formData.get("status") ?? "draft").trim();
   const isPublic = formData.get("is_public") === "on";
+  const dealId = String(formData.get("deal_id") ?? "").trim() || null;
 
   if (!title) return { error: "Title is required" };
 
@@ -39,6 +41,7 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
     title,
     listing_type: listingType,
     summary: summary || null,
+    deal_id: dealId,
     amount,
     status,
     is_public: isPublic,
@@ -47,6 +50,18 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
   if (error) return { error: error.message };
   revalidatePath("/marketplace");
   return {};
+}
+
+// Take a matched listing to an investor: queue a gated outreach through the same
+// gate/dispatch path the Capital Map uses. Tier 2 by default — it reaches a
+// counterparty, so it lands in approvals unless a mandate pre-authorizes it, and
+// it warms the relationship on the graph via the engagement feedback loop.
+export async function queueListingOutreach(formData: FormData): Promise<void> {
+  const investorId = String(formData.get("investor_id") ?? "").trim();
+  const title = String(formData.get("listing_title") ?? "").trim() || "this listing";
+  if (!investorId) return;
+  await queueNextAction(investorId, "send_outreach", `Marketplace outreach · ${title}`);
+  revalidatePath("/marketplace");
 }
 
 // Advance a listing through its lifecycle: draft → listed → paused → closed,

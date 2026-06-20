@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { buildCapitalMap } from "@/lib/capital-map";
+import { rankListingsForInvestor, type ListingMatch, type ListingContext } from "@/lib/matching";
+import type { MarketplaceListing } from "@/lib/supabase/database.types";
 import { CapitalMap } from "./CapitalMap";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +18,33 @@ export default async function CapitalMapPage() {
 
   const supabase = createServerClient();
   const entries = await buildCapitalMap(supabase);
+
+  // Marketplace ↔ Capital Map flywheel: pull this firm's live listings and the
+  // geography of any linked deal, then score each listing against every investor
+  // so the map can surface "what live opportunities fit this LP?" inline.
+  const [listingsRes, dealsRes] = await Promise.all([
+    supabase
+      .from("marketplace_listings")
+      .select("*")
+      .eq("status", "listed")
+      .limit(200),
+    supabase.from("deals").select("id, geography, asset_class").limit(500),
+  ]);
+  const listings = (listingsRes.data ?? []) as MarketplaceListing[];
+  const dealCtx = new Map<string, ListingContext>();
+  for (const d of dealsRes.data ?? []) {
+    dealCtx.set(d.id, { geography: d.geography, assetClass: d.asset_class });
+  }
+  const contextFor = (l: MarketplaceListing): ListingContext =>
+    (l.deal_id && dealCtx.get(l.deal_id)) || {};
+
+  const matchesByInvestor: Record<string, ListingMatch[]> = {};
+  if (listings.length) {
+    for (const entry of entries) {
+      const m = rankListingsForInvestor(entry.investor, listings, { contextFor });
+      if (m.length) matchesByInvestor[entry.investor.id] = m;
+    }
+  }
 
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
@@ -34,7 +63,7 @@ export default async function CapitalMapPage() {
         </p>
       </header>
 
-      <CapitalMap entries={entries} />
+      <CapitalMap entries={entries} matchesByInvestor={matchesByInvestor} />
     </div>
   );
 }

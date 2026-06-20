@@ -20,6 +20,7 @@ import {
   type CopilotBriefing,
 } from "@/components/copilot/actions";
 import { ReviewFeed } from "@/components/copilot/ReviewFeed";
+import { EarnOrb } from "@/components/copilot/EarnOrb";
 import type { Mandate } from "@/lib/gates";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
@@ -196,7 +197,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
           title="Ask Earn (⌘K)"
           className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-gold-500/40 bg-surface-1 px-4 py-2.5 text-sm font-medium text-gold-300 shadow-lg shadow-black/40 transition hover:bg-surface-2 print:hidden"
         >
-          <span className="text-base leading-none">✶</span>
+          <EarnOrb size={22} pulse />
           Ask Earn
           <kbd className="ml-1 rounded border border-line px-1 font-mono text-[10px] text-fg-muted">⌘K</kbd>
         </button>
@@ -214,9 +215,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
         <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 text-sm text-gold-300">
-                ✶
-              </span>
+              <EarnOrb size={28} />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-fg-primary">Earn</p>
                 <p className="truncate font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -395,7 +394,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                 )}
                 {pending ? (
                   <div className="mr-6 inline-flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-fg-muted">
-                    <span className="animate-pulse">✶</span> Earn is routing your ask…
+                    <EarnOrb size={16} pulse /> Earn is routing your ask…
                   </div>
                 ) : null}
                 <div ref={threadEndRef} />
