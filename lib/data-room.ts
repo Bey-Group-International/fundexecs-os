@@ -20,16 +20,24 @@ export interface DataRoomSection {
 }
 
 // `key` doubles as the document's doc_type, so the add form and the grouped
-// library agree on categories.
+// library agree on categories. The taxonomy mirrors an institutional fund data
+// room — the sections an allocator's ODD/IDD team expects before committing —
+// so coverage scoring pushes operators toward institution-ready materials.
 export const DATA_ROOM_SECTIONS: DataRoomSection[] = [
-  { key: "overview", label: "Overview", description: "Firm profile, positioning, and summary.", buildModule: "profile", weight: 2, suggestion: "Add a firm overview or summary deck." },
-  { key: "thesis", label: "Thesis & Strategy", description: "Mandate, strategy, and target returns.", buildModule: "thesis", weight: 3, suggestion: "Add your thesis / strategy materials." },
-  { key: "track_record", label: "Track Record", description: "Prior deals and realized performance.", buildModule: "track_record", weight: 3, suggestion: "Add a track-record summary or case studies." },
-  { key: "team", label: "Team", description: "Principals, bios, and org.", buildModule: "team", weight: 2, suggestion: "Add team bios." },
-  { key: "legal", label: "Legal & Structure", description: "Entities, formation docs, and agreements.", buildModule: "entity", weight: 2, suggestion: "Add legal / structure documents." },
-  { key: "financials", label: "Financials", description: "Statements, models, and projections.", weight: 2, suggestion: "Add financials — statements or a model." },
-  { key: "diligence", label: "Diligence / DDQ", description: "Due-diligence questionnaires and responses.", weight: 2, suggestion: "Add a DDQ or diligence pack." },
-  { key: "references", label: "References", description: "References and prior counterparties.", weight: 1, suggestion: "Add references." },
+  { key: "overview", label: "Firm Overview", description: "Firm summary, history, and positioning.", buildModule: "profile", weight: 2, suggestion: "Add a firm overview / summary deck." },
+  { key: "thesis", label: "Investment Strategy & Thesis", description: "Mandate, strategy, edge, and target returns.", buildModule: "thesis", weight: 3, suggestion: "Add your strategy / thesis materials." },
+  { key: "track_record", label: "Track Record & Performance", description: "Realized/unrealized performance, attribution, and benchmarks.", buildModule: "track_record", weight: 3, suggestion: "Add a track-record / performance summary." },
+  { key: "portfolio", label: "Portfolio & Case Studies", description: "Holdings, marks, and representative deal case studies.", weight: 2, suggestion: "Add portfolio case studies." },
+  { key: "team", label: "Team & Governance", description: "Principals, bios, org chart, and decision governance.", buildModule: "team", weight: 2, suggestion: "Add team bios and governance." },
+  { key: "fund_terms", label: "Fund Terms", description: "PPM, LPA, fees & carry, key terms, and side letters.", weight: 3, suggestion: "Add fund terms — PPM / LPA / fee schedule." },
+  { key: "legal", label: "Legal & Structure", description: "Entities, formation, and material agreements.", buildModule: "entity", weight: 2, suggestion: "Add legal / structure documents." },
+  { key: "financials", label: "Financials & Audits", description: "Audited financials, NAV, and management-company accounts.", weight: 2, suggestion: "Add audited financials." },
+  { key: "compliance", label: "Compliance & Regulatory", description: "Form ADV, AML/KYC, and compliance policies.", weight: 2, suggestion: "Add compliance & regulatory filings." },
+  { key: "operations", label: "Operations & Service Providers", description: "Fund admin, audit, legal, custody, and ODD pack.", weight: 1, suggestion: "Add operations / service-provider details (ODD)." },
+  { key: "esg", label: "ESG & Responsible Investing", description: "ESG policy, reporting, and diligence approach.", weight: 1, suggestion: "Add your ESG / responsible-investing policy." },
+  { key: "risk", label: "Risk Management", description: "Risk framework, valuation policy, and controls.", weight: 1, suggestion: "Add your risk-management framework." },
+  { key: "diligence", label: "Diligence / DDQ", description: "ILPA DDQ and due-diligence responses.", weight: 2, suggestion: "Add a completed DDQ (ILPA)." },
+  { key: "references", label: "References", description: "LP, portfolio, and counterparty references.", weight: 1, suggestion: "Add references." },
   { key: "other", label: "Other Materials", description: "Anything else worth sharing.", catchAll: true },
 ];
 
