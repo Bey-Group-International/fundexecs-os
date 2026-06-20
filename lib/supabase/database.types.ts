@@ -89,6 +89,17 @@ type Timestamps = {
   updated_at: string;
 }
 
+// Provenance + verification + soft-archive columns (migration 0032), present on
+// every table-backed module record (Source, Run, Execute).
+type RecordMeta = {
+  provenance: string; // 'manual' | 'ai' | 'import'
+  verification_status: string; // 'unverified' | 'verified'
+  verified_at: string | null;
+  verified_by: string | null;
+  verification_note: string | null;
+  archived_at: string | null;
+}
+
 export type Principal = {
   id: string;
   email: string;
@@ -144,7 +155,7 @@ export type InvestmentThesis = Timestamps & {
   is_active: boolean;
 }
 
-export type Investor = Timestamps & {
+export type Investor = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -184,7 +195,7 @@ export type Commitment = Timestamps & {
   committed_at: string | null;
 }
 
-export type CapitalEvent = Timestamps & {
+export type CapitalEvent = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   fund_id: string;
@@ -198,7 +209,7 @@ export type CapitalEvent = Timestamps & {
   notes: string | null;
 }
 
-export type Deal = Timestamps & {
+export type Deal = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -215,7 +226,7 @@ export type Deal = Timestamps & {
   session_id: string | null;
 }
 
-export type Asset = Timestamps & {
+export type Asset = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   deal_id: string | null;
@@ -231,7 +242,7 @@ export type Asset = Timestamps & {
   session_id: string | null;
 }
 
-export type Underwriting = Timestamps & {
+export type Underwriting = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   deal_id: string;
@@ -244,7 +255,7 @@ export type Underwriting = Timestamps & {
   created_by: string | null;
 }
 
-export type DiligenceItem = Timestamps & {
+export type DiligenceItem = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   deal_id: string;
@@ -359,7 +370,7 @@ export type Entity = Timestamps & {
   created_by: string | null;
 };
 
-export type Partner = Timestamps & {
+export type Partner = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -372,7 +383,7 @@ export type Partner = Timestamps & {
   created_by: string | null;
 };
 
-export type ServiceProvider = Timestamps & {
+export type ServiceProvider = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -384,7 +395,7 @@ export type ServiceProvider = Timestamps & {
   created_by: string | null;
 };
 
-export type DebtFacility = Timestamps & {
+export type DebtFacility = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
