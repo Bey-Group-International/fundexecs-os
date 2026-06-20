@@ -1,4 +1,4 @@
--- 0042_ecosystem_matchmaking.sql
+-- 0045_ecosystem_matchmaking.sql
 -- Instant ecosystem matchmaking. The moment a new organization finishes
 -- onboarding, Earn scores its firm profile against every other discoverable org
 -- and drops a professional alert into the matching orgs' Unified Inbox — across
