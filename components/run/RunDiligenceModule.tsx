@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
-import { addDiligenceItem, updateDiligenceItem } from "@/app/(app)/deal/[id]/actions";
+import { addDiligenceItem } from "@/app/(app)/deal/[id]/actions";
 import type { Deal, DiligenceItem, RiskSeverity } from "@/lib/supabase/database.types";
+import {
+  coverageByCategory,
+  groupByDeal,
+  openCount,
+  overdueCount,
+} from "@/lib/diligence-templates";
+import { DiligenceTemplatePicker } from "@/components/run/DiligenceTemplatePicker";
+import { DiligenceDealGroup } from "@/components/run/DiligenceDealGroup";
 
 // Deals you can still run evaluation work against — everything that hasn't been
 // passed on or died. Ordered newest-first for the picker.
@@ -20,29 +28,7 @@ async function activeDeals(orgId: string): Promise<Deal[]> {
 const fieldClass =
   "rounded-md border border-line bg-surface-0 px-2.5 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none";
 const SEVERITY_OPTS: RiskSeverity[] = ["low", "medium", "high", "critical"];
-const DILIGENCE_STATUSES = ["open", "in_review", "cleared", "flagged", "waived"];
-
-const SEV_DOT: Record<RiskSeverity, string> = {
-  low: "bg-fg-muted",
-  medium: "bg-gold-400",
-  high: "bg-status-danger/80",
-  critical: "bg-status-danger",
-};
-
-function DealPicker({ deals }: { deals: Deal[] }) {
-  return (
-    <select name="deal_id" className={fieldClass} required defaultValue="" aria-label="Deal">
-      <option value="" disabled>
-        Deal…
-      </option>
-      {deals.map((d) => (
-        <option key={d.id} value={d.id}>
-          {d.name}
-        </option>
-      ))}
-    </select>
-  );
-}
+const labelClass = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
 
 // Shared empty state when there's no deal to attach work to yet.
 function NoDeals({ what }: { what: string }) {
@@ -59,6 +45,17 @@ function NoDeals({ what }: { what: string }) {
   );
 }
 
+function Stat({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-1 px-4 py-3">
+      <div className={labelClass}>{label}</div>
+      <div className={`mt-1 text-2xl font-semibold ${danger && value > 0 ? "text-status-danger" : "text-fg-primary"}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 // --- Run › Diligence: org-wide checklist, now actionable -------------------
 export async function RunDiligenceModule({ orgId }: { orgId: string }) {
   const supabase = createServerClient();
@@ -69,10 +66,16 @@ export async function RunDiligenceModule({ orgId }: { orgId: string }) {
       .select("*")
       .eq("organization_id", orgId)
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(200),
   ]);
   const items = (itemsRes.data ?? []) as DiligenceItem[];
   const nameById = new Map(deals.map((d) => [d.id, d.name]));
+  const today = new Date().toISOString().slice(0, 10);
+
+  const coverage = coverageByCategory(items);
+  const groups = groupByDeal(items);
+  const open = openCount(items);
+  const overdue = overdueCount(items, today);
 
   return (
     <div>
@@ -81,11 +84,31 @@ export async function RunDiligenceModule({ orgId }: { orgId: string }) {
         <NoDeals what="diligence" />
       ) : (
         <>
+          {/* Portfolio-wide rollup */}
+          <div className="mb-4 grid grid-cols-3 gap-3">
+            <Stat label="Open items" value={open} />
+            <Stat label="Overdue" value={overdue} danger />
+            <Stat label="Total tracked" value={items.length} />
+          </div>
+
+          {/* One-click checklist templates */}
+          <DiligenceTemplatePicker deals={deals} />
+
+          {/* Manual add */}
           <form
             action={addDiligenceItem}
             className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-line bg-surface-1 p-3"
           >
-            <DealPicker deals={deals} />
+            <select name="deal_id" className={fieldClass} required defaultValue="" aria-label="Deal">
+              <option value="" disabled>
+                Deal…
+              </option>
+              {deals.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
             <input name="title" placeholder="New diligence item…" className={`${fieldClass} min-w-0 flex-1`} required />
             <input name="category" placeholder="Category" className={`${fieldClass} w-28`} />
             <select name="risk_severity" className={fieldClass} defaultValue="" aria-label="Severity">
@@ -102,43 +125,45 @@ export async function RunDiligenceModule({ orgId }: { orgId: string }) {
           </form>
 
           {items.length === 0 ? (
-            <p className="text-sm text-fg-muted">No diligence items yet — add the first one above.</p>
+            <p className="text-sm text-fg-muted">No diligence items yet — add the first one above or apply a template.</p>
           ) : (
-            <div className="divide-y divide-line/50 overflow-hidden rounded-xl border border-line">
-              {items.map((i) => {
-                const resolved = i.status === "cleared" || i.status === "waived";
-                return (
-                  <div key={i.id} className={`flex items-center gap-2.5 px-4 py-2.5 ${resolved ? "opacity-60" : "bg-surface-1"}`}>
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${i.risk_severity ? SEV_DOT[i.risk_severity] : "bg-line"}`} aria-hidden />
-                    <Link href={`/deal/${i.deal_id}`} className="min-w-0 flex-1 truncate text-sm text-fg-primary hover:text-gold-300">
-                      {i.title}
-                      <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                        {nameById.get(i.deal_id) ?? "—"} · {i.category}
-                      </span>
-                    </Link>
-                    <form action={updateDiligenceItem} className="flex items-center gap-1">
-                      <input type="hidden" name="id" value={i.id} />
-                      <input type="hidden" name="deal_id" value={i.deal_id} />
-                      <select
-                        name="status"
-                        defaultValue={i.status}
-                        className="rounded-md border border-line bg-surface-0 px-1.5 py-1 text-[11px] text-fg-secondary focus:border-gold-500/60 focus:outline-none"
-                        aria-label="Status"
-                      >
-                        {DILIGENCE_STATUSES.map((s) => (
-                          <option key={s} value={s}>
-                            {s.replace("_", " ")}
-                          </option>
-                        ))}
-                      </select>
-                      <button className="rounded-md border border-line px-2 py-1 text-[11px] text-fg-secondary transition hover:border-gold-500/50 hover:text-gold-300">
-                        Save
-                      </button>
-                    </form>
-                  </div>
-                );
-              })}
-            </div>
+            <>
+              {/* Category coverage */}
+              <div className="mb-5">
+                <div className={`mb-2 ${labelClass}`}>Coverage by category</div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {coverage.map((c) => (
+                    <div key={c.category} className="rounded-lg border border-line bg-surface-1 px-3 py-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs capitalize text-fg-secondary">{c.category}</span>
+                        <span className={labelClass}>
+                          {c.resolved}/{c.total}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-0">
+                        <div className="h-full bg-emerald-500" style={{ width: `${Math.round(c.ratio * 100)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Per-deal groups with bulk actions */}
+              <div className="space-y-4">
+                {groups.map((g) => (
+                  <DiligenceDealGroup
+                    key={g.dealId}
+                    dealId={g.dealId}
+                    dealName={nameById.get(g.dealId) ?? "Unknown deal"}
+                    items={g.items}
+                    total={g.total}
+                    resolved={g.resolved}
+                    progress={g.progress}
+                    today={today}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </>
       )}
