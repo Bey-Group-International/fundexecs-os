@@ -48,6 +48,20 @@ type Turn =
     };
 
 /**
+ * Routes where the Earn dock is suppressed: the session/workspace surfaces
+ * (which *are* an Earn conversation, so the floating dock is redundant) and the
+ * Workflows screen. Matched against the pathname.
+ */
+function dockHiddenOn(pathname: string): boolean {
+  return (
+    pathname === "/workspace" ||
+    pathname === "/sessions" ||
+    pathname === "/automations" ||
+    pathname.startsWith("/session/")
+  );
+}
+
+/**
  * The app-wide Earn copilot dock: a ⌘K slide-over present on every page that
  * reads the operator's current location, surfaces the on-point specialist plus
  * a live briefing and context suggestions, and maintains a multi-turn
@@ -55,6 +69,7 @@ type Turn =
  */
 export function EarnCopilotDock({ name }: { name: string }) {
   const pathname = usePathname() || "/";
+  const hidden = dockHiddenOn(pathname);
   const ctx = copilotContextFromPath(pathname);
   const specialist = AGENT_BY_KEY[onPointAgent(ctx)];
   const suggestions = suggestionsFor(ctx);
@@ -129,8 +144,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
     inputRef.current?.focus();
   }
 
-  // ⌘/Ctrl-K toggles the dock; Esc closes it.
+  // ⌘/Ctrl-K toggles the dock; Esc closes it. Inert where the dock is hidden.
   useEffect(() => {
+    if (hidden) return;
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -141,7 +157,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [hidden]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
@@ -186,6 +202,10 @@ export function EarnCopilotDock({ name }: { name: string }) {
   function submitAsk() {
     ask(body);
   }
+
+  // Suppressed on the session/workspace and Workflows screens (hooks above run
+  // unconditionally to satisfy the rules of hooks).
+  if (hidden) return null;
 
   return (
     <>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PrintButton } from "@/components/PrintButton";
 import type { AssetWarRoom as WarRoom, LifecycleStage, AssetNextAction } from "@/lib/execute-war-room";
 import { formatCompactCurrency } from "@/lib/execute-war-room";
 import type { AssetType, CapitalEventType } from "@/lib/supabase/database.types";
@@ -79,7 +80,7 @@ function Header({ data }: { data: WarRoom }) {
   // Map the multiple onto the 0–100 ring against a 3x ceiling; show the raw value.
   const ringValue = moic != null ? (moic / 3) * 100 : 0;
   return (
-    <div className="rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-4 sm:gap-5">
         <div className="relative shrink-0">
           <Ring value={ringValue} />
@@ -137,7 +138,7 @@ function Value({ data }: { data: WarRoom }) {
       : `${unrealizedGain >= 0 ? "+" : "−"}${formatCompactCurrency(Math.abs(unrealizedGain))}`;
   const hasYield = asset.noi != null || asset.cap_rate != null;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Value</SectionTitle>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <StatCell label="Acquisition cost" value={formatCompactCurrency(asset.acquisition_cost)} />
@@ -160,7 +161,7 @@ function Value({ data }: { data: WarRoom }) {
 function CapitalFlows({ data }: { data: WarRoom }) {
   const { capitalEvents } = data;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
           <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -222,7 +223,7 @@ function NextActionItem({ action }: { action: AssetNextAction }) {
 function NextActions({ data }: { data: WarRoom }) {
   const { nextActions } = data;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Next best actions</SectionTitle>
       {nextActions.length ? (
         <ul className="flex flex-col gap-2">
@@ -241,7 +242,7 @@ function Provenance({ data }: { data: WarRoom }) {
   const { asset, deal, fund } = data;
   if (!deal && !fund) return null;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Provenance</SectionTitle>
       <div className="flex flex-col gap-2 text-sm">
         {fund ? (
@@ -273,12 +274,15 @@ function Provenance({ data }: { data: WarRoom }) {
 export function AssetWarRoom({ data }: { data: WarRoom }) {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
-      <Link
-        href="/execute/asset_management"
-        className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
-      >
-        ← Asset management
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/execute/asset_management"
+          className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
+        >
+          ← Asset management
+        </Link>
+        <PrintButton />
+      </div>
       <Header data={data} />
       <Value data={data} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
