@@ -21,11 +21,11 @@ and verified outcomes into **durable, portable, auditable units** that *compound
 
 We model this as three layers, each owning one scarce asset:
 
-| Layer | Owns | Maps to (today) | Token primitive |
-|-------|------|-----------------|-----------------|
-| **Access** | What you can do / see | `wallets` + `credit_ledger` | **Credits** (metered, spendable) |
-| **Governance** | Your standing to act in the market | `marketplace_listings` + matching | **Reputation + Stake** |
-| **Security** | Whether an outcome is real | Closing checklist + `verification_status` | **Attestations + Escrow** |
+|     Layer      |                Owns                |              Maps to (today)              |         Token primitive          |
+|----------------|------------------------------------|-------------------------------------------|----------------------------------|
+| **Access**     | What you can do / see              | `wallets` + `credit_ledger`               | **Credits** (metered, spendable) |
+| **Governance** | Your standing to act in the market | `marketplace_listings` + matching         | **Reputation + Stake**           |
+| **Security**   | Whether an outcome is real         | Closing checklist + `verification_status` | **Attestations + Escrow**        |
 
 The three are not independent products. They are one flywheel (§5): credits fund
 activity → activity that *verifiably closes* mints reputation → reputation buys
@@ -277,14 +277,14 @@ You asked for all four. They are not four features — they are four **inputs to
 score** that lowers the cost and raises the priority of a user's next action.
 
 ```
-                 ┌─────────────────────────────────────────────┐
-                 │              COMPOUNDING SCORE               │
-                 │   (drives price discount + match priority)   │
-                 └─────────────────────────────────────────────┘
-                    ▲          ▲             ▲            ▲
-        ┌───────────┘   ┌──────┘      ┌──────┘     ┌──────┘
-   (a) Reputation   (b) Loyalty   (c) Staking   (d) Data network
-   track record     + tenure      governance    effects
+              ┌─────────────────────────────────────────────┐
+              │              COMPOUNDING SCORE               │
+              │   (drives price discount + match priority)   │
+              └─────────────────────────────────────────────┘
+                 ▲          ▲             ▲            ▲
+     ┌───────────┘   ┌──────┘      ┌──────┘     ┌──────┘
+(a) Reputation   (b) Loyalty   (c) Staking   (d) Data network
+track record     + tenure      governance    effects
 ```
 
 - **(a) Reputation / track-record** — the core flywheel (§4.1). Verified closes
@@ -316,12 +316,12 @@ trust graph and a points casino.
 
 New tables (all build on, and reuse the audit pattern of, existing ones):
 
-| Table | Purpose | Mirrors |
-|-------|---------|---------|
-| `reputation_scores` | current score + tier per org | `wallets` |
-| `reputation_ledger` | append-only reputation movements | `credit_ledger` |
-| `stake_positions` | locked/returned/forfeited credit stakes | (credit holds) |
-| `attestations` | immutable, signed, optionally-anchored claims | extends `verification_status` |
+|        Table        |                    Purpose                    |            Mirrors            |
+|---------------------|-----------------------------------------------|-------------------------------|
+| `reputation_scores` | current score + tier per org                  | `wallets`                     |
+| `reputation_ledger` | append-only reputation movements              | `credit_ledger`               |
+| `stake_positions`   | locked/returned/forfeited credit stakes       | (credit holds)                |
+| `attestations`      | immutable, signed, optionally-anchored claims | extends `verification_status` |
 
 No existing table is broken. Credits stay the single source of truth for value
 movement; stake and escrow are *holds* on credits; reputation and attestations are
@@ -365,3 +365,4 @@ with `marketplace`-style public-read policies where discovery requires it.
   The moment any unit becomes transferable-for-value on-chain, securities/AML review
   is mandatory. The substrate (§2) is designed so that line is never crossed by
   accident — only by an explicit, reviewed per-unit decision.
+
