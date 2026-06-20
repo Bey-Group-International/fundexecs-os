@@ -33,14 +33,20 @@ interface TeamControlsProps {
 
 const ROLE_OPTIONS: MemberRole[] = ["owner", "admin", "member"];
 
-// Only allow user-supplied avatar URLs that use a safe scheme. Blocks
-// javascript:/vbscript:/other-scheme payloads from reaching the <img> sink
-// (CodeQL js/xss-through-dom); falls back to initials when unsafe/empty.
+// Only allow user-supplied avatar URLs that resolve to a real http(s)
+// resource. Parsing with the URL constructor and re-emitting `.href` breaks the
+// taint flow into the <img> sink and rejects javascript:/data:/other-scheme
+// payloads (CodeQL js/xss-through-dom). Falls back to initials when unsafe.
 function safeImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  const u = url.trim();
-  if (/^https?:\/\//i.test(u)) return u;
-  if (/^data:image\//i.test(u)) return u;
+  try {
+    const parsed = new URL(url.trim());
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.href;
+    }
+  } catch {
+    // not a valid absolute URL
+  }
   return null;
 }
 
