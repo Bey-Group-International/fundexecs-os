@@ -78,7 +78,7 @@ export interface AddSourcedResult {
 export async function addSourcedTargets(
   hub: string,
   module: string,
-  candidates: { name: string; category: string; rationale: string }[],
+  candidates: { name: string; category: string; rationale: string; sourceUrl?: string }[],
 ): Promise<AddSourcedResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
@@ -88,7 +88,17 @@ export async function addSourcedTargets(
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
   const clean = candidates
-    .map((c) => ({ name: String(c.name ?? "").trim(), category: String(c.category ?? "").trim(), rationale: String(c.rationale ?? "").trim() }))
+    .map((c) => ({
+      name: String(c.name ?? "").trim(),
+      category: String(c.category ?? "").trim(),
+      rationale: String(c.rationale ?? "").trim(),
+      // A web-sourced citation becomes the verification evidence, pre-filled so
+      // the operator can confirm the (still unverified) record in one click.
+      verification_note:
+        typeof c.sourceUrl === "string" && /^https?:\/\/\S+$/i.test(c.sourceUrl.trim())
+          ? c.sourceUrl.trim().slice(0, 500)
+          : null,
+    }))
     .filter((c) => c.name);
   if (clean.length === 0) return { ok: false, error: "Nothing to add." };
 
@@ -107,6 +117,7 @@ export async function addSourcedTargets(
         investor_type: (valid.has(c.category as InvestorType) ? c.category : "other") as InvestorType,
         pipeline_stage: "prospect",
         notes: note(c.rationale),
+        verification_note: c.verification_note,
       }));
       const { data: ins, error } = await supabase.from("investors").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -121,6 +132,7 @@ export async function addSourcedTargets(
         stage: "sourced" as const,
         asset_class: c.category || null,
         notes: note(c.rationale),
+        verification_note: c.verification_note,
       }));
       const { data: ins, error } = await supabase.from("deals").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -136,6 +148,7 @@ export async function addSourcedTargets(
         status: "prospective",
         currency: "USD",
         notes: note(c.rationale),
+        verification_note: c.verification_note,
       }));
       const { data: ins, error } = await supabase.from("debt_facilities").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -150,6 +163,7 @@ export async function addSourcedTargets(
         partner_type: c.category || "co_gp",
         status: "prospective",
         notes: note(c.rationale),
+        verification_note: c.verification_note,
       }));
       const { data: ins, error } = await supabase.from("partners").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -164,6 +178,7 @@ export async function addSourcedTargets(
         provider_type: c.category || "legal",
         status: "prospective",
         notes: note(c.rationale),
+        verification_note: c.verification_note,
       }));
       const { data: ins, error } = await supabase.from("service_providers").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };

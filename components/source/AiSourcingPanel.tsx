@@ -32,12 +32,14 @@ export function AiSourcingPanel({
   entities,
   agentName,
   live,
+  webEnrichment = false,
 }: {
   hub: string;
   module: string;
   entities: string;
   agentName: string;
   live: boolean;
+  webEnrichment?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [pending, start] = useTransition();
@@ -86,6 +88,7 @@ export function AiSourcingPanel({
       name: c.name,
       category: c.category,
       rationale: c.rationale,
+      sourceUrl: c.sourceUrl,
     }));
     if (picks.length === 0) return setMessage("Select at least one to add.");
     start(async () => {
@@ -123,6 +126,10 @@ export function AiSourcingPanel({
         {!live ? (
           <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
             offline mode
+          </span>
+        ) : webEnrichment ? (
+          <span className="rounded-full border border-status-info/40 bg-status-info/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-info">
+            web ⚡
           </span>
         ) : null}
         <div className="ml-auto flex gap-1.5">
@@ -183,6 +190,17 @@ export function AiSourcingPanel({
                 </div>
                 <p className="mt-1 text-xs text-fg-secondary">{c.rationale}</p>
                 <p className="mt-1 text-[11px] text-gold-300">→ {c.firstMove}</p>
+                {c.sourceUrl ? (
+                  <a
+                    href={c.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-1 inline-block max-w-full truncate font-mono text-[10px] text-status-info hover:underline"
+                  >
+                    ↗ source
+                  </a>
+                ) : null}
               </div>
             </label>
           ))}
