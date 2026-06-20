@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { getWizardQuestions } from "@/lib/builder-wizard";
-import { finalizeWithEarn } from "./builder-actions";
+import { finalizeWithEarn, suggestWizardAnswers } from "./builder-actions";
 
 // Guided setup: a short, section-aware questionnaire. The operator answers
 // plain questions, then Earn expands the answers into an institutional draft
@@ -24,6 +24,20 @@ export function BuilderWizard({
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
+
+  // Context-aware: seed answers from the firm's existing data (user edits win).
+  useEffect(() => {
+    let live = true;
+    suggestWizardAnswers(docId).then((s) => {
+      if (!live || Object.keys(s).length === 0) return;
+      setAnswers((a) => ({ ...s, ...a }));
+      setPrefilled(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [docId]);
 
   const total = questions.length;
   const onReview = step >= total;
@@ -99,6 +113,11 @@ export function BuilderWizard({
           <div className="h-full bg-gold-400" style={{ width: `${((step + 1) / total) * 100}%` }} />
         </div>
       </div>
+      {prefilled ? (
+        <p className="rounded-md border border-gold-500/20 bg-gold-500/5 px-2.5 py-1 text-[11px] text-fg-muted">
+          ✶ Pre-filled from your firm data where available — edit as needed.
+        </p>
+      ) : null}
       <label className="flex flex-col gap-1.5">
         <span className="text-sm text-fg-primary">{q.label}</span>
         {q.hint ? <span className="text-xs text-fg-muted">{q.hint}</span> : null}
