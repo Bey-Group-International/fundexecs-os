@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
@@ -172,4 +173,42 @@ export async function revokeShare(formData: FormData): Promise<void> {
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
   revalidatePath(ROOM);
+}
+
+// Open a section's builder: jump to the section's most recent document, creating
+// an empty one first when the section has none. Drives the coverage list — each
+// section/document is a click into the document builder.
+export async function openSection(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const sectionKey = String(formData.get("section") ?? "").trim();
+  const sectionDef = DATA_ROOM_SECTIONS.find((s) => s.key === sectionKey);
+  if (!sectionDef) return;
+
+  const supabase = createServerClient();
+  const { data: existing } = await supabase
+    .from("documents")
+    .select("id")
+    .eq("organization_id", ctx.orgId)
+    .eq("doc_type", sectionDef.key)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let id = existing?.id;
+  if (!id) {
+    const { data: created } = await supabase
+      .from("documents")
+      .insert({
+        organization_id: ctx.orgId,
+        name: sectionDef.label,
+        doc_type: sectionDef.key,
+        mime_type: "text/markdown",
+        uploaded_by: ctx.userId,
+      })
+      .select("id")
+      .maybeSingle();
+    id = created?.id;
+  }
+  if (id) redirect(`/document/${id}`);
 }

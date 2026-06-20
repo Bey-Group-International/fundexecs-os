@@ -268,6 +268,8 @@ export type DiligenceItem = Timestamps & RecordMeta & {
   likelihood: RiskSeverity | null;
   mitigation: string | null;
   residual_severity: RiskSeverity | null;
+  owner: string | null;
+  due_date: string | null;
 }
 
 export type IcDecisionKind = "go" | "conditional" | "hold" | "no_go";

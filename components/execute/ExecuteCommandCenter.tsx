@@ -1,20 +1,6 @@
 import Link from "next/link";
 import type { ExecutePerformance, ExecuteModuleChip } from "@/lib/execute-performance";
-
-function compactUsd(n: number): string {
-  const abs = Math.abs(n);
-  if (abs < 1) return "$0";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(n);
-}
-
-function multiple(v: number | null): string {
-  return v == null ? "—" : `${v.toFixed(2)}×`;
-}
+import { compactUsd, multiple } from "@/lib/format";
 
 // Performance ring — pure SVG, renders server-side with no client JS. Fill maps
 // the hero multiple onto a 2.0× target (a full ring = doubled capital); tone

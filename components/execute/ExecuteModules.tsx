@@ -1,183 +1,16 @@
-import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
-import { getExecutePerformance, isExited, type ExecutePerformance } from "@/lib/execute-performance";
+import { getExecutePerformance, isExited } from "@/lib/execute-performance";
+import { compactUsd, multiple, num } from "@/lib/format";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
-import { promoteDealToAsset } from "@/components/execute/actions";
-import type { Asset, Deal, Artifact } from "@/lib/supabase/database.types";
+import { EmptyState, StatTile } from "@/components/execute/ui";
+import type { Asset, Artifact } from "@/lib/supabase/database.types";
 
-// Shared helpers --------------------------------------------------------------
-function compactUsd(n: number): string {
-  if (!Number.isFinite(n) || Math.abs(n) < 1) return "$0";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(n);
-}
-
-function multiple(v: number | null): string {
-  return v == null ? "—" : `${v.toFixed(2)}×`;
-}
-
-const num = (v: number | null | undefined): number =>
-  typeof v === "number" && Number.isFinite(v) ? v : 0;
-
-// Empty-state scaffold, pointed at wherever the module's data is sourced.
-function EmptyState({ note, href, cta }: { note: string; href: string; cta: string }) {
-  return (
-    <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
-      <span
-        aria-hidden
-        className="mb-3 flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/5 font-mono text-sm text-gold-400"
-      >
-        ✶
-      </span>
-      <p className="max-w-sm text-sm text-fg-secondary">{note}</p>
-      <Link
-        href={href}
-        className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
-      >
-        → {cta}
-      </Link>
-    </div>
-  );
-}
-
-function StatTile({ value, label, tone }: { value: string; label: string; tone?: "good" | "bad" }) {
-  const valueTone = tone === "good" ? "text-emerald-300" : tone === "bad" ? "text-status-danger" : "text-fg-primary";
-  return (
-    <div className="flex flex-col gap-0.5 rounded-xl border border-line bg-surface-1 px-3.5 py-3">
-      <span className={`font-display text-lg font-semibold leading-none ${valueTone}`}>{value}</span>
-      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</span>
-    </div>
-  );
-}
-
-// --- Closing: the approve-to-portfolio handoff -------------------------------
-// Deals that have cleared committee and are working toward close. This is the
-// bridge between Run (evaluation) and the rest of Execute (operating the asset):
-// the legal close, the wire, and the moment a deal becomes a portfolio holding.
-const CLOSING_STAGES = new Set(["ic_review", "closing"]);
-
-function daysUntil(iso: string | null): number | null {
-  if (!iso) return null;
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return null;
-  return Math.round((t - Date.now()) / 86_400_000);
-}
-
-export async function ExecuteClosingModule({ orgId }: { orgId: string }) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from("deals")
-    .select("*")
-    .eq("organization_id", orgId)
-    .in("stage", ["ic_review", "closing"]);
-  const deals = ((data ?? []) as Deal[]).filter((d) => CLOSING_STAGES.has(d.stage));
-
-  // Closing first, then on-deck IC approvals; soonest expected close to the top.
-  deals.sort((a, b) => {
-    if (a.stage !== b.stage) return a.stage === "closing" ? -1 : 1;
-    const ad = a.expected_close ?? "9999";
-    const bd = b.expected_close ?? "9999";
-    return ad < bd ? -1 : ad > bd ? 1 : 0;
-  });
-
-  const closing = deals.filter((d) => d.stage === "closing");
-  const totalClosing = closing.reduce((s, d) => s + num(d.target_amount), 0);
-  const nextClose = closing.map((d) => d.expected_close).filter(Boolean).sort()[0] ?? null;
-  const nextCloseDays = daysUntil(nextClose);
-
-  if (deals.length === 0) {
-    return (
-      <div>
-        <ModuleHeader
-          title="Closing"
-          blurb="Deals cleared for close — the handoff from evaluation to the portfolio book."
-        />
-        <EmptyState
-          note="Nothing in closing. Take a deal through IC in the Run hub and it will appear here as it moves to close."
-          href="/run/strategy"
-          cta="Run hub"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <ModuleHeader
-        title="Closing"
-        blurb="Deals cleared for close — the handoff from evaluation to the portfolio book."
-      />
-      <div className="mb-5 grid grid-cols-3 gap-2.5">
-        <StatTile value={String(closing.length)} label="in closing" />
-        <StatTile value={compactUsd(totalClosing)} label="capital closing" />
-        <StatTile
-          value={nextCloseDays == null ? "—" : nextCloseDays < 0 ? "overdue" : `${nextCloseDays}d`}
-          label="next close"
-          tone={nextCloseDays != null && nextCloseDays < 0 ? "bad" : undefined}
-        />
-      </div>
-
-      <div className="flex flex-col gap-2.5">
-        {deals.map((d) => {
-          const due = daysUntil(d.expected_close);
-          return (
-            <div
-              key={d.id}
-              className="rounded-xl border border-line bg-surface-1 p-4 transition hover:border-gold-500/30"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="truncate font-medium text-fg-primary">{d.name}</span>
-                <span
-                  className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-                    d.stage === "closing"
-                      ? "border-gold-500/40 text-gold-300"
-                      : "border-status-info/50 text-status-info"
-                  }`}
-                >
-                  {d.stage === "closing" ? "Closing" : "IC cleared"}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-fg-muted">
-                {d.target_amount ? (
-                  <span className="text-fg-secondary">{compactUsd(num(d.target_amount))}</span>
-                ) : null}
-                {d.asset_class ? <span>{d.asset_class}</span> : null}
-                {d.lead_principal ? <span>lead · {d.lead_principal}</span> : null}
-                {d.expected_close ? (
-                  <span className={due != null && due < 0 ? "text-status-danger" : "text-gold-300"}>
-                    {due != null && due < 0
-                      ? `close overdue ${Math.abs(due)}d`
-                      : `closes ${d.expected_close}${due != null ? ` · ${due}d` : ""}`}
-                  </span>
-                ) : (
-                  <span>no close date set</span>
-                )}
-              </div>
-              {d.stage === "closing" ? (
-                <form action={promoteDealToAsset} className="mt-3">
-                  <input type="hidden" name="deal_id" value={d.id} />
-                  <button className="inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 hover:text-gold-200">
-                    → Promote to portfolio
-                  </button>
-                </form>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+// Closing, Capital Events, and Asset Management each have their own module file;
+// this one carries the remaining derived Execute views: Reporting and Exit.
 
 // --- Reporting: the live portfolio report ------------------------------------
 // A standing LP-grade snapshot synthesized from the operating record (the same
 // roll-up the command center reads), plus the library of reports already drafted.
-// Turns Reporting from a dead scaffold into the page an operator screenshots for
-// the quarterly letter — and a one-click Earn launch to draft the next one.
 function ReportLine({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-line/50 py-2 last:border-0">
@@ -333,8 +166,6 @@ export async function ExecuteExitModule({ orgId }: { orgId: string }) {
   const realizedCost = exited.reduce((s, a) => s + num(a.acquisition_cost), 0);
   const realizedMoic = realizedCost > 0 ? Math.round((realizedValue / realizedCost) * 100) / 100 : null;
 
-  // Held positions sorted by current mark — the strongest are the natural next
-  // harvests. Surface the top handful as exit candidates.
   const candidates = held
     .map((a) => ({ a, m: withMultiple(a) }))
     .filter((x) => x.m != null)
