@@ -20,6 +20,7 @@ import {
   RunStressTestModule,
   RunCommsModule,
 } from "@/components/run/RunModules";
+import { RunDiligenceModule, RunUnderwritingModule } from "@/components/run/RunListModules";
 import {
   ExecuteClosingModule,
   ExecuteReportingModule,
@@ -123,28 +124,6 @@ const LIST_MODULES: Record<string, ListConfig> = {
     ],
     empty: "No debt facilities yet. Track credit lines, term loans, and mezz here.",
   },
-  "run/underwriting": {
-    table: "underwritings",
-    blurb: "Base, bull, and bear cases behind every investment decision.",
-    columns: [
-      { key: "name", label: "Model" },
-      { key: "scenario", label: "Scenario" },
-      { key: "projected_irr", label: "IRR" },
-      { key: "projected_moic", label: "MOIC" },
-    ],
-    empty: "No underwriting models yet.",
-  },
-  "run/diligence": {
-    table: "diligence_items",
-    blurb: "Open questions and findings that gate conviction.",
-    columns: [
-      { key: "title", label: "Item" },
-      { key: "category", label: "Category" },
-      { key: "status", label: "Status" },
-      { key: "risk_severity", label: "Risk" },
-    ],
-    empty: "No diligence items yet.",
-  },
   "execute/capital_events": {
     table: "capital_events",
     blurb: "Calls, distributions, and every flow of capital post-close.",
@@ -211,15 +190,18 @@ export async function ModuleView({
   // carries the mandate alongside live conviction.
   const mandateStrip = hub.key === "source" ? <MandateStrip orgId={ctx.orgId} /> : null;
 
-  // --- Run hub: derived evaluation modules ---------------------------------
+  // --- Run hub: derived evaluation modules + actionable lists --------------
   // Strategy, Risk, Stress Test, and Comms are synthesized from the live deal
-  // working set (deals + underwriting + diligence); Diligence and Underwriting
-  // fall through to their table-backed views below.
+  // working set (deals + underwriting + diligence). Diligence and Underwriting
+  // are the org-wide lists, now editable in place (add + inline status) with a
+  // deal picker — the same actions the deal war room uses.
   if (hub.key === "run") {
     if (mod.key === "strategy") return <RunStrategyModule orgId={ctx.orgId} />;
     if (mod.key === "risk") return <RunRiskModule orgId={ctx.orgId} />;
     if (mod.key === "stress_test") return <RunStressTestModule orgId={ctx.orgId} />;
     if (mod.key === "comms") return <RunCommsModule orgId={ctx.orgId} />;
+    if (mod.key === "diligence") return <RunDiligenceModule orgId={ctx.orgId} />;
+    if (mod.key === "underwriting") return <RunUnderwritingModule orgId={ctx.orgId} />;
   }
 
   // --- Execute hub: derived operating modules ------------------------------
