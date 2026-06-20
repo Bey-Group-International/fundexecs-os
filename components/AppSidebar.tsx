@@ -101,12 +101,14 @@ export function AppSidebar({
   archiveSessionAction,
   pinSessionAction,
   unreadSessionAction,
+  inboxUnread = 0,
 }: {
   name: string;
   planName: string;
   hubs: HubItem[];
   sessions: SessionItem[];
   groups: GroupItem[];
+  inboxUnread?: number;
   signOutAction: () => void;
   createGroupAction: (formData: FormData) => void;
   moveSessionAction: (formData: FormData) => void;
@@ -380,6 +382,17 @@ export function AppSidebar({
         </Link>
 
         <div className="mt-3 flex flex-col gap-0.5">
+          <Link href="/inbox" className={`${linkClass} justify-between`}>
+            <span className="flex items-center gap-2">
+              <span className="font-mono text-base leading-none text-gold-400">⊞</span>
+              Inbox
+            </span>
+            {inboxUnread > 0 ? (
+              <span className="rounded-full bg-gold-400 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none text-surface-0">
+                {inboxUnread > 99 ? "99+" : inboxUnread}
+              </span>
+            ) : null}
+          </Link>
           <Link href="/automations" className={linkClass}>
             <span className="font-mono text-base leading-none text-gold-400">↻</span>
             Workflows

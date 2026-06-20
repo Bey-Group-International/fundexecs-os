@@ -81,6 +81,19 @@ export type MarketplaceStatus = "draft" | "listed" | "paused" | "closed";
 export type TriggerType = "schedule" | "manual" | "email" | "webhook" | "event";
 export type SessionOrigin = "earn" | "workflow";
 
+// The Unified Inbox enums (migration 0038).
+export type InboxChannel =
+  | "gmail"
+  | "slack"
+  | "calendly"
+  | "google_calendar"
+  | "zoom"
+  | "google_meet"
+  | "docusign";
+export type InboxCategory = "messaging" | "booking" | "video" | "signing";
+export type InboxThreadStatus = "open" | "snoozed" | "done";
+export type InboxDirection = "inbound" | "outbound";
+
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
 // Common audit columns present on most tables.
@@ -656,6 +669,44 @@ export type DispatchLog = {
   created_at: string;
 };
 
+// A Unified Inbox thread (migration 0038) — one counterparty touchpoint with an
+// AI triage layer (priority/intent/ai_summary) and deep links into Command
+// Center context (deal_id / investor_id). The inbound counterpart to DispatchLog.
+export type InboxThread = Timestamps & {
+  id: string;
+  organization_id: string;
+  channel: InboxChannel;
+  category: InboxCategory;
+  subject: string;
+  counterparty_name: string | null;
+  counterparty_email: string | null;
+  preview: string | null;
+  status: InboxThreadStatus;
+  unread: boolean;
+  priority: number;
+  intent: string | null;
+  ai_summary: string | null;
+  last_message_at: string | null;
+  meeting_at: string | null;
+  meeting_url: string | null;
+  deal_id: string | null;
+  investor_id: string | null;
+  created_by: string | null;
+};
+
+// One message within an inbox thread (migration 0038).
+export type InboxMessage = {
+  id: string;
+  organization_id: string;
+  thread_id: string;
+  direction: InboxDirection;
+  author: string | null;
+  body: string;
+  occurred_at: string;
+  metadata: Json;
+  created_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -775,6 +826,8 @@ export type Database = {
       stakeholders: TableShape<Stakeholder>;
       share_classes: TableShape<ShareClass>;
       equity_holdings: TableShape<EquityHolding>;
+      inbox_threads: TableShape<InboxThread>;
+      inbox_messages: TableShape<InboxMessage>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -814,6 +867,10 @@ export type Database = {
       marketplace_status: MarketplaceStatus;
       trigger_type: TriggerType;
       session_origin: SessionOrigin;
+      inbox_channel: InboxChannel;
+      inbox_category: InboxCategory;
+      inbox_thread_status: InboxThreadStatus;
+      inbox_direction: InboxDirection;
     };
   };
 }
