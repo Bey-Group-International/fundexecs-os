@@ -1,4 +1,4 @@
--- 0047_tokenization.sql
+-- 0048_tokenization.sql
 -- Tokenization layers, persistence (see docs/TOKENIZATION_LAYERS.md). Promotes the
 -- Phase 0 in-code resolvers to durable ledgers, following the exact append-only
 -- pattern proven by credit_ledger (migration 0039):

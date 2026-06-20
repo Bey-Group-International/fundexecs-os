@@ -1,8 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { getWallet } from "@/lib/wallet";
+import { entitlements } from "@/lib/entitlements";
+import { compoundingProfile } from "@/lib/compounding";
+import { requiredListingStake, lockStake, resolveListingStake } from "@/lib/stake";
 import { queueNextAction } from "@/app/(app)/capital-map/actions";
 import type { MarketplaceStatus } from "@/lib/supabase/database.types";
 
@@ -35,19 +39,52 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
     if (!Number.isNaN(parsed)) amount = parsed;
   }
 
+  // Governance gate (TOKENIZATION_LAYERS.md §4.2/§4.3): only orgs entitled to
+  // list may create a listing, and listing escrows a refundable, reputation-
+  // scaled credit stake.
+  const wallet = await getWallet(ctx.orgId);
+  const ent = await entitlements(ctx.orgId, wallet?.plan ?? null);
+  if (!ent.canList) {
+    return { error: "Your plan or standing doesn't allow listing yet." };
+  }
+
   const supabase = createServerClient();
-  const { error } = await supabase.from("marketplace_listings").insert({
-    organization_id: ctx.orgId,
-    title,
-    listing_type: listingType,
-    summary: summary || null,
-    deal_id: dealId,
-    amount,
-    status,
-    is_public: isPublic,
-  });
+  const { data: listing, error } = await supabase
+    .from("marketplace_listings")
+    .insert({
+      organization_id: ctx.orgId,
+      title,
+      listing_type: listingType,
+      summary: summary || null,
+      deal_id: dealId,
+      amount,
+      status,
+      is_public: isPublic,
+    })
+    .select("id")
+    .single();
 
   if (error) return { error: error.message };
+
+  // Lock the listing stake. Reputable orgs post less; if the required stake is
+  // 0, skip locking. Stake writes use the service client (credit movements need
+  // the service role). A guard inside lockStake rejects insufficient balance.
+  const requiredStake = requiredListingStake(await compoundingProfile(ctx.orgId));
+  if (requiredStake > 0) {
+    try {
+      await lockStake(createServiceClient(), {
+        orgId: ctx.orgId,
+        purpose: "listing",
+        refId: listing.id,
+        amount: requiredStake,
+      });
+    } catch (e) {
+      // Roll back the listing so we never leave one un-staked.
+      await supabase.from("marketplace_listings").delete().eq("id", listing.id);
+      return { error: e instanceof Error ? e.message : "Could not lock listing stake." };
+    }
+  }
+
   revalidatePath("/marketplace");
   return {};
 }
@@ -89,6 +126,15 @@ export async function updateListingStatus(formData: FormData): Promise<void> {
     .update({ status: next })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+
+  // On honest completion, return the listing stake (TOKENIZATION_LAYERS.md §4.3).
+  // resolveListingStake is idempotent and a no-op when there's no locked stake.
+  // TODO: bad-faith forfeiture ("forfeited") needs the dispute/appeal path from
+  // spec §9 before it can move real stakes — out of scope for this change.
+  if (next === "closed") {
+    await resolveListingStake(createServiceClient(), id, "returned");
+  }
+
   revalidatePath("/marketplace");
 }
 

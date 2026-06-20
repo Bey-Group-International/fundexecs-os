@@ -12,7 +12,7 @@ import type { ReputationLedgerEntry } from "@/lib/supabase/database.types";
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 // Why standing moved. Keep in lockstep with the reputation_ledger.reason values
-// referenced in migration 0047.
+// referenced in migration 0048.
 export type ReputationReason =
   | "close_verified" // a deal reached a verified close (the keystone event)
   | "diligence_cleared" // a diligence item was cleared/waived

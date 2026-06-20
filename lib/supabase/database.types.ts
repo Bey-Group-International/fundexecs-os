@@ -470,7 +470,7 @@ export type Wallet = Timestamps & {
   plan_interval: string | null;
 };
 
-// Tokenization layers (migration 0047). Earned standing, credit stakes, and
+// Tokenization layers (migration 0048). Earned standing, credit stakes, and
 // immutable attestations — see docs/TOKENIZATION_LAYERS.md.
 export type ReputationTierName = "unranked" | "verified" | "established" | "principal";
 export type ReputationScore = {
@@ -1080,7 +1080,7 @@ export type Database = {
         Returns: number;
       };
       // Atomically add to an org's reputation score (creating the row if absent),
-      // clamped at 0 (migration 0047). Returns the new score.
+      // clamped at 0 (migration 0048). Returns the new score.
       increment_org_reputation: {
         Args: {
           p_org: string;
