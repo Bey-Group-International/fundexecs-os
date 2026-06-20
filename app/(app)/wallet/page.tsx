@@ -90,20 +90,20 @@ export default async function WalletPage({
           <p className="mt-2 text-sm text-fg-secondary">
             {planName ? (
               <>
-                You’re on <span className="text-fg-primary">{planName}</span>. Unused credits roll
-                over while your plan is active.
+                Your firm is on <span className="text-fg-primary">{planName}</span>. Unused credits
+                roll over for as long as the subscription is active.
               </>
             ) : balance === 0 ? (
-              "You’re out of credits. Choose a plan or buy a pack below to keep the agents working."
+              "Your balance is depleted. Activate a plan or add a credit pack below to keep your agents working."
             ) : (
-              "Choose a plan below to get monthly credits — and unlock rollover and a growing loyalty bonus."
+              "Activate a plan to receive monthly credits — with rollover and a tenure credit that grows the longer your firm stays."
             )}
           </p>
         </div>
 
         <div className="fx-glass p-5">
           <p className="font-mono text-[10px] uppercase tracking-widest text-gold-400/80">
-            Loyalty bonus
+            Tenure credit
           </p>
           <p className="mt-1 font-display text-2xl font-semibold text-fg-primary">
             +{formatCredits(loyalty)}
@@ -111,8 +111,8 @@ export default async function WalletPage({
           </p>
           <p className="mt-1 text-xs leading-snug text-fg-secondary">
             {currentPlan
-              ? `${months} month${months === 1 ? "" : "s"} on plan. Grows +${LOYALTY_STEP} credits each month, up to ${formatCredits(LOYALTY_CAP)}/mo.`
-              : `Stay subscribed and earn +${LOYALTY_STEP} bonus credits per month of tenure, up to ${formatCredits(LOYALTY_CAP)}/mo.`}
+              ? `${months} month${months === 1 ? "" : "s"} active. Accrues +${LOYALTY_STEP} credits each month, up to ${formatCredits(LOYALTY_CAP)}/mo.`
+              : `Stay subscribed and accrue +${LOYALTY_STEP} credits per month of tenure, up to ${formatCredits(LOYALTY_CAP)}/mo.`}
           </p>
         </div>
       </div>
@@ -129,15 +129,15 @@ export default async function WalletPage({
               <span className="text-fg-primary">
                 {PLAN_BY_KEY[recommendedKey as keyof typeof PLAN_BY_KEY]?.name}
               </span>{" "}
-              fits your usage best.
+              best fits your firm’s usage.
             </>
           ) : (
             <>
-              Most teams start on{" "}
+              Most firms begin on{" "}
               <span className="text-fg-primary">
                 {PLAN_BY_KEY[recommendedKey as keyof typeof PLAN_BY_KEY]?.name}
               </span>{" "}
-              — a balanced amount of monthly credits.
+              — a balanced monthly allotment with room to scale.
             </>
           )}
         </span>
@@ -163,10 +163,10 @@ export default async function WalletPage({
         className="fx-card fx-card-hover group mt-8 flex items-center gap-3 p-5"
       >
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-fg-primary">Earn credits instead of buying them</p>
+          <p className="text-sm font-medium text-fg-primary">Earn credits through your network</p>
           <p className="mt-0.5 text-xs text-fg-secondary">
-            Invite other firms and build a downline — escalating rewards three levels deep, plus
-            milestone bonuses. Or gift credits to a colleague.
+            Introduce other firms and build a partner network — escalating rewards three levels
+            deep, plus milestone bonuses. Or gift credits to a colleague or portfolio company.
           </p>
         </div>
         <span className="font-mono text-fg-muted transition group-hover:text-gold-400">→</span>

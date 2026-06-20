@@ -28,8 +28,13 @@ export const PLANS: Plan[] = [
     monthly: 5,
     annual: 50,
     creditsPerMonth: 500,
-    blurb: "For getting real work done solo.",
-    features: ["500 credits / mo", "All six agents", "Scheduled workflows"],
+    blurb: "For a single operator.",
+    features: [
+      "500 credits / mo",
+      "All 15 agents, every hub",
+      "Single operator seat",
+      "Scheduled workflows",
+    ],
   },
   {
     key: "pro",
@@ -38,7 +43,12 @@ export const PLANS: Plan[] = [
     annual: 300,
     creditsPerMonth: 4_000,
     blurb: "For an active deal team.",
-    features: ["4,000 credits / mo", "Priority agent runs", "Unlimited sessions & groups"],
+    features: [
+      "4,000 credits / mo",
+      "All 15 agents, priority runs",
+      "Team seats with role-based access",
+      "Audit log, data export & priority support",
+    ],
   },
   {
     key: "scale",
@@ -47,7 +57,12 @@ export const PLANS: Plan[] = [
     annual: 1_000,
     creditsPerMonth: 15_000,
     blurb: "For a firm running on FundExecs.",
-    features: ["15,000 credits / mo", "Highest throughput", "Early access to new hubs"],
+    features: [
+      "15,000 credits / mo, highest throughput",
+      "Unlimited seats with SSO / SAML",
+      "Governance: audit trail, retention & export",
+      "Dedicated success manager, uptime SLA & onboarding",
+    ],
   },
 ];
 
@@ -88,11 +103,12 @@ export function annualSavingsPct(plan: Plan): number {
   return monthlyYear === 0 ? 0 : Math.round((annualSavingsUsd(plan) / monthlyYear) * 100);
 }
 
-// Loyalty bonus — a standing reward that grows with continuous-subscription
+// Tenure credit — a standing allotment that accrues with continuous-subscription
 // tenure, capped so it stays sustainable. Every full month on a plan adds
-// LOYALTY_STEP to the monthly bonus credits, up to LOYALTY_CAP. This makes
-// staying subscribed compound: the longer you run on FundExecs, the more credits
-// each month quietly delivers.
+// LOYALTY_STEP to the monthly credit, up to LOYALTY_CAP. Identifiers retain the
+// "loyalty" name for backward compatibility; the surfaced label is "tenure
+// credit." The effect: the longer a firm runs on FundExecs, the more monthly
+// credits its subscription quietly returns.
 export const LOYALTY_STEP = 50; // bonus credits added per month of tenure
 export const LOYALTY_CAP = 1_000; // max monthly loyalty bonus
 
