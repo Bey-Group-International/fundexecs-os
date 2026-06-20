@@ -90,7 +90,8 @@ export type InboxChannel =
   | "zoom"
   | "google_meet"
   | "docusign"
-  | "ecosystem";
+  | "ecosystem"
+  | "deal_share";
 export type InboxCategory = "messaging" | "booking" | "video" | "signing";
 export type InboxThreadStatus = "open" | "snoozed" | "done";
 export type InboxDirection = "inbound" | "outbound";
@@ -892,6 +893,44 @@ export type StripeCheckout = {
   fulfilled_at: string | null;
 };
 
+// A shareable teaser of a deal (migration 0044): the public token + Earn's
+// confidential memo. The full deal room is never exposed — only this travels.
+export type DealShare = Timestamps & {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  token: string;
+  memo: string;
+  created_by: string | null;
+  revoked_at: string | null;
+};
+
+// A matched (or forwarded) target of a shared deal (migration 0044). The
+// recipient org reads these as its "deals that fit you" feed; `investor_id` is
+// the recipient's own profile the deal fit, so the deep link resolves for them.
+export type DealShareRecipient = {
+  id: string;
+  share_id: string;
+  organization_id: string;
+  investor_id: string | null;
+  score: number;
+  rationale: Json;
+  source: "matched" | "forwarded";
+  created_at: string;
+};
+
+// One view of a tracked deal-share link (migration 0044). `organization_id` is
+// the sharer (who reads the access log); `viewer_org_id` is the viewing org
+// when known, else null for an anonymous open.
+export type DealShareView = {
+  id: string;
+  share_id: string;
+  organization_id: string;
+  viewer_org_id: string | null;
+  viewer_label: string | null;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -960,6 +999,9 @@ export type Database = {
       stripe_checkouts: TableShape<StripeCheckout>;
       api_keys: TableShape<ApiKey>;
       org_secrets: TableShape<OrgSecret>;
+      deal_shares: TableShape<DealShare>;
+      deal_share_recipients: TableShape<DealShareRecipient>;
+      deal_share_views: TableShape<DealShareView>;
     };
     Views: Record<string, never>;
     Functions: {
