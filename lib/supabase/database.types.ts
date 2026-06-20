@@ -380,6 +380,8 @@ export type Stakeholder = Timestamps & {
   email: string | null;
   notes: string | null;
   created_by: string | null;
+  principal_id: string | null;
+  investor_id: string | null;
 };
 
 export type ShareClass = Timestamps & {
