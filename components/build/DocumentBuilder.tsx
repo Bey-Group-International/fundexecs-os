@@ -5,9 +5,10 @@ import { inputClass } from "./DraftWithEarn";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { updateDocument } from "./materials-actions";
 import { autoComposeContent, earnChat } from "./builder-actions";
+import { BuilderWizard } from "./BuilderWizard";
 import type { DraftTurn } from "@/lib/claude";
 
-type Tab = "manual" | "parse" | "earn";
+type Tab = "guided" | "parse" | "earn";
 
 const TEXT_TYPES = [".txt", ".md", ".markdown", ".csv", ".json", ".text"];
 
@@ -20,7 +21,7 @@ export interface BuilderDoc {
 }
 
 export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
-  const [tab, setTab] = useState<Tab>("manual");
+  const [tab, setTab] = useState<Tab>("guided");
   const [name, setName] = useState(doc.name);
   const [section, setSection] = useState(doc.doc_type ?? "other");
   const [content, setContent] = useState(doc.content ?? "");
@@ -58,7 +59,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     if ("error" in res) setNote(res.error);
     else {
       setContent(res.content);
-      setTab("manual");
+      setTab("guided");
       setNote("Composed a draft from your firm data — review and save.");
     }
   }
@@ -75,7 +76,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     }
     const text = await file.text();
     setContent(text);
-    setTab("manual");
+    setTab("guided");
     setNote(`Imported ${file.name} — review and save.`);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -114,8 +115,35 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     <div className="grid gap-5 lg:grid-cols-2">
       {/* Left: mode controls */}
       <div className="flex flex-col gap-4">
+        {/* Shared identity — name + section apply across every mode */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-fg-secondary">Name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-fg-secondary">Section</span>
+            <select value={section} onChange={(e) => setSection(e.target.value)} className={inputClass}>
+              {DATA_ROOM_SECTIONS.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {isLink ? (
+          <p className="-mt-1 text-xs text-fg-muted">
+            Linked file:{" "}
+            <a href={doc.storage_key ?? "#"} target="_blank" rel="noopener noreferrer" className="text-gold-400 hover:underline">
+              open original →
+            </a>{" "}
+            · the draft below is saved with the document.
+          </p>
+        ) : null}
+
         <div className="flex gap-1.5">
-          {tabBtn("manual", "Manual")}
+          {tabBtn("guided", "Guided setup")}
           {tabBtn("parse", "Parse")}
           {tabBtn("earn", "✶ Earn")}
         </div>
@@ -124,32 +152,8 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
           <p className="rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2 text-xs text-fg-secondary">{note}</p>
         ) : null}
 
-        {tab === "manual" ? (
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-fg-secondary">Name</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-fg-secondary">Section</span>
-              <select value={section} onChange={(e) => setSection(e.target.value)} className={inputClass}>
-                {DATA_ROOM_SECTIONS.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {isLink ? (
-              <p className="text-xs text-fg-muted">
-                Linked file:{" "}
-                <a href={doc.storage_key ?? "#"} target="_blank" rel="noopener noreferrer" className="text-gold-400 hover:underline">
-                  open original →
-                </a>{" "}
-                · notes below are saved with the document.
-              </p>
-            ) : null}
-          </div>
+        {tab === "guided" ? (
+          <BuilderWizard docId={doc.id} name={name} section={section} onContent={setContent} />
         ) : null}
 
         {tab === "parse" ? (

@@ -5,6 +5,7 @@ import { getSessionContext } from "@/lib/auth";
 import { gatherFoundationContext } from "@/lib/foundation-context";
 import { composeDraft, type ComposeFoundation } from "@/lib/data-room-compose";
 import { conversationalDraft, type DraftTurn } from "@/lib/claude";
+import { answersToMarkdown, getWizardQuestions, type WizardQuestion } from "@/lib/builder-wizard";
 import { blendTrackRecord } from "@/lib/track-record";
 import type {
   Organization,
@@ -126,4 +127,52 @@ export async function earnChat(
     foundation,
     messages,
   });
+}
+
+// Guided-setup finalize: take the wizard answers and have Earn expand them into
+// an institutional-grade document. Falls back to a deterministic assembly of the
+// answers when Earn is offline, so the wizard always produces something.
+export async function finalizeWithEarn(
+  docId: string,
+  answers: Record<string, string>,
+): Promise<{ content: string } | { error: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "Not authenticated" };
+  const supabase = createServerClient();
+  const { data } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("id", docId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  const doc = data as Document | null;
+  if (!doc) return { error: "Document not found" };
+
+  const questions: WizardQuestion[] = getWizardQuestions(doc.name, doc.doc_type);
+  const qa = questions
+    .map((q) => {
+      const a = (answers[q.id] ?? "").trim();
+      return a ? `Q: ${q.label}\nA: ${a}` : null;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+
+  const foundation = await gatherFoundationContext(ctx.orgId);
+  const prompt =
+    `Using my answers below, write a polished, institutional-grade "${doc.name}" ` +
+    `(data-room section: ${doc.doc_type ?? "other"}). Expand and structure it professionally; ` +
+    `stay faithful to the answers and the firm context, and mark any gap as [TODO].\n\n${qa}`;
+
+  const { content } = await conversationalDraft({
+    docName: doc.name,
+    section: doc.doc_type ?? "other",
+    currentContent: "",
+    foundation,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  // Offline (no API key) → conversationalDraft echoes the empty draft; assemble
+  // the answers deterministically instead.
+  const final = content.trim() ? content : answersToMarkdown(doc.name, questions, answers);
+  return { content: final };
 }
