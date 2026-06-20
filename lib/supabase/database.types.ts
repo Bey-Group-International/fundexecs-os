@@ -839,6 +839,41 @@ export type CreditGift = {
   redeemed_at: string | null;
 };
 
+// A FundExecs-issued API credential pair (migration 0042). The publishable key
+// is public; only the SHA-256 hash of the secret is stored, alongside non-secret
+// display fragments (`secret_prefix` + `secret_last4`) so the UI can render a
+// masked form. `mode` separates test from live credentials.
+export type ApiKeyMode = "test" | "live";
+
+export type ApiKey = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  mode: ApiKeyMode;
+  publishable_key: string;
+  secret_hash: string;
+  secret_prefix: string;
+  secret_last4: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+};
+
+// A third-party secret an org stores for FundExecs to use on its behalf
+// (migration 0042). The value is AES-256-GCM encrypted at rest; `last4` is the
+// only plaintext fragment kept, for a recognizable masked display.
+export type OrgSecret = Timestamps & {
+  id: string;
+  organization_id: string;
+  provider: string;
+  label: string | null;
+  ciphertext: string;
+  iv: string;
+  auth_tag: string;
+  last4: string;
+  created_by: string | null;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -904,6 +939,8 @@ export type Database = {
       referrals: TableShape<Referral>;
       credit_ledger: TableShape<CreditLedgerEntry>;
       credit_gifts: TableShape<CreditGift>;
+      api_keys: TableShape<ApiKey>;
+      org_secrets: TableShape<OrgSecret>;
     };
     Views: Record<string, never>;
     Functions: {
