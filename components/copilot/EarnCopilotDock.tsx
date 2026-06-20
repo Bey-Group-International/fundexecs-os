@@ -19,6 +19,7 @@ import {
 } from "@/components/copilot/actions";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
+/** A small colored dot used to tag a message or chip with its agent's identity. */
 function AgentDot({ color }: { color: string }) {
   return <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden />;
 }
@@ -42,6 +43,12 @@ type Turn =
       sessionId?: string;
     };
 
+/**
+ * The app-wide Earn copilot dock: a ⌘K slide-over present on every page that
+ * reads the operator's current location, surfaces the on-point specialist plus
+ * a live briefing and context suggestions, and maintains a multi-turn
+ * conversation with Earn (persisted across reloads and in-app navigation).
+ */
 export function EarnCopilotDock({ name }: { name: string }) {
   const pathname = usePathname() || "/";
   const ctx = copilotContextFromPath(pathname);
@@ -58,6 +65,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
+  // Gates the persist effect until the initial hydrate has run, so the empty
+  // mount-time state never overwrites a previously saved conversation.
+  const hydrated = useRef(false);
 
   // Hydrate the running conversation from this tab's storage so the dock keeps
   // the session across reloads, then persist on every change.
@@ -72,8 +82,10 @@ export function EarnCopilotDock({ name }: { name: string }) {
     } catch {
       /* ignore malformed storage */
     }
+    hydrated.current = true;
   }, []);
   useEffect(() => {
+    if (!hydrated.current) return;
     try {
       sessionStorage.setItem(STORE_KEY, JSON.stringify({ sessionId, thread }));
     } catch {
@@ -103,6 +115,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
     });
   }
 
+  /** Start a fresh conversation: drop the current thread and session. */
   function newConversation() {
     setThread([]);
     setSessionId(null);
@@ -152,6 +165,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
     };
   }, [open, pathname]);
 
+  /** Send the current composer contents to Earn. */
   function submitAsk() {
     ask(body);
   }
