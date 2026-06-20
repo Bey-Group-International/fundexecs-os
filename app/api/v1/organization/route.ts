@@ -1,6 +1,4 @@
-import { NextResponse } from "next/server";
-import { requireApiKey } from "@/lib/api-keys-verify";
-import { createServiceClient } from "@/lib/supabase/server";
+import { failure, resource, withApiKey } from "@/lib/api-v1";
 import type { Organization } from "@/lib/supabase/database.types";
 
 // GET /api/v1/organization — the authenticated org's public profile.
@@ -8,30 +6,22 @@ import type { Organization } from "@/lib/supabase/database.types";
 //   curl https://app.fundexecs.com/api/v1/organization \
 //     -H "Authorization: Bearer fxsk_live_…"
 //
-// Authenticated by an issued secret key (see lib/api-keys-verify). The caller has
-// no Supabase session, so we read with the service-role client and scope strictly
-// to the key's own organization_id. Only non-sensitive profile fields are
-// returned — never internal flags or credentials.
+// Reads with the service-role client scoped strictly to the key's organization_id.
+// Only non-sensitive profile fields are returned — never internal flags.
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  const auth = await requireApiKey(request);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
-
-  const supabase = createServiceClient();
+export const GET = withApiKey(async ({ orgId, supabase }) => {
   const { data, error } = await supabase
     .from("organizations")
     .select("*")
-    .eq("id", auth.key.orgId)
+    .eq("id", orgId)
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  if (error) return failure(error.message, 500);
+  if (!data) return failure("Organization not found", 404);
 
   const org = data as Organization;
-  return NextResponse.json({
+  return resource({
     id: org.id,
     name: org.name,
     slug: org.slug,
@@ -42,4 +32,4 @@ export async function GET(request: Request) {
     aum_range: org.aum_range,
     created_at: org.created_at,
   });
-}
+});
