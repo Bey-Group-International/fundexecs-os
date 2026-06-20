@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { isExited } from "@/lib/execute-performance";
 import { compactUsd, usd, multiple, num, shortDate } from "@/lib/format";
@@ -137,7 +138,9 @@ export async function ExecuteAssetManagementModule({
                   className={`border-b border-line/50 last:border-0 ${exited ? "opacity-55" : "bg-surface-1"}`}
                 >
                   <td className="px-4 py-3 font-medium text-fg-primary">
-                    {a.name}
+                    <Link href={`/asset/${a.id}`} className="transition hover:text-gold-300">
+                      {a.name}
+                    </Link>
                     {a.acquisition_date ? (
                       <span className="ml-2 font-mono text-[10px] text-fg-muted">acq. {shortDate(a.acquisition_date)}</span>
                     ) : null}
