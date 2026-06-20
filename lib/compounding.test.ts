@@ -6,6 +6,7 @@ import {
   reputationScore,
   tierForScore,
   profileFromSignals,
+  profileFromScore,
   effectiveCost,
   UNRANKED_PROFILE,
   type CompoundingSignals,
@@ -79,6 +80,24 @@ describe("profileFromSignals — guardrails", () => {
     const unranked = profileFromSignals(signals());
     const principal = profileFromSignals(signals({ closedDeals: 12 }));
     expect(principal.requiredStakeMultiplier).toBeLessThan(unranked.requiredStakeMultiplier);
+  });
+});
+
+describe("profileFromScore — Phase 1 stored-score path", () => {
+  it("agrees with the proxy path for an equivalent merit score", () => {
+    // Two closed deals via the proxy == a stored score of 50.
+    const proxy = profileFromSignals({ closedDeals: 2, verifiedRecords: 0, tenureMonths: 0 });
+    const stored = profileFromScore(50, 0);
+    expect(stored.tier).toBe(proxy.tier);
+    expect(stored.priceMultiplier).toBe(proxy.priceMultiplier);
+    expect(stored.matchBoost).toBe(proxy.matchBoost);
+  });
+
+  it("applies tenure loyalty on top of a stored score", () => {
+    const noTenure = profileFromScore(50, 0);
+    const tenured = profileFromScore(50, 1000);
+    expect(tenured.factors.loyaltyPct).toBeGreaterThan(noTenure.factors.loyaltyPct);
+    expect(tenured.priceMultiplier).toBeLessThan(noTenure.priceMultiplier);
   });
 });
 

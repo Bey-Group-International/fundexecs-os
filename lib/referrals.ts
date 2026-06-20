@@ -96,6 +96,8 @@ export type LedgerReason =
   | "gift_sent"
   | "plan_grant"
   | "pack_purchase"
+  | "stake_lock"
+  | "stake_release"
   | "spend";
 
 /** Whether a ledger reason represents referral earnings (for totals). */

@@ -4,8 +4,9 @@
 // & admin engaged, funding secured, close date set) with live progress — so the
 // close is a process an operator drives, not a status they wait on.
 import * as React from "react";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { num } from "@/lib/format";
+import { recordDealClose } from "@/lib/attestations";
 import type { Deal, DiligenceItem, ServiceProvider, Fund } from "@/lib/supabase/database.types";
 
 const cache: <T extends (...args: never[]) => unknown>(fn: T) => T =
@@ -195,3 +196,26 @@ export const getExecuteClosing = cache(async function getExecuteClosing(
     (fundRes.data ?? []) as Fund[],
   );
 });
+
+/**
+ * The closing → reputation hook (Phase 2, docs/TOKENIZATION_LAYERS.md §5.4).
+ * Finds the org's deals whose close is `ready` (every step cleared) and records
+ * a verified close for each — writing an immutable 'closed' attestation and
+ * minting close_verified reputation, exactly once per deal. recordDealClose is
+ * idempotent, so this is safe to invoke repeatedly. Kept separate from the
+ * request-scoped read path above and run service-role, because it WRITES.
+ * Returns the deal ids that were freshly attested on this call.
+ */
+export async function attestReadyCloses(orgId: string): Promise<string[]> {
+  const summary = await getExecuteClosing(orgId);
+  const ready = summary.closes.filter((c) => c.ready).map((c) => c.deal);
+  if (ready.length === 0) return [];
+
+  const service = createServiceClient();
+  const attested: string[] = [];
+  for (const deal of ready) {
+    const attestation = await recordDealClose(service, deal);
+    if (attestation) attested.push(deal.id);
+  }
+  return attested;
+}

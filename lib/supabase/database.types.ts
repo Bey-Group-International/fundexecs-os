@@ -470,6 +470,50 @@ export type Wallet = Timestamps & {
   plan_interval: string | null;
 };
 
+// Tokenization layers (migration 0048). Earned standing, credit stakes, and
+// immutable attestations — see docs/TOKENIZATION_LAYERS.md.
+export type ReputationTierName = "unranked" | "verified" | "established" | "principal";
+export type ReputationScore = {
+  organization_id: string;
+  score: number;
+  tier: ReputationTierName;
+  updated_at: string;
+};
+export type ReputationLedgerEntry = {
+  id: string;
+  organization_id: string;
+  delta: number;
+  reason: string;
+  source_type: string | null;
+  source_id: string | null;
+  note: string | null;
+  created_at: string;
+};
+export type StakePosition = {
+  id: string;
+  organization_id: string;
+  purpose: "listing" | "governance";
+  ref_id: string | null;
+  amount: number;
+  status: "locked" | "returned" | "forfeited";
+  note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
+export type Attestation = {
+  id: string;
+  organization_id: string;
+  subject_type: string;
+  subject_id: string;
+  claim: string;
+  attested_by: string | null;
+  witness_org_id: string | null;
+  evidence_hash: string | null;
+  settlement: "internal" | "anchored" | "onchain";
+  anchor_ref: string | null;
+  created_at: string;
+};
+
 export type SessionShare = {
   id: string;
   organization_id: string;
@@ -1002,6 +1046,10 @@ export type Database = {
       deal_shares: TableShape<DealShare>;
       deal_share_recipients: TableShape<DealShareRecipient>;
       deal_share_views: TableShape<DealShareView>;
+      reputation_scores: TableShape<ReputationScore>;
+      reputation_ledger: TableShape<ReputationLedgerEntry>;
+      stake_positions: TableShape<StakePosition>;
+      attestations: TableShape<Attestation>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -1025,6 +1073,15 @@ export type Database = {
       // Atomically credit an org's wallet (creating it if absent), clamped at 0
       // (migration 0039). Returns the new balance.
       increment_org_credits: {
+        Args: {
+          p_org: string;
+          p_delta: number;
+        };
+        Returns: number;
+      };
+      // Atomically add to an org's reputation score (creating the row if absent),
+      // clamped at 0 (migration 0048). Returns the new score.
+      increment_org_reputation: {
         Args: {
           p_org: string;
           p_delta: number;
