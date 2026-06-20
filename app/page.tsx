@@ -141,18 +141,18 @@ export default function LandingPage({
           {/* Command graph */}
           <div className="flex items-center justify-center lg:justify-end">
             <div className="fx-orbit-card min-h-[360px] w-full max-w-md p-5 sm:p-6">
-              <div className="relative z-10 flex items-center justify-between">
+              <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-400">
                     Live command graph
                   </p>
                   <p className="mt-1 text-sm text-fg-secondary">Earn routes capital work across agents.</p>
                 </div>
-                <span className="rounded-full border border-gold-500/35 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300">
+                <span className="w-fit rounded-full border border-gold-500/35 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300">
                   60 FPS CSS
                 </span>
               </div>
-              <div className="relative z-10 mt-8 grid grid-cols-3 gap-3">
+              <div className="relative z-10 mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {[
                   ["Source", "124 LP paths"],
                   ["Run", "8 diligence rooms"],
