@@ -3,12 +3,16 @@
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
-import { handlePrompt } from "@/lib/engine";
+import { handlePrompt, decideApproval } from "@/lib/engine";
+import { getActiveMandate } from "@/lib/mandates";
+import type { Mandate } from "@/lib/gates";
 import {
   copilotContextFromPath,
   contextPreamble,
   suggestionsFor,
+  willAutoRun,
   type CopilotContext,
+  type CopilotSuggestion,
 } from "@/lib/copilot";
 import { getBuildReadiness } from "@/lib/build-readiness";
 import { getRunConviction } from "@/lib/run-conviction";
@@ -59,13 +63,24 @@ export async function askEarn(input: {
   }
 }
 
-/** Resolve a suggestion's pre-baked prompt by id within a given location. */
-function findSuggestionPrompt(loc: CopilotContext, id: string): string | null {
-  return suggestionsFor(loc).find((s) => s.id === id)?.prompt ?? null;
+/** Resolve a suggestion by id within a given location. */
+function findSuggestion(loc: CopilotContext, id: string): CopilotSuggestion | null {
+  return suggestionsFor(loc).find((s) => s.id === id) ?? null;
 }
 
-// Launch a pre-baked, context-aware suggestion. Mirrors the draft-with-Earn
-// pattern: plan the templated prompt, then open the session it created.
+/** The org's active standing mandate, for showing what Earn may auto-run. */
+export async function getMandateSummary(): Promise<Mandate | null> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return null;
+  const supabase = createServerClient();
+  return (await getActiveMandate(supabase, ctx.orgId)) ?? null;
+}
+
+// Launch a pre-baked, context-aware suggestion. Plans the templated prompt,
+// then — when the standing mandate authorizes it (internal Tier-1 work, or a
+// Tier-2 action pre-approved within the ceiling) — auto-approves and runs the
+// workflow proactively. Otherwise it lands in the session awaiting the
+// operator's sign-off. Either way, opens the session.
 export async function launchCopilotSuggestion(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
@@ -73,14 +88,25 @@ export async function launchCopilotSuggestion(formData: FormData): Promise<void>
   const pathname = String(formData.get("pathname") ?? "/");
   const id = String(formData.get("suggestion_id") ?? "");
   const loc = copilotContextFromPath(pathname);
-  const prompt = findSuggestionPrompt(loc, id);
-  if (!prompt) redirect("/workspace");
+  const suggestion = findSuggestion(loc, id);
+  if (!suggestion) redirect("/workspace");
 
   const supabase = createServerClient();
-  const result = await handlePrompt(
-    { supabase, orgId: ctx.orgId, actorId: ctx.userId },
-    `${contextPreamble(loc)} ${prompt}`,
-  );
+  const engineCtx = { supabase, orgId: ctx.orgId, actorId: ctx.userId };
+  const result = await handlePrompt(engineCtx, `${contextPreamble(loc)} ${suggestion.prompt}`);
+
+  // Proactive execution — gated by the standing mandate, never above Tier 2.
+  if (result.approval_id) {
+    const mandate = await getActiveMandate(supabase, ctx.orgId);
+    if (willAutoRun(suggestion, mandate)) {
+      try {
+        await decideApproval(engineCtx, { approvalId: result.approval_id, decision: "approved" });
+      } catch {
+        // If auto-execution fails, the workflow simply remains awaiting approval.
+      }
+    }
+  }
+
   redirect(result.session_id ? `/session/${result.session_id}` : "/workspace");
 }
 
