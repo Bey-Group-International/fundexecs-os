@@ -62,3 +62,35 @@ export function blendTrackRecord(records: TrackRecord[]): BlendedTrackRecord {
       : null,
   };
 }
+
+export interface VintageGroup {
+  /** The vintage year for the group, or null for deals with no/invalid vintage. */
+  vintage: number | null;
+  blended: BlendedTrackRecord;
+}
+
+/**
+ * Groups deals by vintage year and blends each group, sorted by vintage
+ * descending. Deals with a missing or non-positive vintage are collected into a
+ * single trailing group keyed by null. Pure — reuses blendTrackRecord per group.
+ */
+export function groupByVintage(records: TrackRecord[]): VintageGroup[] {
+  const byVintage = new Map<number | null, TrackRecord[]>();
+  for (const r of records) {
+    const key =
+      typeof r.vintage_year === "number" && r.vintage_year > 0
+        ? r.vintage_year
+        : null;
+    const bucket = byVintage.get(key);
+    if (bucket) bucket.push(r);
+    else byVintage.set(key, [r]);
+  }
+
+  return [...byVintage.entries()]
+    .sort(([a], [b]) => {
+      if (a === null) return 1; // null/unknown vintage sorts last
+      if (b === null) return -1;
+      return b - a; // descending
+    })
+    .map(([vintage, group]) => ({ vintage, blended: blendTrackRecord(group) }));
+}

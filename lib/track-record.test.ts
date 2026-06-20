@@ -1,6 +1,6 @@
 // lib/track-record.test.ts
 // Unit tests for the pooled track-record math behind the investor one-pager.
-import { blendTrackRecord } from "@/lib/track-record";
+import { blendTrackRecord, groupByVintage } from "@/lib/track-record";
 import type { TrackRecord } from "@/lib/supabase/database.types";
 
 function makeRecord(overrides: Partial<TrackRecord> = {}): TrackRecord {
@@ -66,5 +66,46 @@ describe("blendTrackRecord", () => {
       makeRecord({ vintage_year: null }),
     ]);
     expect(b.vintageRange).toEqual({ from: 2019, to: 2023 });
+  });
+});
+
+describe("groupByVintage", () => {
+  it("returns an empty array for no records", () => {
+    expect(groupByVintage([])).toEqual([]);
+  });
+
+  it("groups deals by vintage year and blends each group", () => {
+    const groups = groupByVintage([
+      makeRecord({ vintage_year: 2021, invested_amount: 100, realized_value: 200 }),
+      makeRecord({ vintage_year: 2021, invested_amount: 100, unrealized_value: 100 }),
+      makeRecord({ vintage_year: 2019, invested_amount: 50, realized_value: 75 }),
+    ]);
+    expect(groups).toHaveLength(2);
+    const y2021 = groups.find((g) => g.vintage === 2021)!;
+    expect(y2021.blended.dealCount).toBe(2);
+    expect(y2021.blended.totalInvested).toBe(200);
+    expect(y2021.blended.totalValue).toBe(300);
+    expect(y2021.blended.pooledMoic).toBeCloseTo(1.5);
+  });
+
+  it("orders groups by vintage descending", () => {
+    const groups = groupByVintage([
+      makeRecord({ vintage_year: 2018 }),
+      makeRecord({ vintage_year: 2023 }),
+      makeRecord({ vintage_year: 2020 }),
+    ]);
+    expect(groups.map((g) => g.vintage)).toEqual([2023, 2020, 2018]);
+  });
+
+  it("collects null and non-positive vintages into a single trailing group", () => {
+    const groups = groupByVintage([
+      makeRecord({ vintage_year: 2022 }),
+      makeRecord({ vintage_year: null }),
+      makeRecord({ vintage_year: 0 }),
+    ]);
+    expect(groups.map((g) => g.vintage)).toEqual([2022, null]);
+    const unknown = groups[groups.length - 1];
+    expect(unknown.vintage).toBeNull();
+    expect(unknown.blended.dealCount).toBe(2);
   });
 });
