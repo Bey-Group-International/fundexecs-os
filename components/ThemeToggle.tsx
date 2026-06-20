@@ -20,11 +20,20 @@ function getInitialTheme(): ThemeMode {
 }
 
 export function ThemeToggle({ compact = false }: { compact?: boolean }) {
-  const [mode, setMode] = useState<ThemeMode>(getInitialTheme);
+  const [mode, setMode] = useState<ThemeMode>("night");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    const initial = getInitialTheme();
+    setMode(initial);
+    applyTheme(initial);
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
     applyTheme(mode);
-  }, [mode]);
+  }, [hydrated, mode]);
 
   function toggleTheme() {
     setMode((current) => {
