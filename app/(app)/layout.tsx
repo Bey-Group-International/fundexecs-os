@@ -20,6 +20,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
 import { GlobalTopBar } from "@/components/GlobalTopBar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 
 // The four hubs, in operating order, as shown in the side rail.
 const HUB_ORDER: Hub[] = ["build", "run", "source", "execute"];
@@ -143,6 +144,7 @@ export default async function AppLayout({
 
       <div className="print:hidden">
         <GuidedTour />
+        <EarnCopilotDock name={name} />
       </div>
     </div>
   );

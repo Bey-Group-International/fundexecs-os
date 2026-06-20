@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
+import { scoreDocument } from "@/lib/document-quality";
 import { updateDocument } from "./materials-actions";
-import { autoComposeContent, earnChat } from "./builder-actions";
+import { autoComposeContent, earnChat, institutionalize } from "./builder-actions";
 import { BuilderWizard } from "./BuilderWizard";
 import type { DraftTurn } from "@/lib/claude";
 
@@ -79,6 +80,18 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     setTab("guided");
     setNote(`Imported ${file.name} — review and save.`);
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  const report = useMemo(() => scoreDocument(name, section, content), [name, section, content]);
+
+  async function institutionalizeDraft() {
+    if (!content.trim() || busy) return;
+    setBusy(true);
+    setNote(null);
+    const res = await institutionalize(doc.id, content);
+    setBusy(false);
+    if ("error" in res) setNote(res.error);
+    else setContent(res.content);
   }
 
   async function sendEarn() {
@@ -251,6 +264,14 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
             ) : null}
             <button
               type="button"
+              onClick={() => void institutionalizeDraft()}
+              disabled={busy || !content.trim()}
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+            >
+              {busy ? "Working…" : "✶ Institutionalize"}
+            </button>
+            <button
+              type="button"
               onClick={save}
               disabled={pending}
               className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
@@ -259,10 +280,45 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
             </button>
           </div>
         </div>
+
+        {/* Self-aware institutional readiness */}
+        <div className="rounded-lg border border-line bg-surface-1 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Institutional readiness</span>
+            <span
+              className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                report.level === "Institutional"
+                  ? "border-emerald-400/40 text-emerald-300"
+                  : report.level === "Solid"
+                    ? "border-gold-500/40 text-gold-300"
+                    : "border-line text-fg-muted"
+              }`}
+            >
+              {report.level}
+            </span>
+            <span className="ml-auto font-display text-lg font-semibold text-fg-primary">{report.score}%</span>
+          </div>
+          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-2">
+            <div className="h-full bg-gold-400" style={{ width: `${report.score}%` }} />
+          </div>
+          {report.gaps.length > 0 ? (
+            <ul className="mt-2 flex flex-col gap-0.5">
+              {report.gaps.map((g, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-xs text-fg-secondary">
+                  <span className="text-fg-muted">○</span>
+                  {g}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-emerald-300">✓ Meets the institutional bar for this section.</p>
+          )}
+        </div>
+
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          rows={22}
+          rows={20}
           placeholder="Your document content…"
           className={`${inputClass} resize-y font-mono text-[13px] leading-relaxed`}
         />

@@ -129,6 +129,92 @@ export async function earnChat(
   });
 }
 
+// Context-aware prefill: seed the guided-setup answers from the firm's existing
+// Build data so the wizard starts populated rather than blank.
+export async function suggestWizardAnswers(docId: string): Promise<Record<string, string>> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return {};
+  const supabase = createServerClient();
+  const { data } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("id", docId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  const doc = data as Document | null;
+  if (!doc) return {};
+
+  const f = await loadFoundation(ctx.orgId);
+  const perf = [
+    f.grossIrr != null ? `${f.grossIrr}% gross IRR` : null,
+    f.pooledMoic != null ? `${f.pooledMoic}x MOIC` : null,
+    f.dealCount > 0 ? `${f.dealCount} deals (${f.realizedCount} realized)` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  // Map known wizard question ids → suggestions, only where data exists.
+  const all: Record<string, string | null> = {
+    oneliner: f.tagline || f.description,
+    highlights: perf || null,
+    proof: perf || null,
+    what: f.assetClasses.length ? f.assetClasses.join(", ") : null,
+    where: f.geographies.length ? f.geographies.join(", ") : null,
+    targets: [
+      f.targetIrr != null ? `${f.targetIrr}% target IRR` : null,
+      f.targetMoic != null ? `${f.targetMoic}x target MOIC` : null,
+    ]
+      .filter(Boolean)
+      .join(", ") || null,
+    headline: perf || null,
+    principals: f.team.length ? f.team.map((m) => `${m.name}${m.title ? ` — ${m.title}` : ""}`).join("\n") : null,
+    entities: f.entities.length ? f.entities.join(", ") : null,
+    summary: f.totalInvested ? `Total invested to date: ${f.totalInvested}` : null,
+  };
+
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(all)) if (v) out[k] = v;
+  return out;
+}
+
+// One-click institutionalize: upgrade the current draft to institutional grade,
+// preserving facts and following the section's expected structure.
+export async function institutionalize(
+  docId: string,
+  content: string,
+): Promise<{ content: string } | { error: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "Not authenticated" };
+  const supabase = createServerClient();
+  const { data } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("id", docId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  const doc = data as Document | null;
+  if (!doc) return { error: "Document not found" };
+  if (!content.trim()) return { error: "Nothing to upgrade yet — draft something first." };
+
+  const foundation = await gatherFoundationContext(ctx.orgId);
+  const { content: upgraded } = await conversationalDraft({
+    docName: doc.name,
+    section: doc.doc_type ?? "other",
+    currentContent: content,
+    foundation,
+    messages: [
+      {
+        role: "user",
+        content:
+          "Upgrade this draft to institutional grade: tighten the language, structure it per institutional " +
+          "norms for this document, ensure every expected section is covered, and back claims with the firm's " +
+          "figures. Preserve all facts; mark genuine gaps as [TODO]. Return the complete document.",
+      },
+    ],
+  });
+  return { content: upgraded.trim() ? upgraded : content };
+}
+
 // Guided-setup finalize: take the wizard answers and have Earn expand them into
 // an institutional-grade document. Falls back to a deterministic assembly of the
 // answers when Earn is offline, so the wizard always produces something.

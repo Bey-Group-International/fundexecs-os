@@ -372,6 +372,38 @@ export type Entity = Timestamps & {
   created_by: string | null;
 };
 
+export type Stakeholder = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  kind: string; // person | entity | investor | fund | pool | other
+  email: string | null;
+  notes: string | null;
+  created_by: string | null;
+};
+
+export type ShareClass = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  name: string;
+  kind: string; // common | preferred | lp_interest | gp_interest | membership | option | safe | note | other
+  authorized_units: number | null;
+};
+
+export type EquityHolding = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  stakeholder_id: string;
+  share_class_id: string | null;
+  units: number | null;
+  ownership_pct: number | null;
+  invested_amount: number | null;
+  notes: string | null;
+  created_by: string | null;
+};
+
 export type Partner = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
@@ -738,6 +770,9 @@ export type Database = {
       investor_portal_shares: TableShape<InvestorPortalShare>;
       investor_portal_views: TableShape<InvestorPortalView>;
       valuation_marks: TableShape<ValuationMark>;
+      stakeholders: TableShape<Stakeholder>;
+      share_classes: TableShape<ShareClass>;
+      equity_holdings: TableShape<EquityHolding>;
     };
     Views: Record<string, never>;
     Functions: {
