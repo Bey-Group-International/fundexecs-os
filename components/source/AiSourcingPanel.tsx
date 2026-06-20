@@ -9,6 +9,7 @@ import {
   queueSourceAction,
 } from "@/app/(app)/[hub]/[module]/source-ai-actions";
 import type { SourceCandidate, PipelineScore } from "@/lib/source-ai";
+import { buildSourceSelectionPayload } from "@/lib/source-selection";
 import type { ActionKind } from "@/lib/gates";
 
 function humanize(s: string): string {
@@ -51,16 +52,21 @@ export function AiSourcingPanel({
   const [scores, setScores] = useState<PipelineScore[] | null>(null);
   const [queued, setQueued] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
+  const [lastQuery, setLastQuery] = useState<string>("");
+  const [personalized, setPersonalized] = useState(false);
 
   const runGenerate = () => {
     setMode("generate");
     setMessage(null);
     setScores(null);
+    const query = ask.trim();
+    setLastQuery(query);
     start(async () => {
-      const res = await sourceTargets(hub, module);
+      const res = await sourceTargets(hub, module, query || undefined);
       if (!res.ok) return setMessage(res.error ?? "Could not source targets.");
       setCandidates(res.candidates ?? []);
       setSelected(new Set((res.candidates ?? []).map((_, i) => i)));
+      setPersonalized(Boolean(res.personalized));
     });
   };
 
@@ -87,17 +93,13 @@ export function AiSourcingPanel({
 
   const addSelected = () => {
     if (!candidates) return;
-    const picks = candidates.filter((_, i) => selected.has(i)).map((c) => ({
-      name: c.name,
-      category: c.category,
-      rationale: c.rationale,
-      sourceUrl: c.sourceUrl,
-    }));
+    const { picks, rejected } = buildSourceSelectionPayload(candidates, (_, i) => selected.has(i));
     if (picks.length === 0) return setMessage("Select at least one to add.");
     start(async () => {
-      const res = await addSourcedTargets(hub, module, picks);
+      const res = await addSourcedTargets(hub, module, picks, { query: lastQuery || undefined, rejected });
       if (!res.ok) return setMessage(res.error ?? "Could not add to pipeline.");
-      setMessage(`Added ${res.added} to the pipeline.`);
+      const learned = rejected.length ? ` Recorded ${rejected.length} skip signal${rejected.length === 1 ? "" : "s"} for next time.` : "";
+      setMessage(`Added ${res.added} to the pipeline.${learned}`);
       setCandidates(null);
       setMode("idle");
     });
@@ -133,6 +135,11 @@ export function AiSourcingPanel({
         ) : webEnrichment ? (
           <span className="rounded-full border border-status-info/40 bg-status-info/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-info">
             web ⚡
+          </span>
+        ) : null}
+        {personalized ? (
+          <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            personalized ✦
           </span>
         ) : null}
         <div className="ml-auto flex gap-1.5">
