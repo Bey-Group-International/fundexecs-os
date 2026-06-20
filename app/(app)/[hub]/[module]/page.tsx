@@ -1,6 +1,7 @@
 import { ModuleView } from "@/components/ModuleView";
 import { SourceSearch } from "@/components/source/SourceSearch";
 import { SourceTriage } from "@/components/source/SourceTriage";
+import { RunSearch } from "@/components/run/RunSearch";
 import { ExecuteSearch } from "@/components/execute/ExecuteSearch";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 import { copilotLive } from "@/lib/claude";
@@ -32,6 +33,9 @@ export default function ModulePage({
   }
   if (params.hub === "source" && params.module === "triage") {
     return <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />;
+  }
+  if (params.hub === "run" && params.module === "search") {
+    return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "execute" && params.module === "search") {
     return <ExecuteSearch live={copilotLive()} initialPrompt={initialPrompt} />;
