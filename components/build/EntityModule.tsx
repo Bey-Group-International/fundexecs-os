@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
-import type { Entity } from "@/lib/supabase/database.types";
+import type { Entity, Stakeholder, ShareClass, EquityHolding } from "@/lib/supabase/database.types";
 import { ModuleHeader, inputClass } from "./DraftWithEarn";
 import { createEntity, deleteEntity } from "./actions";
 import { updateEntity } from "./edit-actions";
 import { RecordEditor, EditInput } from "./RecordEditor";
 import { EntityTree } from "./EntityTree";
+import { EntityOwnership } from "./EntityOwnership";
 
 const ENTITY_TYPES = ["gp", "management_co", "fund", "spv", "holdco", "other"];
 const TYPE_LABEL: Record<string, string> = {
@@ -32,8 +33,16 @@ export async function EntityModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
   const supabase = createServerClient();
-  const { data } = await supabase.from("entities").select("*").order("created_at", { ascending: false });
-  const entities = (data ?? []) as Entity[];
+  const [entitiesRes, stakeholdersRes, classesRes, holdingsRes] = await Promise.all([
+    supabase.from("entities").select("*").order("created_at", { ascending: false }),
+    supabase.from("stakeholders").select("*").order("name", { ascending: true }),
+    supabase.from("share_classes").select("*"),
+    supabase.from("equity_holdings").select("*"),
+  ]);
+  const entities = (entitiesRes.data ?? []) as Entity[];
+  const stakeholders = (stakeholdersRes.data ?? []) as Stakeholder[];
+  const shareClasses = (classesRes.data ?? []) as ShareClass[];
+  const holdings = (holdingsRes.data ?? []) as EquityHolding[];
 
   return (
     <div>
@@ -140,6 +149,13 @@ export async function EntityModule() {
           })}
         </div>
       )}
+
+      <EntityOwnership
+        entities={entities.map((e) => ({ id: e.id, name: e.name, entity_type: e.entity_type }))}
+        stakeholders={stakeholders.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))}
+        shareClasses={shareClasses.map((c) => ({ id: c.id, entity_id: c.entity_id, name: c.name }))}
+        holdings={holdings}
+      />
     </div>
   );
 }
