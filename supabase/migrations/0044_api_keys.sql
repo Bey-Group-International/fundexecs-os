@@ -1,4 +1,4 @@
--- 0043_api_keys.sql
+-- 0044_api_keys.sql
 -- Settings → APIs. Two related but distinct subsystems:
 --
 --   1. api_keys  — FundExecs-ISSUED credentials. Each row is a Stripe-style

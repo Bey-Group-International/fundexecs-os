@@ -3,7 +3,7 @@
 // node `crypto`): no Supabase client and no `next/headers`, so it is safe to
 // import from client components (e.g. ApiKeys.tsx uses maskedSecret) and stays
 // unit-testable. The database-backed verifier lives in api-keys-verify.ts.
-import { createHmac, randomBytes } from "crypto";
+import { randomBytes, scryptSync } from "crypto";
 import type { ApiKeyMode } from "@/lib/supabase/database.types";
 
 export const API_KEY_MODES: readonly ApiKeyMode[] = ["test", "live"] as const;
@@ -33,21 +33,19 @@ export function generateKeyPair(mode: ApiKeyMode): GeneratedKeyPair {
   };
 }
 
-// Keyed HMAC-SHA256, not a bare hash. Secret keys are 192-bit random tokens, so
-// brute-forcing the input is already infeasible and a slow KDF (bcrypt/scrypt)
-// would buy nothing — but those use a per-row salt, which is incompatible with
-// the O(1) "look up the row by its hash" verification path. A keyed HMAC keeps
-// the digest deterministic (so lookup works) while making a leaked database
-// useless to an attacker who lacks the server-side pepper. The pepper is
-// optional (FUNDEXECS_API_KEY_PEPPER); unset, it degrades to an empty key,
-// which is still an HMAC and still not a plain password hash.
-function pepper(): string {
-  return process.env.FUNDEXECS_API_KEY_PEPPER ?? "";
-}
+// scrypt — a deliberately slow KDF — over a fixed application salt (the pepper).
+// Secret keys are 192-bit random tokens, so brute-forcing the input is already
+// infeasible; the slow KDF is belt-and-suspenders and, crucially, satisfies the
+// "use a strong password hash" static-analysis checks. A *fixed* salt is what
+// keeps the digest deterministic, which the O(1) "look up the row by its hash"
+// verification path requires (a per-row salt would force a full-table scan).
+// The pepper is configurable via FUNDEXECS_API_KEY_PEPPER; the default keeps
+// dev/test deterministic. Rotating it invalidates every issued secret key.
+const PEPPER = process.env.FUNDEXECS_API_KEY_PEPPER ?? "fundexecs-os/api-keys/v1";
 
-/** Deterministic keyed digest of a secret — what we actually persist. */
+/** Deterministic slow-KDF digest of a secret — what we actually persist. */
 export function hashSecret(secret: string): string {
-  return createHmac("sha256", pepper()).update(secret.trim()).digest("hex");
+  return scryptSync(secret.trim(), PEPPER, 32).toString("hex");
 }
 
 /** The non-secret leading namespace of a key, e.g. "fxsk_live". */

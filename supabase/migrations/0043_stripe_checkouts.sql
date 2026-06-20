@@ -1,4 +1,4 @@
--- 0042_stripe_checkouts.sql
+-- 0043_stripe_checkouts.sql
 -- Tracks hosted Stripe Checkout sessions so fulfillment (granting credits,
 -- activating a plan, creating a paid gift) happens exactly once per session.
 -- Rows are written by the server (service role) when a session is created and
