@@ -5,6 +5,7 @@ import type { MemberRole } from "@/lib/supabase/database.types";
 import { inputClass } from "./DraftWithEarn";
 import {
   updateMyProfile,
+  assignTeamTask,
   changeMemberRole,
   removeMember,
   inviteMember,
@@ -39,6 +40,14 @@ interface TeamControlsProps {
 }
 
 const ROLE_OPTIONS: MemberRole[] = ["owner", "admin", "member"];
+const HUB_OPTIONS = [
+  { value: "", label: "No hub" },
+  { value: "build", label: "Build" },
+  { value: "source", label: "Source" },
+  { value: "run", label: "Run" },
+  { value: "execute", label: "Execute" },
+];
+const PRIORITY_OPTIONS = ["low", "normal", "high", "urgent"];
 
 // Only allow user-supplied avatar URLs that resolve to a real http(s)
 // resource. Parsing with the URL constructor and re-emitting `.href` breaks the
@@ -107,6 +116,7 @@ export function TeamControls({
   seats,
 }: TeamControlsProps) {
   const isAdmin = currentRole === "owner" || currentRole === "admin";
+  const canAssign = isAdmin || currentRole === "member";
   const ownerCount = members.filter((m) => m.role === "owner").length;
 
   const byName = (a: TeamMemberView, b: TeamMemberView) =>
@@ -138,6 +148,8 @@ export function TeamControls({
     <div className="flex flex-col gap-6">
       <YourProfile ownProfile={ownProfile} />
 
+      {canAssign ? <AssignTaskForm members={members} currentUserId={currentUserId} /> : null}
+
       {isAdmin ? <InviteForm seats={seats} /> : null}
 
       {leaders.length > 0 ? (
@@ -158,6 +170,103 @@ export function TeamControls({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// --- Assign tasks ----------------------------------------------------------
+function AssignTaskForm({
+  members,
+  currentUserId,
+}: {
+  members: TeamMemberView[];
+  currentUserId: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const defaultAssignee = members.some((m) => m.principalId === currentUserId)
+    ? currentUserId
+    : members[0]?.principalId;
+
+  return (
+    <form
+      ref={formRef}
+      action={(fd) => {
+        setError(null);
+        setSuccess(false);
+        startTransition(async () => {
+          const res = await assignTeamTask(fd);
+          if (res.error) {
+            setError(res.error);
+          } else {
+            setSuccess(true);
+            formRef.current?.reset();
+          }
+        });
+      }}
+      className="grid gap-3 rounded-xl border border-neural-400/20 bg-neural-400/[0.04] p-4 md:grid-cols-[1.1fr_0.8fr_0.7fr]"
+    >
+      <div className="md:col-span-3">
+        <p className="text-sm font-medium text-fg-primary">Assign team task</p>
+        <p className="mt-0.5 text-xs text-fg-muted">
+          Send work to a teammate&apos;s Earn dock so they can complete it with context.
+        </p>
+      </div>
+      <input
+        name="title"
+        required
+        placeholder="e.g. Refresh LP follow-up list"
+        className={inputClass}
+      />
+      <select name="assigned_to" defaultValue={defaultAssignee ?? ""} className={inputClass}>
+        {members.map((m) => (
+          <option key={m.principalId} value={m.principalId}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+      <select name="priority" defaultValue="normal" className={inputClass}>
+        {PRIORITY_OPTIONS.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </select>
+      <textarea
+        name="description"
+        rows={2}
+        placeholder="What needs to be done?"
+        className={`${inputClass} md:col-span-3`}
+      />
+      <select name="hub" defaultValue="" className={inputClass}>
+        {HUB_OPTIONS.map((h) => (
+          <option key={h.value} value={h.value}>
+            {h.label}
+          </option>
+        ))}
+      </select>
+      <input
+        name="module"
+        placeholder="Module (optional)"
+        className={inputClass}
+      />
+      <input
+        name="due_at"
+        type="date"
+        className={inputClass}
+      />
+      <div className="flex items-center gap-3 md:col-span-3">
+        <button
+          disabled={pending || members.length === 0}
+          className="rounded-md bg-neural-400 px-4 py-2 text-sm font-medium text-black transition hover:bg-neural-300 disabled:opacity-50"
+        >
+          {pending ? "Assigning…" : "Assign task"}
+        </button>
+        {error ? <span className="text-xs text-status-danger">{error}</span> : null}
+        {success ? <span className="text-xs text-status-success">Task assigned.</span> : null}
+      </div>
+    </form>
   );
 }
 
