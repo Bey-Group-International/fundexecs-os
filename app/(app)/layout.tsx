@@ -47,8 +47,13 @@ export default async function AppLayout({
   // Account display + the rail's "Recent" conversation list (Claude Code
   // style): sessions filed under group names with an Ungrouped bucket.
   const supabase = createServerClient();
-  const [{ data: principal }, { data: wallet }, { data: recentSessions }, { data: groupRows }] =
-    await Promise.all([
+  const [
+    { data: principal },
+    { data: wallet },
+    { data: recentSessions },
+    { data: groupRows },
+    { count: inboxUnread },
+  ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
       supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
       supabase
@@ -64,6 +69,13 @@ export default async function AppLayout({
         .select("id, name")
         .eq("organization_id", ctx.orgId)
         .order("created_at", { ascending: true }),
+      // Unread, still-open inbox threads — drives the sidebar badge.
+      supabase
+        .from("inbox_threads")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", ctx.orgId)
+        .eq("unread", true)
+        .eq("status", "open"),
     ]);
   const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
   const planKey = wallet?.plan as PlanKey | null;
@@ -123,6 +135,7 @@ export default async function AppLayout({
         hubs={hubs}
         sessions={sessions}
         groups={groups}
+        inboxUnread={inboxUnread ?? 0}
         signOutAction={signOut}
         createGroupAction={createSessionGroup}
         moveSessionAction={moveSessionToGroup}

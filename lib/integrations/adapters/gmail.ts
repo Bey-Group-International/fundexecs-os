@@ -56,6 +56,11 @@ export const gmailModule: AdapterModule = {
     "send_diligence_request",
     "distribute_report",
     "share_materials",
+    // Email is the default messaging channel for unified-inbox replies; a reply
+    // on a non-email thread (e.g. Slack) is pinned to its channel via the
+    // DispatchContext.channel hint instead.
+    "draft_reply",
+    "send_reply",
   ],
   adapter: gmailAdapter,
 };

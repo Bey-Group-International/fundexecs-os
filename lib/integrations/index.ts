@@ -16,7 +16,7 @@ export type {
 export { getAdapter } from "./registry";
 
 export async function dispatchAction(ctx: DispatchContext): Promise<DispatchResult> {
-  const adapter = getAdapter(ctx.action);
+  const adapter = getAdapter(ctx.action, ctx.channel);
   try {
     return await adapter.dispatch(ctx);
   } catch (err) {

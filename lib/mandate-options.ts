@@ -46,6 +46,21 @@ export const MANDATE_ACTION_OPTIONS: MandateActionOption[] = (
       label: "Distribute report",
       description: "Send a report or update out to LPs or stakeholders.",
     },
+    {
+      kind: "send_reply",
+      label: "Reply in inbox",
+      description: "Send a reply to a counterparty from a unified-inbox thread.",
+    },
+    {
+      kind: "propose_meeting",
+      label: "Propose a meeting",
+      description: "Offer times or a booking link to schedule from an inbox thread.",
+    },
+    {
+      kind: "confirm_booking",
+      label: "Confirm a booking",
+      description: "Confirm a proposed meeting time with the counterparty.",
+    },
   ] satisfies MandateActionOption[]
 ).filter((o) => tierForAction(o.kind) === 2);
 

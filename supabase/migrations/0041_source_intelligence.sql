@@ -1,4 +1,4 @@
--- 0038_source_intelligence.sql
+-- 0041_source_intelligence.sql
 -- The Source learning ledger. Every time an operator acts on an AI suggestion —
 -- accepts a sourced candidate, skips one, or queues a recommended move — one
 -- append-only row is written here. lib/source-intelligence.ts distills these
