@@ -11,16 +11,44 @@ export async function updateProfile(formData: FormData) {
   const auth = await requireOrgContext();
   if (!auth.ok) return;
 
+  // Trim a field; empty string becomes null.
+  const t = (name: string): string | null => {
+    const v = String(formData.get(name) ?? "").trim();
+    return v === "" ? null : v;
+  };
+
+  // Website: trim, and prefix https:// when a scheme is missing.
+  const rawWebsite = String(formData.get("website") ?? "").trim();
+  const website =
+    rawWebsite === ""
+      ? null
+      : /^[a-z][a-z0-9+.-]*:\/\//i.test(rawWebsite)
+        ? rawWebsite
+        : `https://${rawWebsite}`;
+
+  // Fund count: parse to a number, or null when empty/invalid.
+  const rawFundCount = String(formData.get("fund_count") ?? "").trim();
+  let fund_count: number | null = null;
+  if (rawFundCount !== "") {
+    const n = Number(rawFundCount);
+    fund_count = Number.isFinite(n) ? n : null;
+  }
+
   const supabase = createServerClient();
   await supabase
     .from("organizations")
     .update({
       name: String(formData.get("name") ?? "").trim(),
-      legal_name: String(formData.get("legal_name") ?? "") || null,
-      entity_type: String(formData.get("entity_type") ?? "") || null,
-      jurisdiction: String(formData.get("jurisdiction") ?? "") || null,
-      website: String(formData.get("website") ?? "") || null,
-      description: String(formData.get("description") ?? "") || null,
+      legal_name: t("legal_name"),
+      entity_type: t("entity_type"),
+      jurisdiction: t("jurisdiction"),
+      website,
+      description: t("description"),
+      hq_location: t("hq_location"),
+      aum_range: t("aum_range"),
+      fund_count,
+      primary_strategy: t("primary_strategy"),
+      operator_role: t("operator_role"),
     })
     .eq("id", auth.ctx.orgId);
 
