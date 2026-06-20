@@ -1,6 +1,8 @@
 import { ModuleView } from "@/components/ModuleView";
 import { SourceSearch } from "@/components/source/SourceSearch";
+import { RunSearch } from "@/components/run/RunSearch";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
+import { copilotLive } from "@/lib/claude";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,15 @@ export default function ModulePage({
       <SourceSearch
         live={sourcingLive()}
         webEnrichment={sourcingEnrichmentEnabled()}
+        initialPrompt={typeof q === "string" && q.trim() ? q : undefined}
+      />
+    );
+  }
+  if (params.hub === "run" && params.module === "search") {
+    const q = Array.isArray(searchParams?.q) ? searchParams?.q[0] : searchParams?.q;
+    return (
+      <RunSearch
+        live={copilotLive()}
         initialPrompt={typeof q === "string" && q.trim() ? q : undefined}
       />
     );
