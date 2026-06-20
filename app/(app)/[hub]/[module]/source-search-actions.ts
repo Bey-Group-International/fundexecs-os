@@ -11,6 +11,7 @@ import {
   type SourceCandidate,
   type SourcingMandate,
 } from "@/lib/source-ai";
+import { buildOperatorContext, isPersonalized } from "@/lib/source-intelligence";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { AgentKey, Json } from "@/lib/supabase/database.types";
 
@@ -47,6 +48,8 @@ export interface StartSearchResult {
   workflowId?: string;
   summary?: string;
   steps?: SearchStep[];
+  /** True when the plan was tuned by this operator's learned preferences. */
+  personalized?: boolean;
   error?: string;
 }
 
@@ -62,7 +65,12 @@ export async function startSourceSearch(prompt: string): Promise<StartSearchResu
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
   const mandate = await loadMandate(orgId);
-  const plan = await planSourceSearch(clean, mandate);
+  const context = await buildOperatorContext(supabase, {
+    orgId,
+    principalId: auth.ctx.userId,
+    role: auth.ctx.role,
+  });
+  const plan = await planSourceSearch(clean, mandate, context);
   if (!plan.steps.length) return { ok: false, error: "Couldn't plan that search." };
 
   const { data: session } = await supabase
@@ -138,7 +146,7 @@ export async function startSourceSearch(prompt: string): Promise<StartSearchResu
     }
   }
 
-  return { ok: true, sessionId, workflowId, summary: plan.summary, steps };
+  return { ok: true, sessionId, workflowId, summary: plan.summary, steps, personalized: isPersonalized(context) };
 }
 
 export interface RunStepResult {
@@ -181,7 +189,13 @@ export async function runSourceStep(args: {
     .is("archived_at", null)
     .limit(60);
   const existing = ((data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
-  const candidates = await generateTargets(args.module, mandate, existing, args.query);
+  const context = await buildOperatorContext(supabase, {
+    orgId,
+    principalId: auth.ctx.userId,
+    role: auth.ctx.role,
+    module: args.module,
+  });
+  const candidates = await generateTargets(args.module, mandate, existing, args.query, context);
 
   await supabase
     .from("tasks")

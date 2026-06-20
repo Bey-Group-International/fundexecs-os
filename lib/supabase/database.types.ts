@@ -656,6 +656,30 @@ export type DispatchLog = {
   created_at: string;
 };
 
+// The Source learning ledger (migration 0038). One append-only row per operator
+// action on an AI suggestion (accept / reject / queue). lib/source-intelligence
+// distills these — per org and per principal — into the learned-preferences
+// digest injected into Source prompts.
+export type SourceFeedback = {
+  id: string;
+  organization_id: string;
+  principal_id: string | null;
+  module: string;
+  agent: string | null;
+  signal: string; // 'accepted' | 'rejected' | 'queued'
+  subject_name: string;
+  category: string | null;
+  rationale: string | null;
+  source_query: string | null;
+  fit_score: number | null;
+  action: string | null;
+  record_id: string | null;
+  task_id: string | null;
+  session_id: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -755,6 +779,7 @@ export type Database = {
       automations: TableShape<Automation>;
       mandates: TableShape<MandateRow>;
       dispatch_log: TableShape<DispatchLog>;
+      source_feedback: TableShape<SourceFeedback>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
       wallets: TableShape<Wallet>;
