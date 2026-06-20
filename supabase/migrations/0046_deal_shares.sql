@@ -1,4 +1,4 @@
--- 0044_deal_shares.sql
+-- 0046_deal_shares.sql
 -- Share a deal across the ecosystem. One action does three things (lib/deal-
 -- share*): Earn drafts a confidential teaser memo, the deal is matched
 -- AngelList-style (check size · stage · sector · geography, via lib/matching)

@@ -893,7 +893,7 @@ export type StripeCheckout = {
   fulfilled_at: string | null;
 };
 
-// A shareable teaser of a deal (migration 0044): the public token + Earn's
+// A shareable teaser of a deal (migration 0046): the public token + Earn's
 // confidential memo. The full deal room is never exposed — only this travels.
 export type DealShare = Timestamps & {
   id: string;
@@ -905,7 +905,7 @@ export type DealShare = Timestamps & {
   revoked_at: string | null;
 };
 
-// A matched (or forwarded) target of a shared deal (migration 0044). The
+// A matched (or forwarded) target of a shared deal (migration 0046). The
 // recipient org reads these as its "deals that fit you" feed; `investor_id` is
 // the recipient's own profile the deal fit, so the deep link resolves for them.
 export type DealShareRecipient = {
@@ -919,7 +919,7 @@ export type DealShareRecipient = {
   created_at: string;
 };
 
-// One view of a tracked deal-share link (migration 0044). `organization_id` is
+// One view of a tracked deal-share link (migration 0046). `organization_id` is
 // the sharer (who reads the access log); `viewer_org_id` is the viewing org
 // when known, else null for an anonymous open.
 export type DealShareView = {
