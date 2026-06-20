@@ -33,6 +33,17 @@ interface TeamControlsProps {
 
 const ROLE_OPTIONS: MemberRole[] = ["owner", "admin", "member"];
 
+// Only allow user-supplied avatar URLs that use a safe scheme. Blocks
+// javascript:/vbscript:/other-scheme payloads from reaching the <img> sink
+// (CodeQL js/xss-through-dom); falls back to initials when unsafe/empty.
+function safeImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const u = url.trim();
+  if (/^https?:\/\//i.test(u)) return u;
+  if (/^data:image\//i.test(u)) return u;
+  return null;
+}
+
 function Avatar({
   name,
   avatarUrl,
@@ -40,11 +51,12 @@ function Avatar({
   name: string;
   avatarUrl?: string | null;
 }) {
-  if (avatarUrl) {
+  const safe = safeImageUrl(avatarUrl);
+  if (safe) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={avatarUrl}
+        src={safe}
         alt={name}
         className="h-9 w-9 shrink-0 rounded-full object-cover"
       />
