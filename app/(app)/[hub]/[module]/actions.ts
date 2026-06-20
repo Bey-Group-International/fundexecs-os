@@ -128,6 +128,12 @@ export async function createModuleRow(
             | "fund_interest"
             | "other"
             | null) ?? "real_estate",
+        acquisition_cost: num(formData, "acquisition_cost"),
+        current_value: num(formData, "current_value"),
+        acquisition_date: text(formData, "acquisition_date"),
+        status: text(formData, "status") ?? "active",
+        noi: num(formData, "noi"),
+        cap_rate: num(formData, "cap_rate"),
       });
       break;
     }
