@@ -10,7 +10,9 @@ import { BrandModule } from "@/components/build/BrandModule";
 import { EntityModule } from "@/components/build/EntityModule";
 import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
+import { MaterialsModule } from "@/components/build/MaterialsModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
+import { ProfileForm } from "@/components/build/ProfileForm";
 import { MandateStrip } from "@/components/build/MandateStrip";
 import {
   RunStrategyModule,
@@ -18,6 +20,7 @@ import {
   RunStressTestModule,
   RunCommsModule,
 } from "@/components/run/RunModules";
+import { RunDiligenceModule, RunUnderwritingModule } from "@/components/run/RunListModules";
 import {
   ExecuteReportingModule,
   ExecuteExitModule,
@@ -29,8 +32,11 @@ import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
 import { ModuleDashboard } from "@/components/source/ModuleDashboard";
+import { AiSourcingPanel } from "@/components/source/AiSourcingPanel";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { summarizeModule } from "@/lib/source-stats";
+import { sourceConfigFor, sourcingLive } from "@/lib/source-ai";
+import { AGENT_BY_KEY } from "@/lib/agents";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 
@@ -120,39 +126,9 @@ const LIST_MODULES: Record<string, ListConfig> = {
     ],
     empty: "No debt facilities yet. Track credit lines, term loans, and mezz here.",
   },
-  "run/underwriting": {
-    table: "underwritings",
-    blurb: "Base, bull, and bear cases behind every investment decision.",
-    columns: [
-      { key: "name", label: "Model" },
-      { key: "scenario", label: "Scenario" },
-      { key: "projected_irr", label: "IRR" },
-      { key: "projected_moic", label: "MOIC" },
-    ],
-    empty: "No underwriting models yet.",
-  },
-  "run/diligence": {
-    table: "diligence_items",
-    blurb: "Open questions and findings that gate conviction.",
-    columns: [
-      { key: "title", label: "Item" },
-      { key: "category", label: "Category" },
-      { key: "status", label: "Status" },
-      { key: "risk_severity", label: "Risk" },
-    ],
-    empty: "No diligence items yet.",
-  },
-  // Execute modules (closing, capital_events, asset_management, reporting, exit)
-  // are all rendered by their own bespoke components above — no generic table.
+  // The Run lists (diligence, underwriting) and every Execute module are
+  // rendered by their own bespoke components above — no generic table here.
 };
-
-const PROFILE_FIELDS = [
-  { name: "name", label: "Organization name" },
-  { name: "legal_name", label: "Legal name" },
-  { name: "entity_type", label: "Entity type" },
-  { name: "jurisdiction", label: "Jurisdiction" },
-  { name: "website", label: "Website" },
-];
 
 // Modules whose rows can be scoped to a session (first pass — the key demo
 // path). When opened inside the session frame, the list filters to the session
@@ -189,15 +165,18 @@ export async function ModuleView({
   // carries the mandate alongside live conviction.
   const mandateStrip = hub.key === "source" ? <MandateStrip orgId={ctx.orgId} /> : null;
 
-  // --- Run hub: derived evaluation modules ---------------------------------
+  // --- Run hub: derived evaluation modules + actionable lists --------------
   // Strategy, Risk, Stress Test, and Comms are synthesized from the live deal
-  // working set (deals + underwriting + diligence); Diligence and Underwriting
-  // fall through to their table-backed views below.
+  // working set (deals + underwriting + diligence). Diligence and Underwriting
+  // are the org-wide lists, now editable in place (add + inline status) with a
+  // deal picker — the same actions the deal war room uses.
   if (hub.key === "run") {
     if (mod.key === "strategy") return <RunStrategyModule orgId={ctx.orgId} />;
     if (mod.key === "risk") return <RunRiskModule orgId={ctx.orgId} />;
     if (mod.key === "stress_test") return <RunStressTestModule orgId={ctx.orgId} />;
     if (mod.key === "comms") return <RunCommsModule orgId={ctx.orgId} />;
+    if (mod.key === "diligence") return <RunDiligenceModule orgId={ctx.orgId} />;
+    if (mod.key === "underwriting") return <RunUnderwritingModule orgId={ctx.orgId} />;
   }
 
   // --- Execute hub: bespoke operating modules ------------------------------
@@ -221,6 +200,7 @@ export async function ModuleView({
     if (mod.key === "entity") return <EntityModule />;
     if (mod.key === "track_record") return <TrackRecordModule />;
     if (mod.key === "team") return <TeamModule />;
+    if (mod.key === "data_room") return <MaterialsModule />;
     // profile falls through to the editable org form below
   }
 
@@ -238,30 +218,22 @@ export async function ModuleView({
           blurb="Your firm's identity and the basics every other module builds on."
           module="profile"
         />
-        <form action={updateProfile} className="flex max-w-xl flex-col gap-4">
-        {PROFILE_FIELDS.map((f) => (
-          <label key={f.name} className="flex flex-col gap-1.5 text-sm">
-            <span className="text-fg-secondary">{f.label}</span>
-            <input
-              name={f.name}
-              defaultValue={(org?.[f.name as keyof typeof org] as string) ?? ""}
-              className="rounded-md border border-line bg-surface-1 px-3 py-2 outline-none focus:border-gold-500"
-            />
-          </label>
-        ))}
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-fg-secondary">Description</span>
-          <textarea
-            name="description"
-            rows={3}
-            defaultValue={org?.description ?? ""}
-            className="rounded-md border border-line bg-surface-1 px-3 py-2 outline-none focus:border-gold-500"
-          />
-        </label>
-        <button className="self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
-          Save profile
-        </button>
-        </form>
+        <ProfileForm
+          action={updateProfile}
+          values={{
+            name: org?.name ?? "",
+            legal_name: org?.legal_name ?? "",
+            entity_type: org?.entity_type ?? "",
+            jurisdiction: org?.jurisdiction ?? "",
+            website: org?.website ?? "",
+            description: org?.description ?? "",
+            hq_location: org?.hq_location ?? "",
+            aum_range: org?.aum_range ?? "",
+            fund_count: org?.fund_count != null ? String(org.fund_count) : "",
+            primary_strategy: org?.primary_strategy ?? "",
+            operator_role: org?.operator_role ?? "",
+          }}
+        />
       </div>
     );
   }
@@ -272,14 +244,27 @@ export async function ModuleView({
     // Inside the session frame, a session-scoped module shows only this
     // session's rows; standalone it shows the full org-wide list.
     const scoped = sessionId && SESSION_SCOPED_MODULES.has(key);
-    let query = supabase
+    // Live rows drive the list + dashboards; archived rows are fetched
+    // separately and only surfaced behind the table's "Show archived" toggle.
+    let liveQ = supabase
       .from(cfg.table as "investors")
       .select("*")
+      .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(50);
-    if (scoped) query = query.eq("session_id", sessionId);
-    const { data } = await query;
-    const rows = (data ?? []) as unknown as Record<string, unknown>[];
+    let archQ = supabase
+      .from(cfg.table as "investors")
+      .select("*")
+      .not("archived_at", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (scoped) {
+      liveQ = liveQ.eq("session_id", sessionId);
+      archQ = archQ.eq("session_id", sessionId);
+    }
+    const [liveRes, archRes] = await Promise.all([liveQ, archQ]);
+    const rows = (liveRes.data ?? []) as unknown as Record<string, unknown>[];
+    const archivedRows = (archRes.data ?? []) as unknown as Record<string, unknown>[];
     const addConfig = ADD_ROW_CONFIGS[key];
 
     // Source modules read as live dashboards: a KPI strip + stage funnel
@@ -287,15 +272,24 @@ export async function ModuleView({
     // generic momentum strip (volume, recent adds, last activity).
     const summary = summarizeModule(key, rows);
 
+    // AI Sourcing surface — only on the standalone hub view (not the session
+    // frame, whose rows are session-scoped). Generate/score/act against the
+    // mandate, with the operator's gate on every outbound move.
+    const aiCfg = sessionId ? null : sourceConfigFor(key);
+
     let statBar = null;
     if (!summary) {
       // Momentum: accurate total + last-7-day counts, scoped the same way as
       // the list. Cheap head-only count queries, run alongside the page load.
       const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
-      let totalQ = supabase.from(cfg.table as "investors").select("*", { count: "exact", head: true });
+      let totalQ = supabase
+        .from(cfg.table as "investors")
+        .select("*", { count: "exact", head: true })
+        .is("archived_at", null);
       let weekQ = supabase
         .from(cfg.table as "investors")
         .select("*", { count: "exact", head: true })
+        .is("archived_at", null)
         .gte("created_at", weekAgo);
       if (scoped) {
         totalQ = totalQ.eq("session_id", sessionId);
@@ -312,6 +306,15 @@ export async function ModuleView({
       <div>
         {mandateStrip}
         <ModuleHeader title={mod.label} blurb={cfg.blurb} />
+        {aiCfg ? (
+          <AiSourcingPanel
+            hub={hub.key}
+            module={mod.key}
+            entities={aiCfg.entities}
+            agentName={AGENT_BY_KEY[aiCfg.agent]?.name ?? "Sourcing"}
+            live={sourcingLive()}
+          />
+        ) : null}
         {summary ? <ModuleDashboard summary={summary} empty={rows.length === 0} /> : statBar}
         {addConfig ? (
           <AddRowForm
@@ -321,7 +324,7 @@ export async function ModuleView({
             sessionId={scoped ? sessionId : undefined}
           />
         ) : null}
-        {rows.length === 0 ? (
+        {rows.length === 0 && archivedRows.length === 0 ? (
           <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
             <span
               aria-hidden
@@ -338,7 +341,14 @@ export async function ModuleView({
             </Link>
           </div>
         ) : (
-          <ModuleTable columns={cfg.columns} rows={rows} />
+          <ModuleTable
+            columns={cfg.columns}
+            rows={rows}
+            archivedRows={archivedRows}
+            hub={hub.key}
+            module={mod.key}
+            table={cfg.table}
+          />
         )}
       </div>
     );

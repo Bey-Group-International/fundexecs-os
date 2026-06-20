@@ -2,7 +2,7 @@
 // Unit tests for the pure Run-hub conviction roll-up. No database is hit — the
 // fetch (getRunConviction) is the only impure wrapper; rollupRunConviction and
 // toPercent are exercised here with small in-memory fixtures.
-import { rollupRunConviction, toPercent } from "@/lib/run-conviction";
+import { rollupRunConviction, toPercent, effectiveSeverity } from "@/lib/run-conviction";
 import type { Mandate } from "@/lib/build-readiness";
 import type { Deal, Underwriting, DiligenceItem, TrackRecord } from "@/lib/supabase/database.types";
 
@@ -25,6 +25,12 @@ function makeDeal(overrides: Partial<Deal> = {}): Deal {
     session_id: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    provenance: "manual",
+    verification_status: "unverified",
+    verified_at: null,
+    verified_by: null,
+    verification_note: null,
+    archived_at: null,
     ...overrides,
   };
 }
@@ -43,6 +49,12 @@ function makeUnderwriting(overrides: Partial<Underwriting> = {}): Underwriting {
     created_by: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    provenance: "manual",
+    verification_status: "unverified",
+    verified_at: null,
+    verified_by: null,
+    verification_note: null,
+    archived_at: null,
     ...overrides,
   };
 }
@@ -58,8 +70,17 @@ function makeDiligence(overrides: Partial<DiligenceItem> = {}): DiligenceItem {
     status: "cleared",
     risk_severity: null,
     finding: null,
+    likelihood: null,
+    mitigation: null,
+    residual_severity: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    provenance: "manual",
+    verification_status: "unverified",
+    verified_at: null,
+    verified_by: null,
+    verification_note: null,
+    archived_at: null,
     ...overrides,
   };
 }
@@ -183,5 +204,40 @@ describe("rollupRunConviction", () => {
     const r = rollupRunConviction([strong, weak], uw, dil, [], MANDATE);
     expect(r.deals[0].deal.id).toBe("strong");
     expect(r.deals[0].score).toBeGreaterThan(r.deals[1].score);
+  });
+
+  it("lets a recorded mitigation buy conviction back via residual severity", () => {
+    const deal = makeDeal();
+    const uw = [
+      makeUnderwriting({ id: "base", scenario: "base" }),
+      makeUnderwriting({ id: "down", scenario: "downside", projected_irr: 0.12 }),
+    ];
+    // Three cleared + one critical finding that has been mitigated down to low.
+    const dil = [
+      makeDiligence({ id: "1", status: "cleared" }),
+      makeDiligence({ id: "2", status: "cleared" }),
+      makeDiligence({ id: "3", status: "cleared" }),
+      makeDiligence({
+        id: "4",
+        status: "flagged",
+        risk_severity: "critical",
+        mitigation: "Indemnity + escrow",
+        residual_severity: "low",
+      }),
+    ];
+    const r = rollupRunConviction([deal], uw, dil, [], MANDATE);
+    expect(r.deals[0].openRisks).toHaveLength(0); // residual low no longer bites
+    expect(r.deals[0].stage.key).toBe("ic_ready");
+  });
+});
+
+describe("effectiveSeverity", () => {
+  it("prefers residual severity once a mitigation is recorded", () => {
+    expect(
+      effectiveSeverity(makeDiligence({ risk_severity: "critical", residual_severity: "low" })),
+    ).toBe("low");
+  });
+  it("falls back to raw severity when there is no residual", () => {
+    expect(effectiveSeverity(makeDiligence({ risk_severity: "high", residual_severity: null }))).toBe("high");
   });
 });

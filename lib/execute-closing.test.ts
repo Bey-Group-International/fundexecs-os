@@ -3,6 +3,16 @@
 import { rollupExecuteClosing } from "@/lib/execute-closing";
 import type { Deal, DiligenceItem, ServiceProvider, Fund } from "@/lib/supabase/database.types";
 
+// Record-provenance fields shared by managed-record tables.
+const meta = {
+  provenance: "manual",
+  verification_status: "unverified",
+  verified_at: null,
+  verified_by: null,
+  verification_note: null,
+  archived_at: null,
+};
+
 function makeDeal(overrides: Partial<Deal> = {}): Deal {
   return {
     id: "deal-1",
@@ -21,6 +31,7 @@ function makeDeal(overrides: Partial<Deal> = {}): Deal {
     session_id: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    ...meta,
     ...overrides,
   };
 }
@@ -36,8 +47,12 @@ function makeDiligence(overrides: Partial<DiligenceItem> = {}): DiligenceItem {
     status: "cleared",
     risk_severity: null,
     finding: null,
+    likelihood: null,
+    mitigation: null,
+    residual_severity: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    ...meta,
     ...overrides,
   };
 }
@@ -55,6 +70,7 @@ function makeProvider(overrides: Partial<ServiceProvider> = {}): ServiceProvider
     created_by: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    ...meta,
     ...overrides,
   };
 }

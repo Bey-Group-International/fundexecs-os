@@ -89,6 +89,17 @@ type Timestamps = {
   updated_at: string;
 }
 
+// Provenance + verification + soft-archive columns (migration 0032), present on
+// every table-backed module record (Source, Run, Execute).
+type RecordMeta = {
+  provenance: string; // 'manual' | 'ai' | 'import'
+  verification_status: string; // 'unverified' | 'verified'
+  verified_at: string | null;
+  verified_by: string | null;
+  verification_note: string | null;
+  archived_at: string | null;
+}
+
 export type Principal = {
   id: string;
   email: string;
@@ -144,7 +155,7 @@ export type InvestmentThesis = Timestamps & {
   is_active: boolean;
 }
 
-export type Investor = Timestamps & {
+export type Investor = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -184,7 +195,7 @@ export type Commitment = Timestamps & {
   committed_at: string | null;
 }
 
-export type CapitalEvent = Timestamps & {
+export type CapitalEvent = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   fund_id: string;
@@ -198,7 +209,7 @@ export type CapitalEvent = Timestamps & {
   notes: string | null;
 }
 
-export type Deal = Timestamps & {
+export type Deal = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -215,7 +226,7 @@ export type Deal = Timestamps & {
   session_id: string | null;
 }
 
-export type Asset = Timestamps & {
+export type Asset = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   deal_id: string | null;
@@ -231,7 +242,7 @@ export type Asset = Timestamps & {
   session_id: string | null;
 }
 
-export type Underwriting = Timestamps & {
+export type Underwriting = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   deal_id: string;
@@ -244,7 +255,7 @@ export type Underwriting = Timestamps & {
   created_by: string | null;
 }
 
-export type DiligenceItem = Timestamps & {
+export type DiligenceItem = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   deal_id: string;
@@ -254,7 +265,32 @@ export type DiligenceItem = Timestamps & {
   status: DiligenceStatus;
   risk_severity: RiskSeverity | null;
   finding: string | null;
+  likelihood: RiskSeverity | null;
+  mitigation: string | null;
+  residual_severity: RiskSeverity | null;
 }
+
+export type IcDecisionKind = "go" | "conditional" | "hold" | "no_go";
+
+export type IcDecision = {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  decision: IcDecisionKind;
+  rationale: string | null;
+  conviction: number | null;
+  decided_by: string | null;
+  created_at: string;
+};
+
+export type ConvictionSnapshot = {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  score: number;
+  stage: string;
+  captured_at: string;
+};
 
 export type Relationship = Timestamps & {
   id: string;
@@ -334,7 +370,7 @@ export type Entity = Timestamps & {
   created_by: string | null;
 };
 
-export type Partner = Timestamps & {
+export type Partner = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -347,7 +383,7 @@ export type Partner = Timestamps & {
   created_by: string | null;
 };
 
-export type ServiceProvider = Timestamps & {
+export type ServiceProvider = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -359,7 +395,7 @@ export type ServiceProvider = Timestamps & {
   created_by: string | null;
 };
 
-export type DebtFacility = Timestamps & {
+export type DebtFacility = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -455,6 +491,28 @@ export type Document = {
   mime_type: string | null;
   size_bytes: number | null;
   uploaded_by: string | null;
+  content: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type DataRoomShare = {
+  id: string;
+  organization_id: string;
+  token: string;
+  label: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type DataRoomView = {
+  id: string;
+  organization_id: string;
+  share_id: string | null;
+  document_id: string | null;
+  kind: "room" | "document";
   created_at: string;
 };
 
@@ -617,6 +675,8 @@ export type Database = {
       documents: TableShape<Document>;
       underwritings: TableShape<Underwriting>;
       diligence_items: TableShape<DiligenceItem>;
+      ic_decisions: TableShape<IcDecision>;
+      conviction_snapshots: TableShape<ConvictionSnapshot>;
       relationships: TableShape<Relationship>;
       ai_agents: TableShape<AiAgent>;
       prompts: TableShape<Prompt>;
@@ -640,6 +700,8 @@ export type Database = {
       brain_runs: TableShape<BrainRun>;
       brain_documents: TableShape<BrainDocument>;
       brain_kb_chunks: TableShape<BrainKbChunk>;
+      data_room_shares: TableShape<DataRoomShare>;
+      data_room_views: TableShape<DataRoomView>;
     };
     Views: Record<string, never>;
     Functions: {

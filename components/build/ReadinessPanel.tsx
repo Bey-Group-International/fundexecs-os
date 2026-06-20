@@ -72,6 +72,12 @@ export function ReadinessPanel({ readiness }: { readiness: BuildReadiness }) {
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
               {stage.label}
             </span>
+            <Link
+              href="/build/data_room"
+              className="ml-auto font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
+            >
+              View materials →
+            </Link>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
           {nextStage ? (

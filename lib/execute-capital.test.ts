@@ -3,6 +3,16 @@
 import { rollupCapitalEvents, directionOf } from "@/lib/execute-capital";
 import type { CapitalEvent, Fund } from "@/lib/supabase/database.types";
 
+// Record-provenance fields shared by managed-record tables.
+const meta = {
+  provenance: "manual",
+  verification_status: "unverified",
+  verified_at: null,
+  verified_by: null,
+  verification_note: null,
+  archived_at: null,
+};
+
 function makeEvent(overrides: Partial<CapitalEvent> = {}): CapitalEvent {
   return {
     id: "ce-1",
@@ -18,6 +28,7 @@ function makeEvent(overrides: Partial<CapitalEvent> = {}): CapitalEvent {
     notes: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    ...meta,
     ...overrides,
   };
 }

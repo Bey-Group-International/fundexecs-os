@@ -16,7 +16,13 @@ import { createServerClient } from "@/lib/supabase/server";
 const cache: <T extends (...args: never[]) => unknown>(fn: T) => T =
   typeof React.cache === "function" ? React.cache : (fn) => fn;
 import { getMandate, type Mandate } from "@/lib/build-readiness";
-import type { Deal, Underwriting, DiligenceItem, TrackRecord } from "@/lib/supabase/database.types";
+import type {
+  Deal,
+  Underwriting,
+  DiligenceItem,
+  TrackRecord,
+  RiskSeverity,
+} from "@/lib/supabase/database.types";
 
 // The working set Run acts on: deals actively being evaluated (post-sourcing,
 // pre-close). Sourced deals haven't entered evaluation; owned/exited/passed/
@@ -99,7 +105,13 @@ export function toPercent(v: number | null): number | null {
 
 const STRESS_SCENARIOS = new Set(["downside", "stress", "bear", "bear_case"]);
 
-function scoreDeal(
+// The severity a finding still carries: its residual (post-mitigation) severity
+// when one has been set, otherwise its raw severity.
+export function effectiveSeverity(d: DiligenceItem): RiskSeverity | null {
+  return d.residual_severity ?? d.risk_severity;
+}
+
+export function scoreDeal(
   deal: Deal,
   underwritings: Underwriting[],
   diligence: DiligenceItem[],
@@ -117,9 +129,12 @@ function scoreDeal(
 
   const resolved = items.filter((d) => DILIGENCE_RESOLVED.has(d.status));
   const coverage = items.length ? resolved.length / items.length : 0;
-  const openRisks = items.filter(
-    (d) => !DILIGENCE_RESOLVED.has(d.status) && d.risk_severity != null && SEVERE.has(d.risk_severity),
-  );
+  // The severity that still bites is the residual one once a mitigation has been
+  // recorded — so writing a mitigation visibly buys conviction back.
+  const openRisks = items.filter((d) => {
+    const sev = effectiveSeverity(d);
+    return !DILIGENCE_RESOLVED.has(d.status) && sev != null && SEVERE.has(sev);
+  });
 
   const projectedIrr = toPercent(baseCase?.projected_irr ?? null);
   const projectedMoic = baseCase?.projected_moic ?? null;
