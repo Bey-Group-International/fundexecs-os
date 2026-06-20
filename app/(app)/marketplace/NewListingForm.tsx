@@ -29,7 +29,7 @@ export function NewListingForm() {
           else formRef.current?.reset();
         })
       }
-      className="rounded-xl border border-line bg-surface-1 p-4"
+      className="fx-card animate-fade-up p-4"
     >
       <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
         New listing

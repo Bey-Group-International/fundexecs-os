@@ -57,9 +57,22 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.35" },
         },
+        // Soft entrance — cards/rows lift into place. Used with `both` so the
+        // pre-animation state (faded, nudged down) holds before it runs.
+        fxFadeUp: {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        // Slow breathing glow for live/ambient accents (graph nodes, dots).
+        fxGlow: {
+          "0%, 100%": { opacity: "0.55" },
+          "50%": { opacity: "1" },
+        },
       },
       animation: {
         pulse: "fxPulse 1.6s ease-in-out infinite",
+        "fade-up": "fxFadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
+        glow: "fxGlow 3.2s ease-in-out infinite",
       },
     },
   },
