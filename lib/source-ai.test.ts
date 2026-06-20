@@ -19,6 +19,8 @@ const {
   clampScore,
   cleanUrl,
   parseJsonArray,
+  fallbackPlan,
+  normalizePlan,
   SOURCE_ACTIONS,
   tierForAction,
 } = __test;
@@ -165,6 +167,50 @@ describe("normalizeScores", () => {
     );
     expect(out.map((s) => s.id)).toEqual(["a", "b"]);
     expect(out[1].action).toBe("research"); // move_capital rejected
+  });
+});
+
+describe("fallbackPlan (Earn planner, no API key)", () => {
+  it("routes keywords to the matching modules with the owning agent", () => {
+    const plan = fallbackPlan("Find lenders and co-GPs for the strategy");
+    const modules = plan.steps.map((s) => s.module);
+    expect(modules).toContain("source/debt");
+    expect(modules).toContain("source/partners");
+    expect(plan.steps.find((s) => s.module === "source/debt")?.agent).toBe("capital_connector");
+  });
+
+  it("defaults to the two pipelines when nothing matches", () => {
+    const plan = fallbackPlan("hello there");
+    expect(plan.steps.map((s) => s.module)).toEqual(["source/lp_pipeline", "source/deal_pipeline"]);
+  });
+
+  it("caps at four steps", () => {
+    const plan = fallbackPlan("lp investor deal target lender debt partner co-gp legal audit provider");
+    expect(plan.steps.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("normalizePlan", () => {
+  it("drops unknown modules, dedupes, and assigns the owning agent", () => {
+    const plan = normalizePlan(
+      {
+        summary: "Test",
+        steps: [
+          { module: "source/lp_pipeline", title: "LPs", query: "q" },
+          { module: "source/lp_pipeline", title: "dupe", query: "q" },
+          { module: "nope/bad", title: "x", query: "q" },
+          { module: "source/providers", title: "Bench", query: "q" },
+        ],
+      } as never,
+      "fallback prompt",
+    );
+    expect(plan.steps.map((s) => s.module)).toEqual(["source/lp_pipeline", "source/providers"]);
+    expect(plan.steps[0].agent).toBe("capital_raiser");
+  });
+
+  it("falls back when no valid steps remain", () => {
+    const plan = normalizePlan({ summary: "x", steps: [{ module: "bad", title: "t", query: "q" }] } as never, "find LPs");
+    expect(plan.steps.length).toBeGreaterThan(0);
   });
 });
 

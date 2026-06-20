@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   sourceTargets,
   addSourcedTargets,
@@ -42,6 +43,8 @@ export function AiSourcingPanel({
   webEnrichment?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("idle");
+  const [ask, setAsk] = useState("");
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [candidates, setCandidates] = useState<SourceCandidate[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -156,6 +159,29 @@ export function AiSourcingPanel({
         Propose thesis-fit {entities} to add, or score the pipeline and queue the next move — every
         outbound action runs through your approval gate.
       </p>
+
+      {/* Conversational entry — hand a request to Earn + the Source team */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const q = ask.trim();
+          router.push(`/source/search${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+        }}
+        className="mt-3 flex items-center gap-2"
+      >
+        <input
+          value={ask}
+          onChange={(e) => setAsk(e.target.value)}
+          placeholder={`Ask Earn to source ${entities}…`}
+          className="min-w-0 flex-1 rounded-md border border-line bg-surface-0 px-3 py-1.5 text-xs text-fg-primary outline-none focus:border-gold-500"
+        />
+        <button
+          type="submit"
+          className="shrink-0 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-200 transition hover:bg-gold-500/20"
+        >
+          ✶ Search
+        </button>
+      </form>
 
       {pending ? <p className="mt-3 animate-pulse text-xs text-gold-300">Working…</p> : null}
       {message ? (

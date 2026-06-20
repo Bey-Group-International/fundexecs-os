@@ -155,6 +155,12 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
               {stage.label}
             </span>
+            <Link
+              href="/source/search"
+              className="ml-auto rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            >
+              ✶ AI Search
+            </Link>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
 
