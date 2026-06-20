@@ -14,13 +14,10 @@ import { MaterialsModule } from "@/components/build/MaterialsModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { ProfileForm } from "@/components/build/ProfileForm";
 import { MandateStrip } from "@/components/build/MandateStrip";
-import {
-  RunStrategyModule,
-  RunRiskModule,
-  RunStressTestModule,
-  RunCommsModule,
-} from "@/components/run/RunModules";
-import { RunDiligenceModule, RunUnderwritingModule } from "@/components/run/RunListModules";
+import { RunRiskModule, RunStressTestModule, RunCommsModule } from "@/components/run/RunModules";
+import { RunStrategyModule } from "@/components/run/RunStrategyModule";
+import { RunDiligenceModule } from "@/components/run/RunDiligenceModule";
+import { RunUnderwritingModule } from "@/components/run/RunUnderwritingModule";
 import {
   ExecuteClosingModule,
   ExecuteReportingModule,
