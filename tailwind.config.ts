@@ -68,11 +68,26 @@ const config: Config = {
           "0%, 100%": { opacity: "0.55" },
           "50%": { opacity: "1" },
         },
+        // One-shot wiggle for the mailbox when a new message arrives.
+        fxShake: {
+          "0%, 100%": { transform: "translateX(0) rotate(0deg)" },
+          "20%": { transform: "translateX(-2px) rotate(-9deg)" },
+          "40%": { transform: "translateX(2px) rotate(9deg)" },
+          "60%": { transform: "translateX(-2px) rotate(-6deg)" },
+          "80%": { transform: "translateX(2px) rotate(6deg)" },
+        },
+        // One-shot pop for the lightbulb when a new deal lands.
+        fxNudge: {
+          "0%, 100%": { transform: "scale(1)" },
+          "45%": { transform: "scale(1.28)" },
+        },
       },
       animation: {
         pulse: "fxPulse 1.6s ease-in-out infinite",
         "fade-up": "fxFadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
         glow: "fxGlow 3.2s ease-in-out infinite",
+        shake: "fxShake 0.6s ease-in-out",
+        nudge: "fxNudge 0.5s ease-in-out",
       },
     },
   },

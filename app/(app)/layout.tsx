@@ -16,7 +16,6 @@ import {
   setSessionUnread,
 } from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
-import { getInboxCount } from "@/lib/inbox";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
 import { GlobalTopBar } from "@/components/GlobalTopBar";
@@ -40,10 +39,7 @@ export default async function AppLayout({
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const [balance, inboxCount] = await Promise.all([
-    getWalletBalance(ctx.orgId),
-    getInboxCount(ctx.orgId),
-  ]);
+  const balance = await getWalletBalance(ctx.orgId);
 
   // Account display + the rail's "Recent" conversation list (Claude Code
   // style): sessions filed under group names with an Ungrouped bucket.
@@ -53,7 +49,8 @@ export default async function AppLayout({
     { data: wallet },
     { data: recentSessions },
     { data: groupRows },
-    { count: inboxUnread },
+    { count: messagesUnread },
+    { count: dealsUnread },
     { data: matchAlertRow },
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
@@ -71,13 +68,24 @@ export default async function AppLayout({
         .select("id, name")
         .eq("organization_id", ctx.orgId)
         .order("created_at", { ascending: true }),
-      // Unread, still-open inbox threads — drives the sidebar badge.
+      // Unread messages — the mailbox icon + sidebar badge. Capital, partners,
+      // providers, and comms; everything EXCEPT shared deals (those go to the
+      // lightbulb).
       supabase
         .from("inbox_threads")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", ctx.orgId)
         .eq("unread", true)
-        .eq("status", "open"),
+        .eq("status", "open")
+        .neq("channel", "deal_share"),
+      // Unread shared-deal updates — the lightbulb icon (botmemo deal flow).
+      supabase
+        .from("inbox_threads")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", ctx.orgId)
+        .eq("unread", true)
+        .eq("status", "open")
+        .eq("channel", "deal_share"),
       // The newest unread match alert — an ecosystem match or a shared deal that
       // fits — surfaced as the quick toast by the bell. Read-later lives in the
       // inbox / feed; this is just the pop-in.
@@ -164,7 +172,7 @@ export default async function AppLayout({
         hubs={hubs}
         sessions={sessions}
         groups={groups}
-        inboxUnread={inboxUnread ?? 0}
+        inboxUnread={messagesUnread ?? 0}
         signOutAction={signOut}
         createGroupAction={createSessionGroup}
         moveSessionAction={moveSessionToGroup}
@@ -180,10 +188,13 @@ export default async function AppLayout({
       <ActiveSessionProvider>
         <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
           <div className="print:hidden">
-            {/* The bell reflects both the action queue ("needs you") and unread
-                Communications threads — ecosystem match alerts land here, so a
-                fresh match lights the bell. */}
-            <GlobalTopBar balance={balance} inboxCount={inboxCount + (inboxUnread ?? 0)} />
+            {/* Mailbox = unread messages (capital/partners/providers + comms);
+                lightbulb = unread shared deals. Both shake/pop on a new arrival. */}
+            <GlobalTopBar
+              balance={balance}
+              messagesUnread={messagesUnread ?? 0}
+              dealsUnread={dealsUnread ?? 0}
+            />
             {/* The quick alert that pops in by the bell on a fresh ecosystem
                 match — click to open, or let it fade and read it later. */}
             <MatchToast alert={matchAlert} />
