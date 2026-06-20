@@ -20,6 +20,7 @@ import { getInboxCount } from "@/lib/inbox";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
 import { GlobalTopBar } from "@/components/GlobalTopBar";
+import { MatchToast } from "@/components/inbox/MatchToast";
 import { AppSidebar } from "@/components/AppSidebar";
 import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 
@@ -53,6 +54,7 @@ export default async function AppLayout({
     { data: recentSessions },
     { data: groupRows },
     { count: inboxUnread },
+    { data: matchAlertRow },
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
       supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
@@ -76,7 +78,32 @@ export default async function AppLayout({
         .eq("organization_id", ctx.orgId)
         .eq("unread", true)
         .eq("status", "open"),
+      // The newest unread ecosystem match — surfaced as the quick toast by the
+      // bell. Read-later lives in the inbox; this is just the pop-in.
+      supabase
+        .from("inbox_threads")
+        .select("id, subject, preview, ai_summary")
+        .eq("organization_id", ctx.orgId)
+        .eq("channel", "ecosystem")
+        .eq("unread", true)
+        .eq("status", "open")
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
+
+  // Shape the freshest ecosystem match for the toast (null when there is none).
+  const matchRow = matchAlertRow as
+    | { id: string; subject: string; preview: string | null; ai_summary: string | null }
+    | null;
+  const matchAlert = matchRow
+    ? {
+        id: matchRow.id,
+        title: matchRow.subject,
+        body: matchRow.ai_summary ?? matchRow.preview ?? "",
+        href: "/inbox",
+      }
+    : null;
   const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
   const planKey = wallet?.plan as PlanKey | null;
   const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
@@ -155,6 +182,9 @@ export default async function AppLayout({
                 Communications threads — ecosystem match alerts land here, so a
                 fresh match lights the bell. */}
             <GlobalTopBar balance={balance} inboxCount={inboxCount + (inboxUnread ?? 0)} />
+            {/* The quick alert that pops in by the bell on a fresh ecosystem
+                match — click to open, or let it fade and read it later. */}
+            <MatchToast alert={matchAlert} />
           </div>
           <main className="flex-1 overflow-y-auto px-8 py-8 print:overflow-visible print:p-0">
             {children}

@@ -110,6 +110,33 @@ describe("scoreOrgMatch", () => {
     expect(match.score).toBeLessThan(60);
   });
 
+  it("rewards a cross-strategy fit in a funding lane (a credit lender for a RE GP)", () => {
+    const gp = makeOrg({ operatorRole: "gp", strategy: "real_estate" });
+    const lender = makeOrg({
+      id: "org-2",
+      operatorRole: "family_office",
+      strategy: "credit",
+      location: "New York, NY",
+      aumRange: "100m_500m",
+    });
+    const match = scoreOrgMatch(gp, lender)!;
+    // Credit on either side reclassifies the capital fit to debt...
+    expect(match.lane).toBe("debt");
+    // ...and a different-but-complementary mandate still earns funding-lane
+    // credit: debt 30 + complement 12 + geo 25 + scale 20 = 87.
+    expect(match.score).toBe(87);
+    expect(match.reasons.some((r) => /complementary/i.test(r))).toBe(true);
+  });
+
+  it("gives no strategy credit to a cross-strategy fit outside a funding lane", () => {
+    const a = makeOrg({ operatorRole: "operator", strategy: "real_estate", location: "Berlin", jurisdiction: "Germany", aumRange: "sub_25m" });
+    const b = makeOrg({ id: "org-2", operatorRole: "advisory", strategy: "private_equity", location: "Berlin", jurisdiction: "Germany", aumRange: "sub_25m" });
+    const match = scoreOrgMatch(a, b)!;
+    // partners lane: base 20 + strategy 0 (cross, non-funding) + geo 25 + scale 20 = 65.
+    expect(match.lane).toBe("partners");
+    expect(match.score).toBe(65);
+  });
+
   it("clamps to 100 and never exceeds it", () => {
     const a = makeOrg({ operatorRole: "gp" });
     const b = makeOrg({ id: "org-2", operatorRole: "family_office" });
