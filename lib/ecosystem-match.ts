@@ -111,19 +111,46 @@ export function classifyLane(a: EcoOrgProfile, b: EcoOrgProfile): EcosystemLane 
 
 // --- Scoring ----------------------------------------------------------------
 
-// Lane floor: how much a bare role-complementarity is worth before strategy,
-// geography, and scale refine it. Capital/debt anchor highest — a funding fit is
-// the strongest reason to make an introduction.
-const LANE_BASE: Record<EcosystemLane, number> = {
-  capital: 30,
-  debt: 30,
-  deals: 24,
-  partners: 20,
-  providers: 20,
-};
+/**
+ * The scoring weights, in one tunable place. Calibrate the engine by editing
+ * these — the bands mirror lib/matching so the two feel like one instrument:
+ *   lane floor (role fit) → up to 30
+ *   strategy overlap      → up to 25
+ *   geography overlap     → up to 25
+ *   scale proximity       → up to 20
+ * Keep the per-band maxima summing to ~100 so a perfect fit reads as 100/100.
+ */
+export const MATCH_WEIGHTS = {
+  // Lane floor: what a bare role-complementarity is worth before strategy,
+  // geography, and scale refine it. Capital/debt anchor highest — a funding fit
+  // is the strongest reason to make an introduction.
+  lane: { capital: 30, debt: 30, deals: 24, partners: 20, providers: 20 } as Record<
+    EcosystemLane,
+    number
+  >,
+  // Strategy overlap. `same` is the strongest signal; `multi` is a softer
+  // overlap; `complement` rewards a deliberately cross-strategy fit in a funding
+  // lane (a credit lender backing a real-estate GP is a *good* debt match, not a
+  // miss); `unknown` is neutral when a profile hasn't named its strategy yet.
+  strategySame: 25,
+  strategyMulti: 15,
+  strategyComplement: 12,
+  strategyUnknown: 8,
+  // Geography overlap — any shared place token across hq_location / jurisdiction.
+  geography: 25,
+  // Scale proximity by AUM-band distance.
+  scaleSame: 20,
+  scaleAdjacent: 12,
+  scaleNear: 6,
+  scaleUnknown: 6,
+} as const;
 
 // AUM buckets in ascending order, so scale proximity is just index distance.
 const AUM_ORDER = ["sub_25m", "25m_100m", "100m_500m", "500m_1b", "over_1b"];
+
+// The funding lanes, where a cross-strategy match is expected rather than weak.
+const FUNDING_LANES = new Set<EcosystemLane>(["capital", "debt"]);
+
 
 // Split a location/jurisdiction string into comparable tokens, dropping noise
 // words too short to be a meaningful place name.
@@ -152,49 +179,55 @@ export function scoreOrgMatch(viewer: EcoOrgProfile, candidate: EcoOrgProfile): 
   if (!lane) return null;
 
   const reasons: string[] = [];
-  let score = LANE_BASE[lane];
+  let score = MATCH_WEIGHTS.lane[lane];
   reasons.push(`${roleLabel(candidate.operatorRole)} — a natural ${LANE_LABEL[lane].toLowerCase()} fit.`);
 
-  // Strategy overlap (up to 25). Same strategy is the strongest signal;
-  // multi-strategy on either side is a softer overlap; unknown is neutral.
+  // Strategy overlap. Same strategy is the strongest signal; multi-strategy is a
+  // softer overlap; a *cross*-strategy pair is rewarded in a funding lane (a
+  // lender/allocator backing a different-strategy GP is a real fit, not a miss)
+  // but earns nothing elsewhere; an unnamed strategy is neutral.
   if (viewer.strategy && candidate.strategy) {
     if (viewer.strategy === candidate.strategy) {
-      score += 25;
+      score += MATCH_WEIGHTS.strategySame;
       reasons.push(`Both run a ${strategyLabel(viewer.strategy)} strategy.`);
     } else if (viewer.strategy === "multi" || candidate.strategy === "multi") {
-      score += 15;
+      score += MATCH_WEIGHTS.strategyMulti;
       reasons.push("Multi-strategy overlap.");
+    } else if (FUNDING_LANES.has(lane)) {
+      score += MATCH_WEIGHTS.strategyComplement;
+      reasons.push(
+        `Complementary mandates — ${strategyLabel(candidate.strategy)} capital for a ${strategyLabel(viewer.strategy)} book.`,
+      );
     }
   } else {
-    score += 8;
+    score += MATCH_WEIGHTS.strategyUnknown;
   }
 
-  // Geography overlap (up to 25). Any shared place token across hq_location /
-  // jurisdiction counts.
+  // Geography overlap. Any shared place token across hq_location / jurisdiction.
   const vTokens = geoTokens(viewer.location, viewer.jurisdiction);
   const cTokens = geoTokens(candidate.location, candidate.jurisdiction);
   const shared = [...vTokens].find((t) => cTokens.has(t));
   if (shared) {
-    score += 25;
+    score += MATCH_WEIGHTS.geography;
     reasons.push(`Both operate in ${shared.replace(/\b\w/, (c) => c.toUpperCase())}.`);
   }
 
-  // Scale proximity (up to 20). Closer AUM bands deploy at compatible sizes.
+  // Scale proximity. Closer AUM bands deploy at compatible sizes.
   const vi = viewer.aumRange ? AUM_ORDER.indexOf(viewer.aumRange) : -1;
   const ci = candidate.aumRange ? AUM_ORDER.indexOf(candidate.aumRange) : -1;
   if (vi >= 0 && ci >= 0) {
     const dist = Math.abs(vi - ci);
     if (dist === 0) {
-      score += 20;
+      score += MATCH_WEIGHTS.scaleSame;
       reasons.push("Comparable scale.");
     } else if (dist === 1) {
-      score += 12;
+      score += MATCH_WEIGHTS.scaleAdjacent;
       reasons.push("Adjacent scale band.");
     } else if (dist === 2) {
-      score += 6;
+      score += MATCH_WEIGHTS.scaleNear;
     }
   } else {
-    score += 6;
+    score += MATCH_WEIGHTS.scaleUnknown;
   }
 
   return { org: candidate, lane, score: Math.min(100, Math.round(score)), reasons };
@@ -246,7 +279,7 @@ export function buildInboundAlert(viewer: EcoOrgProfile, match: EcoMatch): Alert
   return {
     subject: `New ${LANE_LABEL[match.lane]} match — ${viewer.name}`,
     preview: teaser(viewer),
-    aiSummary: `${viewer.name} just joined the ecosystem. ${match.reasons.join(" ")} Request a warm intro to open the conversation.`,
+    aiSummary: `${viewer.name} just joined the ecosystem and scores ${match.score}/100 as a ${LANE_LABEL[match.lane]} fit. ${match.reasons.join(" ")} Request a warm intro to open the conversation — contact details unlock once they accept.`,
     intent: "Ecosystem match",
   };
 }
@@ -261,7 +294,7 @@ export function buildDigestAlert(viewer: EcoOrgProfile, matches: EcoMatch[]): Al
   return {
     subject: `${n} new ecosystem match${n === 1 ? "" : "es"} for ${viewer.name}`,
     preview: matches.map((m) => m.org.name).slice(0, 3).join(", "),
-    aiSummary: `Earn matched you across the ecosystem the moment your profile went live:\n${lines.join("\n")}`,
+    aiSummary: `Earn matched you across the ecosystem the moment your profile went live:\n${lines.join("\n")}\n\nOpen your inbox to review each and request a warm intro.`,
     intent: "Ecosystem matches",
   };
 }
