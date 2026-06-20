@@ -16,10 +16,12 @@ export function PlanSelector({
   plans,
   currentPlan,
   recommendedKey,
+  live = false,
 }: {
   plans: PlanView[];
   currentPlan: string | null;
   recommendedKey: string | null;
+  live?: boolean;
 }) {
   const [interval, setInterval] = useState<PlanInterval>("annual");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
@@ -34,6 +36,10 @@ export function PlanSelector({
     fd.set("interval", interval);
     startTransition(async () => {
       const res = await selectPlanAction(fd);
+      if (res?.url) {
+        window.location.href = res.url; // off to Stripe Checkout
+        return;
+      }
       if (res?.error) setError(res.error);
       setPendingKey(null);
     });
@@ -136,9 +142,9 @@ export function PlanSelector({
 
       {error ? <p className="mt-3 text-xs text-status-danger">{error}</p> : null}
       <p className="mt-3 text-xs text-fg-muted">
-        Checkout isn’t wired yet — no card is charged. Choosing a plan activates it and front-loads
-        its credits so you can see the value flow. Unused credits roll over while your plan is
-        active.
+        {live
+          ? "Secure checkout by Stripe. Your plan activates and credits are granted the moment payment completes. Unused credits roll over while your plan is active."
+          : "Stripe isn’t configured here — no card is charged. Choosing a plan activates it and front-loads its credits so you can see the value flow. Unused credits roll over while your plan is active."}
       </p>
     </div>
   );

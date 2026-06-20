@@ -15,8 +15,10 @@ import {
   LOYALTY_STEP,
   LOYALTY_CAP,
 } from "@/lib/billing";
+import { stripeConfigured } from "@/lib/stripe";
 import { PlanSelector, type PlanView } from "./PlanSelector";
 import { CreditPacks } from "./CreditPacks";
+import { CheckoutBanner } from "./CheckoutBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +32,16 @@ function recommendPlan(spend30d: number): string {
   return fit?.key ?? PLANS[PLANS.length - 1].key;
 }
 
-export default async function WalletPage() {
+export default async function WalletPage({
+  searchParams,
+}: {
+  searchParams: { checkout?: string };
+}) {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
+
+  const live = stripeConfigured();
 
   const [wallet, spend30d] = await Promise.all([
     getWallet(ctx.orgId),
@@ -65,6 +73,8 @@ export default async function WalletPage() {
           Credits & plans
         </h1>
       </header>
+
+      <CheckoutBanner status={searchParams.checkout} />
 
       {/* Balance + loyalty */}
       <div className="grid gap-2 sm:grid-cols-[1.4fr_1fr]">
@@ -131,12 +141,17 @@ export default async function WalletPage() {
       </div>
 
       <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-wider text-fg-muted">Plans</h2>
-      <PlanSelector plans={plans} currentPlan={currentPlan} recommendedKey={recommendedKey} />
+      <PlanSelector
+        plans={plans}
+        currentPlan={currentPlan}
+        recommendedKey={recommendedKey}
+        live={live}
+      />
 
       <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-wider text-fg-muted">
         One-off credit packs
       </h2>
-      <CreditPacks />
+      <CreditPacks live={live} />
 
       {/* Gift Earn cross-sell */}
       <Link
@@ -154,8 +169,9 @@ export default async function WalletPage() {
       </Link>
 
       <p className="mt-6 text-center text-xs text-fg-muted">
-        Checkout isn’t wired yet — choices activate in mock mode (no charge) so the value flow is
-        visible. Connect a payment provider to enable real purchases.
+        {live
+          ? "Payments are processed securely by Stripe. Plans renew automatically; cancel anytime."
+          : "Stripe isn’t configured in this environment — choices activate in mock mode (no charge). Set STRIPE_SECRET_KEY to enable real checkout."}
       </p>
     </div>
   );
