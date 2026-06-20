@@ -12,7 +12,7 @@ import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
 import { OnePagerModule } from "@/components/build/OnePagerModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
-import { AutosaveForm } from "@/components/build/AutosaveForm";
+import { ProfileForm } from "@/components/build/ProfileForm";
 import { MandateStrip } from "@/components/build/MandateStrip";
 import {
   RunStrategyModule,
@@ -146,14 +146,6 @@ const LIST_MODULES: Record<string, ListConfig> = {
   },
 };
 
-const PROFILE_FIELDS = [
-  { name: "name", label: "Organization name" },
-  { name: "legal_name", label: "Legal name" },
-  { name: "entity_type", label: "Entity type" },
-  { name: "jurisdiction", label: "Jurisdiction" },
-  { name: "website", label: "Website" },
-];
-
 // Modules whose rows can be scoped to a session (first pass — the key demo
 // path). When opened inside the session frame, the list filters to the session
 // and new rows are tagged with it; opened standalone, the full org-wide list
@@ -240,27 +232,22 @@ export async function ModuleView({
           blurb="Your firm's identity and the basics every other module builds on."
           module="profile"
         />
-        <AutosaveForm action={updateProfile} className="flex max-w-xl flex-col gap-4 pt-5">
-        {PROFILE_FIELDS.map((f) => (
-          <label key={f.name} className="flex flex-col gap-1.5 text-sm">
-            <span className="text-fg-secondary">{f.label}</span>
-            <input
-              name={f.name}
-              defaultValue={(org?.[f.name as keyof typeof org] as string) ?? ""}
-              className="rounded-md border border-line bg-surface-1 px-3 py-2 outline-none focus:border-gold-500"
-            />
-          </label>
-        ))}
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-fg-secondary">Description</span>
-          <textarea
-            name="description"
-            rows={3}
-            defaultValue={org?.description ?? ""}
-            className="rounded-md border border-line bg-surface-1 px-3 py-2 outline-none focus:border-gold-500"
-          />
-        </label>
-        </AutosaveForm>
+        <ProfileForm
+          action={updateProfile}
+          values={{
+            name: org?.name ?? "",
+            legal_name: org?.legal_name ?? "",
+            entity_type: org?.entity_type ?? "",
+            jurisdiction: org?.jurisdiction ?? "",
+            website: org?.website ?? "",
+            description: org?.description ?? "",
+            hq_location: org?.hq_location ?? "",
+            aum_range: org?.aum_range ?? "",
+            fund_count: org?.fund_count != null ? String(org.fund_count) : "",
+            primary_strategy: org?.primary_strategy ?? "",
+            operator_role: org?.operator_role ?? "",
+          }}
+        />
       </div>
     );
   }
