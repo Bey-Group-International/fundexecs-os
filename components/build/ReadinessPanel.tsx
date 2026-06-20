@@ -73,10 +73,10 @@ export function ReadinessPanel({ readiness }: { readiness: BuildReadiness }) {
               {stage.label}
             </span>
             <Link
-              href="/build/one_pager"
+              href="/build/data_room"
               className="ml-auto font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
             >
-              View one-pager →
+              View materials →
             </Link>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>

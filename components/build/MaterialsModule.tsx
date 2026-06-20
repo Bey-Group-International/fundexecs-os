@@ -48,11 +48,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-// The investor one-pager: the firm's whole Build foundation — identity, thesis,
+// Materials & Data Room: the firm's whole Build foundation — identity, thesis,
 // pooled track record, structure, team — assembled into a single branded,
-// print-ready tear sheet. The foundation entered once compounds into the
-// artifact an LP actually reads.
-export async function OnePagerModule() {
+// print-ready set of materials LPs can review. The foundation entered once
+// compounds into the materials a prospective investor actually reads.
+export async function MaterialsModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
   const supabase = createServerClient();
@@ -106,10 +106,10 @@ export async function OnePagerModule() {
       <div className="mb-5 flex items-center justify-between gap-4 print:hidden">
         <div>
           <h2 className="font-display text-xl font-semibold tracking-tight text-fg-primary">
-            Investor One-Pager
+            Materials &amp; Data Room
           </h2>
           <p className="mt-0.5 text-sm text-fg-secondary">
-            Your foundation, assembled into a tear sheet you can send.{" "}
+            Your foundation, assembled into investor-ready materials you can send.{" "}
             <span className="text-fg-muted">{readiness.overall}% complete.</span>
           </p>
         </div>

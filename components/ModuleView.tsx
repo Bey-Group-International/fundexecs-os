@@ -10,7 +10,7 @@ import { BrandModule } from "@/components/build/BrandModule";
 import { EntityModule } from "@/components/build/EntityModule";
 import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
-import { OnePagerModule } from "@/components/build/OnePagerModule";
+import { MaterialsModule } from "@/components/build/MaterialsModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { ProfileForm } from "@/components/build/ProfileForm";
 import { MandateStrip } from "@/components/build/MandateStrip";
@@ -214,7 +214,7 @@ export async function ModuleView({
     if (mod.key === "entity") return <EntityModule />;
     if (mod.key === "track_record") return <TrackRecordModule />;
     if (mod.key === "team") return <TeamModule />;
-    if (mod.key === "one_pager") return <OnePagerModule />;
+    if (mod.key === "data_room") return <MaterialsModule />;
     // profile falls through to the editable org form below
   }
 
