@@ -94,8 +94,8 @@ function Header({ data }: { data: WarRoom }) {
   const { conviction, snapshots } = data;
   const { deal, score, stage, projectedIrr, projectedMoic } = conviction;
   return (
-    <div className="rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-5">
-      <div className="flex flex-wrap items-center gap-5">
+    <div className="rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center gap-4 sm:gap-5">
         <div className="relative shrink-0">
           <Ring value={score} />
           <span className="absolute inset-0 flex items-center justify-center font-display text-base font-semibold text-fg-primary">
@@ -131,7 +131,7 @@ function Header({ data }: { data: WarRoom }) {
 
 function Checks({ data }: { data: WarRoom }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Conviction checklist</SectionTitle>
       <ul className="flex flex-col gap-1.5">
         {data.conviction.checks.map((c) => (
@@ -156,7 +156,7 @@ function Checks({ data }: { data: WarRoom }) {
 function Underwriting({ data }: { data: WarRoom }) {
   const { cases, deal } = data.conviction;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Underwriting</SectionTitle>
       {cases.length === 0 ? (
         <p className="mb-3 text-sm text-fg-muted">No cases yet — add a base case to start the conviction clock.</p>
@@ -165,10 +165,10 @@ function Underwriting({ data }: { data: WarRoom }) {
           {cases.map((u) => {
             const irr = toPercent(u.projected_irr);
             return (
-              <div key={u.id} className="flex items-center justify-between gap-3 rounded-lg border border-line/60 px-3 py-2 text-sm">
-                <span className="flex items-center gap-2">
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-line/60 px-3 py-2 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
                   <span className="capitalize text-fg-primary">{u.scenario.replace("_", " ")}</span>
-                  <span className="text-fg-muted">{u.name}</span>
+                  <span className="truncate text-fg-muted">{u.name}</span>
                 </span>
                 <span className="font-mono text-fg-secondary">
                   {irr != null ? `${irr}% IRR` : "—"}
@@ -201,7 +201,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
   const resolved = item.status === "cleared" || item.status === "waived";
   return (
     <div className={`flex flex-col gap-2 px-3 py-2.5 ${resolved ? "opacity-60" : ""}`}>
-      <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
         {item.risk_severity ? (
           <span className={`h-2 w-2 shrink-0 rounded-full ${SEV_DOT[item.risk_severity]}`} aria-hidden />
         ) : (
@@ -262,7 +262,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
 function Diligence({ data }: { data: WarRoom }) {
   const { diligence, deal, coverage } = data.conviction;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
           <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -324,7 +324,7 @@ function Heatmap({ data }: { data: WarRoom }) {
   // Render severity high → low (top → bottom).
   const rows = [...grid].reverse();
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Risk heatmap</SectionTitle>
       <div className="flex gap-2">
         <div className="flex flex-col justify-between py-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
@@ -391,7 +391,7 @@ function Decision({ data }: { data: WarRoom }) {
   const { deal } = data.conviction;
   const latest = data.decisions[0];
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
           latest ? (

@@ -39,6 +39,7 @@ interface GroupItem {
 // Secondary destinations folded under "More".
 const MORE_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Command Center" },
+  { href: "/search", label: "Search" },
   { href: "/activity", label: "Activity" },
   { href: "/capital-map", label: "Capital Map" },
   { href: "/graph", label: "Graphs" },

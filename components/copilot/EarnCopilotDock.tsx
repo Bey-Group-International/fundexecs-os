@@ -198,7 +198,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
         >
           <span className="text-base leading-none">✶</span>
           Ask Earn
-          <kbd className="ml-1 rounded border border-line px-1 font-mono text-[10px] text-fg-muted">⌘K</kbd>
+          <kbd className="ml-1 hidden rounded border border-line px-1 font-mono text-[10px] text-fg-muted sm:inline">⌘K</kbd>
         </button>
       ) : null}
 
@@ -304,7 +304,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                     <input type="hidden" name="suggestion_id" value={s.id} />
                     <button className="group w-full rounded-xl border border-line bg-surface-0/40 p-3 text-left transition hover:border-gold-500/40 hover:bg-surface-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-fg-primary">{s.label}</span>
+                        <span className="min-w-0 text-sm font-medium text-fg-primary">{s.label}</span>
                         {tier ? (
                           <span
                             className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_TONE[tier]}`}
@@ -316,11 +316,11 @@ export function EarnCopilotDock({ name }: { name: string }) {
                       </div>
                       <p className="mt-0.5 text-xs text-fg-secondary">{s.hint}</p>
                       <div className="mt-1.5 flex items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                          <AgentDot color={agent.color} /> {agent.name}
+                        <span className="inline-flex min-w-0 items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                          <AgentDot color={agent.color} /> <span className="truncate">{agent.name}</span>
                         </span>
                         <span
-                          className={`font-mono text-[9px] uppercase tracking-wider ${
+                          className={`shrink-0 font-mono text-[9px] uppercase tracking-wider ${
                             auto ? "text-emerald-300" : "text-fg-muted"
                           }`}
                           title={
@@ -368,13 +368,13 @@ export function EarnCopilotDock({ name }: { name: string }) {
               <div className="flex flex-col gap-2">
                 {thread.map((turn, i) =>
                   turn.role === "user" ? (
-                    <div key={i} className="ml-6 rounded-lg rounded-br-sm border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary">
+                    <div key={i} className="ml-6 break-words rounded-lg rounded-br-sm border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary">
                       {turn.text}
                     </div>
                   ) : (
                     <div key={i} className="mr-6 rounded-lg rounded-bl-sm border border-gold-500/30 bg-gold-500/5 px-3 py-2">
                       {turn.planTitle ? (
-                        <p className="text-sm font-medium text-fg-primary">{turn.planTitle}</p>
+                        <p className="break-words text-sm font-medium text-fg-primary">{turn.planTitle}</p>
                       ) : null}
                       {turn.steps?.length ? (
                         <ul className="mt-1.5 flex flex-col gap-1">
@@ -383,8 +383,8 @@ export function EarnCopilotDock({ name }: { name: string }) {
                             return (
                               <li key={j} className="flex items-center gap-2 text-xs text-fg-secondary">
                                 <AgentDot color={a?.color ?? "#888"} />
-                                <span className="text-fg-muted">{a?.name ?? st.agent}</span>
-                                <span className="truncate">{st.title}</span>
+                                <span className="shrink-0 text-fg-muted">{a?.name ?? st.agent}</span>
+                                <span className="min-w-0 truncate">{st.title}</span>
                               </li>
                             );
                           })}
