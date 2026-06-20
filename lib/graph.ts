@@ -35,6 +35,9 @@ export type GraphEdge = {
   source: string;
   target: string;
   relation?: string;
+  // 0..100 tie strength, when the underlying relationship carries one. Drives
+  // edge weight in the UI; undefined for structural edges (deal/capital).
+  strength?: number;
 };
 
 export type GraphData = {
@@ -80,7 +83,7 @@ async function buildRelationshipGraph(supabase: Client): Promise<GraphData> {
   const { data: edges } = await supabase
     .from("relationships")
     .select(
-      "from_entity_type, from_entity_id, to_entity_type, to_entity_id, relation",
+      "from_entity_type, from_entity_id, to_entity_type, to_entity_id, relation, strength",
     )
     .eq("graph", "relationship")
     .limit(500);
@@ -143,7 +146,12 @@ async function buildRelationshipGraph(supabase: Client): Promise<GraphData> {
       r.from_entity_type,
     );
     nodes.add(to, labels.get(to) || humanize(r.to_entity_type), r.to_entity_type);
-    graphEdges.push({ source: from, target: to, relation: r.relation });
+    graphEdges.push({
+      source: from,
+      target: to,
+      relation: r.relation,
+      strength: r.strength ?? undefined,
+    });
   }
 
   return { nodes: nodes.list(), edges: graphEdges };
