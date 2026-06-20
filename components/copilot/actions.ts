@@ -18,7 +18,7 @@ import { getBuildReadiness } from "@/lib/build-readiness";
 import { getRunConviction } from "@/lib/run-conviction";
 import { getSourceMomentum } from "@/lib/source-readiness";
 import { getExecutePerformance } from "@/lib/execute-performance";
-import type { AgentKey } from "@/lib/supabase/database.types";
+import type { AgentKey, Task, Approval, TaskStatus } from "@/lib/supabase/database.types";
 
 export interface AskEarnResult {
   ok: boolean;
@@ -108,6 +108,103 @@ export async function launchCopilotSuggestion(formData: FormData): Promise<void>
   }
 
   redirect(result.session_id ? `/session/${result.session_id}` : "/workspace");
+}
+
+// --- Recent runs -----------------------------------------------------------
+// The dock's "Recent runs" feed: the org's most recent copilot workflows so the
+// operator can review/approve results at a glance — closing the loop on
+// proactive auto-execution.
+export interface RunSummary {
+  sessionId: string | null;
+  title: string;
+  status: TaskStatus;
+  createdAt: string;
+  /** Pending approval id for a workflow still awaiting the operator's sign-off. */
+  approvalId?: string;
+}
+
+/**
+ * The org's most recent parent workflows (newest first, ~6), each with its
+ * pending approval id resolved when it's still awaiting approval. Best-effort:
+ * returns [] on any error so the dock degrades gracefully.
+ */
+export async function getRecentRuns(): Promise<RunSummary[]> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return [];
+  const supabase = createServerClient();
+
+  try {
+    const { data: workflows } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("organization_id", ctx.orgId)
+      .is("parent_task_id", null)
+      .order("created_at", { ascending: false })
+      .limit(6);
+    const list = (workflows ?? []) as Task[];
+    if (list.length === 0) return [];
+
+    // Resolve pending approvals only for workflows still awaiting sign-off.
+    const awaitingIds = list.filter((w) => w.status === "awaiting_approval").map((w) => w.id);
+    let approvalByTask = new Map<string, string>();
+    if (awaitingIds.length > 0) {
+      const { data: approvals } = await supabase
+        .from("approvals")
+        .select("id, task_id, decision")
+        .in("task_id", awaitingIds)
+        .eq("decision", "pending");
+      approvalByTask = new Map(
+        ((approvals ?? []) as Pick<Approval, "id" | "task_id" | "decision">[]).map((a) => [
+          a.task_id,
+          a.id,
+        ]),
+      );
+    }
+
+    return list.map((w) => ({
+      sessionId: w.session_id,
+      title: w.title,
+      status: w.status,
+      createdAt: w.created_at,
+      approvalId: approvalByTask.get(w.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Approve a run from the dock's feed — runs the workflow end-to-end. No-op if missing. */
+export async function approveRun(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const approvalId = String(formData.get("approval_id") ?? "");
+  if (!approvalId) return;
+  const supabase = createServerClient();
+  try {
+    await decideApproval(
+      { supabase, orgId: ctx.orgId, actorId: ctx.userId },
+      { approvalId, decision: "approved" },
+    );
+  } catch {
+    // Best-effort: the dock re-fetches and the run simply stays awaiting approval.
+  }
+}
+
+/** Dismiss (reject) a run from the dock's feed. No-op if missing. */
+export async function dismissRun(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const approvalId = String(formData.get("approval_id") ?? "");
+  if (!approvalId) return;
+  const supabase = createServerClient();
+  try {
+    await decideApproval(
+      { supabase, orgId: ctx.orgId, actorId: ctx.userId },
+      { approvalId, decision: "rejected" },
+    );
+  } catch {
+    // Best-effort: ignore and let the dock re-fetch.
+  }
 }
 
 // --- Live briefing ---------------------------------------------------------

@@ -19,6 +19,7 @@ import {
   getMandateSummary,
   type CopilotBriefing,
 } from "@/components/copilot/actions";
+import { ReviewFeed } from "@/components/copilot/ReviewFeed";
 import type { Mandate } from "@/lib/gates";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
@@ -338,6 +339,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
             </div>
           </div>
 
+          {/* Recent runs — review/approve the copilot's recent workflows */}
+          <ReviewFeed open={open} onClose={() => setOpen(false)} />
+
           {/* Conversation — the maintained, multi-turn session in the dock */}
           {thread.length > 0 ? (
             <div>
@@ -453,6 +457,15 @@ export function EarnCopilotDock({ name }: { name: string }) {
             >
               {pending ? "Routing…" : "Ask Earn"}
             </button>
+          </div>
+          <div className="mt-2 text-center">
+            <Link
+              href="/settings/mandate"
+              onClick={() => setOpen(false)}
+              className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
+            >
+              ⚙ What Earn can do
+            </Link>
           </div>
         </div>
       </div>

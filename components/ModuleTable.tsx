@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   verifyRecord,
@@ -207,6 +208,16 @@ export default function ModuleTable({
                             </div>
                           ))}
                         </dl>
+
+                        {/* Drill-down to the LP war room (investors only). */}
+                        {table === "investors" ? (
+                          <Link
+                            href={`/investor/${id}`}
+                            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+                          >
+                            → Open LP war room
+                          </Link>
+                        ) : null}
 
                         {/* Provenance + verification meta */}
                         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line/60 pt-3 text-[11px] text-fg-muted">
