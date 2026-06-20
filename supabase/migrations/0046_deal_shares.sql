@@ -1,4 +1,7 @@
--- 0044_deal_shares.sql
+-- 0046_deal_shares.sql
+-- (Renumbered from a duplicate 0044 — 0044_api_keys.sql and 0044_deal_shares.sql
+-- shared the same version prefix, which collides on schema_migrations.version
+-- during a preview-branch replay. Renamed to 0046 to give it a unique version.)
 -- Share a deal across the ecosystem. One action does three things (lib/deal-
 -- share*): Earn drafts a confidential teaser memo, the deal is matched
 -- AngelList-style (check size · stage · sector · geography, via lib/matching)
