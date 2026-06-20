@@ -46,6 +46,7 @@ export function SourceTriage({
   const [queued, setQueued] = useState<Set<string>>(new Set());
   const [queueing, setQueueing] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [personalized, setPersonalized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ranInitial = useRef(false);
 
@@ -60,6 +61,7 @@ export function SourceTriage({
     setGroups([]);
     setQueued(new Set());
     setNotes({});
+    setPersonalized(false);
 
     try {
       const res = await runTriage(clean);
@@ -68,6 +70,7 @@ export function SourceTriage({
         setPhase("idle");
         return;
       }
+      setPersonalized(Boolean(res.personalized));
       setSummary(res.summary ?? "");
       setGroups(res.groups);
       setPhase("done");
@@ -128,6 +131,14 @@ export function SourceTriage({
           {!live ? (
             <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
               offline mode
+            </span>
+          ) : null}
+          {personalized ? (
+            <span
+              title="Tuned by what you've queued and accepted before"
+              className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300"
+            >
+              ✦ personalized
             </span>
           ) : null}
         </div>

@@ -243,6 +243,7 @@ migration workflow.
 - [x] **Persist deals/assets from workflows** so the Command Center populates from real work
 - [x] **Capital Map** — relationship temperature, thesis fit, warm-intro pathfinding + gated next actions (Affinity, rebuilt native)
 - [x] **Gate layer** — Tier 1/2/3 control primitive so no action reaches a counterparty without sign-off
+- [x] **Unified Inbox** — one AI-triaged stream for booking, messaging, and video; gated next actions, deep links into Command Center context, and a dashboard digest (mock-or-real channel adapters: Gmail, Slack, Calendly, Google Calendar, Zoom, Google Meet)
 - [ ] Three-graph data architecture (query layer + `/graph/*`)
 - [ ] Three.js avatar workspace
 - [ ] Remaining Source / Run / Execute hub modules

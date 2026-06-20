@@ -6,5 +6,6 @@
 import type { AdapterModule } from "../types";
 import { gmailModule } from "./gmail";
 import { docusignModule } from "./docusign";
+import { INBOX_MODULES } from "./inbox";
 
-export const ADAPTERS: AdapterModule[] = [gmailModule, docusignModule];
+export const ADAPTERS: AdapterModule[] = [gmailModule, docusignModule, ...INBOX_MODULES];

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PrintButton } from "@/components/PrintButton";
 import type { AssetWarRoom as WarRoom, LifecycleStage, AssetNextAction } from "@/lib/execute-war-room";
 import { formatCompactCurrency } from "@/lib/execute-war-room";
 import type { AssetType, CapitalEventType } from "@/lib/supabase/database.types";
@@ -79,8 +80,8 @@ function Header({ data }: { data: WarRoom }) {
   // Map the multiple onto the 0–100 ring against a 3x ceiling; show the raw value.
   const ringValue = moic != null ? (moic / 3) * 100 : 0;
   return (
-    <div className="rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-5">
-      <div className="flex flex-wrap items-center gap-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center gap-4 sm:gap-5">
         <div className="relative shrink-0">
           <Ring value={ringValue} />
           <span className="absolute inset-0 flex flex-col items-center justify-center text-center">
@@ -92,7 +93,7 @@ function Header({ data }: { data: WarRoom }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-fg-primary">{asset.name}</h1>
+            <h1 className="min-w-0 break-words font-display text-2xl font-semibold tracking-tight text-fg-primary">{asset.name}</h1>
             <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${stage.tone}`}>
               {stage.label}
             </span>
@@ -137,7 +138,7 @@ function Value({ data }: { data: WarRoom }) {
       : `${unrealizedGain >= 0 ? "+" : "−"}${formatCompactCurrency(Math.abs(unrealizedGain))}`;
   const hasYield = asset.noi != null || asset.cap_rate != null;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Value</SectionTitle>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <StatCell label="Acquisition cost" value={formatCompactCurrency(asset.acquisition_cost)} />
@@ -160,7 +161,7 @@ function Value({ data }: { data: WarRoom }) {
 function CapitalFlows({ data }: { data: WarRoom }) {
   const { capitalEvents } = data;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
           <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -176,10 +177,10 @@ function CapitalFlows({ data }: { data: WarRoom }) {
             const outflow = OUTFLOW_EVENTS.has(event.event_type);
             return (
               <div key={event.id} className="flex items-center gap-2.5 text-sm">
-                <span className="font-mono text-[10px] text-fg-muted">
+                <span className="shrink-0 font-mono text-[10px] text-fg-muted">
                   {new Date(event.effective_date).toLocaleDateString()}
                 </span>
-                <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary">
+                <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary">
                   {humanize(event.event_type)}
                 </span>
                 {event.reference ? (
@@ -187,7 +188,7 @@ function CapitalFlows({ data }: { data: WarRoom }) {
                 ) : (
                   <span className="flex-1" />
                 )}
-                <span className={`font-mono ${EVENT_TONE[event.event_type]}`}>
+                <span className={`shrink-0 font-mono ${EVENT_TONE[event.event_type]}`}>
                   {outflow ? "+" : "−"}
                   {formatCompactCurrency(event.amount)}
                 </span>
@@ -222,7 +223,7 @@ function NextActionItem({ action }: { action: AssetNextAction }) {
 function NextActions({ data }: { data: WarRoom }) {
   const { nextActions } = data;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Next best actions</SectionTitle>
       {nextActions.length ? (
         <ul className="flex flex-col gap-2">
@@ -241,19 +242,19 @@ function Provenance({ data }: { data: WarRoom }) {
   const { asset, deal, fund } = data;
   if (!deal && !fund) return null;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Provenance</SectionTitle>
       <div className="flex flex-col gap-2 text-sm">
         {fund ? (
           <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Fund</span>
-            <span className="text-fg-primary">{fund.name}</span>
+            <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Fund</span>
+            <span className="min-w-0 truncate text-right text-fg-primary">{fund.name}</span>
           </div>
         ) : null}
         {deal ? (
           <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Source deal</span>
-            <Link href={`/deal/${deal.id}`} className="text-gold-300 transition hover:underline">
+            <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Source deal</span>
+            <Link href={`/deal/${deal.id}`} className="min-w-0 truncate text-right text-gold-300 transition hover:underline">
               {deal.name} →
             </Link>
           </div>
@@ -273,12 +274,15 @@ function Provenance({ data }: { data: WarRoom }) {
 export function AssetWarRoom({ data }: { data: WarRoom }) {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
-      <Link
-        href="/execute/asset_management"
-        className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
-      >
-        ← Asset management
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/execute/asset_management"
+          className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
+        >
+          ← Asset management
+        </Link>
+        <PrintButton />
+      </div>
       <Header data={data} />
       <Value data={data} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

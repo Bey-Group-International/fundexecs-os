@@ -16,6 +16,7 @@ import {
   type PipelineScore,
   type SourcingMandate,
 } from "@/lib/source-ai";
+import { buildOperatorContext, recordSourceFeedback, type SourceFeedbackInput } from "@/lib/source-intelligence";
 import type { AgentKey, InvestorType, Json } from "@/lib/supabase/database.types";
 
 // The Source agent that owns each sourcing action — drives task assignment.
@@ -65,7 +66,13 @@ export async function sourceTargets(hub: string, module: string): Promise<Source
     .limit(60);
   const existing = ((data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
   const mandate = await loadMandate(auth.ctx.orgId);
-  const candidates = await generateTargets(key, mandate, existing);
+  const context = await buildOperatorContext(supabase, {
+    orgId: auth.ctx.orgId,
+    principalId: auth.ctx.userId,
+    role: auth.ctx.role,
+    module: key,
+  });
+  const candidates = await generateTargets(key, mandate, existing, undefined, context);
   return { ok: true, candidates };
 }
 
@@ -79,12 +86,20 @@ export interface AddSourcedResult {
 export async function addSourcedTargets(
   hub: string,
   module: string,
-  candidates: { name: string; category: string; rationale: string; sourceUrl?: string }[],
+  candidates: { name: string; category: string; rationale: string; fitScore?: number; sourceUrl?: string }[],
+  // Optional learning context: the originating request and the candidates that
+  // were surfaced but NOT picked. Recording both accepts and rejects is what lets
+  // the engine learn this operator's taste (see lib/source-intelligence.ts).
+  meta?: {
+    query?: string;
+    rejected?: { name: string; category?: string; rationale?: string; fitScore?: number }[];
+  },
 ): Promise<AddSourcedResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const key = `${hub}/${module}`;
-  if (!sourceConfigFor(key)) return { ok: false, error: "Unknown module." };
+  const cfg = sourceConfigFor(key);
+  if (!cfg) return { ok: false, error: "Unknown module." };
 
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
@@ -93,6 +108,7 @@ export async function addSourcedTargets(
       name: String(c.name ?? "").trim(),
       category: String(c.category ?? "").trim(),
       rationale: String(c.rationale ?? "").trim(),
+      fitScore: typeof c.fitScore === "number" ? c.fitScore : null,
       // A web-sourced citation becomes the verification evidence, pre-filled so
       // the operator can confirm the (still unverified) record in one click.
       verification_note:
@@ -108,6 +124,7 @@ export async function addSourcedTargets(
   const note = (r: string) => (r ? `AI-sourced — ${r}` : "AI-sourced.");
 
   let added = 0;
+  let insertedIds: string[] = [];
   switch (key) {
     case "source/lp_pipeline": {
       const valid = new Set<InvestorType>(["lp", "family_office", "institution", "fund_of_funds", "lender", "bank", "co_gp", "other"]);
@@ -123,6 +140,7 @@ export async function addSourcedTargets(
       const { data: ins, error } = await supabase.from("investors").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
       added = ins?.length ?? rows.length;
+      insertedIds = ins?.map((r) => r.id) ?? [];
       break;
     }
     case "source/deal_pipeline": {
@@ -138,6 +156,7 @@ export async function addSourcedTargets(
       const { data: ins, error } = await supabase.from("deals").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
       added = ins?.length ?? rows.length;
+      insertedIds = ins?.map((r) => r.id) ?? [];
       break;
     }
     case "source/debt": {
@@ -154,6 +173,7 @@ export async function addSourcedTargets(
       const { data: ins, error } = await supabase.from("debt_facilities").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
       added = ins?.length ?? rows.length;
+      insertedIds = ins?.map((r) => r.id) ?? [];
       break;
     }
     case "source/partners": {
@@ -169,6 +189,7 @@ export async function addSourcedTargets(
       const { data: ins, error } = await supabase.from("partners").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
       added = ins?.length ?? rows.length;
+      insertedIds = ins?.map((r) => r.id) ?? [];
       break;
     }
     case "source/providers": {
@@ -184,11 +205,44 @@ export async function addSourcedTargets(
       const { data: ins, error } = await supabase.from("service_providers").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
       added = ins?.length ?? rows.length;
+      insertedIds = ins?.map((r) => r.id) ?? [];
       break;
     }
     default:
       return { ok: false, error: "Unknown module." };
   }
+
+  // Learning signal: the picks are 'accepted', the surfaced-but-skipped are
+  // 'rejected'. Best-effort — recording never blocks the add.
+  const feedback: SourceFeedbackInput[] = clean.map((c, i) => ({
+    organizationId: orgId,
+    principalId: auth.ctx.userId,
+    module: key,
+    agent: cfg.agent,
+    signal: "accepted",
+    subjectName: c.name,
+    category: c.category || null,
+    rationale: c.rationale || null,
+    sourceQuery: meta?.query ?? null,
+    fitScore: c.fitScore,
+    recordId: insertedIds[i] ?? null,
+  }));
+  for (const r of meta?.rejected ?? []) {
+    if (!r?.name) continue;
+    feedback.push({
+      organizationId: orgId,
+      principalId: auth.ctx.userId,
+      module: key,
+      agent: cfg.agent,
+      signal: "rejected",
+      subjectName: r.name,
+      category: r.category ?? null,
+      rationale: r.rationale ?? null,
+      sourceQuery: meta?.query ?? null,
+      fitScore: typeof r.fitScore === "number" ? r.fitScore : null,
+    });
+  }
+  await recordSourceFeedback(supabase, feedback);
 
   revalidatePath(`/${hub}/${module}`);
   return { ok: true, added };
@@ -224,7 +278,13 @@ export async function scorePipeline(hub: string, module: string): Promise<ScoreP
   if (rows.length === 0) return { ok: true, scores: [] };
 
   const mandate = await loadMandate(auth.ctx.orgId);
-  const scores = await scorePipelineEngine(key, mandate, rows);
+  const context = await buildOperatorContext(supabase, {
+    orgId: auth.ctx.orgId,
+    principalId: auth.ctx.userId,
+    role: auth.ctx.role,
+    module: key,
+  });
+  const scores = await scorePipelineEngine(key, mandate, rows, context);
   return { ok: true, scores };
 }
 
@@ -286,6 +346,20 @@ export async function queueSourceAction(args: {
     hub: "source",
     payload: { title, gate_tier: decision.tier } as Json,
   });
+
+  // Learning signal: the operator chose to queue this recommended move.
+  await recordSourceFeedback(supabase, [
+    {
+      organizationId: orgId,
+      principalId: auth.ctx.userId,
+      module: args.module.startsWith("source/") ? args.module : `source/${args.module}`,
+      agent,
+      signal: "queued",
+      subjectName: args.name,
+      action: args.action,
+      taskId: task.id,
+    },
+  ]);
 
   if (decision.requiresApproval) {
     const { data: approval } = await supabase

@@ -38,6 +38,16 @@ body {
   .fx-glass {
     @apply rounded-2xl border border-line/70 bg-surface-1/60 shadow-[0_1px_2px_rgba(0,0,0,0.4)] backdrop-blur-xl;
   }
+  /* KPI tile — a compact stat cell for the summary rows above each workspace.
+     Slightly brighter top edge so a row of them reads as a single instrument
+     panel. */
+  .fx-stat {
+    @apply rounded-xl border border-line/80 bg-gradient-to-b from-surface-2/70 to-surface-1/30 px-4 py-3 transition duration-200 hover:border-gold-500/30;
+  }
+  /* Segmented control — the pill toggle shared by the graph + marketplace tabs. */
+  .fx-segment {
+    @apply rounded-lg border border-line/80 bg-surface-1/70 p-1 backdrop-blur-sm;
+  }
 }
 
 /* Ambient gold glow anchored to the top of the Command Center — gives the page

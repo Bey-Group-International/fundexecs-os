@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PrintButton } from "@/components/PrintButton";
 import type { DealWarRoom as WarRoom } from "@/lib/run-war-room";
 import { buildHeatmap, SEVERITY_AXIS } from "@/lib/run-war-room";
 import { toPercent } from "@/lib/run-conviction";
@@ -94,8 +95,8 @@ function Header({ data }: { data: WarRoom }) {
   const { conviction, snapshots } = data;
   const { deal, score, stage, projectedIrr, projectedMoic } = conviction;
   return (
-    <div className="rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-5">
-      <div className="flex flex-wrap items-center gap-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center gap-4 sm:gap-5">
         <div className="relative shrink-0">
           <Ring value={score} />
           <span className="absolute inset-0 flex items-center justify-center font-display text-base font-semibold text-fg-primary">
@@ -131,7 +132,7 @@ function Header({ data }: { data: WarRoom }) {
 
 function Checks({ data }: { data: WarRoom }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Conviction checklist</SectionTitle>
       <ul className="flex flex-col gap-1.5">
         {data.conviction.checks.map((c) => (
@@ -156,7 +157,7 @@ function Checks({ data }: { data: WarRoom }) {
 function Underwriting({ data }: { data: WarRoom }) {
   const { cases, deal } = data.conviction;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Underwriting</SectionTitle>
       {cases.length === 0 ? (
         <p className="mb-3 text-sm text-fg-muted">No cases yet — add a base case to start the conviction clock.</p>
@@ -165,10 +166,10 @@ function Underwriting({ data }: { data: WarRoom }) {
           {cases.map((u) => {
             const irr = toPercent(u.projected_irr);
             return (
-              <div key={u.id} className="flex items-center justify-between gap-3 rounded-lg border border-line/60 px-3 py-2 text-sm">
-                <span className="flex items-center gap-2">
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-line/60 px-3 py-2 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
                   <span className="capitalize text-fg-primary">{u.scenario.replace("_", " ")}</span>
-                  <span className="text-fg-muted">{u.name}</span>
+                  <span className="truncate text-fg-muted">{u.name}</span>
                 </span>
                 <span className="font-mono text-fg-secondary">
                   {irr != null ? `${irr}% IRR` : "—"}
@@ -179,7 +180,7 @@ function Underwriting({ data }: { data: WarRoom }) {
           })}
         </div>
       )}
-      <form action={addUnderwriting} className="flex flex-wrap items-end gap-2">
+      <form action={addUnderwriting} className="flex flex-wrap items-end gap-2 print:hidden">
         <input type="hidden" name="deal_id" value={deal.id} />
         <select name="scenario" className={fieldClass} defaultValue="base" aria-label="Scenario">
           <option value="base">Base</option>
@@ -201,7 +202,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
   const resolved = item.status === "cleared" || item.status === "waived";
   return (
     <div className={`flex flex-col gap-2 px-3 py-2.5 ${resolved ? "opacity-60" : ""}`}>
-      <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
         {item.risk_severity ? (
           <span className={`h-2 w-2 shrink-0 rounded-full ${SEV_DOT[item.risk_severity]}`} aria-hidden />
         ) : (
@@ -211,7 +212,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
           {item.title}
         </span>
         <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{item.category}</span>
-        <form action={updateDiligenceItem} className="flex items-center">
+        <form action={updateDiligenceItem} className="flex items-center print:hidden">
           <input type="hidden" name="id" value={item.id} />
           <input type="hidden" name="deal_id" value={item.deal_id} />
           <select
@@ -233,7 +234,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
       </div>
       {/* Mitigation: only meaningful for severe, unresolved findings */}
       {!resolved && item.risk_severity && (item.risk_severity === "high" || item.risk_severity === "critical") ? (
-        <form action={updateDiligenceItem} className="flex flex-wrap items-center gap-2 pl-5">
+        <form action={updateDiligenceItem} className="flex flex-wrap items-center gap-2 pl-5 print:hidden">
           <input type="hidden" name="id" value={item.id} />
           <input type="hidden" name="deal_id" value={item.deal_id} />
           <input
@@ -262,7 +263,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
 function Diligence({ data }: { data: WarRoom }) {
   const { diligence, deal, coverage } = data.conviction;
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
           <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -281,7 +282,7 @@ function Diligence({ data }: { data: WarRoom }) {
       ) : (
         <p className="mb-3 text-sm text-fg-muted">No diligence items yet.</p>
       )}
-      <form action={addDiligenceItem} className="flex flex-wrap items-end gap-2">
+      <form action={addDiligenceItem} className="flex flex-wrap items-end gap-2 print:hidden">
         <input type="hidden" name="deal_id" value={deal.id} />
         <input name="title" placeholder="New diligence item…" className={`${fieldClass} min-w-0 flex-1`} required />
         <input name="category" placeholder="Category" className={`${fieldClass} w-28`} />
@@ -324,7 +325,7 @@ function Heatmap({ data }: { data: WarRoom }) {
   // Render severity high → low (top → bottom).
   const rows = [...grid].reverse();
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Risk heatmap</SectionTitle>
       <div className="flex gap-2">
         <div className="flex flex-col justify-between py-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
@@ -391,7 +392,7 @@ function Decision({ data }: { data: WarRoom }) {
   const { deal } = data.conviction;
   const latest = data.decisions[0];
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-5">
+    <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
           latest ? (
@@ -403,7 +404,7 @@ function Decision({ data }: { data: WarRoom }) {
       >
         IC decision
       </SectionTitle>
-      <form action={recordIcDecision} className="flex flex-col gap-2">
+      <form action={recordIcDecision} className="flex flex-col gap-2 print:hidden">
         <input type="hidden" name="deal_id" value={deal.id} />
         <textarea
           name="rationale"
@@ -424,7 +425,7 @@ function Decision({ data }: { data: WarRoom }) {
           ))}
         </div>
       </form>
-      <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:hidden">
         Go → advances to closing · No-Go → passes the deal
       </p>
       <DecisionHistory decisions={data.decisions} />
@@ -436,9 +437,12 @@ function Decision({ data }: { data: WarRoom }) {
 export function DealWarRoom({ data }: { data: WarRoom }) {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
-      <Link href="/run/strategy" className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400">
-        ← Run hub
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/run/strategy" className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400">
+          ← Run hub
+        </Link>
+        <PrintButton />
+      </div>
       <Header data={data} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Checks data={data} />

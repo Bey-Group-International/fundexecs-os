@@ -58,6 +58,7 @@ export function SourceSearch({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [added, setAdded] = useState<Record<string, number>>({});
   const [adding, setAdding] = useState<Set<string>>(new Set());
+  const [personalized, setPersonalized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ranInitial = useRef(false);
 
@@ -72,6 +73,7 @@ export function SourceSearch({
     setSteps([]);
     setSelected(new Set());
     setAdded({});
+    setPersonalized(false);
     setActiveAgent("associate");
 
     try {
@@ -82,6 +84,7 @@ export function SourceSearch({
         setActiveAgent(null);
         return;
       }
+      setPersonalized(Boolean(res.personalized));
       setSummary(res.summary ?? "");
       setSteps(res.steps.map((s) => ({ ...s, status: "queued" as StepStatus })));
       setPhase("running");
@@ -153,12 +156,17 @@ export function SourceSearch({
     if (!step.candidates || added[step.id] != null || adding.has(step.id)) return;
     const picks = step.candidates
       .filter((_, i) => selected.has(`${step.id}:${i}`))
-      .map((c) => ({ name: c.name, category: c.category, rationale: c.rationale, sourceUrl: c.sourceUrl }));
+      .map((c) => ({ name: c.name, category: c.category, rationale: c.rationale, fitScore: c.fitScore, sourceUrl: c.sourceUrl }));
     if (picks.length === 0) return;
+    // The surfaced-but-skipped candidates are a reject signal — recording them
+    // alongside the picks is what teaches the engine this operator's taste.
+    const rejected = step.candidates
+      .filter((_, i) => !selected.has(`${step.id}:${i}`))
+      .map((c) => ({ name: c.name, category: c.category, rationale: c.rationale, fitScore: c.fitScore }));
     const moduleKey = step.module.replace(/^source\//, "");
     setAdding((prev) => new Set(prev).add(step.id));
     try {
-      const res = await addSourcedTargets("source", moduleKey, picks);
+      const res = await addSourcedTargets("source", moduleKey, picks, { query: step.query, rejected });
       if (res.ok) setAdded((prev) => ({ ...prev, [step.id]: res.added ?? picks.length }));
       else setError(res.error ?? "Could not add to pipeline.");
     } catch {
@@ -186,6 +194,14 @@ export function SourceSearch({
           ) : webEnrichment ? (
             <span className="rounded-full border border-status-info/40 bg-status-info/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-info">
               web ⚡
+            </span>
+          ) : null}
+          {personalized ? (
+            <span
+              title="Tuned by what you've accepted and skipped before"
+              className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300"
+            >
+              ✦ personalized
             </span>
           ) : null}
         </div>

@@ -15,6 +15,11 @@ export interface DispatchContext {
   actorId: string;
   // The action being dispatched.
   action: ActionKind;
+  // Optional channel hint. Most call sites route purely by ActionKind, but the
+  // unified inbox knows which provider a thread flows through (e.g. a reply on a
+  // Slack thread vs. an email thread) and pins dispatch to that channel. When set
+  // and a matching adapter is registered, it overrides ActionKind routing.
+  channel?: string;
   // The counterparty this action reaches, when known.
   target?: { name?: string; email?: string };
   // Drafted content when the action carries a message.

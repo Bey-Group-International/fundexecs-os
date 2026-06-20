@@ -10,7 +10,9 @@ import {
   sourceConfigFor,
   type PipelineScore,
   type SourcingMandate,
+  type OperatorContext,
 } from "@/lib/source-ai";
+import { buildOperatorContext, isPersonalized } from "@/lib/source-intelligence";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { AgentKey, Json } from "@/lib/supabase/database.types";
 
@@ -44,6 +46,8 @@ export interface RunTriageResult {
   ok: boolean;
   summary?: string;
   groups?: TriageGroup[];
+  /** True when the triage was tuned by this operator's learned preferences. */
+  personalized?: boolean;
   error?: string;
 }
 
@@ -60,7 +64,12 @@ export async function runTriage(prompt: string): Promise<RunTriageResult> {
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
   const mandate = await loadMandate(orgId);
-  const plan = await planTriage(clean, mandate);
+  const planContext = await buildOperatorContext(supabase, {
+    orgId,
+    principalId: auth.ctx.userId,
+    role: auth.ctx.role,
+  });
+  const plan = await planTriage(clean, mandate, planContext);
   if (!plan.modules.length) return { ok: false, error: "Couldn't plan that triage." };
 
   // Session + workflow so the triage shows in the session theater (mirrors
@@ -149,7 +158,17 @@ export async function runTriage(prompt: string): Promise<RunTriageResult> {
       if (typeof email === "string" && email.trim()) rowEmail[String(r.id)] = email.trim();
     }
 
-    const scores = rows.length ? await scorePipelineEngine(moduleKey, mandate, rows) : [];
+    // Module-scoped context (recent activity + learned signal for this module),
+    // reusing the shared user/portfolio signal from the planning pass.
+    const moduleContext: OperatorContext = rows.length
+      ? await buildOperatorContext(supabase, {
+          orgId,
+          principalId: auth.ctx.userId,
+          role: auth.ctx.role,
+          module: moduleKey,
+        })
+      : planContext;
+    const scores = rows.length ? await scorePipelineEngine(moduleKey, mandate, rows, moduleContext) : [];
 
     if (stepTask?.id) {
       await supabase
@@ -192,5 +211,5 @@ export async function runTriage(prompt: string): Promise<RunTriageResult> {
   revalidatePath("/source/triage");
   revalidatePath("/dashboard");
 
-  return { ok: true, summary: plan.summary, groups };
+  return { ok: true, summary: plan.summary, groups, personalized: isPersonalized(planContext) };
 }

@@ -51,6 +51,37 @@ export interface SourcingMandate {
   targetMoic: number | null;
 }
 
+// Per-request operator context the engine reasons WITH, on top of the mandate.
+// Assembled DB-side by lib/source-intelligence.ts and passed in, so the engine
+// itself stays DB-free. Every field is an already-distilled string; the engine
+// only formats and injects them. This is what makes sourcing context-aware
+// (recent activity, portfolio), user-aware (identity), and continually learning
+// (the learned digest from past accept/reject signals).
+export interface OperatorContext {
+  /** Per-user distilled preferences from past accept/reject/queue signals. */
+  learned?: string;
+  /** Recent pipeline additions + what's stalling, for the relevant module(s). */
+  activity?: string;
+  /** Cross-hub portfolio/holdings state so Source knows what's already held. */
+  portfolio?: string;
+  /** The current operator's name/title/role, for relevance + tone. */
+  user?: string;
+}
+
+// Render the assembled operator context as a labeled prompt block (or "" when
+// empty). Injected right after the mandate so Claude reasons with who's asking,
+// what's already moving, and what this operator has historically preferred.
+export function operatorContextBlock(ctx?: OperatorContext): string {
+  if (!ctx) return "";
+  const parts = [
+    ctx.user ? `Operator: ${ctx.user}` : null,
+    ctx.portfolio ? `Portfolio context: ${ctx.portfolio}` : null,
+    ctx.activity ? `Recent pipeline activity: ${ctx.activity}` : null,
+    ctx.learned ? `Learned preferences (weight these, don't over-fit): ${ctx.learned}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join("\n") + "\n\n" : "";
+}
+
 export interface SourceCandidate {
   name: string;
   /** A value from the module's category enum (or a free asset class for deals). */
@@ -282,6 +313,7 @@ export async function generateTargets(
   mandate: SourcingMandate | null,
   existingNames: string[] = [],
   query?: string,
+  context?: OperatorContext,
 ): Promise<SourceCandidate[]> {
   const cfg = sourceConfigFor(key);
   if (!cfg) return [];
@@ -292,7 +324,7 @@ export async function generateTargets(
   // External enrichment first (opt-in): real, currently-operating targets with
   // a source citation. Falls through to model knowledge if it yields nothing.
   if (sourcingEnrichmentEnabled()) {
-    const enriched = await enrichedTargets(anthropic, cfg, mandate, existingNames, options, query);
+    const enriched = await enrichedTargets(anthropic, cfg, mandate, existingNames, options, query, context);
     if (enriched.length) return enriched;
   }
 
@@ -312,6 +344,7 @@ export async function generateTargets(
           role: "user",
           content:
             `Mandate:\n${mandateContext(mandate)}\n\n` +
+            operatorContextBlock(context) +
             queryLine +
             `Source ${cfg.entities}: ${cfg.hint}.\n` +
             (existingNames.length
@@ -345,6 +378,7 @@ async function enrichedTargets(
   existingNames: string[],
   options: string[],
   query?: string,
+  context?: OperatorContext,
 ): Promise<SourceCandidate[]> {
   const agentName = AGENT_BY_KEY[cfg.agent]?.name ?? "Sourcing";
   const catLine = cfg.freeCategory
@@ -363,6 +397,7 @@ async function enrichedTargets(
           role: "user",
           content:
             `Mandate:\n${mandateContext(mandate)}\n\n` +
+            operatorContextBlock(context) +
             queryLine +
             `Find 3–6 ${cfg.entities}: ${cfg.hint}.\n` +
             (existingNames.length
@@ -556,6 +591,7 @@ function normalizePlan(raw: Partial<SourceSearchPlan> | null, prompt: string): S
 export async function planSourceSearch(
   prompt: string,
   mandate: SourcingMandate | null,
+  context?: OperatorContext,
 ): Promise<SourceSearchPlan> {
   const anthropic = client();
   if (!anthropic) return fallbackPlan(prompt);
@@ -573,7 +609,7 @@ export async function planSourceSearch(
       messages: [
         {
           role: "user",
-          content: `Mandate:\n${mandateContext(mandate)}\n\nRequest: ${prompt}\n\nReturn the plan.`,
+          content: `Mandate:\n${mandateContext(mandate)}\n\n${operatorContextBlock(context)}Request: ${prompt}\n\nReturn the plan.`,
         },
       ],
     });
@@ -655,6 +691,7 @@ function normalizeTriagePlan(raw: Partial<TriagePlan> | null, prompt: string): T
 export async function planTriage(
   prompt: string,
   mandate: SourcingMandate | null,
+  context?: OperatorContext,
 ): Promise<TriagePlan> {
   const anthropic = client();
   if (!anthropic) return fallbackTriagePlan(prompt);
@@ -673,7 +710,7 @@ export async function planTriage(
       messages: [
         {
           role: "user",
-          content: `Mandate:\n${mandateContext(mandate)}\n\nTriage request: ${prompt}\n\nReturn the plan.`,
+          content: `Mandate:\n${mandateContext(mandate)}\n\n${operatorContextBlock(context)}Triage request: ${prompt}\n\nReturn the plan.`,
         },
       ],
     });
@@ -721,6 +758,7 @@ export async function scorePipeline(
   key: string,
   mandate: SourcingMandate | null,
   rows: ScoreInputRow[],
+  context?: OperatorContext,
 ): Promise<PipelineScore[]> {
   const cfg = sourceConfigFor(key);
   if (!cfg || rows.length === 0) return [];
@@ -738,6 +776,7 @@ export async function scorePipeline(
           role: "user",
           content:
             `Mandate:\n${mandateContext(mandate)}\n\n` +
+            operatorContextBlock(context) +
             `Score these ${cfg.entities}:\n` +
             rows
               .slice(0, 30)
@@ -816,6 +855,7 @@ export const __test = {
   sourceConfigFor,
   categoryOptions,
   mandateContext,
+  operatorContextBlock,
   normalizeCandidates,
   normalizeScores,
   fallbackCandidates,
