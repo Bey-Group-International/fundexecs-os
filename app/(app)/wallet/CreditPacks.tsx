@@ -2,14 +2,22 @@
 
 import { useState, useTransition } from "react";
 import { CREDIT_PACKS, formatCredits, formatUsd } from "@/lib/billing";
+import { StripeCheckoutModal } from "@/components/StripeCheckoutModal";
 import { purchasePackAction } from "./actions";
 
 // One-off credit packs (no subscription). With Stripe configured, buying opens
-// hosted Checkout; otherwise it mock-grants the pack's credits so the flow is
-// real end-to-end.
-export function CreditPacks({ live = false }: { live?: boolean }) {
+// an in-app embedded Checkout; otherwise it mock-grants the pack's credits so
+// the flow is real end-to-end.
+export function CreditPacks({
+  live = false,
+  publishableKey = "",
+}: {
+  live?: boolean;
+  publishableKey?: string;
+}) {
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function buy(packKey: string) {
@@ -19,17 +27,24 @@ export function CreditPacks({ live = false }: { live?: boolean }) {
     fd.set("pack_key", packKey);
     startTransition(async () => {
       const res = await purchasePackAction(fd);
-      if (res?.url) {
-        window.location.href = res.url; // off to Stripe Checkout
-        return;
+      if (res?.clientSecret) {
+        setClientSecret(res.clientSecret); // open in-app embedded checkout
+      } else if (res?.error) {
+        setError(res.error);
       }
-      if (res?.error) setError(res.error);
       setPendingKey(null);
     });
   }
 
   return (
     <div>
+      {clientSecret ? (
+        <StripeCheckoutModal
+          clientSecret={clientSecret}
+          publishableKey={publishableKey}
+          onClose={() => setClientSecret(null)}
+        />
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-3">
         {CREDIT_PACKS.map((pack) => {
           const busy = pending && pendingKey === pack.key;

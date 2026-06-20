@@ -2,15 +2,23 @@
 
 import { useRef, useState, useTransition } from "react";
 import { CREDIT_PACKS, formatCredits, formatUsd } from "@/lib/billing";
+import { StripeCheckoutModal } from "@/components/StripeCheckoutModal";
 import { purchaseGiftAction } from "./actions";
 
 // Buy a credit pack as a gift for a colleague. Mirrors the mandate form's
 // inline-validation pattern: a transition runs the server action and we surface
-// the error or reset on success. Payment is mocked until a provider is wired.
-export function GiftForm({ live = false }: { live?: boolean }) {
+// the error, open the in-app embedded checkout, or reset on a mock success.
+export function GiftForm({
+  live = false,
+  publishableKey = "",
+}: {
+  live?: boolean;
+  publishableKey?: string;
+}) {
   const [packKey, setPackKey] = useState(CREDIT_PACKS[1]?.key ?? CREDIT_PACKS[0].key);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -22,8 +30,8 @@ export function GiftForm({ live = false }: { live?: boolean }) {
           setError(null);
           setDone(false);
           const res = await purchaseGiftAction(formData);
-          if (res?.url) {
-            window.location.href = res.url; // off to Stripe Checkout
+          if (res?.clientSecret) {
+            setClientSecret(res.clientSecret); // open in-app embedded checkout
             return;
           }
           if (res?.error) setError(res.error);
@@ -36,6 +44,13 @@ export function GiftForm({ live = false }: { live?: boolean }) {
       }
       className="flex flex-col gap-3"
     >
+      {clientSecret ? (
+        <StripeCheckoutModal
+          clientSecret={clientSecret}
+          publishableKey={publishableKey}
+          onClose={() => setClientSecret(null)}
+        />
+      ) : null}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {CREDIT_PACKS.map((pack) => {
           const active = pack.key === packKey;
