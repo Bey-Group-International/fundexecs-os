@@ -59,6 +59,7 @@ export async function askEarn(input: {
   }
 }
 
+/** Resolve a suggestion's pre-baked prompt by id within a given location. */
 function findSuggestionPrompt(loc: CopilotContext, id: string): string | null {
   return suggestionsFor(loc).find((s) => s.id === id)?.prompt ?? null;
 }
@@ -95,6 +96,7 @@ export interface CopilotBriefing {
   nextAction: { label: string; prompt: string } | null;
 }
 
+/** Format a 0–100 score as a rounded percentage string. */
 function pct(n: number): string {
   return `${Math.round(n)}%`;
 }
