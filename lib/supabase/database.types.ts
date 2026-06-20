@@ -534,6 +534,20 @@ export type Attestation = {
   anchor_ref: string | null;
   created_at: string;
 };
+// Stake forfeiture due-process record (migration 0051). An appealable challenge
+// against a locked stake; no credit moves until it is resolved. See
+// docs/TOKENIZATION_LAYERS.md §9.
+export type StakeDispute = {
+  id: string;
+  organization_id: string;
+  stake_id: string;
+  status: "open" | "upheld" | "dismissed";
+  reason: string | null;
+  opened_by: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
 
 export type SessionShare = {
   id: string;
@@ -1089,6 +1103,7 @@ export type Database = {
       reputation_ledger: TableShape<ReputationLedgerEntry>;
       stake_positions: TableShape<StakePosition>;
       attestations: TableShape<Attestation>;
+      stake_disputes: TableShape<StakeDispute>;
     };
     Views: Record<string, never>;
     Functions: {

@@ -6,7 +6,12 @@ import { getSessionContext } from "@/lib/auth";
 import { getWallet } from "@/lib/wallet";
 import { entitlements } from "@/lib/entitlements";
 import { compoundingProfile } from "@/lib/compounding";
-import { requiredListingStake, lockStake, resolveListingStake } from "@/lib/stake";
+import {
+  requiredListingStake,
+  lockStake,
+  resolveListingStake,
+  forfeitListingStakeViaDispute,
+} from "@/lib/stake";
 import { queueNextAction } from "@/app/(app)/capital-map/actions";
 import type { MarketplaceStatus } from "@/lib/supabase/database.types";
 
@@ -136,6 +141,50 @@ export async function updateListingStatus(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/marketplace");
+}
+
+// File a bad-faith dispute against a listing's stake (e.g. an operator reports a
+// misrepresented deal or a ghosted match). This does NOT burn the stake: it opens
+// an appealable dispute (TOKENIZATION_LAYERS.md §9 due process) so no real credits
+// move before resolution. The staker under challenge is the listing's owning org;
+// the reporter (ctx.userId) is recorded as opened_by.
+// TODO: admin resolution surface — upheld/dismissed (resolveDispute) is an ops
+// concern and has no UI yet.
+export async function fileListingStakeDispute(
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "Not authenticated" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+  if (!id) return { error: "Listing id is required" };
+
+  const service = createServiceClient();
+
+  // Resolve the staker (listing owner) — the org whose stake is under challenge.
+  const { data: listing } = await service
+    .from("marketplace_listings")
+    .select("organization_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!listing) return { error: "Listing not found" };
+
+  try {
+    const dispute = await forfeitListingStakeViaDispute(service, id, {
+      orgId: listing.organization_id,
+      reason,
+      openedBy: ctx.userId,
+    });
+    if (!dispute) {
+      return { error: "No locked stake to dispute for this listing." };
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not file dispute." };
+  }
+
+  revalidatePath("/marketplace");
+  return {};
 }
 
 export async function toggleListingPublic(formData: FormData): Promise<void> {
