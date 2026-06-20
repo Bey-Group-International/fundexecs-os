@@ -98,16 +98,18 @@ export function tierForScore(score: number): ReputationTier {
   return "unranked";
 }
 
-/** Build the full profile from raw signals. Pure — the IO-free core. */
-export function profileFromSignals(signals: CompoundingSignals): CompoundingProfile {
-  const score = reputationScore(signals);
+/**
+ * Build the full profile from a known merit score + tenure. Pure. Used both by
+ * the Phase 0 proxy (score derived from signals) and Phase 1 (score read from the
+ * stored reputation ledger), so the two share one set of guardrails.
+ */
+export function profileFromScore(score: number, tenureMonths: number): CompoundingProfile {
   const tier = tierForScore(score);
 
   const meritDiscount = MERIT_DISCOUNT_BY_TIER[tier];
   // Loyalty discount tracks the existing tenure-credit curve, normalized to its
   // cap and scaled into the loyalty discount band, so the two surfaces agree.
-  const loyaltyDiscount =
-    LOYALTY_DISCOUNT_CAP * (loyaltyBonus(signals.tenureMonths) / LOYALTY_CAP);
+  const loyaltyDiscount = LOYALTY_DISCOUNT_CAP * (loyaltyBonus(tenureMonths) / LOYALTY_CAP);
 
   const rawMultiplier = 1 - meritDiscount - loyaltyDiscount;
   const priceMultiplier = Math.max(PRICE_FLOOR, Number(rawMultiplier.toFixed(4)));
@@ -124,6 +126,11 @@ export function profileFromSignals(signals: CompoundingSignals): CompoundingProf
       loyaltyPct: Math.round(loyaltyDiscount * 100),
     },
   };
+}
+
+/** Build the full profile from raw signals (the Phase 0 proxy path). Pure. */
+export function profileFromSignals(signals: CompoundingSignals): CompoundingProfile {
+  return profileFromScore(reputationScore(signals), signals.tenureMonths);
 }
 
 /**
@@ -143,15 +150,31 @@ const UNRANKED: CompoundingProfile = profileFromSignals({
 });
 
 /**
- * Resolve an org's live compounding profile from existing tables. No new schema:
- * closed deals and verified records come from `deals` (+ verification_status),
- * tenure from the wallet. Falls back to the unranked profile for an org with no
- * footprint yet, so callers can use it unconditionally.
+ * Resolve an org's live compounding profile. Standing comes from the stored
+ * reputation ledger (Phase 1) when the org has earned any; otherwise it falls
+ * back to the Phase 0 PROXY derived from existing tables (closed deals + verified
+ * records), so orgs that earned a track record before minting existed still rank.
+ * Tenure (loyalty) always comes from the wallet. Returns the unranked profile for
+ * an org with no footprint, so callers can use it unconditionally.
  */
 export async function compoundingProfile(orgId: string): Promise<CompoundingProfile> {
   const supabase = createServerClient();
 
-  const [closed, verified, wallet] = await Promise.all([
+  const [stored, wallet] = await Promise.all([
+    supabase.from("reputation_scores").select("score").eq("organization_id", orgId).maybeSingle(),
+    supabase.from("wallets").select("updated_at, plan").eq("organization_id", orgId).maybeSingle(),
+  ]);
+
+  // Tenure only accrues while on a plan; mirror the Wallet page's logic.
+  const since = wallet.data?.plan ? wallet.data?.updated_at : null;
+  const tenure = monthsSince(since);
+
+  // Authoritative stored score wins; else compute the proxy.
+  if (stored.data) {
+    return profileFromScore(stored.data.score, tenure);
+  }
+
+  const [closed, verified] = await Promise.all([
     supabase
       .from("deals")
       .select("id", { count: "exact", head: true })
@@ -162,12 +185,7 @@ export async function compoundingProfile(orgId: string): Promise<CompoundingProf
       .select("id", { count: "exact", head: true })
       .eq("organization_id", orgId)
       .eq("verification_status", "verified"),
-    supabase.from("wallets").select("updated_at, plan").eq("organization_id", orgId).maybeSingle(),
   ]);
-
-  // Tenure only accrues while on a plan; mirror the Wallet page's logic.
-  const since = wallet.data?.plan ? wallet.data?.updated_at : null;
-  const tenure = monthsSince(since);
 
   return profileFromSignals({
     closedDeals: closed.count ?? 0,
