@@ -22,10 +22,12 @@ import {
 } from "@/components/run/RunModules";
 import { RunDiligenceModule, RunUnderwritingModule } from "@/components/run/RunListModules";
 import {
-  ExecuteClosingModule,
   ExecuteReportingModule,
   ExecuteExitModule,
 } from "@/components/execute/ExecuteModules";
+import { ExecuteClosingModule } from "@/components/execute/ClosingModule";
+import { ExecuteCapitalEventsModule } from "@/components/execute/CapitalEventsModule";
+import { ExecuteAssetManagementModule } from "@/components/execute/AssetManagementModule";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
@@ -124,26 +126,8 @@ const LIST_MODULES: Record<string, ListConfig> = {
     ],
     empty: "No debt facilities yet. Track credit lines, term loans, and mezz here.",
   },
-  "execute/capital_events": {
-    table: "capital_events",
-    blurb: "Calls, distributions, and every flow of capital post-close.",
-    columns: [
-      { key: "event_type", label: "Type" },
-      { key: "amount", label: "Amount" },
-      { key: "effective_date", label: "Effective" },
-    ],
-    empty: "No capital events yet.",
-  },
-  "execute/asset_management": {
-    table: "assets",
-    blurb: "Portfolio holdings and their current marks.",
-    columns: [
-      { key: "name", label: "Asset" },
-      { key: "asset_type", label: "Type" },
-      { key: "current_value", label: "Value" },
-    ],
-    empty: "No portfolio assets yet.",
-  },
+  // The Run lists (diligence, underwriting) and every Execute module are
+  // rendered by their own bespoke components above — no generic table here.
 };
 
 // Modules whose rows can be scoped to a session (first pass — the key demo
@@ -153,7 +137,6 @@ const LIST_MODULES: Record<string, ListConfig> = {
 const SESSION_SCOPED_MODULES = new Set([
   "source/deal_pipeline",
   "source/lp_pipeline",
-  "execute/asset_management",
 ]);
 
 export async function ModuleView({
@@ -196,13 +179,16 @@ export async function ModuleView({
     if (mod.key === "underwriting") return <RunUnderwritingModule orgId={ctx.orgId} />;
   }
 
-  // --- Execute hub: derived operating modules ------------------------------
-  // Closing, Reporting, and Exit are synthesized from the operating record
-  // (deals heading to close, the portfolio performance roll-up, and realized
-  // assets); Capital Events and Asset Management fall through to their table-
-  // backed views below.
+  // --- Execute hub: bespoke operating modules ------------------------------
+  // Every Execute module has its own purpose-built view, synthesized from the
+  // operating record: the close process, the capital ledger, the marked book,
+  // the live report, and the realized record. Asset Management is session-scoped
+  // (it carries the sessionId through to its scoped reads and add-form).
   if (hub.key === "execute") {
     if (mod.key === "closing") return <ExecuteClosingModule orgId={ctx.orgId} />;
+    if (mod.key === "capital_events") return <ExecuteCapitalEventsModule orgId={ctx.orgId} />;
+    if (mod.key === "asset_management")
+      return <ExecuteAssetManagementModule orgId={ctx.orgId} sessionId={sessionId} />;
     if (mod.key === "reporting") return <ExecuteReportingModule orgId={ctx.orgId} />;
     if (mod.key === "exit") return <ExecuteExitModule orgId={ctx.orgId} />;
   }

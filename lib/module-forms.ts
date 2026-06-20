@@ -47,6 +47,7 @@ const DEAL_STAGES = [
 ];
 
 const ASSET_TYPES = ["real_estate", "operating_company", "portfolio_company", "fund_interest", "other"];
+const ASSET_STATUSES = ["active", "monitoring", "underperforming", "exited", "written_off"];
 
 const CAPITAL_EVENT_TYPES = [
   "capital_call",
@@ -87,6 +88,12 @@ export const ADD_ROW_CONFIGS: Record<string, AddRowConfig> = {
     fields: [
       { name: "name", label: "Asset name", type: "text", required: true },
       { name: "asset_type", label: "Asset type", type: "select", options: ASSET_TYPES, defaultValue: "real_estate" },
+      { name: "acquisition_cost", label: "Acquisition cost", type: "number" },
+      { name: "current_value", label: "Current value", type: "number" },
+      { name: "acquisition_date", label: "Acquisition date", type: "date" },
+      { name: "status", label: "Status", type: "select", options: ASSET_STATUSES, defaultValue: "active" },
+      { name: "noi", label: "NOI", type: "number" },
+      { name: "cap_rate", label: "Cap rate (%)", type: "number" },
     ],
   },
   "execute/capital_events": {
