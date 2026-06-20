@@ -36,11 +36,23 @@ describe("buildAttestationRow", () => {
     });
   });
 
-  it("defaults the optional signer/witness/evidence fields to null", () => {
+  it("defaults the optional signer/witness fields to null", () => {
     const row = buildAttestationRow(input());
     expect(row.attested_by).toBeNull();
     expect(row.witness_org_id).toBeNull();
-    expect(row.evidence_hash).toBeNull();
+  });
+
+  it("computes a deterministic evidence_hash when none is supplied (Phase 4)", () => {
+    // Every attestation is born with a verifiable hash of its identifying
+    // content, while settlement stays 'internal' until anchored.
+    const row = buildAttestationRow(input());
+    expect(row.evidence_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(buildAttestationRow(input()).evidence_hash).toBe(row.evidence_hash);
+  });
+
+  it("lets an explicit evidence_hash override the computed one", () => {
+    const row = buildAttestationRow({ ...input(), evidenceHash: "0xabc" });
+    expect(row.evidence_hash).toBe("0xabc");
   });
 
   it("lets the DB default own settlement and assign id/created_at", () => {

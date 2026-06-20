@@ -4,6 +4,9 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Investor, MarketplaceListing, MarketplaceStatus } from "@/lib/supabase/database.types";
 import { rankInvestorsForListing, type InvestorMatch, type ListingContext } from "@/lib/matching";
+import { compoundingProfile } from "@/lib/compounding";
+import { requiredListingStake } from "@/lib/stake";
+import { TierBadge, tierLabel } from "@/components/TierBadge";
 import { NewListingForm } from "./NewListingForm";
 import { updateListingStatus, toggleListingPublic, deleteListing, queueListingOutreach } from "./actions";
 
@@ -55,10 +58,11 @@ export default async function MarketplacePage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = createServerClient();
-  const [listingsRes, investorsRes, dealsRes] = await Promise.all([
+  const [listingsRes, investorsRes, dealsRes, profile] = await Promise.all([
     supabase.from("marketplace_listings").select("*").order("created_at", { ascending: false }),
     supabase.from("investors").select("*").limit(500),
     supabase.from("deals").select("id, name, geography, asset_class").limit(500),
+    compoundingProfile(ctx.orgId),
   ]);
   const listings = (listingsRes.data ?? []) as MarketplaceListing[];
   const investors = (investorsRes.data ?? []) as Investor[];
@@ -92,6 +96,11 @@ export default async function MarketplacePage() {
     notation: "compact",
   });
 
+  // The refundable credit stake this org locks to publish a listing, scaled down
+  // by its reputation (see docs/TOKENIZATION_LAYERS.md §4.2). Threaded into the
+  // create form so the cost is visible before posting.
+  const listingStake = requiredListingStake(profile);
+
   return (
     <div className="fx-ambient mx-auto max-w-4xl">
       <header className="mb-6 animate-fade-up">
@@ -123,6 +132,20 @@ export default async function MarketplacePage() {
         </Link>
       </nav>
 
+      {/* Your standing — earned reputation (closed deals, verified records) lifts
+          your listings in discovery and lowers the stake you lock to post. */}
+      <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-neural-400/20 bg-black/45 px-4 py-3 text-sm animate-fade-up">
+        <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
+          Your standing
+        </span>
+        <TierBadge tier={profile.tier} />
+        <span className="text-fg-secondary">
+          {profile.tier === "unranked"
+            ? "Close deals and verify records to earn standing — higher tiers surface your listings first and lower the stake you post."
+            : `${tierLabel(profile.tier)} — your listings surface higher and you post a lower stake at higher tiers.`}
+        </span>
+      </div>
+
       {listings.length > 0 ? (
         <div className="mb-6 grid animate-fade-up grid-cols-2 gap-2 sm:grid-cols-4">
           {[
@@ -150,7 +173,11 @@ export default async function MarketplacePage() {
         </div>
       ) : null}
 
-      <NewListingForm deals={deals.map((d) => ({ id: d.id, name: d.name }))} />
+      <NewListingForm
+        deals={deals.map((d) => ({ id: d.id, name: d.name }))}
+        requiredStake={listingStake}
+        tier={profile.tier}
+      />
 
       <section className="mt-8">
         <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
