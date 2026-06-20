@@ -84,6 +84,8 @@ export async function createEntity(formData: FormData): Promise<void> {
     name,
     entity_type: String(formData.get("entity_type") ?? "spv").trim() || "spv",
     jurisdiction: String(formData.get("jurisdiction") ?? "").trim() || null,
+    parent_entity_id: String(formData.get("parent_entity_id") ?? "").trim() || null,
+    formation_date: String(formData.get("formation_date") ?? "").trim() || null,
     notes: String(formData.get("notes") ?? "").trim() || null,
     created_by: ctx.userId,
   });
