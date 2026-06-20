@@ -27,6 +27,13 @@ export function sourcingLive(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
+// External enrichment (web search) is opt-in: it needs a model key AND an
+// explicit flag, since the web_search server tool must be enabled on the
+// account and incurs extra cost. When off, generation uses model knowledge.
+export function sourcingEnrichmentEnabled(): boolean {
+  return sourcingLive() && /^(1|true|on)$/i.test(process.env.SOURCE_WEB_SEARCH ?? "");
+}
+
 function client(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   return apiKey ? new Anthropic({ apiKey }) : null;
@@ -53,6 +60,8 @@ export interface SourceCandidate {
   rationale: string;
   /** Short imperative first move, e.g. "Warm intro via a mutual GP". */
   firstMove: string;
+  /** Supporting source URL when found via web-search enrichment. */
+  sourceUrl?: string;
 }
 
 export interface PipelineScore {
@@ -202,6 +211,30 @@ const clampScore = (n: unknown): number => {
 const cleanStr = (v: unknown, max: number): string =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
 
+// Keep only well-formed http(s) URLs — the source citation for a candidate.
+function cleanUrl(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const s = v.trim();
+  return /^https?:\/\/\S+$/i.test(s) ? s.slice(0, 500) : undefined;
+}
+
+// Extract a JSON array from free-form model text (handles ```json fences and
+// surrounding prose). Used for the web-search path, where structured-output
+// formatting is unavailable alongside the server tool.
+function parseJsonArray(text: string): unknown[] | null {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fenced ? fenced[1] : text;
+  const start = body.indexOf("[");
+  const end = body.lastIndexOf("]");
+  if (start === -1 || end === -1 || end < start) return null;
+  try {
+    const parsed = JSON.parse(body.slice(start, end + 1));
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 // Action kinds the sourcing engine is allowed to recommend — a safe subset that
 // excludes anything capital- or compliance-binding (Tier 3 never auto-sourced).
 const SOURCE_ACTIONS: ActionKind[] = [
@@ -255,6 +288,13 @@ export async function generateTargets(
   const anthropic = client();
   if (!anthropic) return fallbackCandidates(cfg, mandate, existingNames, options);
 
+  // External enrichment first (opt-in): real, currently-operating targets with
+  // a source citation. Falls through to model knowledge if it yields nothing.
+  if (sourcingEnrichmentEnabled()) {
+    const enriched = await enrichedTargets(anthropic, cfg, mandate, existingNames, options);
+    if (enriched.length) return enriched;
+  }
+
   const agentName = AGENT_BY_KEY[cfg.agent]?.name ?? "Sourcing";
   const catLine = cfg.freeCategory
     ? `Set "category" to the most fitting asset class.`
@@ -287,6 +327,52 @@ export async function generateTargets(
   }
 }
 
+// Web-search-backed generation. Searches for real, currently-operating targets
+// and asks for a plain JSON array (structured-output formatting isn't combinable
+// with the server tool), then parses it. Returns [] on any failure so the
+// caller falls back to model-knowledge generation.
+const WEB_SEARCH_TOOLS = [
+  { type: "web_search_20260209", name: "web_search", max_uses: 5 },
+] as unknown as NonNullable<Anthropic.MessageCreateParamsNonStreaming["tools"]>;
+
+async function enrichedTargets(
+  anthropic: Anthropic,
+  cfg: SourceAiConfig,
+  mandate: SourcingMandate | null,
+  existingNames: string[],
+  options: string[],
+): Promise<SourceCandidate[]> {
+  const agentName = AGENT_BY_KEY[cfg.agent]?.name ?? "Sourcing";
+  const catLine = cfg.freeCategory
+    ? `Set "category" to the most fitting asset class.`
+    : `Set "category" to exactly one of: ${options.join(", ")}.`;
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 3000,
+      output_config: { effort: "low" },
+      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Use web search to find REAL, currently-operating ${cfg.entities} that fit the firm's mandate. For each, include "sourceUrl" — a link to a page that supports it. Return ONLY a JSON array (no prose, no markdown) of objects with keys: name, category, fitScore (0-100), rationale, firstMove, sourceUrl. ${catLine}`,
+      tools: WEB_SEARCH_TOOLS,
+      messages: [
+        {
+          role: "user",
+          content:
+            `Mandate:\n${mandateContext(mandate)}\n\n` +
+            `Find 3–6 ${cfg.entities}: ${cfg.hint}.\n` +
+            (existingNames.length
+              ? `Already in the pipeline (do not repeat): ${existingNames.slice(0, 40).join(", ")}.\n`
+              : "") +
+            `Return the JSON array.`,
+        },
+      ],
+    });
+    const raw = parseJsonArray(textOf(message));
+    return raw ? normalizeCandidates(raw, cfg, options, existingNames) : [];
+  } catch {
+    return [];
+  }
+}
+
 function normalizeCandidates(
   raw: unknown[],
   cfg: SourceAiConfig,
@@ -312,6 +398,7 @@ function normalizeCandidates(
       fitScore: clampScore(o.fitScore),
       rationale: cleanStr(o.rationale, 240) || "Fits the mandate.",
       firstMove: cleanStr(o.firstMove, 120) || "Research and qualify.",
+      sourceUrl: cleanUrl(o.sourceUrl),
     });
     if (out.length >= 6) break;
   }
@@ -504,6 +591,8 @@ export const __test = {
   fallbackScores,
   coerceAction,
   clampScore,
+  cleanUrl,
+  parseJsonArray,
   SOURCE_ACTIONS,
   tierForAction,
 };

@@ -17,6 +17,8 @@ const {
   normalizeScores,
   coerceAction,
   clampScore,
+  cleanUrl,
+  parseJsonArray,
   SOURCE_ACTIONS,
   tierForAction,
 } = __test;
@@ -79,9 +81,47 @@ describe("clampScore / coerceAction", () => {
   });
 });
 
+describe("cleanUrl", () => {
+  it("keeps well-formed http(s) URLs and rejects the rest", () => {
+    expect(cleanUrl("https://acme.com/about")).toBe("https://acme.com/about");
+    expect(cleanUrl("http://x.io")).toBe("http://x.io");
+    expect(cleanUrl("acme.com")).toBeUndefined();
+    expect(cleanUrl("javascript:alert(1)")).toBeUndefined();
+    expect(cleanUrl(123)).toBeUndefined();
+  });
+});
+
+describe("parseJsonArray", () => {
+  it("parses a bare JSON array", () => {
+    expect(parseJsonArray('[{"name":"A"}]')).toEqual([{ name: "A" }]);
+  });
+  it("extracts from a ```json fenced block with prose around it", () => {
+    const text = 'Here are the results:\n```json\n[{"name":"B"}]\n```\nDone.';
+    expect(parseJsonArray(text)).toEqual([{ name: "B" }]);
+  });
+  it("returns null when no array is present", () => {
+    expect(parseJsonArray("no json here")).toBeNull();
+    expect(parseJsonArray("{not: an array}")).toBeNull();
+  });
+});
+
 describe("normalizeCandidates", () => {
   const cfg = sourceConfigFor("source/lp_pipeline")!;
   const opts = categoryOptions(cfg);
+
+  it("keeps a valid sourceUrl and drops an invalid one", () => {
+    const out = normalizeCandidates(
+      [
+        { name: "Cited LP", category: "lp", fitScore: 80, rationale: "x", firstMove: "y", sourceUrl: "https://lp.com" },
+        { name: "Bad URL LP", category: "lp", fitScore: 70, rationale: "x", firstMove: "y", sourceUrl: "not-a-url" },
+      ],
+      cfg,
+      opts,
+      [],
+    );
+    expect(out.find((c) => c.name === "Cited LP")?.sourceUrl).toBe("https://lp.com");
+    expect(out.find((c) => c.name === "Bad URL LP")?.sourceUrl).toBeUndefined();
+  });
 
   it("coerces an invalid category to a valid enum value", () => {
     const out = normalizeCandidates(

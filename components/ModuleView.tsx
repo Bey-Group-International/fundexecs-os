@@ -33,7 +33,7 @@ import { ModuleDashboard } from "@/components/source/ModuleDashboard";
 import { AiSourcingPanel } from "@/components/source/AiSourcingPanel";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { summarizeModule } from "@/lib/source-stats";
-import { sourceConfigFor, sourcingLive } from "@/lib/source-ai";
+import { sourceConfigFor, sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 import { AGENT_BY_KEY } from "@/lib/agents";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
@@ -327,6 +327,7 @@ export async function ModuleView({
             entities={aiCfg.entities}
             agentName={AGENT_BY_KEY[aiCfg.agent]?.name ?? "Sourcing"}
             live={sourcingLive()}
+            webEnrichment={sourcingEnrichmentEnabled()}
           />
         ) : null}
         {summary ? <ModuleDashboard summary={summary} empty={rows.length === 0} /> : statBar}
