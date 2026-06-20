@@ -7,6 +7,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentKey, Hub, AssetType } from "@/lib/supabase/database.types";
 import { AGENTS } from "@/lib/agents";
+import { guidanceText } from "@/lib/document-quality";
 
 // Default to Sonnet 4.6 for institutional-quality deliverables.
 // Override with CLAUDE_MODEL env var (e.g. claude-opus-4-8 or claude-haiku-4-5-20251001).
@@ -462,8 +463,10 @@ export async function conversationalDraft(args: {
   }
   const system =
     `You are Earn, drafting an institutional "${args.docName}" (data-room section: ${args.section}) ` +
-    `for a private-markets firm. Write in a precise, institutional voice. Ground everything in the firm ` +
-    `context below — never invent facts; leave a clearly marked [TODO] where information is missing.\n\n` +
+    `for a private-markets firm being read by an allocator's diligence team. Write in a precise, ` +
+    `institutional voice; lead with the outcome; be specific and verifiable. Ground everything in the ` +
+    `firm context below — never invent facts; leave a clearly marked [TODO] where information is missing.\n\n` +
+    `=== Institutional structure to follow ===\n${guidanceText(args.docName, args.section)}\n\n` +
     `=== Firm context ===\n${args.foundation || "(no firm data yet)"}\n\n` +
     `=== Current draft ===\n${args.currentContent || "(empty)"}\n\n` +
     `Each turn, return JSON {reply, content} where content is the COMPLETE revised markdown document.`;
