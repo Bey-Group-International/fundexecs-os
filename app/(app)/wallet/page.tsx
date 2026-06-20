@@ -227,8 +227,8 @@ export default async function WalletPage({
           </p>
           <p className="mt-1 text-sm font-medium text-fg-primary">Earn credits instead of buying them</p>
           <p className="mt-0.5 text-xs text-fg-secondary">
-            Invite other firms and build a downline — escalating rewards three levels deep, plus
-            milestone bonuses. Or gift credits to a colleague.
+            Introduce other firms and build a partner network — escalating rewards three levels
+            deep, plus milestone bonuses. Or gift credits to a colleague or portfolio company.
           </p>
         </div>
         <span className="font-mono text-fg-muted transition group-hover:text-neural-300">→</span>

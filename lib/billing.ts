@@ -17,6 +17,8 @@ export interface Plan {
   annual: number;
   /** Credits granted per month on this plan. */
   creditsPerMonth: number;
+  /** Member seats included. `null` = unlimited. */
+  seats: number | null;
   blurb: string;
   features: string[];
 }
@@ -28,8 +30,14 @@ export const PLANS: Plan[] = [
     monthly: 5,
     annual: 50,
     creditsPerMonth: 500,
-    blurb: "For getting real work done solo.",
-    features: ["500 credits / mo", "All six agents", "Scheduled workflows"],
+    seats: 1,
+    blurb: "For a single operator.",
+    features: [
+      "500 credits / mo",
+      "All 15 agents, every hub",
+      "Single operator seat",
+      "Scheduled workflows",
+    ],
   },
   {
     key: "pro",
@@ -37,8 +45,14 @@ export const PLANS: Plan[] = [
     monthly: 30,
     annual: 300,
     creditsPerMonth: 4_000,
+    seats: 10,
     blurb: "For an active deal team.",
-    features: ["4,000 credits / mo", "Priority agent runs", "Unlimited sessions & groups"],
+    features: [
+      "4,000 credits / mo",
+      "All 15 agents, priority runs",
+      "Up to 10 seats with role-based access",
+      "Audit log, data export & priority support",
+    ],
   },
   {
     key: "scale",
@@ -46,8 +60,14 @@ export const PLANS: Plan[] = [
     monthly: 100,
     annual: 1_000,
     creditsPerMonth: 15_000,
+    seats: null,
     blurb: "For a firm running on FundExecs.",
-    features: ["15,000 credits / mo", "Highest throughput", "Early access to new hubs"],
+    features: [
+      "15,000 credits / mo, highest throughput",
+      "Unlimited seats with SSO / SAML",
+      "Governance: audit trail, retention & export",
+      "Dedicated success manager, uptime SLA & onboarding",
+    ],
   },
 ];
 
@@ -71,6 +91,31 @@ export function planPrice(plan: Plan, interval: PlanInterval): number {
   return interval === "annual" ? plan.annual : plan.monthly;
 }
 
+// Seats available to an org with no active plan (entry level). An org always
+// has at least its owner, so the floor is 1.
+export const FREE_PLAN_SEATS = 1;
+
+// Member seats allowed for a plan key. `null` means unlimited. Unknown or
+// missing plans fall back to the entry-level allotment.
+export function planSeatLimit(planKey: string | null | undefined): number | null {
+  if (!planKey) return FREE_PLAN_SEATS;
+  const plan = PLAN_BY_KEY[planKey as PlanKey];
+  return plan ? plan.seats : FREE_PLAN_SEATS;
+}
+
+// Whether an org at `currentMembers` has used up its seat allotment and cannot
+// add another member without upgrading. Unlimited plans are never full. Orgs
+// already over their limit (e.g. after a downgrade) stay blocked from adding
+// more until they upgrade.
+export function seatLimitReached(
+  planKey: string | null | undefined,
+  currentMembers: number,
+): boolean {
+  const limit = planSeatLimit(planKey);
+  if (limit === null) return false; // unlimited
+  return currentMembers >= limit;
+}
+
 // Credits granted up front when starting a plan on the given interval. Annual
 // plans front-load the full year (12 months) of credits — and since unused
 // credits roll over while the plan is active, that compounds in the operator's
@@ -88,11 +133,12 @@ export function annualSavingsPct(plan: Plan): number {
   return monthlyYear === 0 ? 0 : Math.round((annualSavingsUsd(plan) / monthlyYear) * 100);
 }
 
-// Loyalty bonus — a standing reward that grows with continuous-subscription
+// Tenure credit — a standing allotment that accrues with continuous-subscription
 // tenure, capped so it stays sustainable. Every full month on a plan adds
-// LOYALTY_STEP to the monthly bonus credits, up to LOYALTY_CAP. This makes
-// staying subscribed compound: the longer you run on FundExecs, the more credits
-// each month quietly delivers.
+// LOYALTY_STEP to the monthly credit, up to LOYALTY_CAP. Identifiers retain the
+// "loyalty" name for backward compatibility; the surfaced label is "tenure
+// credit." The effect: the longer a firm runs on FundExecs, the more monthly
+// credits its subscription quietly returns.
 export const LOYALTY_STEP = 50; // bonus credits added per month of tenure
 export const LOYALTY_CAP = 1_000; // max monthly loyalty bonus
 

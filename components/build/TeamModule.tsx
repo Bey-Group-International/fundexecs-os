@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { getWallet } from "@/lib/wallet";
+import { planSeatLimit } from "@/lib/billing";
 import type { OrganizationMember, Principal } from "@/lib/supabase/database.types";
 import { ModuleHeader } from "./DraftWithEarn";
 import { TeamControls, type TeamMemberView } from "./TeamControls";
@@ -43,6 +45,9 @@ export async function TeamModule() {
     avatar_url: self?.avatar_url ?? null,
   };
 
+  const wallet = await getWallet(ctx.orgId);
+  const seats = { used: members.length, limit: planSeatLimit(wallet?.plan) };
+
   return (
     <div>
       <ModuleHeader
@@ -61,6 +66,7 @@ export async function TeamModule() {
           currentUserId={ctx.userId}
           currentRole={ctx.role}
           ownProfile={ownProfile}
+          seats={seats}
         />
       )}
 
