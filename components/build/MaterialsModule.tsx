@@ -192,10 +192,10 @@ export async function MaterialsModule() {
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
-              Data-room coverage
+              Institutional coverage
             </span>
             <p className="mt-0.5 text-sm text-fg-secondary">
-              What everyone you bring to the table — LPs, co-investors, lenders, partners — expects to see.
+              The sections an allocator&apos;s diligence team expects in an institutional fund data room.
             </p>
           </div>
           <div className="text-right">

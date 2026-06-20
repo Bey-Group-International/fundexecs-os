@@ -55,4 +55,11 @@ describe("summarizeDataRoom", () => {
     expect(s.weightedPercent).toBeGreaterThan(0);
     expect(s.suggestions.every((i) => i.key !== "thesis")).toBe(true);
   });
+
+  it("includes institutional data-room sections", () => {
+    const keys = new Set(DATA_ROOM_SECTIONS.map((s) => s.key));
+    for (const k of ["fund_terms", "compliance", "operations", "esg", "risk", "portfolio"]) {
+      expect(keys.has(k)).toBe(true);
+    }
+  });
 });
