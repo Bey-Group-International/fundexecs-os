@@ -20,6 +20,7 @@ import {
   type CopilotBriefing,
 } from "@/components/copilot/actions";
 import { ReviewFeed } from "@/components/copilot/ReviewFeed";
+import { TeamTasksFeed } from "@/components/copilot/TeamTasksFeed";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import type { Mandate } from "@/lib/gates";
 import type { AgentKey } from "@/lib/supabase/database.types";
@@ -363,6 +364,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
 
           {/* Recent runs — review/approve the copilot's recent workflows */}
           <ReviewFeed open={open} onClose={() => setOpen(false)} />
+
+          {/* Personal tasks — assigned human work that can launch through Earn */}
+          <TeamTasksFeed open={open} pathname={pathname} />
 
           {/* Conversation — the maintained, multi-turn session in the dock */}
           {thread.length > 0 ? (

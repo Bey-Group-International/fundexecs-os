@@ -80,6 +80,7 @@ export type RiskSeverity = "low" | "medium" | "high" | "critical";
 export type MarketplaceStatus = "draft" | "listed" | "paused" | "closed";
 export type TriggerType = "schedule" | "manual" | "email" | "webhook" | "event";
 export type SessionOrigin = "earn" | "workflow";
+export type TeamTaskPriority = "low" | "normal" | "high" | "urgent";
 
 // The Unified Inbox enums (migration 0038).
 export type InboxChannel =
@@ -353,6 +354,26 @@ export type Task = Timestamps & {
   step_order: number;
   automation_id: string | null;
   session_id: string | null;
+}
+
+export type TeamTask = Timestamps & {
+  id: string;
+  organization_id: string;
+  assigned_to: string;
+  assigned_by: string | null;
+  title: string;
+  description: string | null;
+  hub: Hub | null;
+  module: string | null;
+  priority: TeamTaskPriority;
+  status: TaskStatus;
+  due_at: string | null;
+  session_id: string | null;
+  source_task_id: string | null;
+  deal_id: string | null;
+  asset_id: string | null;
+  context_snapshot: Json;
+  completed_at: string | null;
 }
 
 export type SessionGroup = Timestamps & {
@@ -740,6 +761,22 @@ export type SourceFeedback = {
   created_at: string;
 };
 
+export type OperatorFeedback = {
+  id: string;
+  organization_id: string;
+  principal_id: string | null;
+  scope: string | null;
+  module: string | null;
+  agent: string | null;
+  signal: string;
+  subject: string;
+  task_id: string | null;
+  team_task_id: string | null;
+  session_id: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
 // A Unified Inbox thread (migration 0038) — one counterparty touchpoint with an
 // AI triage layer (priority/intent/ai_summary) and deep links into Command
 // Center context (deal_id / investor_id). The inbound counterpart to DispatchLog.
@@ -1006,6 +1043,7 @@ export type Database = {
       ai_agents: TableShape<AiAgent>;
       prompts: TableShape<Prompt>;
       tasks: TableShape<Task>;
+      team_tasks: TableShape<TeamTask>;
       task_handoffs: TableShape<TaskHandoff>;
       approvals: TableShape<Approval>;
       task_events: TableShape<TaskEvent>;
@@ -1014,6 +1052,7 @@ export type Database = {
       mandates: TableShape<MandateRow>;
       dispatch_log: TableShape<DispatchLog>;
       source_feedback: TableShape<SourceFeedback>;
+      operator_feedback: TableShape<OperatorFeedback>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
       wallets: TableShape<Wallet>;

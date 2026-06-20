@@ -77,6 +77,9 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
   Command Center (deals, assets, deliverables, completed workflows, a sample
   automation — org-scoped, idempotent); and a floating Guided Tour that walks a
   tester through the full loop end-to-end (localStorage-persisted).
+- ✅ Human team task loop — `team_tasks` lets work be assigned to principals,
+  surfaced inside the Earn dock, launched through the normal Earn session loop,
+  and marked complete with cross-hub `operator_feedback` learning signals.
 
 ### What has not been built yet
 
@@ -87,6 +90,8 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - 🔧 Remaining hub modules (Source, Run, Execute; most of Build)
 - 🔧 Marketplace layer (schema exists; no logic/UI)
 - 🔧 Graph query layer (`/graph/*` endpoints + visualizations)
+- 🔧 Org-specific artifact embedding into Brain recall (operator feedback now
+  learns from behavior; completed work is not yet vectorized into recall)
 
 ### What you must never do
 
@@ -462,6 +467,19 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Integrated, not yet tested.
              |  Next: three-graph query layer (/graph/*); email/webhook/event triggers;
              |  retry/adapt-on-failure autonomy; external integrations (MCP/HTTP connections).
+
+2026-06-20  |  Team task loop + operator learning  |  Earn now carries human work.
+             |  Built: 0050_team_tasks_and_operator_feedback.sql; team_tasks queue
+             |  (assignee/principal scoped, hub/module context, priority, session link);
+             |  operator_feedback ledger for cross-hub approval/task signals; Team page
+             |  assignment form; Earn dock "Your tasks" card with Run with Earn + Done;
+             |  learned operator digest injected into dock asks and team-task launches.
+             |  Decision: keep human task completion separate from AI workflow task rows,
+             |  then link through session_id/source_task_id so the sacred Earn loop remains
+             |  unchanged and audit-friendly.
+             |  Confidence: Integrated, not yet tested.
+             |  Next: vectorize high-quality completed artifacts into org-scoped Brain recall
+             |  and expand feedback capture beyond dock/team flows.
 ```
 
 ---
