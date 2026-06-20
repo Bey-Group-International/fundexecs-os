@@ -6,6 +6,7 @@ import { AGENTS } from "@/lib/agents";
 import type { Task, Deal, Asset, Artifact, AgentKey } from "@/lib/supabase/database.types";
 import { seedDemoData, clearDemoData } from "./actions";
 import { SessionsSection } from "./SessionsSection";
+import { MissionControl } from "@/components/dashboard/MissionControl";
 import { HottestCapital, PendingGates } from "./CapitalSignals";
 import { Outbox } from "./Outbox";
 import type { Session, SessionGroup, Approval, DispatchLog } from "@/lib/supabase/database.types";
@@ -169,6 +170,11 @@ export default async function DashboardPage() {
           </form>
         </div>
       </header>
+
+      {/* Mission control — each hub's headline signal + next-best action. */}
+      <div className="mb-6">
+        <MissionControl orgId={ctx.orgId} />
+      </div>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Workflows" value={workflows.length} />
