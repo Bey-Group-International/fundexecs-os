@@ -3,6 +3,7 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { sanitizeMandateActions } from "@/lib/mandate-options";
+import { matchNewOrgAndNotify } from "@/lib/ecosystem-match.server";
 
 // The standing mandate's display name, matching the settings editor so onboarding
 // and the editor tune the same single, always-present delegation.
@@ -77,6 +78,16 @@ export async function createOrganization(
       is_active: true,
       created_by: ctx.userId,
     });
+
+    // The profile is live — let Earn match it across the ecosystem and fan out
+    // professional alerts to matching orgs (and a reciprocal digest back). This
+    // is a delight, not a gate: a never-block call so a matchmaking hiccup can
+    // never strand the operator outside the org they just created.
+    try {
+      await matchNewOrgAndNotify(org.id);
+    } catch {
+      // ignore — onboarding succeeds regardless of matchmaking
+    }
   }
 
   return {};
