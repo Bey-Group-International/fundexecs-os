@@ -78,13 +78,14 @@ export default async function AppLayout({
         .eq("organization_id", ctx.orgId)
         .eq("unread", true)
         .eq("status", "open"),
-      // The newest unread ecosystem match — surfaced as the quick toast by the
-      // bell. Read-later lives in the inbox; this is just the pop-in.
+      // The newest unread match alert — an ecosystem match or a shared deal that
+      // fits — surfaced as the quick toast by the bell. Read-later lives in the
+      // inbox / feed; this is just the pop-in.
       supabase
         .from("inbox_threads")
-        .select("id, subject, preview, ai_summary")
+        .select("id, channel, subject, preview, ai_summary")
         .eq("organization_id", ctx.orgId)
-        .eq("channel", "ecosystem")
+        .in("channel", ["ecosystem", "deal_share"])
         .eq("unread", true)
         .eq("status", "open")
         .order("last_message_at", { ascending: false, nullsFirst: false })
@@ -92,16 +93,17 @@ export default async function AppLayout({
         .maybeSingle(),
     ]);
 
-  // Shape the freshest ecosystem match for the toast (null when there is none).
+  // Shape the freshest match for the toast (null when there is none). A deal
+  // match opens the "deals that fit you" feed; an ecosystem match opens the inbox.
   const matchRow = matchAlertRow as
-    | { id: string; subject: string; preview: string | null; ai_summary: string | null }
+    | { id: string; channel: string; subject: string; preview: string | null; ai_summary: string | null }
     | null;
   const matchAlert = matchRow
     ? {
         id: matchRow.id,
         title: matchRow.subject,
         body: matchRow.ai_summary ?? matchRow.preview ?? "",
-        href: "/inbox",
+        href: matchRow.channel === "deal_share" ? "/deals/feed" : "/inbox",
       }
     : null;
   const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";

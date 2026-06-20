@@ -92,7 +92,7 @@ export function MatchToast({ alert }: { alert: MatchToastAlert | null }) {
             </span>
             <div className="min-w-0">
               <p className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
-                New ecosystem match
+                Earn · new match
               </p>
               <p className="mt-1 truncate text-sm font-medium text-fg-primary">{alert.title}</p>
               {alert.body ? (
