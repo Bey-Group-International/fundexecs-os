@@ -88,7 +88,7 @@ export default function LandingPage({
             </Link>
             <Link
               href="/login?mode=signup"
-              className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
+              className="shrink-0 rounded-md bg-gold-400 px-2.5 py-1.5 text-xs font-medium text-surface-0 transition hover:opacity-90 sm:px-3 sm:text-sm"
             >
               Request access
             </Link>
@@ -149,7 +149,8 @@ export default function LandingPage({
                   <p className="mt-1 text-sm text-fg-secondary">Earn routes capital work across agents.</p>
                 </div>
                 <span className="w-fit rounded-full border border-gold-500/35 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300">
-                  60 FPS CSS
+                  <span className="sm:hidden">CSS</span>
+                  <span className="hidden sm:inline">60 FPS CSS</span>
                 </span>
               </div>
               <div className="relative z-10 mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -203,7 +204,7 @@ export default function LandingPage({
       <div className="border-t border-line" />
 
       {/* How it works — video placeholder + loop */}
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+      <section id="how-it-works" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-start">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
