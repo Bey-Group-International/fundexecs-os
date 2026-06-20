@@ -16,6 +16,7 @@ import {
   LOYALTY_CAP,
 } from "@/lib/billing";
 import { stripeConfigured, stripePublishableKeyValue } from "@/lib/stripe";
+import { compoundingProfile, type ReputationTier } from "@/lib/compounding";
 import { PlanSelector, type PlanView } from "./PlanSelector";
 import { CreditPacks } from "./CreditPacks";
 import { CheckoutBanner } from "./CheckoutBanner";
@@ -32,6 +33,26 @@ function recommendPlan(spend30d: number): string {
   return fit?.key ?? PLANS[PLANS.length - 1].key;
 }
 
+// How each reputation tier presents on the Wallet "Standing" card.
+const TIER_META: Record<ReputationTier, { label: string; blurb: string }> = {
+  unranked: {
+    label: "Unranked",
+    blurb: "Close deals and verify records to earn standing — it lowers the cost of every action.",
+  },
+  verified: {
+    label: "Verified Operator",
+    blurb: "A proven track record. Your actions cost less and your listings surface higher.",
+  },
+  established: {
+    label: "Established",
+    blurb: "Priority queue, deeper discounts, and the ability to attest verified outcomes.",
+  },
+  principal: {
+    label: "Principal",
+    blurb: "Top standing — maximum discount, lowest stake, and the standing to vouch for others.",
+  },
+};
+
 export default async function WalletPage({
   searchParams,
 }: {
@@ -46,9 +67,10 @@ export default async function WalletPage({
   // can mount the in-app form without exposing it via NEXT_PUBLIC_.
   const publishableKey = stripePublishableKeyValue();
 
-  const [wallet, spend30d] = await Promise.all([
+  const [wallet, spend30d, profile] = await Promise.all([
     getWallet(ctx.orgId),
     recentSpend(ctx.orgId),
+    compoundingProfile(ctx.orgId),
   ]);
 
   const balance = wallet?.credits ?? 0;
@@ -141,6 +163,22 @@ export default async function WalletPage({
             </>
           )}
         </span>
+      </div>
+
+      {/* Standing — the compounding profile, made visible. Reputation earned from
+          closed deals and verified records discounts every action and lifts a
+          firm's listings in the marketplace. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-bg-elevated/40 px-4 py-3 text-sm">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          Standing
+        </span>
+        <span className="text-fg-primary">{TIER_META[profile.tier].label}</span>
+        {profile.discountPct > 0 && (
+          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] text-emerald-300">
+            −{profile.discountPct}% on every action
+          </span>
+        )}
+        <span className="text-fg-secondary">{TIER_META[profile.tier].blurb}</span>
       </div>
 
       <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-wider text-fg-muted">Plans</h2>
