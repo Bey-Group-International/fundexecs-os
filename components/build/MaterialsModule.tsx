@@ -17,8 +17,8 @@ import { blendTrackRecord } from "@/lib/track-record";
 import { computeBuildReadiness } from "@/lib/build-readiness";
 import { DATA_ROOM_SECTIONS, summarizeDataRoom } from "@/lib/data-room";
 import { PrintButton } from "./PrintButton";
-import { DocumentLibrary } from "./DataRoomDocuments";
 import { ShareControls } from "./ShareControls";
+import { openSection } from "./materials-actions";
 
 // Render a stored document link only when it is a real http(s) URL.
 function safeHref(url: string | null): string | null {
@@ -203,33 +203,65 @@ export async function MaterialsModule() {
             <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">weighted</p>
           </div>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {summary.items.map((item) => (
-            <div
-              key={item.key}
-              className="flex items-center gap-2 rounded-lg border border-line bg-surface-0 px-3 py-2"
-            >
-              <span className={`font-mono text-xs ${item.ready ? "text-emerald-400" : "text-fg-muted"}`}>
-                {item.ready ? "✓" : "○"}
-              </span>
-              <span className={`text-sm ${item.ready ? "text-fg-primary" : "text-fg-secondary"}`}>
-                {item.label}
-              </span>
-              <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                {item.docCount > 0
-                  ? `${item.docCount} doc${item.docCount > 1 ? "s" : ""}`
-                  : item.viaBuild
-                    ? "from Build"
-                    : "missing"}
-              </span>
-            </div>
-          ))}
+        <p className="mb-3 text-xs text-fg-muted">
+          Click a section to open its builder — write it manually, compose from your data, or draft with Earn.
+        </p>
+        <div className="flex flex-col gap-2">
+          {summary.items.map((item) => {
+            const docs = docsBySection.get(item.key) ?? [];
+            return (
+              <div key={item.key} className="overflow-hidden rounded-lg border border-line bg-surface-0">
+                <form action={openSection} className="flex w-full items-center gap-2 px-3 py-2">
+                  <input type="hidden" name="section" value={item.key} />
+                  <span className={`font-mono text-xs ${item.ready ? "text-emerald-400" : "text-fg-muted"}`}>
+                    {item.ready ? "✓" : "○"}
+                  </span>
+                  <span className={`text-sm ${item.ready ? "text-fg-primary" : "text-fg-secondary"}`}>
+                    {item.label}
+                  </span>
+                  <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    {item.docCount > 0
+                      ? `${item.docCount} doc${item.docCount > 1 ? "s" : ""}`
+                      : item.viaBuild
+                        ? "from Build"
+                        : "missing"}
+                  </span>
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-md border border-gold-500/40 bg-gold-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+                  >
+                    {docs.length ? "Open →" : "+ Build"}
+                  </button>
+                </form>
+                {docs.length > 0 ? (
+                  <div className="flex flex-col gap-1 border-t border-line/60 px-3 py-1.5">
+                    {docs.map((d) => (
+                      <Link
+                        key={d.id}
+                        href={`/document/${d.id}`}
+                        className="flex items-center gap-2 truncate text-sm text-fg-secondary transition hover:text-gold-300"
+                      >
+                        <span aria-hidden className="font-mono text-[11px] text-fg-muted">
+                          {d.storage_key ? "🔗" : "📄"}
+                        </span>
+                        <span className="truncate">{d.name}</span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
         {summary.suggestions.length > 0 ? (
-          <div className="mt-3 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2">
+          <form action={openSection} className="mt-3 flex items-center gap-2 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2">
+            <input type="hidden" name="section" value={summary.suggestions[0].key} />
             <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Next best to add</span>
-            <span className="ml-2 text-sm text-fg-primary">{summary.suggestions[0].suggestion}</span>
-          </div>
+            <span className="truncate text-sm text-fg-primary">{summary.suggestions[0].suggestion}</span>
+            <button type="submit" className="ml-auto shrink-0 font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+              Build →
+            </button>
+          </form>
         ) : null}
       </div>
 
@@ -393,18 +425,6 @@ export async function MaterialsModule() {
           </p>
         </footer>
       </article>
-
-      {/* Interactive document library — search, create, link, edit, reorder */}
-      <DocumentLibrary
-        documents={documents.map((d) => ({
-          id: d.id,
-          name: d.name,
-          doc_type: d.doc_type,
-          storage_key: d.storage_key,
-          content: d.content,
-          created_at: d.created_at,
-        }))}
-      />
 
       {/* Shareable read-only links */}
       <ShareControls
