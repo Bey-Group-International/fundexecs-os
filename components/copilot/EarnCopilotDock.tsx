@@ -10,13 +10,16 @@ import {
   onPointAgent,
   suggestionsFor,
   suggestionTier,
+  willAutoRun,
 } from "@/lib/copilot";
 import {
   askEarn,
   launchCopilotSuggestion,
   getCopilotBriefing,
+  getMandateSummary,
   type CopilotBriefing,
 } from "@/components/copilot/actions";
+import type { Mandate } from "@/lib/gates";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
 /** A small colored dot used to tag a message or chip with its agent's identity. */
@@ -62,6 +65,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [briefing, setBriefing] = useState<CopilotBriefing | null>(null);
+  const [mandate, setMandate] = useState<Mandate | null>(null);
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -164,6 +168,18 @@ export function EarnCopilotDock({ name }: { name: string }) {
       active = false;
     };
   }, [open, pathname]);
+
+  // Load the standing mandate once on first open, to show what Earn may auto-run.
+  useEffect(() => {
+    if (!open || mandate) return;
+    let active = true;
+    getMandateSummary().then((m) => {
+      if (active && m) setMandate(m);
+    });
+    return () => {
+      active = false;
+    };
+  }, [open, mandate]);
 
   /** Send the current composer contents to Earn. */
   function submitAsk() {
@@ -280,6 +296,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
               {suggestions.map((s) => {
                 const tier = suggestionTier(s);
                 const agent = AGENT_BY_KEY[s.agent];
+                const auto = willAutoRun(s, mandate ?? undefined);
                 return (
                   <form key={s.id} action={launchCopilotSuggestion}>
                     <input type="hidden" name="pathname" value={pathname} />
@@ -297,9 +314,23 @@ export function EarnCopilotDock({ name }: { name: string }) {
                         ) : null}
                       </div>
                       <p className="mt-0.5 text-xs text-fg-secondary">{s.hint}</p>
-                      <p className="mt-1.5 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                        <AgentDot color={agent.color} /> {agent.name}
-                      </p>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                          <AgentDot color={agent.color} /> {agent.name}
+                        </span>
+                        <span
+                          className={`font-mono text-[9px] uppercase tracking-wider ${
+                            auto ? "text-emerald-300" : "text-fg-muted"
+                          }`}
+                          title={
+                            auto
+                              ? "Earn runs this now under your standing mandate"
+                              : "Earn drafts the plan; you approve before it runs"
+                          }
+                        >
+                          {auto ? "✶ Earn runs it" : "needs approval"}
+                        </span>
+                      </div>
                     </button>
                   </form>
                 );

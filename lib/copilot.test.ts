@@ -6,8 +6,11 @@ import {
   onPointAgent,
   suggestionsFor,
   suggestionTier,
+  willAutoRun,
   contextPreamble,
+  type CopilotSuggestion,
 } from "@/lib/copilot";
+import type { Mandate } from "@/lib/gates";
 
 describe("copilotContextFromPath", () => {
   it("parses a hub/module route", () => {
@@ -91,6 +94,38 @@ describe("suggestionTier", () => {
     expect(suggestionTier(capCall)).toBe(2); // distribute_report → Tier 2
     const dd = suggestionsFor(copilotContextFromPath("/run/diligence"))[0];
     expect(suggestionTier(dd)).toBeNull(); // no outward action
+  });
+});
+
+describe("willAutoRun", () => {
+  const sug = (action?: CopilotSuggestion["action"]): CopilotSuggestion => ({
+    id: "x",
+    label: "x",
+    hint: "x",
+    prompt: "x",
+    agent: "associate",
+    action,
+  });
+
+  it("auto-runs internal (no-action) suggestions", () => {
+    expect(willAutoRun(sug())).toBe(true);
+  });
+
+  it("auto-runs Tier-1 actions without any mandate", () => {
+    expect(willAutoRun(sug("draft_memo"))).toBe(true); // internal work product
+  });
+
+  it("holds a Tier-2 action for approval when no mandate authorizes it", () => {
+    expect(willAutoRun(sug("distribute_report"))).toBe(false);
+  });
+
+  it("auto-runs a Tier-2 action only when the mandate pre-authorizes it within ceiling", () => {
+    const mandate: Mandate = { autoApprove: ["distribute_report"], autonomyCeiling: 2 };
+    expect(willAutoRun(sug("distribute_report"), mandate)).toBe(true);
+    // Same action but ceiling too low → still needs approval.
+    expect(willAutoRun(sug("distribute_report"), { autoApprove: ["distribute_report"], autonomyCeiling: 1 })).toBe(
+      false,
+    );
   });
 });
 
