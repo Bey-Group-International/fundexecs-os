@@ -11,7 +11,13 @@ import {
   suggestionsFor,
   suggestionTier,
 } from "@/lib/copilot";
-import { askEarn, launchCopilotSuggestion, type AskEarnResult } from "@/components/copilot/actions";
+import {
+  askEarn,
+  launchCopilotSuggestion,
+  getCopilotBriefing,
+  type AskEarnResult,
+  type CopilotBriefing,
+} from "@/components/copilot/actions";
 
 function AgentDot({ color }: { color: string }) {
   return <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden />;
@@ -34,8 +40,19 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
   const [result, setResult] = useState<AskEarnResult | null>(null);
+  const [briefing, setBriefing] = useState<CopilotBriefing | null>(null);
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Run any prompt through Earn and show the routed plan inline.
+  function ask(text: string) {
+    if (!text.trim() || pending) return;
+    start(async () => {
+      const r = await askEarn({ body: text, pathname });
+      setResult(r);
+      if (r.ok) setBody("");
+    });
+  }
 
   // ⌘/Ctrl-K toggles the dock; Esc closes it.
   useEffect(() => {
@@ -55,18 +72,26 @@ export function EarnCopilotDock({ name }: { name: string }) {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
   }, [open]);
 
-  // A fresh location resets the inline plan result.
+  // A fresh location resets the inline plan result and live briefing.
   useEffect(() => {
     setResult(null);
+    setBriefing(null);
   }, [pathname]);
 
-  function submitAsk() {
-    if (!body.trim() || pending) return;
-    start(async () => {
-      const r = await askEarn({ body, pathname });
-      setResult(r);
-      if (r.ok) setBody("");
+  // Pull the live briefing for this location when the dock is open.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    getCopilotBriefing(pathname).then((b) => {
+      if (active) setBriefing(b);
     });
+    return () => {
+      active = false;
+    };
+  }, [open, pathname]);
+
+  function submitAsk() {
+    ask(body);
   }
 
   return (
@@ -123,6 +148,53 @@ export function EarnCopilotDock({ name }: { name: string }) {
         </div>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+          {/* Live briefing — where things stand in this context */}
+          {briefing ? (
+            <div className="rounded-xl border border-line bg-surface-0/40 p-3">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Where things stand</p>
+              <p className="mt-1 text-sm font-medium text-fg-primary">{briefing.headline}</p>
+              {briefing.stats.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {briefing.stats.map((st) => (
+                    <span key={st.label} className="inline-flex items-baseline gap-1 text-xs">
+                      <span
+                        className={`font-mono font-semibold ${
+                          st.tone === "good"
+                            ? "text-emerald-300"
+                            : st.tone === "bad"
+                              ? "text-status-danger"
+                              : st.tone === "warn"
+                                ? "text-gold-300"
+                                : "text-fg-primary"
+                        }`}
+                      >
+                        {st.value}
+                      </span>
+                      <span className="text-fg-muted">{st.label}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {briefing.nextAction ? (
+                <button
+                  onClick={() => ask(briefing.nextAction!.prompt)}
+                  disabled={pending}
+                  className="mt-2.5 flex w-full items-center gap-2 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2 text-left transition hover:bg-gold-500/10 disabled:opacity-50"
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-[11px] text-surface-0">
+                    →
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                      Do this next
+                    </span>
+                    <span className="block truncate text-sm text-fg-primary">{briefing.nextAction.label}</span>
+                  </span>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Suggestions */}
           <div>
             <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400">
