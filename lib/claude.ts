@@ -420,3 +420,69 @@ function fallbackAssetFields(args: { title: string; prompt: string; context: str
     current_value: parseUsdAmount(args.prompt),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Conversational document drafting — the Earn mode in the data-room builder.
+// Earn drafts/revises a document through chat, grounded in the firm's data.
+// Returns a short reply plus the full revised document content (markdown).
+// Falls back to keeping the current draft when no API key is configured.
+// ---------------------------------------------------------------------------
+export interface DraftTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const DRAFT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    reply: { type: "string", description: "A short chat reply to the user (1-3 sentences)." },
+    content: {
+      type: "string",
+      description: "The FULL revised document in markdown — the complete draft so far, not a diff.",
+    },
+  },
+  required: ["reply", "content"],
+} as const;
+
+export async function conversationalDraft(args: {
+  docName: string;
+  section: string;
+  currentContent: string;
+  foundation: string;
+  messages: DraftTurn[];
+}): Promise<{ reply: string; content: string }> {
+  const anthropic = client();
+  if (!anthropic) {
+    return {
+      reply:
+        "Earn is offline (no API key configured), so I kept your current draft. You can still write it manually or compose from your data.",
+      content: args.currentContent,
+    };
+  }
+  const system =
+    `You are Earn, drafting an institutional "${args.docName}" (data-room section: ${args.section}) ` +
+    `for a private-markets firm. Write in a precise, institutional voice. Ground everything in the firm ` +
+    `context below — never invent facts; leave a clearly marked [TODO] where information is missing.\n\n` +
+    `=== Firm context ===\n${args.foundation || "(no firm data yet)"}\n\n` +
+    `=== Current draft ===\n${args.currentContent || "(empty)"}\n\n` +
+    `Each turn, return JSON {reply, content} where content is the COMPLETE revised markdown document.`;
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 3000,
+      system,
+      output_config: { effort: "medium", format: { type: "json_schema", schema: DRAFT_SCHEMA } },
+      messages: args.messages.slice(-12).map((m) => ({ role: m.role, content: m.content })),
+    });
+    const json = textOf(message);
+    if (!json) return { reply: "I couldn't draft that — try rephrasing.", content: args.currentContent };
+    const parsed = JSON.parse(json) as { reply?: string; content?: string };
+    return {
+      reply: parsed.reply?.trim() || "Updated the draft.",
+      content: typeof parsed.content === "string" ? parsed.content : args.currentContent,
+    };
+  } catch {
+    return { reply: "Something went wrong drafting that. Your draft is unchanged.", content: args.currentContent };
+  }
+}

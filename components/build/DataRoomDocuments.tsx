@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { inputClass } from "./DraftWithEarn";
 import { DATA_ROOM_SECTIONS, KEY_MATERIALS, hasMaterial } from "@/lib/data-room";
 import {
@@ -44,7 +45,6 @@ function fmtDate(iso: string | null): string {
 // / delete. Edit reveals an inline form posting updateDocument.
 function DocRow({ doc, isFirst, isLast }: { doc: DocView; isFirst: boolean; isLast: boolean }) {
   const [editing, setEditing] = useState(false);
-  const [showContent, setShowContent] = useState(false);
   const [pending, startTransition] = useTransition();
   const isLink = !!doc.storage_key;
 
@@ -78,13 +78,13 @@ function DocRow({ doc, isFirst, isLast }: { doc: DocView; isFirst: boolean; isLa
     <div className="rounded-lg border border-line bg-surface-1 px-3 py-2">
       <div className="flex items-center gap-2">
         <span aria-hidden className="font-mono text-xs text-fg-muted">{isLink ? "🔗" : "📄"}</span>
-        <button
-          type="button"
-          onClick={() => doc.content && setShowContent((v) => !v)}
-          className={`min-w-0 flex-1 truncate text-left text-sm text-fg-primary ${doc.content ? "hover:text-gold-300" : "cursor-default"}`}
+        <Link
+          href={`/document/${doc.id}`}
+          className="min-w-0 flex-1 truncate text-sm text-fg-primary hover:text-gold-300"
+          title="Open in builder"
         >
           {doc.name}
-        </button>
+        </Link>
         {doc.created_at ? (
           <span className="hidden shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:inline">
             {fmtDate(doc.created_at)}
@@ -119,9 +119,6 @@ function DocRow({ doc, isFirst, isLast }: { doc: DocView; isFirst: boolean; isLa
           <button className="rounded border border-line px-1.5 py-0.5 text-xs text-fg-muted hover:border-red-500/40 hover:text-red-400">✕</button>
         </form>
       </div>
-      {showContent && doc.content ? (
-        <p className="mt-2 whitespace-pre-wrap border-t border-line pt-2 text-xs leading-snug text-fg-secondary">{doc.content}</p>
-      ) : null}
     </div>
   );
 }
