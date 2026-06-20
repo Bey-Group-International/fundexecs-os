@@ -717,7 +717,7 @@ export type BrainKbChunk = {
   created_at: string;
 };
 
-// Gift Earn (migration 0038). A shareable referral code per org; the referral
+// Gift Earn (migration 0039). A shareable referral code per org; the referral
 // forest (each org referred at most once, so referrer edges form a downline
 // tree); an append-only credit ledger recording every credit movement; and
 // purchased credit gifts redeemable by token.
@@ -847,7 +847,7 @@ export type Database = {
         }[];
       };
       // Atomically credit an org's wallet (creating it if absent), clamped at 0
-      // (migration 0038). Returns the new balance.
+      // (migration 0039). Returns the new balance.
       increment_org_credits: {
         Args: {
           p_org: string;

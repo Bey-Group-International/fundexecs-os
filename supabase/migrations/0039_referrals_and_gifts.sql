@@ -1,4 +1,4 @@
--- 0038_referrals_and_gifts.sql
+-- 0039_referrals_and_gifts.sql
 -- Gift Earn: a multi-level referral ("downline") program, purchased credit
 -- gifts, and an append-only credit ledger that records every credit movement so
 -- referral earnings can be shown and audited. Idempotent (IF NOT EXISTS +
