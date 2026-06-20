@@ -21,6 +21,8 @@ const {
   parseJsonArray,
   fallbackPlan,
   normalizePlan,
+  fallbackTriagePlan,
+  normalizeTriagePlan,
   SOURCE_ACTIONS,
   tierForAction,
 } = __test;
@@ -211,6 +213,52 @@ describe("normalizePlan", () => {
   it("falls back when no valid steps remain", () => {
     const plan = normalizePlan({ summary: "x", steps: [{ module: "bad", title: "t", query: "q" }] } as never, "find LPs");
     expect(plan.steps.length).toBeGreaterThan(0);
+  });
+});
+
+describe("fallbackTriagePlan (Earn triage planner, no API key)", () => {
+  it("routes keywords to the matching modules", () => {
+    const plan = fallbackTriagePlan("Which LPs should I chase this week?");
+    expect(plan.modules).toContain("source/lp_pipeline");
+  });
+
+  it("maps bench/dormant language to partners", () => {
+    const plan = fallbackTriagePlan("Who in my bench is dormant?");
+    expect(plan.modules).toContain("source/partners");
+  });
+
+  it("defaults to the two pipelines when nothing matches", () => {
+    const plan = fallbackTriagePlan("hello there");
+    expect(plan.modules).toEqual(["source/lp_pipeline", "source/deal_pipeline"]);
+  });
+
+  it("caps at four modules", () => {
+    const plan = fallbackTriagePlan("lp investor deal target lender debt partner co-gp legal audit provider");
+    expect(plan.modules.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("normalizeTriagePlan", () => {
+  it("drops unknown modules and dedupes", () => {
+    const plan = normalizeTriagePlan(
+      {
+        summary: "Test",
+        modules: ["source/lp_pipeline", "source/lp_pipeline", "nope/bad", "source/providers"],
+      } as never,
+      "fallback prompt",
+    );
+    expect(plan.modules).toEqual(["source/lp_pipeline", "source/providers"]);
+  });
+
+  it("falls back when no valid modules remain", () => {
+    const plan = normalizeTriagePlan({ summary: "x", modules: ["bad"] } as never, "triage LPs");
+    expect(plan.modules.length).toBeGreaterThan(0);
+    expect(plan.modules).toContain("source/lp_pipeline");
+  });
+
+  it("falls back when modules is missing", () => {
+    const plan = normalizeTriagePlan({ summary: "x" } as never, "triage deals");
+    expect(plan.modules.length).toBeGreaterThan(0);
   });
 });
 
