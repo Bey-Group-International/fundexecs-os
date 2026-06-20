@@ -1,9 +1,11 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { getExecutePerformance, isExited } from "@/lib/execute-performance";
 import { getValuationMarks, summarizeMarks } from "@/lib/valuation-history";
+import { assetSeries, portfolioSeries } from "@/lib/valuation-series";
 import { compactUsd, usd, multiple, num, shortDate } from "@/lib/format";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile, EarnAction } from "@/components/execute/ui";
+import { Sparkline } from "@/components/execute/Sparkline";
 import RecordMarkForm from "@/components/execute/RecordMarkForm";
 import type { Asset } from "@/lib/supabase/database.types";
 
@@ -31,6 +33,9 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
   const held = allAssets.filter((a) => !isExited(a.status));
   const markByAsset = summarizeMarks(marks);
   const nameById = new Map(allAssets.map((a) => [a.id, a.name]));
+  const portfolio = portfolioSeries(held, marks);
+  const portfolioGain =
+    portfolio.length >= 2 ? portfolio[portfolio.length - 1].value - portfolio[0].value : 0;
 
   const header = (
     <ModuleHeader title="Valuations" blurb="Fair-value marks across the book — value created, and the Analyst to re-mark it." />
@@ -67,6 +72,28 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
           tone={perf.grossMoic == null ? undefined : perf.grossMoic >= 1 ? "good" : "bad"}
         />
       </div>
+
+      {/* Portfolio value over time */}
+      {portfolio.length >= 2 ? (
+        <div className="mb-4 rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-5">
+          <div className="flex items-baseline justify-between">
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+              Portfolio value over time
+            </span>
+            <span
+              className={`font-mono text-[11px] ${portfolioGain >= 0 ? "text-emerald-300" : "text-status-danger"}`}
+            >
+              {portfolioGain >= 0 ? "+" : "−"}
+              {compactUsd(Math.abs(portfolioGain))} since {shortDate(portfolio[0].date)}
+            </span>
+          </div>
+          <Sparkline values={portfolio.map((p) => p.value)} width={600} height={56} className="mt-3 h-14 w-full" />
+          <div className="mt-1 flex justify-between font-mono text-[10px] text-fg-muted">
+            <span>{shortDate(portfolio[0].date)} · {compactUsd(portfolio[0].value)}</span>
+            <span>{shortDate(portfolio[portfolio.length - 1].date)} · {compactUsd(portfolio[portfolio.length - 1].value)}</span>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <EarnAction kind="valuation_run" label="Run valuation pass" />
@@ -126,10 +153,16 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
                   <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-fg-secondary">
                     {yieldPct != null ? `${yieldPct}%` : "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-[11px] text-fg-muted">
+                  <td className="whitespace-nowrap px-3 py-3">
                     {(() => {
+                      const series = assetSeries(a, marks.filter((m) => m.asset_id === a.id));
                       const s = markByAsset.get(a.id);
-                      return s ? `${s.count} · ${shortDate(s.latest?.as_of)}` : "—";
+                      return (
+                        <div className="flex items-center justify-end gap-2">
+                          {series.length >= 2 ? <Sparkline values={series.map((p) => p.value)} className="h-6 w-20" /> : null}
+                          <span className="font-mono text-[11px] text-fg-muted">{s ? s.count : "—"}</span>
+                        </div>
+                      );
                     })()}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right">
