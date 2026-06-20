@@ -839,6 +839,22 @@ export type CreditGift = {
   redeemed_at: string | null;
 };
 
+// Stripe hosted-Checkout session tracking (migration 0042). One row per Checkout
+// Session, flipped to 'fulfilled' exactly once so credits/plan/gift effects are
+// never double-applied. `metadata` mirrors the session metadata used to fulfill.
+export type StripeCheckout = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  kind: "plan" | "pack" | "gift";
+  status: "pending" | "fulfilled" | "cancelled";
+  amount_usd: number | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+  fulfilled_at: string | null;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -904,6 +920,7 @@ export type Database = {
       referrals: TableShape<Referral>;
       credit_ledger: TableShape<CreditLedgerEntry>;
       credit_gifts: TableShape<CreditGift>;
+      stripe_checkouts: TableShape<StripeCheckout>;
     };
     Views: Record<string, never>;
     Functions: {

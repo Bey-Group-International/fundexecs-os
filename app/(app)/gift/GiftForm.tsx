@@ -7,7 +7,7 @@ import { purchaseGiftAction } from "./actions";
 // Buy a credit pack as a gift for a colleague. Mirrors the mandate form's
 // inline-validation pattern: a transition runs the server action and we surface
 // the error or reset on success. Payment is mocked until a provider is wired.
-export function GiftForm() {
+export function GiftForm({ live = false }: { live?: boolean }) {
   const [packKey, setPackKey] = useState(CREDIT_PACKS[1]?.key ?? CREDIT_PACKS[0].key);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -22,6 +22,10 @@ export function GiftForm() {
           setError(null);
           setDone(false);
           const res = await purchaseGiftAction(formData);
+          if (res?.url) {
+            window.location.href = res.url; // off to Stripe Checkout
+            return;
+          }
           if (res?.error) setError(res.error);
           else {
             formRef.current?.reset();
@@ -84,12 +88,13 @@ export function GiftForm() {
       {error ? <p className="text-xs text-status-danger">{error}</p> : null}
       {done ? (
         <p className="text-xs text-status-success">
-          Gift created — copy its redeem link from “Gifts you’ve sent” below and share it.
+          Gift created — copy its redeem code from “Gifts you’ve sent” below and share it.
         </p>
       ) : null}
       <p className="text-[11px] leading-snug text-fg-muted">
-        Checkout isn’t wired yet, so no card is charged — the gift is created and becomes a
-        redeemable link you can share. Credits move to the recipient when they redeem it.
+        {live
+          ? "Secure checkout by Stripe. After payment the gift is created and becomes a redeemable code you can share; credits move to the recipient when they redeem it."
+          : "Stripe isn’t configured here, so no card is charged — the gift is created immediately as a redeemable code. Credits move to the recipient when they redeem it."}
       </p>
     </form>
   );

@@ -4,9 +4,10 @@ import { useState, useTransition } from "react";
 import { CREDIT_PACKS, formatCredits, formatUsd } from "@/lib/billing";
 import { purchasePackAction } from "./actions";
 
-// One-off credit packs (no subscription). Buying is mocked — it grants the
-// pack's credits to the org's wallet so the flow is real end-to-end.
-export function CreditPacks() {
+// One-off credit packs (no subscription). With Stripe configured, buying opens
+// hosted Checkout; otherwise it mock-grants the pack's credits so the flow is
+// real end-to-end.
+export function CreditPacks({ live = false }: { live?: boolean }) {
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -18,6 +19,10 @@ export function CreditPacks() {
     fd.set("pack_key", packKey);
     startTransition(async () => {
       const res = await purchasePackAction(fd);
+      if (res?.url) {
+        window.location.href = res.url; // off to Stripe Checkout
+        return;
+      }
       if (res?.error) setError(res.error);
       setPendingKey(null);
     });
@@ -51,6 +56,11 @@ export function CreditPacks() {
         })}
       </div>
       {error ? <p className="mt-3 text-xs text-status-danger">{error}</p> : null}
+      <p className="mt-3 text-xs text-fg-muted">
+        {live
+          ? "Secure one-time checkout by Stripe. Credits land in your wallet as soon as payment completes."
+          : "Stripe isn’t configured here — packs are granted in mock mode (no charge)."}
+      </p>
     </div>
   );
 }
