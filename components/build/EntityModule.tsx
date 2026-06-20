@@ -1,13 +1,24 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
-import type { Entity, Stakeholder, ShareClass, EquityHolding } from "@/lib/supabase/database.types";
+import type {
+  Entity,
+  Stakeholder,
+  ShareClass,
+  EquityHolding,
+  OrganizationMember,
+  Principal,
+  Investor,
+} from "@/lib/supabase/database.types";
 import { ModuleHeader, inputClass } from "./DraftWithEarn";
 import { createEntity, deleteEntity } from "./actions";
 import { updateEntity } from "./edit-actions";
 import { RecordEditor, EditInput } from "./RecordEditor";
 import { EntityTree } from "./EntityTree";
 import { EntityOwnership } from "./EntityOwnership";
+import { FormationWizard } from "./FormationWizard";
+import { DilutionModeler } from "./DilutionModeler";
+import { StakeholderLinks } from "./StakeholderLinks";
 
 const ENTITY_TYPES = ["gp", "management_co", "fund", "spv", "holdco", "other"];
 const TYPE_LABEL: Record<string, string> = {
@@ -44,6 +55,30 @@ export async function EntityModule() {
   const shareClasses = (classesRes.data ?? []) as ShareClass[];
   const holdings = (holdingsRes.data ?? []) as EquityHolding[];
 
+  // Identities the cap table can link stakeholders to: team members + investors.
+  const { data: memberData } = await supabase
+    .from("organization_members")
+    .select("*")
+    .eq("organization_id", ctx.orgId);
+  const members = (memberData ?? []) as OrganizationMember[];
+  let principals: Principal[] = [];
+  if (members.length) {
+    const { data } = await supabase
+      .from("principals")
+      .select("*")
+      .in("id", members.map((m) => m.principal_id));
+    principals = (data ?? []) as Principal[];
+  }
+  const { data: investorData } = await supabase
+    .from("investors")
+    .select("id,name")
+    .eq("organization_id", ctx.orgId)
+    .order("name", { ascending: true });
+  const investors = (investorData ?? []) as Pick<Investor, "id" | "name">[];
+
+  const principalOptions = principals.map((p) => ({ id: p.id, name: p.full_name || p.email }));
+  const investorOptions = investors.map((i) => ({ id: i.id, name: i.name }));
+
   return (
     <div>
       <ModuleHeader
@@ -53,6 +88,10 @@ export async function EntityModule() {
       />
 
       {entities.length > 0 ? <EntityTree entities={entities} /> : null}
+
+      <div className="mb-4">
+        <FormationWizard parents={entities.map((e) => ({ id: e.id, name: e.name }))} />
+      </div>
 
       <form action={createEntity} className="mb-6 grid gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-2">
         <input name="name" placeholder="Entity name" className={`${inputClass} sm:col-span-2`} />
@@ -156,6 +195,29 @@ export async function EntityModule() {
         shareClasses={shareClasses.map((c) => ({ id: c.id, entity_id: c.entity_id, name: c.name }))}
         holdings={holdings}
       />
+
+      {entities.length > 0 ? (
+        <DilutionModeler
+          entities={entities.map((e) => ({ id: e.id, name: e.name }))}
+          holdings={holdings}
+          stakeholders={stakeholders.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))}
+          shareClasses={shareClasses.map((c) => ({ id: c.id, name: c.name }))}
+        />
+      ) : null}
+
+      {stakeholders.length > 0 ? (
+        <StakeholderLinks
+          stakeholders={stakeholders.map((s) => ({
+            id: s.id,
+            name: s.name,
+            kind: s.kind,
+            principal_id: s.principal_id,
+            investor_id: s.investor_id,
+          }))}
+          principals={principalOptions}
+          investors={investorOptions}
+        />
+      ) : null}
     </div>
   );
 }

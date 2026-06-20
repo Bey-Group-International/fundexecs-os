@@ -31,6 +31,8 @@ export interface AskEarnResult {
 export async function askEarn(input: {
   body: string;
   pathname: string;
+  /** When set, the ask continues this session as a multi-turn conversation. */
+  sessionId?: string;
 }): Promise<AskEarnResult> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
@@ -44,6 +46,7 @@ export async function askEarn(input: {
     const result = await handlePrompt(
       { supabase, orgId: ctx.orgId, actorId: ctx.userId },
       `${contextPreamble(location)} ${body}`,
+      input.sessionId,
     );
     return {
       ok: true,

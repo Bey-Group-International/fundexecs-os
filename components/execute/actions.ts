@@ -106,3 +106,78 @@ export async function runWithEarn(formData: FormData): Promise<void> {
   );
   redirect(result.session_id ? `/session/${result.session_id}` : "/workspace");
 }
+
+// --- Investor portal: token-gated external statements ----------------------
+// Mirrors the data-room share model. A share is a read-only link to one
+// stakeholder's capital account, served by the public /portal/[token] route via
+// the service role. Native — no external dependency.
+export async function createInvestorPortalShare(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const investorId = String(formData.get("investor_id") ?? "");
+  if (!investorId) return;
+  const supabase = createServerClient();
+  // Reuse an existing live link if one exists; otherwise mint a new one.
+  const { data: existing } = await supabase
+    .from("investor_portal_shares")
+    .select("id")
+    .eq("organization_id", ctx.orgId)
+    .eq("investor_id", investorId)
+    .is("revoked_at", null)
+    .maybeSingle();
+  if (!existing) {
+    await supabase
+      .from("investor_portal_shares")
+      .insert({ organization_id: ctx.orgId, investor_id: investorId, created_by: ctx.userId });
+  }
+  revalidatePath("/execute/cap_table");
+}
+
+export async function revokeInvestorPortalShare(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const supabase = createServerClient();
+  await supabase
+    .from("investor_portal_shares")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath("/execute/cap_table");
+}
+
+// --- Valuations: record a fair-value mark (audit trail) --------------------
+// Appends a mark to the valuation_marks history and rolls it onto the asset as
+// the current value, so the latest mark and the full history stay in sync.
+export async function recordValuationMark(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const assetId = String(formData.get("asset_id") ?? "");
+  const raw = String(formData.get("value") ?? "").trim();
+  const value = Number(raw);
+  if (!assetId || raw === "" || !Number.isFinite(value)) return;
+
+  const asOf = String(formData.get("as_of") ?? "").trim() || new Date().toISOString().slice(0, 10);
+  const method = String(formData.get("method") ?? "").trim() || null;
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  const supabase = createServerClient();
+  await supabase.from("valuation_marks").insert({
+    organization_id: ctx.orgId,
+    asset_id: assetId,
+    value,
+    as_of: asOf,
+    method,
+    note,
+    created_by: ctx.userId,
+  });
+  // Latest mark becomes the asset's current value.
+  await supabase
+    .from("assets")
+    .update({ current_value: value })
+    .eq("id", assetId)
+    .eq("organization_id", ctx.orgId);
+
+  revalidatePath("/execute/valuations");
+}
