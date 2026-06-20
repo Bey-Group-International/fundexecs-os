@@ -1,15 +1,16 @@
 # FundExecs OS visual system
 
-FundExecs OS uses a dark, institutional command-center language. Keep visual
-changes scoped to the surface they serve so the app does not drift into competing
-themes.
+FundExecs OS uses an institutional command-center language with day and night
+themes. Keep visual changes scoped to the surface they serve so the app does not
+drift into competing themes.
 
 ## Accent zones
 
-- **Gold (`gold.*`)**: default operating shell, navigation, dashboard, hubs,
-  settings, marketing, and general CTAs.
-- **Neural green (`neural.*`)**: compute-heavy surfaces only: Wallet/Credits,
-  billing plan cards, and the Earn copilot terminal chrome.
+- **Blue accent (`gold.*`)**: default operating shell, navigation, dashboard,
+  hubs, settings, marketing, and general CTAs. The class name remains `gold.*`
+  for compatibility, but the resolved palette is electric blue.
+- **Neural blue (`neural.*`)**: compute-heavy surfaces only: Wallet/Credits,
+  billing plan cards, graph animations, and the Earn copilot terminal chrome.
 - **Status tokens (`status.*`)**: semantic state only: success, warning, info,
   danger. Prefer these over raw Tailwind `emerald-*`, `red-*`, or `blue-*` when
   the color is communicating state.
@@ -18,11 +19,13 @@ themes.
 
 ## Shared utilities
 
-- `fx-card`, `fx-card-hover`, `fx-glass`, `fx-stat`, `fx-segment`: warm
+- `fx-card`, `fx-card-hover`, `fx-glass`, `fx-stat`, `fx-segment`: shared
   operating-shell surfaces.
-- `fx-ambient`: page-level gold depth for command pages.
+- `fx-ambient`: page-level blue depth for command pages.
 - `fx-neural-panel`, `fx-neural-card`, `fx-neural-ambient`: scoped neural
   console surfaces.
+- `fx-blueprint`, `fx-orbit-card`: high-impact hero/demo surfaces with GPU-grid
+  treatment and CSS-only animation.
 - `fx-data-stream`: lightweight processing line for pending/activation states.
 
 ## Overlay placement

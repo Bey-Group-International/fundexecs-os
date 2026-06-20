@@ -5,6 +5,7 @@ import Link from "next/link";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { formatCredits } from "@/lib/billing";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   renameSession,
   setSessionColor,
@@ -50,7 +51,7 @@ export function SessionCommandBar({
   const active = tasks.filter((t) => t.status === "in_progress" || t.status === "pending").length;
 
   return (
-    <div className="relative flex h-12 items-center gap-2 border-b border-line px-4">
+    <div className="relative flex min-h-12 items-center gap-2 border-b border-line bg-surface-0/82 px-3 py-2 backdrop-blur-xl sm:h-12 sm:px-4">
       {/* Session name */}
       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: accent }} />
       {renaming ? (
@@ -81,6 +82,7 @@ export function SessionCommandBar({
       )}
 
       <div className="ml-auto flex items-center gap-1">
+        <ThemeToggle compact />
         {/* Notifications */}
         <div className="relative">
           <button
@@ -101,7 +103,7 @@ export function SessionCommandBar({
         <div className="relative">
           <button
             onClick={() => setShare((v) => !v)}
-            className="rounded-md px-2 py-1.5 text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+            className="hidden rounded-md px-2 py-1.5 text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary sm:inline-flex"
           >
             Share
           </button>
@@ -129,7 +131,7 @@ export function SessionCommandBar({
         <Link
           href="/wallet"
           title="Credit balance — open wallet"
-          className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+          className="hidden items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary sm:flex"
         >
           <span className="text-gold-400">◇</span>
           {formatCredits(balance)}
@@ -267,7 +269,7 @@ export function SessionCommandBar({
 
       {/* Background Tasks slide-over */}
       {tasksOpen ? (
-        <div className="fixed inset-y-0 right-0 z-[60] flex w-80 flex-col border-l border-line bg-surface-1 shadow-2xl">
+        <div className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-sm flex-col border-l border-line bg-surface-1 shadow-2xl sm:w-80">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
               Background Tasks

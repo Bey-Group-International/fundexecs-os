@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import OnboardingWizard from "./wizard";
 
 export default async function OnboardingPage({
@@ -12,9 +13,12 @@ export default async function OnboardingPage({
   if (ctx.orgId) redirect("/workspace");
 
   return (
-    <div className="flex min-h-screen bg-surface-0">
+    <div className="fx-blueprint flex min-h-screen bg-surface-0">
+      <div className="fixed right-4 top-4 z-20">
+        <ThemeToggle />
+      </div>
       {/* Progress rail */}
-      <div className="hidden w-72 flex-col border-r border-line p-10 lg:flex">
+      <div className="hidden w-72 flex-col border-r border-line bg-surface-1/55 p-10 backdrop-blur-xl lg:flex">
         <span className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
           FundExecs OS
         </span>
@@ -41,7 +45,7 @@ export default async function OnboardingPage({
       </div>
 
       {/* Wizard */}
-      <div className="flex flex-1 items-center justify-center px-6 py-12">
+      <div className="flex flex-1 items-center justify-center px-4 py-20 sm:px-6">
         <OnboardingWizard error={searchParams.error} />
       </div>
     </div>
