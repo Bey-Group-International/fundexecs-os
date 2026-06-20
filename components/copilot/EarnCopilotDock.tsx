@@ -30,7 +30,7 @@ function AgentDot({ color }: { color: string }) {
 }
 
 const TIER_TONE: Record<number, string> = {
-  1: "border-emerald-400/40 text-emerald-300",
+  1: "border-status-success/40 text-status-success",
   2: "border-neural-400/45 text-neural-300",
   3: "border-status-danger/40 text-status-danger",
 };
@@ -275,7 +275,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                       <span
                         className={`font-mono font-semibold ${
                           st.tone === "good"
-                            ? "text-emerald-300"
+                            ? "text-status-success"
                             : st.tone === "bad"
                               ? "text-status-danger"
                               : st.tone === "warn"
@@ -343,7 +343,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                         </span>
                         <span
                           className={`shrink-0 font-mono text-[9px] uppercase tracking-wider ${
-                            auto ? "text-emerald-300" : "text-fg-muted"
+                            auto ? "text-status-success" : "text-fg-muted"
                           }`}
                           title={
                             auto

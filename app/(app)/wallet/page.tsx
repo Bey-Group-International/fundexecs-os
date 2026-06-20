@@ -154,7 +154,7 @@ export default async function WalletPage({
               )}
             </p>
             <div className="mt-5 grid gap-2 sm:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <div className="rounded-xl border border-line/40 bg-surface-2/30 p-3">
                 <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
                   30d burn
                 </p>
@@ -162,7 +162,7 @@ export default async function WalletPage({
                   {formatCredits(spend30d)}
                 </p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <div className="rounded-xl border border-line/40 bg-surface-2/30 p-3">
                 <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
                   Suggested
                 </p>
@@ -170,7 +170,7 @@ export default async function WalletPage({
                   {recommendedPlan?.name}
                 </p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <div className="rounded-xl border border-line/40 bg-surface-2/30 p-3">
                 <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
                   Entry price
                 </p>

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Logo } from "@/components/Logo";
 
 // Client-side side rail, Claude Code style. Minimal top level (Logo · New
 // Session · Workflows · More), the operational hubs whose modules expand on
@@ -60,7 +60,7 @@ const ACCOUNT_ITEMS: { label: string; href?: string; icon: string }[] = [
   { label: "Learn more", href: "/settings#about", icon: "ℹ" },
   { label: "View plans", href: "/wallet", icon: "◆" },
   { label: "Gift Earn", href: "/gift", icon: "✦" },
-  { label: "Brains", href: "/earn", icon: "✧" },
+  { label: "Earn guide", href: "/earn", icon: "✧" },
 ];
 
 function useDismiss<T extends HTMLElement>(onDismiss: () => void) {
@@ -290,7 +290,7 @@ export function AppSidebar({
           }}
         >
           <input type="hidden" name="id" value={s.id} />
-          <button className="w-full truncate rounded-md px-2 py-1 text-left text-xs text-red-400 transition hover:bg-red-500/10 hover:text-red-300">
+          <button className="w-full truncate rounded-md px-2 py-1 text-left text-xs text-status-danger transition hover:bg-status-danger/10 hover:text-status-danger">
             Delete
           </button>
         </form>
@@ -356,21 +356,9 @@ export function AppSidebar({
 
   return (
     <aside className="flex w-[224px] shrink-0 flex-col border-r border-line bg-surface-1">
-      {/* Logo — Earn coin mark + wordmark */}
+      {/* Logo — centralized coin mark + wordmark */}
       <div className="flex h-12 items-center gap-2 border-b border-line px-4">
-        <Link href="/workspace" className="flex items-center gap-2">
-          <Image
-            src="/earn-coin.png"
-            alt="Earn"
-            width={24}
-            height={24}
-            className="h-6 w-6 rounded-md object-contain"
-            priority
-          />
-          <span className="font-mono text-xs uppercase tracking-[0.22em] text-gold-400">
-            FundExecs OS
-          </span>
-        </Link>
+        <Logo href="/workspace" variant="coin-wordmark" />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">

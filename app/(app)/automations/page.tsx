@@ -44,7 +44,7 @@ export default async function AutomationsPage() {
   const automations = (data ?? []) as Automation[];
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="fx-ambient mx-auto max-w-4xl">
       <header className="mb-6">
         <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
           Workflows
@@ -84,7 +84,7 @@ export default async function AutomationsPage() {
                 <div className="flex items-start gap-3">
                   <span
                     className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                      a.enabled ? "bg-emerald-400" : "bg-fg-muted/40"
+                      a.enabled ? "bg-status-success" : "bg-fg-muted/40"
                     }`}
                     aria-label={a.enabled ? "enabled" : "paused"}
                   />
@@ -163,7 +163,7 @@ export default async function AutomationsPage() {
                     </form>
                     <form action={deleteAutomation}>
                       <input type="hidden" name="id" value={a.id} />
-                      <button className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400">
+                      <button className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger">
                         ✕
                       </button>
                     </form>

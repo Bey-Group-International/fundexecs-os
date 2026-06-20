@@ -13,7 +13,7 @@ export default async function AgendaPage() {
   const agenda = await getAgenda(ctx.orgId);
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="fx-ambient mx-auto max-w-4xl">
       <header className="mb-6">
         <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
           Agenda

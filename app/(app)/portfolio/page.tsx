@@ -13,7 +13,7 @@ export default async function PortfolioPage() {
   const data = await getPortfolioMonitor(ctx.orgId);
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-6">
         <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
           Portfolio

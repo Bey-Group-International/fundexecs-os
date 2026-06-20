@@ -49,7 +49,7 @@ function StatCard({
     tone === "gold"
       ? "text-gold-300"
       : tone === "positive"
-        ? "text-emerald-400"
+        ? "text-status-success"
         : "text-fg-primary";
   return (
     <div className="rounded-lg border border-line bg-surface-1 p-4">
@@ -208,7 +208,7 @@ export function LpReport({ report }: { report: LpReportData }) {
                   <Eyebrow>
                     Distributions · {activity.distributionsCount}
                   </Eyebrow>
-                  <div className="mt-2 font-display text-xl font-semibold tracking-tight text-emerald-400">
+                  <div className="mt-2 font-display text-xl font-semibold tracking-tight text-status-success">
                     {usd(activity.distributionsTotal)}
                   </div>
                 </div>

@@ -10,7 +10,7 @@ import type { TaskStatus } from "@/lib/supabase/database.types";
 const STATUS_PILL: Partial<Record<TaskStatus, { label: string; cls: string }>> = {
   awaiting_approval: { label: "needs you", cls: "border-neural-400/45 text-neural-300" },
   in_progress: { label: "running", cls: "border-status-info/40 text-status-info" },
-  completed: { label: "done", cls: "border-emerald-400/40 text-emerald-300" },
+  completed: { label: "done", cls: "border-status-success/40 text-status-success" },
   failed: { label: "failed", cls: "border-status-danger/40 text-status-danger" },
 };
 
