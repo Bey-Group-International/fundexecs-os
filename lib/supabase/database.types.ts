@@ -265,7 +265,32 @@ export type DiligenceItem = Timestamps & RecordMeta & {
   status: DiligenceStatus;
   risk_severity: RiskSeverity | null;
   finding: string | null;
+  likelihood: RiskSeverity | null;
+  mitigation: string | null;
+  residual_severity: RiskSeverity | null;
 }
+
+export type IcDecisionKind = "go" | "conditional" | "hold" | "no_go";
+
+export type IcDecision = {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  decision: IcDecisionKind;
+  rationale: string | null;
+  conviction: number | null;
+  decided_by: string | null;
+  created_at: string;
+};
+
+export type ConvictionSnapshot = {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  score: number;
+  stage: string;
+  captured_at: string;
+};
 
 export type Relationship = Timestamps & {
   id: string;
@@ -466,6 +491,28 @@ export type Document = {
   mime_type: string | null;
   size_bytes: number | null;
   uploaded_by: string | null;
+  content: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type DataRoomShare = {
+  id: string;
+  organization_id: string;
+  token: string;
+  label: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type DataRoomView = {
+  id: string;
+  organization_id: string;
+  share_id: string | null;
+  document_id: string | null;
+  kind: "room" | "document";
   created_at: string;
 };
 
@@ -628,6 +675,8 @@ export type Database = {
       documents: TableShape<Document>;
       underwritings: TableShape<Underwriting>;
       diligence_items: TableShape<DiligenceItem>;
+      ic_decisions: TableShape<IcDecision>;
+      conviction_snapshots: TableShape<ConvictionSnapshot>;
       relationships: TableShape<Relationship>;
       ai_agents: TableShape<AiAgent>;
       prompts: TableShape<Prompt>;
@@ -651,6 +700,8 @@ export type Database = {
       brain_runs: TableShape<BrainRun>;
       brain_documents: TableShape<BrainDocument>;
       brain_kb_chunks: TableShape<BrainKbChunk>;
+      data_room_shares: TableShape<DataRoomShare>;
+      data_room_views: TableShape<DataRoomView>;
     };
     Views: Record<string, never>;
     Functions: {

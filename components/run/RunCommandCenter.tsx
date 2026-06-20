@@ -64,7 +64,7 @@ function Bench({
 function DealConvictionChip({ d }: { d: DealConviction }) {
   return (
     <Link
-      href="/run/strategy"
+      href={`/deal/${d.deal.id}`}
       title={`${d.deal.name} · ${d.score}% conviction · ${d.stage.label}`}
       className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition hover:bg-surface-2 ${d.stage.tone}`}
     >

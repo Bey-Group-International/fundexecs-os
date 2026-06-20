@@ -110,7 +110,8 @@ export default async function AppLayout({
   });
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-0 text-fg-primary">
+    <div className="flex h-screen overflow-hidden bg-surface-0 text-fg-primary print:block print:h-auto print:overflow-visible">
+      <div className="contents print:hidden">
       <AppSidebar
         name={name}
         planName={planName}
@@ -127,15 +128,22 @@ export default async function AppLayout({
         pinSessionAction={setSessionPinned}
         unreadSessionAction={setSessionUnread}
       />
+      </div>
 
       <ActiveSessionProvider>
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <GlobalTopBar balance={balance} />
-          <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
+        <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
+          <div className="print:hidden">
+            <GlobalTopBar balance={balance} />
+          </div>
+          <main className="flex-1 overflow-y-auto px-8 py-8 print:overflow-visible print:p-0">
+            {children}
+          </main>
         </div>
       </ActiveSessionProvider>
 
-      <GuidedTour />
+      <div className="print:hidden">
+        <GuidedTour />
+      </div>
     </div>
   );
 }

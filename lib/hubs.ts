@@ -26,6 +26,7 @@ export const HUBS: HubDefinition[] = [
       { key: "entity", label: "Entity" },
       { key: "track_record", label: "Track Record" },
       { key: "team", label: "Team" },
+      { key: "data_room", label: "Materials & Data Room" },
     ],
   },
   {

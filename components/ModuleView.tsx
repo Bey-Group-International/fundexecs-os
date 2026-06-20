@@ -10,7 +10,9 @@ import { BrandModule } from "@/components/build/BrandModule";
 import { EntityModule } from "@/components/build/EntityModule";
 import { TrackRecordModule } from "@/components/build/TrackRecordModule";
 import { TeamModule } from "@/components/build/TeamModule";
+import { MaterialsModule } from "@/components/build/MaterialsModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
+import { ProfileForm } from "@/components/build/ProfileForm";
 import { MandateStrip } from "@/components/build/MandateStrip";
 import {
   RunStrategyModule,
@@ -18,6 +20,7 @@ import {
   RunStressTestModule,
   RunCommsModule,
 } from "@/components/run/RunModules";
+import { RunDiligenceModule, RunUnderwritingModule } from "@/components/run/RunListModules";
 import {
   ExecuteClosingModule,
   ExecuteReportingModule,
@@ -121,28 +124,6 @@ const LIST_MODULES: Record<string, ListConfig> = {
     ],
     empty: "No debt facilities yet. Track credit lines, term loans, and mezz here.",
   },
-  "run/underwriting": {
-    table: "underwritings",
-    blurb: "Base, bull, and bear cases behind every investment decision.",
-    columns: [
-      { key: "name", label: "Model" },
-      { key: "scenario", label: "Scenario" },
-      { key: "projected_irr", label: "IRR" },
-      { key: "projected_moic", label: "MOIC" },
-    ],
-    empty: "No underwriting models yet.",
-  },
-  "run/diligence": {
-    table: "diligence_items",
-    blurb: "Open questions and findings that gate conviction.",
-    columns: [
-      { key: "title", label: "Item" },
-      { key: "category", label: "Category" },
-      { key: "status", label: "Status" },
-      { key: "risk_severity", label: "Risk" },
-    ],
-    empty: "No diligence items yet.",
-  },
   "execute/capital_events": {
     table: "capital_events",
     blurb: "Calls, distributions, and every flow of capital post-close.",
@@ -164,14 +145,6 @@ const LIST_MODULES: Record<string, ListConfig> = {
     empty: "No portfolio assets yet.",
   },
 };
-
-const PROFILE_FIELDS = [
-  { name: "name", label: "Organization name" },
-  { name: "legal_name", label: "Legal name" },
-  { name: "entity_type", label: "Entity type" },
-  { name: "jurisdiction", label: "Jurisdiction" },
-  { name: "website", label: "Website" },
-];
 
 // Modules whose rows can be scoped to a session (first pass — the key demo
 // path). When opened inside the session frame, the list filters to the session
@@ -209,15 +182,18 @@ export async function ModuleView({
   // carries the mandate alongside live conviction.
   const mandateStrip = hub.key === "source" ? <MandateStrip orgId={ctx.orgId} /> : null;
 
-  // --- Run hub: derived evaluation modules ---------------------------------
+  // --- Run hub: derived evaluation modules + actionable lists --------------
   // Strategy, Risk, Stress Test, and Comms are synthesized from the live deal
-  // working set (deals + underwriting + diligence); Diligence and Underwriting
-  // fall through to their table-backed views below.
+  // working set (deals + underwriting + diligence). Diligence and Underwriting
+  // are the org-wide lists, now editable in place (add + inline status) with a
+  // deal picker — the same actions the deal war room uses.
   if (hub.key === "run") {
     if (mod.key === "strategy") return <RunStrategyModule orgId={ctx.orgId} />;
     if (mod.key === "risk") return <RunRiskModule orgId={ctx.orgId} />;
     if (mod.key === "stress_test") return <RunStressTestModule orgId={ctx.orgId} />;
     if (mod.key === "comms") return <RunCommsModule orgId={ctx.orgId} />;
+    if (mod.key === "diligence") return <RunDiligenceModule orgId={ctx.orgId} />;
+    if (mod.key === "underwriting") return <RunUnderwritingModule orgId={ctx.orgId} />;
   }
 
   // --- Execute hub: derived operating modules ------------------------------
@@ -238,6 +214,7 @@ export async function ModuleView({
     if (mod.key === "entity") return <EntityModule />;
     if (mod.key === "track_record") return <TrackRecordModule />;
     if (mod.key === "team") return <TeamModule />;
+    if (mod.key === "data_room") return <MaterialsModule />;
     // profile falls through to the editable org form below
   }
 
@@ -255,30 +232,22 @@ export async function ModuleView({
           blurb="Your firm's identity and the basics every other module builds on."
           module="profile"
         />
-        <form action={updateProfile} className="flex max-w-xl flex-col gap-4">
-        {PROFILE_FIELDS.map((f) => (
-          <label key={f.name} className="flex flex-col gap-1.5 text-sm">
-            <span className="text-fg-secondary">{f.label}</span>
-            <input
-              name={f.name}
-              defaultValue={(org?.[f.name as keyof typeof org] as string) ?? ""}
-              className="rounded-md border border-line bg-surface-1 px-3 py-2 outline-none focus:border-gold-500"
-            />
-          </label>
-        ))}
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-fg-secondary">Description</span>
-          <textarea
-            name="description"
-            rows={3}
-            defaultValue={org?.description ?? ""}
-            className="rounded-md border border-line bg-surface-1 px-3 py-2 outline-none focus:border-gold-500"
-          />
-        </label>
-        <button className="self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
-          Save profile
-        </button>
-        </form>
+        <ProfileForm
+          action={updateProfile}
+          values={{
+            name: org?.name ?? "",
+            legal_name: org?.legal_name ?? "",
+            entity_type: org?.entity_type ?? "",
+            jurisdiction: org?.jurisdiction ?? "",
+            website: org?.website ?? "",
+            description: org?.description ?? "",
+            hq_location: org?.hq_location ?? "",
+            aum_range: org?.aum_range ?? "",
+            fund_count: org?.fund_count != null ? String(org.fund_count) : "",
+            primary_strategy: org?.primary_strategy ?? "",
+            operator_role: org?.operator_role ?? "",
+          }}
+        />
       </div>
     );
   }
