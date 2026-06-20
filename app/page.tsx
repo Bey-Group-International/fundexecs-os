@@ -88,7 +88,7 @@ export default function LandingPage({
             </Link>
             <Link
               href="/login?mode=signup"
-              className="shrink-0 rounded-md bg-gold-400 px-2.5 py-1.5 text-xs font-medium text-surface-0 transition hover:opacity-90 sm:px-3 sm:text-sm"
+              className="hidden shrink-0 rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:opacity-90 sm:inline-flex"
             >
               Request access
             </Link>
@@ -105,10 +105,17 @@ export default function LandingPage({
         <div className="grid items-center gap-16 lg:grid-cols-2">
           {/* Text */}
           <div>
-            <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-status-success" />
-              Private equity · Real estate · Private credit · Family office
-            </p>
+            <div className="flex max-w-xl flex-wrap items-center gap-1.5">
+              {["Private equity", "Real estate", "Private credit", "Family office"].map((market, index) => (
+                <span
+                  key={market}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-gold-500/30 bg-gold-500/5 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-gold-300"
+                >
+                  {index === 0 ? <span className="h-1.5 w-1.5 rounded-full bg-status-success" /> : null}
+                  {market}
+                </span>
+              ))}
+            </div>
             <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-6xl">
               The Operating System<br />
               for Private Markets
