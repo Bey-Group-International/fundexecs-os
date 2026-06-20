@@ -10,6 +10,7 @@ import {
 import { addSourcedTargets } from "@/app/(app)/[hub]/[module]/source-ai-actions";
 import { AGENTS, AGENT_BY_KEY } from "@/lib/agents";
 import type { SourceCandidate } from "@/lib/source-ai";
+import { buildSourceSelectionPayload } from "@/lib/source-selection";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
 type StepStatus = "queued" | "running" | "done" | "error";
@@ -154,15 +155,10 @@ export function SourceSearch({
 
   async function addGroup(step: LiveStep) {
     if (!step.candidates || added[step.id] != null || adding.has(step.id)) return;
-    const picks = step.candidates
-      .filter((_, i) => selected.has(`${step.id}:${i}`))
-      .map((c) => ({ name: c.name, category: c.category, rationale: c.rationale, fitScore: c.fitScore, sourceUrl: c.sourceUrl }));
+    const { picks, rejected } = buildSourceSelectionPayload(step.candidates, (_, i) => selected.has(`${step.id}:${i}`));
     if (picks.length === 0) return;
     // The surfaced-but-skipped candidates are a reject signal — recording them
     // alongside the picks is what teaches the engine this operator's taste.
-    const rejected = step.candidates
-      .filter((_, i) => !selected.has(`${step.id}:${i}`))
-      .map((c) => ({ name: c.name, category: c.category, rationale: c.rationale, fitScore: c.fitScore }));
     const moduleKey = step.module.replace(/^source\//, "");
     setAdding((prev) => new Set(prev).add(step.id));
     try {

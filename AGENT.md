@@ -80,6 +80,9 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - ✅ Human team task loop — `team_tasks` lets work be assigned to principals,
   surfaced inside the Earn dock, launched through the normal Earn session loop,
   and marked complete with cross-hub `operator_feedback` learning signals.
+- ✅ Source learning optimization — the in-module AI Sourcing panel now passes
+  operator queries into target generation, records accepted and rejected
+  candidate signals with fit scores, and surfaces personalization state.
 
 ### What has not been built yet
 
@@ -480,6 +483,18 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Integrated, not yet tested.
              |  Next: vectorize high-quality completed artifacts into org-scoped Brain recall
              |  and expand feedback capture beyond dock/team flows.
+
+2026-06-20  |  Source sourcing optimization  |  The module panel now learns like Search.
+             |  Built: shared source-selection helper for accepted/rejected candidate
+             |  payloads; AI Sourcing panel passes the operator's ask into generation,
+             |  records unchecked candidates as rejected source_feedback with fit scores,
+             |  and shows a personalized chip when learned preferences are active.
+             |  Also made deterministic fallback candidates carry the operator query so
+             |  no-key environments still reflect the ask.
+             |  Confidence: Tested by unit/type/lint/build; authenticated UI blocked by
+             |  missing local Supabase env.
+             |  Next: align Source activity staleness/live-stage filters and add DB-backed
+             |  action tests once local Supabase is available.
 ```
 
 ---

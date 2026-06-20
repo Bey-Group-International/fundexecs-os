@@ -153,6 +153,20 @@ describe("normalizeCandidates", () => {
   });
 });
 
+describe("generateTargets fallback", () => {
+  it("carries the operator query into deterministic candidates when no model key is present", async () => {
+    const out = await generateTargets(
+      "source/lp_pipeline",
+      MANDATE,
+      [],
+      "family offices that like industrial platforms",
+    );
+
+    expect(out.length).toBeGreaterThan(0);
+    expect(out[0].rationale).toContain("family offices that like industrial platforms");
+  });
+});
+
 describe("normalizeScores", () => {
   it("keeps only rows that map to a known id and coerces the action", () => {
     const rows = [
