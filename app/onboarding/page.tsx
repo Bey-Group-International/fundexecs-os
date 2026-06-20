@@ -24,6 +24,7 @@ export default async function OnboardingPage({
             { step: 2, label: "Your role", sublabel: "AUM, fund count, structure" },
             { step: 3, label: "Strategy", sublabel: "Asset class and focus" },
             { step: 4, label: "First hub", sublabel: "Where to start" },
+            { step: 5, label: "Mandate", sublabel: "What Earn may run — optional" },
           ].map(({ step, label, sublabel }) => (
             <div key={step} className="flex items-start gap-3">
               <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line font-mono text-xs text-fg-muted">

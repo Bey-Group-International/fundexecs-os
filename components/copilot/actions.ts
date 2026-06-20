@@ -3,18 +3,22 @@
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
-import { handlePrompt } from "@/lib/engine";
+import { handlePrompt, decideApproval } from "@/lib/engine";
+import { getActiveMandate } from "@/lib/mandates";
+import type { Mandate } from "@/lib/gates";
 import {
   copilotContextFromPath,
   contextPreamble,
   suggestionsFor,
+  willAutoRun,
   type CopilotContext,
+  type CopilotSuggestion,
 } from "@/lib/copilot";
 import { getBuildReadiness } from "@/lib/build-readiness";
 import { getRunConviction } from "@/lib/run-conviction";
 import { getSourceMomentum } from "@/lib/source-readiness";
 import { getExecutePerformance } from "@/lib/execute-performance";
-import type { AgentKey } from "@/lib/supabase/database.types";
+import type { AgentKey, Task, Approval, TaskStatus } from "@/lib/supabase/database.types";
 
 export interface AskEarnResult {
   ok: boolean;
@@ -59,13 +63,24 @@ export async function askEarn(input: {
   }
 }
 
-/** Resolve a suggestion's pre-baked prompt by id within a given location. */
-function findSuggestionPrompt(loc: CopilotContext, id: string): string | null {
-  return suggestionsFor(loc).find((s) => s.id === id)?.prompt ?? null;
+/** Resolve a suggestion by id within a given location. */
+function findSuggestion(loc: CopilotContext, id: string): CopilotSuggestion | null {
+  return suggestionsFor(loc).find((s) => s.id === id) ?? null;
 }
 
-// Launch a pre-baked, context-aware suggestion. Mirrors the draft-with-Earn
-// pattern: plan the templated prompt, then open the session it created.
+/** The org's active standing mandate, for showing what Earn may auto-run. */
+export async function getMandateSummary(): Promise<Mandate | null> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return null;
+  const supabase = createServerClient();
+  return (await getActiveMandate(supabase, ctx.orgId)) ?? null;
+}
+
+// Launch a pre-baked, context-aware suggestion. Plans the templated prompt,
+// then — when the standing mandate authorizes it (internal Tier-1 work, or a
+// Tier-2 action pre-approved within the ceiling) — auto-approves and runs the
+// workflow proactively. Otherwise it lands in the session awaiting the
+// operator's sign-off. Either way, opens the session.
 export async function launchCopilotSuggestion(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
@@ -73,15 +88,123 @@ export async function launchCopilotSuggestion(formData: FormData): Promise<void>
   const pathname = String(formData.get("pathname") ?? "/");
   const id = String(formData.get("suggestion_id") ?? "");
   const loc = copilotContextFromPath(pathname);
-  const prompt = findSuggestionPrompt(loc, id);
-  if (!prompt) redirect("/workspace");
+  const suggestion = findSuggestion(loc, id);
+  if (!suggestion) redirect("/workspace");
 
   const supabase = createServerClient();
-  const result = await handlePrompt(
-    { supabase, orgId: ctx.orgId, actorId: ctx.userId },
-    `${contextPreamble(loc)} ${prompt}`,
-  );
+  const engineCtx = { supabase, orgId: ctx.orgId, actorId: ctx.userId };
+  const result = await handlePrompt(engineCtx, `${contextPreamble(loc)} ${suggestion.prompt}`);
+
+  // Proactive execution — gated by the standing mandate, never above Tier 2.
+  if (result.approval_id) {
+    const mandate = await getActiveMandate(supabase, ctx.orgId);
+    if (willAutoRun(suggestion, mandate)) {
+      try {
+        await decideApproval(engineCtx, { approvalId: result.approval_id, decision: "approved" });
+      } catch {
+        // If auto-execution fails, the workflow simply remains awaiting approval.
+      }
+    }
+  }
+
   redirect(result.session_id ? `/session/${result.session_id}` : "/workspace");
+}
+
+// --- Recent runs -----------------------------------------------------------
+// The dock's "Recent runs" feed: the org's most recent copilot workflows so the
+// operator can review/approve results at a glance — closing the loop on
+// proactive auto-execution.
+export interface RunSummary {
+  sessionId: string | null;
+  title: string;
+  status: TaskStatus;
+  createdAt: string;
+  /** Pending approval id for a workflow still awaiting the operator's sign-off. */
+  approvalId?: string;
+}
+
+/**
+ * The org's most recent parent workflows (newest first, ~6), each with its
+ * pending approval id resolved when it's still awaiting approval. Best-effort:
+ * returns [] on any error so the dock degrades gracefully.
+ */
+export async function getRecentRuns(): Promise<RunSummary[]> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return [];
+  const supabase = createServerClient();
+
+  try {
+    const { data: workflows } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("organization_id", ctx.orgId)
+      .is("parent_task_id", null)
+      .order("created_at", { ascending: false })
+      .limit(6);
+    const list = (workflows ?? []) as Task[];
+    if (list.length === 0) return [];
+
+    // Resolve pending approvals only for workflows still awaiting sign-off.
+    const awaitingIds = list.filter((w) => w.status === "awaiting_approval").map((w) => w.id);
+    let approvalByTask = new Map<string, string>();
+    if (awaitingIds.length > 0) {
+      const { data: approvals } = await supabase
+        .from("approvals")
+        .select("id, task_id, decision")
+        .in("task_id", awaitingIds)
+        .eq("decision", "pending");
+      approvalByTask = new Map(
+        ((approvals ?? []) as Pick<Approval, "id" | "task_id" | "decision">[]).map((a) => [
+          a.task_id,
+          a.id,
+        ]),
+      );
+    }
+
+    return list.map((w) => ({
+      sessionId: w.session_id,
+      title: w.title,
+      status: w.status,
+      createdAt: w.created_at,
+      approvalId: approvalByTask.get(w.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Approve a run from the dock's feed — runs the workflow end-to-end. No-op if missing. */
+export async function approveRun(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const approvalId = String(formData.get("approval_id") ?? "");
+  if (!approvalId) return;
+  const supabase = createServerClient();
+  try {
+    await decideApproval(
+      { supabase, orgId: ctx.orgId, actorId: ctx.userId },
+      { approvalId, decision: "approved" },
+    );
+  } catch {
+    // Best-effort: the dock re-fetches and the run simply stays awaiting approval.
+  }
+}
+
+/** Dismiss (reject) a run from the dock's feed. No-op if missing. */
+export async function dismissRun(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const approvalId = String(formData.get("approval_id") ?? "");
+  if (!approvalId) return;
+  const supabase = createServerClient();
+  try {
+    await decideApproval(
+      { supabase, orgId: ctx.orgId, actorId: ctx.userId },
+      { approvalId, decision: "rejected" },
+    );
+  } catch {
+    // Best-effort: ignore and let the dock re-fetch.
+  }
 }
 
 // --- Live briefing ---------------------------------------------------------

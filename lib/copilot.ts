@@ -4,7 +4,7 @@
 // dependency-light so it is trivially unit-testable and safe to import from
 // client components.
 import type { AgentKey, Hub } from "@/lib/supabase/database.types";
-import { tierForAction, type ActionKind, type GateTier } from "@/lib/gates";
+import { tierForAction, gateDecision, type ActionKind, type GateTier, type Mandate } from "@/lib/gates";
 
 export interface CopilotContext {
   hub: Hub | null;
@@ -309,6 +309,17 @@ export function suggestionsFor(ctx: CopilotContext): CopilotSuggestion[] {
 /** The gate tier for a suggestion that performs an outward action (else null). */
 export function suggestionTier(s: CopilotSuggestion): GateTier | null {
   return s.action ? tierForAction(s.action) : null;
+}
+
+/**
+ * Whether Earn will run this suggestion immediately vs. parking it for the
+ * operator's approval. Suggestions with no outward action are internal Tier-1
+ * work product and always run; outward ones run only when the standing mandate
+ * pre-authorizes them (Tier 2 within ceiling). Tier 3 never auto-runs.
+ */
+export function willAutoRun(s: CopilotSuggestion, mandate?: Mandate): boolean {
+  if (!s.action) return true;
+  return !gateDecision(s.action, mandate).requiresApproval;
 }
 
 /**

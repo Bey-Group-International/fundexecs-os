@@ -16,6 +16,7 @@ import {
   setSessionUnread,
 } from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
+import { getInboxCount } from "@/lib/inbox";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
 import { GlobalTopBar } from "@/components/GlobalTopBar";
@@ -38,7 +39,10 @@ export default async function AppLayout({
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const balance = await getWalletBalance(ctx.orgId);
+  const [balance, inboxCount] = await Promise.all([
+    getWalletBalance(ctx.orgId),
+    getInboxCount(ctx.orgId),
+  ]);
 
   // Account display + the rail's "Recent" conversation list (Claude Code
   // style): sessions filed under group names with an Ungrouped bucket.
@@ -134,7 +138,7 @@ export default async function AppLayout({
       <ActiveSessionProvider>
         <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
           <div className="print:hidden">
-            <GlobalTopBar balance={balance} />
+            <GlobalTopBar balance={balance} inboxCount={inboxCount} />
           </div>
           <main className="flex-1 overflow-y-auto px-8 py-8 print:overflow-visible print:p-0">
             {children}

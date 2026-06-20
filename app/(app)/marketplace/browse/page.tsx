@@ -67,21 +67,22 @@ export default async function MarketplaceBrowsePage() {
   const listings = (data ?? []) as unknown as PublicListing[];
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+    <div className="fx-ambient mx-auto max-w-4xl">
+      <header className="mb-6 animate-fade-up">
+        <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-gold-400 shadow-[0_0_10px_2px_rgba(212,175,106,0.6)]" />
           Marketplace
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
           Browse
         </h1>
-        <p className="mt-1 text-sm text-fg-secondary">
+        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-fg-secondary">
           Public listings from across every firm on FundExecs. Deals, funds, and allocations
           counterparties have opened to the network.
         </p>
       </header>
 
-      <nav className="mb-6 inline-flex rounded-lg border border-line bg-surface-1 p-1 font-mono text-xs uppercase tracking-wider">
+      <nav className="fx-segment mb-6 inline-flex font-mono text-xs uppercase tracking-wider">
         <Link
           href="/marketplace"
           className="rounded-md px-3 py-1.5 text-fg-muted transition hover:text-fg-primary"
@@ -102,10 +103,14 @@ export default async function MarketplaceBrowsePage() {
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {listings.map((l) => {
+          {listings.map((l, i) => {
             const amount = formatAmount(l.amount);
             return (
-              <div key={l.id} className="rounded-xl border border-line bg-surface-1 p-4">
+              <div
+                key={l.id}
+                className="fx-card fx-card-hover animate-fade-up p-4"
+                style={{ animationDelay: `${Math.min(i * 35, 280)}ms` }}
+              >
                 <div className="min-w-0 flex-1">
                   <p className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
                     {l.organizations?.name ?? "Unknown firm"}
