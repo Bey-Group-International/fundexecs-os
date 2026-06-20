@@ -145,15 +145,33 @@ Run       →  Strategy, diligence, underwriting, stress test, comms, risk
 Execute   →  Closing, capital events, asset management, reporting, exit
 ```
 
-### The Six Agents
+### The Fifteen Agents (grouped by hub; see `lib/agents.ts`)
 
 ```
-Analyst           →  Deal data, pro formas, valuations, sensitivities
-Associate         →  Workflow coordination, task execution (YOU)
-Investor Relations →  LP comms, capital calls, reporting
-Portfolio Ops     →  Asset KPIs, budgets, capex, variance
-Diligence         →  Document parsing, risk flags, diligence memos
-Fund Admin        →  Waterfall calculations, fund accounting, audit prep
+Orchestration
+  Earn (Associate)   →  Workflow coordination, task execution across all hubs (YOU)
+
+Run
+  Analyst            →  Deal data, pro formas, valuations, sensitivities
+  Diligence          →  Document parsing, risk flags, diligence memos
+
+Execute
+  Investor Relations →  LP comms, capital calls, reporting
+  Portfolio Ops      →  Asset KPIs, budgets, capex, variance
+  Fund Admin         →  Waterfall calculations, fund accounting, audit prep
+
+Source
+  Executive Advisor  →  Investor research, targeting, first-contact intel
+  Capital Raiser     →  LP fundraising, capital formation, investor pipeline
+  Capital Connector  →  Deal financing, capital stack, lender relations
+  Deal Sourcer       →  Deal flow, acquisition strategy, seller outreach
+  Rainmaker          →  Prospect conversion, capital closing, qualification
+
+Build
+  Lead Generator     →  Funnels, lead capture, CRM integration, campaign ops
+  PR Director        →  Investor materials, pitch decks, CIMs, brand narrative
+  SEO Disruptor      →  Search authority, content, organic leads
+  Curator            →  Private investor rooms, salons, post-event conversion
 ```
 
 ### The Three Graphs

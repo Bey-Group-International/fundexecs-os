@@ -12,8 +12,9 @@ const LISTING_TYPES = [
 ];
 
 // The create-listing form. Client-side so validation surfaces inline and the
-// form resets on success without a full reload.
-export function NewListingForm() {
+// form resets on success without a full reload. Linking a deal lets the matching
+// engine score listings on geography too, not just amount + type.
+export function NewListingForm({ deals = [] }: { deals?: { id: string; name: string }[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
@@ -29,7 +30,7 @@ export function NewListingForm() {
           else formRef.current?.reset();
         })
       }
-      className="rounded-xl border border-line bg-surface-1 p-4"
+      className="fx-card animate-fade-up p-4"
     >
       <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
         New listing
@@ -85,6 +86,24 @@ export function NewListingForm() {
               <option value="listed">Listed</option>
             </select>
           </label>
+
+          {deals.length ? (
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Deal</span>
+              <select
+                name="deal_id"
+                defaultValue=""
+                className="max-w-[160px] rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary focus:border-gold-500/60 focus:outline-none"
+              >
+                <option value="">None</option>
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label className="flex items-center gap-2 text-xs text-fg-secondary">
             <input type="checkbox" name="is_public" className="h-3.5 w-3.5 accent-gold-500" />

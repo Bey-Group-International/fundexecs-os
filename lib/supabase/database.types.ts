@@ -81,12 +81,38 @@ export type MarketplaceStatus = "draft" | "listed" | "paused" | "closed";
 export type TriggerType = "schedule" | "manual" | "email" | "webhook" | "event";
 export type SessionOrigin = "earn" | "workflow";
 
+// The Unified Inbox enums (migration 0038).
+export type InboxChannel =
+  | "gmail"
+  | "slack"
+  | "calendly"
+  | "google_calendar"
+  | "zoom"
+  | "google_meet"
+  | "docusign"
+  | "ecosystem"
+  | "deal_share";
+export type InboxCategory = "messaging" | "booking" | "video" | "signing";
+export type InboxThreadStatus = "open" | "snoozed" | "done";
+export type InboxDirection = "inbound" | "outbound";
+
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
 // Common audit columns present on most tables.
 type Timestamps = {
   created_at: string;
   updated_at: string;
+}
+
+// Provenance + verification + soft-archive columns (migration 0032), present on
+// every table-backed module record (Source, Run, Execute).
+type RecordMeta = {
+  provenance: string; // 'manual' | 'ai' | 'import'
+  verification_status: string; // 'unverified' | 'verified'
+  verified_at: string | null;
+  verified_by: string | null;
+  verification_note: string | null;
+  archived_at: string | null;
 }
 
 export type Principal = {
@@ -117,6 +143,7 @@ export type Organization = Timestamps & {
   fund_count: number | null;
   primary_strategy: string | null;
   first_hub: string | null;
+  discoverable: boolean;
   tagline: string | null;
   brand_voice: string | null;
   brand_palette: string[];
@@ -144,7 +171,7 @@ export type InvestmentThesis = Timestamps & {
   is_active: boolean;
 }
 
-export type Investor = Timestamps & {
+export type Investor = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -184,7 +211,7 @@ export type Commitment = Timestamps & {
   committed_at: string | null;
 }
 
-export type CapitalEvent = Timestamps & {
+export type CapitalEvent = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   fund_id: string;
@@ -198,7 +225,7 @@ export type CapitalEvent = Timestamps & {
   notes: string | null;
 }
 
-export type Deal = Timestamps & {
+export type Deal = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -215,7 +242,7 @@ export type Deal = Timestamps & {
   session_id: string | null;
 }
 
-export type Asset = Timestamps & {
+export type Asset = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   deal_id: string | null;
@@ -231,7 +258,7 @@ export type Asset = Timestamps & {
   session_id: string | null;
 }
 
-export type Underwriting = Timestamps & {
+export type Underwriting = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   deal_id: string;
@@ -244,7 +271,7 @@ export type Underwriting = Timestamps & {
   created_by: string | null;
 }
 
-export type DiligenceItem = Timestamps & {
+export type DiligenceItem = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   deal_id: string;
@@ -254,7 +281,34 @@ export type DiligenceItem = Timestamps & {
   status: DiligenceStatus;
   risk_severity: RiskSeverity | null;
   finding: string | null;
+  likelihood: RiskSeverity | null;
+  mitigation: string | null;
+  residual_severity: RiskSeverity | null;
+  owner: string | null;
+  due_date: string | null;
 }
+
+export type IcDecisionKind = "go" | "conditional" | "hold" | "no_go";
+
+export type IcDecision = {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  decision: IcDecisionKind;
+  rationale: string | null;
+  conviction: number | null;
+  decided_by: string | null;
+  created_at: string;
+};
+
+export type ConvictionSnapshot = {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  score: number;
+  stage: string;
+  captured_at: string;
+};
 
 export type Relationship = Timestamps & {
   id: string;
@@ -317,6 +371,8 @@ export type Session = Timestamps & {
   automation_id: string | null;
   color: string | null;
   archived_at: string | null;
+  pinned_at: string | null;
+  unread: boolean;
   created_by: string | null;
 };
 
@@ -332,7 +388,41 @@ export type Entity = Timestamps & {
   created_by: string | null;
 };
 
-export type Partner = Timestamps & {
+export type Stakeholder = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  kind: string; // person | entity | investor | fund | pool | other
+  email: string | null;
+  notes: string | null;
+  created_by: string | null;
+  principal_id: string | null;
+  investor_id: string | null;
+};
+
+export type ShareClass = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  name: string;
+  kind: string; // common | preferred | lp_interest | gp_interest | membership | option | safe | note | other
+  authorized_units: number | null;
+};
+
+export type EquityHolding = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  stakeholder_id: string;
+  share_class_id: string | null;
+  units: number | null;
+  ownership_pct: number | null;
+  invested_amount: number | null;
+  notes: string | null;
+  created_by: string | null;
+};
+
+export type Partner = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -345,7 +435,7 @@ export type Partner = Timestamps & {
   created_by: string | null;
 };
 
-export type ServiceProvider = Timestamps & {
+export type ServiceProvider = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -357,7 +447,7 @@ export type ServiceProvider = Timestamps & {
   created_by: string | null;
 };
 
-export type DebtFacility = Timestamps & {
+export type DebtFacility = Timestamps & RecordMeta & {
   id: string;
   organization_id: string;
   name: string;
@@ -378,6 +468,50 @@ export type Wallet = Timestamps & {
   credits: number;
   plan: string | null;
   plan_interval: string | null;
+};
+
+// Tokenization layers (migration 0048). Earned standing, credit stakes, and
+// immutable attestations — see docs/TOKENIZATION_LAYERS.md.
+export type ReputationTierName = "unranked" | "verified" | "established" | "principal";
+export type ReputationScore = {
+  organization_id: string;
+  score: number;
+  tier: ReputationTierName;
+  updated_at: string;
+};
+export type ReputationLedgerEntry = {
+  id: string;
+  organization_id: string;
+  delta: number;
+  reason: string;
+  source_type: string | null;
+  source_id: string | null;
+  note: string | null;
+  created_at: string;
+};
+export type StakePosition = {
+  id: string;
+  organization_id: string;
+  purpose: "listing" | "governance";
+  ref_id: string | null;
+  amount: number;
+  status: "locked" | "returned" | "forfeited";
+  note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
+export type Attestation = {
+  id: string;
+  organization_id: string;
+  subject_type: string;
+  subject_id: string;
+  claim: string;
+  attested_by: string | null;
+  witness_org_id: string | null;
+  evidence_hash: string | null;
+  settlement: "internal" | "anchored" | "onchain";
+  anchor_ref: string | null;
+  created_at: string;
 };
 
 export type SessionShare = {
@@ -453,6 +587,59 @@ export type Document = {
   mime_type: string | null;
   size_bytes: number | null;
   uploaded_by: string | null;
+  content: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type DataRoomShare = {
+  id: string;
+  organization_id: string;
+  token: string;
+  label: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type DataRoomView = {
+  id: string;
+  organization_id: string;
+  share_id: string | null;
+  document_id: string | null;
+  kind: "room" | "document";
+  created_at: string;
+};
+
+export type InvestorPortalShare = {
+  id: string;
+  organization_id: string;
+  investor_id: string;
+  token: string;
+  label: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type InvestorPortalView = {
+  id: string;
+  organization_id: string;
+  share_id: string | null;
+  created_at: string;
+};
+
+export type ValuationMark = {
+  id: string;
+  organization_id: string;
+  asset_id: string;
+  value: number;
+  as_of: string;
+  method: string | null;
+  note: string | null;
+  created_by: string | null;
   created_at: string;
 };
 
@@ -529,6 +716,68 @@ export type DispatchLog = {
   created_at: string;
 };
 
+// The Source learning ledger (migration 0041). One append-only row per operator
+// action on an AI suggestion (accept / reject / queue). lib/source-intelligence
+// distills these — per org and per principal — into the learned-preferences
+// digest injected into Source prompts.
+export type SourceFeedback = {
+  id: string;
+  organization_id: string;
+  principal_id: string | null;
+  module: string;
+  agent: string | null;
+  signal: string; // 'accepted' | 'rejected' | 'queued'
+  subject_name: string;
+  category: string | null;
+  rationale: string | null;
+  source_query: string | null;
+  fit_score: number | null;
+  action: string | null;
+  record_id: string | null;
+  task_id: string | null;
+  session_id: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
+// A Unified Inbox thread (migration 0038) — one counterparty touchpoint with an
+// AI triage layer (priority/intent/ai_summary) and deep links into Command
+// Center context (deal_id / investor_id). The inbound counterpart to DispatchLog.
+export type InboxThread = Timestamps & {
+  id: string;
+  organization_id: string;
+  channel: InboxChannel;
+  category: InboxCategory;
+  subject: string;
+  counterparty_name: string | null;
+  counterparty_email: string | null;
+  preview: string | null;
+  status: InboxThreadStatus;
+  unread: boolean;
+  priority: number;
+  intent: string | null;
+  ai_summary: string | null;
+  last_message_at: string | null;
+  meeting_at: string | null;
+  meeting_url: string | null;
+  deal_id: string | null;
+  investor_id: string | null;
+  created_by: string | null;
+};
+
+// One message within an inbox thread (migration 0038).
+export type InboxMessage = {
+  id: string;
+  organization_id: string;
+  thread_id: string;
+  direction: InboxDirection;
+  author: string | null;
+  body: string;
+  occurred_at: string;
+  metadata: Json;
+  created_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -590,6 +839,142 @@ export type BrainKbChunk = {
   created_at: string;
 };
 
+// Gift Earn (migration 0039). A shareable referral code per org; the referral
+// forest (each org referred at most once, so referrer edges form a downline
+// tree); an append-only credit ledger recording every credit movement; and
+// purchased credit gifts redeemable by token.
+export type ReferralCode = {
+  id: string;
+  organization_id: string;
+  code: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type Referral = {
+  id: string;
+  referrer_organization_id: string;
+  referred_organization_id: string;
+  code: string;
+  status: "pending" | "joined" | "subscribed";
+  created_at: string;
+};
+
+export type CreditLedgerEntry = {
+  id: string;
+  organization_id: string;
+  amount: number;
+  reason: string;
+  source_organization_id: string | null;
+  level: number | null;
+  note: string | null;
+  created_at: string;
+};
+
+export type CreditGift = {
+  id: string;
+  sender_organization_id: string;
+  recipient_email: string;
+  credits: number;
+  amount_usd: number;
+  message: string | null;
+  status: "pending" | "redeemed" | "cancelled";
+  redeem_token: string;
+  redeemed_by_organization_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  redeemed_at: string | null;
+};
+
+// A FundExecs-issued API credential pair (migration 0044). The publishable key
+// is public; only a keyed HMAC-SHA256 of the secret is stored, alongside
+// non-secret display fragments (`secret_prefix` + `secret_last4`) so the UI can
+// render a masked form. `mode` separates test from live credentials.
+export type ApiKeyMode = "test" | "live";
+
+export type ApiKey = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  mode: ApiKeyMode;
+  publishable_key: string;
+  secret_hash: string;
+  secret_prefix: string;
+  secret_last4: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+};
+
+// A third-party secret an org stores for FundExecs to use on its behalf
+// (migration 0044). The value is AES-256-GCM encrypted at rest; `last4` is the
+// only plaintext fragment kept, for a recognizable masked display.
+export type OrgSecret = Timestamps & {
+  id: string;
+  organization_id: string;
+  provider: string;
+  label: string | null;
+  ciphertext: string;
+  iv: string;
+  auth_tag: string;
+  last4: string;
+  created_by: string | null;
+};
+
+// Stripe hosted-Checkout session tracking (migration 0043). One row per Checkout
+// Session, flipped to 'fulfilled' exactly once so credits/plan/gift effects are
+// never double-applied. `metadata` mirrors the session metadata used to fulfill.
+export type StripeCheckout = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  kind: "plan" | "pack" | "gift";
+  status: "pending" | "fulfilled" | "cancelled";
+  amount_usd: number | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+  fulfilled_at: string | null;
+};
+
+// A shareable teaser of a deal (migration 0046): the public token + Earn's
+// confidential memo. The full deal room is never exposed — only this travels.
+export type DealShare = Timestamps & {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  token: string;
+  memo: string;
+  created_by: string | null;
+  revoked_at: string | null;
+};
+
+// A matched (or forwarded) target of a shared deal (migration 0046). The
+// recipient org reads these as its "deals that fit you" feed; `investor_id` is
+// the recipient's own profile the deal fit, so the deep link resolves for them.
+export type DealShareRecipient = {
+  id: string;
+  share_id: string;
+  organization_id: string;
+  investor_id: string | null;
+  score: number;
+  rationale: Json;
+  source: "matched" | "forwarded";
+  created_at: string;
+};
+
+// One view of a tracked deal-share link (migration 0046). `organization_id` is
+// the sharer (who reads the access log); `viewer_org_id` is the viewing org
+// when known, else null for an anonymous open.
+export type DealShareView = {
+  id: string;
+  share_id: string;
+  organization_id: string;
+  viewer_org_id: string | null;
+  viewer_label: string | null;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -615,6 +1000,8 @@ export type Database = {
       documents: TableShape<Document>;
       underwritings: TableShape<Underwriting>;
       diligence_items: TableShape<DiligenceItem>;
+      ic_decisions: TableShape<IcDecision>;
+      conviction_snapshots: TableShape<ConvictionSnapshot>;
       relationships: TableShape<Relationship>;
       ai_agents: TableShape<AiAgent>;
       prompts: TableShape<Prompt>;
@@ -626,6 +1013,7 @@ export type Database = {
       automations: TableShape<Automation>;
       mandates: TableShape<MandateRow>;
       dispatch_log: TableShape<DispatchLog>;
+      source_feedback: TableShape<SourceFeedback>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
       wallets: TableShape<Wallet>;
@@ -638,6 +1026,30 @@ export type Database = {
       brain_runs: TableShape<BrainRun>;
       brain_documents: TableShape<BrainDocument>;
       brain_kb_chunks: TableShape<BrainKbChunk>;
+      data_room_shares: TableShape<DataRoomShare>;
+      data_room_views: TableShape<DataRoomView>;
+      investor_portal_shares: TableShape<InvestorPortalShare>;
+      investor_portal_views: TableShape<InvestorPortalView>;
+      valuation_marks: TableShape<ValuationMark>;
+      stakeholders: TableShape<Stakeholder>;
+      share_classes: TableShape<ShareClass>;
+      equity_holdings: TableShape<EquityHolding>;
+      inbox_threads: TableShape<InboxThread>;
+      inbox_messages: TableShape<InboxMessage>;
+      referral_codes: TableShape<ReferralCode>;
+      referrals: TableShape<Referral>;
+      credit_ledger: TableShape<CreditLedgerEntry>;
+      credit_gifts: TableShape<CreditGift>;
+      stripe_checkouts: TableShape<StripeCheckout>;
+      api_keys: TableShape<ApiKey>;
+      org_secrets: TableShape<OrgSecret>;
+      deal_shares: TableShape<DealShare>;
+      deal_share_recipients: TableShape<DealShareRecipient>;
+      deal_share_views: TableShape<DealShareView>;
+      reputation_scores: TableShape<ReputationScore>;
+      reputation_ledger: TableShape<ReputationLedgerEntry>;
+      stake_positions: TableShape<StakePosition>;
+      attestations: TableShape<Attestation>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -658,6 +1070,24 @@ export type Database = {
           similarity: number;
         }[];
       };
+      // Atomically credit an org's wallet (creating it if absent), clamped at 0
+      // (migration 0039). Returns the new balance.
+      increment_org_credits: {
+        Args: {
+          p_org: string;
+          p_delta: number;
+        };
+        Returns: number;
+      };
+      // Atomically add to an org's reputation score (creating the row if absent),
+      // clamped at 0 (migration 0048). Returns the new score.
+      increment_org_reputation: {
+        Args: {
+          p_org: string;
+          p_delta: number;
+        };
+        Returns: number;
+      };
     };
     Enums: {
       hub: Hub;
@@ -677,6 +1107,10 @@ export type Database = {
       marketplace_status: MarketplaceStatus;
       trigger_type: TriggerType;
       session_origin: SessionOrigin;
+      inbox_channel: InboxChannel;
+      inbox_category: InboxCategory;
+      inbox_thread_status: InboxThreadStatus;
+      inbox_direction: InboxDirection;
     };
   };
 }

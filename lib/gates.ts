@@ -28,12 +28,21 @@ export type ActionKind =
   | "score"
   | "research"
   | "build_list"
+  // Inbox: drafting a reply / spinning up a video room are internal prep —
+  // nothing reaches the counterparty until it is sent (a Tier-2 action).
+  | "draft_reply"
+  | "create_video_meeting"
   // Tier 2 — external-facing; touches a counterparty.
   | "send_outreach"
   | "send_intro_request"
   | "share_materials"
   | "send_diligence_request"
   | "distribute_report"
+  // Inbox: replying, proposing a time, or confirming a booking all reach the
+  // counterparty, so they are gated like any other outward move.
+  | "send_reply"
+  | "propose_meeting"
+  | "confirm_booking"
   // Tier 3 — compliance- or capital-binding; creates an obligation.
   | "sign_document"
   | "submit_term_sheet"
@@ -48,6 +57,8 @@ const TIER_1: ActionKind[] = [
   "score",
   "research",
   "build_list",
+  "draft_reply",
+  "create_video_meeting",
 ];
 
 const TIER_2: ActionKind[] = [
@@ -56,6 +67,9 @@ const TIER_2: ActionKind[] = [
   "share_materials",
   "send_diligence_request",
   "distribute_report",
+  "send_reply",
+  "propose_meeting",
+  "confirm_booking",
 ];
 
 const TIER_3: ActionKind[] = [

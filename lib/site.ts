@@ -9,7 +9,7 @@ export const SITE_TAGLINE = "Agents that own the work";
 export const SITE_TITLE = `${SITE_NAME} — ${SITE_TAGLINE}`;
 
 export const SITE_DESCRIPTION =
-  "The AI-native operating system for private capital. Six agents source deals, underwrite, manage LPs, and own the work — on a schedule, approval-gated by default.";
+  "The AI-native operating system for private capital. Fifteen agents source capital, underwrite deals, manage LPs, and own the work across every hub — on a schedule, approval-gated by default.";
 
 // Canonical production URL. Overridable per-environment via NEXT_PUBLIC_APP_URL
 // (e.g. Vercel preview deployments, localhost). The fallback is the real

@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
-import { requireOrgContext } from "@/lib/auth";
+import { getSessionContext, requireOrgContext } from "@/lib/auth";
+import { handlePrompt } from "@/lib/engine";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 
 // Update the active organization's Build › Profile fields. RLS restricts this
@@ -11,16 +13,44 @@ export async function updateProfile(formData: FormData) {
   const auth = await requireOrgContext();
   if (!auth.ok) return;
 
+  // Trim a field; empty string becomes null.
+  const t = (name: string): string | null => {
+    const v = String(formData.get(name) ?? "").trim();
+    return v === "" ? null : v;
+  };
+
+  // Website: trim, and prefix https:// when a scheme is missing.
+  const rawWebsite = String(formData.get("website") ?? "").trim();
+  const website =
+    rawWebsite === ""
+      ? null
+      : /^[a-z][a-z0-9+.-]*:\/\//i.test(rawWebsite)
+        ? rawWebsite
+        : `https://${rawWebsite}`;
+
+  // Fund count: parse to a number, or null when empty/invalid.
+  const rawFundCount = String(formData.get("fund_count") ?? "").trim();
+  let fund_count: number | null = null;
+  if (rawFundCount !== "") {
+    const n = Number(rawFundCount);
+    fund_count = Number.isFinite(n) ? n : null;
+  }
+
   const supabase = createServerClient();
   await supabase
     .from("organizations")
     .update({
       name: String(formData.get("name") ?? "").trim(),
-      legal_name: String(formData.get("legal_name") ?? "") || null,
-      entity_type: String(formData.get("entity_type") ?? "") || null,
-      jurisdiction: String(formData.get("jurisdiction") ?? "") || null,
-      website: String(formData.get("website") ?? "") || null,
-      description: String(formData.get("description") ?? "") || null,
+      legal_name: t("legal_name"),
+      entity_type: t("entity_type"),
+      jurisdiction: t("jurisdiction"),
+      website,
+      description: t("description"),
+      hq_location: t("hq_location"),
+      aum_range: t("aum_range"),
+      fund_count,
+      primary_strategy: t("primary_strategy"),
+      operator_role: t("operator_role"),
     })
     .eq("id", auth.ctx.orgId);
 
@@ -126,6 +156,44 @@ export async function createModuleRow(
             | "fund_interest"
             | "other"
             | null) ?? "real_estate",
+        acquisition_cost: num(formData, "acquisition_cost"),
+        current_value: num(formData, "current_value"),
+        acquisition_date: text(formData, "acquisition_date"),
+        status: text(formData, "status") ?? "active",
+        noi: num(formData, "noi"),
+        cap_rate: num(formData, "cap_rate"),
+      });
+      break;
+    }
+    case "execute/capital_events": {
+      const amount = num(formData, "amount");
+      if (amount == null) return;
+      // Capital events belong to a fund (NOT NULL FK). Attach to the org's
+      // first fund; without one there's nothing to book the flow against.
+      const { data: fund } = await supabase
+        .from("funds")
+        .select("id")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (!fund) return;
+      await supabase.from("capital_events").insert({
+        organization_id: orgId,
+        fund_id: fund.id,
+        event_type:
+          (text(formData, "event_type") as
+            | "capital_call"
+            | "distribution"
+            | "contribution"
+            | "fee"
+            | "return_of_capital"
+            | "carry"
+            | null) ?? "capital_call",
+        amount,
+        currency: text(formData, "currency") ?? "USD",
+        effective_date: text(formData, "effective_date") ?? new Date().toISOString().slice(0, 10),
+        reference: text(formData, "reference"),
       });
       break;
     }
@@ -177,4 +245,41 @@ export async function createModuleRow(
 
   revalidatePath(`/${hub}/${module}`);
   if (sessionId) revalidatePath(`/session/${sessionId}/${hub}/${module}`);
+}
+
+// --- Run › Comms: deal-aware Earn launcher --------------------------------
+// Seeds an Earn session pre-prompted to draft a comms artifact for a specific
+// deal, then opens it. Keeps the Run › Comms module a productive launchpad
+// rather than a dead-end scaffold.
+const COMMS_PROMPTS: Record<string, (deal: string) => string> = {
+  ic_memo: (deal) =>
+    `Draft an institutional IC memo for the deal "${deal}": opportunity summary, thesis fit, base/downside underwriting, key diligence findings and open risks, and a clear recommendation.`,
+  lp_update: (deal) =>
+    `Draft a concise LP update on the deal "${deal}" we're evaluating: what it is, why it fits the mandate, where we are in diligence, and expected next steps — confident but measured.`,
+  screening_memo: (deal) =>
+    `Draft a one-page screening memo for the deal "${deal}": the opportunity, thesis fit, the two or three things that would make or break it, and a go / no-go recommendation on whether to spend diligence time.`,
+};
+
+export async function draftDealComms(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const dealId = String(formData.get("deal_id") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  const build = COMMS_PROMPTS[kind];
+  if (!dealId || !build) redirect("/workspace");
+
+  const supabase = createServerClient();
+  const { data: deal } = await supabase
+    .from("deals")
+    .select("name")
+    .eq("id", dealId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (!deal) redirect("/run/comms");
+
+  const result = await handlePrompt(
+    { supabase, orgId: ctx.orgId, actorId: ctx.userId },
+    build(deal.name as string),
+  );
+  redirect(result.session_id ? `/session/${result.session_id}` : "/workspace");
 }

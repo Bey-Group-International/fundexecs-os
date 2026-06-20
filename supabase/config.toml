@@ -8,6 +8,12 @@ port = 54321
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
+# NOTE: Supabase flipped the implicit "auto-grant Data API privileges on new
+# public tables" default to false on 2026-05-30. The non-standard
+# `auto_expose_new_tables` key used to restore that legacy behavior is rejected by
+# the hosted branching CLI ("'api' has invalid keys"), so migrations now issue
+# explicit GRANTs to anon/authenticated/service_role for the tables they create
+# (RLS still governs actual row access). See migration 0048 for the pattern.
 
 [db]
 port = 54322

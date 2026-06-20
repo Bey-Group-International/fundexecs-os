@@ -24,6 +24,26 @@ FundExecs OS is the **system of record for private-market operators** — combin
 
 It automates the **80% of time spent moving information** so you can focus on the **20% that drives decisions**.
 
+### Wallet and Earn Copilot Visual Refresh
+
+The visual system now has an electric-blue enterprise console treatment:
+day/night themes, compute-grid panels, glowing hierarchy, CSS-only activation
+streams, and an Earn copilot drawer that reads like an active operating-agent
+terminal.
+
+![FundExecs OS wallet neural preview](./public/fundexecs-wallet-neural-preview.svg)
+
+The animated SVG below is a lightweight demo placeholder for the README and
+marketing surfaces. It shows the Pro selection flow and Earn routing feedback
+without adding video binaries or capture tooling.
+
+![FundExecs OS Earn copilot demo loop](./public/fundexecs-earn-copilot-demo.svg)
+
+Visual implementation guardrails live in
+[`docs/VISUAL_SYSTEM.md`](./docs/VISUAL_SYSTEM.md): blue accents for the
+operating shell, neural blue for compute/copilot surfaces, status tokens for
+semantic states, and centralized logo usage.
+
 |    What it replaces     |         What it becomes         |
 |-------------------------|---------------------------------|
 | DealCloud / Dynamo      | Native deal pipeline + graph    |
@@ -243,6 +263,7 @@ migration workflow.
 - [x] **Persist deals/assets from workflows** so the Command Center populates from real work
 - [x] **Capital Map** — relationship temperature, thesis fit, warm-intro pathfinding + gated next actions (Affinity, rebuilt native)
 - [x] **Gate layer** — Tier 1/2/3 control primitive so no action reaches a counterparty without sign-off
+- [x] **Unified Inbox** — one AI-triaged stream for booking, messaging, and video; gated next actions, deep links into Command Center context, and a dashboard digest (mock-or-real channel adapters: Gmail, Slack, Calendly, Google Calendar, Zoom, Google Meet)
 - [ ] Three-graph data architecture (query layer + `/graph/*`)
 - [ ] Three.js avatar workspace
 - [ ] Remaining Source / Run / Execute hub modules

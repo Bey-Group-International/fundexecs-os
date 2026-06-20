@@ -5,18 +5,31 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
+import {
+  createSessionGroup,
+  moveSessionToGroup,
+  deleteSession,
+  renameSession,
+  createSessionShare,
+  setSessionArchived,
+  setSessionPinned,
+  setSessionUnread,
+} from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
 import { GlobalTopBar } from "@/components/GlobalTopBar";
+import { MatchToast } from "@/components/inbox/MatchToast";
 import { AppSidebar } from "@/components/AppSidebar";
+import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 
 // The four hubs, in operating order, as shown in the side rail.
 const HUB_ORDER: Hub[] = ["build", "run", "source", "execute"];
 
-// Authed shell. Side rail: Earn (the copilot) + Workflows + Command Center, then
-// the four operational hubs (Build / Run / Source / Execute) whose modules
-// reveal on hover. Each hub has its own page with a top module switcher.
+// Authed shell. Side rail (see AppSidebar): Logo · New Session · Workflows ·
+// More, the four operational hubs (Build / Run / Source / Execute) whose
+// modules expand on click, then Recent sessions filed under group names, and
+// the account footer. Each hub has its own page with a top module switcher.
 export default async function AppLayout({
   children,
 }: {
@@ -28,33 +41,115 @@ export default async function AppLayout({
 
   const balance = await getWalletBalance(ctx.orgId);
 
-  // Account display: principal's name + current plan for the side-rail footer.
-  // The recent sessions feed the sidebar's conversation list (Claude Code style).
+  // Account display + the rail's "Recent" conversation list (Claude Code
+  // style): sessions filed under group names with an Ungrouped bucket.
   const supabase = createServerClient();
-  const [{ data: principal }, { data: wallet }, { data: recentSessions }] = await Promise.all([
-    supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
-    supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
-    supabase
-      .from("sessions")
-      .select("id, name, color")
-      .is("archived_at", null)
-      .order("created_at", { ascending: false })
-      .limit(20),
-  ]);
+  const [
+    { data: principal },
+    { data: wallet },
+    { data: recentSessions },
+    { data: groupRows },
+    { count: messagesUnread },
+    { count: dealsUnread },
+    { data: matchAlertRow },
+  ] = await Promise.all([
+      supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
+      supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
+      supabase
+        .from("sessions")
+        .select("id, name, color, group_id, pinned_at, unread")
+        .eq("organization_id", ctx.orgId)
+        .is("archived_at", null)
+        .order("pinned_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .limit(25),
+      supabase
+        .from("session_groups")
+        .select("id, name")
+        .eq("organization_id", ctx.orgId)
+        .order("created_at", { ascending: true }),
+      // Unread messages — the mailbox icon + sidebar badge. Capital, partners,
+      // providers, and comms; everything EXCEPT shared deals (those go to the
+      // lightbulb).
+      supabase
+        .from("inbox_threads")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", ctx.orgId)
+        .eq("unread", true)
+        .eq("status", "open")
+        .neq("channel", "deal_share"),
+      // Unread shared-deal updates — the lightbulb icon (botmemo deal flow).
+      supabase
+        .from("inbox_threads")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", ctx.orgId)
+        .eq("unread", true)
+        .eq("status", "open")
+        .eq("channel", "deal_share"),
+      // The newest unread match alert — an ecosystem match or a shared deal that
+      // fits — surfaced as the quick toast by the bell. Read-later lives in the
+      // inbox / feed; this is just the pop-in.
+      supabase
+        .from("inbox_threads")
+        .select("id, channel, subject, preview, ai_summary")
+        .eq("organization_id", ctx.orgId)
+        .in("channel", ["ecosystem", "deal_share"])
+        .eq("unread", true)
+        .eq("status", "open")
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  // Shape the freshest match for the toast (null when there is none). A deal
+  // match opens the "deals that fit you" feed; an ecosystem match opens the inbox.
+  const matchRow = matchAlertRow as
+    | { id: string; channel: string; subject: string; preview: string | null; ai_summary: string | null }
+    | null;
+  const matchAlert = matchRow
+    ? {
+        id: matchRow.id,
+        title: matchRow.subject,
+        body: matchRow.ai_summary ?? matchRow.preview ?? "",
+        href: matchRow.channel === "deal_share" ? "/deals/feed" : "/inbox",
+      }
+    : null;
+  const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
+  const planKey = wallet?.plan as PlanKey | null;
+  const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
 
   // Only surface sessions that actually hold work. A session is created lazily
   // on the first prompt (which also creates its workflow), so empty rows never
   // appear in the conversation list.
-  const candidates = (recentSessions ?? []) as { id: string; name: string; color: string | null }[];
+  const candidates = (recentSessions ?? []) as {
+    id: string;
+    name: string;
+    color: string | null;
+    group_id: string | null;
+    pinned_at: string | null;
+    unread: boolean;
+  }[];
   const candidateIds = candidates.map((s) => s.id);
   const { data: workflowRows } = candidateIds.length
-    ? await supabase.from("tasks").select("session_id").is("parent_task_id", null).in("session_id", candidateIds)
+    ? await supabase
+        .from("tasks")
+        .select("session_id")
+        .is("parent_task_id", null)
+        .in("session_id", candidateIds)
     : { data: [] as { session_id: string | null }[] };
   const sessionsWithWork = new Set((workflowRows ?? []).map((w) => w.session_id));
-  const sessions = candidates.filter((s) => sessionsWithWork.has(s.id)).slice(0, 8);
-  const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
-  const planKey = wallet?.plan as PlanKey | null;
-  const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
+  const sessions = candidates
+    .filter((s) => sessionsWithWork.has(s.id))
+    .slice(0, 12)
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      groupId: s.group_id,
+      pinned: s.pinned_at != null,
+      unread: s.unread,
+    }));
+  const groups = (groupRows ?? []).map((g) => ({ id: g.id, name: g.name }));
 
   const hubs = HUB_ORDER.map((key) => {
     const hub = HUB_BY_KEY[key];
@@ -69,23 +164,51 @@ export default async function AppLayout({
   });
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-0 text-fg-primary">
+    <div className="flex h-dvh overflow-hidden bg-surface-0 text-fg-primary print:block print:h-auto print:overflow-visible">
+      <div className="contents print:hidden">
       <AppSidebar
         name={name}
         planName={planName}
         hubs={hubs}
         sessions={sessions}
+        groups={groups}
+        inboxUnread={messagesUnread ?? 0}
         signOutAction={signOut}
+        createGroupAction={createSessionGroup}
+        moveSessionAction={moveSessionToGroup}
+        deleteSessionAction={deleteSession}
+        renameSessionAction={renameSession}
+        shareSessionAction={createSessionShare}
+        archiveSessionAction={setSessionArchived}
+        pinSessionAction={setSessionPinned}
+        unreadSessionAction={setSessionUnread}
       />
+      </div>
 
       <ActiveSessionProvider>
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <GlobalTopBar balance={balance} />
-          <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
+        <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
+          <div className="print:hidden">
+            {/* Mailbox = unread messages (capital/partners/providers + comms);
+                lightbulb = unread shared deals. Both shake/pop on a new arrival. */}
+            <GlobalTopBar
+              balance={balance}
+              messagesUnread={messagesUnread ?? 0}
+              dealsUnread={dealsUnread ?? 0}
+            />
+            {/* The quick alert that pops in by the bell on a fresh ecosystem
+                match — click to open, or let it fade and read it later. */}
+            <MatchToast alert={matchAlert} />
+          </div>
+          <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 print:overflow-visible print:p-0">
+            {children}
+          </main>
         </div>
       </ActiveSessionProvider>
 
-      <GuidedTour />
+      <div className="print:hidden">
+        <GuidedTour />
+        <EarnCopilotDock name={name} />
+      </div>
     </div>
   );
 }

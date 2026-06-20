@@ -1,8 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AGENTS } from "@/lib/agents";
 import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const CALENDLY = "https://calendly.com/fundexecs";
 
@@ -72,16 +72,17 @@ export default function LandingPage({
   }
 
   return (
-    <div className="min-h-screen bg-surface-0 text-fg-primary">
+    <div className="min-h-screen overflow-hidden bg-surface-0 text-fg-primary">
 
       {/* Nav */}
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-line bg-surface-0/80 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-line bg-surface-0/82 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <Logo />
           <div className="flex items-center gap-3">
+            <ThemeToggle compact />
             <Link
               href="/login"
-              className="rounded-md px-3 py-1.5 text-sm text-fg-secondary transition hover:text-fg-primary"
+              className="hidden rounded-md px-3 py-1.5 text-sm text-fg-secondary transition hover:text-fg-primary sm:inline-flex"
             >
               Sign in
             </Link>
@@ -96,19 +97,19 @@ export default function LandingPage({
       </header>
 
       {/* Hero */}
-      <section className="relative mx-auto max-w-6xl px-6 pb-24 pt-40">
+      <section className="fx-blueprint relative mx-auto max-w-6xl px-4 pb-20 pt-32 sm:px-6 sm:pb-24 sm:pt-40">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-24 -z-10 mx-auto h-72 max-w-3xl rounded-full bg-gold-500/10 blur-3xl"
+          className="pointer-events-none absolute inset-x-0 top-24 -z-10 mx-auto h-72 max-w-3xl rounded-full bg-gold-500/15 blur-3xl"
         />
         <div className="grid items-center gap-16 lg:grid-cols-2">
           {/* Text */}
           <div>
             <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="h-1.5 w-1.5 rounded-full bg-status-success" />
               Private equity · Real estate · Private credit · Family office
             </p>
-            <h1 className="mt-5 text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">
+            <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-6xl">
               The Operating System<br />
               for Private Markets
             </h1>
@@ -119,7 +120,7 @@ export default function LandingPage({
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/login?mode=signup"
-                className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
+                className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 shadow-[0_14px_34px_-20px_rgb(var(--fx-accent-rgb)/0.95)] transition hover:opacity-90"
               >
                 Request access
               </Link>
@@ -137,31 +138,63 @@ export default function LandingPage({
             </p>
           </div>
 
-          {/* Earn Orb */}
+          {/* Command graph */}
           <div className="flex items-center justify-center lg:justify-end">
-            <div className="relative flex items-center justify-center">
-              {/* Outer glow */}
-              <div
-                aria-hidden
-                className="absolute h-72 w-72 rounded-full bg-gold-500/15 blur-3xl"
-                style={{ animation: "pulse 4s cubic-bezier(0.4,0,0.6,1) infinite" }}
-              />
-              {/* Mid ring */}
-              <div
-                aria-hidden
-                className="absolute h-56 w-56 rounded-full border border-gold-500/20 bg-gradient-to-br from-gold-500/10 to-transparent"
-                style={{ animation: "pulse 3s cubic-bezier(0.4,0,0.6,1) infinite 0.5s" }}
-              />
-              {/* Orb body — coin image cropped into circle */}
-              <div className="relative h-48 w-48 overflow-hidden rounded-full border border-gold-500/40 shadow-[0_0_60px_-10px_rgba(234,179,8,0.4)]">
-                <Image
-                  src="/earn-coin.png"
-                  alt="Earn"
-                  fill
-                  className="object-contain"
-                  priority
-                />
+            <div className="fx-orbit-card min-h-[360px] w-full max-w-md p-5 sm:p-6">
+              <div className="relative z-10 flex items-center justify-between">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-400">
+                    Live command graph
+                  </p>
+                  <p className="mt-1 text-sm text-fg-secondary">Earn routes capital work across agents.</p>
+                </div>
+                <span className="rounded-full border border-gold-500/35 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300">
+                  60 FPS CSS
+                </span>
               </div>
+              <div className="relative z-10 mt-8 grid grid-cols-3 gap-3">
+                {[
+                  ["Source", "124 LP paths"],
+                  ["Run", "8 diligence rooms"],
+                  ["Execute", "$42M marked"],
+                ].map(([label, value], index) => (
+                  <div
+                    key={label}
+                    className="rounded-2xl border border-line/80 bg-surface-0/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]"
+                    style={{ animationDelay: `${index * 120}ms` }}
+                  >
+                    <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</p>
+                    <p className="mt-2 text-sm font-semibold text-fg-primary">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="relative z-10 mt-9 flex h-40 items-center justify-center">
+                <span className="absolute h-32 w-32 rounded-full border border-gold-400/25" />
+                <span className="absolute h-48 w-48 rounded-full border border-gold-400/10" />
+                <span className="absolute h-3 w-3 rounded-full bg-gold-300 shadow-[0_0_24px_rgb(var(--fx-accent-rgb)/0.9)]" />
+                {[
+                  "Analyst",
+                  "IR",
+                  "Diligence",
+                  "Admin",
+                ].map((label, index) => (
+                  <span
+                    key={label}
+                    className={`absolute rounded-full border border-gold-500/35 bg-surface-1 px-2 py-1 font-mono text-[10px] text-fg-secondary shadow-[0_0_22px_-10px_rgb(var(--fx-accent-rgb)/0.9)] ${
+                      index === 0
+                        ? "-top-1 left-1/2 -translate-x-1/2"
+                        : index === 1
+                          ? "right-2 top-1/2 -translate-y-1/2"
+                          : index === 2
+                            ? "bottom-0 left-1/2 -translate-x-1/2"
+                            : "left-2 top-1/2 -translate-y-1/2"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+              <div className="fx-data-stream" />
             </div>
           </div>
         </div>
@@ -170,7 +203,7 @@ export default function LandingPage({
       <div className="border-t border-line" />
 
       {/* How it works — video placeholder + loop */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-start">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
@@ -195,7 +228,7 @@ export default function LandingPage({
                 { label: "Deal Sourcing", example: "Screen acquisition targets, score thesis fit, produce the screening report." },
                 { label: "Portfolio Ops", example: "Pull KPIs across every asset, flag variances, deliver the board pack." },
               ].map((uc) => (
-                <div key={uc.label} className="flex items-start gap-3 rounded-lg border border-line bg-surface-1 px-4 py-3">
+                <div key={uc.label} className="fx-glass flex items-start gap-3 px-4 py-3">
                   <span className="mt-0.5 shrink-0 rounded-full border border-gold-500/30 bg-gold-500/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-gold-400">
                     {uc.label}
                   </span>
@@ -239,7 +272,7 @@ export default function LandingPage({
           {/* Right: loop */}
           <div className="flex flex-col gap-4">
             {/* Loop steps */}
-            <div className="rounded-2xl border border-line bg-surface-1 p-6">
+            <div className="fx-card p-5 sm:p-6">
               <p className="mb-5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
                 The capital workflow loop
               </p>
@@ -264,7 +297,7 @@ export default function LandingPage({
       <div className="border-t border-line" />
 
       {/* Agent Roster */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
           Agent Roster
         </p>
@@ -281,7 +314,7 @@ export default function LandingPage({
           const earn = AGENTS.find((a) => a.key === "associate");
           if (!earn) return null;
           return (
-            <div className="mt-8 rounded-2xl border border-gold-500/30 bg-surface-1 p-6">
+            <div className="fx-card mt-8 border-gold-500/30 p-5 sm:p-6">
               <div className="flex items-center gap-3">
                 <span
                   className="h-3 w-3 rounded-full ring-2 ring-gold-500/30"
@@ -305,7 +338,7 @@ export default function LandingPage({
           {AGENTS.filter((a) => a.key !== "associate").map((agent) => (
             <div
               key={agent.key}
-              className="rounded-xl border border-line bg-surface-1 p-5 transition hover:border-gold-500/30"
+              className="fx-card fx-card-hover p-5"
             >
               <div className="flex items-center gap-2.5">
                 <span
@@ -326,7 +359,7 @@ export default function LandingPage({
       <div className="border-t border-line" />
 
       {/* CTA */}
-      <section className="mx-auto max-w-6xl px-6 py-24 text-center">
+      <section className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 sm:py-24">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
           Early access
         </p>
@@ -359,8 +392,8 @@ export default function LandingPage({
         </p>
       </section>
 
-      <footer className="border-t border-line px-6 py-6">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
+      <footer className="border-t border-line px-4 py-6 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <span className="font-mono text-xs text-fg-muted">FundExecs OS · Alpha</span>
           <span className="font-mono text-xs text-fg-muted">
             Data model first. Agents second. Capital third.

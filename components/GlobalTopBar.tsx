@@ -3,12 +3,22 @@
 import Link from "next/link";
 import { useActiveSession } from "@/components/session/active-session";
 import { SessionCommandBar } from "@/components/session/SessionCommandBar";
+import { TopNavAlerts } from "@/components/TopNavAlerts";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatCredits } from "@/lib/billing";
 
 // The global top bar. Inside a session it renders the full command surface
 // (session name + Share + ⋮ Session Actions); elsewhere it shows the app-level
-// items only (Notifications · Balance · Profile→Settings).
-export function GlobalTopBar({ balance }: { balance: number }) {
+// items: the live mailbox + lightbulb alerts, balance, and settings.
+export function GlobalTopBar({
+  balance,
+  messagesUnread = 0,
+  dealsUnread = 0,
+}: {
+  balance: number;
+  messagesUnread?: number;
+  dealsUnread?: number;
+}) {
   const { session, tasks } = useActiveSession();
 
   if (session) {
@@ -24,20 +34,15 @@ export function GlobalTopBar({ balance }: { balance: number }) {
   }
 
   return (
-    <div className="flex h-12 items-center gap-2 border-b border-line px-4">
+    <div className="flex min-h-12 items-center gap-2 border-b border-line bg-surface-0/82 px-3 py-2 backdrop-blur-xl sm:h-12 sm:px-4">
       <span className="font-mono text-xs uppercase tracking-wider text-fg-muted">Workspace</span>
       <div className="ml-auto flex items-center gap-1">
-        <span
-          title="Notifications"
-          className="rounded-md px-2 py-1.5 text-fg-secondary"
-          aria-label="Notifications"
-        >
-          💡
-        </span>
+        <ThemeToggle compact />
+        <TopNavAlerts initialMessages={messagesUnread} initialDeals={dealsUnread} />
         <Link
           href="/wallet"
           title="Credit balance — open wallet"
-          className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+          className="hidden items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary sm:flex"
         >
           <span className="text-gold-400">◇</span>
           {formatCredits(balance)}

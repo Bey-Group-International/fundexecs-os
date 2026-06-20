@@ -26,6 +26,7 @@ export const HUBS: HubDefinition[] = [
       { key: "entity", label: "Entity" },
       { key: "track_record", label: "Track Record" },
       { key: "team", label: "Team" },
+      { key: "data_room", label: "Materials & Data Room" },
     ],
   },
   {
@@ -61,6 +62,9 @@ export const HUBS: HubDefinition[] = [
       { key: "closing", label: "Closing" },
       { key: "capital_events", label: "Capital Events" },
       { key: "asset_management", label: "Asset Management" },
+      { key: "valuations", label: "Valuations" },
+      { key: "cap_table", label: "Cap Table" },
+      { key: "waterfall", label: "Waterfall" },
       { key: "reporting", label: "Reporting" },
       { key: "exit", label: "Exit" },
     ],

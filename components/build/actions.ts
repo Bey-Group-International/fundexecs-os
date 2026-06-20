@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
+import { gatherFoundationContext } from "@/lib/foundation-context";
 
 // Parse a comma/newline-separated input into a clean string[].
 function toList(raw: string): string[] {
@@ -83,6 +84,8 @@ export async function createEntity(formData: FormData): Promise<void> {
     name,
     entity_type: String(formData.get("entity_type") ?? "spv").trim() || "spv",
     jurisdiction: String(formData.get("jurisdiction") ?? "").trim() || null,
+    parent_entity_id: String(formData.get("parent_entity_id") ?? "").trim() || null,
+    formation_date: String(formData.get("formation_date") ?? "").trim() || null,
     notes: String(formData.get("notes") ?? "").trim() || null,
     created_by: ctx.userId,
   });
@@ -144,14 +147,23 @@ const DRAFT_PROMPTS: Record<string, string> = {
   track_record:
     "Turn our deals into an investor-ready track record summary: highlight realized vs. unrealized, gross IRR/MOIC, and notable outcomes.",
   team: "Draft concise, professional bios for our team based on their roles and the firm's focus.",
+  reporting:
+    "Draft a quarterly LP update from our live portfolio: NAV and value created, capital account (committed / called / distributed), the headline multiples (TVPI, DPI, gross MOIC), notable holdings and any realized exits, and a measured outlook — institutional and confident.",
 };
 
 export async function draftWithEarn(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const moduleKey = String(formData.get("module") ?? "");
-  const prompt = DRAFT_PROMPTS[moduleKey];
+  let prompt = DRAFT_PROMPTS[moduleKey];
   if (!prompt) redirect("/workspace");
+
+  // Compound the draft on what other Build modules already hold, so each
+  // module's Associate builds on the firm's foundation instead of from scratch.
+  const context = await gatherFoundationContext(ctx.orgId);
+  if (context) {
+    prompt += `\n\n--- What we already know about the firm (use this; do not contradict it) ---\n${context}`;
+  }
 
   const supabase = createServerClient();
   const result = await handlePrompt(

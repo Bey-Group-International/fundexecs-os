@@ -60,6 +60,26 @@ export async function toggleAutomation(formData: FormData): Promise<void> {
   revalidatePath("/automations");
 }
 
+// Edit a saved workflow in place — name, instruction, and unattended autonomy.
+// This is what makes an approved "Approve & automate" entry editable later.
+export async function updateAutomation(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const prompt = String(formData.get("prompt") ?? "").trim();
+  const autoApprove = formData.get("auto_approve") === "on";
+  if (!id || !name || !prompt) return;
+
+  const supabase = createServerClient();
+  await supabase
+    .from("automations")
+    .update({ name, prompt, auto_approve: autoApprove })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath("/automations");
+}
+
 export async function deleteAutomation(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
@@ -88,6 +108,9 @@ export async function runAutomationNow(formData: FormData): Promise<void> {
     .eq("organization_id", ctx.orgId)
     .single();
   if (!data) return;
+  // Guard: a paused workflow must not spend credits. Stopping it from the
+  // Workflows page blocks future runs until it's resumed.
+  if (!data.enabled) return;
 
   await runAutomation(
     { supabase, orgId: ctx.orgId, actorId: ctx.userId },

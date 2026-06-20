@@ -7,6 +7,7 @@ import { gateDecision, type ActionKind } from "@/lib/gates";
 import { getActiveMandate } from "@/lib/mandates";
 import { dispatchAction } from "@/lib/integrations";
 import { recordDispatch } from "@/lib/integrations/log";
+import { isEngagingAction, recordEngagement } from "@/lib/engagement";
 import type { AgentKey, Json } from "@/lib/supabase/database.types";
 
 // Which executive owns each kind of next action. Determines who the queued task
@@ -18,11 +19,16 @@ const AGENT_FOR_ACTION: Record<ActionKind, AgentKey> = {
   score: "executive_advisor",
   research: "executive_advisor",
   build_list: "executive_advisor",
+  draft_reply: "investor_relations",
+  create_video_meeting: "associate",
   send_outreach: "rainmaker",
   send_intro_request: "rainmaker",
   share_materials: "investor_relations",
   send_diligence_request: "diligence",
   distribute_report: "investor_relations",
+  send_reply: "investor_relations",
+  propose_meeting: "associate",
+  confirm_booking: "associate",
   sign_document: "associate",
   submit_term_sheet: "associate",
   move_capital: "fund_admin",
@@ -99,6 +105,13 @@ export async function queueNextAction(
     hub: "source",
     payload: { title, gate_tier: decision.tier } as Json,
   });
+
+  // Relationship feedback loop: deciding to reach a counterparty warms the
+  // relationship on the graph, which compounds back into the Capital Map's
+  // warmth and intro paths. Internal drafts don't count — only real outreach.
+  if (isEngagingAction(action)) {
+    await recordEngagement(supabase, { orgId, investorId, action });
+  }
 
   if (decision.requiresApproval) {
     const { data: approval } = await supabase
