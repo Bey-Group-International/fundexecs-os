@@ -83,6 +83,9 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - ✅ Source learning optimization — the in-module AI Sourcing panel now passes
   operator queries into target generation, records accepted and rejected
   candidate signals with fit scores, and surfaces personalization state.
+- ✅ Earn conversation theater — sessions now have a 2D live workspace with
+  clickable agent avatars, computation panels, active model display, expanding
+  composer, media attachment manifests, and browser voice transcript capture.
 
 ### What has not been built yet
 
@@ -95,6 +98,9 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - 🔧 Graph query layer (`/graph/*` endpoints + visualizations)
 - 🔧 Org-specific artifact embedding into Brain recall (operator feedback now
   learns from behavior; completed work is not yet vectorized into recall)
+- 🔧 True multimodal/model backends for Earn inputs (UI captures attachment and
+  voice metadata; provider switching is visible but still routes through the
+  current Claude-backed execution path until OpenAI/Gemini adapters and storage land)
 
 ### What you must never do
 
@@ -495,6 +501,21 @@ Deployed, monitoring               →  live, observability active
              |  missing local Supabase env.
              |  Next: align Source activity staleness/live-stage filters and add DB-backed
              |  action tests once local Supabase is available.
+
+2026-06-20  |  Earn conversation theater  |  The session now feels like active work.
+             |  Built: session-theater model helpers + tests; live 2D Earn Workspace in
+             |  Copilot sessions with clickable agent avatars, status/progress lanes, and
+             |  computation panels; expanding two-line composer; model selector state
+             |  (Claude / ChatGPT / Gemini) shown in the workspace and embedded in the
+             |  prompt envelope; image/video attachment manifests; browser speech
+             |  transcript capture when available.
+             |  Decision: ship a 2D inspectable theater first, before Three.js/GSAP and
+             |  binary media/storage/provider adapters, so operators immediately see agents
+             |  working without destabilizing the sacred prompt→plan→approve loop.
+             |  Confidence: Tested by unit/type/lint/build; authenticated UI blocked by
+             |  local login/autofill environment.
+             |  Next: persist attachments to storage, add true multimodal provider routing,
+             |  and store per-session preferred model once provider adapters exist.
 ```
 
 ---

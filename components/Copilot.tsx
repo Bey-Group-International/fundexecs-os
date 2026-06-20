@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
+import { EARN_MODELS, buildEarnPromptEnvelope, type EarnAttachmentInput, type EarnModelKey } from "@/lib/earn-conversation";
+import { activeAgent, buildAgentTheater, type AgentTheaterNode } from "@/lib/session-theater";
 
 export interface WorkflowBundle {
   workflow: Task;
@@ -64,6 +66,10 @@ export default function Copilot({
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
+  const [model, setModel] = useState<EarnModelKey>("claude");
+  const [attachments, setAttachments] = useState<EarnAttachmentInput[]>([]);
+  const [voiceUsed, setVoiceUsed] = useState(false);
+  const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [clarifying, setClarifying] = useState(false);
@@ -71,11 +77,19 @@ export default function Copilot({
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Keep the newest turn in view as the conversation grows — chat behavior.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [bundles.length, planning]);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 176)}px`;
+  }, [prompt]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -105,13 +119,16 @@ export default function Copilot({
     e.preventDefault();
     const body = prompt.trim();
     if (!body || busy) return;
+    const envelope = buildEarnPromptEnvelope({ body, model, attachments, voiceUsed });
     setBusy(true);
     setPlanning(true);
     setPrompt("");
+    setAttachments([]);
+    setVoiceUsed(false);
     const res = await fetch("/api/prompt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(sessionId ? { body, session_id: sessionId } : { body }),
+      body: JSON.stringify(sessionId ? { body: envelope, session_id: sessionId } : { body: envelope }),
     }).catch(() => null);
     setBusy(false);
     setPlanning(false);
@@ -163,9 +180,60 @@ export default function Copilot({
   // Conversation order: oldest turn first, newest nearest the composer.
   const turns = [...bundles].reverse();
   const empty = turns.length === 0 && !planning;
+  const theaterBundle =
+    turns.find((b) => b.workflow.status === "in_progress" || b.workflow.status === "awaiting_approval") ??
+    turns[turns.length - 1] ??
+    null;
+
+  function addFiles(files: FileList | null) {
+    if (!files?.length) return;
+    setAttachments((prev) => [
+      ...prev,
+      ...Array.from(files)
+        .filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/"))
+        .map((file) => ({ name: file.name, type: file.type, size: file.size })),
+    ].slice(0, 6));
+  }
+
+  function startVoice() {
+    type SpeechRecognitionLike = {
+      lang: string;
+      interimResults: boolean;
+      onstart: (() => void) | null;
+      onend: (() => void) | null;
+      onerror: (() => void) | null;
+      onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+      start: () => void;
+    };
+    type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+    const SpeechRecognition =
+      (window as unknown as { SpeechRecognition?: SpeechRecognitionCtor }).SpeechRecognition ??
+      (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionCtor }).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setPrompt((p) => `${p}${p ? "\n" : ""}[Voice input unavailable in this browser.]`);
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript ?? "")
+        .join(" ")
+        .trim();
+      if (transcript) {
+        setVoiceUsed(true);
+        setPrompt((p) => `${p}${p ? "\n" : ""}${transcript}`);
+      }
+    };
+    recognition.start();
+  }
 
   return (
-    <div className="mx-auto flex min-h-full max-w-3xl flex-col">
+    <div className="mx-auto flex min-h-full max-w-6xl flex-col">
       <header className="flex items-center gap-2 pb-4">
         <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-gold-400">
           Earn · Agent Copilot
@@ -176,8 +244,12 @@ export default function Copilot({
         </span>
       </header>
 
+      {theaterBundle ? (
+        <AgentWorkspace bundle={theaterBundle} planning={planning} model={model} />
+      ) : null}
+
       {/* Transcript — each turn is the operator's prompt and Earn's response. */}
-      <div className="flex flex-1 flex-col gap-6 pb-4">
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 pb-4">
         {empty ? (
           <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
             <h1 className="font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -226,26 +298,210 @@ export default function Copilot({
       {/* Composer — pinned to the bottom of the conversation. */}
       <form
         onSubmit={submit}
-        className="sticky bottom-0 flex gap-2 border-t border-line bg-surface-0/90 pb-1 pt-3 backdrop-blur supports-[backdrop-filter]:bg-surface-0/75"
+        className="sticky bottom-0 mx-auto w-full max-w-3xl border-t border-line bg-surface-0/90 pb-1 pt-3 backdrop-blur supports-[backdrop-filter]:bg-surface-0/75"
       >
-        <input
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder={
-            sessionId
-              ? "Reply to Earn — this stays in the conversation…"
-              : "e.g. Build the LBO model and test debt capacity…"
-          }
-          className="flex-1 rounded-lg border border-line bg-surface-1 px-4 py-3 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
-        />
-        <button
-          disabled={busy}
-          className="rounded-lg bg-gold-400 px-5 py-3 text-sm font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
-        >
-          {planning ? "Planning…" : sessionId ? "Send" : "Run"}
-        </button>
+        {attachments.length ? (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {attachments.map((file, i) => (
+              <button
+                key={`${file.name}-${i}`}
+                type="button"
+                onClick={() => setAttachments((prev) => prev.filter((_, index) => index !== i))}
+                className="rounded-full border border-gold-500/30 bg-gold-500/10 px-2 py-1 font-mono text-[10px] text-gold-300"
+                title="Remove attachment"
+              >
+                {file.type.startsWith("video/") ? "video" : "image"} · {file.name} ×
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={inputRef}
+            value={prompt}
+            rows={2}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder={
+              sessionId
+                ? "Reply to Earn — Enter adds space, ⌘↵ sends…"
+                : "e.g. Build the LBO model and test debt capacity…"
+            }
+            className="min-h-[52px] flex-1 resize-none rounded-lg border border-line bg-surface-1 px-4 py-3 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
+          />
+          <div className="flex flex-col gap-1.5">
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value as EarnModelKey)}
+              className="rounded-md border border-line bg-surface-1 px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-secondary outline-none focus:border-gold-500"
+              aria-label="Reasoning model"
+            >
+              {EARN_MODELS.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-1.5">
+              <label className="cursor-pointer rounded-md border border-line bg-surface-1 px-2 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/50">
+                ⬆
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    addFiles(e.target.files);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={startVoice}
+                className={`rounded-md border px-2 py-1.5 text-xs transition ${
+                  listening ? "border-status-danger/50 bg-status-danger/10 text-status-danger" : "border-line bg-surface-1 text-fg-secondary hover:border-gold-500/50"
+                }`}
+                title="Speak to Earn"
+              >
+                {listening ? "●" : "🎙"}
+              </button>
+            </div>
+          </div>
+          <button
+            disabled={busy}
+            className="rounded-lg bg-gold-400 px-5 py-3 text-sm font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+          >
+            {planning ? "Planning…" : sessionId ? "Send" : "Run"}
+          </button>
+        </div>
       </form>
     </div>
+  );
+}
+
+const THEATER_STATUS_LABEL: Record<string, string> = {
+  queued: "Queued",
+  active: "Computing",
+  waiting: "Awaiting approval",
+  done: "Complete",
+  blocked: "Needs attention",
+};
+
+function AgentWorkspace({
+  bundle,
+  planning,
+  model,
+}: {
+  bundle: WorkflowBundle;
+  planning: boolean;
+  model: EarnModelKey;
+}) {
+  const nodes = useMemo(() => buildAgentTheater(bundle.steps), [bundle.steps]);
+  const [selected, setSelected] = useState(() => activeAgent(nodes));
+  const active = nodes.find((node) => node.agent === selected) ?? nodes[0];
+  const modelLabel = EARN_MODELS.find((m) => m.key === model)?.label ?? "Claude";
+
+  useEffect(() => {
+    const next = activeAgent(nodes);
+    if (next) setSelected((current) => (current && nodes.some((node) => node.agent === current) ? current : next));
+  }, [bundle.workflow.id, bundle.workflow.status, nodes]);
+
+  if (!nodes.length && !planning) return null;
+
+  return (
+    <section className="mb-5 overflow-hidden rounded-3xl border border-gold-500/20 bg-[radial-gradient(circle_at_20%_20%,rgba(234,179,8,0.16),transparent_30%),linear-gradient(135deg,rgba(15,23,42,0.94),rgba(2,6,23,0.98))] p-4 shadow-[0_20px_80px_-48px_rgba(234,179,8,0.7)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-300">
+            Live Earn Workspace
+          </p>
+          <h2 className="mt-1 font-display text-xl font-semibold text-fg-primary">{bundle.workflow.title}</h2>
+        </div>
+        <div className="rounded-full border border-gold-500/30 bg-black/35 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200">
+          {modelLabel} driving reasoning
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_0.9fr]">
+        <div className="relative min-h-[240px] overflow-hidden rounded-2xl border border-white/10 bg-black/35 p-4">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:32px_32px]" />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full border border-gold-500/20" />
+          <div className="relative grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {nodes.map((node, index) => (
+              <button
+                key={node.agent}
+                type="button"
+                onClick={() => setSelected(node.agent)}
+                className={`group rounded-2xl border bg-black/40 p-3 text-left transition hover:border-gold-500/50 ${
+                  selected === node.agent ? "border-gold-500/60 shadow-[0_0_28px_-18px_rgba(234,179,8,0.9)]" : "border-white/10"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/15" style={{ backgroundColor: `${node.color}22` }}>
+                    {node.status === "active" ? (
+                      <span className="absolute h-11 w-11 animate-ping rounded-full opacity-20" style={{ backgroundColor: node.color }} />
+                    ) : null}
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: node.color }} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-fg-primary">{node.name}</span>
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                      {THEATER_STATUS_LABEL[node.status]}
+                    </span>
+                  </span>
+                </span>
+                <span className="mt-3 block h-1 overflow-hidden rounded-full bg-white/10">
+                  <span className="block h-full rounded-full transition-all" style={{ width: `${Math.round(node.progress * 100)}%`, backgroundColor: node.color }} />
+                </span>
+                <span className="mt-2 block truncate text-xs text-fg-secondary">
+                  {index === 0 && planning ? "Earn is forming the plan..." : node.activeTitle}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/45 p-4">
+          {active ? (
+            <>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-fg-primary">{active.name}</p>
+                  <p className="mt-1 text-xs text-fg-muted">{active.role}</p>
+                </div>
+                <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  {active.motionStyle}
+                </span>
+              </div>
+              <div className="mt-4 space-y-2">
+                {active.computations.map((line, i) => (
+                  <div key={line} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-fg-secondary">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[10px] text-black" style={{ backgroundColor: active.color }}>
+                      {i + 1}
+                    </span>
+                    {line}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 rounded-lg border border-gold-500/20 bg-gold-500/[0.06] p-3">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-gold-300">Inspectable progress</p>
+                <p className="mt-1 text-xs text-fg-secondary">
+                  {active.stepCount} task{active.stepCount === 1 ? "" : "s"} · {Math.round(active.progress * 100)}% complete · click any avatar to inspect its computation lane.
+                </p>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-fg-muted">Earn is preparing the executive team.</p>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
