@@ -841,7 +841,7 @@ export type CreditGift = {
   redeemed_at: string | null;
 };
 
-// A FundExecs-issued API credential pair (migration 0043). The publishable key
+// A FundExecs-issued API credential pair (migration 0044). The publishable key
 // is public; only a keyed HMAC-SHA256 of the secret is stored, alongside
 // non-secret display fragments (`secret_prefix` + `secret_last4`) so the UI can
 // render a masked form. `mode` separates test from live credentials.
@@ -862,7 +862,7 @@ export type ApiKey = Timestamps & {
 };
 
 // A third-party secret an org stores for FundExecs to use on its behalf
-// (migration 0043). The value is AES-256-GCM encrypted at rest; `last4` is the
+// (migration 0044). The value is AES-256-GCM encrypted at rest; `last4` is the
 // only plaintext fragment kept, for a recognizable masked display.
 export type OrgSecret = Timestamps & {
   id: string;
@@ -876,7 +876,7 @@ export type OrgSecret = Timestamps & {
   created_by: string | null;
 };
 
-// Stripe hosted-Checkout session tracking (migration 0042). One row per Checkout
+// Stripe hosted-Checkout session tracking (migration 0043). One row per Checkout
 // Session, flipped to 'fulfilled' exactly once so credits/plan/gift effects are
 // never double-applied. `metadata` mirrors the session metadata used to fulfill.
 export type StripeCheckout = {
