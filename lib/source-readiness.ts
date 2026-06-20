@@ -142,12 +142,13 @@ const STAGE_DEFS: Omit<SourceStage, "unlocked" | "current">[] = [
 export async function getSourceMomentum(orgId: string): Promise<SourceMomentum> {
   const supabase = createServerClient();
 
+  // Momentum reflects the live pipeline — archived records are excluded.
   const [invRes, dealRes, partRes, provRes, debtRes, fundRes, thesisRes] = await Promise.all([
-    supabase.from("investors").select("*").eq("organization_id", orgId),
-    supabase.from("deals").select("*").eq("organization_id", orgId),
-    supabase.from("partners").select("*").eq("organization_id", orgId),
-    supabase.from("service_providers").select("*").eq("organization_id", orgId),
-    supabase.from("debt_facilities").select("*").eq("organization_id", orgId),
+    supabase.from("investors").select("*").eq("organization_id", orgId).is("archived_at", null),
+    supabase.from("deals").select("*").eq("organization_id", orgId).is("archived_at", null),
+    supabase.from("partners").select("*").eq("organization_id", orgId).is("archived_at", null),
+    supabase.from("service_providers").select("*").eq("organization_id", orgId).is("archived_at", null),
+    supabase.from("debt_facilities").select("*").eq("organization_id", orgId).is("archived_at", null),
     supabase.from("funds").select("*").eq("organization_id", orgId),
     supabase.from("investment_theses").select("*").eq("organization_id", orgId),
   ]);

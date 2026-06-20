@@ -28,6 +28,12 @@ function makeInvestor(overrides: Partial<Investor> = {}): Investor {
     session_id: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    provenance: "manual",
+    verification_status: "unverified",
+    verified_at: null,
+    verified_by: null,
+    verification_note: null,
+    archived_at: null,
     ...overrides,
   };
 }

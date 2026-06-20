@@ -57,7 +57,11 @@ export async function sourceTargets(hub: string, module: string): Promise<Source
   if (!cfg) return { ok: false, error: "AI sourcing is not available for this module." };
 
   const supabase = createServerClient();
-  const { data } = await supabase.from(cfg.table as "investors").select("name").limit(60);
+  const { data } = await supabase
+    .from(cfg.table as "investors")
+    .select("name")
+    .is("archived_at", null)
+    .limit(60);
   const existing = ((data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
   const mandate = await loadMandate(auth.ctx.orgId);
   const candidates = await generateTargets(key, mandate, existing);
@@ -98,6 +102,7 @@ export async function addSourcedTargets(
       const valid = new Set<InvestorType>(["lp", "family_office", "institution", "fund_of_funds", "lender", "bank", "co_gp", "other"]);
       const rows = clean.map((c) => ({
         organization_id: orgId,
+        provenance: "ai",
         name: c.name,
         investor_type: (valid.has(c.category as InvestorType) ? c.category : "other") as InvestorType,
         pipeline_stage: "prospect",
@@ -111,6 +116,7 @@ export async function addSourcedTargets(
     case "source/deal_pipeline": {
       const rows = clean.map((c) => ({
         organization_id: orgId,
+        provenance: "ai",
         name: c.name,
         stage: "sourced" as const,
         asset_class: c.category || null,
@@ -124,6 +130,7 @@ export async function addSourcedTargets(
     case "source/debt": {
       const rows = clean.map((c) => ({
         organization_id: orgId,
+        provenance: "ai",
         name: c.name,
         facility_type: c.category || "term_loan",
         status: "prospective",
@@ -138,6 +145,7 @@ export async function addSourcedTargets(
     case "source/partners": {
       const rows = clean.map((c) => ({
         organization_id: orgId,
+        provenance: "ai",
         name: c.name,
         partner_type: c.category || "co_gp",
         status: "prospective",
@@ -151,6 +159,7 @@ export async function addSourcedTargets(
     case "source/providers": {
       const rows = clean.map((c) => ({
         organization_id: orgId,
+        provenance: "ai",
         name: c.name,
         provider_type: c.category || "legal",
         status: "prospective",
@@ -187,6 +196,7 @@ export async function scorePipeline(hub: string, module: string): Promise<ScoreP
   const { data } = await supabase
     .from(cfg.table as "investors")
     .select("*")
+    .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(30);
   const rows = ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({

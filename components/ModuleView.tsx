@@ -289,14 +289,27 @@ export async function ModuleView({
     // Inside the session frame, a session-scoped module shows only this
     // session's rows; standalone it shows the full org-wide list.
     const scoped = sessionId && SESSION_SCOPED_MODULES.has(key);
-    let query = supabase
+    // Live rows drive the list + dashboards; archived rows are fetched
+    // separately and only surfaced behind the table's "Show archived" toggle.
+    let liveQ = supabase
       .from(cfg.table as "investors")
       .select("*")
+      .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(50);
-    if (scoped) query = query.eq("session_id", sessionId);
-    const { data } = await query;
-    const rows = (data ?? []) as unknown as Record<string, unknown>[];
+    let archQ = supabase
+      .from(cfg.table as "investors")
+      .select("*")
+      .not("archived_at", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (scoped) {
+      liveQ = liveQ.eq("session_id", sessionId);
+      archQ = archQ.eq("session_id", sessionId);
+    }
+    const [liveRes, archRes] = await Promise.all([liveQ, archQ]);
+    const rows = (liveRes.data ?? []) as unknown as Record<string, unknown>[];
+    const archivedRows = (archRes.data ?? []) as unknown as Record<string, unknown>[];
     const addConfig = ADD_ROW_CONFIGS[key];
 
     // Source modules read as live dashboards: a KPI strip + stage funnel
@@ -314,10 +327,14 @@ export async function ModuleView({
       // Momentum: accurate total + last-7-day counts, scoped the same way as
       // the list. Cheap head-only count queries, run alongside the page load.
       const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
-      let totalQ = supabase.from(cfg.table as "investors").select("*", { count: "exact", head: true });
+      let totalQ = supabase
+        .from(cfg.table as "investors")
+        .select("*", { count: "exact", head: true })
+        .is("archived_at", null);
       let weekQ = supabase
         .from(cfg.table as "investors")
         .select("*", { count: "exact", head: true })
+        .is("archived_at", null)
         .gte("created_at", weekAgo);
       if (scoped) {
         totalQ = totalQ.eq("session_id", sessionId);
@@ -352,7 +369,7 @@ export async function ModuleView({
             sessionId={scoped ? sessionId : undefined}
           />
         ) : null}
-        {rows.length === 0 ? (
+        {rows.length === 0 && archivedRows.length === 0 ? (
           <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
             <span
               aria-hidden
@@ -369,7 +386,14 @@ export async function ModuleView({
             </Link>
           </div>
         ) : (
-          <ModuleTable columns={cfg.columns} rows={rows} />
+          <ModuleTable
+            columns={cfg.columns}
+            rows={rows}
+            archivedRows={archivedRows}
+            hub={hub.key}
+            module={mod.key}
+            table={cfg.table}
+          />
         )}
       </div>
     );
