@@ -6,40 +6,45 @@ import { purchaseGift, redeemGift, redeemReferralCode } from "@/lib/gift-earn";
 import { stripeConfigured, createCheckout } from "@/lib/stripe";
 
 // Buy a credit pack as a gift for a recipient email. With Stripe configured this
-// opens a hosted Checkout and the gift is created (and becomes redeemable) on
-// payment return; without Stripe it falls back to creating the gift immediately
-// (mock payment).
+// opens an in-app embedded Checkout and the gift is created (and becomes
+// redeemable) on payment return; without Stripe it falls back to creating the
+// gift immediately (mock payment). Guarded so failures surface inline.
 export async function purchaseGiftAction(
   formData: FormData,
-): Promise<{ error?: string; ok?: boolean; url?: string }> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return { error: "Not authenticated" };
+): Promise<{ error?: string; ok?: boolean; clientSecret?: string }> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return { error: "Not authenticated" };
 
-  const recipientEmail = String(formData.get("recipient_email") ?? "");
-  const packKey = String(formData.get("pack_key") ?? "");
-  const message = String(formData.get("message") ?? "");
+    const recipientEmail = String(formData.get("recipient_email") ?? "");
+    const packKey = String(formData.get("pack_key") ?? "");
+    const message = String(formData.get("message") ?? "");
 
-  if (stripeConfigured()) {
-    return createCheckout({
-      kind: "gift",
-      orgId: ctx.orgId,
+    if (stripeConfigured()) {
+      return await createCheckout({
+        kind: "gift",
+        orgId: ctx.orgId,
+        createdBy: ctx.userId,
+        packKey,
+        recipientEmail,
+        message,
+      });
+    }
+
+    const res = await purchaseGift({
+      senderOrgId: ctx.orgId,
       createdBy: ctx.userId,
-      packKey,
       recipientEmail,
+      packKey,
       message,
     });
+    if (!res.ok) return { error: res.error };
+    revalidatePath("/gift");
+    return { ok: true };
+  } catch (err) {
+    console.error("[gift] purchaseGiftAction failed:", err);
+    return { error: "Something went wrong starting checkout. Please try again." };
   }
-
-  const res = await purchaseGift({
-    senderOrgId: ctx.orgId,
-    createdBy: ctx.userId,
-    recipientEmail,
-    packKey,
-    message,
-  });
-  if (!res.ok) return { error: res.error };
-  revalidatePath("/gift");
-  return { ok: true };
 }
 
 // Redeem a referral code for the current org — credits the welcome bonus and

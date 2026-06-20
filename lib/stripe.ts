@@ -67,13 +67,22 @@ export type CheckoutIntent =
       message?: string;
     };
 
-// Build a hosted Checkout Session for an intent and record it pending. Returns
-// the URL to redirect the browser to.
+// Build an EMBEDDED Checkout Session for an intent and record it pending.
+// Returns the session's client_secret, which the in-app Stripe Embedded Checkout
+// mounts — the payment form renders inside FundExecs (no redirect to Stripe).
+// On completion Stripe sends the browser to return_url (our fulfillment route).
+// Any Stripe/DB failure is caught and returned as a friendly { error } so the
+// caller can surface it inline instead of crashing the page.
 export async function createCheckout(
   intent: CheckoutIntent,
-): Promise<{ url?: string; error?: string }> {
-  const stripe = getStripe();
+): Promise<{ clientSecret?: string; error?: string }> {
   const base = appBaseUrl();
+  let stripe: Stripe;
+  try {
+    stripe = getStripe();
+  } catch {
+    return { error: "Payments aren’t configured. Set STRIPE_SECRET_KEY to enable checkout." };
+  }
 
   let params: Stripe.Checkout.SessionCreateParams;
   let amountUsd = 0;
@@ -150,30 +159,54 @@ export async function createCheckout(
     };
   }
 
-  const dest = intent.kind === "gift" ? "/gift" : "/wallet";
-  const session = await stripe.checkout.sessions.create({
-    ...params,
-    client_reference_id: intent.orgId,
-    metadata,
-    success_url: `${base}/api/stripe/return?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${base}${dest}?checkout=cancelled`,
-  });
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await stripe.checkout.sessions.create({
+      ...params,
+      ui_mode: "embedded",
+      client_reference_id: intent.orgId,
+      metadata,
+      // Embedded Checkout redirects the top frame here once payment completes.
+      return_url: `${base}/api/stripe/return?session_id={CHECKOUT_SESSION_ID}`,
+    });
+  } catch (err) {
+    return { error: friendlyStripeError(err) };
+  }
 
-  if (!session.url) return { error: "Stripe did not return a checkout URL." };
+  if (!session.client_secret) {
+    return { error: "Stripe did not return a checkout session. Please try again." };
+  }
 
   // Record the pending checkout so fulfillment is single-shot and auditable.
-  const service = createServiceClient();
-  await service.from("stripe_checkouts").insert({
-    organization_id: intent.orgId,
-    session_id: session.id,
-    kind: intent.kind,
-    amount_usd: amountUsd,
-    status: "pending",
-    metadata,
-    created_by: intent.createdBy,
-  });
+  try {
+    const service = createServiceClient();
+    await service.from("stripe_checkouts").insert({
+      organization_id: intent.orgId,
+      session_id: session.id,
+      kind: intent.kind,
+      amount_usd: amountUsd,
+      status: "pending",
+      metadata,
+      created_by: intent.createdBy,
+    });
+  } catch {
+    // Non-fatal: fulfillment can still proceed from the session metadata on
+    // return. Don't block the purchase on the audit-row write.
+  }
 
-  return { url: session.url };
+  return { clientSecret: session.client_secret };
+}
+
+// Map a Stripe SDK error to a safe, user-facing message — never echoing the key
+// or raw internals. Logged server-side for diagnosis.
+function friendlyStripeError(err: unknown): string {
+  const type = (err as { type?: string })?.type;
+  const code = (err as { code?: string })?.code;
+  console.error("[stripe] checkout session creation failed:", type ?? "", code ?? "", err);
+  if (type === "StripeAuthenticationError") {
+    return "Payment provider rejected the API key. Please check the Stripe configuration.";
+  }
+  return "We couldn’t start checkout. Please try again in a moment.";
 }
 
 export interface FulfillResult {

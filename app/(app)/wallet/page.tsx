@@ -42,6 +42,9 @@ export default async function WalletPage({
   if (!ctx.orgId) redirect("/onboarding");
 
   const live = stripeConfigured();
+  // Publishable key is client-safe; passed to the embedded checkout so Stripe.js
+  // can mount the in-app form without exposing it via NEXT_PUBLIC_.
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
 
   const [wallet, spend30d] = await Promise.all([
     getWallet(ctx.orgId),
@@ -146,12 +149,13 @@ export default async function WalletPage({
         currentPlan={currentPlan}
         recommendedKey={recommendedKey}
         live={live}
+        publishableKey={publishableKey}
       />
 
       <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-wider text-fg-muted">
         One-off credit packs
       </h2>
-      <CreditPacks live={live} />
+      <CreditPacks live={live} publishableKey={publishableKey} />
 
       {/* Gift Earn cross-sell */}
       <Link

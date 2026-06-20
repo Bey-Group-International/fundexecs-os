@@ -35,6 +35,7 @@ export default async function GiftEarnPage({
   if (!ctx.orgId) redirect("/onboarding");
 
   const live = stripeConfigured();
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
 
   const [code, summary, gifts, balance] = await Promise.all([
     getOrCreateReferralCode(ctx.orgId, ctx.userId),
@@ -218,7 +219,7 @@ export default async function GiftEarnPage({
             </p>
           </div>
           <div className="fx-card p-5">
-            <GiftForm live={live} />
+            <GiftForm live={live} publishableKey={publishableKey} />
           </div>
 
           {gifts.length > 0 ? (

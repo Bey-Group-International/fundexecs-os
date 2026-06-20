@@ -3,10 +3,10 @@ import { fulfillCheckout } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 
-// Stripe Checkout success_url lands here with ?session_id=…. We verify the
-// session was paid and apply its effect (idempotently), then bounce the operator
-// back to the right page with a status flag. This is the primary fulfillment
-// path — no webhook secret required.
+// Embedded Checkout's return_url lands here with ?session_id=… once payment
+// completes. We verify the session was paid and apply its effect (idempotently),
+// then bounce the operator back to the right page with a status flag. This is the
+// primary fulfillment path — no webhook secret required.
 export async function GET(req: NextRequest) {
   const sessionId = req.nextUrl.searchParams.get("session_id");
   const origin = req.nextUrl.origin;
