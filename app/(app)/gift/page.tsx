@@ -14,7 +14,7 @@ import {
   REFERRAL_WELCOME_BONUS,
   rankFor,
 } from "@/lib/referrals";
-import { stripeConfigured } from "@/lib/stripe";
+import { stripeConfigured, stripePublishableKeyValue } from "@/lib/stripe";
 import { CheckoutBanner } from "../wallet/CheckoutBanner";
 import { ReferralLink } from "./ReferralLink";
 import { GiftForm } from "./GiftForm";
@@ -35,7 +35,7 @@ export default async function GiftEarnPage({
   if (!ctx.orgId) redirect("/onboarding");
 
   const live = stripeConfigured();
-  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
+  const publishableKey = stripePublishableKeyValue();
 
   const [code, summary, gifts, balance] = await Promise.all([
     getOrCreateReferralCode(ctx.orgId, ctx.userId),
@@ -125,7 +125,13 @@ export default async function GiftEarnPage({
             </p>
           </div>
           <div className="fx-card p-4">
-            <ReferralLink code={code} />
+            {code ? (
+              <ReferralLink code={code} />
+            ) : (
+              <p className="text-sm text-fg-muted">
+                Your invite link is being set up — check back in a moment.
+              </p>
+            )}
           </div>
 
           <div className="fx-card p-5">

@@ -13,8 +13,8 @@ import type { Database } from "./database.types";
 export function createServerClient() {
   const cookieStore = cookies();
   return createSSRClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "",
     {
       cookies: {
         getAll() {
@@ -43,8 +43,8 @@ export function createServerClient() {
 
 export function createServiceClient() {
   return createRawClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "",
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "",
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
 }

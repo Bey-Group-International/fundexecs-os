@@ -25,16 +25,30 @@ import {
   type PlanKey,
 } from "@/lib/billing";
 
-export function stripeConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY);
+// Read keys trimmed — values pasted into env UIs frequently carry a trailing
+// newline/space, which Stripe rejects as "Invalid API Key".
+function secretKey(): string {
+  return process.env.STRIPE_SECRET_KEY?.trim() ?? "";
+}
+export function stripePublishableKeyValue(): string {
+  return process.env.STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
 }
 
-export const stripePublishableKey = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
+export function stripeConfigured(): boolean {
+  return secretKey().length > 0;
+}
 
 let _stripe: Stripe | null = null;
 export function getStripe(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY;
+  const key = secretKey();
   if (!key) throw new Error("STRIPE_SECRET_KEY is not set");
+  // Catch the most common misconfiguration: a publishable key pasted into the
+  // secret slot. Stripe would just say "Invalid API Key"; this is clearer.
+  if (key.startsWith("pk_")) {
+    throw new Error(
+      "STRIPE_SECRET_KEY looks like a publishable key (pk_…). Use the secret key (sk_… or rk_…).",
+    );
+  }
   if (!_stripe) _stripe = new Stripe(key);
   return _stripe;
 }
@@ -80,8 +94,15 @@ export async function createCheckout(
   let stripe: Stripe;
   try {
     stripe = getStripe();
-  } catch {
-    return { error: "Payments aren’t configured. Set STRIPE_SECRET_KEY to enable checkout." };
+  } catch (err) {
+    // Surface the specific misconfiguration (e.g. wrong key type); fall back to
+    // a generic "not configured" message.
+    const msg = err instanceof Error ? err.message : "";
+    return {
+      error: msg.includes("publishable key")
+        ? msg
+        : "Payments aren’t configured. Set STRIPE_SECRET_KEY to enable checkout.",
+    };
   }
 
   let params: Stripe.Checkout.SessionCreateParams;
