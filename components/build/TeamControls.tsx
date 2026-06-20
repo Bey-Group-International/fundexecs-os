@@ -20,6 +20,12 @@ export interface TeamMemberView {
   role: MemberRole;
 }
 
+export interface SeatInfo {
+  used: number;
+  /** Seat allotment for the current plan. `null` = unlimited. */
+  limit: number | null;
+}
+
 interface TeamControlsProps {
   members: TeamMemberView[];
   currentUserId: string;
@@ -29,6 +35,7 @@ interface TeamControlsProps {
     title: string | null;
     avatar_url: string | null;
   };
+  seats: SeatInfo;
 }
 
 const ROLE_OPTIONS: MemberRole[] = ["owner", "admin", "member"];
@@ -97,6 +104,7 @@ export function TeamControls({
   currentUserId,
   currentRole,
   ownProfile,
+  seats,
 }: TeamControlsProps) {
   const isAdmin = currentRole === "owner" || currentRole === "admin";
   const ownerCount = members.filter((m) => m.role === "owner").length;
@@ -130,7 +138,7 @@ export function TeamControls({
     <div className="flex flex-col gap-6">
       <YourProfile ownProfile={ownProfile} />
 
-      {isAdmin ? <InviteForm /> : null}
+      {isAdmin ? <InviteForm seats={seats} /> : null}
 
       {leaders.length > 0 ? (
         <div className="flex flex-col gap-2">
@@ -224,11 +232,17 @@ function YourProfile({
 }
 
 // --- Invite ---------------------------------------------------------------
-function InviteForm() {
+function InviteForm({ seats }: { seats: SeatInfo }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const unlimited = seats.limit === null;
+  const full = !unlimited && seats.used >= (seats.limit ?? 0);
+  const seatLabel = unlimited
+    ? `${seats.used} seat${seats.used === 1 ? "" : "s"} used · unlimited`
+    : `${seats.used} of ${seats.limit} seats used`;
 
   return (
     <form
@@ -248,20 +262,39 @@ function InviteForm() {
       }}
       className="grid gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-[1fr_auto_auto]"
     >
-      <div className="sm:col-span-3">
-        <p className="text-sm font-medium text-fg-primary">Invite member</p>
-        <p className="mt-0.5 text-xs text-fg-muted">
-          Add an existing FundExecs user to the firm by email.
-        </p>
+      <div className="sm:col-span-3 flex flex-wrap items-baseline justify-between gap-x-3">
+        <div>
+          <p className="text-sm font-medium text-fg-primary">Invite member</p>
+          <p className="mt-0.5 text-xs text-fg-muted">
+            Add an existing FundExecs user to the firm by email.
+          </p>
+        </div>
+        <span
+          className={`font-mono text-[10px] uppercase tracking-wider ${
+            full ? "text-status-danger" : "text-fg-muted"
+          }`}
+        >
+          {seatLabel}
+        </span>
       </div>
+      {full ? (
+        <p className="sm:col-span-3 text-xs text-fg-secondary">
+          Your plan’s seats are full.{" "}
+          <a href="/wallet" className="text-gold-400 underline">
+            Upgrade your plan
+          </a>{" "}
+          to add more members.
+        </p>
+      ) : null}
       <input
         name="email"
         type="email"
         required
+        disabled={full}
         placeholder="name@firm.com"
         className={inputClass}
       />
-      <select name="role" defaultValue="member" className={inputClass}>
+      <select name="role" defaultValue="member" disabled={full} className={inputClass}>
         {ROLE_OPTIONS.map((r) => (
           <option key={r} value={r}>
             {r}
@@ -269,7 +302,7 @@ function InviteForm() {
         ))}
       </select>
       <button
-        disabled={pending}
+        disabled={pending || full}
         className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
       >
         {pending ? "Adding…" : "Add"}

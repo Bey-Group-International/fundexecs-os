@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { planSeatLimit, seatLimitReached } from "@/lib/billing";
 import type { MemberRole } from "@/lib/supabase/database.types";
 
 const TEAM = "/build/team";
@@ -157,6 +158,25 @@ export async function inviteMember(
     .maybeSingle();
   if (existing) {
     return { error: "That person is already a member of this organization." };
+  }
+
+  // Seat limit: an org can only add members up to its plan's seat allotment.
+  // Read the plan and current member count with the service client so the
+  // check is reliable regardless of the caller's row-level visibility.
+  const { data: wallet } = await svc
+    .from("wallets")
+    .select("plan")
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  const { count: memberCount } = await svc
+    .from("organization_members")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", ctx.orgId);
+  if (seatLimitReached(wallet?.plan, memberCount ?? 0)) {
+    const limit = planSeatLimit(wallet?.plan);
+    return {
+      error: `Your plan includes ${limit} seat${limit === 1 ? "" : "s"}. Upgrade your plan to add more members.`,
+    };
   }
 
   const { error } = await svc.from("organization_members").insert({

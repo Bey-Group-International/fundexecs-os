@@ -17,6 +17,8 @@ export interface Plan {
   annual: number;
   /** Credits granted per month on this plan. */
   creditsPerMonth: number;
+  /** Member seats included. `null` = unlimited. */
+  seats: number | null;
   blurb: string;
   features: string[];
 }
@@ -28,6 +30,7 @@ export const PLANS: Plan[] = [
     monthly: 5,
     annual: 50,
     creditsPerMonth: 500,
+    seats: 1,
     blurb: "For a single operator.",
     features: [
       "500 credits / mo",
@@ -42,11 +45,12 @@ export const PLANS: Plan[] = [
     monthly: 30,
     annual: 300,
     creditsPerMonth: 4_000,
+    seats: 10,
     blurb: "For an active deal team.",
     features: [
       "4,000 credits / mo",
       "All 15 agents, priority runs",
-      "Team seats with role-based access",
+      "Up to 10 seats with role-based access",
       "Audit log, data export & priority support",
     ],
   },
@@ -56,6 +60,7 @@ export const PLANS: Plan[] = [
     monthly: 100,
     annual: 1_000,
     creditsPerMonth: 15_000,
+    seats: null,
     blurb: "For a firm running on FundExecs.",
     features: [
       "15,000 credits / mo, highest throughput",
@@ -84,6 +89,31 @@ export const CREDIT_PACKS: CreditPack[] = [
 
 export function planPrice(plan: Plan, interval: PlanInterval): number {
   return interval === "annual" ? plan.annual : plan.monthly;
+}
+
+// Seats available to an org with no active plan (entry level). An org always
+// has at least its owner, so the floor is 1.
+export const FREE_PLAN_SEATS = 1;
+
+// Member seats allowed for a plan key. `null` means unlimited. Unknown or
+// missing plans fall back to the entry-level allotment.
+export function planSeatLimit(planKey: string | null | undefined): number | null {
+  if (!planKey) return FREE_PLAN_SEATS;
+  const plan = PLAN_BY_KEY[planKey as PlanKey];
+  return plan ? plan.seats : FREE_PLAN_SEATS;
+}
+
+// Whether an org at `currentMembers` has used up its seat allotment and cannot
+// add another member without upgrading. Unlimited plans are never full. Orgs
+// already over their limit (e.g. after a downgrade) stay blocked from adding
+// more until they upgrade.
+export function seatLimitReached(
+  planKey: string | null | undefined,
+  currentMembers: number,
+): boolean {
+  const limit = planSeatLimit(planKey);
+  if (limit === null) return false; // unlimited
+  return currentMembers >= limit;
 }
 
 // Credits granted up front when starting a plan on the given interval. Annual
