@@ -1,5 +1,6 @@
 import { ModuleView } from "@/components/ModuleView";
 import { SourceSearch } from "@/components/source/SourceSearch";
+import { SourceTriage } from "@/components/source/SourceTriage";
 import { RunSearch } from "@/components/run/RunSearch";
 import { ExecuteSearch } from "@/components/execute/ExecuteSearch";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
@@ -9,8 +10,8 @@ export const dynamic = "force-dynamic";
 
 // Standalone module page. The hub layout provides the title + module switcher;
 // this renders the module's view (shared with the in-session frame). A few hubs
-// route a "search" pseudo-module to a conversational, Earn-driven surface
-// instead of a table.
+// route a pseudo-module ("search" / "triage") to a conversational, Earn-driven
+// surface instead of a table.
 export default function ModulePage({
   params,
   searchParams,
@@ -29,6 +30,9 @@ export default function ModulePage({
         initialPrompt={initialPrompt}
       />
     );
+  }
+  if (params.hub === "source" && params.module === "triage") {
+    return <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;

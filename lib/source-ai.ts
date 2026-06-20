@@ -585,6 +585,106 @@ export async function planSourceSearch(
 }
 
 // ===========================================================================
+// 1c. TRIAGE PLAN (Earn) — turn a triage request into the modules to score
+// ===========================================================================
+// Unlike planSourceSearch (which finds NEW targets), triage works on the rows
+// already in the pipeline: Earn picks which Source modules the question implies,
+// then each module's live rows are scored + ranked. DB-free; the server action
+// loads the rows. Claude-backed with a deterministic keyword fallback.
+export interface TriagePlan {
+  summary: string;
+  /** 1–4 source/* module keys to triage, best-fit first. */
+  modules: string[];
+}
+
+const TRIAGE_PLAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    summary: { type: "string", description: "One sentence on what this triage will do" },
+    modules: {
+      type: "array",
+      description: "1–4 module keys the request implies, best-fit first",
+      items: { type: "string", enum: SOURCE_MODULE_KEYS },
+    },
+  },
+  required: ["summary", "modules"],
+} as const;
+
+// Deterministic triage plan: map the request to modules by keyword (same style
+// as fallbackPlan), always returning at least the two pipelines.
+function fallbackTriagePlan(prompt: string): TriagePlan {
+  const t = prompt.toLowerCase();
+  const picks: string[] = [];
+  const add = (moduleKey: string) => {
+    if (picks.includes(moduleKey) || !sourceConfigFor(moduleKey)) return;
+    picks.push(moduleKey);
+  };
+  if (/\blp\b|lps|investor|allocator|family office|capital|chase|raise/.test(t)) add("source/lp_pipeline");
+  if (/deal|target|acquisition|company|asset|opportunit|pipeline/.test(t)) add("source/deal_pipeline");
+  if (/lender|debt|credit|loan|mezz|financ/.test(t)) add("source/debt");
+  if (/partner|co-?gp|operating|advisor|introducer|bench|dormant/.test(t)) add("source/partners");
+  if (/legal|audit|\btax\b|fund admin|administrator|provider|counsel|placement/.test(t)) add("source/providers");
+  if (picks.length === 0) {
+    add("source/lp_pipeline");
+    add("source/deal_pipeline");
+  }
+  return { summary: `Triage the pipeline: ${prompt}`.slice(0, 160), modules: picks.slice(0, 4) };
+}
+
+function normalizeTriagePlan(raw: Partial<TriagePlan> | null, prompt: string): TriagePlan {
+  if (!raw || !Array.isArray(raw.modules)) return fallbackTriagePlan(prompt);
+  const seen = new Set<string>();
+  const modules: string[] = [];
+  for (const m of raw.modules) {
+    const moduleKey = cleanStr(m, 60);
+    if (!sourceConfigFor(moduleKey) || seen.has(moduleKey)) continue;
+    seen.add(moduleKey);
+    modules.push(moduleKey);
+    if (modules.length >= 4) break;
+  }
+  if (modules.length === 0) return fallbackTriagePlan(prompt);
+  return { summary: cleanStr(raw.summary, 200) || `Triage the pipeline: ${prompt}`.slice(0, 160), modules };
+}
+
+/**
+ * Earn plans an operator's free-text triage request into the set of Source
+ * modules whose existing rows should be scored + ranked. Claude-backed with a
+ * deterministic keyword fallback.
+ */
+export async function planTriage(
+  prompt: string,
+  mandate: SourcingMandate | null,
+): Promise<TriagePlan> {
+  const anthropic = client();
+  if (!anthropic) return fallbackTriagePlan(prompt);
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 800,
+      system:
+        `You are Earn, the command layer of FundExecs OS, coordinating the Source team for a private-market operator. ` +
+        `The operator wants to triage rows ALREADY in their pipeline (not find new targets). ` +
+        `Given a triage request, choose the 1–4 Source modules whose existing rows it implies. ` +
+        `Modules: source/lp_pipeline (LPs / capital allocators), source/deal_pipeline (acquisition targets / deals), ` +
+        `source/debt (lenders / structured capital), source/partners (co-GPs / operating partners / advisors / bench), ` +
+        `source/providers (legal / audit / tax / fund admin). Only include modules the request implies.`,
+      output_config: { effort: "low", format: { type: "json_schema", schema: TRIAGE_PLAN_SCHEMA } },
+      messages: [
+        {
+          role: "user",
+          content: `Mandate:\n${mandateContext(mandate)}\n\nTriage request: ${prompt}\n\nReturn the plan.`,
+        },
+      ],
+    });
+    const json = textOf(message);
+    return normalizeTriagePlan(json ? (JSON.parse(json) as Partial<TriagePlan>) : null, prompt);
+  } catch {
+    return fallbackTriagePlan(prompt);
+  }
+}
+
+// ===========================================================================
 // 2. SCORE
 // ===========================================================================
 export interface ScoreInputRow {
@@ -726,6 +826,8 @@ export const __test = {
   parseJsonArray,
   fallbackPlan,
   normalizePlan,
+  fallbackTriagePlan,
+  normalizeTriagePlan,
   SOURCE_ACTIONS,
   tierForAction,
 };
