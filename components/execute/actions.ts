@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { handlePrompt } from "@/lib/engine";
 import type { AssetType } from "@/lib/supabase/database.types";
 
 // Best-effort map a deal's free-text asset class onto the asset_type enum so a
@@ -66,4 +68,41 @@ export async function promoteDealToAsset(formData: FormData): Promise<void> {
 
   revalidatePath("/execute/closing");
   revalidatePath("/execute/asset_management");
+}
+
+// --- Execute › agent actions ----------------------------------------------
+// "Run with Earn" launchers for the fund-admin modules. Each kind seeds an Earn
+// session whose prompt invokes the right agent on the firm's live books, then
+// opens it — so the cap table, valuations, and waterfall aren't just views, the
+// agent team works them. The engine routes to the named role.
+const EARN_TASKS: Record<string, string> = {
+  cap_statements:
+    "Acting as Investor Relations: draft per-LP capital account statements from our cap table — committed, called, distributed, unfunded, NAV, and DPI/TVPI for each holder — in clean, LP-ready language.",
+  cap_reconcile:
+    "Acting as Portfolio Ops: reconcile our capital accounts against the commitments and capital-events ledger, flag any holder whose called/distributed totals don't tie out, and propose the correcting entries.",
+  valuation_run:
+    "Acting as the Analyst: run a fresh fair-value valuation pass across the portfolio — re-mark each holding from cost, NOI/cap rate, and comps; show the value bridge and a recommended NAV with rationale per asset.",
+  valuation_asset:
+    "Acting as the Analyst: produce a fair-value mark for this specific holding — method, key assumptions, comps, and a recommended current value with a short rationale.",
+  waterfall_model:
+    "Acting as Fund Admin: model a distribution waterfall for a proposed distribution — return of capital, preferred return, GP catch-up, and carry split — and give the per-LP allocation by ownership share.",
+};
+
+export async function runWithEarn(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const kind = String(formData.get("kind") ?? "");
+  let prompt = EARN_TASKS[kind];
+  if (!prompt) redirect("/workspace");
+
+  // Optional record context (e.g. a specific asset) for the per-item actions.
+  const subject = String(formData.get("subject") ?? "").trim();
+  if (subject) prompt += `\n\nSubject: ${subject}`;
+
+  const supabase = createServerClient();
+  const result = await handlePrompt(
+    { supabase, orgId: ctx.orgId, actorId: ctx.userId },
+    prompt,
+  );
+  redirect(result.session_id ? `/session/${result.session_id}` : "/workspace");
 }
