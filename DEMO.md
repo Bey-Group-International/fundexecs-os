@@ -34,7 +34,7 @@ dashboard, pipeline, deliverables, and a sample automation populate instantly.
 ## 2. The 5-minute script
 
 1. **Land on the marketing page.** One line: *"PE funds run on 30+ tools. This
-   is one AI-native OS — with six agents that own the work."* Point at the
+   is one AI-native OS — with fifteen agents that own the work."* Point at the
    prompt → plan → approve → deliver loop.
 2. **Sign in with Google** (one click) → Command Center, already populated.
    Talk to the deal pipeline, portfolio assets, and latest deliverables.
