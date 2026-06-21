@@ -1026,6 +1026,24 @@ export type DealShareView = {
   created_at: string;
 };
 
+// One per-org integration connection brokered by the unified "merge gateway"
+// (migration 0052). `status` 'revoked' explicitly overrides any env-level
+// default. No secrets: `account_ref` is an opaque handle the gateway resolves.
+export type IntegrationConnectionStatus = "connected" | "revoked";
+export type IntegrationConnection = {
+  id: string;
+  organization_id: string;
+  channel: string;
+  status: IntegrationConnectionStatus;
+  gateway: string;
+  account_label: string | null;
+  account_ref: string | null;
+  connected_by: string | null;
+  created_at: string;
+  updated_at: string;
+  revoked_at: string | null;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -1104,6 +1122,7 @@ export type Database = {
       stake_positions: TableShape<StakePosition>;
       attestations: TableShape<Attestation>;
       stake_disputes: TableShape<StakeDispute>;
+      integration_connections: TableShape<IntegrationConnection>;
     };
     Views: Record<string, never>;
     Functions: {
