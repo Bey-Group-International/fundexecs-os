@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import type { ApiKey, MandateRow } from "@/lib/supabase/database.types";
+import { loadOrgConnections } from "@/lib/integrations/gateway";
 import { NewMandateForm } from "./NewMandateForm";
 import { Connections } from "./Connections";
 import { ApiKeys, type ApiKeyView } from "./ApiKeys";
@@ -69,6 +70,9 @@ export default async function SettingsPage() {
     .eq("id", ctx.orgId)
     .maybeSingle();
   const discoverable = (orgRow as { discoverable: boolean | null } | null)?.discoverable !== false;
+
+  // Per-org integration connections brokered by the unified gateway.
+  const connections = await loadOrgConnections(supabase, ctx.orgId);
 
   const labelFor = (kind: string) =>
     TIER_2_ACTIONS.find((a) => a.kind === kind)?.label ?? kind;
@@ -210,7 +214,7 @@ export default async function SettingsPage() {
             title="Integrations"
             description="Dispatch channels carry approved external actions to the outside world. A connected channel sends for real; an unconnected one runs in mock mode — the action is prepared and queued, not sent — so the gate → dispatch loop works end-to-end before any provider is wired up."
           >
-            <Connections />
+            <Connections connections={connections} />
           </Section>
 
           {/* API keys */}
