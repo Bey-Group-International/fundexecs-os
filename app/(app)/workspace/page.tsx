@@ -3,6 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { copilotLive } from "@/lib/claude";
 import Copilot from "@/components/Copilot";
 import { WorkspaceOperatingSystem } from "@/components/workspace/WorkspaceOperatingSystem";
+import { createServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +15,17 @@ export default async function WorkspacePage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
+  const supabase = createServerClient();
+  const { data: principal } = await supabase
+    .from("principals")
+    .select("full_name")
+    .eq("id", ctx.userId)
+    .maybeSingle();
+  const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Operator";
+
   return (
     <div className="mx-auto max-w-7xl">
-      <WorkspaceOperatingSystem />
+      <WorkspaceOperatingSystem name={name} />
       <Copilot orgId={ctx.orgId} live={copilotLive()} bundles={[]} />
     </div>
   );

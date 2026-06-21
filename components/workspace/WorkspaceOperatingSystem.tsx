@@ -36,6 +36,14 @@ const OUTCOMES = [
   "Artifacts and audit trail preserved",
 ];
 
+const HUB_SHORTCUTS = ["Build", "Source", "Run", "Execute", "Graphs", "Vault"];
+
+const ACTION_QUEUE = [
+  ["Review 4 HVAC targets", "Deal Graph match package", "Now"],
+  ["Authorize 2 introductions", "Capital + relationship path", "Gate"],
+  ["Prepare financing package", "Memo, lender list, audit record", "Active"],
+] as const;
+
 function signalClass(signal: SignalColor): string {
   return {
     gold: "border-gold-400/45 bg-gold-500/10 text-gold-300",
@@ -45,7 +53,7 @@ function signalClass(signal: SignalColor): string {
   }[signal];
 }
 
-export function WorkspaceOperatingSystem() {
+export function WorkspaceOperatingSystem({ name }: { name: string }) {
   return (
     <section className="fx-orbit-card mb-6 p-4 sm:p-5">
       <div className="relative z-10 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
@@ -53,10 +61,10 @@ export function WorkspaceOperatingSystem() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-gold-400">
-                Visual operating system
+                Earn Command Center
               </p>
               <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary sm:text-3xl">
-                Earn turns instructions into approval-gated transactions.
+                Welcome back, {name}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">
                 The workspace is now a spatial digital twin: every mandate routes
@@ -70,6 +78,27 @@ export function WorkspaceOperatingSystem() {
                 Command layer
               </p>
             </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {HUB_SHORTCUTS.map((hub) => (
+              <span
+                key={hub}
+                className="rounded-full border border-line bg-surface-0/75 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-secondary"
+              >
+                {hub}
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-gold-500/30 bg-gold-500/10 p-4">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-gold-300">
+              Current instruction
+            </p>
+            <p className="mt-2 text-sm font-medium leading-6 text-fg-primary">
+              Find HVAC companies with $2M-$8M EBITDA. Identify co-investors,
+              lender paths, and prepare financing package.
+            </p>
           </div>
 
           <div className="relative mt-5 hidden aspect-[16/9] overflow-hidden rounded-[2rem] border border-line/80 bg-surface-0/72 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] md:block">
@@ -134,6 +163,26 @@ export function WorkspaceOperatingSystem() {
               </div>
             ))}
           </div>
+
+          <div className="mt-4 rounded-2xl border border-line bg-surface-0/75 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                Action Queue
+              </p>
+              <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                Title · Details · Last active
+              </span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {ACTION_QUEUE.map(([title, detail, active]) => (
+                <div key={title} className="grid gap-2 rounded-xl border border-line bg-surface-1/75 px-3 py-2 text-xs sm:grid-cols-[1fr_1.25fr_auto]">
+                  <span className="font-medium text-fg-primary">{title}</span>
+                  <span className="text-fg-muted">{detail}</span>
+                  <span className="font-mono uppercase tracking-wider text-gold-400">{active}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -168,6 +217,36 @@ export function WorkspaceOperatingSystem() {
                     {status}
                   </span>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gold-500/35 bg-gold-500/10 p-4">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-gold-300">
+              Action proposed
+            </p>
+            <p className="mt-2 text-sm font-medium leading-6 text-fg-primary">
+              Send controlled intro to co-investors and lender with approved package only.
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+              <span className="rounded-xl border border-line bg-surface-0/75 px-3 py-2 text-fg-secondary">
+                Risk: Tier 2
+              </span>
+              <span className="rounded-xl border border-line bg-surface-0/75 px-3 py-2 text-fg-secondary">
+                External-facing
+              </span>
+              <span className="rounded-xl border border-line bg-surface-0/75 px-3 py-2 text-fg-secondary">
+                No binding terms
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-4 gap-2">
+              {["Approve", "Edit", "Reject", "Escalate"].map((action) => (
+                <span
+                  key={action}
+                  className="rounded-lg border border-line bg-surface-0/75 px-2 py-2 text-center font-mono text-[10px] uppercase tracking-wider text-fg-secondary"
+                >
+                  {action}
+                </span>
               ))}
             </div>
           </div>
