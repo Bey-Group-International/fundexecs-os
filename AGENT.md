@@ -516,6 +516,18 @@ Deployed, monitoring               →  live, observability active
              |  local login/autofill environment.
              |  Next: persist attachments to storage, add true multimodal provider routing,
              |  and store per-session preferred model once provider adapters exist.
+
+2026-06-21  |  Homepage private-market campus  |  The public hero became the OS.
+             |  Built: immediate 2D/8-bit private-market campus hero with real SVG
+             |  sprite/building assets, visible walking executive agents, NVIDIA-green and
+             |  electric-blue neural paths, high-contrast headline overlay, persistent
+             |  computation inspector, and clean Build → Source → Run → Execute loop below.
+             |  Decision: visual identity is a balanced hybrid — 70% private-market campus,
+             |  30% GPU command center. The homepage should feel like a living capital
+             |  ecosystem, not a dashboard screenshot or generic office map.
+             |  Confidence: Tested by lint/build/typecheck/Jest and browser video walkthrough.
+             |  Next: expand the sprite library into a reusable product asset system for
+             |  authenticated Earn sessions and future avatar workspace surfaces.
 ```
 
 ---
