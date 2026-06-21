@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
+import { deriveRouting, cursorResponse, routingHeadline } from "@/lib/intelligence";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import { EARN_MODELS, buildEarnPromptEnvelope, type EarnAttachmentInput, type EarnModelKey } from "@/lib/earn-conversation";
 
@@ -514,6 +515,14 @@ function WorkflowCard({
 }) {
   const { workflow, approval } = bundle;
   const pending = approval && approval.decision === "pending";
+  // Intelligence Layer: recompute the routing the same way the engine did, so
+  // the card renders the Cursor-style Summary / Action / Output / Next Step.
+  const routing = deriveRouting({
+    prompt: workflow.description || workflow.title,
+    hub: workflow.hub,
+    agents: bundle.steps.map((s) => s.assigned_agent),
+  });
+  const cursor = cursorResponse(routing, { pending: Boolean(pending), stepCount: bundle.steps.length });
   return (
     <article className={`rounded-2xl border bg-surface-1/82 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)] sm:p-5 ${primary ? "border-gold-500/40 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)]" : "border-line/80"}`}>
       <div className="flex items-start justify-between gap-3">
@@ -531,9 +540,36 @@ function WorkflowCard({
         </div>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
+      {/* Routing badge — where the Intelligence Layer sent the work. */}
+      <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
+        <span className="truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
+          {routingHeadline(routing)}
+        </span>
+      </div>
+
+      {/* Cursor-style response: Summary / Action / Output / Next Step. */}
+      <dl className="mt-3 space-y-2 text-sm">
+        <div>
+          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Summary</dt>
+          <dd className="text-fg-secondary">{cursor.summary}</dd>
+        </div>
+        <div>
+          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Action</dt>
+          <dd className="text-fg-secondary">{cursor.action}</dd>
+        </div>
+      </dl>
+
+      <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Output</p>
+      <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
         <WorkflowSteps bundle={bundle} />
       </div>
+
+      <p className="mt-3 text-xs text-fg-secondary">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Next step</span>
+        {" · "}
+        {cursor.nextStep}
+      </p>
 
       {pending ? (
         <div className="mt-4 border-t border-line/75 pt-4">
