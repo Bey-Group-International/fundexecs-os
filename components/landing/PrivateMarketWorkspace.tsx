@@ -75,7 +75,7 @@ export function PrivateMarketWorkspace() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.8fr)]">
-        <div className="fx-orbit-card min-h-[640px] p-4 sm:p-6 md:sticky md:top-6 md:max-h-[calc(100vh-3rem)] md:min-h-0 md:self-start md:overflow-y-auto">
+        <div className="fx-orbit-card min-h-[640px] p-4 sm:p-6 md:sticky md:top-6 md:flex md:h-[calc(100vh-3rem)] md:min-h-[540px] md:flex-col md:self-start md:overflow-hidden">
           <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
@@ -93,7 +93,7 @@ export function PrivateMarketWorkspace() {
             </div>
           </div>
 
-          <div className="relative z-10 mt-6 hidden aspect-[16/11] overflow-hidden rounded-[2rem] border border-line/80 bg-surface-0/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] md:block">
+          <div className="relative z-10 mt-6 hidden flex-1 overflow-hidden rounded-[2rem] border border-line/80 bg-surface-0/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] md:block">
             <svg
               aria-hidden
               viewBox="0 0 100 100"
@@ -156,17 +156,6 @@ export function PrivateMarketWorkspace() {
             ))}
           </div>
 
-          <div className="relative z-10 mt-5 grid gap-3 md:grid-cols-3">
-            {GRAPH_LAYERS.map((graph) => (
-              <div key={graph.name} className="rounded-2xl border border-line bg-surface-0/70 p-4">
-                <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
-                  {graph.name}
-                </p>
-                <p className="mt-2 text-sm font-medium text-fg-primary">{graph.metric}</p>
-                <p className="mt-1 text-xs leading-5 text-fg-muted">{graph.summary}</p>
-              </div>
-            ))}
-          </div>
         </div>
 
         <div className="space-y-4">
@@ -185,6 +174,25 @@ export function PrivateMarketWorkspace() {
                     0{index + 1}
                   </p>
                   <p className="mt-1 text-xs font-semibold text-fg-primary">{step}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="fx-card p-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-400">
+              Graph marketplaces
+            </p>
+            <div className="mt-4 space-y-2">
+              {GRAPH_LAYERS.map((graph) => (
+                <div key={graph.name} className="rounded-xl border border-line bg-surface-0 px-3 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-fg-primary">{graph.name}</p>
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                      {graph.metric}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-5 text-fg-muted">{graph.summary}</p>
                 </div>
               ))}
             </div>
