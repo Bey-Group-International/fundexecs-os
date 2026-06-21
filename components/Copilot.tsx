@@ -18,6 +18,7 @@ import {
   type EarnModelKey,
   type EarnModeKey,
 } from "@/lib/earn-conversation";
+import type { ActiveIntegration } from "@/lib/integrations/active";
 
 // Slash commands the composer offers from the "+" menu. Selecting one drops a
 // ready-to-fill prompt scaffold into the input so the operator only supplies
@@ -78,6 +79,7 @@ export default function Copilot({
   live,
   bundles,
   sessionId,
+  integrations = [],
 }: {
   orgId: string;
   live: boolean;
@@ -85,6 +87,9 @@ export default function Copilot({
   // When set, prompts run inside this session and Earn plans with the session's
   // earlier turns in mind. The composer reads as a reply rather than a launch.
   sessionId?: string;
+  // The dispatch channels the operator currently has connected — surfaced in the
+  // composer's "+" menu so they can see what's active without leaving the page.
+  integrations?: ActiveIntegration[];
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -97,8 +102,9 @@ export default function Copilot({
   const [planning, setPlanning] = useState(false);
   const [clarifying, setClarifying] = useState(false);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
-  // Which composer popover is open: the model picker, mode picker, or "+" menu.
-  const [openMenu, setOpenMenu] = useState<"model" | "mode" | "plus" | "slash" | null>(null);
+  // Which composer popover is open: the model picker, mode picker, "+" menu, or
+  // one of its submenus (slash commands / active integrations).
+  const [openMenu, setOpenMenu] = useState<"model" | "mode" | "plus" | "slash" | "integrations" | null>(null);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -560,9 +566,13 @@ export default function Copilot({
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setOpenMenu((m) => (m === "plus" || m === "slash" ? null : "plus"))}
+                    onClick={() =>
+                      setOpenMenu((m) =>
+                        m === "plus" || m === "slash" || m === "integrations" ? null : "plus",
+                      )
+                    }
                     aria-haspopup="menu"
-                    aria-expanded={openMenu === "plus" || openMenu === "slash"}
+                    aria-expanded={openMenu === "plus" || openMenu === "slash" || openMenu === "integrations"}
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface-0/80 text-base text-fg-secondary transition hover:border-gold-500/45 hover:text-fg-primary"
                     title="Add files, slash commands, or integrations"
                   >
@@ -598,14 +608,68 @@ export default function Copilot({
                         </span>
                         <span aria-hidden className="text-fg-muted">›</span>
                       </button>
-                      <a
+                      <button
+                        type="button"
                         role="menuitem"
+                        onClick={() => setOpenMenu("integrations")}
+                        className="flex w-full items-center justify-between gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span aria-hidden className="font-mono text-fg-muted">⤬</span>
+                          Integrations
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          {integrations.length ? (
+                            <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] text-status-success">
+                              {integrations.length}
+                            </span>
+                          ) : null}
+                          <span aria-hidden className="text-fg-muted">›</span>
+                        </span>
+                      </button>
+                    </div>
+                  ) : null}
+                  {openMenu === "integrations" ? (
+                    <div
+                      role="menu"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setOpenMenu("plus")}
+                        className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+                      >
+                        <span aria-hidden>‹</span> Active integrations
+                      </button>
+                      {integrations.length ? (
+                        integrations.map((it) => (
+                          <div
+                            key={it.channel}
+                            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-primary"
+                          >
+                            <span
+                              aria-hidden
+                              className="h-2 w-2 shrink-0 rounded-full bg-status-success"
+                            />
+                            <span className="flex-1 truncate">{it.label}</span>
+                            <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                              Connected
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="px-2.5 py-3 text-xs leading-snug text-fg-secondary">
+                          No integrations connected yet. Connect Gmail, Docusign, Slack, and more to let
+                          Earn act on your behalf.
+                        </p>
+                      )}
+                      <a
                         href="/settings#integrations"
                         onClick={() => setOpenMenu(null)}
-                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                        className="mt-1 flex w-full items-center gap-2.5 border-t border-line/70 px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
                       >
-                        <span aria-hidden className="font-mono text-fg-muted">⤬</span>
-                        Integrations
+                        <span aria-hidden className="font-mono text-fg-muted">⚙</span>
+                        Manage integrations
                       </a>
                     </div>
                   ) : null}
