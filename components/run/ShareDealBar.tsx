@@ -6,6 +6,7 @@
 // discoverable investors (their bell + "deals that fit you" feed), and mint a
 // tracked public link you can send to anyone directly. Shows the memo and a
 // copyable link once shared.
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { shareDealAction } from "@/app/(app)/deal/[id]/actions";
 
@@ -60,14 +61,22 @@ export function ShareDealBar({ dealId }: { dealId: string }) {
             tracked link you can send directly. The full deal room stays gated.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={share}
-          disabled={pending}
-          className="shrink-0 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-60"
-        >
-          {pending ? "Sharing…" : result ? "Re-share" : "Share deal"}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={`/deal/${dealId}/room`}
+            className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+          >
+            Investor Room
+          </Link>
+          <button
+            type="button"
+            onClick={share}
+            disabled={pending}
+            className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-60"
+          >
+            {pending ? "Sharing…" : result ? "Re-share" : "Share deal"}
+          </button>
+        </div>
       </div>
 
       {error ? <p className="mt-3 text-xs text-status-danger">{error}</p> : null}

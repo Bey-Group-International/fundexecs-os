@@ -57,7 +57,7 @@ export function SessionsSection({
 
       {sessions.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-surface-1 p-6 text-center text-sm text-fg-muted">
-          No sessions yet — click <span className="text-fg-secondary">New Session</span> to start
+          No sessions yet — click <span className="text-fg-secondary">Sessions</span> to start
           one in Earn. Workflows create sessions automatically when they run.
         </p>
       ) : (

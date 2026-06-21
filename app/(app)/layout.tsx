@@ -23,13 +23,14 @@ import { MatchToast } from "@/components/inbox/MatchToast";
 import { AppSidebar } from "@/components/AppSidebar";
 import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 
-// The four hubs, in operating order, as shown in the side rail.
-const HUB_ORDER: Hub[] = ["build", "run", "source", "execute"];
+// The four hubs, in operating order, as shown in the side rail (per the
+// product mockups: Build · Source · Run · Execute).
+const HUB_ORDER: Hub[] = ["build", "source", "run", "execute"];
 
-// Authed shell. Side rail (see AppSidebar): Logo · New Session · Workflows ·
-// More, the four operational hubs (Build / Run / Source / Execute) whose
-// modules expand on click, then Recent sessions filed under group names, and
-// the account footer. Each hub has its own page with a top module switcher.
+// Authed shell. Side rail (see AppSidebar): Logo · Sessions · Workflows ·
+// Inbox · More, the four operational hubs (Build / Source / Run / Execute)
+// whose modules expand on click, then Recent sessions filed under group names,
+// and the account footer. Each hub has its own page with a top module switcher.
 export default async function AppLayout({
   children,
 }: {
@@ -156,6 +157,7 @@ export default async function AppLayout({
     return {
       key: hub.key,
       label: hub.label,
+      approvalGated: hub.approvalGated ?? false,
       modules: hub.modules.map((mod) => ({
         href: `/${hub.key}/${mod.key}`,
         label: mod.label,

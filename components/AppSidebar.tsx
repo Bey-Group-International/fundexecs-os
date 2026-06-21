@@ -20,6 +20,9 @@ interface HubItem {
   key: string;
   label: string;
   modules: NavItem[];
+  // Hubs that act outside the firm run behind an approval gate — flagged in the
+  // rail with a small "Approval-gated" badge (per the product mockups).
+  approvalGated?: boolean;
 }
 
 interface SessionItem {
@@ -370,17 +373,22 @@ export function AppSidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
-        {/* New Session opens a blank conversation. The session row is created
-            lazily on the first prompt, so clicking this never leaves empties. */}
-        <Link
-          href="/workspace"
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-gold-400 px-2 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
-        >
-          <span className="text-base leading-none">+</span>
-          New Session
-        </Link>
-
-        <div className="mt-3 flex flex-col gap-0.5">
+        {/* Top-level destinations, in mockup order: Sessions · Workflows ·
+            Inbox · More. "Sessions" opens a fresh Earn conversation (the
+            launcher); a session row is created lazily on the first prompt, so
+            this never leaves empties. */}
+        <div className="flex flex-col gap-0.5">
+          <Link
+            href="/workspace"
+            className={`${linkClass} ${pathname === "/workspace" ? "bg-surface-2 text-fg-primary" : ""}`}
+          >
+            <span className="font-mono text-base leading-none text-gold-400">✦</span>
+            Sessions
+          </Link>
+          <Link href="/automations" className={linkClass}>
+            <span className="font-mono text-base leading-none text-gold-400">↻</span>
+            Workflows
+          </Link>
           <Link href="/inbox" className={`${linkClass} justify-between`}>
             <span className="flex items-center gap-2">
               <span className="font-mono text-base leading-none text-gold-400">⊞</span>
@@ -391,10 +399,6 @@ export function AppSidebar({
                 {inboxUnread > 99 ? "99+" : inboxUnread}
               </span>
             ) : null}
-          </Link>
-          <Link href="/automations" className={linkClass}>
-            <span className="font-mono text-base leading-none text-gold-400">↻</span>
-            Workflows
           </Link>
 
           {/* More — secondary destinations expand on click */}
@@ -440,7 +444,17 @@ export function AppSidebar({
                 aria-expanded={isOpen}
                 className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
               >
-                {hub.label}
+                <span className="flex items-center gap-1.5">
+                  {hub.label}
+                  {hub.approvalGated ? (
+                    <span
+                      title="Approval-gated — actions here run behind your approval"
+                      className="rounded border border-gold-500/40 bg-gold-500/10 px-1 py-px font-mono text-[8px] font-medium uppercase leading-none tracking-wider text-gold-300"
+                    >
+                      Gated
+                    </span>
+                  ) : null}
+                </span>
                 <span className="font-mono text-[10px] text-fg-muted">
                   {isOpen ? "▾" : "▸"}
                 </span>
