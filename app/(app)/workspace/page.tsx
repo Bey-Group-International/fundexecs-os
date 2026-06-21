@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { copilotLive } from "@/lib/claude";
 import Copilot from "@/components/Copilot";
+import { WorkspaceOperatingSystem } from "@/components/workspace/WorkspaceOperatingSystem";
 
 export const dynamic = "force-dynamic";
 
@@ -13,5 +14,10 @@ export default async function WorkspacePage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  return <Copilot orgId={ctx.orgId} live={copilotLive()} bundles={[]} />;
+  return (
+    <div className="mx-auto max-w-7xl">
+      <WorkspaceOperatingSystem />
+      <Copilot orgId={ctx.orgId} live={copilotLive()} bundles={[]} />
+    </div>
+  );
 }
