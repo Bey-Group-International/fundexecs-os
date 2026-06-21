@@ -18,32 +18,33 @@ The issues worth acting on are concentrated in three areas:
 
 No critical, exploitable data-leak was confirmed. Several findings the automated pass flagged as "critical" were **downgraded after manual verification** (see §3).
 
-| Status | Area |
-|---|---|
-| ✅ Pass | Build, typecheck, lint, 626 tests |
-| ✅ Strong | RLS / multi-tenant isolation, secret handling, encryption (AES-256-GCM), API-key hashing |
-| ⚠️ Action | Next.js dependency CVEs; CI build gap; CSPRNG for codes; defense-in-depth org filters |
-| ℹ️ Minor | Threshold inconsistency, env-doc drift, test-coverage gaps |
+|  Status   |                                           Area                                           |
+|-----------|------------------------------------------------------------------------------------------|
+| ✅ Pass    | Build, typecheck, lint, 626 tests                                                        |
+| ✅ Strong  | RLS / multi-tenant isolation, secret handling, encryption (AES-256-GCM), API-key hashing |
+| ⚠️ Action | Next.js dependency CVEs; CI build gap; CSPRNG for codes; defense-in-depth org filters    |
+| ℹ️ Minor  | Threshold inconsistency, env-doc drift, test-coverage gaps                               |
 
 ---
 
 ## 2. Toolchain / build status
 
-| Check | Result |
-|---|---|
-| `tsc --noEmit` | ✅ clean (exit 0) |
-| `next lint` | ✅ no warnings/errors |
-| `next build` | ✅ succeeds |
-| `jest` | ✅ 626 passed / 60 suites |
-| `as any` casts | 0 in `lib/app/components` |
+|             Check             |                           Result                           |
+|-------------------------------|------------------------------------------------------------|
+| `tsc --noEmit`                | ✅ clean (exit 0)                                           |
+| `next lint`                   | ✅ no warnings/errors                                       |
+| `next build`                  | ✅ succeeds                                                 |
+| `jest`                        | ✅ 626 passed / 60 suites                                   |
+| `as any` casts                | 0 in `lib/app/components`                                  |
 | `@ts-ignore/@ts-expect-error` | 1, in a **test** exercising a runtime guard (not an issue) |
-| `console.log` in `lib/app` | 0 |
+| `console.log` in `lib/app`    | 0                                                          |
 
 ---
 
 ## 3. Security findings (severity-corrected)
 
 ### 3.1 Dependency vulnerabilities — **HIGH** (top priority)
+
 `npm audit` reports **23 vulnerabilities (4 high, 19 moderate)**, all stemming from `next@14.2.35` and its transitive `postcss`. Advisories include:
 - SSRF via WebSocket upgrades (`GHSA-c4j6-fc7j-m34r`)
 - Cache poisoning in RSC responses (`GHSA-wfc6-r584-vfw7`, `GHSA-vfv6-92ff-j949`)
@@ -53,24 +54,31 @@ No critical, exploitable data-leak was confirmed. Several findings the automated
 **Action:** Plan a Next.js upgrade. `npm audit fix --force` wants `next@16` (a major bump) — don't run that blindly; instead bump to the latest patched **14.2.x / 15.x** and run the full build + test suite. Mitigating factor: this app uses the App Router (not Pages i18n), so the middleware-bypass advisory doesn't apply.
 
 ### 3.2 Defense-in-depth: org filters on RLS-backed read routes — **LOW** (was flagged "critical")
+
 Routes like `app/api/report/route.ts` query `tasks/approvals/artifacts` by ID only (e.g. `.eq("id", taskId)`), without an explicit `.eq("organization_id", …)`.
 
 **Verified safe:** these handlers use `createServerClient()` — the **cookie-bound, RLS-enforced** client (confirmed in `lib/supabase/server.ts:27`), and the DB audit confirmed **RLS is enabled with org-scoped policies on every table**. So cross-org access is blocked at the database. This is therefore a *defense-in-depth* recommendation, not an active leak: add explicit `organization_id` filters so a future RLS regression can't silently open data. `app/api/clarify/route.ts` already does this correctly and is the pattern to follow.
 
 ### 3.3 Predictable referral codes (`Math.random`) — **MEDIUM**
+
 `lib/gift-earn.ts:26` generates referral codes (which unlock credit rewards) with `Math.random()`:
+
 ```ts
 for (let i = 0; i < len; i++) s += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
 ```
+
 `Math.random()` is not cryptographically secure. Since these codes gate a financial reward, an attacker could attempt to predict/enumerate them. **Action:** switch to `crypto.randomInt()` / `crypto.randomBytes()`. (The 8-char/32-symbol space + unique-constraint retry limits abuse somewhat, so this is medium, not high.)
 
 ### 3.4 Stripe checkout-return ownership — **LOW**
+
 `app/api/stripe/return/route.ts` calls `fulfillCheckout(session_id)` from the query string without checking the session belongs to the logged-in org. Idempotent fulfillment + Stripe metadata make this largely self-correcting, but add an explicit `session.client_reference_id === ctx.orgId` check for robustness.
 
 ### 3.5 No rate-limiting on public v1 API / token routes — **LOW–MEDIUM**
+
 `app/api/v1/*` (API-key auth) and the dataroom token routes have no rate limiting, allowing bulk enumeration/export within a valid key's scope. Consider per-key quotas (Upstash/Vercel) and a timing-safe token compare on `app/dataroom/[token]/...`.
 
 ### 3.6 Confirmed-good controls (no action)
+
 - **Stripe webhook** verifies the signature via `webhooks.constructEvent(...)` and 400s on failure. ✅
 - **Cron endpoint** requires `Authorization: Bearer <CRON_SECRET>`. ✅
 - **Brain ingest** supports a shared-secret path and an authed-org-writer path (service-role used only after auth). ✅
@@ -84,10 +92,12 @@ for (let i = 0; i < len; i++) s += CODE_ALPHABET[Math.floor(Math.random() * CODE
 ## 4. Database / RLS
 
 **Strong.** RLS enabled on all ~70 tables across migrations `0001–0051`; uniform policy shape:
+
 ```sql
 for select using (organization_id in (select public.current_principal_org_ids()));
 for all   using (public.is_org_writer(organization_id)) with check (public.is_org_writer(organization_id));
 ```
+
 - No `USING (true)` on sensitive tables. Intentionally world-readable tables (`ai_agents`, public `marketplace_listings`) are guarded by `is_public/status` predicates.
 - Migration sequence is gapless and idempotent (`create … if not exists`, `drop policy if exists`); no `DROP TABLE`/`TRUNCATE`; FK dependency order is respected.
 - No hardcoded secrets in migrations (only masked display strings like `fxsk_live_••••1234`).
