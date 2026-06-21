@@ -1,61 +1,85 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AGENTS } from "@/lib/agents";
 import { Logo } from "@/components/Logo";
 
 const CALENDLY = "https://calendly.com/fundexecs";
 
-const LOOP = [
+const HUBS = [
   {
-    step: "Instruct",
-    body: "Tell Earn what needs to happen — in plain language. A deal to underwrite. A capital call to send. A memo due Thursday.",
+    name: "Build",
+    room: "Foundation room",
+    task: "Thesis, team, materials, track record",
+    signal: "Profile gap closed",
   },
   {
-    step: "Structure",
-    body: "Earn builds an ordered plan and assigns the right agents. You see exactly what will happen before anything does.",
+    name: "Source",
+    room: "Capital room",
+    task: "LPs, lenders, partners, targets",
+    signal: "3 warm paths opened",
   },
   {
-    step: "Authorize",
-    body: "You approve the plan. No agent moves without your sign-off. Control stays with you.",
+    name: "Run",
+    room: "Deal room",
+    task: "Diligence, models, IC memos, risk",
+    signal: "IC memo drafting",
   },
   {
-    step: "Deliver",
-    body: "Agents execute in sequence and produce timestamped, version-controlled artifacts — IC memos, cap call notices, diligence reports.",
+    name: "Execute",
+    room: "Portfolio room",
+    task: "Reporting, capital events, asset ops",
+    signal: "LP update queued",
   },
 ];
 
-const AGENT_COPY: Record<string, string> = {
-  analyst:
-    "Pro formas, valuations, and sensitivity analyses from raw deal data. Institutional-grade underwriting on demand.",
-  associate:
-    "The command layer. Earn routes every task, coordinates every agent, and keeps every workflow moving — across all domains.",
-  investor_relations:
-    "Capital relationship management — updates, capital calls, subscription docs, and reporting across LPs, family offices, and institutional co-investors.",
-  portfolio_ops:
-    "KPIs, budgets, and capex variance tracked across every asset. Flags problems before they reach a board report.",
-  diligence:
-    "Parses OMs, leases, and financials. Surfaces risk and produces IC-ready diligence memos.",
-  fund_admin:
-    "Waterfall calculations, fund accounting, and audit prep. Back-office coverage — without the back office.",
-  executive_advisor:
-    "Deep intelligence on every investor, family office, and strategic partner before first contact. Know who they are, what they want, and exactly how to position.",
-  capital_raiser:
-    "LP fundraising and capital formation from first outreach to signed commitment. Manages the Founding Capital Circle and anchor LP pipeline.",
-  capital_connector:
-    "Structures the capital stack for every transaction. Finds the right lender, equity partner, or financing vehicle — and closes the relationship.",
-  deal_sourcer:
-    "Identifies acquisition targets: underperforming, founder-owned, or transitioning businesses. Builds the thesis. Structures creative financing.",
-  rainmaker:
-    "Converts qualified prospects into commitments. Runs the closing sequence — from first conversation to signed terms.",
-  lead_generator:
-    "Digital funnels that capture investors, business owners, operators, and connectors. Measurable pipeline from click to conversation.",
-  pr_director:
-    "Investor decks, CIMs, executive summaries, and PR narratives. Positions the platform as institutional, culturally distinct, and serious.",
-  seo_disruptor:
-    "Turns content and thought leadership into category-defining search authority. The right capital and deal flow — without paid acquisition.",
-  curator:
-    "Designs private investor rooms and capital formation salons. Curates the room, the experience, and the follow-up that turns gatherings into relationships.",
-};
+const WORKSPACE_AGENTS = [
+  {
+    name: "Earn",
+    role: "Orchestrating",
+    color: "#60a5fa",
+    x: "47%",
+    y: "44%",
+    task: "Routes the workflow and keeps every executive lane moving.",
+  },
+  {
+    name: "Capital Raiser",
+    role: "Sourcing LPs",
+    color: "#ec4899",
+    x: "22%",
+    y: "24%",
+    task: "Scans capital paths, ranks fit, and drafts the next outreach move.",
+  },
+  {
+    name: "Analyst",
+    role: "Building model",
+    color: "#22d3ee",
+    x: "72%",
+    y: "26%",
+    task: "Runs assumptions, sensitivity ranges, and debt capacity checks.",
+  },
+  {
+    name: "Diligence",
+    role: "Reading docs",
+    color: "#ef4444",
+    x: "68%",
+    y: "68%",
+    task: "Synthesizes risk, missing evidence, and IC-ready findings.",
+  },
+  {
+    name: "Investor Relations",
+    role: "Preparing update",
+    color: "#f59e0b",
+    x: "25%",
+    y: "70%",
+    task: "Turns progress into LP-ready narrative and approval language.",
+  },
+];
+
+const WORKSPACE_NOTES = [
+  "Hover an avatar: show current task, data source, and progress.",
+  "Click an avatar: open the agent computation panel inside Earn.",
+  "New workflow: light the hub room, animate the assigned executives, stream artifacts.",
+  "Completed artifact: pulse the destination hub and pin the output to the timeline.",
+];
 
 export default function LandingPage({
   searchParams,
@@ -72,7 +96,6 @@ export default function LandingPage({
 
   return (
     <div className="min-h-screen overflow-hidden bg-surface-0 text-fg-primary">
-
       {/* Nav */}
       <header className="fixed inset-x-0 top-0 z-50 border-b border-line bg-surface-0/82 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
@@ -95,27 +118,26 @@ export default function LandingPage({
       </header>
 
       {/* Hero */}
-      <section className="fx-blueprint relative mx-auto max-w-6xl px-4 pb-20 pt-32 sm:px-6 sm:pb-24 sm:pt-40">
+      <section className="fx-blueprint relative mx-auto max-w-6xl px-4 pb-14 pt-32 sm:px-6 sm:pb-16 sm:pt-40">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-24 -z-10 mx-auto h-72 max-w-3xl rounded-full bg-gold-500/15 blur-3xl"
         />
-        <div className="grid items-center gap-16 lg:grid-cols-2">
-          {/* Text */}
-          <div>
+        <div className="mx-auto max-w-3xl text-center">
             <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
               <span className="h-1.5 w-1.5 rounded-full bg-status-success" />
-              Private equity · Real estate · Private credit · Family office
+              AI executive team for private markets
             </p>
-            <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-6xl">
-              The Operating System<br />
-              for Private Markets
+            <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-7xl">
+              Your capital work,<br />
+              moving in parallel.
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-fg-secondary">
-              One platform. Fifteen AI agents. Every workflow from deal sourcing
-              to capital formation to exit — unified, auditable, and under your control.
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-fg-secondary">
+              FundExecs OS turns Build, Source, Run, and Execute into one living workspace.
+              Earn coordinates AI executives that source capital, underwrite deals, prepare
+              diligence, and package institutional work product while you stay in control.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Link
                 href="/login?mode=signup"
                 className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 shadow-[0_14px_34px_-20px_rgb(var(--fx-accent-rgb)/0.95)] transition hover:opacity-90"
@@ -132,161 +154,135 @@ export default function LandingPage({
               </Link>
             </div>
             <p className="mt-4 font-mono text-xs text-fg-muted">
-              Pre-Alpha · Invite only · Built for operators running real capital
+              Pre-Alpha · Invite only · Built for operators moving real capital
             </p>
-          </div>
-
-          {/* Command graph */}
-          <div className="flex items-center justify-center lg:justify-end">
-            <div className="fx-orbit-card min-h-[360px] w-full max-w-md p-5 sm:p-6">
-              <div className="relative z-10 flex items-center justify-between">
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-400">
-                    Live command graph
-                  </p>
-                  <p className="mt-1 text-sm text-fg-secondary">Earn routes capital work across agents.</p>
-                </div>
-                <span className="rounded-full border border-gold-500/35 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300">
-                  60 FPS CSS
-                </span>
-              </div>
-              <div className="relative z-10 mt-8 grid grid-cols-3 gap-3">
-                {[
-                  ["Source", "124 LP paths"],
-                  ["Run", "8 diligence rooms"],
-                  ["Execute", "$42M marked"],
-                ].map(([label, value], index) => (
-                  <div
-                    key={label}
-                    className="rounded-2xl border border-line/80 bg-surface-0/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]"
-                    style={{ animationDelay: `${index * 120}ms` }}
-                  >
-                    <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</p>
-                    <p className="mt-2 text-sm font-semibold text-fg-primary">{value}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="relative z-10 mt-9 flex h-40 items-center justify-center">
-                <span className="absolute h-32 w-32 rounded-full border border-gold-400/25" />
-                <span className="absolute h-48 w-48 rounded-full border border-gold-400/10" />
-                <span className="absolute h-3 w-3 rounded-full bg-gold-300 shadow-[0_0_24px_rgb(var(--fx-accent-rgb)/0.9)]" />
-                {[
-                  "Analyst",
-                  "IR",
-                  "Diligence",
-                  "Admin",
-                ].map((label, index) => (
-                  <span
-                    key={label}
-                    className={`absolute rounded-full border border-gold-500/35 bg-surface-1 px-2 py-1 font-mono text-[10px] text-fg-secondary shadow-[0_0_22px_-10px_rgb(var(--fx-accent-rgb)/0.9)] ${
-                      index === 0
-                        ? "-top-1 left-1/2 -translate-x-1/2"
-                        : index === 1
-                          ? "right-2 top-1/2 -translate-y-1/2"
-                          : index === 2
-                            ? "bottom-0 left-1/2 -translate-x-1/2"
-                            : "left-2 top-1/2 -translate-y-1/2"
-                    }`}
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
-              <div className="fx-data-stream" />
-            </div>
-          </div>
         </div>
       </section>
 
       <div className="border-t border-line" />
 
-      {/* How it works — video placeholder + loop */}
+      {/* Living workspace */}
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-        <div className="grid gap-12 lg:grid-cols-2 lg:items-start">
+        <div className="grid gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
-              How it works
+              Living workspace
             </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-              Say it once.<br />Earn handles the rest.
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+              A spatial office for capital formation.
             </h2>
             <p className="mt-4 text-fg-secondary">
-              Direct Earn the way you would a senior operator.{" "}
-              <span className="text-fg-primary">
-                &ldquo;Run diligence on the acquisition target and get me an IC memo by Thursday.&rdquo;
-              </span>{" "}
-              Earn structures the work across the right agents — analyst, diligence, IR, fund admin — and presents a plan for your sign-off before anything moves.
+              The workspace sits directly after the hero because it explains the product in one view:
+              your AI executive team moving through Build, Source, Run, and Execute while the work
+              streams into artifacts you can inspect.
             </p>
-
-            {/* Use case examples */}
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 grid gap-3">
               {[
-                { label: "PE & Credit", example: "Model the LBO, stress-test debt capacity, draft the IC memo." },
-                { label: "Capital Formation", example: "Build the LP outreach, track commitments, send the capital call." },
-                { label: "Deal Sourcing", example: "Screen acquisition targets, score thesis fit, produce the screening report." },
-                { label: "Portfolio Ops", example: "Pull KPIs across every asset, flag variances, deliver the board pack." },
-              ].map((uc) => (
-                <div key={uc.label} className="fx-glass flex items-start gap-3 px-4 py-3">
-                  <span className="mt-0.5 shrink-0 rounded-full border border-gold-500/30 bg-gold-500/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-gold-400">
-                    {uc.label}
-                  </span>
-                  <span className="text-sm text-fg-secondary">{uc.example}</span>
+                "Top-down like Gather.town: rooms, lanes, desks, and live team presence.",
+                "Character-driven like The Sims: each executive has a job, status, and local context.",
+                "Workflow-aware: rooms light up when a prompt triggers work in that hub.",
+              ].map((line) => (
+                <div key={line} className="fx-glass flex items-start gap-3 px-4 py-3">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gold-300" />
+                  <span className="text-sm text-fg-secondary">{line}</span>
                 </div>
               ))}
             </div>
-
-            <ul className="mt-6 space-y-3 text-sm text-fg-secondary">
-              {[
-                "Nothing executes without your explicit sign-off",
-                "Every run produces a timestamped, version-controlled artifact",
-                "Full audit trail — from instruction to deliverable",
-              ].map((f) => (
-                <li key={f} className="flex items-start gap-2.5">
-                  <span className="mt-1 text-gold-400">→</span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-
-            {/* Booking CTA */}
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href={CALENDLY}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
-              >
-                Book a demo
-              </Link>
-              <Link
-                href="/login?mode=signup"
-                className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
-              >
-                Request access
-              </Link>
-            </div>
           </div>
 
-          {/* Right: loop */}
-          <div className="flex flex-col gap-4">
-            {/* Loop steps */}
-            <div className="fx-card p-5 sm:p-6">
-              <p className="mb-5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
-                The capital workflow loop
-              </p>
-              <div className="flex flex-col gap-5">
-                {LOOP.map((l, i) => (
-                  <div key={l.step} className="flex items-start gap-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 font-mono text-xs text-gold-300">
-                      {i + 1}
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-fg-primary">{l.step}</p>
-                      <p className="mt-0.5 text-xs leading-relaxed text-fg-secondary">{l.body}</p>
+          <div className="fx-card overflow-hidden p-3 sm:p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-400">
+                  Earn executive floor
+                </p>
+                <p className="mt-0.5 text-xs text-fg-muted">Hover agents to see work in motion.</p>
+              </div>
+              <span className="rounded-full border border-status-success/35 bg-status-success/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-status-success">
+                5 agents active
+              </span>
+            </div>
+
+            <div className="relative min-h-[520px] overflow-hidden rounded-2xl border border-line bg-[#08121f] p-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.05)]">
+              <div
+                aria-hidden
+                className="absolute inset-0 opacity-55 [background-image:linear-gradient(rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.055)_1px,transparent_1px)] [background-size:24px_24px]"
+              />
+              <div className="relative grid h-[488px] grid-cols-2 grid-rows-2 gap-3">
+                {HUBS.map((hub) => (
+                  <div key={hub.name} className="group relative overflow-hidden rounded-xl border border-white/10 bg-surface-0/45 p-3 transition hover:border-gold-500/45">
+                    <div className="absolute inset-x-3 top-10 h-px bg-gold-500/20" />
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-gold-300">{hub.name}</p>
+                        <p className="mt-1 text-xs text-fg-muted">{hub.room}</p>
+                      </div>
+                      <span className="h-2 w-2 rounded-full bg-status-success shadow-[0_0_16px_rgb(34_197_94/0.8)]" />
+                    </div>
+                    <div className="mt-10 grid grid-cols-3 gap-2">
+                      {[0, 1, 2, 3, 4, 5].map((desk) => (
+                        <span key={desk} className="h-7 rounded border border-white/10 bg-white/[0.06]" />
+                      ))}
+                    </div>
+                    <div className="absolute bottom-3 left-3 right-3 rounded-lg border border-white/10 bg-black/35 px-3 py-2">
+                      <p className="text-xs text-fg-secondary">{hub.task}</p>
+                      <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-gold-300">{hub.signal}</p>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="pointer-events-none absolute inset-0">
+                  <span className="absolute left-[17%] top-[50%] h-1 w-[66%] rounded-full bg-gold-500/20" />
+                  <span className="absolute left-[50%] top-[16%] h-[68%] w-1 rounded-full bg-gold-500/20" />
+                  <span className="absolute left-[50%] top-[50%] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold-300 shadow-[0_0_28px_rgb(var(--fx-accent-rgb)/0.9)]" />
+                </div>
+
+                {WORKSPACE_AGENTS.map((agent, index) => (
+                  <div
+                    key={agent.name}
+                    className="group absolute z-10 -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: agent.x, top: agent.y }}
+                  >
+                    <div className="relative">
+                      <span
+                        className="absolute -inset-2 animate-ping rounded-full opacity-20"
+                        style={{ backgroundColor: agent.color, animationDelay: `${index * 140}ms` }}
+                      />
+                      <span
+                        className="flex h-11 w-11 items-center justify-center rounded-[14px] border-2 border-black/40 text-xs font-bold text-white shadow-[0_8px_22px_-12px_black]"
+                        style={{ backgroundColor: agent.color }}
+                      >
+                        {agent.name.slice(0, 1)}
+                      </span>
+                      <span className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#08121f] bg-status-success" />
+                    </div>
+                    <div className="pointer-events-none absolute left-1/2 top-12 w-52 -translate-x-1/2 rounded-xl border border-gold-500/30 bg-black/90 p-3 opacity-0 shadow-2xl transition group-hover:opacity-100">
+                      <p className="font-mono text-[10px] uppercase tracking-wider text-gold-300">{agent.role}</p>
+                      <p className="mt-1 text-sm font-medium text-fg-primary">{agent.name}</p>
+                      <p className="mt-1 text-xs text-fg-secondary">{agent.task}</p>
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
+                        <span className="block h-full w-3/4 rounded-full" style={{ backgroundColor: agent.color }} />
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
+
+              <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-gold-500/20 bg-black/55 p-3 backdrop-blur">
+                <div className="grid gap-2 text-xs text-fg-secondary sm:grid-cols-3">
+                  <span><strong className="text-fg-primary">Trigger:</strong> &ldquo;Source LPs and draft outreach&rdquo;</span>
+                  <span><strong className="text-fg-primary">Routing:</strong> Source + Build active</span>
+                  <span><strong className="text-fg-primary">Output:</strong> ranked LP list, memo, next moves</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {WORKSPACE_NOTES.map((note) => (
+                <p key={note} className="rounded-lg border border-line bg-surface-1 px-3 py-2 text-xs text-fg-muted">
+                  {note}
+                </p>
+              ))}
             </div>
           </div>
         </div>
@@ -294,60 +290,30 @@ export default function LandingPage({
 
       <div className="border-t border-line" />
 
-      {/* Agent Roster */}
+      {/* Operating loop */}
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
-          Agent Roster
-        </p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-          Fifteen agents. One command layer.
-        </h2>
-        <p className="mt-3 max-w-xl text-fg-secondary">
-          Each agent owns a domain. Earn coordinates them all.
-          You authorize every move.
-        </p>
-
-        {/* Earn — featured */}
-        {(() => {
-          const earn = AGENTS.find((a) => a.key === "associate");
-          if (!earn) return null;
-          return (
-            <div className="fx-card mt-8 border-gold-500/30 p-5 sm:p-6">
-              <div className="flex items-center gap-3">
-                <span
-                  className="h-3 w-3 rounded-full ring-2 ring-gold-500/30"
-                  style={{ backgroundColor: earn.color }}
-                  aria-hidden
-                />
-                <h3 className="text-lg font-semibold">{earn.name}</h3>
-                <span className="rounded-full border border-gold-500/20 bg-gold-500/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-gold-400">
-                  Command layer
-                </span>
-              </div>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg-secondary">
-                {AGENT_COPY[earn.key] ?? earn.role}
-              </p>
-            </div>
-          );
-        })()}
-
-        {/* Remaining 14 agents */}
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {AGENTS.filter((a) => a.key !== "associate").map((agent) => (
-            <div
-              key={agent.key}
-              className="fx-card fx-card-hover p-5"
-            >
-              <div className="flex items-center gap-2.5">
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: agent.color }}
-                  aria-hidden
-                />
-                <h3 className="text-sm font-medium">{agent.name}</h3>
-              </div>
-              <p className="mt-2 text-xs leading-relaxed text-fg-secondary">
-                {AGENT_COPY[agent.key] ?? agent.role}
+        <div className="max-w-2xl">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
+            The operating loop
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight">
+            One instruction becomes coordinated execution.
+          </h2>
+          <p className="mt-3 text-fg-secondary">
+            Earn turns a plain-language request into a plan, assigns the AI executive team,
+            waits for approval, and returns artifacts tied to the workflow.
+          </p>
+        </div>
+        <div className="mt-8 grid gap-3 md:grid-cols-4">
+          {HUBS.map((hub, index) => (
+            <div key={hub.name} className="fx-card fx-card-hover p-5">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+                0{index + 1}
+              </span>
+              <h3 className="mt-4 text-lg font-semibold text-fg-primary">{hub.name}</h3>
+              <p className="mt-2 text-sm text-fg-secondary">{hub.task}</p>
+              <p className="mt-4 rounded-lg border border-line bg-surface-1 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                {hub.signal}
               </p>
             </div>
           ))}
@@ -362,12 +328,11 @@ export default function LandingPage({
           Early access
         </p>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight">
-          Built for operators<br />running real capital.
+          See the AI executive team work.
         </h2>
         <p className="mx-auto mt-4 max-w-md text-fg-secondary">
-          Invite-only. We&rsquo;re onboarding GPs, family offices, and advisory
-          professionals ready to move off fragmented tools and onto one
-          intelligent system.
+          Invite-only for GPs, family offices, and advisory professionals ready
+          to move from fragmented tools into one living operating system.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
@@ -394,7 +359,7 @@ export default function LandingPage({
         <div className="mx-auto flex max-w-6xl flex-col gap-2 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <span className="font-mono text-xs text-fg-muted">FundExecs OS · Alpha</span>
           <span className="font-mono text-xs text-fg-muted">
-            Data model first. Agents second. Capital third.
+            Build &gt; Source &gt; Run &gt; Execute
           </span>
         </div>
       </footer>
