@@ -10,6 +10,7 @@
 // context — the same service-client contract credits and reputation use.
 import { createServiceClient } from "@/lib/supabase/server";
 import { grantReputation, REPUTATION_POINTS } from "@/lib/reputation";
+import { computeEvidenceHash } from "@/lib/anchor";
 import type { Attestation, Deal } from "@/lib/supabase/database.types";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -43,16 +44,25 @@ export const DEAL_CLOSE_CLAIM: AttestationClaim = "closed";
  * Pure mapping from input to the insert payload — no I/O, so it is unit-testable.
  * settlement and anchor_ref are intentionally omitted: the DB default ('internal')
  * applies, and nothing is anchored at write time. id / created_at are DB-assigned.
+ *
+ * Every attestation is born with a verifiable evidence_hash computed from its
+ * claim-identifying fields (Phase 4, §2.1) — so it is anchorable later without ever
+ * re-deriving content. An explicit input.evidenceHash (a pre-hashed evidence set)
+ * still wins; otherwise we hash the content here. settlement stays 'internal' until
+ * anchorAttestation transitions it.
  */
 export function buildAttestationRow(input: WriteAttestationInput): Partial<Attestation> {
-  return {
+  const row = {
     organization_id: input.orgId,
     subject_type: input.subjectType,
     subject_id: input.subjectId,
     claim: input.claim,
     attested_by: input.attestedBy ?? null,
     witness_org_id: input.witnessOrgId ?? null,
-    evidence_hash: input.evidenceHash ?? null,
+  };
+  return {
+    ...row,
+    evidence_hash: input.evidenceHash ?? computeEvidenceHash(row),
   };
 }
 

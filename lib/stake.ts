@@ -141,3 +141,30 @@ export async function resolveListingStake(
   if (!row) return null;
   return resolveStake(service, row.id, outcome);
 }
+
+/**
+ * Bad-faith forfeiture through DUE PROCESS (TOKENIZATION_LAYERS.md §9). Rather
+ * than instantly burning a stake, this FILES an appealable dispute against the
+ * locked listing stake — no credit moves until an admin resolves it (upheld →
+ * forfeited, dismissed → returned, via resolveDispute). Imported lazily to keep
+ * lib/stake.ts free of a circular dependency on lib/stake-dispute.ts (which
+ * imports resolveStake from here). Returns the opened dispute, or null when the
+ * listing has no locked stake to dispute.
+ */
+export async function forfeitListingStakeViaDispute(
+  service: ServiceClient,
+  listingId: string,
+  { orgId, reason, openedBy }: { orgId: string; reason?: string | null; openedBy?: string | null },
+) {
+  const { data: row } = await service
+    .from("stake_positions")
+    .select("id")
+    .eq("ref_id", listingId)
+    .eq("purpose", "listing")
+    .eq("status", "locked")
+    .maybeSingle();
+  if (!row) return null;
+
+  const { openDispute } = await import("@/lib/stake-dispute");
+  return openDispute(service, { stakeId: row.id, orgId, reason, openedBy });
+}
