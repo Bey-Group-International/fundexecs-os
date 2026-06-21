@@ -49,6 +49,14 @@ const MORE_ITEMS: NavItem[] = [
   { href: "/marketplace", label: "Marketplace" },
 ];
 
+const APPROVAL_CONTEXT = [
+  ["External action", "No"],
+  ["Capital-binding", "No"],
+  ["Source confidence", "82%"],
+  ["Artifacts", "memo, package"],
+  ["Graph updates", "all three"],
+] as const;
+
 // Account menu, in display order. Items with a real destination are links;
 // Walkthrough has no href and instead re-opens the guided tour overlay. Each
 // carries a glyph so the popout reads at a glance.
@@ -454,6 +462,23 @@ export function AppSidebar({
             </div>
           );
         })}
+        <Link href="/settings#vault" className={linkClass}>
+          Vault
+        </Link>
+
+        <div className="mt-4 rounded-xl border border-line/80 bg-surface-0/72 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            Approval Context
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {APPROVAL_CONTEXT.map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-2">
+                <span className="truncate text-[11px] text-fg-muted">{label}</span>
+                <span className="shrink-0 font-mono text-[10px] text-fg-secondary">{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Conversation list below the hubs, filed under group names with an
             Ungrouped bucket. */}
