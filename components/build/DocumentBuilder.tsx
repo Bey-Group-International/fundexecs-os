@@ -4,7 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { scoreDocument } from "@/lib/document-quality";
-import { updateDocument } from "./materials-actions";
+import { deleteDocument, updateDocument } from "./materials-actions";
 import { autoComposeContent, earnChat, institutionalize } from "./builder-actions";
 import { BuilderWizard } from "./BuilderWizard";
 import type { DraftTurn } from "@/lib/claude";
@@ -278,6 +278,17 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
             >
               {dirtySaved === "saving" ? "Saving…" : "Save"}
             </button>
+            <form
+              action={deleteDocument}
+              onSubmit={(event) => {
+                if (!confirm(`Delete "${doc.name}" permanently?`)) event.preventDefault();
+              }}
+            >
+              <input type="hidden" name="id" value={doc.id} />
+              <button className="rounded-md border border-status-danger/40 px-3 py-1.5 text-sm text-status-danger transition hover:bg-status-danger/10">
+                Delete
+              </button>
+            </form>
           </div>
         </div>
 

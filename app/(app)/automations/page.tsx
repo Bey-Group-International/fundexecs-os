@@ -163,8 +163,8 @@ export default async function AutomationsPage() {
                     </form>
                     <form action={deleteAutomation}>
                       <input type="hidden" name="id" value={a.id} />
-                      <button className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger">
-                        ✕
+                      <button className="rounded-md border border-status-danger/40 px-2.5 py-1 text-xs text-status-danger transition hover:bg-status-danger/10">
+                        Delete
                       </button>
                     </form>
                   </div>

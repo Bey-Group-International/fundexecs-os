@@ -148,6 +148,7 @@ export async function getInvestorWarRoom(
         .select("*")
         .eq("organization_id", orgId)
         .eq("investor_id", investorId)
+        .is("archived_at", null)
         .order("effective_date", { ascending: false })
         .limit(200),
       supabase

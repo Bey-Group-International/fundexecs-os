@@ -8,6 +8,7 @@ import {
   addStakeholder,
   addShareClass,
   addHolding,
+  deleteStakeholder,
   deleteHolding,
   draftOwnershipWithEarn,
 } from "./ownership-actions";
@@ -190,6 +191,33 @@ export function EntityOwnership({
           <button className="rounded-md border border-line px-3 py-2 text-sm text-fg-secondary transition hover:text-fg-primary">+ Class</button>
         </form>
       </div>
+
+      {stakeholders.length > 0 ? (
+        <div className="mt-2 rounded-xl border border-line bg-surface-1 p-3">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            Stakeholder registry
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {stakeholders.map((s) => (
+              <form
+                key={s.id}
+                action={deleteStakeholder}
+                onSubmit={(event) => {
+                  if (!confirm(`Delete stakeholder "${s.name}" permanently?`)) event.preventDefault();
+                }}
+                className="flex items-center gap-2 rounded-full border border-line bg-surface-0 px-2.5 py-1 text-xs"
+              >
+                <input type="hidden" name="id" value={s.id} />
+                <span className="text-fg-primary">{s.name}</span>
+                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{s.kind}</span>
+                <button className="text-status-danger transition hover:text-red-300" aria-label={`Delete ${s.name}`}>
+                  Delete
+                </button>
+              </form>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Earn draft */}
       <div className="mt-2 rounded-xl border border-gold-500/30 bg-gold-500/5 p-3">

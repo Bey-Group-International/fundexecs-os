@@ -281,7 +281,8 @@ export const getPortfolioMonitor = cache(
         .select(
           "id, name, asset_type, fund_id, acquisition_cost, current_value, status",
         )
-        .eq("organization_id", orgId);
+        .eq("organization_id", orgId)
+        .is("archived_at", null);
 
       const allAssets = (assetRows ?? []) as Asset[];
       const held = allAssets.filter((a) => !isExited(a.status));

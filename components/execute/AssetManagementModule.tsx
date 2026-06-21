@@ -6,6 +6,7 @@ import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile } from "@/components/execute/ui";
 import AddRowForm from "@/components/AddRowForm";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 import type { Asset } from "@/lib/supabase/database.types";
 
 function humanize(s: string): string {
@@ -34,6 +35,7 @@ export async function ExecuteAssetManagementModule({
     .from("assets")
     .select("*")
     .eq("organization_id", orgId)
+    .is("archived_at", null)
     .order("current_value", { ascending: false, nullsFirst: false });
   // Asset Management is session-scoped: inside a session frame, show only this
   // session's holdings; standalone, the full org-wide book.
@@ -118,9 +120,9 @@ export async function ExecuteAssetManagementModule({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-surface-2/80 text-left">
-              {["Asset", "Type", "Cost", "Value", "Mark", "Status"].map((h, i) => (
+              {["Asset", "Type", "Cost", "Value", "Mark", "Status", ""].map((h, i) => (
                 <th
-                  key={h}
+                  key={h || "actions"}
                   className={`px-4 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 && i <= 4 ? "text-right" : ""}`}
                 >
                   {h}
@@ -167,6 +169,16 @@ export async function ExecuteAssetManagementModule({
                     >
                       {humanize(a.status ?? "active")}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <RecordLifecycleActions
+                      hub="execute"
+                      module="asset_management"
+                      table="assets"
+                      id={a.id}
+                      className="justify-end"
+                      deleteClassName=""
+                    />
                   </td>
                 </tr>
               );

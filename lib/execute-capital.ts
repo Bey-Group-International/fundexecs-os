@@ -131,7 +131,7 @@ export const getExecuteCapital = cache(async function getExecuteCapital(
 ): Promise<CapitalSummary> {
   const supabase = createServerClient();
   const [eventsRes, fundsRes] = await Promise.all([
-    supabase.from("capital_events").select("*").eq("organization_id", orgId),
+    supabase.from("capital_events").select("*").eq("organization_id", orgId).is("archived_at", null),
     supabase.from("funds").select("*").eq("organization_id", orgId),
   ]);
   return rollupCapitalEvents(

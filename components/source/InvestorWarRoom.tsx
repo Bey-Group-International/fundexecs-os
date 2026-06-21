@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PrintButton } from "@/components/PrintButton";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 import type { InvestorWarRoom as WarRoom } from "@/lib/source-war-room";
 import { formatCompactCurrency } from "@/lib/source-war-room";
 import type { Temperature, NextAction } from "@/lib/capital-map";
@@ -212,7 +213,7 @@ function CapitalFlows({ data }: { data: WarRoom }) {
           {capitalEvents.map((event) => {
             const inflow = INFLOW_EVENTS.has(event.event_type);
             return (
-              <div key={event.id} className="flex items-center gap-2.5 text-sm">
+              <div key={event.id} className="flex flex-wrap items-center gap-2.5 text-sm">
                 <span className="shrink-0 font-mono text-[10px] text-fg-muted">
                   {new Date(event.effective_date).toLocaleDateString()}
                 </span>
@@ -224,6 +225,14 @@ function CapitalFlows({ data }: { data: WarRoom }) {
                   {inflow ? "+" : "−"}
                   {formatCompactCurrency(event.amount)}
                 </span>
+                <RecordLifecycleActions
+                  hub="investor"
+                  module={data.investor.id}
+                  table="capital_events"
+                  id={event.id}
+                  className="ml-auto print:hidden"
+                  deleteClassName=""
+                />
               </div>
             );
           })}
@@ -321,7 +330,18 @@ export function InvestorWarRoom({ data }: { data: WarRoom }) {
         >
           ← LP pipeline
         </Link>
-        <PrintButton />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <RecordLifecycleActions
+            hub="investor"
+            module={data.investor.id}
+            table="investors"
+            id={data.investor.id}
+            archived={Boolean(data.investor.archived_at)}
+            className="print:hidden"
+            deleteClassName=""
+          />
+          <PrintButton />
+        </div>
       </div>
       <Header data={data} />
       <Commitments data={data} />

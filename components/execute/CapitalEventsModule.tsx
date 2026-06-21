@@ -4,6 +4,7 @@ import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile } from "@/components/execute/ui";
 import AddRowForm from "@/components/AddRowForm";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 
 function humanize(s: string): string {
   return s.replace(/_/g, " ");
@@ -20,7 +21,7 @@ function LedgerLine({ row, first }: { row: LedgerRow; first: boolean }) {
   const amountTone = direction === "out" ? "text-emerald-300" : direction === "in" ? "text-fg-primary" : "text-fg-muted";
   const sign = signed > 0 ? "+" : signed < 0 ? "−" : "";
   return (
-    <div className={`grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 bg-surface-1 sm:grid-cols-[7rem_1fr_auto_auto] ${first ? "" : "border-t border-line/50"}`}>
+    <div className={`grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 bg-surface-1 sm:grid-cols-[7rem_1fr_auto_auto_auto] ${first ? "" : "border-t border-line/50"}`}>
       <span className="font-mono text-[11px] text-fg-muted">{shortDate(event.effective_date)}</span>
       <div className="min-w-0">
         <div className="flex items-center gap-2">
@@ -41,6 +42,14 @@ function LedgerLine({ row, first }: { row: LedgerRow; first: boolean }) {
         net {runningNet >= 0 ? "" : "−"}
         {usd(Math.abs(runningNet))}
       </span>
+      <RecordLifecycleActions
+        hub="execute"
+        module="capital_events"
+        table="capital_events"
+        id={event.id}
+        className="justify-end"
+        deleteClassName=""
+      />
     </div>
   );
 }
