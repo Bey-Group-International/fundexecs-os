@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
+import { EarnOrb } from "@/components/copilot/EarnOrb";
 import { EARN_MODELS, buildEarnPromptEnvelope, type EarnAttachmentInput, type EarnModelKey } from "@/lib/earn-conversation";
 import { activeAgent, buildAgentTheater, type AgentTheaterNode } from "@/lib/session-theater";
 
@@ -233,154 +234,221 @@ export default function Copilot({
   }
 
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col">
-      <header className="flex items-center gap-2 pb-4">
-        <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-gold-400">
-          Earn · Agent Copilot
-        </span>
-        <span className="flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-          <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-status-success" : "bg-fg-muted"}`} />
-          {live ? "Earn ready" : "Fallback mode"}
-        </span>
+    <div className="fx-neural-ambient mx-auto flex min-h-[calc(100dvh-8rem)] max-w-5xl flex-col">
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <EarnOrb size={30} pulse={live || planning} />
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">
+              FundExecs OS · Earn
+            </p>
+            <h1 className="font-display text-lg font-semibold tracking-tight text-fg-primary">
+              Agent chat
+            </h1>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border border-line/80 bg-surface-1/70 px-3 py-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] backdrop-blur">
+          <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-status-success shadow-[0_0_12px_rgb(95_184_122/0.75)]" : "bg-fg-muted"}`} />
+          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            {live ? "Earn ready" : "Fallback mode"}
+          </span>
+        </div>
       </header>
 
-      {theaterBundle ? (
-        <AgentWorkspace bundle={theaterBundle} planning={planning} model={model} />
-      ) : null}
+      <section className="relative flex min-h-0 flex-1 overflow-hidden rounded-[1.75rem] border border-line/80 bg-surface-0/88 shadow-[0_24px_90px_-58px_rgb(var(--fx-accent-rgb)/0.9)]">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgb(var(--fx-accent-rgb)/0.16),transparent_36%),linear-gradient(rgb(var(--fx-accent-rgb)/0.045)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--fx-accent-rgb)/0.045)_1px,transparent_1px)] bg-[length:auto,32px_32px,32px_32px]"
+        />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6">
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+              {theaterBundle ? (
+                <AgentWorkspace bundle={theaterBundle} planning={planning} model={model} />
+              ) : null}
 
-      {/* Transcript — each turn is the operator's prompt and Earn's response. */}
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 pb-4">
-        {empty ? (
-          <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
-            <h1 className="font-display text-3xl font-semibold tracking-tight text-fg-primary">
-              What should we run?
-            </h1>
-            <p className="mt-2 max-w-md text-sm text-fg-secondary">
-              Describe the work. The Associate drafts a plan, delegates to agents,
-              and asks before it automates. Follow-ups stay in this conversation.
-            </p>
+              {empty ? (
+                <div className="flex min-h-[360px] flex-col items-center justify-center px-4 py-14 text-center">
+                  <EarnOrb size={54} pulse />
+                  <h2 className="mt-5 font-display text-3xl font-semibold tracking-tight text-fg-primary">
+                    What should Earn run?
+                  </h2>
+                  <p className="mt-2 max-w-lg text-sm leading-6 text-fg-secondary">
+                    Ask for diligence, sourcing, LP work, or fund operations. Earn drafts the plan, shows the agent lanes, and waits at the gate before automation.
+                  </p>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    {["LBO model", "LP update", "Source family offices", "Review mandate"].map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => {
+                          setPrompt(chip);
+                          inputRef.current?.focus();
+                        }}
+                        className="rounded-full border border-line/80 bg-surface-1/75 px-3 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary"
+                      >
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {turns.map((b) => (
+                <div key={b.workflow.id} className="flex flex-col gap-4">
+                  <div className="flex justify-end gap-3">
+                    <div className="max-w-[84%]">
+                      <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                        You
+                      </div>
+                      <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+                        {b.workflow.description || b.workflow.title}
+                      </div>
+                    </div>
+                    <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
+                      YOU
+                    </span>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <EarnOrb size={32} pulse={b.workflow.status === "in_progress" || b.workflow.status === "awaiting_approval"} className="mt-5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                        Earn
+                        <span className="h-1 w-1 rounded-full bg-line" />
+                        <span>{STATUS_LABEL[b.workflow.status] ?? b.workflow.status}</span>
+                      </div>
+                      <WorkflowCard
+                        bundle={b}
+                        busy={busy}
+                        decide={decide}
+                        primary={b.approval?.decision === "pending"}
+                        clarifying={clarifying}
+                        clarify={clarify?.workflowId === b.workflow.id ? clarify : null}
+                        onAsk={() => askQuestions(b.workflow.id)}
+                        onAnswerChange={(v) => setClarify((c) => (c ? { ...c, answer: v } : c))}
+                        onCancelClarify={() => setClarify(null)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {planning ? (
+                <div className="flex gap-3">
+                  <EarnOrb size={32} pulse className="mt-1" />
+                  <div className="relative overflow-hidden rounded-2xl border border-gold-500/25 bg-surface-1/80 px-4 py-3 text-sm text-fg-secondary">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-400" />
+                      Reading your prompt and drafting the plan...
+                    </span>
+                    <span className="fx-data-stream" aria-hidden />
+                  </div>
+                </div>
+              ) : null}
+
+              <div ref={bottomRef} />
+            </div>
           </div>
-        ) : null}
 
-        {turns.map((b) => (
-          <div key={b.workflow.id} className="flex flex-col gap-3">
-            {/* Operator's prompt */}
-            <div className="flex justify-end">
-              <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-surface-2 px-4 py-2.5 text-sm text-fg-primary">
-                {b.workflow.description || b.workflow.title}
+          <form
+            onSubmit={submit}
+            className="border-t border-line/75 bg-surface-0/88 p-3 backdrop-blur-xl supports-[backdrop-filter]:bg-surface-0/72 sm:p-4"
+          >
+            <div className="mx-auto max-w-3xl rounded-2xl border border-line/85 bg-surface-1/85 p-2 shadow-[inset_0_1px_0_rgb(255_255_255/0.04),0_18px_50px_-38px_rgb(var(--fx-accent-rgb)/0.85)] transition focus-within:border-gold-500/60">
+              {attachments.length ? (
+                <div className="mb-2 flex flex-wrap gap-1.5 px-1">
+                  {attachments.map((file, i) => (
+                    <button
+                      key={`${file.name}-${i}`}
+                      type="button"
+                      onClick={() => setAttachments((prev) => prev.filter((_, index) => index !== i))}
+                      className="rounded-full border border-gold-500/30 bg-gold-500/10 px-2 py-1 font-mono text-[10px] text-gold-300 transition hover:bg-gold-500/15"
+                      title="Remove attachment"
+                    >
+                      {file.type.startsWith("video/") ? "video" : "image"} · {file.name} x
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <textarea
+                ref={inputRef}
+                value={prompt}
+                rows={2}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder={
+                  sessionId
+                    ? "Reply to Earn..."
+                    : "Ask Earn to build the LBO model, test debt capacity, or draft an LP update..."
+                }
+                className="max-h-44 min-h-[56px] w-full resize-none rounded-xl border-0 bg-transparent px-3 py-2.5 text-sm leading-6 text-fg-primary outline-none placeholder:text-fg-muted"
+              />
+
+              <div className="flex flex-wrap items-center gap-2 border-t border-line/70 px-1 pt-2">
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value as EarnModelKey)}
+                  className="h-8 rounded-lg border border-line bg-surface-0/80 px-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-secondary outline-none transition hover:border-gold-500/45 focus:border-gold-500/70"
+                  aria-label="Reasoning model"
+                >
+                  {EARN_MODELS.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+
+                <label className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface-0/80 px-2.5 text-xs text-fg-secondary transition hover:border-gold-500/45 hover:text-fg-primary">
+                  <span className="font-mono text-[11px]">+</span>
+                  Context
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    className="sr-only"
+                    onChange={(e) => {
+                      addFiles(e.target.files);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={startVoice}
+                  className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs transition ${
+                    listening
+                      ? "border-status-danger/50 bg-status-danger/10 text-status-danger"
+                      : "border-line bg-surface-0/80 text-fg-secondary hover:border-gold-500/45 hover:text-fg-primary"
+                  }`}
+                  title="Speak to Earn"
+                >
+                  <span className="font-mono text-[11px]">{listening ? "●" : "mic"}</span>
+                  {listening ? "Listening" : "Voice"}
+                </button>
+
+                <span className="ml-auto hidden font-mono text-[10px] text-fg-muted sm:inline">
+                  Enter to send · Shift+Enter for newline
+                </span>
+                <button
+                  disabled={busy || !prompt.trim()}
+                  className="flex h-8 items-center gap-1.5 rounded-lg bg-gold-400 px-3 text-xs font-semibold text-surface-0 shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.24)] transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {planning ? "Planning" : sessionId ? "Send" : "Run"}
+                  <span aria-hidden>→</span>
+                </button>
               </div>
             </div>
-            {/* Earn's response */}
-            <WorkflowCard
-              bundle={b}
-              busy={busy}
-              decide={decide}
-              primary={b.approval?.decision === "pending"}
-              clarifying={clarifying}
-              clarify={clarify?.workflowId === b.workflow.id ? clarify : null}
-              onAsk={() => askQuestions(b.workflow.id)}
-              onAnswerChange={(v) => setClarify((c) => (c ? { ...c, answer: v } : c))}
-              onCancelClarify={() => setClarify(null)}
-            />
-          </div>
-        ))}
-
-        {planning ? (
-          <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-gold-400" />
-            Reading your prompt · drafting a plan…
-          </div>
-        ) : null}
-
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Composer — pinned to the bottom of the conversation. */}
-      <form
-        onSubmit={submit}
-        className="sticky bottom-0 mx-auto w-full max-w-3xl border-t border-line bg-surface-0/90 pb-1 pt-3 backdrop-blur supports-[backdrop-filter]:bg-surface-0/75"
-      >
-        {attachments.length ? (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {attachments.map((file, i) => (
-              <button
-                key={`${file.name}-${i}`}
-                type="button"
-                onClick={() => setAttachments((prev) => prev.filter((_, index) => index !== i))}
-                className="rounded-full border border-gold-500/30 bg-gold-500/10 px-2 py-1 font-mono text-[10px] text-gold-300"
-                title="Remove attachment"
-              >
-                {file.type.startsWith("video/") ? "video" : "image"} · {file.name} ×
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <div className="flex items-end gap-2">
-          <textarea
-            ref={inputRef}
-            value={prompt}
-            rows={2}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                e.currentTarget.form?.requestSubmit();
-              }
-            }}
-            placeholder={
-              sessionId
-                ? "Reply to Earn — Enter adds space, ⌘↵ sends…"
-                : "e.g. Build the LBO model and test debt capacity…"
-            }
-            className="min-h-[52px] flex-1 resize-none rounded-lg border border-line bg-surface-1 px-4 py-3 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
-          />
-          <div className="flex flex-col gap-1.5">
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value as EarnModelKey)}
-              className="rounded-md border border-line bg-surface-1 px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-secondary outline-none focus:border-gold-500"
-              aria-label="Reasoning model"
-            >
-              {EARN_MODELS.map((m) => (
-                <option key={m.key} value={m.key}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-1.5">
-              <label className="cursor-pointer rounded-md border border-line bg-surface-1 px-2 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/50">
-                ⬆
-                <input
-                  type="file"
-                  accept="image/*,video/*"
-                  multiple
-                  className="sr-only"
-                  onChange={(e) => {
-                    addFiles(e.target.files);
-                    e.currentTarget.value = "";
-                  }}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={startVoice}
-                className={`rounded-md border px-2 py-1.5 text-xs transition ${
-                  listening ? "border-status-danger/50 bg-status-danger/10 text-status-danger" : "border-line bg-surface-1 text-fg-secondary hover:border-gold-500/50"
-                }`}
-                title="Speak to Earn"
-              >
-                {listening ? "●" : "🎙"}
-              </button>
-            </div>
-          </div>
-          <button
-            disabled={busy}
-            className="rounded-lg bg-gold-400 px-5 py-3 text-sm font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
-          >
-            {planning ? "Planning…" : sessionId ? "Send" : "Run"}
-          </button>
+          </form>
         </div>
-      </form>
+      </section>
     </div>
   );
 }
@@ -415,7 +483,7 @@ function AgentWorkspace({
   if (!nodes.length && !planning) return null;
 
   return (
-    <section className="mb-5 overflow-hidden rounded-3xl border border-gold-500/20 bg-[radial-gradient(circle_at_20%_20%,rgba(234,179,8,0.16),transparent_30%),linear-gradient(135deg,rgba(15,23,42,0.94),rgba(2,6,23,0.98))] p-4 shadow-[0_20px_80px_-48px_rgba(234,179,8,0.7)]">
+    <section className="mb-5 overflow-hidden rounded-3xl border border-gold-500/20 bg-[radial-gradient(circle_at_20%_20%,rgb(var(--fx-accent-rgb)/0.16),transparent_30%),linear-gradient(135deg,rgb(var(--fx-surface-1)/0.94),rgb(var(--fx-surface-0)/0.98))] p-4 shadow-[0_20px_80px_-48px_rgb(var(--fx-accent-rgb)/0.7)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-300">
@@ -439,7 +507,7 @@ function AgentWorkspace({
                 type="button"
                 onClick={() => setSelected(node.agent)}
                 className={`group rounded-2xl border bg-black/40 p-3 text-left transition hover:border-gold-500/50 ${
-                  selected === node.agent ? "border-gold-500/60 shadow-[0_0_28px_-18px_rgba(234,179,8,0.9)]" : "border-white/10"
+                  selected === node.agent ? "border-gold-500/60 shadow-[0_0_28px_-18px_rgb(var(--fx-accent-rgb)/0.9)]" : "border-white/10"
                 }`}
               >
                 <span className="flex items-center gap-2">
@@ -510,7 +578,7 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
   const artifactByStep = new Map<string, Artifact>();
   for (const a of artifacts) if (a.step_id) artifactByStep.set(a.step_id, a);
   return (
-    <ol className="relative flex flex-col gap-3">
+    <ol className="relative flex flex-col gap-2.5">
       {steps.map((step, i) => {
         const agent = AGENT_BY_KEY[step.assigned_agent];
         const artifact = artifactByStep.get(step.id);
@@ -521,10 +589,10 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
             ? (step.result as { output?: string }).output
             : undefined);
         return (
-          <li key={step.id} className="flex gap-3">
+          <li key={step.id} className="flex gap-3 rounded-xl border border-line/60 bg-surface-0/45 px-3 py-2.5">
             <div className="flex flex-col items-center">
               <StepNode status={step.status} color={agent?.color} />
-              {i < steps.length - 1 ? <span className="mt-1 w-px flex-1 bg-line" /> : null}
+              {i < steps.length - 1 ? <span className="mt-1 w-px flex-1 bg-line/80" /> : null}
             </div>
             <div className="flex-1 pb-1">
               <div className="flex items-center gap-2">
@@ -576,30 +644,33 @@ function WorkflowCard({
   const { workflow, approval } = bundle;
   const pending = approval && approval.decision === "pending";
   return (
-    <article className={`rounded-xl border bg-surface-1 p-5 ${primary ? "border-gold-500/30" : "border-line"}`}>
+    <article className={`rounded-2xl border bg-surface-1/82 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)] sm:p-5 ${primary ? "border-gold-500/40 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)]" : "border-line/80"}`}>
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="font-display text-lg font-medium text-fg-primary">{workflow.title}</h2>
-          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <div className="min-w-0">
+          <h2 className="font-display text-lg font-semibold tracking-tight text-fg-primary">{workflow.title}</h2>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
             {workflow.hub} · {STATUS_LABEL[workflow.status] ?? workflow.status}
           </p>
         </div>
-        <div className="h-1 w-24 overflow-hidden rounded bg-surface-3">
-          <div className="h-full rounded bg-gold-400 transition-all" style={{ width: `${Math.round(workflow.progress * 100)}%` }} />
+        <div className="w-28 shrink-0 pt-1">
+          <div className="mb-1 text-right font-mono text-[9px] text-fg-muted">{Math.round(workflow.progress * 100)}%</div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-3 shadow-[inset_0_1px_2px_rgb(0_0_0/0.32)]">
+            <div className="h-full rounded-full bg-gradient-to-r from-gold-500 to-gold-300 transition-all" style={{ width: `${Math.round(workflow.progress * 100)}%` }} />
+          </div>
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
         <WorkflowSteps bundle={bundle} />
       </div>
 
       {pending ? (
-        <div className="mt-4 border-t border-line pt-4">
+        <div className="mt-4 border-t border-line/75 pt-4">
           <p className="text-xs text-fg-secondary">{approval.summary}</p>
 
           {/* Clarify panel — Earn's questions for the operator. */}
           {clarify ? (
-            <div className="mt-3 rounded-lg border border-gold-500/30 bg-surface-2 p-3">
+            <div className="mt-3 rounded-xl border border-gold-500/30 bg-gold-500/[0.06] p-3">
               {clarify.questions.length > 0 ? (
                 <>
                   <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
@@ -621,20 +692,22 @@ function WorkflowCard({
                 onChange={(e) => onAnswerChange(e.target.value)}
                 rows={3}
                 placeholder="Answer Earn — your reply refines the plan…"
-                className="mt-2 w-full rounded-md border border-line bg-surface-1 px-3 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
+                className="mt-2 w-full resize-none rounded-lg border border-line bg-surface-1/85 px-3 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
               />
               <div className="mt-2 flex justify-end gap-2">
                 <button
+                  type="button"
                   disabled={busy}
                   onClick={onCancelClarify}
-                  className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface-3 disabled:opacity-50"
+                  className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   disabled={busy || !clarify.answer.trim()}
                   onClick={() => decide(approval.id, "regenerate", clarify.answer.trim())}
-                  className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 hover:bg-gold-300 disabled:opacity-50"
+                  className="rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
                 >
                   Submit &amp; refine
                 </button>
@@ -644,38 +717,43 @@ function WorkflowCard({
 
           <div className="mt-3 flex flex-wrap gap-2">
             <button
+              type="button"
               disabled={busy}
               onClick={() => decide(approval.id, "approved")}
-              className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 hover:bg-gold-300 disabled:opacity-50"
+              className="rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
             >
               Approve &amp; automate
             </button>
             <button
+              type="button"
               disabled={busy}
               onClick={() => decide(approval.id, "accepted")}
               title="Accept the plan as the recommendation — agents won't run"
-              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 hover:bg-gold-500/20 disabled:opacity-50"
+              className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
             >
               Accept recommendation
             </button>
             <button
+              type="button"
               disabled={busy || clarifying}
               onClick={onAsk}
-              className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface-3 disabled:opacity-50"
+              className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
             >
               {clarifying ? "Asking…" : "Ask questions"}
             </button>
             <button
+              type="button"
               disabled={busy}
               onClick={() => decide(approval.id, "regenerate")}
-              className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface-3 disabled:opacity-50"
+              className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
             >
               Regenerate
             </button>
             <button
+              type="button"
               disabled={busy}
               onClick={() => decide(approval.id, "rejected")}
-              className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs text-status-danger hover:bg-surface-3 disabled:opacity-50"
+              className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-status-danger transition hover:bg-surface-3 disabled:opacity-50"
             >
               Decline
             </button>
