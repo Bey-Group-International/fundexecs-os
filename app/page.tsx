@@ -68,7 +68,7 @@ export default function LandingPage({
         />
         <div className="mx-auto max-w-3xl text-center">
           <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
-            Private Markets Digital Twin
+            Private Markets Operating System
           </p>
           <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-7xl">
             FundExecs OS is an autonomous executive team for private markets.

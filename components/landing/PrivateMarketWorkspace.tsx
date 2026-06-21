@@ -163,7 +163,7 @@ export function PrivateMarketWorkspace() {
           <div className="flex items-start justify-between gap-4 border-b border-line bg-surface-0/70 px-4 py-3">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-400">
-                Private Markets Digital Twin
+                Earn Operating Map
               </p>
               <p className="mt-1 text-sm font-medium text-fg-primary">Workspace Structure</p>
               <p className="mt-1 max-w-xl text-xs text-fg-muted">
