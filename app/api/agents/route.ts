@@ -15,6 +15,7 @@ export async function GET() {
     supabase
       .from("tasks")
       .select("assigned_agent")
+      .eq("organization_id", auth.ctx.orgId)
       .in("status", ["pending", "in_progress", "awaiting_approval", "blocked"]),
   ]);
 
