@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
@@ -8,7 +8,6 @@ import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import { EARN_MODELS, buildEarnPromptEnvelope, type EarnAttachmentInput, type EarnModelKey } from "@/lib/earn-conversation";
-import { activeAgent, buildAgentTheater, type AgentTheaterNode } from "@/lib/session-theater";
 
 export interface WorkflowBundle {
   workflow: Task;
@@ -181,10 +180,6 @@ export default function Copilot({
   // Conversation order: oldest turn first, newest nearest the composer.
   const turns = [...bundles].reverse();
   const empty = turns.length === 0 && !planning;
-  const theaterBundle =
-    turns.find((b) => b.workflow.status === "in_progress" || b.workflow.status === "awaiting_approval") ??
-    turns[turns.length - 1] ??
-    null;
 
   function addFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -263,10 +258,6 @@ export default function Copilot({
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-              {theaterBundle ? (
-                <AgentWorkspace bundle={theaterBundle} planning={planning} model={model} />
-              ) : null}
-
               {empty ? (
                 <div className="flex min-h-[360px] flex-col items-center justify-center px-4 py-14 text-center">
                   <EarnOrb size={54} pulse />
@@ -450,126 +441,6 @@ export default function Copilot({
         </div>
       </section>
     </div>
-  );
-}
-
-const THEATER_STATUS_LABEL: Record<string, string> = {
-  queued: "Queued",
-  active: "Computing",
-  waiting: "Awaiting approval",
-  done: "Complete",
-  blocked: "Needs attention",
-};
-
-function AgentWorkspace({
-  bundle,
-  planning,
-  model,
-}: {
-  bundle: WorkflowBundle;
-  planning: boolean;
-  model: EarnModelKey;
-}) {
-  const nodes = useMemo(() => buildAgentTheater(bundle.steps), [bundle.steps]);
-  const [selected, setSelected] = useState(() => activeAgent(nodes));
-  const active = nodes.find((node) => node.agent === selected) ?? nodes[0];
-  const modelLabel = EARN_MODELS.find((m) => m.key === model)?.label ?? "Claude";
-
-  useEffect(() => {
-    const next = activeAgent(nodes);
-    if (next) setSelected((current) => (current && nodes.some((node) => node.agent === current) ? current : next));
-  }, [bundle.workflow.id, bundle.workflow.status, nodes]);
-
-  if (!nodes.length && !planning) return null;
-
-  return (
-    <section className="mb-5 overflow-hidden rounded-3xl border border-gold-500/20 bg-[radial-gradient(circle_at_20%_20%,rgb(var(--fx-accent-rgb)/0.16),transparent_30%),linear-gradient(135deg,rgb(var(--fx-surface-1)/0.94),rgb(var(--fx-surface-0)/0.98))] p-4 shadow-[0_20px_80px_-48px_rgb(var(--fx-accent-rgb)/0.7)]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-300">
-            Earn Workspace
-          </p>
-          <h2 className="mt-1 font-display text-xl font-semibold text-fg-primary">{bundle.workflow.title}</h2>
-        </div>
-        <div className="rounded-full border border-gold-500/30 bg-black/35 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200">
-          {modelLabel} driving reasoning
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_0.9fr]">
-        <div className="relative min-h-[240px] overflow-hidden rounded-2xl border border-white/10 bg-black/35 p-4">
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:32px_32px]" />
-          <div className="pointer-events-none absolute left-1/2 top-1/2 h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full border border-gold-500/20" />
-          <div className="relative grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {nodes.map((node, index) => (
-              <button
-                key={node.agent}
-                type="button"
-                onClick={() => setSelected(node.agent)}
-                className={`group rounded-2xl border bg-black/40 p-3 text-left transition hover:border-gold-500/50 ${
-                  selected === node.agent ? "border-gold-500/60 shadow-[0_0_28px_-18px_rgb(var(--fx-accent-rgb)/0.9)]" : "border-white/10"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <span className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/15" style={{ backgroundColor: `${node.color}22` }}>
-                    {node.status === "active" ? (
-                      <span className="absolute h-11 w-11 animate-ping rounded-full opacity-20" style={{ backgroundColor: node.color }} />
-                    ) : null}
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: node.color }} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-fg-primary">{node.name}</span>
-                    <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                      {THEATER_STATUS_LABEL[node.status]}
-                    </span>
-                  </span>
-                </span>
-                <span className="mt-3 block h-1 overflow-hidden rounded-full bg-white/10">
-                  <span className="block h-full rounded-full transition-all" style={{ width: `${Math.round(node.progress * 100)}%`, backgroundColor: node.color }} />
-                </span>
-                <span className="mt-2 block truncate text-xs text-fg-secondary">
-                  {index === 0 && planning ? "Earn is forming the plan..." : node.activeTitle}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-black/45 p-4">
-          {active ? (
-            <>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-fg-primary">{active.name}</p>
-                  <p className="mt-1 text-xs text-fg-muted">{active.role}</p>
-                </div>
-                <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                  {active.motionStyle}
-                </span>
-              </div>
-              <div className="mt-4 space-y-2">
-                {active.computations.map((line, i) => (
-                  <div key={line} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-fg-secondary">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[10px] text-black" style={{ backgroundColor: active.color }}>
-                      {i + 1}
-                    </span>
-                    {line}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 rounded-lg border border-gold-500/20 bg-gold-500/[0.06] p-3">
-                <p className="font-mono text-[10px] uppercase tracking-wider text-gold-300">Inspectable progress</p>
-                <p className="mt-1 text-xs text-fg-secondary">
-                  {active.stepCount} task{active.stepCount === 1 ? "" : "s"} · {Math.round(active.progress * 100)}% complete · click any avatar to inspect its computation lane.
-                </p>
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-fg-muted">Earn is preparing the executive team.</p>
-          )}
-        </div>
-      </div>
-    </section>
   );
 }
 
