@@ -19,6 +19,16 @@ import {
   type EarnModeKey,
 } from "@/lib/earn-conversation";
 import type { ActiveIntegration } from "@/lib/integrations/active";
+import { classifyIntent } from "@/lib/intent";
+
+// A conversational turn rendered in the transcript. Chat turns are Earn's
+// answer path (ungated) and live in client state alongside the workflow turns.
+interface ChatTurn {
+  id: string;
+  role: "you" | "earn";
+  content: string;
+  streaming?: boolean;
+}
 
 // Slash commands the composer offers from the "+" menu. Selecting one drops a
 // ready-to-fill prompt scaffold into the input so the operator only supplies
@@ -100,6 +110,8 @@ export default function Copilot({
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const [planning, setPlanning] = useState(false);
+  // Earn's conversational answers (ungated), interleaved after the workflow turns.
+  const [chatTurns, setChatTurns] = useState<ChatTurn[]>([]);
   const [clarifying, setClarifying] = useState(false);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
   // Which composer popover is open: the model picker, mode picker, "+" menu, or
@@ -139,7 +151,7 @@ export default function Copilot({
   // Keep the newest turn in view as the conversation grows — chat behavior.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [bundles.length, planning]);
+  }, [bundles.length, planning, chatTurns]);
 
   useEffect(() => {
     const el = inputRef.current;
@@ -176,6 +188,15 @@ export default function Copilot({
     e.preventDefault();
     const body = prompt.trim();
     if (!body || busy) return;
+
+    // Intelligence Layer: a question gets a conversational answer (ungated);
+    // a work request gets the planned, gated workflow. Mode "plan"/"auto" are
+    // operator directives for execution, so those always run as tasks.
+    if (mode === "accept-edits" && classifyIntent(body) === "chat") {
+      await runChat(body);
+      return;
+    }
+
     const envelope = buildEarnPromptEnvelope({ body, model, mode, attachments, voiceUsed });
     setBusy(true);
     setPlanning(true);
@@ -202,6 +223,59 @@ export default function Copilot({
       }
     }
     startTransition(() => router.refresh());
+  }
+
+  // Stream a conversational answer from Earn into the transcript, token by
+  // token. Ungated and client-side — no workflow, no approval, just an answer.
+  async function runChat(body: string) {
+    setBusy(true);
+    setOpenMenu(null);
+    setPrompt("");
+    setAttachments([]);
+    setVoiceUsed(false);
+
+    const youId = `you-${Date.now()}`;
+    const earnId = `earn-${Date.now()}`;
+    const prior = chatTurns.filter((t) => t.role === "you").map((t) => t.content);
+    setChatTurns((prev) => [
+      ...prev,
+      { id: youId, role: "you", content: body },
+      { id: earnId, role: "earn", content: "", streaming: true },
+    ]);
+
+    const append = (chunk: string) =>
+      setChatTurns((prev) =>
+        prev.map((t) => (t.id === earnId ? { ...t, content: t.content + chunk } : t)),
+      );
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body, model, prior }),
+      });
+      if (!res.ok || !res.body) throw new Error("chat failed");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        append(decoder.decode(value, { stream: true }));
+      }
+    } catch {
+      setChatTurns((prev) =>
+        prev.map((t) =>
+          t.id === earnId
+            ? { ...t, content: t.content || "Earn couldn't reach the model — try again." }
+            : t,
+        ),
+      );
+    } finally {
+      setChatTurns((prev) =>
+        prev.map((t) => (t.id === earnId ? { ...t, streaming: false } : t)),
+      );
+      setBusy(false);
+    }
   }
 
   async function decide(
@@ -237,7 +311,7 @@ export default function Copilot({
 
   // Conversation order: oldest turn first, newest nearest the composer.
   const turns = [...bundles].reverse();
-  const empty = turns.length === 0 && !planning;
+  const empty = turns.length === 0 && chatTurns.length === 0 && !planning;
 
   function addFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -400,6 +474,42 @@ export default function Copilot({
                   </div>
                 </div>
               ))}
+
+              {/* Conversational answers — Earn's chat path, streamed in. */}
+              {chatTurns.map((t) =>
+                t.role === "you" ? (
+                  <div key={t.id} className="flex justify-end gap-3">
+                    <div className="max-w-[84%]">
+                      <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                        You
+                      </div>
+                      <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+                        {t.content}
+                      </div>
+                    </div>
+                    <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
+                      YOU
+                    </span>
+                  </div>
+                ) : (
+                  <div key={t.id} className="flex gap-3">
+                    <EarnOrb size={32} pulse={t.streaming} className="mt-5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                        Earn
+                        <span className="h-1 w-1 rounded-full bg-line" />
+                        <span>{t.streaming ? "Answering" : "Answer"}</span>
+                      </div>
+                      <div className="whitespace-pre-wrap rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+                        {t.content}
+                        {t.streaming ? (
+                          <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom" aria-hidden />
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ),
+              )}
 
               {planning ? (
                 <div className="flex gap-3">

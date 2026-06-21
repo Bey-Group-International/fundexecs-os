@@ -57,6 +57,59 @@ function client(): Anthropic | null {
   return apiKey ? new Anthropic({ apiKey }) : null;
 }
 
+// ---------------------------------------------------------------------------
+// Conversational answers — Earn's chat path. When the Intelligence Layer reads
+// a prompt as a question rather than a task, Earn replies directly and
+// conversationally (Claude / ChatGPT / Gemini style) instead of spinning up a
+// gated workflow. The chosen model is honored as a style/persona hint; the
+// engine stays Claude so no extra provider keys are required.
+// ---------------------------------------------------------------------------
+function earnChatSystem(modelLabel: string): string {
+  return (
+    `You are Earn, the command layer of FundExecs OS — an AI operating system for private-market ` +
+    `operators (private equity, family offices, real estate, private credit). Answer the operator's ` +
+    `question directly and conversationally, like a sharp investment partner. Lead with the answer; ` +
+    `be specific, practical, and numerate; prefer short paragraphs or tight bullet lists. Never ` +
+    `fabricate figures — reason from stated facts and flag assumptions. If the request would be ` +
+    `better executed as a multi-step workflow (sourcing, modeling, diligence, outreach, LP work), ` +
+    `answer briefly and offer to run it as a workflow. Respond in the considered, well-structured ` +
+    `style of ${modelLabel}.`
+  );
+}
+
+// Returns a streaming message handle, or null when no API key is configured so
+// the caller can fall back. Earlier turns are replayed so follow-ups build on
+// the conversation.
+export function earnChatStream(args: {
+  body: string;
+  modelLabel: string;
+  priorContext?: string[];
+}) {
+  const anthropic = client();
+  if (!anthropic) return null;
+  const history = (args.priorContext ?? [])
+    .slice(-6)
+    .map((turn) => ({ role: "user" as const, content: turn }));
+  return anthropic.messages.stream({
+    model: MODEL,
+    max_tokens: 1200,
+    system: earnChatSystem(args.modelLabel),
+    output_config: { effort: "low" },
+    messages: [...history, { role: "user", content: args.body }],
+  });
+}
+
+// Deterministic reply when no API key is present, so the chat path still
+// responds in fallback mode rather than failing.
+export function earnChatFallback(body: string): string {
+  return (
+    `Earn is in offline mode — no model key is configured, so I can't generate a full answer right now. ` +
+    `Connect ANTHROPIC_API_KEY to enable conversational responses.\n\n` +
+    `You asked: "${body.trim().slice(0, 240)}"`
+  );
+}
+
+
 const PLAN_SCHEMA = {
   type: "object",
   additionalProperties: false,
