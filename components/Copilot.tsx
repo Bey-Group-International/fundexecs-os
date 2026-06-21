@@ -74,6 +74,7 @@ export default function Copilot({
   const [busy, setBusy] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [clarifying, setClarifying] = useState(false);
+  const [composerError, setComposerError] = useState<string | null>(null);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,7 +90,9 @@ export default function Copilot({
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 176)}px`;
+    const nextHeight = Math.min(Math.max(el.scrollHeight, 56), 176);
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY = el.scrollHeight > 176 ? "auto" : "hidden";
   }, [prompt]);
 
   useEffect(() => {
@@ -120,6 +123,7 @@ export default function Copilot({
     e.preventDefault();
     const body = prompt.trim();
     if (!body || busy) return;
+    setComposerError(null);
     const envelope = buildEarnPromptEnvelope({ body, model, attachments, voiceUsed });
     setBusy(true);
     setPlanning(true);
@@ -134,10 +138,16 @@ export default function Copilot({
     setBusy(false);
     setPlanning(false);
 
+    if (!res?.ok) {
+      setPrompt(body);
+      setComposerError("Earn could not start that run. Check your session and try again.");
+      return;
+    }
+
     // From the launcher (no session yet), the prompt opens a session — follow
     // it in, Claude Code style, so the work continues at /session/<id>. Inside
     // a session we just refresh to surface the new workflow in place.
-    if (!sessionId && res?.ok) {
+    if (!sessionId) {
       const data = await res.json().catch(() => null);
       if (data?.session_id) {
         router.push(`/session/${data.session_id}`);
@@ -376,7 +386,10 @@ export default function Copilot({
                 ref={inputRef}
                 value={prompt}
                 rows={2}
-                onChange={(e) => setPrompt(e.target.value)}
+                onChange={(e) => {
+                  setPrompt(e.target.value);
+                  if (composerError) setComposerError(null);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
                     e.preventDefault();
@@ -445,6 +458,9 @@ export default function Copilot({
                   <span aria-hidden>→</span>
                 </button>
               </div>
+              {composerError ? (
+                <p className="px-1 pt-2 text-xs text-status-danger">{composerError}</p>
+              ) : null}
             </div>
           </form>
         </div>
