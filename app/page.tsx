@@ -3,28 +3,26 @@ import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { PrivateMarketWorkspace } from "@/components/landing/PrivateMarketWorkspace";
 
-const CALENDLY = "https://calendly.com/fundexecs";
-
 const OPERATING_LOOP = [
   {
-    step: "Build",
-    body: "Firm identity, thesis, materials, entities, team, and track record become structured operating context.",
-    signal: "Foundation ready",
+    step: "Command",
+    body: "The operator gives Earn a private-market objective in plain language.",
+    signal: "Request analyzed",
   },
   {
-    step: "Source",
-    body: "Earn activates LP, lender, partner, provider, and deal sourcing across the private-market ecosystem.",
-    signal: "Capital paths open",
-  },
-  {
-    step: "Run",
-    body: "Underwriting, diligence, risk, and IC work move through specialist offices with approval gates.",
-    signal: "Decision pack forming",
+    step: "Plan",
+    body: "Earn creates objectives, workstreams, agent assignments, and approval gates.",
+    signal: "Strategy ready",
   },
   {
     step: "Execute",
-    body: "Capital events, reporting, asset management, closing, and compliance become auditable workflows.",
-    signal: "Artifacts delivered",
+    body: "AI executives source, raise, diligence, document, and follow up across the operating campus.",
+    signal: "Agents active",
+  },
+  {
+    step: "Report",
+    body: "Outcomes collapse into the dashboard as targets, introductions, packages, and updates.",
+    signal: "Results delivered",
   },
 ];
 
@@ -71,35 +69,32 @@ export default function LandingPage({
         <div className="mx-auto max-w-3xl text-center">
           <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
             <span className="h-1.5 w-1.5 rounded-full bg-status-success" />
-            Private Market Ecosystem
+            Private Markets Digital Twin
           </p>
           <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-7xl">
-            Your AI executive team,<br />
-            working beside you.
+            FundExecs OS is an autonomous executive team for private markets.
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-fg-secondary">
-            FundExecs OS turns plain-language capital work into an auditable session:
-            Earn proposes the plan, your executive offices activate, and Workclaw-style
-            automation executes only after approval.
+            Earn plans, delegates, monitors, and routes decisions while an AI
+            workforce sources deals, raises capital, conducts diligence, manages
+            relationships, and executes transactions.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link
               href="/login?mode=signup"
               className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 shadow-[0_14px_34px_-20px_rgb(var(--fx-accent-rgb)/0.95)] transition hover:opacity-90"
             >
-              Request access
+              Meet Earn
             </Link>
             <Link
-              href={CALENDLY}
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#earn-action"
               className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
             >
-              Book a demo
+              Watch Earn Work
             </Link>
           </div>
           <p className="mt-4 font-mono text-xs text-fg-muted">
-            Next.js + Tailwind interface · Cursor/Tasklet inspired · Built for private capital operators
+            Institutional execution layer for private equity, search funds, family offices, sponsors, banks, and capital raisers
           </p>
         </div>
       </section>
@@ -113,14 +108,14 @@ export default function LandingPage({
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="max-w-2xl">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
-            Session activity model
+            Operating model
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-            Idle headquarters becomes live execution.
+            The workflow is visible because the work is real.
           </h2>
           <p className="mt-3 text-fg-secondary">
-            The workspace mirrors actual conversation milestones: no session,
-            prompt review, Earn-led strategy, then full team automation.
+            Every light, node, and agent state maps to a private-market execution
+            event: analysis, planning, approval, delegation, or delivery.
           </p>
         </div>
         <div className="mt-8 grid gap-3 md:grid-cols-4">
@@ -146,26 +141,24 @@ export default function LandingPage({
           Early access
         </p>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight">
-          See the private-market HQ in motion.
+          Meet the executive agent that runs the operating system.
         </h2>
         <p className="mx-auto mt-4 max-w-md text-fg-secondary">
-          Invite-only for GPs, family offices, lenders, advisors, operators, and
-          private-market teams ready to replace fragmented tools with one living system.
+          Invite-only for private-market teams ready to replace fragmented tools
+          with one autonomous execution layer.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
-            href={CALENDLY}
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/login?mode=signup"
             className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
           >
-            Book a demo
+            Meet Earn
           </Link>
           <Link
-            href="/login?mode=signup"
+            href="#earn-action"
             className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
           >
-            Request access
+            Watch Earn Work
           </Link>
         </div>
       </section>
