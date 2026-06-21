@@ -72,8 +72,8 @@ export function TopNavAlerts({
     <>
       <Link
         href="/inbox"
-        aria-label={messages > 0 ? `Inbox — ${messages} unread message${messages === 1 ? "" : "s"}` : "Inbox"}
-        title={messages > 0 ? `Inbox — ${messages} unread` : "Inbox — capital, partners & providers"}
+        aria-label={messages > 0 ? `Match inbox — ${messages} match${messages === 1 ? "" : "es"} ready` : "Match inbox"}
+        title={messages > 0 ? `${messages} match${messages === 1 ? "" : "es"} ready` : "Match inbox — capital, partners & providers"}
         className="relative rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
       >
         <span className={`inline-block ${shakeMsg ? "animate-shake" : ""}`}>📬</span>
@@ -86,8 +86,8 @@ export function TopNavAlerts({
 
       <Link
         href="/deals/feed"
-        aria-label={deals > 0 ? `Deals that fit you — ${deals} new` : "Deals that fit you"}
-        title={deals > 0 ? `Deals that fit you — ${deals} new` : "Deals that fit you"}
+        aria-label={deals > 0 ? `${deals} deal${deals === 1 ? "" : "s"} on the table` : "Hot deals that fit you"}
+        title={deals > 0 ? `${deals} deal${deals === 1 ? "" : "s"} on the table` : "Hot deals that fit you"}
         className="relative rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
       >
         <span className={`inline-block ${popDeal ? "animate-nudge" : ""}`}>💡</span>

@@ -39,7 +39,8 @@ export function GlobalTopBar({
         <TopNavAlerts initialMessages={messagesUnread} initialDeals={dealsUnread} />
         <Link
           href="/wallet"
-          title="Credit balance — open wallet"
+          title="Wallet — credit balance"
+          aria-label="Wallet"
           className="hidden items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary sm:flex"
         >
           <span className="text-gold-400">◇</span>
