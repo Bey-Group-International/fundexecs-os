@@ -1,45 +1,43 @@
 import {
   TASK_GRAPH,
   TWIN_AGENTS,
-  activeAgentCount,
-  isAgentExecuting,
-  nextTwinPhaseOnPrompt,
-  taskNodeStatus,
+  TWIN_DISTRICTS,
 } from "@/lib/private-market-workspace";
 
-describe("private market workspace state machine", () => {
-  it("activates from idle when a prompt is entered", () => {
-    expect(nextTwinPhaseOnPrompt("idle", "Source LPs for the raise")).toBe("prompt");
-    expect(nextTwinPhaseOnPrompt("idle", "   ")).toBe("idle");
-    expect(nextTwinPhaseOnPrompt("planning", "follow up")).toBe("planning");
+describe("private market workspace catalog", () => {
+  it("keeps Earn as the central executive agent", () => {
+    expect(TWIN_AGENTS[0]).toMatchObject({
+      name: "Earn",
+      title: "Chief Executive Agent",
+      district: "Executive Operations Center",
+    });
+    expect(TWIN_AGENTS[0].x).toBe(50);
+    expect(TWIN_AGENTS[0].y).toBe(48);
   });
 
-  it("maps active executive count by session milestone", () => {
-    expect(activeAgentCount("idle")).toBe(1);
-    expect(activeAgentCount("prompt")).toBe(2);
-    expect(activeAgentCount("planning")).toBe(4);
-    expect(activeAgentCount("authorized")).toBe(TWIN_AGENTS.length);
-    expect(activeAgentCount("executing")).toBe(TWIN_AGENTS.length);
-    expect(activeAgentCount("complete")).toBe(1);
+  it("assigns each non-Earn agent to a workspace district", () => {
+    const districtNames = new Set(TWIN_DISTRICTS.map((district) => district.name));
+    for (const agent of TWIN_AGENTS.slice(1)) {
+      expect(districtNames.has(agent.district)).toBe(true);
+    }
   });
 
-  it("activates Earn first, then planning agents, then the full executive workforce", () => {
-    expect(isAgentExecuting("idle", "Earn")).toBe(false);
-    expect(isAgentExecuting("prompt", "Earn")).toBe(true);
-    expect(isAgentExecuting("prompt", "Capital Agent")).toBe(false);
-    expect(isAgentExecuting("planning", "Diligence Agent")).toBe(true);
-    expect(isAgentExecuting("authorized", "Legal Agent")).toBe(true);
-    expect(isAgentExecuting("executing", "Operations Agent")).toBe(true);
-    expect(isAgentExecuting("complete", "Earn")).toBe(true);
-    expect(isAgentExecuting("complete", "Deal Agent")).toBe(false);
+  it("keeps task graph nodes assigned to known agents", () => {
+    const agentNames = new Set(TWIN_AGENTS.map((agent) => agent.name));
+    for (const node of TASK_GRAPH) {
+      expect(agentNames.has(node.agent)).toBe(true);
+    }
   });
 
-  it("advances task graph nodes as execution completes", () => {
-    expect(taskNodeStatus("planning", 0)).toBe("pending");
-    expect(taskNodeStatus("authorized", 0)).toBe("active");
-    expect(taskNodeStatus("executing", 0)).toBe("complete");
-    expect(taskNodeStatus("executing", 4)).toBe("active");
-    expect(taskNodeStatus("executing", TASK_GRAPH.length - 1)).toBe("pending");
-    expect(taskNodeStatus("complete", TASK_GRAPH.length - 1)).toBe("complete");
+  it("preserves the seven-step private-market task graph", () => {
+    expect(TASK_GRAPH.map((node) => node.title)).toEqual([
+      "Source Targets",
+      "Build Outreach List",
+      "Qualify Opportunities",
+      "Analyze Financials",
+      "Build CIM Review",
+      "Prepare Financing Package",
+      "Generate Investor Updates",
+    ]);
   });
 });
