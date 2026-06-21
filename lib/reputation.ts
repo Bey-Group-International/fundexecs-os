@@ -64,9 +64,16 @@ export async function grantReputation(
   const newScore = score ?? 0;
   const tier = tierForScore(newScore);
 
-  // Keep the derived tier column current, then record the movement.
-  await service.from("reputation_scores").update({ tier }).eq("organization_id", orgId);
-  await service.from("reputation_ledger").insert({
+  // Keep the derived tier column current, then record the movement. The score
+  // already moved atomically in the RPC above, so surface failures here instead
+  // of silently desyncing the tier column or the append-only ledger.
+  const { error: tierErr } = await service
+    .from("reputation_scores")
+    .update({ tier })
+    .eq("organization_id", orgId);
+  if (tierErr) throw new Error(`reputation tier update failed: ${tierErr.message}`);
+
+  const { error: ledgerErr } = await service.from("reputation_ledger").insert({
     organization_id: orgId,
     delta,
     reason,
@@ -74,6 +81,7 @@ export async function grantReputation(
     source_id: opts.sourceId ?? null,
     note: opts.note ?? null,
   });
+  if (ledgerErr) throw new Error(`reputation ledger insert failed: ${ledgerErr.message}`);
 
   return { score: newScore, tier };
 }

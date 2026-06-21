@@ -239,7 +239,16 @@ export interface FulfillResult {
 
 // Verify a completed Checkout Session and apply its effect exactly once. Safe to
 // call from both the success redirect and the optional webhook.
-export async function fulfillCheckout(sessionId: string): Promise<FulfillResult> {
+//
+// `expectedOrgId`, when supplied (the success-redirect path knows the caller's
+// org), must match the org that initiated the checkout. Fulfillment always
+// targets the session's OWN org regardless, so this is defense-in-depth: it
+// stops an authenticated user from triggering fulfillment of another org's
+// session id. The webhook path omits it (no caller context).
+export async function fulfillCheckout(
+  sessionId: string,
+  expectedOrgId?: string,
+): Promise<FulfillResult> {
   if (!sessionId) return { ok: false, error: "Missing session id" };
   const service = createServiceClient();
 
@@ -258,6 +267,9 @@ export async function fulfillCheckout(sessionId: string): Promise<FulfillResult>
   const orgId = meta.org_id || row?.organization_id;
   const kind = meta.kind || row?.kind;
   if (!orgId || !kind) return { ok: false, error: "Checkout is missing fulfillment metadata" };
+  if (expectedOrgId && orgId !== expectedOrgId) {
+    return { ok: false, error: "Checkout session does not belong to this organization" };
+  }
   const createdBy = meta.created_by || null;
 
   if (kind === "plan") {

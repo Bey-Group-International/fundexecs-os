@@ -12,6 +12,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("tasks")
     .select("*")
+    .eq("organization_id", auth.ctx.orgId)
     .is("parent_task_id", null)
     .order("created_at", { ascending: false })
     .limit(50);

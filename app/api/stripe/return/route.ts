@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { fulfillCheckout } from "@/lib/stripe";
+import { getSessionContext } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,10 @@ export async function GET(req: NextRequest) {
   if (!sessionId) return NextResponse.redirect(new URL("/wallet", origin));
 
   try {
-    const res = await fulfillCheckout(sessionId);
+    // Bind fulfillment to the signed-in org when we have one, so a user can't
+    // trigger fulfillment of another org's checkout session id.
+    const ctx = await getSessionContext();
+    const res = await fulfillCheckout(sessionId, ctx?.orgId ?? undefined);
     const dest = res.kind === "gift" ? "/gift" : "/wallet";
     const status = res.ok ? "success" : "error";
     return NextResponse.redirect(new URL(`${dest}?checkout=${status}`, origin));

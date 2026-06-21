@@ -5,6 +5,7 @@
 // is not a member of) and all reward writes use the service-role client; they're
 // always scoped by an orgId we derive from the authenticated session, never from
 // client input.
+import { randomInt } from "crypto";
 import { createServiceClient, createServerClient } from "@/lib/supabase/server";
 import { grantCredits } from "@/lib/credits";
 import { CREDIT_PACKS } from "@/lib/billing";
@@ -22,9 +23,11 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 
 // Unambiguous code alphabet (no 0/O/1/I) for share links people may type.
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+// Codes gate a financial reward (credits), so draw from a CSPRNG rather than
+// Math.random() — an attacker should not be able to predict or enumerate them.
 function randomCode(len = 8): string {
   let s = "";
-  for (let i = 0; i < len; i++) s += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  for (let i = 0; i < len; i++) s += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
   return s;
 }
 
