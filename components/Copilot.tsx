@@ -487,7 +487,7 @@ function AgentWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-300">
-            Live Earn Workspace
+            Earn Workspace
           </p>
           <h2 className="mt-1 font-display text-xl font-semibold text-fg-primary">{bundle.workflow.title}</h2>
         </div>
