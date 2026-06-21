@@ -75,7 +75,7 @@ export function PrivateMarketWorkspace() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.8fr)]">
-        <div className="fx-orbit-card min-h-[640px] p-4 sm:p-6 md:sticky md:top-20 md:self-start">
+        <div className="fx-orbit-card min-h-[640px] p-4 sm:p-6 md:sticky md:top-6 md:max-h-[calc(100vh-3rem)] md:min-h-0 md:self-start md:overflow-y-auto">
           <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
