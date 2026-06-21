@@ -261,7 +261,7 @@ export function findIntroPath(
 export async function buildCapitalMap(supabase: Client): Promise<CapitalMapEntry[]> {
   const [investorsRes, thesisRes, commitmentsRes, relationshipsRes, membersRes] =
     await Promise.all([
-      supabase.from("investors").select("*").limit(500),
+      supabase.from("investors").select("*").is("archived_at", null).limit(500),
       supabase
         .from("investment_theses")
         .select("*")

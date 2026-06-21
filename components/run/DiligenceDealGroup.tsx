@@ -13,6 +13,7 @@ import {
   setDiligenceOwnerDue,
 } from "@/components/run/diligence-actions";
 import { updateDiligenceItem } from "@/app/(app)/deal/[id]/actions";
+import { RecordBulkLifecycleActions, RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 
 const SEV_DOT: Record<RiskSeverity, string> = {
   low: "bg-fg-muted",
@@ -90,6 +91,13 @@ export function DiligenceDealGroup({
               >
                 Flag
               </button>
+              <RecordBulkLifecycleActions
+                hub="run"
+                module="diligence"
+                table="diligence_items"
+                ids={selectedIds}
+                onComplete={() => setSelected(new Set())}
+              />
             </form>
           )}
         </div>
@@ -179,6 +187,13 @@ export function DiligenceDealGroup({
                     Assign
                   </button>
                 </form>
+                <RecordLifecycleActions
+                  hub="run"
+                  module="diligence"
+                  table="diligence_items"
+                  id={i.id}
+                  deleteClassName=""
+                />
               </div>
             </div>
           );

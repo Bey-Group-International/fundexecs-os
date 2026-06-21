@@ -255,8 +255,8 @@ export default async function MarketplacePage() {
                             </form>
                             <form action={deleteListing}>
                               <input type="hidden" name="id" value={l.id} />
-                              <button className="rounded-md border border-line px-2 py-1 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400">
-                                ✕
+                              <button className="rounded-md border border-status-danger/40 px-2.5 py-1 text-xs text-status-danger transition hover:bg-status-danger/10">
+                                Delete
                               </button>
                             </form>
                           </div>

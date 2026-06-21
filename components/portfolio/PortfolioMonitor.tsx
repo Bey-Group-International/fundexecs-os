@@ -3,6 +3,8 @@
 // A presentational server component (no hooks, no "use client"). It imports only
 // types from the aggregator so it never pulls `next/headers` into the bundle.
 // Renders a totals strip, an alerts list, and a held-asset table sorted by NAV.
+import Link from "next/link";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 import type {
   PortfolioMonitor as PortfolioMonitorData,
   PortfolioAsset,
@@ -189,6 +191,7 @@ function AssetsTable({ assets }: { assets: PortfolioAsset[] }) {
               <th className="px-4 py-3 text-right font-normal">Mark</th>
               <th className="px-4 py-3 text-right font-normal">MOIC</th>
               <th className="px-4 py-3 text-right font-normal">Conc.</th>
+              <th className="px-4 py-3 font-normal" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
@@ -198,7 +201,9 @@ function AssetsTable({ assets }: { assets: PortfolioAsset[] }) {
                 className="border-b border-line/60 last:border-b-0"
               >
                 <td className="px-4 py-3">
-                  <div className="font-medium text-fg-primary">{asset.name}</div>
+                  <Link href={`/asset/${asset.id}`} className="font-medium text-fg-primary transition hover:text-gold-300">
+                    {asset.name}
+                  </Link>
                   <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                     {asset.assetType.replace(/_/g, " ")}
                     {asset.fundName ? ` · ${asset.fundName}` : ""}
@@ -219,6 +224,16 @@ function AssetsTable({ assets }: { assets: PortfolioAsset[] }) {
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums text-fg-secondary">
                   {pct(asset.concentrationPct)}
+                </td>
+                <td className="px-4 py-3">
+                  <RecordLifecycleActions
+                    hub="portfolio"
+                    module=""
+                    table="assets"
+                    id={asset.id}
+                    className="justify-end"
+                    deleteClassName=""
+                  />
                 </td>
               </tr>
             ))}

@@ -6,6 +6,7 @@ import type { ListingMatch } from "@/lib/matching";
 import type { GateTier } from "@/lib/gates";
 import { TIER_LABEL } from "@/lib/gates";
 import { queueNextAction, type QueueActionResult } from "./actions";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 
 const TEMP_STYLE: Record<Temperature, { dot: string; label: string }> = {
   cold: { dot: "#6b7280", label: "Cold" },
@@ -435,6 +436,14 @@ function InvestorCard({
         >
           {showDraft ? "Hide draft" : "Preview outreach"}
         </button>
+        <RecordLifecycleActions
+          hub="capital-map"
+          module=""
+          table="investors"
+          id={investor.id}
+          className="ml-auto"
+          deleteClassName=""
+        />
       </div>
 
       {showDraft ? (

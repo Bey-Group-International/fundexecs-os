@@ -7,6 +7,7 @@ import {
   setUnderwritingProbability,
   setUnderwritingEquity,
 } from "@/components/run/underwriting-actions";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 import {
   compareScenarios,
   weightedReturn,
@@ -28,6 +29,7 @@ async function activeDeals(orgId: string): Promise<Deal[]> {
     .from("deals")
     .select("*")
     .eq("organization_id", orgId)
+    .is("archived_at", null)
     .not("stage", "in", "(passed,dead)")
     .order("created_at", { ascending: false });
   return (data ?? []) as Deal[];
@@ -137,6 +139,13 @@ function CaseControls({ uw }: { uw: Underwriting }) {
           <span className="ml-2 text-fg-secondary">{uw.name}</span>
         </span>
         <div className="flex flex-wrap items-center gap-2">
+          <RecordLifecycleActions
+            hub="run"
+            module="underwriting"
+            table="underwritings"
+            id={uw.id}
+            deleteClassName=""
+          />
           <form action={setUnderwritingProbability} className="flex items-center gap-1.5">
             <input type="hidden" name="id" value={uw.id} />
             <span className={labelClass}>Prob.</span>
@@ -247,6 +256,7 @@ export async function RunUnderwritingModule({ orgId }: { orgId: string }) {
       .from("underwritings")
       .select("*")
       .eq("organization_id", orgId)
+      .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(200),
   ]);

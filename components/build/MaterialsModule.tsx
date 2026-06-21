@@ -18,6 +18,7 @@ import { computeBuildReadiness } from "@/lib/build-readiness";
 import { DATA_ROOM_SECTIONS, summarizeDataRoom } from "@/lib/data-room";
 import { PrintButton } from "./PrintButton";
 import { ShareControls } from "./ShareControls";
+import { DeleteDocumentButton } from "./DeleteDocumentButton";
 import { openSection } from "./materials-actions";
 
 // Render a stored document link only when it is a real http(s) URL.
@@ -236,16 +237,18 @@ export async function MaterialsModule() {
                 {docs.length > 0 ? (
                   <div className="flex flex-col gap-1 border-t border-line/60 px-3 py-1.5">
                     {docs.map((d) => (
-                      <Link
-                        key={d.id}
-                        href={`/document/${d.id}`}
-                        className="flex items-center gap-2 truncate text-sm text-fg-secondary transition hover:text-gold-300"
-                      >
-                        <span aria-hidden className="font-mono text-[11px] text-fg-muted">
-                          {d.storage_key ? "🔗" : "📄"}
-                        </span>
-                        <span className="truncate">{d.name}</span>
-                      </Link>
+                      <div key={d.id} className="flex items-center gap-2">
+                        <Link
+                          href={`/document/${d.id}`}
+                          className="flex min-w-0 flex-1 items-center gap-2 truncate text-sm text-fg-secondary transition hover:text-gold-300"
+                        >
+                          <span aria-hidden className="font-mono text-[11px] text-fg-muted">
+                            {d.storage_key ? "🔗" : "📄"}
+                          </span>
+                          <span className="truncate">{d.name}</span>
+                        </Link>
+                        <DeleteDocumentButton id={d.id} name={d.name} />
+                      </div>
                     ))}
                   </div>
                 ) : null}
