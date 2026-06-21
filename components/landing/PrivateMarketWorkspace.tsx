@@ -74,8 +74,8 @@ export function PrivateMarketWorkspace() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
-        <div className="fx-orbit-card min-h-[640px] p-4 sm:p-6 lg:sticky lg:top-20 lg:self-start">
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.8fr)]">
+        <div className="fx-orbit-card min-h-[640px] p-4 sm:p-6 md:sticky md:top-20 md:self-start">
           <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
@@ -93,7 +93,7 @@ export function PrivateMarketWorkspace() {
             </div>
           </div>
 
-          <div className="relative z-10 mt-6 hidden aspect-[16/11] overflow-hidden rounded-[2rem] border border-line/80 bg-surface-0/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] lg:block">
+          <div className="relative z-10 mt-6 hidden aspect-[16/11] overflow-hidden rounded-[2rem] border border-line/80 bg-surface-0/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] md:block">
             <svg
               aria-hidden
               viewBox="0 0 100 100"
@@ -147,7 +147,7 @@ export function PrivateMarketWorkspace() {
             ))}
           </div>
 
-          <div className="relative z-10 mt-6 grid gap-3 lg:hidden">
+          <div className="relative z-10 mt-6 grid gap-3 md:hidden">
             {TWIN_DISTRICTS.map((district) => (
               <div key={district.name} className={`rounded-2xl border p-4 ${signalBorder(district.signal)}`}>
                 <p className="text-sm font-semibold text-fg-primary">{district.name}</p>
