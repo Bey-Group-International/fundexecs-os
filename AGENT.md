@@ -528,6 +528,19 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Tested by lint/build/typecheck/Jest and browser video walkthrough.
              |  Next: expand the sprite library into a reusable product asset system for
              |  authenticated Earn sessions and future avatar workspace surfaces.
+
+2026-06-21  |  Landing split-pane HQ state machine  |  Pixel campus rolled into a cleaner OS demo.
+             |  Built: restored the clean landing structure from the pre-pixel baseline and
+             |  replaced the hero visual with a persistent Cursor/Tasklet-style split-pane
+             |  workspace: Earn conversation on the left, Digital HQ on the right, explicit
+             |  Executive Offices of FundExecs suite labels, HQ state machine (idle →
+             |  activation → Earn lead → team takeover), and contained Workclaw automation
+             |  console.
+             |  Decision: public landing should show a product interaction, not a standalone
+             |  game map. Visual motion now maps directly to session milestones and approval
+             |  state.
+             |  Confidence: Tested by unit/lint/typecheck/build/Jest and browser video
+             |  walkthrough.
 ```
 
 ---
