@@ -8,7 +8,28 @@ import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 import { deriveRouting, cursorResponse, routingHeadline } from "@/lib/intelligence";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
-import { EARN_MODELS, buildEarnPromptEnvelope, type EarnAttachmentInput, type EarnModelKey } from "@/lib/earn-conversation";
+import {
+  EARN_MODELS,
+  EARN_MODES,
+  DEFAULT_EARN_MODEL,
+  DEFAULT_EARN_MODE,
+  buildEarnPromptEnvelope,
+  type EarnAttachmentInput,
+  type EarnModelKey,
+  type EarnModeKey,
+} from "@/lib/earn-conversation";
+
+// Slash commands the composer offers from the "+" menu. Selecting one drops a
+// ready-to-fill prompt scaffold into the input so the operator only supplies
+// the specifics.
+const SLASH_COMMANDS: { command: string; label: string; template: string }[] = [
+  { command: "/lbo", label: "Build an LBO model", template: "Build an LBO model for " },
+  { command: "/source", label: "Source counterparties", template: "Source " },
+  { command: "/diligence", label: "Run diligence", template: "Run diligence on " },
+  { command: "/stress-test", label: "Stress test", template: "Stress test " },
+  { command: "/lp-update", label: "Draft an LP update", template: "Draft an LP update covering " },
+  { command: "/memo", label: "Draft an IC memo", template: "Draft an investment committee memo for " },
+];
 
 export interface WorkflowBundle {
   workflow: Task;
@@ -67,7 +88,8 @@ export default function Copilot({
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState<EarnModelKey>("claude");
+  const [model, setModel] = useState<EarnModelKey>(DEFAULT_EARN_MODEL);
+  const [mode, setMode] = useState<EarnModeKey>(DEFAULT_EARN_MODE);
   const [attachments, setAttachments] = useState<EarnAttachmentInput[]>([]);
   const [voiceUsed, setVoiceUsed] = useState(false);
   const [listening, setListening] = useState(false);
@@ -75,10 +97,35 @@ export default function Copilot({
   const [planning, setPlanning] = useState(false);
   const [clarifying, setClarifying] = useState(false);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
+  // Which composer popover is open: the model picker, mode picker, or "+" menu.
+  const [openMenu, setOpenMenu] = useState<"model" | "mode" | "plus" | "slash" | null>(null);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+
+  const activeModel = EARN_MODELS.find((m) => m.key === model) ?? EARN_MODELS[0];
+  const activeMode = EARN_MODES.find((m) => m.key === mode) ?? EARN_MODES[0];
+
+  // Close any open composer popover on an outside click or Escape.
+  useEffect(() => {
+    if (!openMenu) return;
+    const onClick = (e: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) setOpenMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenu(null);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openMenu]);
 
   // Keep the newest turn in view as the conversation grows — chat behavior.
   useEffect(() => {
@@ -120,9 +167,10 @@ export default function Copilot({
     e.preventDefault();
     const body = prompt.trim();
     if (!body || busy) return;
-    const envelope = buildEarnPromptEnvelope({ body, model, attachments, voiceUsed });
+    const envelope = buildEarnPromptEnvelope({ body, model, mode, attachments, voiceUsed });
     setBusy(true);
     setPlanning(true);
+    setOpenMenu(null);
     setPrompt("");
     setAttachments([]);
     setVoiceUsed(false);
@@ -192,7 +240,10 @@ export default function Copilot({
     ].slice(0, 6));
   }
 
+  // Microphone is hold-to-record: recording starts on pointer-down and the
+  // transcript lands when the operator releases (or the recognizer ends).
   function startVoice() {
+    if (recognitionRef.current) return;
     type SpeechRecognitionLike = {
       lang: string;
       interimResults: boolean;
@@ -201,6 +252,7 @@ export default function Copilot({
       onerror: (() => void) | null;
       onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
       start: () => void;
+      stop: () => void;
     };
     type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
     const SpeechRecognition =
@@ -214,8 +266,14 @@ export default function Copilot({
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+    recognition.onerror = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
     recognition.onresult = (event) => {
       const transcript = Array.from(event.results)
         .map((result) => result[0]?.transcript ?? "")
@@ -226,7 +284,26 @@ export default function Copilot({
         setPrompt((p) => `${p}${p ? "\n" : ""}${transcript}`);
       }
     };
+    recognitionRef.current = recognition;
     recognition.start();
+  }
+
+  function stopVoice() {
+    recognitionRef.current?.stop();
+  }
+
+  // "/Slash command" — drop the chosen scaffold into the input and focus so the
+  // operator can complete the specifics.
+  function applySlashCommand(template: string) {
+    setPrompt((p) => (p.trim() ? `${p.trimEnd()} ${template}` : template));
+    setOpenMenu(null);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+    });
   }
 
   return (
@@ -363,58 +440,232 @@ export default function Copilot({
                 className="max-h-44 min-h-[56px] w-full resize-none rounded-xl border-0 bg-transparent px-3 py-2.5 text-sm leading-6 text-fg-primary outline-none placeholder:text-fg-muted"
               />
 
-              <div className="flex flex-wrap items-center gap-2 border-t border-line/70 px-1 pt-2">
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value as EarnModelKey)}
-                  className="h-8 rounded-lg border border-line bg-surface-0/80 px-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-secondary outline-none transition hover:border-gold-500/45 focus:border-gold-500/70"
-                  aria-label="Reasoning model"
-                >
-                  {EARN_MODELS.map((m) => (
-                    <option key={m.key} value={m.key}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+              {/* Hidden picker the "+" menu drives — keeps file selection out of
+                  the toolbar while staying one tap away. */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="sr-only"
+                onChange={(e) => {
+                  addFiles(e.target.files);
+                  e.currentTarget.value = "";
+                }}
+              />
 
-                <label className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface-0/80 px-2.5 text-xs text-fg-secondary transition hover:border-gold-500/45 hover:text-fg-primary">
-                  <span className="font-mono text-[11px]">+</span>
-                  Context
-                  <input
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    className="sr-only"
-                    onChange={(e) => {
-                      addFiles(e.target.files);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-                </label>
+              <div
+                ref={toolbarRef}
+                className="flex flex-wrap items-center gap-2 border-t border-line/70 px-1 pt-2"
+              >
+                {/* Model picker — "LLM models: <model> (Default)". */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenu((m) => (m === "model" ? null : "model"))}
+                    aria-haspopup="menu"
+                    aria-expanded={openMenu === "model"}
+                    className="flex h-8 max-w-[15rem] items-center gap-1.5 rounded-lg border border-line bg-surface-0/80 px-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/45 hover:text-fg-primary"
+                    title="Reasoning model"
+                  >
+                    <span aria-hidden className="text-fg-muted">▾</span>
+                    <span className="truncate">
+                      LLM models: {activeModel.label}
+                      {activeModel.default ? " (Default)" : ""}
+                    </span>
+                  </button>
+                  {openMenu === "model" ? (
+                    <div
+                      role="menu"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                    >
+                      <p className="px-2.5 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Models</p>
+                      {EARN_MODELS.map((m) => (
+                        <button
+                          key={m.key}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={m.key === model}
+                          onClick={() => {
+                            setModel(m.key);
+                            setOpenMenu(null);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${
+                            m.key === model ? "text-fg-primary" : "text-fg-secondary"
+                          }`}
+                        >
+                          <span className="flex flex-col">
+                            <span className="flex items-center gap-1.5">
+                              {m.label}
+                              {m.default ? (
+                                <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-gold-300">
+                                  Default
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{m.provider}</span>
+                          </span>
+                          {m.key === model ? <span className="text-gold-300" aria-hidden>✓</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
 
+                {/* Mode selector — Accept edits / Plan Mode / Auto Mode. */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenu((m) => (m === "mode" ? null : "mode"))}
+                    aria-haspopup="menu"
+                    aria-expanded={openMenu === "mode"}
+                    className="flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface-0/80 px-2.5 text-xs text-fg-secondary transition hover:border-gold-500/45 hover:text-fg-primary"
+                    title="Operator mode"
+                  >
+                    <span aria-hidden className="text-fg-muted">▾</span>
+                    {activeMode.label}
+                  </button>
+                  {openMenu === "mode" ? (
+                    <div
+                      role="menu"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-56 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                    >
+                      <p className="px-2.5 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Mode</p>
+                      {EARN_MODES.map((m) => (
+                        <button
+                          key={m.key}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={m.key === mode}
+                          onClick={() => {
+                            setMode(m.key);
+                            setOpenMenu(null);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-2 ${
+                            m.key === mode ? "text-fg-primary" : "text-fg-secondary"
+                          }`}
+                        >
+                          <span className="flex flex-col">
+                            <span className="text-sm">{m.label}</span>
+                            <span className="text-[10px] text-fg-muted">{m.hint}</span>
+                          </span>
+                          {m.key === mode ? <span className="text-gold-300" aria-hidden>✓</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* "+" menu — Add files or photos · /Slash command · Integrations. */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenu((m) => (m === "plus" || m === "slash" ? null : "plus"))}
+                    aria-haspopup="menu"
+                    aria-expanded={openMenu === "plus" || openMenu === "slash"}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface-0/80 text-base text-fg-secondary transition hover:border-gold-500/45 hover:text-fg-primary"
+                    title="Add files, slash commands, or integrations"
+                  >
+                    <span aria-hidden className="font-mono">+</span>
+                    <span className="sr-only">Add</span>
+                  </button>
+                  {openMenu === "plus" ? (
+                    <div
+                      role="menu"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-56 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setOpenMenu(null);
+                          fileInputRef.current?.click();
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                      >
+                        <span aria-hidden className="font-mono text-fg-muted">▣</span>
+                        Add files or photos
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => setOpenMenu("slash")}
+                        className="flex w-full items-center justify-between gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span aria-hidden className="font-mono text-fg-muted">/</span>
+                          Slash command
+                        </span>
+                        <span aria-hidden className="text-fg-muted">›</span>
+                      </button>
+                      <a
+                        role="menuitem"
+                        href="/settings#integrations"
+                        onClick={() => setOpenMenu(null)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                      >
+                        <span aria-hidden className="font-mono text-fg-muted">⤬</span>
+                        Integrations
+                      </a>
+                    </div>
+                  ) : null}
+                  {openMenu === "slash" ? (
+                    <div
+                      role="menu"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setOpenMenu("plus")}
+                        className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+                      >
+                        <span aria-hidden>‹</span> Slash commands
+                      </button>
+                      {SLASH_COMMANDS.map((c) => (
+                        <button
+                          key={c.command}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => applySlashCommand(c.template)}
+                          className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                        >
+                          {c.label}
+                          <span className="font-mono text-[10px] text-fg-muted">{c.command}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Microphone — hold to record. */}
                 <button
                   type="button"
-                  onClick={startVoice}
-                  className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs transition ${
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    startVoice();
+                  }}
+                  onPointerUp={stopVoice}
+                  onPointerLeave={stopVoice}
+                  className={`flex h-8 w-8 select-none items-center justify-center rounded-lg border text-base transition ${
                     listening
                       ? "border-status-danger/50 bg-status-danger/10 text-status-danger"
                       : "border-line bg-surface-0/80 text-fg-secondary hover:border-gold-500/45 hover:text-fg-primary"
                   }`}
-                  title="Speak to Earn"
+                  title="Hold to record"
+                  aria-label="Hold to record"
                 >
-                  <span className="font-mono text-[11px]">{listening ? "●" : "mic"}</span>
-                  {listening ? "Listening" : "Voice"}
+                  <span aria-hidden>{listening ? "●" : "🎙"}</span>
                 </button>
 
                 <span className="ml-auto hidden font-mono text-[10px] text-fg-muted sm:inline">
-                  Enter to send · Shift+Enter for newline
+                  {listening ? "Recording — release to send" : "Enter to send · Shift+Enter for newline"}
                 </span>
                 <button
                   disabled={busy || !prompt.trim()}
                   className="flex h-8 items-center gap-1.5 rounded-lg bg-gold-400 px-3 text-xs font-semibold text-surface-0 shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.24)] transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {planning ? "Planning" : sessionId ? "Send" : "Run"}
-                  <span aria-hidden>→</span>
+                  <span aria-hidden>↵</span>
                 </button>
               </div>
             </div>
