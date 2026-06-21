@@ -12,6 +12,7 @@ import { generatePlan, executeStep, extractDealFields, extractAssetFields, type 
 import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
+import { deriveRouting } from "@/lib/intelligence";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -323,6 +324,15 @@ export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
   // (named from the prompt) unless one was already provided.
   const session = sessionId ?? (await createSession(ctx, { name: plan.title || body, origin: "earn" }));
 
+  // Intelligence Layer: classify intent across the lifecycle and route to the
+  // correct engine + AI executive. Deterministic, so it holds in fallback mode.
+  // Persisted alongside the plan as the structured routing object (section 6).
+  const routing = deriveRouting({
+    prompt: body,
+    hub: plan.hub,
+    agents: plan.steps.map((s) => s.agent),
+  });
+
   const { data: prompt } = await ctx.supabase
     .from("prompts")
     .insert({
@@ -331,7 +341,7 @@ export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
       body,
       routed_hub: plan.hub,
       routed_agent: plan.steps[0]?.agent ?? "associate",
-      parsed_intent: plan as unknown as Json,
+      parsed_intent: { ...plan, routing } as unknown as Json,
     })
     .select("id")
     .single();
