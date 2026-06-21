@@ -3,16 +3,14 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
-import type { ApiKey, MandateRow, OrgSecret } from "@/lib/supabase/database.types";
+import type { ApiKey, MandateRow } from "@/lib/supabase/database.types";
 import { NewMandateForm } from "./NewMandateForm";
 import { Connections } from "./Connections";
 import { ApiKeys, type ApiKeyView } from "./ApiKeys";
-import { SecretVault, type OrgSecretView } from "./SecretVault";
 import { GuidedTourSetting } from "./GuidedTourSetting";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { TIER_2_ACTIONS } from "./tier2-actions";
 import { deactivateMandate, setDiscoverable } from "./actions";
-import { vaultConfigured } from "@/lib/vault";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +24,6 @@ const SECTIONS: SettingsSection[] = [
   { id: "mandates", label: "Mandates" },
   { id: "integrations", label: "Integrations" },
   { id: "api", label: "API keys" },
-  { id: "vault", label: "Secret vault" },
   { id: "help", label: "Help" },
   { id: "about", label: "About" },
 ];
@@ -62,18 +59,6 @@ export default async function SettingsPage() {
     last_used_at: k.last_used_at,
     revoked_at: k.revoked_at,
     created_at: k.created_at,
-  }));
-
-  const { data: secretRows } = await supabase
-    .from("org_secrets")
-    .select("*")
-    .order("provider", { ascending: true });
-  const secrets: OrgSecretView[] = ((secretRows as OrgSecret[] | null) ?? []).map((s) => ({
-    id: s.id,
-    provider: s.provider,
-    label: s.label,
-    last4: s.last4,
-    updated_at: s.updated_at,
   }));
 
   // Ecosystem discoverability — drives the toggle below. Defaults to on for a
@@ -236,16 +221,6 @@ export default async function SettingsPage() {
             description="Issue FundExecs-native credentials to call the FundExecs OS API. Each key is a publishable/secret pair: the publishable key is safe to embed, the secret authenticates server-to-server (send it as an Authorization: Bearer header). The secret is shown once at creation — store it safely, and rotate or revoke any time."
           >
             <ApiKeys keys={apiKeys} />
-          </Section>
-
-          {/* Secret vault */}
-          <Section
-            id="vault"
-            eyebrow="Developers"
-            title="Secret vault"
-            description="Store third-party credentials (your own Anthropic, Stripe, and similar keys) for FundExecs to use on your behalf. Values are encrypted at rest and used only server-side — once saved, only a masked last-4 is ever shown."
-          >
-            <SecretVault secrets={secrets} configured={vaultConfigured()} />
           </Section>
 
           {/* Help */}

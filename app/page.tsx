@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { PrivateMarketWorkspace } from "@/components/landing/PrivateMarketWorkspace";
 
 const OPERATING_LOOP = [
   {
@@ -86,7 +85,7 @@ export default function LandingPage({
               Meet Earn
             </Link>
             <Link
-              href="#earn-action"
+              href="#operating-model"
               className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
             >
               Explore Workspace
@@ -100,11 +99,7 @@ export default function LandingPage({
 
       <div className="border-t border-line" />
 
-      <PrivateMarketWorkspace />
-
-      <div className="border-t border-line" />
-
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+      <section id="operating-model" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 scroll-mt-20">
         <div className="max-w-2xl">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
             Operating model
@@ -154,7 +149,7 @@ export default function LandingPage({
             Meet Earn
           </Link>
           <Link
-            href="#earn-action"
+            href="#operating-model"
             className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
           >
             Explore Workspace

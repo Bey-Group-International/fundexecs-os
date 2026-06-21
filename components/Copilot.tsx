@@ -230,26 +230,6 @@ export default function Copilot({
 
   return (
     <div className="fx-neural-ambient mx-auto flex min-h-[calc(100dvh-8rem)] max-w-5xl flex-col">
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <EarnOrb size={30} pulse={live || planning} />
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">
-              FundExecs OS · Earn
-            </p>
-            <h1 className="font-display text-lg font-semibold tracking-tight text-fg-primary">
-              Agent chat
-            </h1>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 rounded-full border border-line/80 bg-surface-1/70 px-3 py-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] backdrop-blur">
-          <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-status-success shadow-[0_0_12px_rgb(95_184_122/0.75)]" : "bg-fg-muted"}`} />
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-            {live ? "Earn ready" : "Fallback mode"}
-          </span>
-        </div>
-      </header>
-
       <section className="relative flex min-h-0 flex-1 overflow-hidden rounded-[1.75rem] border border-line/80 bg-surface-0/88 shadow-[0_24px_90px_-58px_rgb(var(--fx-accent-rgb)/0.9)]">
         <div
           aria-hidden
