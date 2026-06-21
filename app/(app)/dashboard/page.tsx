@@ -215,6 +215,38 @@ export default async function DashboardPage() {
         <MissionControl orgId={ctx.orgId} />
       </div>
 
+      {/* Entry into the Gather-style spatial office where Earn orchestrates the
+          executive team in real time. */}
+      <Link
+        href="/command-center"
+        className="fx-card fx-card-hover group relative mb-6 flex items-center gap-4 overflow-hidden p-5"
+      >
+        <span
+          aria-hidden
+          className="absolute inset-0 bg-[radial-gradient(60%_120%_at_85%_50%,rgba(56,189,248,0.18),transparent_70%)]"
+        />
+        <div className="relative min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+              Command Center
+            </span>
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+              Live floor
+            </span>
+          </div>
+          <p className="mt-1.5 font-display text-lg font-semibold text-fg-primary">
+            Enter the spatial office
+          </p>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            Watch Earn delegate across the Mandate, Relationship, Outbound, Diligence, and Capital
+            offices — executives execute in real time.
+          </p>
+        </div>
+        <span className="relative shrink-0 font-mono text-xl text-gold-400 transition group-hover:translate-x-1">
+          →
+        </span>
+      </Link>
+
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Workflows" value={workflows.length} />
         <Stat label="Deliverables" value={stepsCompleted} />
