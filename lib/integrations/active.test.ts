@@ -17,7 +17,17 @@ describe("getActiveIntegrations", () => {
     process.env.DOCUSIGN_ACCESS_TOKEN = "token";
     const active = getActiveIntegrations();
     const docusign = active.find((i) => i.channel === "docusign");
-    expect(docusign).toEqual({ channel: "docusign", label: "Docusign" });
+    expect(docusign?.label).toBe("Docusign");
+  });
+
+  it("exposes each connected channel's operational capabilities from its dispatch handles", () => {
+    process.env.DOCUSIGN_ACCESS_TOKEN = "token";
+    const docusign = getActiveIntegrations().find((i) => i.channel === "docusign");
+    const kinds = docusign?.capabilities.map((c) => c.kind) ?? [];
+    expect(kinds).toEqual(expect.arrayContaining(["sign_document", "submit_term_sheet"]));
+    // Docusign actions are capital-binding (Tier 3) — the gate tier rides along.
+    const sign = docusign?.capabilities.find((c) => c.kind === "sign_document");
+    expect(sign).toMatchObject({ label: "Sign document", tier: 3, tierLabel: "Capital-binding" });
   });
 
   it("returns a distinct channel only once even if multiple modules share it", () => {

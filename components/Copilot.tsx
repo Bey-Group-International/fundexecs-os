@@ -105,6 +105,9 @@ export default function Copilot({
   // Which composer popover is open: the model picker, mode picker, "+" menu, or
   // one of its submenus (slash commands / active integrations).
   const [openMenu, setOpenMenu] = useState<"model" | "mode" | "plus" | "slash" | "integrations" | null>(null);
+  // Which integration row in the submenu is expanded to reveal its operational
+  // actions.
+  const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -310,6 +313,15 @@ export default function Copilot({
       const end = el.value.length;
       el.setSelectionRange(end, end);
     });
+  }
+
+  // Integration capability — drop an operational instruction naming the channel
+  // and action into the composer. Earn plans it and it runs through the usual
+  // approval-gated dispatch (the operator completes the target and sends).
+  function applyIntegrationAction(integrationLabel: string, capabilityLabel: string) {
+    const scaffold = `Use ${integrationLabel} to ${capabilityLabel.toLowerCase()} `;
+    setExpandedIntegration(null);
+    applySlashCommand(scaffold);
   }
 
   return (
@@ -636,27 +648,73 @@ export default function Copilot({
                     >
                       <button
                         type="button"
-                        onClick={() => setOpenMenu("plus")}
+                        onClick={() => {
+                          setExpandedIntegration(null);
+                          setOpenMenu("plus");
+                        }}
                         className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
                       >
                         <span aria-hidden>‹</span> Active integrations
                       </button>
                       {integrations.length ? (
-                        integrations.map((it) => (
-                          <div
-                            key={it.channel}
-                            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-primary"
-                          >
-                            <span
-                              aria-hidden
-                              className="h-2 w-2 shrink-0 rounded-full bg-status-success"
-                            />
-                            <span className="flex-1 truncate">{it.label}</span>
-                            <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
-                              Connected
-                            </span>
-                          </div>
-                        ))
+                        integrations.map((it) => {
+                          const expanded = expandedIntegration === it.channel;
+                          const hasActions = it.capabilities.length > 0;
+                          return (
+                            <div key={it.channel}>
+                              <button
+                                type="button"
+                                disabled={!hasActions}
+                                aria-expanded={expanded}
+                                onClick={() =>
+                                  setExpandedIntegration((c) => (c === it.channel ? null : it.channel))
+                                }
+                                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-primary transition hover:bg-surface-2 disabled:cursor-default disabled:hover:bg-transparent"
+                              >
+                                <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-status-success" />
+                                <span className="flex-1 truncate">{it.label}</span>
+                                {hasActions ? (
+                                  <span className="font-mono text-[9px] text-fg-muted">
+                                    {it.capabilities.length} action{it.capabilities.length === 1 ? "" : "s"}
+                                  </span>
+                                ) : (
+                                  <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                                    Connected
+                                  </span>
+                                )}
+                                {hasActions ? (
+                                  <span aria-hidden className="text-fg-muted">{expanded ? "▾" : "▸"}</span>
+                                ) : null}
+                              </button>
+                              {expanded && hasActions ? (
+                                <div className="mb-1 ml-4 flex flex-col gap-0.5 border-l border-line/70 pl-2">
+                                  {it.capabilities.map((cap) => (
+                                    <button
+                                      key={cap.kind}
+                                      type="button"
+                                      onClick={() => applyIntegrationAction(it.label, cap.label)}
+                                      title={`${cap.tierLabel} action — runs through Earn's approval gate`}
+                                      className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                                    >
+                                      <span className="truncate">{cap.label}</span>
+                                      <span
+                                        className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider ${
+                                          cap.tier === 3
+                                            ? "border-status-danger/40 bg-status-danger/10 text-status-danger"
+                                            : cap.tier === 2
+                                              ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
+                                              : "border-line bg-surface-0 text-fg-muted"
+                                        }`}
+                                      >
+                                        {cap.tierLabel}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })
                       ) : (
                         <p className="px-2.5 py-3 text-xs leading-snug text-fg-secondary">
                           No integrations connected yet. Connect Gmail, Docusign, Slack, and more to let
