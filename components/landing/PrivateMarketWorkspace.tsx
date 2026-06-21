@@ -24,15 +24,12 @@ export function PrivateMarketWorkspace() {
   return (
     <section id="earn-action" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24">
       <div className="mb-8 max-w-3xl">
-        <p className="font-mono text-xs uppercase tracking-[0.24em] text-gold-400">
-          Earn workspace map
-        </p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">
+        <h2 className="text-3xl font-semibold tracking-tight sm:text-5xl">
           See how Earn organizes private-market execution.
         </h2>
         <p className="mt-4 text-fg-secondary">
-          The workspace maps the operator command, approval context, executive agents,
-          task graph, and expected outcomes without suggesting work is running.
+          The execution plan keeps objectives, approval context, task assignments,
+          and expected outcomes visible before work starts.
         </p>
       </div>
 
