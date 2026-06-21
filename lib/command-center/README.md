@@ -62,3 +62,4 @@ without touching geometry, rendering, or the engine.
   avatar protocol) can replace the renderer while reusing `engine` + `map`.
 - Executives are procedural humanoid "trainer" sprites (4-direction, 2-frame
   walk); Earn is the coin asset with a neural-green halo and a delegate burst.
+
