@@ -16,6 +16,7 @@ import { getBuildReadiness } from "@/lib/build-readiness";
 import { getInboxThreads } from "@/lib/inbox/data";
 import { buildDigest, priorityBucket, type DigestThread } from "@/lib/inbox/intelligence";
 import { channelMeta } from "@/lib/inbox/channels";
+import { PrivateMarketDigitalTwin } from "@/components/dashboard/PrivateMarketDigitalTwin";
 
 export const dynamic = "force-dynamic";
 
@@ -146,6 +147,14 @@ export default async function DashboardPage() {
   for (const t of tasks) {
     if (ACTIVE.has(t.status)) workload.set(t.assigned_agent, (workload.get(t.assigned_agent) ?? 0) + 1);
   }
+  const activeAgents = AGENTS
+    .map((agent) => ({
+      name: agent.name,
+      color: agent.color,
+      count: workload.get(agent.key) ?? 0,
+    }))
+    .filter((agent) => agent.count > 0)
+    .sort((a, b) => b.count - a.count);
   const dealByStage = new Map<string, number>();
   for (const d of deals) dealByStage.set(d.stage, (dealByStage.get(d.stage) ?? 0) + 1);
 
@@ -214,6 +223,17 @@ export default async function DashboardPage() {
       <div className="mb-6">
         <MissionControl orgId={ctx.orgId} />
       </div>
+
+      <PrivateMarketDigitalTwin
+        workflows={workflows.length}
+        deals={deals.length}
+        portfolioAssets={assets.length}
+        hottestCapital={hottestCapital.length}
+        pendingGates={pendingGates.length}
+        dispatches={dispatches.length}
+        artifacts={artifacts.length}
+        activeAgents={activeAgents}
+      />
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Workflows" value={workflows.length} />
