@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { PrivateMarketWorkspace } from "@/components/landing/PrivateMarketWorkspace";
 
 const OPERATING_LOOP = [
   {
@@ -68,7 +67,7 @@ export default function LandingPage({
         />
         <div className="mx-auto max-w-3xl text-center">
           <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
-            Private Markets Digital Twin
+            Private Markets Operating System
           </p>
           <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-7xl">
             FundExecs OS is an autonomous executive team for private markets.
@@ -86,10 +85,10 @@ export default function LandingPage({
               Meet Earn
             </Link>
             <Link
-              href="#earn-action"
+              href="/login"
               className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
             >
-              Explore Workspace
+              Sign in
             </Link>
           </div>
           <p className="mt-4 font-mono text-xs text-fg-muted">
@@ -97,10 +96,6 @@ export default function LandingPage({
           </p>
         </div>
       </section>
-
-      <div className="border-t border-line" />
-
-      <PrivateMarketWorkspace />
 
       <div className="border-t border-line" />
 
@@ -154,10 +149,10 @@ export default function LandingPage({
             Meet Earn
           </Link>
           <Link
-            href="#earn-action"
+            href="/login"
             className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
           >
-            Explore Workspace
+            Sign in
           </Link>
         </div>
       </section>
