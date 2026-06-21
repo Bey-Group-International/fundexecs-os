@@ -1,5 +1,3 @@
-export type TwinPhase = "idle" | "prompt" | "planning" | "authorized" | "executing" | "complete";
-
 export type SignalColor = "gold" | "blue" | "green" | "navy";
 
 export interface TwinAgent {
@@ -27,67 +25,6 @@ export interface TaskNode {
   agent: string;
   signal: SignalColor;
 }
-
-export const TWIN_PHASES: Record<
-  TwinPhase,
-  {
-    label: string;
-    status: string;
-    description: string;
-    capacity: number;
-    throughput: number;
-    motion: "standby" | "analyzing" | "planning" | "authorization" | "executing" | "complete";
-  }
-> = {
-  idle: {
-    label: "Idle",
-    status: "Awaiting Instructions",
-    description: "Earn is seated in the Executive Operations Center while the campus holds baseline monitoring.",
-    capacity: 10,
-    throughput: 12,
-    motion: "standby",
-  },
-  prompt: {
-    label: "User Prompt",
-    status: "Analyzing Request",
-    description: "Earn receives the command, classifies the workflow, and wakes the intelligence layer.",
-    capacity: 20,
-    throughput: 28,
-    motion: "analyzing",
-  },
-  planning: {
-    label: "Planning",
-    status: "Plan Ready",
-    description: "Earn composes objectives, workstreams, assigned agents, and approval gates.",
-    capacity: 30,
-    throughput: 42,
-    motion: "planning",
-  },
-  authorized: {
-    label: "Approval Hero Moment",
-    status: "Execution Authorized",
-    description: "Earn stands up, the neural network expands, and the task graph fully materializes.",
-    capacity: 72,
-    throughput: 76,
-    motion: "authorization",
-  },
-  executing: {
-    label: "Autonomous Execution",
-    status: "Executing",
-    description: "Earn delegates work across capital, deal, diligence, legal, operations, marketing, and relationship agents.",
-    capacity: 100,
-    throughput: 96,
-    motion: "executing",
-  },
-  complete: {
-    label: "Completion",
-    status: "Execution Complete",
-    description: "Task graph collapses into outcomes and Earn returns to the Executive Operations Center.",
-    capacity: 18,
-    throughput: 34,
-    motion: "complete",
-  },
-};
 
 export const TWIN_DISTRICTS: TwinDistrict[] = [
   { name: "Executive Operations Center", summary: "Earn orchestration and decision routing", x: 39, y: 38, w: 22, h: 20, signal: "gold" },
@@ -185,67 +122,3 @@ export const TASK_GRAPH: TaskNode[] = [
   { title: "Prepare Financing Package", agent: "Capital Agent", signal: "gold" },
   { title: "Generate Investor Updates", agent: "Relationship Agent", signal: "blue" },
 ];
-
-export const EXECUTION_LOGS: Record<TwinPhase, string[]> = {
-  idle: [
-    "earn.monitor_capacity(10%)",
-    "neural_paths.baseline_pulse()",
-    "awaiting_private_market_command",
-  ],
-  prompt: [
-    "command.received('find acquisition targets')",
-    "earn.classify_workflow(Source + Capital + Diligence)",
-    "intelligence_core.wake()",
-  ],
-  planning: [
-    "earn.compose_objectives()",
-    "task_graph.materialize(7 nodes)",
-    "approval_gate.prepare()",
-  ],
-  authorized: [
-    "approval.received()",
-    "earn.expand_neural_network()",
-    "campus.execution_lock=true",
-  ],
-  executing: [
-    "deal_agent.qualify_targets()",
-    "capital_agent.match_lenders()",
-    "diligence_agent.score_risk()",
-    "relationship_agent.schedule_introductions()",
-  ],
-  complete: [
-    "results.commit_to_dashboard()",
-    "task_graph.collapse_to_outcomes()",
-    "earn.return_to_operations_center()",
-  ],
-};
-
-export function nextTwinPhaseOnPrompt(current: TwinPhase, prompt: string): TwinPhase {
-  if (!prompt.trim()) return current;
-  return current === "idle" ? "prompt" : current;
-}
-
-export function activeAgentCount(phase: TwinPhase): number {
-  if (phase === "idle") return 1;
-  if (phase === "prompt") return 2;
-  if (phase === "planning") return 4;
-  if (phase === "authorized") return TWIN_AGENTS.length;
-  if (phase === "executing") return TWIN_AGENTS.length;
-  return 1;
-}
-
-export function isAgentExecuting(phase: TwinPhase, agentName: string): boolean {
-  if (agentName === "Earn") return phase !== "idle";
-  if (phase === "authorized" || phase === "executing") return true;
-  if (phase === "planning") return ["Capital Agent", "Deal Agent", "Diligence Agent"].includes(agentName);
-  if (phase === "prompt") return agentName === "Relationship Agent";
-  return false;
-}
-
-export function taskNodeStatus(phase: TwinPhase, index: number): "pending" | "active" | "complete" {
-  if (phase === "complete") return "complete";
-  if (phase === "executing") return index < 4 ? "complete" : index === 4 ? "active" : "pending";
-  if (phase === "authorized") return index === 0 ? "active" : "pending";
-  if (phase === "planning") return "pending";
-  return "pending";
-}

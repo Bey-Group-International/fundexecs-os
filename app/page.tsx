@@ -17,7 +17,7 @@ const OPERATING_LOOP = [
   {
     step: "Execute",
     body: "AI executives source, raise, diligence, document, and follow up across the operating campus.",
-    signal: "Agents active",
+    signal: "Agents assigned",
   },
   {
     step: "Report",
@@ -68,7 +68,6 @@ export default function LandingPage({
         />
         <div className="mx-auto max-w-3xl text-center">
           <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-status-success" />
             Private Markets Digital Twin
           </p>
           <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-7xl">
@@ -90,7 +89,7 @@ export default function LandingPage({
               href="#earn-action"
               className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
             >
-              Watch Earn Work
+              Explore Workspace
             </Link>
           </div>
           <p className="mt-4 font-mono text-xs text-fg-muted">
@@ -111,11 +110,11 @@ export default function LandingPage({
             Operating model
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-            The workflow is visible because the work is real.
+            The operating model stays visible from objective to outcome.
           </h2>
           <p className="mt-3 text-fg-secondary">
-            Every light, node, and agent state maps to a private-market execution
-            event: analysis, planning, approval, delegation, or delivery.
+            Each node and assignment shows how Earn structures analysis,
+            planning, approval, delegation, and delivery.
           </p>
         </div>
         <div className="mt-8 grid gap-3 md:grid-cols-4">
@@ -158,7 +157,7 @@ export default function LandingPage({
             href="#earn-action"
             className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
           >
-            Watch Earn Work
+            Explore Workspace
           </Link>
         </div>
       </section>

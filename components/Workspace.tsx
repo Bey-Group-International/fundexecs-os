@@ -1,61 +1,28 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
-import type { Task, Approval, TaskEvent } from "@/lib/supabase/database.types";
+import type { Task, Approval } from "@/lib/supabase/database.types";
 
 interface AgentWorkload {
   key: keyof typeof AGENT_BY_KEY;
   name: string;
   color: string;
-  active_tasks: number;
 }
 
 export default function Workspace({
-  orgId,
   initialTasks,
   pendingApprovals,
-  initialEvents,
   agents,
 }: {
-  orgId: string;
   initialTasks: Task[];
   pendingApprovals: Approval[];
-  initialEvents: TaskEvent[];
   agents: AgentWorkload[];
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
-  const [feed, setFeed] = useState<TaskEvent[]>(initialEvents);
   const [isPending, startTransition] = useTransition();
-
-  // Live workspace: subscribe to task_events for this org. RLS guarantees we
-  // only receive our own rows. Each event refreshes server data and prepends
-  // to the live feed.
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`org-${orgId}-events`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "task_events",
-          filter: `organization_id=eq.${orgId}`,
-        },
-        (payload) => {
-          setFeed((prev) => [payload.new as TaskEvent, ...prev].slice(0, 40));
-          router.refresh();
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [orgId, router]);
 
   async function submitPrompt(e: React.FormEvent) {
     e.preventDefault();
@@ -194,36 +161,6 @@ export default function Workspace({
                 style={{ backgroundColor: a.color }}
               />
               <span className="text-neutral-300">{a.name}</span>
-              {a.active_tasks > 0 ? (
-                <span className="ml-auto rounded-full bg-neutral-800 px-2 text-xs text-neutral-400">
-                  {a.active_tasks}
-                </span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-
-        <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wider text-neutral-500">
-          Live feed
-        </h2>
-        <div className="flex flex-col gap-1.5 font-mono text-xs">
-          {feed.length === 0 ? (
-            <p className="text-neutral-600">Waiting for activity…</p>
-          ) : null}
-          {feed.map((ev) => (
-            <div
-              key={ev.id}
-              className="flex items-center gap-2 rounded border border-neutral-900 bg-neutral-900/30 px-2 py-1.5"
-            >
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{
-                  backgroundColor: ev.agent
-                    ? AGENT_BY_KEY[ev.agent]?.color
-                    : "#52525b",
-                }}
-              />
-              <span className="text-neutral-400">{ev.event_type}</span>
             </div>
           ))}
         </div>
