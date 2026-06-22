@@ -7,20 +7,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, SessionMessage } from "@/lib/supabase/database.types";
 
-// The shape the composer seeds its chat state from.
+// The shape the composer seeds its chat state from. `ts` lets the transcript
+// interleave chat and workflow turns by time.
 export interface ChatTurnSeed {
   id: string;
   role: "you" | "earn";
   content: string;
+  ts: number;
 }
 
 export function toChatTurns(
-  rows: Pick<SessionMessage, "id" | "role" | "content">[],
+  rows: Pick<SessionMessage, "id" | "role" | "content" | "created_at">[],
 ): ChatTurnSeed[] {
   return rows.map((r) => ({
     id: r.id,
     role: r.role === "assistant" ? "earn" : "you",
     content: r.content,
+    ts: Date.parse(r.created_at) || 0,
   }));
 }
 
