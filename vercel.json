@@ -6,6 +6,9 @@
   }, {
     "path": "/api/digest",
     "schedule": "0 13 * * *"
+  }, {
+    "path": "/api/digest/weekly",
+    "schedule": "0 13 * * 1"
   } ],
   "framework": "nextjs"
 }
