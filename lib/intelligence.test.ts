@@ -1,9 +1,18 @@
 import {
   deriveRouting,
+  buildRouting,
+  routingFromTask,
   executiveForAgent,
+  executiveForStage,
+  engineForStage,
   cursorResponse,
   routingHeadline,
+  isLifecycleStage,
+  isTargetEngine,
+  isExecutive,
   EXECUTIVE_LABEL,
+  STAGE_TO_ENGINE,
+  LIFECYCLE_STAGES,
 } from "@/lib/intelligence";
 
 describe("executiveForAgent (mapping layer)", () => {
@@ -109,5 +118,83 @@ describe("routingHeadline", () => {
   it("renders stage → engine · executive", () => {
     const r = deriveRouting({ prompt: "Model the capital stack", hub: "execute", agents: ["capital_connector"] });
     expect(routingHeadline(r)).toBe("Capital Stack Design → Capital Stack Engine · CIO.AI");
+  });
+});
+
+describe("engine mapping totality", () => {
+  it("maps every lifecycle stage to exactly one engine", () => {
+    for (const stage of LIFECYCLE_STAGES) {
+      expect(isTargetEngine(STAGE_TO_ENGINE[stage])).toBe(true);
+      expect(engineForStage(stage)).toBe(STAGE_TO_ENGINE[stage]);
+    }
+  });
+
+  it("keeps deriveRouting's engine consistent with engineForStage(stage)", () => {
+    const prompts = [
+      "Draft the mandate",
+      "Build the diligence pack",
+      "Model the capital stack",
+      "Find LPs for the fund",
+      "Prepare the IC memo",
+      "Summarize portfolio performance",
+      "Automate this weekly",
+    ];
+    for (const p of prompts) {
+      const r = deriveRouting({ prompt: p, hub: "run", agents: ["associate"] });
+      expect(r.target_engine).toBe(engineForStage(r.lifecycle_stage));
+    }
+  });
+});
+
+describe("executiveForStage", () => {
+  it("forces CRO for compliance regardless of agent", () => {
+    expect(executiveForStage("Compliance & Documentation", "analyst")).toBe("cro");
+  });
+  it("otherwise follows the primary agent", () => {
+    expect(executiveForStage("Underwriting", "analyst")).toBe(executiveForAgent("analyst"));
+    expect(executiveForStage("Diligence", "diligence")).toBe("analyst");
+  });
+});
+
+describe("buildRouting (authoritative path)", () => {
+  it("derives engine + executive from the explicit stage", () => {
+    const r = buildRouting({ prompt: "Stress the downside", hub: "run", agents: ["analyst"], stage: "Underwriting" });
+    expect(r.target_engine).toBe("Capital Stack Engine");
+    expect(r.assigned_to).toBe("cio");
+    expect(r.lifecycle_stage).toBe("Underwriting");
+  });
+  it("applies the CRO override when the stage is compliance", () => {
+    const r = buildRouting({ prompt: "KYC review", hub: "execute", agents: ["analyst"], stage: "Compliance & Documentation" });
+    expect(r.assigned_to).toBe("cro");
+  });
+  it("still extracts payload entities/priority", () => {
+    const r = buildRouting({ prompt: 'Underwrite "Acme" now, urgent', hub: "run", agents: ["analyst"], stage: "Underwriting" });
+    expect(r.payload.priority).toBe("high");
+    expect(r.payload.entities).toContain("Acme");
+  });
+});
+
+describe("routingFromTask (read-back)", () => {
+  it("uses the persisted stage when present", () => {
+    const r = routingFromTask({ prompt: "anything at all", hub: "run", agents: ["analyst"], stage: "Closing" });
+    expect(r.lifecycle_stage).toBe("Closing");
+    expect(r.target_engine).toBe("Capital Stack Engine");
+  });
+  it("falls back to deterministic classification for null/invalid stage", () => {
+    const r = routingFromTask({ prompt: "Build the diligence pack", hub: "run", agents: ["diligence"], stage: null });
+    expect(r.lifecycle_stage).toBe("Diligence");
+    const bad = routingFromTask({ prompt: "Build the diligence pack", hub: "run", agents: ["diligence"], stage: "Not A Stage" });
+    expect(bad.lifecycle_stage).toBe("Diligence");
+  });
+});
+
+describe("type guards", () => {
+  it("validate stages, engines, and executives", () => {
+    expect(isLifecycleStage("Diligence")).toBe(true);
+    expect(isLifecycleStage("nope")).toBe(false);
+    expect(isTargetEngine("Diligence Engine")).toBe(true);
+    expect(isTargetEngine("nope")).toBe(false);
+    expect(isExecutive("cro")).toBe(true);
+    expect(isExecutive("nope")).toBe(false);
   });
 });

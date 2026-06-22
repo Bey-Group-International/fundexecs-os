@@ -62,6 +62,52 @@ export const EXECUTIVE_LABEL: Record<Executive, string> = {
   cro: "CRO.AI",
 };
 
+// Each lifecycle stage lands in exactly one Execution Grid pane. Engine is a
+// pure function of stage so the planner (LLM) and the deterministic fallback
+// can never disagree on where the work belongs.
+export const STAGE_TO_ENGINE: Record<LifecycleStage, TargetEngine> = {
+  "Fund Strategy": "Mandate Engine",
+  "Mandate Definition": "Mandate Engine",
+  "Market Mapping": "Relationship Graph",
+  "Capital Stack Design": "Capital Stack Engine",
+  "Fundraising & LP Engagement": "Outbound Engine",
+  "Compliance & Documentation": "Diligence Engine",
+  "Portfolio Construction": "Capital Stack Engine",
+  "Reporting & Communications": "Reporting Engine",
+  Sourcing: "Outbound Engine",
+  Screening: "Outbound Engine",
+  Diligence: "Diligence Engine",
+  Underwriting: "Capital Stack Engine",
+  "IC Preparation": "Reporting Engine",
+  Structuring: "Capital Stack Engine",
+  Closing: "Capital Stack Engine",
+  "Portfolio Monitoring": "Reporting Engine",
+  "Exit Planning": "Reporting Engine",
+  "Workflow Automation": "Workflow Builder",
+};
+
+// Enumerations — used for JSON-schema enums (the planner) and runtime validation.
+export const LIFECYCLE_STAGES = Object.keys(STAGE_TO_ENGINE) as LifecycleStage[];
+export const TARGET_ENGINES = Array.from(new Set(Object.values(STAGE_TO_ENGINE))) as TargetEngine[];
+export const EXECUTIVES = Object.keys(EXECUTIVE_LABEL) as Executive[];
+
+export function isLifecycleStage(v: unknown): v is LifecycleStage {
+  return typeof v === "string" && v in STAGE_TO_ENGINE;
+}
+export function isTargetEngine(v: unknown): v is TargetEngine {
+  return typeof v === "string" && (TARGET_ENGINES as string[]).includes(v);
+}
+export function isExecutive(v: unknown): v is Executive {
+  return typeof v === "string" && v in EXECUTIVE_LABEL;
+}
+
+export function engineForStage(stage: LifecycleStage): TargetEngine {
+  return STAGE_TO_ENGINE[stage];
+}
+
+// Stages that route to CRO regardless of the drafting agent.
+const COMPLIANCE_STAGES = new Set<LifecycleStage>(["Compliance & Documentation"]);
+
 export interface RoutingPayload {
   entities: string[];
   request: string;
@@ -114,6 +160,12 @@ export function executiveForAgent(agent: AgentKey): Executive {
   return AGENT_TO_EXECUTIVE[agent] ?? "earn_coo";
 }
 
+// Compliance/risk work is CRO's regardless of which agent drafts it; otherwise
+// the executive follows the primary agent. Single rule, reused everywhere.
+export function executiveForStage(stage: LifecycleStage, primaryAgent: AgentKey): Executive {
+  return COMPLIANCE_STAGES.has(stage) ? "cro" : executiveForAgent(primaryAgent);
+}
+
 // --- Classification rules -------------------------------------------------
 //
 // Ordered; first match wins. Mirrors the spec's Routing Rules (section 2). Each
@@ -153,8 +205,6 @@ const HUB_DEFAULT: Record<Hub, { stage: LifecycleStage; engine: TargetEngine }> 
   execute: { stage: "Reporting & Communications", engine: "Reporting Engine" },
 };
 
-const COMPLIANCE_STAGES = new Set<LifecycleStage>(["Compliance & Documentation"]);
-
 // Light, non-hallucinating entity scan: quoted names, $ amounts, and runs of
 // Capitalized Words (proper nouns). Returns a small, de-duplicated set.
 function extractEntities(text: string): string[] {
@@ -176,46 +226,80 @@ export interface RoutingInput {
   agents: AgentKey[];
 }
 
-/**
- * Classify a prompt into the structured routing object. Deterministic: the same
- * input always routes the same way, with or without an API key.
- */
-export function deriveRouting(input: RoutingInput): RoutingObject {
-  const prompt = input.prompt.trim();
-  const matched = RULES.find((r) => r.test.test(prompt));
-  const base = matched ?? HUB_DEFAULT[input.hub];
-  const stage = base.stage;
-  const engine = base.engine;
-  const tag = matched?.tag ?? input.hub;
-
-  const primaryAgent = input.agents[0] ?? "associate";
-  // Compliance/risk work is CRO's regardless of which agent drafts it.
-  const assigned_to: Executive = COMPLIANCE_STAGES.has(stage)
-    ? "cro"
-    : executiveForAgent(primaryAgent);
-
+function makePayload(prompt: string, hub: Hub, agents: AgentKey[], tag: string): RoutingPayload {
   const priority: RoutingPayload["priority"] = /\b(urgent|asap|today|immediately|by (eod|tomorrow))\b/i.test(
     prompt,
   )
     ? "high"
     : "normal";
+  return {
+    entities: extractEntities(prompt),
+    request: prompt.slice(0, 2000),
+    parameters: {},
+    priority,
+    tags: Array.from(new Set([hub, tag, ...agents.map(String)])).slice(0, 8),
+  };
+}
 
-  const tags = Array.from(new Set([input.hub, tag, ...input.agents.map(String)])).slice(0, 8);
-
+/**
+ * Assemble the structured routing object from an EXPLICIT lifecycle stage — the
+ * authoritative path. The planner (LLM) chooses the stage; the engine is a pure
+ * function of it and the executive follows the primary agent (CRO for
+ * compliance). Used by the engine so persisted routing matches the plan exactly.
+ */
+export function buildRouting(input: {
+  prompt: string;
+  hub: Hub;
+  agents: AgentKey[];
+  stage: LifecycleStage;
+}): RoutingObject {
+  const stage = input.stage;
+  const primaryAgent = input.agents[0] ?? "associate";
   return {
     intent: stage,
     lifecycle_stage: stage,
-    target_engine: engine,
-    assigned_to,
-    payload: {
-      entities: extractEntities(prompt),
-      request: prompt.slice(0, 2000),
-      parameters: {},
-      priority,
-      tags,
-    },
+    target_engine: engineForStage(stage),
+    assigned_to: executiveForStage(stage, primaryAgent),
+    payload: makePayload(input.prompt.trim(), input.hub, input.agents, stage),
     status: "routed",
   };
+}
+
+/**
+ * Classify a prompt into the structured routing object DETERMINISTICALLY. This
+ * is the fallback (no API key) and the validator behind the planner: the same
+ * input always routes the same way.
+ */
+export function deriveRouting(input: RoutingInput): RoutingObject {
+  const prompt = input.prompt.trim();
+  const matched = RULES.find((r) => r.test.test(prompt));
+  const stage = (matched ?? HUB_DEFAULT[input.hub]).stage;
+  const tag = matched?.tag ?? input.hub;
+  return {
+    intent: stage,
+    lifecycle_stage: stage,
+    target_engine: engineForStage(stage),
+    assigned_to: executiveForStage(stage, input.agents[0] ?? "associate"),
+    payload: makePayload(prompt, input.hub, input.agents, tag),
+    status: "routed",
+  };
+}
+
+/**
+ * Reconstruct a routing object for the UI from a workflow's PERSISTED columns,
+ * falling back to deterministic classification for rows written before routing
+ * was persisted. Keeps server routing and client rendering in lockstep.
+ */
+export function routingFromTask(input: {
+  prompt: string;
+  hub: Hub;
+  agents: AgentKey[];
+  stage: string | null;
+}): RoutingObject {
+  if (isLifecycleStage(input.stage)) {
+    return buildRouting({ prompt: input.prompt, hub: input.hub, agents: input.agents, stage: input.stage });
+  }
+  return deriveRouting({ prompt: input.prompt, hub: input.hub, agents: input.agents });
 }
 
 // --- Cursor-style response (section 4) ------------------------------------

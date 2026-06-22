@@ -8,6 +8,16 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { AgentKey, Hub, AssetType } from "@/lib/supabase/database.types";
 import { AGENTS } from "@/lib/agents";
 import { guidanceText } from "@/lib/document-quality";
+import {
+  deriveRouting,
+  engineForStage,
+  executiveForStage,
+  isLifecycleStage,
+  LIFECYCLE_STAGES,
+  type LifecycleStage,
+  type TargetEngine,
+  type Executive,
+} from "@/lib/intelligence";
 
 // Default to Sonnet 4.6 for institutional-quality deliverables.
 // Override with CLAUDE_MODEL env var (e.g. claude-opus-4-8 or claude-haiku-4-5-20251001).
@@ -23,6 +33,11 @@ export interface AgentPlan {
   hub: Hub;
   summary: string;
   steps: PlanStep[];
+  // Intelligence Layer: the planner classifies the lifecycle stage in the same
+  // call; engine and executive are pure functions of it, so routing can't drift.
+  lifecycle_stage: LifecycleStage;
+  target_engine: TargetEngine;
+  assigned_to: Executive;
 }
 
 export interface DealFields {
@@ -116,6 +131,11 @@ const PLAN_SCHEMA = {
   properties: {
     title: { type: "string", description: "Short title for the overall workflow" },
     hub: { type: "string", enum: HUBS },
+    lifecycle_stage: {
+      type: "string",
+      enum: LIFECYCLE_STAGES,
+      description: "The single private-markets lifecycle stage this request belongs to",
+    },
     summary: { type: "string", description: "One sentence on what the workflow achieves" },
     steps: {
       type: "array",
@@ -132,7 +152,7 @@ const PLAN_SCHEMA = {
       },
     },
   },
-  required: ["title", "hub", "summary", "steps"],
+  required: ["title", "hub", "lifecycle_stage", "summary", "steps"],
 } as const;
 
 const PLAN_SYSTEM = `You are Earn — the command layer of FundExecs OS, an AI operating system for private-market operators (PE funds, family offices, real estate, private credit).
@@ -152,7 +172,8 @@ Given an operator's prompt, produce a concise multi-step plan. Delegate each ste
 - pr_director: investor decks, CIMs, executive summaries, brand positioning, PR narratives
 - seo_disruptor: content strategy, thought leadership, organic authority, category-defining search presence
 - curator: private investor event design, capital formation salons, room curation, relationship follow-up
-Choose the hub (build/source/run/execute) that best fits the work. Keep to 2-4 steps. Titles are short and imperative.`;
+Choose the hub (build/source/run/execute) that best fits the work. Keep to 2-4 steps. Titles are short and imperative.
+Also classify the request into exactly one lifecycle_stage from the provided enum — the private-markets stage the work belongs to (e.g. Sourcing, Diligence, Underwriting, IC Preparation, Fundraising & LP Engagement, Compliance & Documentation, Portfolio Monitoring). This drives which execution engine the work is routed to.`;
 
 function textOf(message: Anthropic.Message): string {
   return message.content
@@ -174,11 +195,21 @@ function normalizePlan(raw: Partial<AgentPlan> | null, prompt: string): AgentPla
       description: String(s.description ?? "").slice(0, 240),
     }));
   if (steps.length === 0) return fallback;
+  const hub = HUBS.includes(raw.hub as Hub) ? (raw.hub as Hub) : fallback.hub;
+  const agents = steps.map((s) => s.agent);
+  // Trust the planner's lifecycle stage when valid; otherwise classify
+  // deterministically. Engine and executive are derived so they can't diverge.
+  const lifecycle_stage = isLifecycleStage(raw.lifecycle_stage)
+    ? raw.lifecycle_stage
+    : deriveRouting({ prompt, hub, agents }).lifecycle_stage;
   return {
     title: String(raw.title ?? fallback.title).slice(0, 90),
-    hub: HUBS.includes(raw.hub as Hub) ? (raw.hub as Hub) : fallback.hub,
+    hub,
     summary: String(raw.summary ?? fallback.summary).slice(0, 240),
     steps,
+    lifecycle_stage,
+    target_engine: engineForStage(lifecycle_stage),
+    assigned_to: executiveForStage(lifecycle_stage, agents[0] ?? "associate"),
   };
 }
 
@@ -446,7 +477,16 @@ function fallbackPlan(prompt: string): AgentPlan {
       { agent: "analyst", title: "Execute analysis", description: "Produce the supporting analysis." },
     ];
   }
-  return { title: prompt.trim().slice(0, 80) || "Workflow", hub, summary: "Planned by the Associate.", steps };
+  const det = deriveRouting({ prompt, hub, agents: steps.map((s) => s.agent) });
+  return {
+    title: prompt.trim().slice(0, 80) || "Workflow",
+    hub,
+    summary: "Planned by the Associate.",
+    steps,
+    lifecycle_stage: det.lifecycle_stage,
+    target_engine: det.target_engine,
+    assigned_to: det.assigned_to,
+  };
 }
 
 function fallbackStepOutput(args: { stepTitle: string; agent: AgentKey }): string {
