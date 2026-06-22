@@ -1,4 +1,4 @@
--- 0057_outreach_sequences.sql
+-- 0060_outreach_sequences.sql
 -- Outbound Outreach Sequences — multi-touch cadences (the Hypergen / CapTarget
 -- core), built ON TOP of the existing gate + dispatch layer rather than beside
 -- it. A sequence is an ordered set of steps (email / LinkedIn / call), each with

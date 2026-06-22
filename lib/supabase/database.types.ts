@@ -905,7 +905,7 @@ export type SourcingEntity = Timestamps & {
   created_by: string | null;
 };
 
-// Outbound Outreach Sequences (migration 0057) — multi-touch cadences built on
+// Outbound Outreach Sequences (migration 0060) — multi-touch cadences built on
 // the gate + dispatch layer. A sequence has ordered steps; targets are enrolled
 // and advanced one due step at a time, each send routed through the gate
 // (queueSourceAction → gateDecision → dispatch), with the gate task recorded on
