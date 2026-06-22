@@ -23,6 +23,8 @@ export interface HubSignal {
   score: number | null;
   /** Compact headline metric, e.g. "72% conviction", "Operating · 1.8x TVPI". */
   metric: string;
+  /** Optional muted sub-line under the metric, e.g. data-room coverage. */
+  detail?: string;
   /** The single next-best move for this hub, or null when nothing is pending. */
   nextAction: { label: string; href: string } | null;
 }
@@ -89,12 +91,14 @@ export async function getMissionControl(orgId: string): Promise<MissionControl> 
 async function buildSignal(orgId: string): Promise<HubSignal> {
   try {
     const r = await getBuildReadiness(orgId);
+    const dr = r.dataRoom;
     return {
       hub: "build",
       label: "Build",
       href: "/build/profile",
       score: r.overall,
       metric: `${r.overall}% foundation · ${r.stage.label}`,
+      detail: `Data room ${dr.readyCount}/${dr.total}${dr.topMissing ? ` · ${dr.topMissing} next` : " · complete"}`,
       nextAction: r.nextAction ? { label: r.nextAction.label, href: r.nextAction.href } : null,
     };
   } catch {

@@ -101,6 +101,31 @@ describe("computeBuildReadiness — data room dimension", () => {
     const r = computeBuildReadiness(fullFoundation());
     expect(r.nextAction).not.toBeNull();
     expect(r.nextAction!.moduleKey).toBe("data_room");
+    // Deep-links straight to the section's builder so scroll + highlight can fire.
+    expect(r.nextAction!.href).toMatch(/^\/build\/data_room#section-/);
+  });
+
+  it("exposes a compact data-room digest for command-center snapshots", () => {
+    const r = computeBuildReadiness(fullFoundation());
+    expect(r.dataRoom.total).toBeGreaterThan(0);
+    expect(r.dataRoom.readyCount).toBeGreaterThan(0);
+    expect(r.dataRoom.readyCount).toBeLessThan(r.dataRoom.total);
+    expect(r.dataRoom.score).toBe(r.modules.find((m) => m.key === "data_room")!.score);
+    // The heaviest missing section surfaces as the "next" hint.
+    expect(typeof r.dataRoom.topMissing).toBe("string");
+  });
+
+  it("a fully-covered data room reports no missing section", () => {
+    const r = computeBuildReadiness({
+      ...fullFoundation(),
+      docCounts: {
+        overview: 1, marketing: 3, thesis: 1, track_record: 1, portfolio: 1,
+        team: 1, fund_terms: 1, legal: 1, financials: 1, compliance: 1,
+        operations: 1, esg: 1, risk: 1, diligence: 1, references: 1,
+      },
+    });
+    expect(r.dataRoom.topMissing).toBeNull();
+    expect(r.dataRoom.readyCount).toBe(r.dataRoom.total);
   });
 
   it("a fully-documented, fully-built firm reaches the fundraising-ready stage", () => {

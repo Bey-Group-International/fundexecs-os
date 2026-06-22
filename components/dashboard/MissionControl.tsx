@@ -72,7 +72,14 @@ function HubTile({ signal }: { signal: HubSignal }) {
 
       <div className="flex items-center gap-3">
         {signal.score != null ? <Ring value={signal.score} tone={tone} /> : null}
-        <p className="min-w-0 text-sm font-medium leading-snug text-fg-primary">{signal.metric}</p>
+        <div className="min-w-0">
+          <p className="text-sm font-medium leading-snug text-fg-primary">{signal.metric}</p>
+          {signal.detail ? (
+            <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              {signal.detail}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {signal.nextAction ? (
