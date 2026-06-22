@@ -133,6 +133,11 @@ export default function Copilot({
   const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(null);
   const [clarifying, setClarifying] = useState(false);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
+  // Live step execution streamed from /api/approve/stream after an "approved"
+  // decision: which steps are in-flight vs. completed, so the canvas lights them
+  // up as they execute rather than waiting on the debounce refresh. Keyed by
+  // step id; cleared once the workflow finishes and the refresh lands.
+  const [liveSteps, setLiveSteps] = useState<Record<string, "in_progress" | "completed">>({});
   // Execution Grid: filter the conversation's workflows by the engine they were
   // routed to. null = show all.
   const [engineFilter, setEngineFilter] = useState<TargetEngine | null>(null);
@@ -435,12 +440,13 @@ export default function Copilot({
     navigator.clipboard?.writeText(text).catch(() => {});
   }
 
-  async function decide(
+  // Non-streaming approval (every decision but the live-streamed "approved"
+  // path, and the fallback when the stream is unavailable).
+  async function decidePlain(
     approvalId: string,
     decision: "approved" | "rejected" | "regenerate" | "accepted",
     note?: string,
   ) {
-    setBusy(true);
     await fetch("/api/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -448,7 +454,73 @@ export default function Copilot({
     }).catch(() => {});
     setClarify(null);
     setBusy(false);
+    setLiveSteps({});
     startTransition(() => router.refresh());
+  }
+
+  // Approve & automate, with live step progress streamed into the canvas. Reads
+  // the ndjson from /api/approve/stream and lights up steps as they execute,
+  // then refreshes on workflow_done. Degrades gracefully: any stream failure
+  // falls back to the plain /api/approve call so the gate still resolves.
+  async function decideApproved(approvalId: string, note?: string) {
+    setLiveSteps({});
+    try {
+      const res = await fetch("/api/approve/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approval_id: approvalId, decision: "approved", note }),
+      });
+      if (!res.ok || !res.body) throw new Error("stream unavailable");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let errored = false;
+      let done = false;
+      for (;;) {
+        const { done: readerDone, value } = await reader.read();
+        if (readerDone) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const ev = JSON.parse(line) as {
+            type: string;
+            step_id?: string;
+          };
+          if (ev.type === "step_start" && ev.step_id) {
+            setLiveSteps((prev) => ({ ...prev, [ev.step_id as string]: "in_progress" }));
+          } else if (ev.type === "step_done" && ev.step_id) {
+            setLiveSteps((prev) => ({ ...prev, [ev.step_id as string]: "completed" }));
+          } else if (ev.type === "workflow_done") {
+            done = true;
+          } else if (ev.type === "error") {
+            errored = true;
+          }
+        }
+      }
+      if (errored || !done) throw new Error("approval stream failed");
+      setClarify(null);
+      setBusy(false);
+      startTransition(() => router.refresh());
+    } catch {
+      // The work already runs server-side through the gate; fall back so the
+      // operator still gets the result even if live progress dropped.
+      await decidePlain(approvalId, "approved", note);
+    }
+  }
+
+  async function decide(
+    approvalId: string,
+    decision: "approved" | "rejected" | "regenerate" | "accepted",
+    note?: string,
+  ) {
+    setBusy(true);
+    if (decision === "approved") {
+      await decideApproved(approvalId, note);
+    } else {
+      await decidePlain(approvalId, decision, note);
+    }
   }
 
   // "Ask questions to complete" — Earn surfaces what it needs to know. The
@@ -771,6 +843,7 @@ export default function Copilot({
               bundle={focusedBundle}
               busy={busy}
               decide={decide}
+              liveSteps={liveSteps}
               primary={focusedBundle.approval?.decision === "pending"}
               clarifying={clarifying}
               clarify={clarify?.workflowId === focusedBundle.workflow.id ? clarify : null}
@@ -1346,7 +1419,16 @@ export default function Copilot({
   );
 }
 
-function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
+function WorkflowSteps({
+  bundle,
+  liveSteps = {},
+}: {
+  bundle: WorkflowBundle;
+  // Live step states streamed during an "approved" run, keyed by step id. Used
+  // only to advance a step's display ahead of the debounce refresh — it never
+  // regresses a persisted status or overrides a terminal one.
+  liveSteps?: Record<string, "in_progress" | "completed">;
+}) {
   const { steps, artifacts } = bundle;
   const artifactByStep = new Map<string, Artifact>();
   for (const a of artifacts) if (a.step_id) artifactByStep.set(a.step_id, a);
@@ -1355,6 +1437,15 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
       {steps.map((step, i) => {
         const agent = AGENT_BY_KEY[step.assigned_agent];
         const artifact = artifactByStep.get(step.id);
+        // Overlay live progress, but only to move a step forward: a persisted
+        // completed/cancelled/failed step is never reopened by a stale event.
+        const live = liveSteps[step.id];
+        const status =
+          step.status === "pending" && (live === "in_progress" || live === "completed")
+            ? live
+            : step.status === "in_progress" && live === "completed"
+              ? "completed"
+              : step.status;
         // Prefer the durable artifact; fall back to the step's inline result.
         const output =
           artifact?.content ??
@@ -1364,7 +1455,7 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
         return (
           <li key={step.id} className="flex gap-3 rounded-xl border border-line/60 bg-surface-0/45 px-3 py-2.5">
             <div className="flex flex-col items-center">
-              <StepNode status={step.status} color={agent?.color} />
+              <StepNode status={status} color={agent?.color} />
               {i < steps.length - 1 ? <span className="mt-1 w-px flex-1 bg-line/80" /> : null}
             </div>
             <div className="flex-1 pb-1">
@@ -1376,7 +1467,7 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
                   </span>
                 ) : null}
                 <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                  {STATUS_LABEL[step.status] ?? step.status}
+                  {STATUS_LABEL[status] ?? status}
                 </span>
               </div>
               <p className="mt-0.5 text-xs text-fg-secondary">
@@ -1397,6 +1488,7 @@ function WorkflowCard({
   bundle,
   busy,
   decide,
+  liveSteps,
   primary,
   clarifying,
   clarify,
@@ -1407,6 +1499,8 @@ function WorkflowCard({
   bundle: WorkflowBundle;
   busy: boolean;
   decide: (id: string, d: "approved" | "rejected" | "regenerate" | "accepted", note?: string) => void;
+  // Live step states streamed during this workflow's "approved" run.
+  liveSteps?: Record<string, "in_progress" | "completed">;
   primary?: boolean;
   clarifying: boolean;
   clarify: { questions: string[]; answer: string } | null;
@@ -1465,7 +1559,7 @@ function WorkflowCard({
 
       <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Output</p>
       <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
-        <WorkflowSteps bundle={bundle} />
+        <WorkflowSteps bundle={bundle} liveSteps={liveSteps} />
       </div>
 
       <p className="mt-3 text-xs text-fg-secondary">
