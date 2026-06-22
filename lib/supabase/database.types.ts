@@ -1017,7 +1017,7 @@ export type RadarDigestLogEntry = {
 };
 
 // An append-only weekly snapshot of the serialized Source Outcome Funnel
-// (migration 0065). `snapshot` holds the full Funnel (lib/source-funnel.ts);
+// (migration 0066). `snapshot` holds the full Funnel (lib/source-funnel.ts);
 // the most recent prior row is the baseline the weekly rollup diffs against.
 export type FunnelSnapshotRow = {
   id: string;
@@ -1064,7 +1064,7 @@ export type Artifact = Timestamps & {
   verification_note: string | null;
   sources: Json;
   brain_run_id: string | null;
-  // Trust layer (migration 0066). Automated grounding score in [0,1] — how much
+  // Trust layer (migration 0065). Automated grounding score in [0,1] — how much
   // of the output reflects its cited sources.
   grounding_score: number;
 };
