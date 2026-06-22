@@ -8,6 +8,9 @@ import {
   groupAgenda,
   overdueCount,
   agendaCount,
+  bucketCounts,
+  severityCounts,
+  agendaSummaryLine,
   type AgendaItem,
 } from "./agenda";
 
@@ -130,5 +133,63 @@ describe("counts", () => {
   });
   it("overdueCount counts only past-due items", () => {
     expect(overdueCount(items, NOW)).toBe(2);
+  });
+});
+
+describe("bucketCounts", () => {
+  const items: AgendaItem[] = [
+    item({ id: "od1", when: "2026-06-10" }),
+    item({ id: "od2", when: "2026-06-18" }),
+    item({ id: "td", when: "2026-06-20" }),
+    item({ id: "wk", when: "2026-06-23" }),
+    item({ id: "lt", when: "2026-07-30" }),
+  ];
+  it("tallies each bucket relative to now", () => {
+    expect(bucketCounts(items, NOW)).toEqual({
+      overdue: 2,
+      today: 1,
+      week: 1,
+      later: 1,
+    });
+  });
+  it("returns all-zero for an empty list", () => {
+    expect(bucketCounts([], NOW)).toEqual({
+      overdue: 0,
+      today: 0,
+      week: 0,
+      later: 0,
+    });
+  });
+});
+
+describe("severityCounts", () => {
+  it("tallies by severity and counts absent as none", () => {
+    const items: AgendaItem[] = [
+      item({ id: "c", when: "2026-06-20", severity: "critical" }),
+      item({ id: "h", when: "2026-06-20", severity: "high" }),
+      item({ id: "h2", when: "2026-06-20", severity: "high" }),
+      item({ id: "plain", when: "2026-06-20" }),
+    ];
+    expect(severityCounts(items)).toEqual({
+      critical: 1,
+      high: 2,
+      medium: 0,
+      low: 0,
+      none: 1,
+    });
+  });
+});
+
+describe("agendaSummaryLine", () => {
+  it("returns a placeholder when empty", () => {
+    expect(agendaSummaryLine([], NOW)).toBe("Nothing scheduled");
+  });
+  it("joins only non-zero segments", () => {
+    const items: AgendaItem[] = [
+      item({ id: "od", when: "2026-06-10" }),
+      item({ id: "td1", when: "2026-06-20" }),
+      item({ id: "td2", when: "2026-06-20" }),
+    ];
+    expect(agendaSummaryLine(items, NOW)).toBe("1 overdue · 2 due today");
   });
 });
