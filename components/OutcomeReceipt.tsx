@@ -1,17 +1,11 @@
 import Link from "next/link";
-import type { OutcomeSummary } from "@/lib/routing-trace";
+import { fmtClockTime, type OutcomeSummary } from "@/lib/routing-trace";
 
 // A durable, plain-language receipt of what the operator's decision did — so a
 // completed/declined workflow always says "this went through", by whom-equivalent
 // (you), when, and where it landed (the saved automation). Renders nothing while
 // a decision is still pending or absent; the card shows the decision controls
 // in that state.
-
-function fmtTime(at: string | null): string {
-  if (!at) return "";
-  const d = new Date(at);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
 
 const TONE: Record<string, { ring: string; icon: string; iconColor: string }> = {
   approved: { ring: "border-gold-500/45 bg-gold-500/[0.07]", icon: "✓", iconColor: "text-gold-300" },
@@ -22,7 +16,7 @@ const TONE: Record<string, { ring: string; icon: string; iconColor: string }> = 
 export function OutcomeReceipt({ outcome }: { outcome: OutcomeSummary }) {
   if (outcome.kind === "none" || outcome.kind === "pending") return null;
   const tone = TONE[outcome.kind] ?? TONE.declined;
-  const when = fmtTime(outcome.at);
+  const when = fmtClockTime(outcome.at);
 
   return (
     <div className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 ${tone.ring}`}>
