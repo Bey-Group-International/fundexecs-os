@@ -20,6 +20,7 @@ import {
 } from "@/lib/earn-conversation";
 import type { ActiveIntegration } from "@/lib/integrations/active";
 import { classifyIntent } from "@/lib/intent";
+import { Markdown } from "@/components/Markdown";
 
 // A conversational turn rendered in the transcript. Chat turns are Earn's
 // answer path (ungated) and live in client state alongside the workflow turns.
@@ -28,6 +29,10 @@ interface ChatTurn {
   role: "you" | "earn";
   content: string;
   streaming?: boolean;
+  // For an Earn turn: the question that produced it (drives Regenerate) and the
+  // suggested next prompts.
+  sourcePrompt?: string;
+  followups?: string[];
 }
 
 // Slash commands the composer offers from the "+" menu. Selecting one drops a
@@ -132,6 +137,8 @@ export default function Copilot({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  // In-flight chat stream, so the Stop control can abort it.
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   const activeModel = EARN_MODELS.find((m) => m.key === model) ?? EARN_MODELS[0];
   const activeMode = EARN_MODES.find((m) => m.key === mode) ?? EARN_MODES[0];
@@ -191,17 +198,23 @@ export default function Copilot({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const body = prompt.trim();
-    if (!body || busy) return;
+    await dispatchPrompt(prompt.trim());
+  }
 
-    // Intelligence Layer: a question gets a conversational answer (ungated);
-    // a work request gets the planned, gated workflow. Mode "plan"/"auto" are
-    // operator directives for execution, so those always run as tasks.
+  // Route a prompt: a question gets a conversational answer (ungated); a work
+  // request gets the planned, gated workflow. Mode "plan"/"auto" are operator
+  // directives for execution, so those always run as tasks.
+  async function dispatchPrompt(body: string) {
+    if (!body || busy) return;
     if (mode === "accept-edits" && classifyIntent(body) === "chat") {
       await runChat(body);
-      return;
+    } else {
+      await runTask(body);
     }
+  }
 
+  // Launch the agentic workflow path (plan → gate → dispatch).
+  async function runTask(body: string) {
     const envelope = buildEarnPromptEnvelope({ body, model, mode, attachments, voiceUsed });
     setBusy(true);
     setPlanning(true);
@@ -245,7 +258,7 @@ export default function Copilot({
     setChatTurns((prev) => [
       ...prev,
       { id: youId, role: "you", content: body },
-      { id: earnId, role: "earn", content: "", streaming: true },
+      { id: earnId, role: "earn", content: "", streaming: true, sourcePrompt: body },
     ]);
 
     const append = (chunk: string) =>
@@ -253,11 +266,15 @@ export default function Copilot({
         prev.map((t) => (t.id === earnId ? { ...t, content: t.content + chunk } : t)),
       );
 
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
+    let replyText = "";
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sessionId ? { body, model, prior, session_id: sessionId } : { body, model, prior }),
+        signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error("chat failed");
       const reader = res.body.getReader();
@@ -265,22 +282,50 @@ export default function Copilot({
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        append(decoder.decode(value, { stream: true }));
+        const chunk = decoder.decode(value, { stream: true });
+        replyText += chunk;
+        append(chunk);
       }
-    } catch {
-      setChatTurns((prev) =>
-        prev.map((t) =>
-          t.id === earnId
-            ? { ...t, content: t.content || "Earn couldn't reach the model — try again." }
-            : t,
-        ),
-      );
+    } catch (err) {
+      // An operator-initiated Stop aborts the reader — keep the partial answer.
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        setChatTurns((prev) =>
+          prev.map((t) =>
+            t.id === earnId
+              ? { ...t, content: t.content || "Earn couldn't reach the model — try again." }
+              : t,
+          ),
+        );
+      }
     } finally {
-      setChatTurns((prev) =>
-        prev.map((t) => (t.id === earnId ? { ...t, streaming: false } : t)),
-      );
+      chatAbortRef.current = null;
+      setChatTurns((prev) => prev.map((t) => (t.id === earnId ? { ...t, streaming: false } : t)));
       setBusy(false);
     }
+
+    // Suggested follow-ups under the answer — best-effort, after it completes.
+    if (replyText.trim()) {
+      const suggestions = await fetch("/api/chat/followups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body, reply: replyText }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => (Array.isArray(d?.suggestions) ? (d.suggestions as string[]) : []))
+        .catch(() => []);
+      if (suggestions.length) {
+        setChatTurns((prev) => prev.map((t) => (t.id === earnId ? { ...t, followups: suggestions } : t)));
+      }
+    }
+  }
+
+  // Stop an in-progress answer; the partial text is kept.
+  function stopChat() {
+    chatAbortRef.current?.abort();
+  }
+
+  function copyText(text: string) {
+    navigator.clipboard?.writeText(text).catch(() => {});
   }
 
   async function decide(
@@ -505,12 +550,63 @@ export default function Copilot({
                         <span className="h-1 w-1 rounded-full bg-line" />
                         <span>{t.streaming ? "Answering" : "Answer"}</span>
                       </div>
-                      <div className="whitespace-pre-wrap rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
-                        {t.content}
+                      <div className="rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+                        {t.content ? <Markdown>{t.content}</Markdown> : null}
                         {t.streaming ? (
                           <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom" aria-hidden />
                         ) : null}
                       </div>
+
+                      {/* Live controls: stop while streaming; copy/regenerate after. */}
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        {t.streaming ? (
+                          <button
+                            type="button"
+                            onClick={stopChat}
+                            className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary transition hover:border-status-danger/50 hover:text-status-danger"
+                          >
+                            Stop
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => copyText(t.content)}
+                              disabled={!t.content}
+                              className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+                            >
+                              Copy
+                            </button>
+                            {t.sourcePrompt ? (
+                              <button
+                                type="button"
+                                onClick={() => dispatchPrompt(t.sourcePrompt!)}
+                                disabled={busy}
+                                className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+                              >
+                                Regenerate
+                              </button>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Suggested follow-ups — one tap to send the next prompt. */}
+                      {t.followups?.length ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {t.followups.map((s, i) => (
+                            <button
+                              key={`${t.id}-f${i}`}
+                              type="button"
+                              onClick={() => dispatchPrompt(s)}
+                              disabled={busy}
+                              className="rounded-full border border-line/80 bg-surface-1/75 px-3 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary disabled:opacity-40"
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ),
