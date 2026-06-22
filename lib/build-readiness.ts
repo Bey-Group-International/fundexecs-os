@@ -52,6 +52,15 @@ export interface NextAction {
   href: string;
 }
 
+/** Compact data-room coverage, surfaced in command-center snapshots. */
+export interface DataRoomDigest {
+  score: number;
+  readyCount: number;
+  total: number;
+  /** Highest-leverage missing section's label, or null when fully covered. */
+  topMissing: string | null;
+}
+
 export interface BuildReadiness {
   overall: number;
   stage: ReadinessStage;
@@ -59,6 +68,8 @@ export interface BuildReadiness {
   modules: ModuleReadiness[];
   statuses: Record<string, ModuleStatus>;
   nextAction: NextAction | null;
+  /** Coverage of the Materials & Data Room module, for glanceable summaries. */
+  dataRoom: DataRoomDigest;
 }
 
 const has = (v: unknown): boolean =>
@@ -273,15 +284,28 @@ export function computeBuildReadiness(input: BuildReadinessInput): BuildReadines
   const currentStage = [...stages].reverse().find((s) => s.unlocked) ?? stages[0];
   currentStage.current = true;
 
-  // Next-best action: first incomplete check, walking modules in hub order so
-  // the foundation is built front-to-back (profile → thesis → … → team).
+  // Next-best action: first incomplete check, walking the foundation modules in
+  // hub order so they're built front-to-back (profile → thesis → … → team).
+  // Only once the foundation is complete does the next step point at the data
+  // room — and then at the single highest-leverage missing section, deep-linked
+  // straight to that section's builder in the Materials module.
+  const foundationModules = [profile, thesisMod, brand, entity, trackRecord, team];
   let nextAction: NextAction | null = null;
-  for (const m of modules) {
+  for (const m of foundationModules) {
     const pending = m.checks.find((c) => !c.done);
     if (pending) {
       nextAction = { moduleKey: m.key, moduleLabel: m.label, label: pending.action, href: m.href };
       break;
     }
+  }
+  const topGap = dataRoomSummary.suggestions[0] ?? null;
+  if (!nextAction && topGap) {
+    nextAction = {
+      moduleKey: "data_room",
+      moduleLabel: "Materials & Data Room",
+      label: topGap.suggestion,
+      href: `/build/data_room#section-${topGap.key}`,
+    };
   }
 
   const statuses = Object.fromEntries(modules.map((m) => [m.key, m.status])) as Record<
@@ -289,7 +313,22 @@ export function computeBuildReadiness(input: BuildReadinessInput): BuildReadines
     ModuleStatus
   >;
 
-  return { overall, stage: currentStage, stages, modules, statuses, nextAction };
+  const dataRoomDigest: DataRoomDigest = {
+    score: dataRoom.score,
+    readyCount: dataRoomSummary.readyCount,
+    total: dataRoomSummary.total,
+    topMissing: topGap?.label ?? null,
+  };
+
+  return {
+    overall,
+    stage: currentStage,
+    stages,
+    modules,
+    statuses,
+    nextAction,
+    dataRoom: dataRoomDigest,
+  };
 }
 
 export interface Mandate {

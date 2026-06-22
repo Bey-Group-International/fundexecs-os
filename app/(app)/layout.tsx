@@ -16,6 +16,7 @@ import {
   setSessionUnread,
 } from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
+import { getBuildReadiness, type ModuleStatus } from "@/lib/build-readiness";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
 import { GlobalTopBar } from "@/components/GlobalTopBar";
@@ -53,6 +54,7 @@ export default async function AppLayout({
     { count: messagesUnread },
     { count: dealsUnread },
     { data: matchAlertRow },
+    buildStatuses,
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
       supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
@@ -100,6 +102,12 @@ export default async function AppLayout({
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle(),
+      // Build-hub foundation progress for the rail's module status dots. Runs in
+      // the same parallel batch (no added wall-clock); degrades to no dots on
+      // failure so the sidebar never blocks on it.
+      getBuildReadiness(ctx.orgId)
+        .then((r) => r.statuses)
+        .catch(() => null as Record<string, ModuleStatus> | null),
     ]);
 
   // Shape the freshest match for the toast (null when there is none). A deal
@@ -161,6 +169,8 @@ export default async function AppLayout({
       modules: hub.modules.map((mod) => ({
         href: `/${hub.key}/${mod.key}`,
         label: mod.label,
+        // Only the Build hub carries readiness; other hubs render without dots.
+        status: hub.key === "build" ? buildStatuses?.[mod.key] : undefined,
       })),
     };
   });

@@ -377,9 +377,17 @@ export async function getCopilotBriefing(pathname: string): Promise<CopilotBrief
   try {
     if (hub === "build") {
       const r = await getBuildReadiness(orgId);
+      const dr = r.dataRoom;
       return {
         headline: `${pct(r.overall)} foundation · ${r.stage.label}`,
-        stats: [{ label: "Readiness", value: pct(r.overall), tone: r.overall >= 85 ? "good" : "warn" }],
+        stats: [
+          { label: "Readiness", value: pct(r.overall), tone: r.overall >= 85 ? "good" : "warn" },
+          {
+            label: "Data room",
+            value: `${dr.readyCount}/${dr.total}`,
+            tone: dr.score >= 85 ? "good" : "warn",
+          },
+        ],
         nextAction: r.nextAction
           ? { label: r.nextAction.label, prompt: `Help me with this next step and draft it: ${r.nextAction.label}` }
           : null,

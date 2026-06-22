@@ -14,6 +14,8 @@ import { Logo } from "@/components/Logo";
 interface NavItem {
   href: string;
   label: string;
+  /** Foundation progress for Build modules — drives the rail status dot. */
+  status?: "empty" | "started" | "complete";
 }
 
 interface HubItem {
@@ -488,9 +490,28 @@ export function AppSidebar({
                     <Link
                       key={mod.href}
                       href={mod.href}
-                      className="rounded-md px-2 py-1 pl-7 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                      className="flex items-center gap-1.5 rounded-md px-2 py-1 pl-7 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
                     >
-                      {mod.label}
+                      {mod.status ? (
+                        <span
+                          aria-hidden
+                          title={
+                            mod.status === "complete"
+                              ? "Complete"
+                              : mod.status === "started"
+                                ? "In progress"
+                                : "Not started"
+                          }
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                            mod.status === "complete"
+                              ? "bg-emerald-400"
+                              : mod.status === "started"
+                                ? "bg-gold-400"
+                                : "bg-line"
+                          }`}
+                        />
+                      ) : null}
+                      <span className="truncate">{mod.label}</span>
                     </Link>
                   ))}
                 </div>

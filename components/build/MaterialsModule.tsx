@@ -16,6 +16,7 @@ import type {
 import { blendTrackRecord } from "@/lib/track-record";
 import { computeBuildReadiness } from "@/lib/build-readiness";
 import { DATA_ROOM_SECTIONS, summarizeDataRoom } from "@/lib/data-room";
+import { SectionHighlighter } from "@/components/build/SectionHighlighter";
 import { PrintButton } from "./PrintButton";
 import { ShareControls } from "./ShareControls";
 import { DeleteDocumentButton } from "./DeleteDocumentButton";
@@ -189,6 +190,7 @@ export async function MaterialsModule() {
       ) : null}
 
       {/* Data-room coverage checklist (operator aid; hidden in print) */}
+      <SectionHighlighter />
       <div className="mb-6 rounded-2xl border border-line bg-surface-1 p-5 print:hidden">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
@@ -211,7 +213,11 @@ export async function MaterialsModule() {
           {summary.items.map((item) => {
             const docs = docsBySection.get(item.key) ?? [];
             return (
-              <div key={item.key} className="overflow-hidden rounded-lg border border-line bg-surface-0">
+              <div
+                key={item.key}
+                id={`section-${item.key}`}
+                className="scroll-mt-24 overflow-hidden rounded-lg border border-line bg-surface-0 transition-shadow duration-700"
+              >
                 <form action={openSection} className="flex w-full items-center gap-2 px-3 py-2">
                   <input type="hidden" name="section" value={item.key} />
                   <span className={`font-mono text-xs ${item.ready ? "text-emerald-400" : "text-fg-muted"}`}>
