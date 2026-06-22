@@ -1893,6 +1893,7 @@ function WorkflowCard({
               title={primaryArtifact.title}
               sources={primaryArtifact.sources}
               verificationStatus={primaryArtifact.verification_status}
+              groundingScore={primaryArtifact.grounding_score}
             />
           </div>
           <p className="mt-2 text-xs text-fg-secondary">
