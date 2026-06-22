@@ -111,15 +111,31 @@ export function computeRelationshipScore(params: {
   };
 }
 
-// Build relationship scores for all investors in the org from Supabase data
-export async function buildRelationshipScores(supabase: Client): Promise<RelationshipScore[]> {
+/**
+ * Build relationship scores for all investors in the given organization.
+ *
+ * @param supabase - Authenticated Supabase client (anon or service-role).
+ * @param organizationId - The organization to scope all queries to. Required
+ *   to prevent cross-tenant data leakage when a service-role client is used
+ *   (RLS is bypassed in that case).
+ */
+export async function buildRelationshipScores(
+  supabase: Client,
+  organizationId: string,
+): Promise<RelationshipScore[]> {
   const [investorsRes, commitmentsRes, threadsRes] = await Promise.all([
-    supabase.from("investors").select("id, name, pipeline_stage").is("archived_at", null).limit(500),
-    supabase.from("commitments").select("investor_id").limit(1000),
+    supabase
+      .from("investors")
+      .select("id, name, pipeline_stage")
+      .eq("organization_id", organizationId)
+      .is("archived_at", null)
+      .limit(500),
+    supabase.from("commitments").select("investor_id").eq("organization_id", organizationId).limit(1000),
     // inbox_threads has investor_id directly — use it as the interaction proxy
     supabase
       .from("inbox_threads")
       .select("id, created_at, investor_id")
+      .eq("organization_id", organizationId)
       .not("investor_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(2000),

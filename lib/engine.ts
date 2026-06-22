@@ -13,6 +13,7 @@ import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
 import { buildRouting } from "@/lib/intelligence";
+import { shouldReuseRecord } from "@/lib/reference-binding";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -20,6 +21,30 @@ interface Ctx {
   supabase: Client;
   orgId: string;
   actorId: string;
+}
+
+/**
+ * Live execution progress, surfaced to a caller that wants to stream step
+ * state into the canvas. Purely observational — emitting these never changes
+ * what the engine persists or how the human-approval gate behaves. Callers that
+ * pass no callback get identical behavior.
+ */
+export type ProgressEvent =
+  | { type: "step_start"; step_id: string; title: string; step_order: number }
+  | { type: "step_done"; step_id: string; title: string }
+  | { type: "workflow_done"; workflow_id: string };
+
+type OnProgress = (ev: ProgressEvent) => void;
+
+// Emit a progress event defensively: an observer throwing must never break the
+// (already-persisted) workflow run.
+function emitProgress(onProgress: OnProgress | undefined, ev: ProgressEvent) {
+  if (!onProgress) return;
+  try {
+    onProgress(ev);
+  } catch {
+    // Swallow — progress is supplementary to the durable task/event writes.
+  }
 }
 
 function hubToGraph(hub: Hub): GraphKind | null {
@@ -194,6 +219,13 @@ async function materializePlan(
  *
  * Idempotent: a workflow records its seeded record id on `tasks.result`. A
  * re-approval updates that record in place instead of creating a duplicate.
+ *
+ * Reference binding: a NEW follow-up workflow in the same session has no prior
+ * id of its own, but it often means the session's EXISTING record ("update the
+ * deal", "revise the model"). When no prior id exists, we look up the session's
+ * most-recent deal/asset and — using the conservative, deterministic
+ * `shouldReuseRecord` cue test — bind to it (update in place) instead of minting
+ * a duplicate. A genuinely different request still creates a new record.
  */
 async function persistOutcome(
   ctx: Ctx,
@@ -233,6 +265,31 @@ async function persistOutcome(
         .select("id")
         .maybeSingle();
       if (!error && updated) dealId = updated.id;
+    } else if (workflow.session_id) {
+      // Reference binding: a follow-up workflow with no prior id of its own may
+      // mean the session's existing deal. Bind to the most-recent one when the
+      // prompt/extracted name says so, and update it in place.
+      const { data: existing } = await ctx.supabase
+        .from("deals")
+        .select("id, name")
+        .eq("organization_id", ctx.orgId)
+        .eq("session_id", workflow.session_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (
+        existing &&
+        shouldReuseRecord({ promptText: prompt, existingName: existing.name, extractedName: fields.name })
+      ) {
+        const { data: updated, error } = await ctx.supabase
+          .from("deals")
+          .update(row)
+          .eq("id", existing.id)
+          .eq("organization_id", ctx.orgId)
+          .select("id")
+          .maybeSingle();
+        if (!error && updated) dealId = updated.id;
+      }
     }
     if (!dealId) {
       const { data: deal } = await ctx.supabase
@@ -271,6 +328,31 @@ async function persistOutcome(
         .select("id")
         .maybeSingle();
       if (!error && updated) assetId = updated.id;
+    } else if (workflow.session_id) {
+      // Reference binding: a follow-up workflow with no prior id of its own may
+      // mean the session's existing asset. Bind to the most-recent one when the
+      // prompt/extracted name says so, and update it in place.
+      const { data: existing } = await ctx.supabase
+        .from("assets")
+        .select("id, name")
+        .eq("organization_id", ctx.orgId)
+        .eq("session_id", workflow.session_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (
+        existing &&
+        shouldReuseRecord({ promptText: prompt, existingName: existing.name, extractedName: fields.name })
+      ) {
+        const { data: updated, error } = await ctx.supabase
+          .from("assets")
+          .update(row)
+          .eq("id", existing.id)
+          .eq("organization_id", ctx.orgId)
+          .select("id")
+          .maybeSingle();
+        if (!error && updated) assetId = updated.id;
+      }
     }
     if (!assetId) {
       const { data: asset } = await ctx.supabase.from("assets").insert(row).select("id").single();
@@ -450,8 +532,15 @@ export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
   };
 }
 
-/** Run every step of an approved workflow, each producing a deliverable. */
-async function executeWorkflow(ctx: Ctx, workflow: Task) {
+/**
+ * Run every step of an approved workflow, each producing a deliverable.
+ *
+ * `onProgress` is an optional observer that receives live step/workflow events
+ * so a streaming caller can light up the canvas as steps execute. It is fired
+ * after the matching DB write, so an emitted event always reflects persisted
+ * state. Omitting it yields identical behavior to the gated path.
+ */
+async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress) {
   await ctx.supabase
     .from("tasks")
     .update({ status: "in_progress", progress: 0.05 })
@@ -479,6 +568,12 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
         payload: { step_id: step.id, message: `${step.title}…`, active_step: step.step_order },
       }),
     ]);
+    emitProgress(onProgress, {
+      type: "step_start",
+      step_id: step.id,
+      title: step.title,
+      step_order: step.step_order,
+    });
 
     const output = await executeStep({
       workflowTitle: workflow.title,
@@ -551,6 +646,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
         .update({ progress: (i + 1) / Math.max(list.length, 1) })
         .eq("id", workflow.id),
     ]);
+    emitProgress(onProgress, { type: "step_done", step_id: step.id, title: step.title });
   }
 
   // Turn the finished work into a structured record (Deal / Asset).
@@ -581,6 +677,8 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
       payload: { graph: workflow.graph_touched, ...outcome },
     });
   }
+
+  emitProgress(onProgress, { type: "workflow_done", workflow_id: workflow.id });
 }
 
 /**
@@ -677,10 +775,17 @@ async function acceptRecommendation(ctx: Ctx, wf: Task) {
   });
 }
 
-/** POST /approve — capture the human decision and drive automation. */
+/**
+ * POST /approve — capture the human decision and drive automation.
+ *
+ * `onProgress` (optional) lets a streaming caller observe live step execution
+ * on the "approved" path; it changes nothing about the gate or persistence and
+ * is ignored for every other decision. Existing callers pass nothing.
+ */
 export async function decideApproval(
   ctx: Ctx,
   args: { approvalId: string; decision: "approved" | "rejected" | "regenerate" | "accepted"; note?: string },
+  onProgress?: OnProgress,
 ) {
   const { data: approval } = await ctx.supabase
     .from("approvals")
@@ -743,7 +848,7 @@ export async function decideApproval(
           .eq("id", wf.id);
       }
     }
-    await executeWorkflow(ctx, wf);
+    await executeWorkflow(ctx, wf, onProgress);
   } else if (args.decision === "accepted") {
     // Accept: the plan stands as the recommendation — no agents run. Capture it
     // as a first-class artifact and mark the workflow done.
