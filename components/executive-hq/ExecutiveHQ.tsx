@@ -230,7 +230,7 @@ function RoomCell({
           : "transform 0.2s cubic-bezier(0.2,0,0,1), box-shadow 0.25s ease, opacity 0s",
       }}
     >
-      {/* Per-room PNG overlay — independent day/night mode */}
+      {/* Per-room PNG overlay — hidden at rest, reveals on hover */}
       <img
         src={roomBgSrc(room.id, mode)}
         alt="" aria-hidden="true"
@@ -238,52 +238,32 @@ function RoomCell({
           position:"absolute", inset:0, width:"100%", height:"100%",
           objectFit:"cover", objectPosition:"center top",
           pointerEvents:"none", zIndex:0,
-          opacity: hovered ? 0.55 : 0.3,
-          transition:"opacity 0.3s ease",
+          opacity: hovered ? 0.65 : 0,
+          transition:"opacity 0.35s ease",
         }}
       />
 
-      {/* Per-room day/night toggle — visible on hover */}
-      {hovered && (
-        <button
-          onClick={handleToggleNight}
-          title={roomNight ? "Switch to day" : "Switch to night"}
-          style={{
-            position:"absolute", top:5, left:6, zIndex:8,
-            background:"rgba(8,6,4,0.78)", backdropFilter:"blur(6px)",
-            border:`1px solid ${GOLD}55`, borderRadius:2,
-            color:GOLD, fontFamily:"Georgia,serif",
-            fontSize:8, padding:"2px 6px", cursor:"pointer",
-            letterSpacing:"0.1em", lineHeight:1.2,
-            transition:"border-color 0.2s ease",
-          }}
-        >
-          {roomNight ? "☀" : "☾"}
-        </button>
-      )}
-
-      {/* Hover brightness lift — applied via a transparent overlay so the full office map shows through */}
+      {/* Hover brightness lift */}
       <div style={{
         position:"absolute", inset:0, zIndex:1, pointerEvents:"none",
-        background: hovered ? "rgba(255,240,180,0.06)" : "transparent",
+        background: hovered ? "rgba(255,240,180,0.04)" : "transparent",
         transition:"background 0.25s ease",
       }}/>
 
-      {/* Gold shimmer overlay — breathes with activity */}
-      <div style={{
-        position:"absolute", inset:0, pointerEvents:"none", zIndex:2,
-        background:`linear-gradient(135deg, rgba(201,168,76,${shimmerOpacity}) 0%, transparent 50%, rgba(201,168,76,${shimmerOpacity * 0.5}) 100%)`,
-        animation: !reducedEffects ? `room-breathe ${breatheDuration} ease-in-out infinite` : "none",
-        animationDelay:`${roomIndex*0.55}s`,
-        transition:"opacity 0.3s ease",
-      }}/>
+      {/* Gold shimmer — only visible on hover/focus */}
+      {isActive && (
+        <div style={{
+          position:"absolute", inset:0, pointerEvents:"none", zIndex:2,
+          background:`linear-gradient(135deg, rgba(201,168,76,0.14) 0%, transparent 50%, rgba(201,168,76,0.07) 100%)`,
+          transition:"opacity 0.3s ease",
+        }}/>
+      )}
 
-      {/* Hover radial glow — warm gold center */}
+      {/* Hover radial glow */}
       {isActive && (
         <div style={{
           position:"absolute", inset:0, pointerEvents:"none", zIndex:3,
-          background:`radial-gradient(ellipse at 50% 60%, rgba(201,168,76,0.12) 0%, transparent 70%)`,
-          animation:"fadeSlideUp 0.2s ease-out",
+          background:`radial-gradient(ellipse at 50% 70%, rgba(201,168,76,0.09) 0%, transparent 65%)`,
         }}/>
       )}
 
@@ -298,19 +278,6 @@ function RoomCell({
         }}/>
       )}
 
-      {/* Particle shimmer dots — luxury sparkle on hover */}
-      {isActive && !reducedEffects && [0,1,2].map(i => (
-        <div key={i} aria-hidden="true" style={{
-          position:"absolute",
-          left:`${20 + i * 30}%`, top:`${30 + i * 15}%`,
-          width:2, height:2, borderRadius:"50%",
-          background:GOLD,
-          boxShadow:`0 0 6px ${GOLD}, 0 0 12px ${GOLD}88`,
-          pointerEvents:"none", zIndex:4,
-          animation:`light-flicker ${3+i}s ease-in-out infinite`,
-          animationDelay:`${i*0.4}s`,
-        }}/>
-      ))}
 
       {/* Exec avatars (hidden for now) */}
       <div style={{ position:"absolute", bottom:28, left:0, right:0, zIndex:5, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
@@ -340,7 +307,7 @@ function RoomCell({
           marginBottom:3,
           transition:"width 0.35s ease",
         }}/>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:4 }}>
           <div style={{
             fontFamily:"Georgia,'Times New Roman',serif",
             fontSize:7, fontWeight:400,
@@ -348,19 +315,34 @@ function RoomCell({
             color: isActive ? GOLD : `${GOLD}88`,
             textShadow: isActive ? `0 0 16px ${GOLD}66` : "none",
             transition:"all 0.25s ease",
+            flex:1, minWidth:0,
           }}>
             {isZooming ? "Entering…" : room.label}
           </div>
-          {stats && (
+          {!isZooming && stats && !hovered && (
             <div style={{
               fontFamily:"'Courier New',monospace", fontSize:6.5,
-              color: isActive ? "rgba(255,248,220,0.9)" : "rgba(255,248,220,0.45)",
-              letterSpacing:"0.06em",
-              transition:"color 0.25s ease",
+              color:"rgba(255,248,220,0.45)",
+              letterSpacing:"0.06em", whiteSpace:"nowrap",
             }}>
-              <span style={{ color: stats.trend==="up" ? "#86efac" : stats.trend==="down" ? "#fca5a5" : "rgba(255,248,220,0.5)" }}>{trendArrow}</span>
+              <span style={{ color: stats.trend==="up" ? "#86efac" : stats.trend==="down" ? "#fca5a5" : "rgba(255,248,220,0.4)" }}>{trendArrow}</span>
               {" "}{stats.value} {stats.label}
             </div>
+          )}
+          {hovered && (
+            <button
+              onClick={handleToggleNight}
+              title={roomNight ? "Switch to day" : "Switch to night"}
+              style={{
+                background:"rgba(201,168,76,0.12)", backdropFilter:"blur(4px)",
+                border:`1px solid ${GOLD}55`, borderRadius:2,
+                color:GOLD, fontFamily:"Georgia,serif",
+                fontSize:8, padding:"1px 5px", cursor:"pointer",
+                letterSpacing:"0.08em", lineHeight:1.3, flexShrink:0,
+              }}
+            >
+              {roomNight ? "☀" : "☾"}
+            </button>
           )}
         </div>
       </div>
@@ -553,61 +535,6 @@ export function ExecutiveHQ() {
             animation:"hq-scanline 6s linear infinite",
           }}/>
         </div>
-      )}
-
-      {/* ── Gold particle data stream ── */}
-      {!reducedEffects && (
-        <div aria-hidden="true" style={{ position:"absolute", inset:0, zIndex:2, pointerEvents:"none", overflow:"hidden" }}>
-          {([
-            {l:"8%",  t:"20%", dx:"60px",  dy:"-50px", dur:7,   delay:"0s"   },
-            {l:"22%", t:"55%", dx:"-45px", dy:"-70px", dur:8.5, delay:"1.2s" },
-            {l:"38%", t:"12%", dx:"35px",  dy:"55px",  dur:6.5, delay:"2.4s" },
-            {l:"55%", t:"68%", dx:"-60px", dy:"-30px", dur:9,   delay:"0.6s" },
-            {l:"70%", t:"35%", dx:"50px",  dy:"-45px", dur:7.5, delay:"3.1s" },
-            {l:"85%", t:"60%", dx:"-35px", dy:"-55px", dur:8,   delay:"1.8s" },
-            {l:"14%", t:"40%", dx:"40px",  dy:"60px",  dur:6,   delay:"4.0s" },
-            {l:"48%", t:"78%", dx:"-25px", dy:"-65px", dur:7,   delay:"2.7s" },
-            {l:"76%", t:"18%", dx:"-50px", dy:"40px",  dur:9.5, delay:"0.3s" },
-          ] as {l:string;t:string;dx:string;dy:string;dur:number;delay:string}[]).map((p, i) => (
-            <div key={i} style={{
-              position:"absolute", left:p.l, top:p.t,
-              width: i%3===0 ? 2 : 1.5, height: i%3===0 ? 2 : 1.5,
-              borderRadius:"50%",
-              background: i%4===0 ? GOLD : i%4===1 ? "#e8d5a0" : i%4===2 ? "#f8ecc0" : "#c9a84c99",
-              boxShadow:`0 0 ${i%2===0?8:5}px ${GOLD}`,
-              ["--pdx" as string]: p.dx, ["--pdy" as string]: p.dy,
-              animation:`gold-particle ${p.dur}s ease-in-out ${p.delay} infinite`,
-            }}/>
-          ))}
-        </div>
-      )}
-
-      {/* ── Pulse rings — active rooms ── */}
-      {!reducedEffects && (
-        <svg aria-hidden="true" style={{ position:"absolute", inset:0, width:"100%", height:"100%", zIndex:2, pointerEvents:"none", overflow:"visible" }}>
-          <defs>
-            <linearGradient id="pg1" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={GOLD} stopOpacity="0"/>
-              <stop offset="50%" stopColor={GOLD} stopOpacity="0.8"/>
-              <stop offset="100%" stopColor={GOLD} stopOpacity="0"/>
-            </linearGradient>
-          </defs>
-          {([
-            {cx:"13%", cy:"21%", delay:"0s"},
-            {cx:"62%", cy:"21%", delay:"1.4s"},
-            {cx:"38%", cy:"57%", delay:"0.7s"},
-            {cx:"87%", cy:"57%", delay:"2.1s"},
-          ] as {cx:string;cy:string;delay:string}[]).map((r,i) => (
-            <circle key={i} cx={r.cx} cy={r.cy} r="12"
-              fill="none" stroke={GOLD} strokeWidth="1"
-              style={{
-                transformOrigin:`${r.cx} ${r.cy}`,
-                animation:`pulse-ring-lux 3.5s ease-out ${r.delay} infinite`,
-                opacity:0,
-              }}
-            />
-          ))}
-        </svg>
       )}
 
       {/* ── HUD sweep line (top) ── */}
