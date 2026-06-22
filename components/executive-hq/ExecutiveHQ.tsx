@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ExecutiveHQBoot } from "./ExecutiveHQBoot";
 
 type Executive = {
   id: string;
@@ -361,6 +362,11 @@ type SelectedExec = Executive | null;
 
 export function ExecutiveHQ() {
   const [selected, setSelected] = useState<SelectedExec>(null);
+  const [booting, setBooting] = useState(true);
+
+  if (booting) {
+    return <ExecutiveHQBoot onComplete={() => setBooting(false)} />;
+  }
 
   return (
     <div
