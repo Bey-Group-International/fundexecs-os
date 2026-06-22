@@ -12,7 +12,7 @@ import { generatePlan, generatePlans, executeStep, extractDealFields, extractAss
 import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
-import { buildRouting } from "@/lib/intelligence";
+import { buildRouting, deskOverride, engineForStage, executiveForStage, type Executive } from "@/lib/intelligence";
 import { shouldReuseRecord } from "@/lib/reference-binding";
 import { getRoutingCorrections, formatRoutingCorrections } from "@/lib/routing-feedback";
 
@@ -458,15 +458,47 @@ async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[
   return [...reroute, ...active, ...turns];
 }
 
-export async function planPrompt(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan> {
-  return generatePlan(body, await gatherPriorContext(ctx, sessionId));
+// Apply an operator's explicit desk delegation to a generated plan, overriding
+// Earn's auto-routed owner. Repoints the primary step to a representative agent
+// of the desk (and pins a compliance stage for CRO), so the persisted routing —
+// and everything derived from it — reflects the delegation. Pure.
+export function applyDelegation(plan: AgentPlan, desk: Executive): AgentPlan {
+  const ov = deskOverride(desk);
+  const steps = plan.steps.length
+    ? plan.steps.map((s, i) => (i === 0 ? { ...s, agent: ov.primaryAgent } : s))
+    : plan.steps;
+  const lifecycle_stage = ov.stage ?? plan.lifecycle_stage;
+  return {
+    ...plan,
+    steps,
+    lifecycle_stage,
+    target_engine: ov.engine ?? engineForStage(lifecycle_stage),
+    assigned_to: executiveForStage(lifecycle_stage, ov.primaryAgent),
+  };
+}
+
+export async function planPrompt(
+  ctx: Ctx,
+  body: string,
+  sessionId?: string,
+  delegate?: Executive,
+): Promise<AgentPlan> {
+  const plan = await generatePlan(body, await gatherPriorContext(ctx, sessionId));
+  return delegate ? applyDelegation(plan, delegate) : plan;
 }
 
 // Multi-intent: plan a prompt into one OR MORE workflows. Returns a single plan
 // in the common case; multiple only when the request spans distinct lifecycle
-// stages that should be executed and approved independently.
-export async function planPrompts(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan[]> {
-  return generatePlans(body, await gatherPriorContext(ctx, sessionId));
+// stages that should be executed and approved independently. When `delegate` is
+// set, the operator has overridden routing to a specific desk.
+export async function planPrompts(
+  ctx: Ctx,
+  body: string,
+  sessionId?: string,
+  delegate?: Executive,
+): Promise<AgentPlan[]> {
+  const plans = await generatePlans(body, await gatherPriorContext(ctx, sessionId));
+  return delegate ? plans.map((p) => applyDelegation(p, delegate)) : plans;
 }
 
 // Persist a single (pre-drafted) plan as a gated workflow. Thin wrapper over
@@ -529,8 +561,8 @@ export async function materializePrompts(ctx: Ctx, body: string, plans: AgentPla
   return { workflows, session_id: session, split };
 }
 
-export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
-  const plans = await planPrompts(ctx, body, sessionId);
+export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string, delegate?: Executive) {
+  const plans = await planPrompts(ctx, body, sessionId, delegate);
   const { workflows, session_id, split } = await materializePrompts(ctx, body, plans, sessionId);
   const primary = workflows[0];
   // Keep the original single-workflow contract (plan/workflow/approval_id) for
@@ -797,7 +829,14 @@ async function acceptRecommendation(ctx: Ctx, wf: Task) {
  */
 export async function decideApproval(
   ctx: Ctx,
-  args: { approvalId: string; decision: "approved" | "rejected" | "regenerate" | "accepted"; note?: string },
+  args: {
+    approvalId: string;
+    decision: "approved" | "rejected" | "regenerate" | "accepted";
+    note?: string;
+    // When the operator re-routes from the card, the desk to delegate the
+    // rebuilt plan to. Only honored on "regenerate".
+    delegate?: Executive;
+  },
   onProgress?: OnProgress,
 ) {
   const { data: approval } = await ctx.supabase
@@ -877,7 +916,8 @@ export async function decideApproval(
     // (e.g. answers to Earn's clarifying questions) refines the new plan.
     const base = wf.description ?? wf.title;
     const context = args.note?.trim() ? [`Operator clarification: ${args.note.trim()}`] : [];
-    const plan = await generatePlan(base, context);
+    const drafted = await generatePlan(base, context);
+    const plan = args.delegate ? applyDelegation(drafted, args.delegate) : drafted;
     await materializePlan(ctx, base, plan, { workflowId: wf.id });
   }
 

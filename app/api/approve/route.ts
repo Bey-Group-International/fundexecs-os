@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { decideApproval } from "@/lib/engine";
+import { isExecutive } from "@/lib/intelligence";
 
 // Approval triggers step execution, which calls Claude per step.
 export const maxDuration = 300;
@@ -23,10 +24,13 @@ export async function POST(request: Request) {
     );
   }
 
+  // On a re-route, the operator may delegate the rebuilt plan to a desk.
+  const desk = isExecutive(payload.delegate) ? payload.delegate : undefined;
+
   const supabase = createServerClient();
   const result = await decideApproval(
     { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId },
-    { approvalId: String(payload.approval_id), decision, note: payload.note },
+    { approvalId: String(payload.approval_id), decision, note: payload.note, delegate: desk },
   );
   return NextResponse.json(result);
 }
