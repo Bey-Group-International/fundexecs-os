@@ -75,11 +75,17 @@ export default function RecordMarkForm({ assets }: { assets: AssetOption[] }) {
         </label>
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="text-fg-secondary">Method</span>
-          <input
+          <select
             name="method"
-            placeholder="e.g. DCF, comps, last round"
+            defaultValue="409A"
             className="rounded-md border border-line bg-surface-0 px-3 py-2 text-fg-primary outline-none focus:border-gold-500"
-          />
+          >
+            {["409A", "DCF", "Comparables", "Recent round", "Cost", "Mark to market", "Other"].map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="flex flex-col gap-1.5 text-sm sm:col-span-2">
           <span className="text-fg-secondary">Note</span>

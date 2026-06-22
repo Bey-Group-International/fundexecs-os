@@ -62,11 +62,38 @@ README.md             product overview
 ## Database changes
 
 - Every schema change is a **new migration file** in `supabase/migrations/`
-  (`NNNN_description.sql`). Never edit a migration that has been merged.
+  (see the naming convention below). Never edit a migration that has been merged.
 - Every table is **org-scoped** via `organization_id` and protected by **RLS**.
   New tables must enable RLS and add policies in the same migration set.
 - Run `npm run db:reset` locally to confirm migrations apply cleanly from
   scratch before opening a PR.
+
+### Database migrations: naming convention
+
+**New migrations MUST be named `YYYYMMDDHHMMSS_snake_slug.sql`** — a 14-digit
+**UTC** timestamp followed by a snake_case description, e.g.
+`20260622100000_lp_onboarding_contracts.sql`. Do **not** use the legacy `00NN_`
+sequence for anything new.
+
+**Why.** The repo's history started on a sequential `00NN_*.sql` scheme, but the
+data model now uses timestamped migrations. Mixing the two schemes is what causes
+the recurring Supabase ⚠️ "out-of-order migration" warnings: a timestamp version
+(e.g. `20260622100000`) sorts astronomically higher than any `00NN` number, so
+every newly added `00NN` file applies *before* the already-applied timestamped
+one on an incremental (preview/production) database. Timestamps generated at
+creation time always sort **after** all prior history, so they apply in order and
+the warnings stop.
+
+**Existing migrations are intentionally left as-is.** They have already been
+applied to production/preview databases, which track migrations by their version
+string. Renaming or renumbering an applied migration makes the database think it
+is missing/new and can trigger re-application or errors. So we never touch
+historical files — the fix is **forward-only**: adopt timestamps from here on.
+
+**Enforced in CI.** `lib/migrations-naming.test.ts` fails any migration that is
+neither a grandfathered legacy `00NN_*.sql` file (the set that exists today) nor
+a valid 14-digit timestamp file. `lib/migrations-unique.test.ts` additionally
+guards against duplicate version prefixes. Run `npm test` before opening a PR.
 
 ## Pull requests
 
@@ -83,3 +110,4 @@ README.md             product overview
 - Match the surrounding code's naming and comment density.
 - Prefer the simpler implementation and flag follow-ups rather than
   over-engineering.
+

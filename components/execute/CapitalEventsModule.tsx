@@ -1,10 +1,42 @@
 import { getExecuteCapital, type LedgerRow, type FlowDirection } from "@/lib/execute-capital";
 import { usd, compactUsd, shortDate } from "@/lib/format";
+import { createServerClient } from "@/lib/supabase/server";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile } from "@/components/execute/ui";
 import AddRowForm from "@/components/AddRowForm";
+import CapitalRunForm, { type CommitmentRow, type FundOption } from "@/components/execute/CapitalRunForm";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
+import type { Fund, Commitment, Investor } from "@/lib/supabase/database.types";
+
+// Load funds + their commitments (with investor names) for the agent-run
+// capital call / distribution. Kept here so the module stays a server component.
+async function loadCapitalRunData(orgId: string): Promise<{
+  funds: FundOption[];
+  commitmentsByFund: Record<string, CommitmentRow[]>;
+}> {
+  const supabase = createServerClient();
+  const [fundRes, commitRes, invRes] = await Promise.all([
+    supabase.from("funds").select("id,name").eq("organization_id", orgId),
+    supabase.from("commitments").select("*").eq("organization_id", orgId),
+    supabase.from("investors").select("id,name").eq("organization_id", orgId),
+  ]);
+  const funds = (fundRes.data ?? []) as FundOption[];
+  const investorName = new Map(((invRes.data ?? []) as Pick<Investor, "id" | "name">[]).map((i) => [i.id, i.name]));
+  const commitmentsByFund: Record<string, CommitmentRow[]> = {};
+  for (const c of (commitRes.data ?? []) as Commitment[]) {
+    (commitmentsByFund[c.fund_id] ??= []).push({
+      id: c.id,
+      investor_id: c.investor_id,
+      committed_amount: c.committed_amount,
+      called_amount: c.called_amount,
+      distributed_amount: c.distributed_amount,
+      investorName: investorName.get(c.investor_id) ?? "Unknown LP",
+    });
+  }
+  // Only funds that actually have commitments can be run.
+  return { funds: funds.filter((f) => commitmentsByFund[f.id]?.length), commitmentsByFund };
+}
 
 function humanize(s: string): string {
   return s.replace(/_/g, " ");
@@ -58,7 +90,7 @@ function LedgerLine({ row, first }: { row: LedgerRow; first: boolean }) {
 // (paid-in vs returned, net to LPs), a per-type breakdown, and a chronological
 // ledger with a running net — plus inline entry for new calls and distributions.
 export async function ExecuteCapitalEventsModule({ orgId }: { orgId: string }) {
-  const summary = await getExecuteCapital(orgId);
+  const [summary, runData] = await Promise.all([getExecuteCapital(orgId), loadCapitalRunData(orgId)]);
   const fields = ADD_ROW_CONFIGS["execute/capital_events"]?.fields ?? [];
 
   const header = (
@@ -73,6 +105,7 @@ export async function ExecuteCapitalEventsModule({ orgId }: { orgId: string }) {
       <div>
         {header}
         <AddRowForm hub="execute" module="capital_events" fields={fields} />
+        <CapitalRunForm funds={runData.funds} commitmentsByFund={runData.commitmentsByFund} />
         <EmptyState
           note="No capital events yet. Log a capital call or distribution above, or ask Earn — your net position will build here."
           href="/workspace"
@@ -89,6 +122,7 @@ export async function ExecuteCapitalEventsModule({ orgId }: { orgId: string }) {
     <div>
       {header}
       <AddRowForm hub="execute" module="capital_events" fields={fields} />
+      <CapitalRunForm funds={runData.funds} commitmentsByFund={runData.commitmentsByFund} />
 
       <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <StatTile value={compactUsd(summary.called)} label="paid in" />
