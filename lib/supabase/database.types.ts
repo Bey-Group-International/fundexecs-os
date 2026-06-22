@@ -1016,6 +1016,16 @@ export type RadarDigestLogEntry = {
   sent_at: string;
 };
 
+// An append-only weekly snapshot of the serialized Source Outcome Funnel
+// (migration 0065). `snapshot` holds the full Funnel (lib/source-funnel.ts);
+// the most recent prior row is the baseline the weekly rollup diffs against.
+export type FunnelSnapshotRow = {
+  id: string;
+  organization_id: string;
+  snapshot: Json;
+  captured_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -1346,6 +1356,7 @@ export type Database = {
       radar_feedback: TableShape<RadarFeedback>;
       radar_digest_prefs: TableShape<RadarDigestPref>;
       radar_digest_log: TableShape<RadarDigestLogEntry>;
+      funnel_snapshots: TableShape<FunnelSnapshotRow>;
     };
     Views: Record<string, never>;
     Functions: {
