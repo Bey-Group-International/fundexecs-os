@@ -81,6 +81,27 @@ export interface BreakdownRow {
   conversion: number;
 }
 
+// The act-now loop's telemetry, surfaced alongside the conversion funnel. The
+// digest engagement (radar_digest_engagement: opened/clicked over digests sent)
+// and Radar feedback (radar_feedback: accepted/dismissed/snoozed) say how well
+// the act-now system is landing — distinct from, but complementary to, the
+// sourced→mandate funnel. All rates are 0–100 integers; empty data → 0.
+export interface EngagementSummary {
+  // Raw tallies (the denominators/numerators behind the rates).
+  digestsSent: number; // count of radar_digest_log rows
+  itemsSent: number; // summed item_count across those digests
+  opens: number; // radar_digest_engagement action='opened'
+  clicks: number; // radar_digest_engagement action='clicked'
+  accepted: number; // radar_feedback action='accepted'
+  dismissed: number; // radar_feedback action='dismissed'
+  snoozed: number; // radar_feedback action='snoozed'
+  // Derived rates (0–100).
+  openRate: number; // opens / digestsSent
+  clickRate: number; // clicks / digestsSent
+  clickThroughRate: number; // clicks / opens
+  acceptanceRate: number; // accepted / (accepted + dismissed + snoozed)
+}
+
 // The full funnel read for an org.
 export interface Funnel {
   counts: StageCounts;
@@ -89,6 +110,9 @@ export interface Funnel {
   overallConversion: number;
   bySource: BreakdownRow[];
   bySignal: BreakdownRow[];
+  // Additive + optional: the act-now loop's telemetry (digest engagement +
+  // Radar feedback). Present when buildFunnel could read those tables.
+  engagement?: EngagementSummary;
 }
 
 // ===========================================================================
@@ -194,6 +218,84 @@ export function humanizeKey(s: string): string {
 }
 
 // ===========================================================================
+// PURE — act-now telemetry rates (no DB, unit-testable)
+// ===========================================================================
+
+/**
+ * Digest engagement rates: how often a sent digest is opened vs. clicked, plus
+ * the click-through (clicks / opens). All 0–100 integers; divide-by-zero (no
+ * digests sent / nothing opened) yields 0 rather than NaN. Pure + deterministic.
+ */
+export function engagementRates(input: {
+  digestsSent: number;
+  opens: number;
+  clicks: number;
+}): { openRate: number; clickRate: number; clickThroughRate: number } {
+  const digestsSent = input.digestsSent ?? 0;
+  const opens = input.opens ?? 0;
+  const clicks = input.clicks ?? 0;
+  return {
+    openRate: pct(opens, digestsSent),
+    clickRate: pct(clicks, digestsSent),
+    clickThroughRate: pct(clicks, opens),
+  };
+}
+
+/**
+ * Radar feedback acceptance: accepted / (accepted + dismissed + snoozed), as a
+ * 0–100 rate. No feedback at all → 0 (no divide-by-zero). Pure.
+ */
+export function feedbackRates(input: {
+  accepted: number;
+  dismissed: number;
+  snoozed: number;
+}): { acceptanceRate: number } {
+  const accepted = input.accepted ?? 0;
+  const dismissed = input.dismissed ?? 0;
+  const snoozed = input.snoozed ?? 0;
+  const total = accepted + dismissed + snoozed;
+  return { acceptanceRate: pct(accepted, total) };
+}
+
+/**
+ * Assemble the act-now telemetry block from raw tallies, deriving every rate.
+ * Deterministic — same inputs, same output. buildFunnel calls this after
+ * gathering; tests call it directly. Pure.
+ */
+export function summarizeEngagement(input: {
+  digestsSent: number;
+  itemsSent: number;
+  opens: number;
+  clicks: number;
+  accepted: number;
+  dismissed: number;
+  snoozed: number;
+}): EngagementSummary {
+  const digestsSent = input.digestsSent ?? 0;
+  const itemsSent = input.itemsSent ?? 0;
+  const opens = input.opens ?? 0;
+  const clicks = input.clicks ?? 0;
+  const accepted = input.accepted ?? 0;
+  const dismissed = input.dismissed ?? 0;
+  const snoozed = input.snoozed ?? 0;
+  const eng = engagementRates({ digestsSent, opens, clicks });
+  const fb = feedbackRates({ accepted, dismissed, snoozed });
+  return {
+    digestsSent,
+    itemsSent,
+    opens,
+    clicks,
+    accepted,
+    dismissed,
+    snoozed,
+    openRate: eng.openRate,
+    clickRate: eng.clickRate,
+    clickThroughRate: eng.clickThroughRate,
+    acceptanceRate: fb.acceptanceRate,
+  };
+}
+
+// ===========================================================================
 // DB compositor — gather the five stages + breakdowns, best-effort + read-only
 // ===========================================================================
 interface EntityRow {
@@ -215,6 +317,15 @@ interface DealRow {
 interface SignalRow {
   entity_id: string | null;
   signal_type: string | null;
+}
+interface DigestLogRow {
+  item_count: number | null;
+}
+interface DigestEngagementRow {
+  action: string | null; // 'opened' | 'clicked'
+}
+interface FeedbackRow {
+  action: string | null; // 'accepted' | 'dismissed' | 'snoozed'
 }
 
 // An enrollment counts as "contacted" once at least one step has been sent
@@ -373,7 +484,61 @@ export async function buildFunnel(supabase: Client, orgId: string): Promise<Funn
   }
   const bySignal = breakdownBy(signalContribs);
 
-  return summarizeFunnel(counts, bySource, bySignal);
+  // --- act-now telemetry: digest engagement + Radar feedback --------------
+  // Best-effort + read-only, exactly like the stage reads above: a missing or
+  // unreadable telemetry table degrades that tally to 0 rather than throwing,
+  // so the funnel still renders. Additive — never touches the funnel counts.
+
+  // digests sent (the open/click denominator) + total items surfaced.
+  let digestLog: DigestLogRow[] = [];
+  try {
+    const { data } = await supabase
+      .from("radar_digest_log")
+      .select("item_count")
+      .eq("organization_id", orgId)
+      .limit(5000);
+    digestLog = (data ?? []) as unknown as DigestLogRow[];
+  } catch {
+    digestLog = [];
+  }
+
+  // digest engagement: opened / clicked events.
+  let digestEngagement: DigestEngagementRow[] = [];
+  try {
+    const { data } = await supabase
+      .from("radar_digest_engagement")
+      .select("action")
+      .eq("organization_id", orgId)
+      .limit(5000);
+    digestEngagement = (data ?? []) as unknown as DigestEngagementRow[];
+  } catch {
+    digestEngagement = [];
+  }
+
+  // Radar feedback: accepted / dismissed / snoozed.
+  let feedback: FeedbackRow[] = [];
+  try {
+    const { data } = await supabase
+      .from("radar_feedback")
+      .select("action")
+      .eq("organization_id", orgId)
+      .limit(5000);
+    feedback = (data ?? []) as unknown as FeedbackRow[];
+  } catch {
+    feedback = [];
+  }
+
+  const engagement = summarizeEngagement({
+    digestsSent: digestLog.length,
+    itemsSent: digestLog.reduce((sum, d) => sum + (d.item_count ?? 0), 0),
+    opens: digestEngagement.filter((e) => e.action === "opened").length,
+    clicks: digestEngagement.filter((e) => e.action === "clicked").length,
+    accepted: feedback.filter((f) => f.action === "accepted").length,
+    dismissed: feedback.filter((f) => f.action === "dismissed").length,
+    snoozed: feedback.filter((f) => f.action === "snoozed").length,
+  });
+
+  return { ...summarizeFunnel(counts, bySource, bySignal), engagement };
 }
 
 export const __test = {
@@ -383,4 +548,7 @@ export const __test = {
   breakdownBy,
   summarizeFunnel,
   humanizeKey,
+  engagementRates,
+  feedbackRates,
+  summarizeEngagement,
 };
