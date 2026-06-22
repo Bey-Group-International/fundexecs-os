@@ -343,7 +343,9 @@ async function gatherActiveContext(ctx: Ctx, sessionId: string): Promise<string[
 }
 
 /** POST /prompt — plan the prompt into a workflow awaiting approval. */
-export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
+// Draft the plan for a prompt (no writes). Split out so the streaming endpoint
+// can reveal the plan in the canvas before materializing it.
+export async function planPrompt(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan> {
   // Inside an existing session, replay its earlier prompts so Earn plans the
   // follow-up with the conversation in mind (oldest first), plus the active
   // deal/asset so references like "the deal" resolve.
@@ -361,9 +363,12 @@ export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
     const active = await gatherActiveContext(ctx, sessionId);
     priorContext = [...active, ...turns];
   }
+  return generatePlan(body, priorContext);
+}
 
-  const plan = await generatePlan(body, priorContext);
-
+// Persist a (pre-drafted) plan as a gated workflow — session, prompt row, and
+// the awaiting-approval workflow with its steps.
+export async function materializePrompt(ctx: Ctx, body: string, plan: AgentPlan, sessionId?: string) {
   // Sessions are the first step in operations: an Earn prompt opens a session
   // (named from the prompt) unless one was already provided.
   const session = sessionId ?? (await createSession(ctx, { name: plan.title || body, origin: "earn" }));
@@ -396,7 +401,13 @@ export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
     sessionId: session,
   });
 
-  return { plan, workflow, approval_id: approvalId, session_id: session };
+  return { workflow, approval_id: approvalId, session_id: session };
+}
+
+export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
+  const plan = await planPrompt(ctx, body, sessionId);
+  const rest = await materializePrompt(ctx, body, plan, sessionId);
+  return { plan, ...rest };
 }
 
 /** Run every step of an approved workflow, each producing a deliverable. */
