@@ -68,6 +68,31 @@ const WorkspaceDocumentList = nextDynamic(() =>
   import("@/components/workspace/DocumentCard").then((m) => m.WorkspaceDocumentList),
 );
 
+// The `source` hub's standalone modules: a registry of module key → render fn.
+// Each shares the same shape (a sourcing-live surface keyed off ?q), so they live
+// in one map instead of a long if-ladder — adding a module is a one-line entry.
+// (Bespoke source modules like `lp_pipeline` are handled separately below.)
+const SOURCE_MODULES: Record<string, (initialPrompt?: string) => JSX.Element> = {
+  search: (initialPrompt) => (
+    <SourceSearch
+      live={sourcingLive()}
+      webEnrichment={sourcingEnrichmentEnabled()}
+      initialPrompt={initialPrompt}
+    />
+  ),
+  triage: (initialPrompt) => <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />,
+  buyers: (initialPrompt) => <OwnershipIntel live={sourcingLive()} initialPrompt={initialPrompt} />,
+  intel: (initialPrompt) => <SourcingIntel live={sourcingLive()} initialPrompt={initialPrompt} />,
+  outreach: () => <OutreachStudio live={sourcingLive()} />,
+  signals: (initialPrompt) => <SourceSignals live={sourcingLive()} initialPrompt={initialPrompt} />,
+  radar: (initialPrompt) => <SourceRadar live={sourcingLive()} initialPrompt={initialPrompt} />,
+  funnel: (initialPrompt) => <SourceFunnel live={sourcingLive()} initialPrompt={initialPrompt} />,
+  attribution: (initialPrompt) => (
+    <RadarAttribution live={sourcingLive()} initialPrompt={initialPrompt} />
+  ),
+  health: (initialPrompt) => <CronHealth live={sourcingLive()} initialPrompt={initialPrompt} />,
+};
+
 export const dynamic = "force-dynamic";
 
 // Standalone module page. The hub layout provides the title + module switcher;
@@ -84,41 +109,9 @@ export default function ModulePage({
   const q = Array.isArray(searchParams?.q) ? searchParams?.q[0] : searchParams?.q;
   const initialPrompt = typeof q === "string" && q.trim() ? q : undefined;
 
-  if (params.hub === "source" && params.module === "search") {
-    return (
-      <SourceSearch
-        live={sourcingLive()}
-        webEnrichment={sourcingEnrichmentEnabled()}
-        initialPrompt={initialPrompt}
-      />
-    );
-  }
-  if (params.hub === "source" && params.module === "triage") {
-    return <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />;
-  }
-  if (params.hub === "source" && params.module === "buyers") {
-    return <OwnershipIntel live={sourcingLive()} initialPrompt={initialPrompt} />;
-  }
-  if (params.hub === "source" && params.module === "intel") {
-    return <SourcingIntel live={sourcingLive()} initialPrompt={initialPrompt} />;
-  }
-  if (params.hub === "source" && params.module === "outreach") {
-    return <OutreachStudio live={sourcingLive()} />;
-  }
-  if (params.hub === "source" && params.module === "signals") {
-    return <SourceSignals live={sourcingLive()} initialPrompt={initialPrompt} />;
-  }
-  if (params.hub === "source" && params.module === "radar") {
-    return <SourceRadar live={sourcingLive()} initialPrompt={initialPrompt} />;
-  }
-  if (params.hub === "source" && params.module === "funnel") {
-    return <SourceFunnel live={sourcingLive()} initialPrompt={initialPrompt} />;
-  }
-  if (params.hub === "source" && params.module === "attribution") {
-    return <RadarAttribution live={sourcingLive()} initialPrompt={initialPrompt} />;
-  }
-  if (params.hub === "source" && params.module === "health") {
-    return <CronHealth live={sourcingLive()} initialPrompt={initialPrompt} />;
+  if (params.hub === "source") {
+    const renderSourceModule = SOURCE_MODULES[params.module];
+    if (renderSourceModule) return renderSourceModule(initialPrompt);
   }
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;
