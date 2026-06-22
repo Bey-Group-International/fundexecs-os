@@ -25,6 +25,7 @@ import {
   type SignalRecord,
   type SignalType,
 } from "@/lib/sourcing-signals";
+import { applyLearnedAdjustment, type LearnedWeights } from "@/lib/radar-learning";
 
 type Client = SupabaseClient<Database>;
 const DAY = 24 * 60 * 60 * 1000;
@@ -151,11 +152,16 @@ function inPipelineOf(row: EntityRow): boolean {
  * Build the ranked radar for an org: pull the catalog + recent signals, join them
  * (by entity id, falling back to name), compute propensity + freshness + the
  * composite priority, and attach the routing move. Best-effort and read-only.
+ *
+ * `opts.weights` is the optional learned layer (lib/radar-learning.ts): a bounded
+ * per-(kind, moveKind) adjustment derived from the operator's accept/dismiss
+ * feedback, applied on TOP of the pure base score and re-sorted. Omitting it leaves
+ * the ranking byte-identical to the static score.
  */
 export async function buildRadar(
   supabase: Client,
   orgId: string,
-  opts: { kind?: EntityKind | null; limit?: number } = {},
+  opts: { kind?: EntityKind | null; limit?: number; weights?: LearnedWeights | null } = {},
 ): Promise<RadarItem[]> {
   const limit = opts.limit ?? 20;
   let entities: EntityRow[] = [];
@@ -191,7 +197,10 @@ export async function buildRadar(
     const recency = sigs.reduce((m, s) => Math.max(m, recencyScore(s.occurredAt ?? s.createdAt, now)), 0);
     const fit = fitOf(row);
     const inPipeline = inPipelineOf(row);
-    const score = radarScore({ fit, propensity, recency, signalCount: sigs.length });
+    const baseScore = radarScore({ fit, propensity, recency, signalCount: sigs.length });
+    const move = recommendMove({ name: row.name, kind: row.kind, propensity, fit, inPipeline });
+    // Learned layer applied on top of the pure base score; no weights → unchanged.
+    const score = applyLearnedAdjustment(baseScore, row.kind, move.kind, opts.weights);
     return {
       entityId: row.id,
       name: row.name,
@@ -207,7 +216,7 @@ export async function buildRadar(
       signalSummary: sigs.length ? summarizeSignals(forScore) : "No signals yet — scan to surface triggers.",
       recency,
       score,
-      move: recommendMove({ name: row.name, kind: row.kind, propensity, fit, inPipeline }),
+      move,
     };
   });
 

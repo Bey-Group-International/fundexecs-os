@@ -1,7 +1,8 @@
 // lib/source-radar.test.ts
 // Unit tests for the pure scoring + routing that powers the Source Radar — the
 // composite priority and the cross-cluster move recommendation. No DB.
-import { __test } from "@/lib/source-radar";
+import { __test, buildRadar } from "@/lib/source-radar";
+import { computeLearnedWeights, MAX_ADJUSTMENT, type RadarAggregate } from "@/lib/radar-learning";
 
 const { recencyScore, radarScore, recommendMove } = __test;
 
@@ -58,5 +59,79 @@ describe("recommendMove (cross-cluster routing)", () => {
   it("falls back to watching signals when quiet and tracked", () => {
     const m = recommendMove({ name: "Delta", kind: "provider", propensity: { sell: 0, raise: 0 }, fit: 40, inPipeline: true });
     expect(m.kind).toBe("signals");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildRadar with the learned layer. A tiny fake Supabase client: each builder
+// method returns `this`, and the builder is thenable so `await q` and chained
+// queries (sourcing_entities + entity_signals) both resolve to { data }.
+// ---------------------------------------------------------------------------
+function fakeClient(entities: unknown[]) {
+  const tableData: Record<string, unknown[]> = {
+    sourcing_entities: entities,
+    entity_signals: [],
+  };
+  const builder = (rows: unknown[]) => {
+    const b: Record<string, unknown> = {};
+    const chain = () => b;
+    b.select = chain;
+    b.eq = chain;
+    b.not = chain;
+    b.order = chain;
+    b.limit = chain;
+    b.then = (resolve: (v: { data: unknown[] }) => unknown) => resolve({ data: rows });
+    return b;
+  };
+  return {
+    from: (table: string) => builder(tableData[table] ?? []),
+  } as unknown as Parameters<typeof buildRadar>[0];
+}
+
+const entityRow = (over: Record<string, unknown> = {}) => ({
+  id: "11111111-1111-1111-1111-111111111111",
+  kind: "company",
+  name: "Acme Co",
+  categories: ["saas"],
+  geography: "US",
+  description: null,
+  source_url: null,
+  provenance: "discovery",
+  metadata: { fitScore: 70 },
+  ...over,
+});
+
+describe("buildRadar (learned layer)", () => {
+  it("with no weights is byte-identical to the pure base score", async () => {
+    const entities = [
+      entityRow({ id: "a", name: "Alpha", metadata: { fitScore: 70 } }),
+      entityRow({ id: "b", name: "Beta", kind: "investor", metadata: { fitScore: 40 } }),
+    ];
+    const items = await buildRadar(fakeClient(entities), "org-1");
+    for (const it of items) {
+      // No signals in the fake → propensity/recency are 0; score is fit-only.
+      const expected = radarScore({ fit: it.fit, propensity: it.propensity, recency: it.recency, signalCount: it.signalCount });
+      expect(it.score).toBe(expected);
+    }
+    // Default ordering preserved (highest base score first).
+    expect(items[0].name).toBe("Alpha");
+  });
+
+  it("passing weights nudges the score and re-sorts", async () => {
+    const entities = [
+      entityRow({ id: "a", name: "Alpha", metadata: { fitScore: 60 } }), // base 15
+      entityRow({ id: "b", name: "Beta", metadata: { fitScore: 64 } }), // base 16
+    ];
+    // Both route to "pipeline" (strong-ish fit, untracked). Reward that combo so
+    // the adjustment lifts both and the relative order by base score is kept.
+    const aggs: RadarAggregate[] = [
+      { entityKind: "company", moveKind: "pipeline", accepted: 10, dismissed: 0, snoozed: 0 },
+    ];
+    const weights = computeLearnedWeights(aggs);
+    const base = await buildRadar(fakeClient(entities), "org-1");
+    const tuned = await buildRadar(fakeClient(entities), "org-1", { weights });
+    const byName = (arr: typeof tuned, n: string) => arr.find((x) => x.name === n)!;
+    expect(byName(tuned, "Alpha").score).toBe(byName(base, "Alpha").score + MAX_ADJUSTMENT);
+    expect(byName(tuned, "Beta").score).toBe(byName(base, "Beta").score + MAX_ADJUSTMENT);
   });
 });

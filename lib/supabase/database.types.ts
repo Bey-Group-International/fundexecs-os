@@ -950,6 +950,23 @@ export type OutreachEnrollment = Timestamps & {
   created_by: string | null;
 };
 
+// An operator's verdict on a Source Radar recommendation (migration 0061). The
+// learning loop: each accepted/dismissed/snoozed row, keyed by the
+// (entity_kind, move_kind) it was shown for, feeds lib/radar-learning.ts which
+// tunes future rankings. Append-style; created_at only.
+export type RadarFeedback = {
+  id: string;
+  organization_id: string;
+  entity_id: string | null;
+  entity_name: string | null;
+  entity_kind: string | null;
+  move_kind: string | null; // RadarMoveKind: pipeline|buyers|outreach|signals|research
+  action: string; // 'accepted' | 'dismissed' | 'snoozed'
+  score_at_action: number | null;
+  principal_id: string | null;
+  created_at: string;
+};
+
 // A market signal / trigger about a catalog entity (migration 0055). The
 // Signals & Triggers layer: discrete, time-stamped events (funding rounds,
 // hiring, ownership changes, news, growth, raise/sale intent) that
@@ -1316,6 +1333,7 @@ export type Database = {
       outreach_sequences: TableShape<OutreachSequence>;
       outreach_steps: TableShape<OutreachStep>;
       outreach_enrollments: TableShape<OutreachEnrollment>;
+      radar_feedback: TableShape<RadarFeedback>;
       radar_digest_prefs: TableShape<RadarDigestPref>;
       radar_digest_log: TableShape<RadarDigestLogEntry>;
     };
