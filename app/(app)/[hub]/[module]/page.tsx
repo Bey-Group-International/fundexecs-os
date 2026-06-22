@@ -12,11 +12,17 @@ const SourceSearch = nextDynamic(() =>
 const SourceTriage = nextDynamic(() =>
   import("@/components/source/SourceTriage").then((m) => m.SourceTriage),
 );
+const OwnershipIntel = nextDynamic(() =>
+  import("@/components/source/OwnershipIntel").then((m) => m.OwnershipIntel),
+);
 const SourcingIntel = nextDynamic(() =>
   import("@/components/source/SourcingIntel").then((m) => m.SourcingIntel),
 );
 const OutreachStudio = nextDynamic(() =>
   import("@/components/source/OutreachStudio").then((m) => m.OutreachStudio),
+);
+const SourceSignals = nextDynamic(() =>
+  import("@/components/source/SourceSignals").then((m) => m.SourceSignals),
 );
 const RunSearch = nextDynamic(() =>
   import("@/components/run/RunSearch").then((m) => m.RunSearch),
@@ -53,11 +59,17 @@ export default function ModulePage({
   if (params.hub === "source" && params.module === "triage") {
     return <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
+  if (params.hub === "source" && params.module === "buyers") {
+    return <OwnershipIntel live={sourcingLive()} initialPrompt={initialPrompt} />;
+  }
   if (params.hub === "source" && params.module === "intel") {
     return <SourcingIntel live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "source" && params.module === "outreach") {
     return <OutreachStudio live={sourcingLive()} />;
+  }
+  if (params.hub === "source" && params.module === "signals") {
+    return <SourceSignals live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;

@@ -846,6 +846,45 @@ export type InboxMessage = {
   created_at: string;
 };
 
+// Ownership & Buyer Intelligence (migration 0056). The M&A side of the market on
+// top of the sourcing catalog (0042) + deals: who-bought-whom history and the
+// likely-buyer / add-on lists ranked by lib/ownership-intel.ts. Both org-scoped.
+export type Acquisition = {
+  id: string;
+  organization_id: string;
+  acquirer_name: string;
+  target_name: string;
+  acquirer_entity_id: string | null;
+  target_entity_id: string | null;
+  announced_on: string | null;
+  price_amount: number | null;
+  currency: string;
+  structure: string | null; // 'majority' | 'minority' | 'add_on' | 'merger' | 'asset' | 'recap'
+  sector: string | null;
+  source_url: string | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type BuyerProfile = {
+  id: string;
+  organization_id: string;
+  name: string;
+  entity_id: string | null;
+  buyer_type: string | null; // 'strategic' | 'financial' | 'pe' | 'family_office' | 'search_fund'
+  thesis: string | null;
+  sectors: string[];
+  geographies: string[];
+  check_min: number | null;
+  check_max: number | null;
+  appetite: number | null;
+  source_url: string | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+};
+
 // The Sourcing Intelligence catalog (migration 0042). A first-party, embedded
 // entity store powering semantic discovery + lookalike search. `embedding` is the
 // pgvector column surfaced as the text literal "[..]" the client sends; cosine
@@ -866,7 +905,7 @@ export type SourcingEntity = Timestamps & {
   created_by: string | null;
 };
 
-// Outbound Outreach Sequences (migration 0055) — multi-touch cadences built on
+// Outbound Outreach Sequences (migration 0057) — multi-touch cadences built on
 // the gate + dispatch layer. A sequence has ordered steps; targets are enrolled
 // and advanced one due step at a time, each send routed through the gate
 // (queueSourceAction → gateDecision → dispatch), with the gate task recorded on
@@ -908,6 +947,30 @@ export type OutreachEnrollment = Timestamps & {
   task_id: string | null;
   metadata: Json;
   created_by: string | null;
+};
+
+// A market signal / trigger about a catalog entity (migration 0055). The
+// Signals & Triggers layer: discrete, time-stamped events (funding rounds,
+// hiring, ownership changes, news, growth, raise/sale intent) that
+// lib/sourcing-signals.ts rolls into a deterministic propensity score.
+// `entity_id` is the sourcing_entities row when known (nullable); subject_name +
+// kind keep the row self-describing. Append-style; created_at only.
+export type EntitySignal = {
+  id: string;
+  organization_id: string;
+  entity_id: string | null;
+  subject_name: string;
+  kind: string | null; // the entity kind, when known
+  // 'funding_round' | 'hiring' | 'ownership_change' | 'news' | 'growth' |
+  // 'raise_intent' | 'sale_intent'
+  signal_type: string;
+  strength: number; // 0–100
+  summary: string | null;
+  source_url: string | null;
+  occurred_at: string | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
 };
 
 export type Artifact = Timestamps & {
@@ -1181,6 +1244,9 @@ export type Database = {
       audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
       sourcing_entities: TableShape<SourcingEntity>;
+      entity_signals: TableShape<EntitySignal>;
+      acquisitions: TableShape<Acquisition>;
+      buyer_profiles: TableShape<BuyerProfile>;
       operator_feedback: TableShape<OperatorFeedback>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
