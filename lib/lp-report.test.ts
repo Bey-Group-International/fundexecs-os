@@ -8,7 +8,10 @@ import {
   rollupFunds,
   holdingsRows,
   summarizeActivity,
+  fundBreakdown,
+  netCashflow,
 } from "./lp-report";
+import type { LpCapitalActivity } from "./lp-report";
 import type { Fund, Asset, CapitalEvent } from "@/lib/supabase/database.types";
 
 function fund(overrides: Partial<Fund>): Fund {
@@ -153,5 +156,82 @@ describe("summarizeActivity", () => {
     expect(a.contributionsTotal).toBe(150);
     expect(a.distributionsCount).toBe(2);
     expect(a.distributionsTotal).toBe(50);
+  });
+});
+
+describe("fundBreakdown", () => {
+  it("maps funds to per-fund rows preserving name/amounts/currency", () => {
+    const rows = fundBreakdown([
+      fund({
+        id: "f1",
+        name: "Fund I",
+        committed_capital: 100,
+        called_capital: 60,
+        distributed_capital: 20,
+        currency: "USD",
+      }),
+      fund({
+        id: "f2",
+        name: "Fund II",
+        committed_capital: 50,
+        called_capital: 40,
+        distributed_capital: 10,
+        currency: "EUR",
+      }),
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({
+      id: "f1",
+      name: "Fund I",
+      committed: 100,
+      called: 60,
+      distributed: 20,
+      currency: "USD",
+    });
+    expect(rows[1].currency).toBe("EUR");
+  });
+  it("defaults a missing currency to USD and zero amounts", () => {
+    const rows = fundBreakdown([
+      fund({
+        id: "f3",
+        name: "Fund III",
+        committed_capital: null as unknown as number,
+        called_capital: null as unknown as number,
+        distributed_capital: null as unknown as number,
+        currency: null as unknown as string,
+      }),
+    ]);
+    expect(rows[0].committed).toBe(0);
+    expect(rows[0].called).toBe(0);
+    expect(rows[0].distributed).toBe(0);
+    expect(rows[0].currency).toBe("USD");
+  });
+});
+
+describe("netCashflow", () => {
+  function activity(
+    overrides: Partial<LpCapitalActivity>,
+  ): LpCapitalActivity {
+    return {
+      contributionsCount: 0,
+      contributionsTotal: 0,
+      distributionsCount: 0,
+      distributionsTotal: 0,
+      ...overrides,
+    };
+  }
+  it("nets distributions minus contributions (positive)", () => {
+    const c = netCashflow(
+      activity({ contributionsTotal: 100, distributionsTotal: 150 }),
+    );
+    expect(c.contributionsTotal).toBe(100);
+    expect(c.distributionsTotal).toBe(150);
+    expect(c.net).toBe(50);
+  });
+  it("returns a negative net when more is called than returned", () => {
+    const c = netCashflow(
+      activity({ contributionsTotal: 200, distributionsTotal: 50 }),
+    );
+    expect(c.net).toBe(-150);
   });
 });

@@ -13,11 +13,14 @@
 // them.
 import * as React from "react";
 import { createServerClient } from "@/lib/supabase/server";
+import { portfolioSeries } from "@/lib/valuation-series";
+import type { SeriesPoint, MarkLike } from "@/lib/valuation-series";
 import type {
   Fund,
   Asset,
   CapitalEvent,
   Commitment,
+  ValuationMark,
 } from "@/lib/supabase/database.types";
 
 // React's per-request `cache` is provided by the Next.js runtime; fall back to
@@ -63,6 +66,23 @@ export interface LpCapitalActivity {
   distributionsTotal: number;
 }
 
+/** A single fund's per-fund capital line for the LP breakdown table. */
+export interface LpFundRow {
+  id: string;
+  name: string;
+  committed: number;
+  called: number;
+  distributed: number;
+  currency: string;
+}
+
+/** Contributions vs. distributions net, derived from capital activity. */
+export interface LpCashflow {
+  contributionsTotal: number;
+  distributionsTotal: number;
+  net: number;
+}
+
 export interface LpReport {
   period: string;
   generatedAt: string;
@@ -71,6 +91,10 @@ export interface LpReport {
   multiples: LpMultiples;
   holdings: LpHolding[];
   activity: LpCapitalActivity;
+  /** Portfolio NAV over time, derived from valuation marks (best-effort). */
+  navSeries: SeriesPoint[];
+  /** Per-fund capital breakdown rows. */
+  funds: LpFundRow[];
   hasData: boolean;
 }
 
@@ -200,6 +224,36 @@ export function summarizeActivity(events: CapitalEvent[]): LpCapitalActivity {
   };
 }
 
+/**
+ * Map fund rows into per-fund breakdown rows (name, committed, called,
+ * distributed, currency). Each fund defaults its own currency to USD.
+ */
+export function fundBreakdown(funds: Fund[]): LpFundRow[] {
+  return funds.map((f) => ({
+    id: f.id,
+    name: f.name,
+    committed: f.committed_capital ?? 0,
+    called: f.called_capital ?? 0,
+    distributed: f.distributed_capital ?? 0,
+    currency: f.currency || "USD",
+  }));
+}
+
+/**
+ * Net cashflow from capital activity: contributions in, distributions out, and
+ * the net (distributions − contributions). Positive net means more cash returned
+ * to LPs than called.
+ */
+export function netCashflow(activity: LpCapitalActivity): LpCashflow {
+  const contributionsTotal = activity.contributionsTotal ?? 0;
+  const distributionsTotal = activity.distributionsTotal ?? 0;
+  return {
+    contributionsTotal,
+    distributionsTotal,
+    net: distributionsTotal - contributionsTotal,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Aggregator (I/O)
 // ---------------------------------------------------------------------------
@@ -238,6 +292,8 @@ export const getLpReport = cache(async (orgId: string): Promise<LpReport> => {
       distributionsCount: 0,
       distributionsTotal: 0,
     },
+    navSeries: [],
+    funds: [],
     hasData: false,
   };
 
@@ -255,6 +311,25 @@ export const getLpReport = cache(async (orgId: string): Promise<LpReport> => {
     const funds = (fundsRes.data ?? []) as Fund[];
     const assets = (assetsRes.data ?? []) as Asset[];
     const events = (eventsRes.data ?? []) as CapitalEvent[];
+
+    // NAV-over-time from the valuation-marks audit trail. Best-effort: a read
+    // failure (or missing table) degrades to an empty series, never throws.
+    let navSeries: SeriesPoint[] = [];
+    try {
+      const marksRes = await supabase
+        .from("valuation_marks")
+        .select("*")
+        .eq("organization_id", orgId);
+      const marks = (marksRes.data ?? []) as ValuationMark[];
+      const markLikes: MarkLike[] = marks.map((m) => ({
+        asset_id: m.asset_id,
+        as_of: m.as_of,
+        value: m.value,
+      }));
+      navSeries = portfolioSeries(assets, markLikes);
+    } catch {
+      navSeries = [];
+    }
 
     const roll = rollupFunds(funds);
     const holdings = holdingsRows(assets);
@@ -290,6 +365,8 @@ export const getLpReport = cache(async (orgId: string): Promise<LpReport> => {
       multiples,
       holdings,
       activity,
+      navSeries,
+      funds: fundBreakdown(funds),
       hasData,
     };
   } catch {

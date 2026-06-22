@@ -6,7 +6,13 @@
 // the action row, which is hidden on print. Imports ONLY types from the
 // aggregator, so it never transitively pulls in the Supabase server client.
 import { PrintButton } from "@/components/PrintButton";
+import { Sparkline } from "@/components/execute/Sparkline";
+import { DraftLpUpdateButton } from "@/components/reports/DraftLpUpdateButton";
 import type { LpReport as LpReportData } from "@/lib/lp-report";
+
+// Net cashflow (distributions − contributions) for the activity net row.
+const netCashflow = (a: LpReportData["activity"]) =>
+  (a.distributionsTotal ?? 0) - (a.contributionsTotal ?? 0);
 
 // Whole-dollar USD formatter for the report figures.
 const usd = (n: number): string =>
@@ -64,12 +70,14 @@ function StatCard({
 }
 
 export function LpReport({ report }: { report: LpReportData }) {
-  const { capital, multiples, holdings, activity } = report;
+  const { capital, multiples, holdings, activity, navSeries, funds } = report;
+  const net = netCashflow(activity);
 
   return (
     <div className="rounded-xl border border-line bg-surface-0 p-6 sm:p-8">
       {/* Action row — hidden on print */}
-      <div className="mb-4 flex justify-end print:hidden">
+      <div className="mb-4 flex items-start justify-end gap-3 print:hidden">
+        <DraftLpUpdateButton period={report.period} />
         <PrintButton label="Print / Export report" />
       </div>
 
@@ -113,6 +121,77 @@ export function LpReport({ report }: { report: LpReportData }) {
               <StatCard label="Uncalled" value={usd(capital.uncalled)} />
             </div>
           </section>
+
+          {/* Portfolio NAV over time */}
+          {navSeries.length > 0 && (
+            <section className="mt-6">
+              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                Portfolio NAV over time
+              </h2>
+              <div className="rounded-lg border border-line bg-surface-1 p-4">
+                <div className="flex items-baseline justify-between">
+                  <Eyebrow>NAV trend</Eyebrow>
+                  <span className="font-display text-xl font-semibold tracking-tight text-gold-300">
+                    {usd(navSeries[navSeries.length - 1].value)}
+                  </span>
+                </div>
+                <Sparkline
+                  values={navSeries.map((p) => p.value)}
+                  className="mt-3 h-10 w-full"
+                />
+              </div>
+            </section>
+          )}
+
+          {/* Per-fund breakdown */}
+          {funds.length > 0 && (
+            <section className="mt-6">
+              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                Per-fund Breakdown
+              </h2>
+              <div className="overflow-x-auto rounded-lg border border-line">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-surface-2">
+                    <tr className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                      <th className="px-4 py-2 font-normal">Fund</th>
+                      <th className="px-4 py-2 text-right font-normal">
+                        Committed
+                      </th>
+                      <th className="px-4 py-2 text-right font-normal">
+                        Called
+                      </th>
+                      <th className="px-4 py-2 text-right font-normal">
+                        Distributed
+                      </th>
+                      <th className="px-4 py-2 font-normal">Currency</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {funds.map((f) => (
+                      <tr
+                        key={f.id}
+                        className="border-t border-line text-fg-secondary"
+                      >
+                        <td className="px-4 py-2 text-fg-primary">{f.name}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          {usd(f.committed)}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          {usd(f.called)}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums text-emerald-400">
+                          {usd(f.distributed)}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                          {f.currency}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* Performance multiples */}
           <section className="mt-6">
@@ -212,6 +291,16 @@ export function LpReport({ report }: { report: LpReportData }) {
                     {usd(activity.distributionsTotal)}
                   </div>
                 </div>
+              </div>
+              <div className="mt-3 flex items-baseline justify-between rounded-lg border border-line bg-surface-2 px-4 py-3">
+                <Eyebrow>Net cashflow (distributions − contributions)</Eyebrow>
+                <span
+                  className={`font-display text-lg font-semibold tracking-tight ${
+                    net >= 0 ? "text-emerald-400" : "text-status-danger"
+                  }`}
+                >
+                  {usd(net)}
+                </span>
               </div>
             </section>
           )}
