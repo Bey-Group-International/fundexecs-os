@@ -7,6 +7,7 @@ import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 import { routingFromTask, cursorResponse, routingHeadline, EXECUTIVE_LABEL, type TargetEngine } from "@/lib/intelligence";
+import { splitPositions, type SplitPosition } from "@/lib/split-grouping";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import {
   EARN_MODELS,
@@ -631,6 +632,12 @@ export default function Copilot({
       stage: b.workflow.lifecycle_stage,
     }).target_engine;
 
+  // Split prompts: when the Intelligence Layer fans one prompt out into several
+  // sibling workflows, they share a non-null prompt_id. Map each such workflow
+  // to its "N of M" position so the card/rail can flag the split. Singletons and
+  // null prompt_ids get no entry (and thus no chip).
+  const splitOf = splitPositions(bundles.map((b) => b.workflow));
+
   // Engines present across the conversation — drives the filter chips.
   const enginesPresent = Array.from(new Set(bundles.map(engineOf)));
   const visibleBundles = engineFilter ? bundles.filter((b) => engineOf(b) === engineFilter) : bundles;
@@ -785,6 +792,7 @@ export default function Copilot({
       agents: b.steps.map((s) => s.assigned_agent),
       stage: b.workflow.lifecycle_stage,
     });
+    const split = splitOf.get(b.workflow.id) ?? null;
     return (
       <div key={b.workflow.id} className="flex flex-col gap-2">
         <div className="flex justify-end gap-3">
@@ -818,6 +826,11 @@ export default function Copilot({
             <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
               {routingHeadline(routing)}
             </p>
+            {split ? (
+              <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                Split · {split.index} of {split.total}
+              </p>
+            ) : null}
             <div className="mt-2 flex items-center gap-2">
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
                 <div
@@ -986,6 +999,7 @@ export default function Copilot({
               busy={busy}
               decide={decide}
               liveSteps={liveSteps}
+              split={splitOf.get(focusedBundle.workflow.id) ?? null}
               primary={focusedBundle.approval?.decision === "pending"}
               clarifying={clarifying}
               clarify={clarify?.workflowId === focusedBundle.workflow.id ? clarify : null}
@@ -1644,6 +1658,7 @@ function WorkflowCard({
   busy,
   decide,
   liveSteps,
+  split,
   primary,
   clarifying,
   clarify,
@@ -1656,6 +1671,9 @@ function WorkflowCard({
   decide: (id: string, d: "approved" | "rejected" | "regenerate" | "accepted", note?: string) => void;
   // Live step states streamed during this workflow's "approved" run.
   liveSteps?: Record<string, "in_progress" | "completed">;
+  // This workflow's position within its split-prompt group, when it has siblings
+  // (the engine fanned one prompt into several). null = not part of a split.
+  split?: SplitPosition | null;
   primary?: boolean;
   clarifying: boolean;
   clarify: { questions: string[]; answer: string } | null;
@@ -1692,12 +1710,23 @@ function WorkflowCard({
         </div>
       </div>
 
-      {/* Routing badge — where the Intelligence Layer sent the work. */}
-      <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
-        <span className="truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
-          {routingHeadline(routing)}
+      {/* Routing badge — where the Intelligence Layer sent the work — plus, when
+          this prompt was split into siblings, a "Split · N of M" chip. */}
+      <div className="mt-3 flex max-w-full flex-wrap items-center gap-2">
+        <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
+          <span className="truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
+            {routingHeadline(routing)}
+          </span>
         </span>
+        {split ? (
+          <span
+            className="inline-flex shrink-0 items-center rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300"
+            title="This workflow was split from one request into sibling workflows"
+          >
+            Split · {split.index} of {split.total}
+          </span>
+        ) : null}
       </div>
 
       {/* Cursor-style response: Summary / Action / Output / Next Step. */}
