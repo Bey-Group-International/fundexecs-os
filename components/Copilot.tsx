@@ -872,9 +872,18 @@ export default function Copilot({
                 {STATUS_LABEL[b.workflow.status] ?? b.workflow.status}
               </span>
             </div>
-            <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
-              {routingHeadline(routing)}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <p className="min-w-0 truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
+                {routingHeadline(routing)}
+              </p>
+              {/* Low-confidence (hub-default) routes get a muted glance-worthy pill,
+                  mirroring the Execution Grid's low-confidence idiom. */}
+              {routing.confidence === "low" ? (
+                <span className="shrink-0 rounded-full border border-line/60 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  ~ low-confidence
+                </span>
+              ) : null}
+            </div>
             {split ? (
               <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
                 Split · {split.index} of {split.total}
