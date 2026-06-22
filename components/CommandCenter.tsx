@@ -5,11 +5,18 @@ import { buildNBAList } from "@/lib/next-best-action";
 import { buildInsights, IntelligenceStrip } from "@/components/IntelligenceStrip";
 import { NextBestAction } from "@/components/NextBestAction";
 import { createServerClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth";
 
 export async function CommandCenter() {
   const supabase = createServerClient();
+  const ctx = await getSessionContext();
+  const organizationId = ctx?.orgId;
 
-  const scores = await buildRelationshipScores(supabase);
+  if (!organizationId) {
+    return null;
+  }
+
+  const scores = await buildRelationshipScores(supabase, organizationId);
   const decayAlerts = extractDecayAlerts(scores);
   const nbaItems = buildNBAList(decayAlerts, scores, { maxItems: 5 });
 
