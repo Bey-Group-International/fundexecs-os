@@ -134,10 +134,9 @@ async function materializePlan(
     workflow = data as Task;
   }
 
-  // Steps as child tasks.
-  for (let i = 0; i < plan.steps.length; i++) {
-    const step = plan.steps[i];
-    await ctx.supabase.from("tasks").insert({
+  // Steps as child tasks — batch insert in one round trip.
+  await ctx.supabase.from("tasks").insert(
+    plan.steps.map((step, i) => ({
       organization_id: ctx.orgId,
       parent_task_id: workflow.id,
       title: step.title,
@@ -149,8 +148,8 @@ async function materializePlan(
       requires_approval: false,
       created_by: ctx.actorId,
       step_order: i + 1,
-    });
-  }
+    })),
+  );
 
   await recordEvent(ctx, {
     taskId: workflow.id,
@@ -373,17 +372,16 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
 
   for (let i = 0; i < list.length; i++) {
     const step = list[i];
-    await ctx.supabase
-      .from("tasks")
-      .update({ status: "in_progress", progress: 0.5 })
-      .eq("id", step.id);
-    await recordEvent(ctx, {
-      taskId: workflow.id,
-      type: "task.progress",
-      agent: step.assigned_agent,
-      hub: step.hub,
-      payload: { step_id: step.id, message: `${step.title}…`, active_step: step.step_order },
-    });
+    await Promise.all([
+      ctx.supabase.from("tasks").update({ status: "in_progress", progress: 0.5 }).eq("id", step.id),
+      recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "task.progress",
+        agent: step.assigned_agent,
+        hub: step.hub,
+        payload: { step_id: step.id, message: `${step.title}…`, active_step: step.step_order },
+      }),
+    ]);
 
     const output = await executeStep({
       workflowTitle: workflow.title,
@@ -412,54 +410,50 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
 
     priorOutputs.push(`${step.title}:\n${output}`);
 
-    await ctx.supabase
-      .from("tasks")
-      .update({
-        status: "completed",
-        progress: 1,
-        completed_at: new Date().toISOString(),
-        result: { output } as Json,
-      })
-      .eq("id", step.id);
-
-    // Promote the step output to a first-class, typed artifact.
     const artifactType = classifyArtifact(step.assigned_agent, step.title);
-    const { data: artifact } = await ctx.supabase
-      .from("artifacts")
-      .insert({
-        organization_id: ctx.orgId,
-        workflow_id: workflow.id,
-        step_id: step.id,
-        title: step.title,
-        artifact_type: artifactType,
-        agent: step.assigned_agent,
-        hub: step.hub,
-        content: output,
-        created_by: ctx.actorId,
-      })
-      .select("id")
-      .single();
+    const [, { data: artifact }] = await Promise.all([
+      ctx.supabase
+        .from("tasks")
+        .update({ status: "completed", progress: 1, completed_at: new Date().toISOString(), result: { output } as Json })
+        .eq("id", step.id),
+      ctx.supabase
+        .from("artifacts")
+        .insert({
+          organization_id: ctx.orgId,
+          workflow_id: workflow.id,
+          step_id: step.id,
+          title: step.title,
+          artifact_type: artifactType,
+          agent: step.assigned_agent,
+          hub: step.hub,
+          content: output,
+          created_by: ctx.actorId,
+        })
+        .select("id")
+        .single(),
+    ]);
     if (artifact?.id) artifactIds.push(artifact.id);
 
-    await recordEvent(ctx, {
-      taskId: workflow.id,
-      type: "task.completed",
-      agent: step.assigned_agent,
-      hub: step.hub,
-      payload: { step_id: step.id, message: `${step.title} — done` },
-    });
-    await recordEvent(ctx, {
-      taskId: workflow.id,
-      type: "artifact.created",
-      agent: step.assigned_agent,
-      hub: step.hub,
-      payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title },
-    });
-
-    await ctx.supabase
-      .from("tasks")
-      .update({ progress: (i + 1) / Math.max(list.length, 1) })
-      .eq("id", workflow.id);
+    await Promise.all([
+      recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "task.completed",
+        agent: step.assigned_agent,
+        hub: step.hub,
+        payload: { step_id: step.id, message: `${step.title} — done` },
+      }),
+      recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "artifact.created",
+        agent: step.assigned_agent,
+        hub: step.hub,
+        payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title },
+      }),
+      ctx.supabase
+        .from("tasks")
+        .update({ progress: (i + 1) / Math.max(list.length, 1) })
+        .eq("id", workflow.id),
+    ]);
   }
 
   // Turn the finished work into a structured record (Deal / Asset).

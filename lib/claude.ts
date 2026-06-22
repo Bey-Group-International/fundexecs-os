@@ -198,7 +198,7 @@ export async function generatePlan(
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 2000,
-      system: PLAN_SYSTEM,
+      system: [{ type: "text", text: PLAN_SYSTEM, cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: { type: "json_schema", schema: PLAN_SCHEMA } },
       messages: [...history, { role: "user", content: prompt }],
     });
@@ -228,12 +228,13 @@ const QUESTIONS_SCHEMA = {
 export async function generateClarifyingQuestions(prompt: string): Promise<string[]> {
   const anthropic = client();
   if (!anthropic) return [];
+  const CLARIFY_SYSTEM =
+    "You are Earn, the command layer of FundExecs OS. Before executing an operator's request, ask only the clarifying questions that materially change the work (scope, constraints, targets, definitions). Ask nothing if the request is already actionable. Never ask more than 3. Keep each question to one short sentence.";
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 600,
-      system:
-        "You are Earn, the command layer of FundExecs OS. Before executing an operator's request, ask only the clarifying questions that materially change the work (scope, constraints, targets, definitions). Ask nothing if the request is already actionable. Never ask more than 3. Keep each question to one short sentence.",
+      system: [{ type: "text", text: CLARIFY_SYSTEM, cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: { type: "json_schema", schema: QUESTIONS_SCHEMA } },
       messages: [{ role: "user", content: prompt }],
     });
@@ -358,7 +359,7 @@ export async function extractDealFields(args: {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 600,
-      system: EXTRACT_SYSTEM,
+      system: [{ type: "text", text: EXTRACT_SYSTEM, cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: { type: "json_schema", schema: DEAL_FIELDS_SCHEMA } },
       messages: [{ role: "user", content: extractContent(args) }],
     });
@@ -388,7 +389,7 @@ export async function extractAssetFields(args: {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 600,
-      system: EXTRACT_SYSTEM,
+      system: [{ type: "text", text: EXTRACT_SYSTEM, cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: { type: "json_schema", schema: ASSET_FIELDS_SCHEMA } },
       messages: [{ role: "user", content: extractContent(args) }],
     });
