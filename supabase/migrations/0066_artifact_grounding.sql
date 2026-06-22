@@ -1,4 +1,4 @@
--- 0065_artifact_grounding.sql
+-- 0066_artifact_grounding.sql
 -- Trust layer, phase 2: the automated half of "verified". Alongside the cited
 -- `sources` (migration 0063), every artifact now carries an aggregate
 -- `grounding_score` in [0,1] — how much of the output actually reflects the
