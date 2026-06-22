@@ -204,6 +204,23 @@ const PLAN_SCHEMA = {
   required: ["title", "hub", "lifecycle_stage", "summary", "steps"],
 } as const;
 
+// Multi-intent: a prompt may span several DISTINCT lifecycle stages that should
+// be executed and approved independently (e.g. "underwrite the deal AND draft
+// the LP update"). The planner returns 1-3 workflows; one is the common case.
+const PLANS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    workflows: {
+      type: "array",
+      description:
+        "1-3 workflows. Return ONE unless the request clearly spans different lifecycle stages that warrant separate, independently-approved workflows. Never split a single cohesive task.",
+      items: PLAN_SCHEMA,
+    },
+  },
+  required: ["workflows"],
+} as const;
+
 const PLAN_SYSTEM = `You are Earn — the command layer of FundExecs OS, an AI operating system for private-market operators (PE funds, family offices, real estate, private credit).
 Given an operator's prompt, produce a concise multi-step plan. Delegate each step to the single most appropriate agent:
 - analyst: deal data, pro formas, valuations, LBO/DCF models, sensitivities, underwriting
@@ -223,6 +240,11 @@ Given an operator's prompt, produce a concise multi-step plan. Delegate each ste
 - curator: private investor event design, capital formation salons, room curation, relationship follow-up
 Choose the hub (build/source/run/execute) that best fits the work. Keep to 2-4 steps. Titles are short and imperative.
 Also classify the request into exactly one lifecycle_stage from the provided enum — the private-markets stage the work belongs to (e.g. Sourcing, Diligence, Underwriting, IC Preparation, Fundraising & LP Engagement, Compliance & Documentation, Portfolio Monitoring). This drives which execution engine the work is routed to.`;
+
+const PLANS_SYSTEM = `${PLAN_SYSTEM}
+
+You may return MULTIPLE workflows, but only when the operator's message clearly bundles work across DIFFERENT lifecycle stages that are best executed and approved separately — for example "underwrite the deal and draft the LP update" (Underwriting + Reporting & Communications), or "build the diligence pack, then prep the IC memo" (Diligence + IC Preparation). Each workflow must have a distinct lifecycle_stage and its summary should describe just its slice of the request.
+Default to ONE workflow. Do NOT split a single cohesive task into pieces, and never return more than 3 workflows. When in doubt, return one.`;
 
 function textOf(message: Anthropic.Message): string {
   return message.content
@@ -286,6 +308,55 @@ export async function generatePlan(
     return normalizePlan(json ? (JSON.parse(json) as AgentPlan) : null, prompt);
   } catch {
     return fallbackPlan(prompt);
+  }
+}
+
+/**
+ * Normalize a multi-workflow planner response into 1-3 plans. Conservative: it
+ * de-duplicates by lifecycle stage (two workflows with the same stage aren't a
+ * genuine split) and falls back to a single plan when nothing valid comes back.
+ */
+export function normalizePlans(raw: { workflows?: unknown } | null, prompt: string): AgentPlan[] {
+  const arr = raw && Array.isArray(raw.workflows) ? raw.workflows : null;
+  if (!arr || arr.length === 0) return [fallbackPlan(prompt)];
+  const seen = new Set<string>();
+  const plans: AgentPlan[] = [];
+  for (const w of arr) {
+    const plan = normalizePlan(w as Partial<AgentPlan>, prompt);
+    if (seen.has(plan.lifecycle_stage)) continue; // collapse same-stage duplicates
+    seen.add(plan.lifecycle_stage);
+    plans.push(plan);
+    if (plans.length === 3) break; // hard cap
+  }
+  return plans.length ? plans : [fallbackPlan(prompt)];
+}
+
+/**
+ * Plan a prompt into one OR MORE workflows. Returns a single plan in the common
+ * case; multiple only when the request spans distinct lifecycle stages. Holds in
+ * fallback mode (no API key) by returning a single deterministic plan.
+ */
+export async function generatePlans(
+  prompt: string,
+  priorContext: string[] = [],
+): Promise<AgentPlan[]> {
+  const anthropic = client();
+  if (!anthropic) return [fallbackPlan(prompt)];
+  const history = priorContext
+    .slice(-6)
+    .map((turn) => ({ role: "user" as const, content: turn }));
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 3000,
+      system: [{ type: "text", text: PLANS_SYSTEM, cache_control: { type: "ephemeral" } }],
+      output_config: { effort: "low", format: { type: "json_schema", schema: PLANS_SCHEMA } },
+      messages: [...history, { role: "user", content: prompt }],
+    });
+    const json = textOf(message);
+    return normalizePlans(json ? (JSON.parse(json) as { workflows?: unknown }) : null, prompt);
+  } catch {
+    return [fallbackPlan(prompt)];
   }
 }
 

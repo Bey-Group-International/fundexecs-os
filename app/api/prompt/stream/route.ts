@@ -1,6 +1,6 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
-import { planPrompt, materializePrompt } from "@/lib/engine";
+import { planPrompts, materializePrompts } from "@/lib/engine";
 
 // Plan generation calls Claude; give it room beyond the default.
 export const maxDuration = 60;
@@ -40,10 +40,12 @@ export async function POST(request: Request) {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
       try {
         send({ type: "planning" });
-        const plan = await planPrompt(ctx, body, sessionId);
-        send({ type: "plan", plan });
-        const { session_id: sid, workflow } = await materializePrompt(ctx, body, plan, sessionId);
-        send({ type: "ready", session_id: sid, workflow_id: workflow.id });
+        const plans = await planPrompts(ctx, body, sessionId);
+        // Reveal the primary plan in the canvas; `split` tells the client more
+        // than one workflow was routed (the rest load with the session).
+        send({ type: "plan", plan: plans[0], plans, split: plans.length > 1 });
+        const { session_id: sid, workflows } = await materializePrompts(ctx, body, plans, sessionId);
+        send({ type: "ready", session_id: sid, workflow_id: workflows[0]?.workflow.id, split: plans.length > 1 });
       } catch {
         send({ type: "error" });
       } finally {

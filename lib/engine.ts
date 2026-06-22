@@ -8,7 +8,7 @@
 import { createServerClient } from "@/lib/supabase/server";
 import type { AgentKey, Hub, GraphKind, ArtifactType, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
-import { generatePlan, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
+import { generatePlan, generatePlans, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
 import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
@@ -345,69 +345,109 @@ async function gatherActiveContext(ctx: Ctx, sessionId: string): Promise<string[
 /** POST /prompt — plan the prompt into a workflow awaiting approval. */
 // Draft the plan for a prompt (no writes). Split out so the streaming endpoint
 // can reveal the plan in the canvas before materializing it.
-export async function planPrompt(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan> {
-  // Inside an existing session, replay its earlier prompts so Earn plans the
-  // follow-up with the conversation in mind (oldest first), plus the active
-  // deal/asset so references like "the deal" resolve.
-  let priorContext: string[] = [];
-  if (sessionId) {
-    const { data: prior } = await ctx.supabase
-      .from("tasks")
-      .select("description")
-      .eq("session_id", sessionId)
-      .is("parent_task_id", null)
-      .order("created_at", { ascending: true });
-    const turns = ((prior ?? []) as { description: string | null }[])
-      .map((t) => t.description?.trim() ?? "")
-      .filter(Boolean);
-    const active = await gatherActiveContext(ctx, sessionId);
-    priorContext = [...active, ...turns];
-  }
-  return generatePlan(body, priorContext);
+// Inside an existing session, replay its earlier prompts so Earn plans the
+// follow-up with the conversation in mind (oldest first), plus the active
+// deal/asset so references like "the deal" resolve.
+async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[]> {
+  if (!sessionId) return [];
+  const { data: prior } = await ctx.supabase
+    .from("tasks")
+    .select("description")
+    .eq("session_id", sessionId)
+    .is("parent_task_id", null)
+    .order("created_at", { ascending: true });
+  const turns = ((prior ?? []) as { description: string | null }[])
+    .map((t) => t.description?.trim() ?? "")
+    .filter(Boolean);
+  const active = await gatherActiveContext(ctx, sessionId);
+  return [...active, ...turns];
 }
 
-// Persist a (pre-drafted) plan as a gated workflow — session, prompt row, and
-// the awaiting-approval workflow with its steps.
+export async function planPrompt(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan> {
+  return generatePlan(body, await gatherPriorContext(ctx, sessionId));
+}
+
+// Multi-intent: plan a prompt into one OR MORE workflows. Returns a single plan
+// in the common case; multiple only when the request spans distinct lifecycle
+// stages that should be executed and approved independently.
+export async function planPrompts(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan[]> {
+  return generatePlans(body, await gatherPriorContext(ctx, sessionId));
+}
+
+// Persist a single (pre-drafted) plan as a gated workflow. Thin wrapper over
+// materializePrompts so the single-workflow path can't drift from the multi one.
 export async function materializePrompt(ctx: Ctx, body: string, plan: AgentPlan, sessionId?: string) {
-  // Sessions are the first step in operations: an Earn prompt opens a session
-  // (named from the prompt) unless one was already provided.
-  const session = sessionId ?? (await createSession(ctx, { name: plan.title || body, origin: "earn" }));
+  const { workflows, session_id } = await materializePrompts(ctx, body, [plan], sessionId);
+  const primary = workflows[0];
+  return { workflow: primary.workflow, approval_id: primary.approval_id, session_id };
+}
 
-  // Intelligence Layer: the plan already carries the authoritative lifecycle
-  // stage (classified in the same call); build the structured routing object
-  // from it so persisted routing matches the plan exactly (section 6).
-  const routing = buildRouting({
-    prompt: body,
-    hub: plan.hub,
-    agents: plan.steps.map((s) => s.agent),
-    stage: plan.lifecycle_stage,
-  });
+/**
+ * Materialize one OR MORE plans into independent sibling workflows in a single
+ * session. Each workflow keeps its own approval gate and engine routing (the
+ * spec's "split and route independently"). One prompt row records the original
+ * message; each split workflow's description is its own slice (the plan summary)
+ * so the cards read distinctly rather than repeating the full prompt.
+ */
+export async function materializePrompts(ctx: Ctx, body: string, plans: AgentPlan[], sessionId?: string) {
+  const session = sessionId ?? (await createSession(ctx, { name: plans[0]?.title || body, origin: "earn" }));
+  const split = plans.length > 1;
 
+  const routings = plans.map((plan) =>
+    buildRouting({
+      prompt: body,
+      hub: plan.hub,
+      agents: plan.steps.map((s) => s.agent),
+      stage: plan.lifecycle_stage,
+    }),
+  );
+
+  // One prompt row for the operator's message; parsed_intent carries every
+  // routed workflow so the split is auditable.
   const { data: prompt } = await ctx.supabase
     .from("prompts")
     .insert({
       organization_id: ctx.orgId,
       principal_id: ctx.actorId,
       body,
-      routed_hub: plan.hub,
-      routed_agent: plan.steps[0]?.agent ?? "associate",
-      parsed_intent: { ...plan, routing } as unknown as Json,
+      routed_hub: plans[0]?.hub ?? "run",
+      routed_agent: plans[0]?.steps[0]?.agent ?? "associate",
+      parsed_intent: {
+        split,
+        workflows: plans.map((plan, i) => ({ ...plan, routing: routings[i] })),
+      } as unknown as Json,
     })
     .select("id")
     .single();
 
-  const { workflow, approvalId } = await materializePlan(ctx, body, plan, {
-    promptId: prompt?.id ?? null,
-    sessionId: session,
-  });
+  const workflows = [];
+  for (const plan of plans) {
+    const { workflow, approvalId } = await materializePlan(
+      ctx,
+      split ? plan.summary || plan.title : body,
+      plan,
+      { promptId: prompt?.id ?? null, sessionId: session },
+    );
+    workflows.push({ plan, workflow, approval_id: approvalId });
+  }
 
-  return { workflow, approval_id: approvalId, session_id: session };
+  return { workflows, session_id: session, split };
 }
 
 export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
-  const plan = await planPrompt(ctx, body, sessionId);
-  const rest = await materializePrompt(ctx, body, plan, sessionId);
-  return { plan, ...rest };
+  const plans = await planPrompts(ctx, body, sessionId);
+  const { workflows, session_id, split } = await materializePrompts(ctx, body, plans, sessionId);
+  const primary = workflows[0];
+  // Keep the original single-workflow contract (plan/workflow/approval_id) for
+  // existing callers; expose the full set + split flag for richer consumers.
+  return {
+    plan: primary?.plan,
+    workflow: primary?.workflow,
+    approval_id: primary?.approval_id ?? null,
+    workflows,
+    split,
+    session_id,
+  };
 }
 
 /** Run every step of an approved workflow, each producing a deliverable. */
