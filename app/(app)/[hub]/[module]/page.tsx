@@ -12,6 +12,9 @@ const SourceSearch = nextDynamic(() =>
 const SourceTriage = nextDynamic(() =>
   import("@/components/source/SourceTriage").then((m) => m.SourceTriage),
 );
+const OwnershipIntel = nextDynamic(() =>
+  import("@/components/source/OwnershipIntel").then((m) => m.OwnershipIntel),
+);
 const SourcingIntel = nextDynamic(() =>
   import("@/components/source/SourcingIntel").then((m) => m.SourcingIntel),
 );
@@ -52,6 +55,9 @@ export default function ModulePage({
   }
   if (params.hub === "source" && params.module === "triage") {
     return <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />;
+  }
+  if (params.hub === "source" && params.module === "buyers") {
+    return <OwnershipIntel live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "source" && params.module === "intel") {
     return <SourcingIntel live={sourcingLive()} initialPrompt={initialPrompt} />;

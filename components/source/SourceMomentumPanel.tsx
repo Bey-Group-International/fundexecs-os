@@ -179,6 +179,12 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
             >
               ✶ Signals
             </Link>
+            <Link
+              href="/source/buyers"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            >
+              ✶ Buyers
+            </Link>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
 

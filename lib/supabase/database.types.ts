@@ -846,6 +846,45 @@ export type InboxMessage = {
   created_at: string;
 };
 
+// Ownership & Buyer Intelligence (migration 0056). The M&A side of the market on
+// top of the sourcing catalog (0042) + deals: who-bought-whom history and the
+// likely-buyer / add-on lists ranked by lib/ownership-intel.ts. Both org-scoped.
+export type Acquisition = {
+  id: string;
+  organization_id: string;
+  acquirer_name: string;
+  target_name: string;
+  acquirer_entity_id: string | null;
+  target_entity_id: string | null;
+  announced_on: string | null;
+  price_amount: number | null;
+  currency: string;
+  structure: string | null; // 'majority' | 'minority' | 'add_on' | 'merger' | 'asset' | 'recap'
+  sector: string | null;
+  source_url: string | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type BuyerProfile = {
+  id: string;
+  organization_id: string;
+  name: string;
+  entity_id: string | null;
+  buyer_type: string | null; // 'strategic' | 'financial' | 'pe' | 'family_office' | 'search_fund'
+  thesis: string | null;
+  sectors: string[];
+  geographies: string[];
+  check_min: number | null;
+  check_max: number | null;
+  appetite: number | null;
+  source_url: string | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+};
+
 // The Sourcing Intelligence catalog (migration 0042). A first-party, embedded
 // entity store powering semantic discovery + lookalike search. `embedding` is the
 // pgvector column surfaced as the text literal "[..]" the client sends; cosine
@@ -1162,6 +1201,8 @@ export type Database = {
       source_feedback: TableShape<SourceFeedback>;
       sourcing_entities: TableShape<SourcingEntity>;
       entity_signals: TableShape<EntitySignal>;
+      acquisitions: TableShape<Acquisition>;
+      buyer_profiles: TableShape<BuyerProfile>;
       operator_feedback: TableShape<OperatorFeedback>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
