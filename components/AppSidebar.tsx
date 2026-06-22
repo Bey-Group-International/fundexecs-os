@@ -94,10 +94,10 @@ function MenuButton({ children, onClick }: { children: ReactNode; onClick?: () =
 
 interface SessionRowProps {
   s: SessionItem;
-  pathname: string;
-  renamingId: string | null;
+  isActive: boolean;
+  isRenaming: boolean;
   setRenamingId: (id: string | null) => void;
-  menuId: string | null;
+  isMenuOpen: boolean;
   setMenuId: (id: string | null) => void;
   moveOpen: boolean;
   setMoveOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -114,10 +114,10 @@ interface SessionRowProps {
 
 const SessionRow = memo(function SessionRow({
   s,
-  pathname,
-  renamingId,
+  isActive,
+  isRenaming,
   setRenamingId,
-  menuId,
+  isMenuOpen,
   setMenuId,
   moveOpen,
   setMoveOpen,
@@ -131,8 +131,6 @@ const SessionRow = memo(function SessionRow({
   deleteSessionAction,
   moveSessionAction,
 }: SessionRowProps) {
-  const active = pathname === `/session/${s.id}`;
-
   function copyLink(id: string) {
     try {
       void navigator.clipboard.writeText(`${window.location.origin}/session/${id}`);
@@ -141,7 +139,7 @@ const SessionRow = memo(function SessionRow({
     }
   }
 
-  if (renamingId === s.id) {
+  if (isRenaming) {
     return (
       <form
         action={renameSessionAction}
@@ -262,7 +260,7 @@ const SessionRow = memo(function SessionRow({
         href={`/session/${s.id}`}
         title={s.name}
         className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 pl-4 transition ${
-          active
+          isActive
             ? "bg-surface-2 text-fg-primary"
             : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
         }`}
@@ -295,7 +293,7 @@ const SessionRow = memo(function SessionRow({
         type="button"
         onClick={() => {
           setMoveOpen(false);
-          setMenuId(menuId === s.id ? null : s.id);
+          setMenuId(isMenuOpen ? null : s.id);
         }}
         aria-label="Session actions"
         title="Session actions"
@@ -304,7 +302,7 @@ const SessionRow = memo(function SessionRow({
         ⋯
       </button>
 
-      {menuId === s.id ? (
+      {isMenuOpen ? (
         <div className="absolute right-1 top-full z-10 mt-0.5 flex w-44 flex-col gap-0.5 rounded-lg border border-line bg-surface-1 p-1.5 shadow-2xl">
           {menuItems}
         </div>
@@ -560,12 +558,12 @@ export function AppSidebar({
                         <SessionRow
                           key={s.id}
                           s={s}
-                          pathname={pathname}
-                          renamingId={renamingId}
+                          isActive={pathname === `/session/${s.id}`}
+                          isRenaming={renamingId === s.id}
                           setRenamingId={setRenamingId}
-                          menuId={menuId}
+                          isMenuOpen={menuId === s.id}
                           setMenuId={setMenuId}
-                          moveOpen={moveOpen}
+                          moveOpen={menuId === s.id && moveOpen}
                           setMoveOpen={setMoveOpen}
                           groups={groups}
                           closeMenu={closeMenu}
