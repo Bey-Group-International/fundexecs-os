@@ -1441,7 +1441,7 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
                 <span className="font-mono uppercase text-fg-muted">{agent?.name}</span> · {step.description}
               </p>
               {output ? (
-                <ArtifactInline content={output} artifactType={artifact?.artifact_type} />
+                <ArtifactInline content={output} artifactType={artifact?.artifact_type} title={step.title} />
               ) : null}
             </div>
           </li>
