@@ -14,6 +14,7 @@ type ExecData = {
   bobDelay: string;
   wanderDelay: string;
   hint: string;
+  walkDuration: string;
 };
 
 type RoomData = {
@@ -68,6 +69,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0s",
     wanderDelay: "0s",
     hint: "Onboarding complete ✓",
+    walkDuration: "7s",
   },
   executiveAdvisor: {
     id: "executive-advisor",
@@ -79,6 +81,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.6s",
     wanderDelay: "1.2s",
     hint: "Market signal detected",
+    walkDuration: "8s",
   },
   dealSourcer: {
     id: "deal-sourcer",
@@ -90,6 +93,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.2s",
     wanderDelay: "0.5s",
     hint: "3 targets in pipeline",
+    walkDuration: "9s",
   },
   capitalRaiser: {
     id: "capital-raiser",
@@ -101,6 +105,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.8s",
     wanderDelay: "2.1s",
     hint: "Fund room ready",
+    walkDuration: "10s",
   },
   workflowInstructor: {
     id: "workflow-instructor",
@@ -112,6 +117,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.4s",
     wanderDelay: "0.9s",
     hint: "SOP updated",
+    walkDuration: "11s",
   },
   capitalConnector: {
     id: "capital-connector",
@@ -123,6 +129,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.4s",
     wanderDelay: "1.8s",
     hint: "Follow-up due",
+    walkDuration: "12s",
   },
   automater: {
     id: "automater",
@@ -134,6 +141,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.1s",
     wanderDelay: "0.3s",
     hint: "2 workflows ran today",
+    walkDuration: "13s",
   },
   rainmaker: {
     id: "rainmaker",
@@ -145,6 +153,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.5s",
     wanderDelay: "1.5s",
     hint: "High-value lead flagged",
+    walkDuration: "7.5s",
   },
   prDirector: {
     id: "pr-director",
@@ -156,6 +165,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0s",
     wanderDelay: "0.7s",
     hint: "Story opportunity",
+    walkDuration: "8.5s",
   },
   leadGenerator: {
     id: "lead-generator",
@@ -167,6 +177,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.3s",
     wanderDelay: "2.4s",
     hint: "12 leads captured",
+    walkDuration: "9.5s",
   },
   seoDisruptor: {
     id: "seo-disruptor",
@@ -178,6 +189,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.6s",
     wanderDelay: "1.1s",
     hint: "Rankings improved",
+    walkDuration: "10.5s",
   },
   curator: {
     id: "curator",
@@ -189,6 +201,7 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.9s",
     wanderDelay: "3.0s",
     hint: "Event scheduled",
+    walkDuration: "11.5s",
   },
   investorRelations: {
     id: "investor-relations",
@@ -200,6 +213,19 @@ const E: Record<string, ExecData> = {
     bobDelay: "0.3s",
     wanderDelay: "0.6s",
     hint: "LP update ready",
+    walkDuration: "12.5s",
+  },
+  officeManager: {
+    id: "office-manager",
+    name: "Office Manager",
+    shortName: "Manager",
+    sprite: "/assets/fundexecs/characters/office-manager/sprite.svg",
+    themeColor: "#94a3b8",
+    href: "/dashboard",
+    bobDelay: "0.1s",
+    wanderDelay: "0.2s",
+    hint: "All systems operational",
+    walkDuration: "9s",
   },
 };
 
@@ -256,7 +282,7 @@ const ROOMS: RoomData[] = [
     gridArea: "ops",
     accentColor: "#22c55e",
     monitorColor: "#86efac",
-    executives: [E.automater],
+    executives: [E.automater, E.officeManager],
   },
   {
     id: "legal",
@@ -332,14 +358,27 @@ function ExecAvatar({
   onClick,
   activeBubble,
   reducedEffects,
+  nightMode,
 }: {
   exec: ExecData;
   size: number;
   onClick: () => void;
   activeBubble: BubbleState;
   reducedEffects: boolean;
+  nightMode: boolean;
 }) {
   const showBubble = activeBubble?.execId === exec.id;
+
+  // Outer wrapper: walks left↔right across the room, flipping on turnaround
+  const walkAnim = reducedEffects
+    ? `exec-bob 2.6s ease-in-out infinite ${exec.bobDelay}`
+    : `exec-walk ${exec.walkDuration} linear infinite ${exec.wanderDelay}`;
+
+  // Inner image: step-bounce for foot-fall feel (2 steps per second)
+  const stepAnim = reducedEffects ? "none" : `exec-step 0.42s steps(2, end) infinite`;
+
+  // mix-blend-mode: screen removes dark backgrounds on dark map; multiply on light map
+  const blendMode = nightMode ? "screen" : "multiply";
 
   return (
     <button
@@ -355,11 +394,10 @@ function ExecAvatar({
         flexDirection: "column",
         alignItems: "center",
         gap: 1,
-        animation: reducedEffects
-          ? `exec-bob 2.6s ease-in-out infinite ${exec.bobDelay}`
-          : `exec-bob 2.6s ease-in-out infinite ${exec.bobDelay}, exec-wander 6s ease-in-out infinite ${exec.wanderDelay}`,
+        animation: walkAnim,
         position: "relative",
         zIndex: 4,
+        willChange: "transform",
       }}
     >
       {showBubble && (
@@ -372,7 +410,14 @@ function ExecAvatar({
         width={size}
         height={size}
         draggable={false}
-        style={{ imageRendering: "pixelated", display: "block", userSelect: "none" }}
+        style={{
+          imageRendering: "pixelated",
+          display: "block",
+          userSelect: "none",
+          animation: stepAnim,
+          mixBlendMode: blendMode,
+          filter: `drop-shadow(0 2px 6px ${exec.themeColor}88)`,
+        }}
       />
       <span
         style={{
@@ -401,6 +446,7 @@ function RoomCell({
   zoomingRoom,
   activeBubble,
   reducedEffects,
+  nightMode,
 }: {
   room: RoomData;
   roomIndex: number;
@@ -409,6 +455,7 @@ function RoomCell({
   zoomingRoom: string | null;
   activeBubble: BubbleState;
   reducedEffects: boolean;
+  nightMode: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const execCount = room.executives.length;
@@ -569,17 +616,18 @@ function RoomCell({
         </div>
       )}
 
-      {/* Exec avatars — bottom center */}
+      {/* Exec avatars — walk across the floor of the room */}
       <div
         style={{
           position: "absolute",
           bottom: 6,
-          left: "50%",
-          transform: "translateX(-50%)",
+          left: 0,
+          right: 0,
           zIndex: 4,
           display: "flex",
-          gap: execCount >= 4 ? 2 : 4,
+          justifyContent: "space-around",
           alignItems: "flex-end",
+          pointerEvents: "none",
         }}
       >
         {room.executives.map((exec) => (
@@ -590,6 +638,7 @@ function RoomCell({
             onClick={() => onExecClick(exec)}
             activeBubble={activeBubble}
             reducedEffects={reducedEffects}
+            nightMode={nightMode}
           />
         ))}
       </div>
@@ -710,11 +759,17 @@ export function ExecutiveHQ() {
           0%, 100% { transform: translateY(0px); }
           50%       { transform: translateY(-4px); }
         }
-        @keyframes exec-wander {
-          0%   { margin-left: 0px; }
-          25%  { margin-left: -4px; }
-          75%  { margin-left: 4px; }
-          100% { margin-left: 0px; }
+        @keyframes exec-walk {
+          0%        { transform: translateX(-38%) scaleX(1); }
+          49.9%     { transform: translateX(38%) scaleX(1); }
+          50%       { transform: translateX(38%) scaleX(-1); }
+          99.9%     { transform: translateX(-38%) scaleX(-1); }
+          100%      { transform: translateX(-38%) scaleX(1); }
+        }
+        @keyframes exec-step {
+          0%   { transform: translateY(0) scaleY(1) scaleX(1); }
+          50%  { transform: translateY(-3px) scaleY(1.06) scaleX(0.96); }
+          100% { transform: translateY(0) scaleY(1) scaleX(1); }
         }
         @keyframes monitor-pulse {
           0%, 100% { opacity: 0.6; }
@@ -808,6 +863,7 @@ export function ExecutiveHQ() {
             zoomingRoom={zoomingRoom}
             activeBubble={activeBubble}
             reducedEffects={reducedEffects}
+            nightMode={nightMode}
           />
         ))}
       </div>
