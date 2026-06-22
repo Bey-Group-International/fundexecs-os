@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ArtifactType, Json } from "@/lib/supabase/database.types";
 import { ArtifactModal } from "@/components/ArtifactModal";
 import { parseSources, verificationView, type VerificationLevel } from "@/lib/artifact-provenance";
+import type { SealStatus } from "@/lib/attestation-seal";
 
 // Verification badge palette — verified (signed off) / grounded (cites sources,
 // unsigned) / unverified (no sources).
@@ -13,6 +14,32 @@ const VERIFY_TONE: Record<VerificationLevel, string> = {
   unverified: "border-line/70 bg-surface-2/50 text-fg-muted",
 };
 
+// A recomputed-seal chip. Only "sealed" / "tampered" render — "tampered" is loud
+// (it means the signed content changed since sign-off); unsealed shows nothing.
+function SealChip({ status }: { status?: SealStatus }) {
+  if (status === "sealed") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-status-success/45 bg-status-success/[0.08] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success"
+        title="Tamper-evident — the seal was recomputed and matches the signed content."
+      >
+        🔒 Sealed
+      </span>
+    );
+  }
+  if (status === "tampered") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-status-danger/55 bg-status-danger/[0.12] px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-status-danger"
+        title="The seal no longer matches — the signed content changed after sign-off. Re-verify before relying on it."
+      >
+        ⚠ Seal broken
+      </span>
+    );
+  }
+  return null;
+}
+
 // Provenance bar — a verification badge plus the openable grounding citations
 // that make a composer output verifiable. Renders the badge always; the sources
 // list expands on demand.
@@ -20,10 +47,12 @@ export function ProvenanceBar({
   sources,
   verificationStatus,
   groundingScore,
+  sealStatus,
 }: {
   sources?: Json | null;
   verificationStatus?: string | null;
   groundingScore?: number | null;
+  sealStatus?: SealStatus;
 }) {
   const [open, setOpen] = useState(false);
   const cited = parseSources(sources);
@@ -39,6 +68,7 @@ export function ProvenanceBar({
           {view.level === "verified" ? "✓ " : null}
           {view.label}
         </span>
+        <SealChip status={sealStatus} />
         {cited.length ? (
           <button
             type="button"
@@ -367,6 +397,7 @@ interface ArtifactCardProps {
   sources?: Json | null;
   verificationStatus?: string | null;
   groundingScore?: number | null;
+  sealStatus?: SealStatus;
 }
 
 export function ArtifactCard({
@@ -379,6 +410,7 @@ export function ArtifactCard({
   sources,
   verificationStatus,
   groundingScore,
+  sealStatus,
 }: ArtifactCardProps) {
   const [expanded, setExpanded] = useState(false);
   const label = ARTIFACT_LABEL[artifact_type] ?? "Artifact";
@@ -414,7 +446,12 @@ export function ArtifactCard({
             {renderContent(content)}
           </div>
           {sources !== undefined || verificationStatus !== undefined ? (
-            <ProvenanceBar sources={sources} verificationStatus={verificationStatus} groundingScore={groundingScore} />
+            <ProvenanceBar
+              sources={sources}
+              verificationStatus={verificationStatus}
+              groundingScore={groundingScore}
+              sealStatus={sealStatus}
+            />
           ) : null}
           <button
             onClick={() => setExpanded(false)}
@@ -436,6 +473,7 @@ export function ArtifactInline({
   sources,
   verificationStatus,
   groundingScore,
+  sealStatus,
 }: {
   content: string;
   artifactType?: ArtifactType;
@@ -444,6 +482,7 @@ export function ArtifactInline({
   sources?: Json | null;
   verificationStatus?: string | null;
   groundingScore?: number | null;
+  sealStatus?: SealStatus;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -477,7 +516,12 @@ export function ArtifactInline({
         </button>
       )}
       {sources !== undefined || verificationStatus !== undefined ? (
-        <ProvenanceBar sources={sources} verificationStatus={verificationStatus} groundingScore={groundingScore} />
+        <ProvenanceBar
+          sources={sources}
+          verificationStatus={verificationStatus}
+          groundingScore={groundingScore}
+          sealStatus={sealStatus}
+        />
       ) : null}
       {modalOpen && (
         <ArtifactModal

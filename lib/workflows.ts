@@ -1,6 +1,7 @@
 import type { createServerClient } from "@/lib/supabase/server";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
-import type { WorkflowBundle } from "@/components/Copilot";
+import type { WorkflowBundle, SealedArtifact } from "@/components/Copilot";
+import { loadArtifactSealStatuses } from "@/lib/artifact-seal";
 
 type ServerClient = ReturnType<typeof createServerClient>;
 
@@ -35,10 +36,19 @@ export async function loadWorkflowBundles(
   const approvals = (approvalsRes.data ?? []) as Approval[];
   const artifacts = (artifactsRes.data ?? []) as Artifact[];
 
+  // Recompute each artifact's tamper-evident seal so the UI can surface whether
+  // a verified output is still intact. Best-effort — an empty map (e.g. on query
+  // failure) simply leaves every artifact unsealed, never blocking the load.
+  const sealStatuses = await loadArtifactSealStatuses(supabase, artifacts);
+  const sealed: SealedArtifact[] = artifacts.map((a) => {
+    const seal_status = sealStatuses.get(a.id);
+    return seal_status ? { ...a, seal_status } : a;
+  });
+
   return workflowList.map((workflow) => ({
     workflow,
     steps: steps.filter((s) => s.parent_task_id === workflow.id),
-    artifacts: artifacts.filter((a) => a.workflow_id === workflow.id),
+    artifacts: sealed.filter((a) => a.workflow_id === workflow.id),
     // most recent pending approval for the workflow, else latest
     approval:
       approvals
