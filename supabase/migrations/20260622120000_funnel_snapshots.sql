@@ -1,4 +1,4 @@
--- 0065_funnel_snapshots.sql
+-- 20260622120000_funnel_snapshots.sql
 -- Weekly funnel rollup — the snapshot store that closes the funnel → digest loop.
 -- The Source Outcome Funnel (lib/source-funnel.ts, buildFunnel) measures the
 -- sourcing pipeline end-to-end (sourced → contacted → replied → met → mandate),
