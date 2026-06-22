@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { runAutomation } from "@/lib/engine";
 import { nextRun } from "@/lib/cron";
+import { findDueOrgsForScan, scanOrgRadarSignals } from "@/lib/radar-scan";
 import type { Automation } from "@/lib/supabase/database.types";
 
 // Each due automation plans + (if trusted) executes a full workflow via Claude.
@@ -92,5 +93,38 @@ export async function GET(request: Request) {
     results.push({ id: a.id, status });
   }
 
-  return NextResponse.json({ swept: due.length, results });
+  // ---------------------------------------------------------------------------
+  // Radar signal scan (push, not pull) — self-contained, append-only block.
+  //
+  // Today the radar's "why now" half only fills in when an operator manually
+  // triggers a scan. Here the hourly sweep tops it up automatically: pick the
+  // orgs whose freshest signal is stale (>24h, or never scanned), scoped per
+  // org via the service-role client, capped at MAX_ORGS_PER_SWEEP so the signal
+  // budget can't run away (mirrors MAX_PER_SWEEP above). The once-per-day
+  // staleness guard means a given org is rescanned at most daily even though the
+  // cron fires hourly. Best-effort: a failure here never aborts the automations
+  // sweep that already ran, and reuses /api/cron (no new cron path / vercel.json
+  // change). Org selection + staleness live in lib/radar-scan.ts (pure + tested).
+  const radar: { scannedOrgs: number; generated: number; entities: number } = {
+    scannedOrgs: 0,
+    generated: 0,
+    entities: 0,
+  };
+  try {
+    const dueOrgs = await findDueOrgsForScan(supabase, now);
+    radar.scannedOrgs = dueOrgs.length;
+    for (const orgId of dueOrgs) {
+      try {
+        const r = await scanOrgRadarSignals(supabase, orgId);
+        radar.generated += r.generated;
+        radar.entities += r.scanned;
+      } catch {
+        // one bad org shouldn't stop the rest of the radar sweep
+      }
+    }
+  } catch {
+    // radar scan is additive — never fail the whole cron over it
+  }
+
+  return NextResponse.json({ swept: due.length, results, radar });
 }
