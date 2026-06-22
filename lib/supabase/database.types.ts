@@ -92,7 +92,8 @@ export type InboxChannel =
   | "google_meet"
   | "docusign"
   | "ecosystem"
-  | "deal_share";
+  | "deal_share"
+  | "radar_digest";
 export type InboxCategory = "messaging" | "booking" | "video" | "signing";
 export type InboxThreadStatus = "open" | "snoozed" | "done";
 export type InboxDirection = "inbound" | "outbound";
@@ -973,6 +974,31 @@ export type EntitySignal = {
   created_at: string;
 };
 
+// Per-org, per-channel delivery settings for the Act-now Radar digest (migration
+// 0062). One row per (organization_id, channel): where the ranked sourcing brief
+// lands, how often, and at what minimum score.
+export type RadarDigestPref = {
+  id: string;
+  organization_id: string;
+  channel: string; // 'in_app' | 'slack' | 'email'
+  recipient: string | null; // slack channel id / email; null for in_app
+  cadence: string; // 'daily' | 'weekly'
+  min_score: number;
+  enabled: boolean;
+  created_at: string;
+};
+
+// An append-only record of each Act-now Radar digest sent (migration 0062):
+// which channel, how many items, and a compact snapshot of the top items.
+export type RadarDigestLogEntry = {
+  id: string;
+  organization_id: string;
+  channel: string;
+  item_count: number;
+  top_items: Json;
+  sent_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -1290,6 +1316,8 @@ export type Database = {
       outreach_sequences: TableShape<OutreachSequence>;
       outreach_steps: TableShape<OutreachStep>;
       outreach_enrollments: TableShape<OutreachEnrollment>;
+      radar_digest_prefs: TableShape<RadarDigestPref>;
+      radar_digest_log: TableShape<RadarDigestLogEntry>;
     };
     Views: Record<string, never>;
     Functions: {
