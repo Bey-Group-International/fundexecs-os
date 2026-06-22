@@ -1,11 +1,10 @@
 -- Allocator Intelligence Directory + Portfolio Health
 
 -- Allocator profiles: enriched data on family offices, institutions, RIAs
--- References contacts (LP/allocator contacts) rather than a non-existent investors table
 CREATE TABLE IF NOT EXISTS public.allocator_profiles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  contact_id UUID REFERENCES public.contacts(id) ON DELETE SET NULL,
+  investor_id UUID REFERENCES public.investors(id) ON DELETE SET NULL,
   -- Enriched fields beyond the base contacts table
   aum_min NUMERIC(18,2),
   aum_max NUMERIC(18,2),
@@ -41,7 +40,7 @@ CREATE TABLE IF NOT EXISTS public.allocator_profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS allocator_profiles_org_id_idx ON public.allocator_profiles(org_id);
-CREATE INDEX IF NOT EXISTS allocator_profiles_contact_id_idx ON public.allocator_profiles(contact_id);
+CREATE INDEX IF NOT EXISTS allocator_profiles_investor_id_idx ON public.allocator_profiles(investor_id);
 CREATE INDEX IF NOT EXISTS allocator_profiles_allocator_type_idx ON public.allocator_profiles(allocator_type);
 CREATE INDEX IF NOT EXISTS allocator_profiles_accreditation_status_idx ON public.allocator_profiles(accreditation_status);
 CREATE INDEX IF NOT EXISTS allocator_profiles_kyc_status_idx ON public.allocator_profiles(kyc_status);
