@@ -6,17 +6,24 @@ import { buildNBAList } from "@/lib/next-best-action";
 import { buildInsights, IntelligenceStrip } from "@/components/IntelligenceStrip";
 import { NextBestAction } from "@/components/NextBestAction";
 import { createServerClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth";
 import { CommandCenterSkeleton } from "@/components/CommandCenterSkeleton";
 import { CommandCenterError } from "@/components/CommandCenterError";
 
 async function CommandCenterContent() {
   const supabase = createServerClient();
+  const ctx = await getSessionContext();
+  const organizationId = ctx?.orgId;
+
+  if (!organizationId) {
+    return null;
+  }
 
   let scores: Awaited<ReturnType<typeof buildRelationshipScores>> = [];
   let nbaItems: ReturnType<typeof buildNBAList> = [];
 
   try {
-    scores = await buildRelationshipScores(supabase);
+    scores = await buildRelationshipScores(supabase, organizationId);
   } catch (err) {
     console.error("[CommandCenter] buildRelationshipScores failed:", err);
   }
