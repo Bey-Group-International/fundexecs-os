@@ -8,6 +8,7 @@ import {
   computeLearnedWeights,
   type LearnedWeights,
   type RadarAggregate,
+  type EngagementAggregate,
 } from "@/lib/radar-learning";
 import type { EntityKind } from "@/lib/sourcing-intel";
 
@@ -49,9 +50,46 @@ async function loadLearnedWeights(
       else if (r.action === "snoozed") agg.snoozed += 1;
       byKey.set(key, agg);
     }
-    return computeLearnedWeights([...byKey.values()]);
+
+    const engagement = await loadEngagementAggregates(supabase, orgId);
+    return computeLearnedWeights([...byKey.values()], engagement);
   } catch {
     return null;
+  }
+}
+
+// Aggregate this org's radar_digest_engagement (implicit opens + clicks) into the
+// engagement buckets the learning loop folds in alongside explicit feedback.
+// Best-effort + read-only: any failure (table missing on a fresh DB, RLS) yields
+// no engagement, leaving the explicit-only weights intact.
+async function loadEngagementAggregates(
+  supabase: ReturnType<typeof createServerClient>,
+  orgId: string,
+): Promise<EngagementAggregate[]> {
+  try {
+    const { data } = await supabase
+      .from("radar_digest_engagement")
+      .select("entity_kind, move_kind, action")
+      .eq("organization_id", orgId)
+      .limit(5000);
+    const rows = (data ?? []) as { entity_kind: string | null; move_kind: string | null; action: string | null }[];
+    if (rows.length === 0) return [];
+
+    const byKey = new Map<string, EngagementAggregate>();
+    for (const r of rows) {
+      // Engagement is only learnable when attributed to a (kind, move) combo.
+      if (!r.entity_kind || !r.move_kind || !r.action) continue;
+      const key = `${r.entity_kind}:${r.move_kind}`;
+      const agg =
+        byKey.get(key) ??
+        { entityKind: r.entity_kind, moveKind: r.move_kind as RadarMoveKind, clicked: 0, opened: 0 };
+      if (r.action === "clicked") agg.clicked += 1;
+      else if (r.action === "opened") agg.opened += 1;
+      byKey.set(key, agg);
+    }
+    return [...byKey.values()];
+  } catch {
+    return [];
   }
 }
 
