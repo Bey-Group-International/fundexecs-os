@@ -1,4 +1,5 @@
 import { getCapTable } from "@/lib/cap-table";
+import { getUnifiedOwnership, type UnifiedHolder } from "@/lib/ownership";
 import { compactUsd, usd, multiple } from "@/lib/format";
 import { createServerClient } from "@/lib/supabase/server";
 import { summarizePortalViews } from "@/lib/investor-portal";
@@ -17,7 +18,14 @@ function humanize(s: string): string {
 // NAV, DPI/TVPI). The agent team works it in place — IR drafts LP statements,
 // Ops reconciles the accounts.
 export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
-  const t = await getCapTable(orgId);
+  const [t, ownership] = await Promise.all([getCapTable(orgId), getUnifiedOwnership(orgId)]);
+
+  // Cross-link to the firm's entity cap table (Build): which fund holders also
+  // hold direct equity in the firm's own vehicles (GP, SPVs). Keyed by investor.
+  const equityByInvestor = new Map<string, UnifiedHolder>();
+  for (const h of ownership.holders) {
+    if (h.investorId && h.hasEquity) equityByInvestor.set(h.investorId, h);
+  }
 
   // Live portal links per holder, for the shareable read-only statements, with
   // an engagement signal (has the LP opened it, and when).
@@ -74,6 +82,26 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
         <StatTile value={compactUsd(t.totalNav)} label="NAV" sub={`top holder ${t.topHolderPct}%`} />
       </div>
 
+      {/* Complete ownership — the reconciliation of fund commitments with the
+          firm's entity cap table. A view Carta keeps in two separate products. */}
+      {ownership.linkedCount > 0 ? (
+        <div className="mb-4 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+              Complete ownership
+            </span>
+            <span className="font-mono text-[11px] text-fg-muted">
+              {compactUsd(ownership.totalEquityInvested)} direct equity
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-fg-secondary">
+            <span className="text-fg-primary">{ownership.linkedCount}</span> of {ownership.holderCount}{" "}
+            {ownership.holderCount === 1 ? "holder" : "holders"} also hold direct equity in your vehicles —
+            their fund commitments and entity stakes, reconciled into one position.
+          </p>
+        </div>
+      ) : null}
+
       {/* Agent actions */}
       <div className="mb-4 flex flex-wrap gap-2">
         <EarnAction kind="cap_statements" label="Draft LP statements" />
@@ -116,7 +144,21 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
           <tbody>
             {t.holders.map((h) => (
               <tr key={h.investorId} className="border-b border-line/50 bg-surface-1 last:border-0">
-                <td className="whitespace-nowrap px-3 py-3 font-medium text-fg-primary">{h.name}</td>
+                <td className="whitespace-nowrap px-3 py-3 font-medium text-fg-primary">
+                  {h.name}
+                  {(() => {
+                    const eq = equityByInvestor.get(h.investorId);
+                    if (!eq) return null;
+                    return (
+                      <span
+                        title={eq.equity.map((e) => e.entityName).join(", ")}
+                        className="ml-2 rounded-full border border-gold-500/40 bg-gold-500/5 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300"
+                      >
+                        + equity ×{eq.equity.length}
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td className="whitespace-nowrap px-3 py-3 text-fg-secondary">{humanize(h.type)}</td>
                 <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-fg-primary">{usd(h.committed)}</td>
                 <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-gold-300">{h.ownershipPct}%</td>
