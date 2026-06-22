@@ -8,7 +8,7 @@ type ExecData = {
   id: string;
   name: string;
   shortName: string;
-  card: string;
+  sprite: string;
   themeColor: string;
   href: string;
   bobDelay: string;
@@ -62,7 +62,7 @@ const E: Record<string, ExecData> = {
     id: "earnest-fundmaker",
     name: "Earnest Fundmaker",
     shortName: "Earnest",
-    card: "/assets/fundexecs/characters/earnest-fundmaker/card.png",
+    sprite: "/assets/fundexecs/characters/earnest-fundmaker/sprite.png",
     themeColor: "#fbbf24",
     href: "/dashboard",
     bobDelay: "0s",
@@ -73,7 +73,7 @@ const E: Record<string, ExecData> = {
     id: "executive-advisor",
     name: "Executive Advisor",
     shortName: "Exec Advisor",
-    card: "/assets/fundexecs/characters/executive-advisor/card.png",
+    sprite: "/assets/fundexecs/characters/executive-advisor/sprite.png",
     themeColor: "#a855f7",
     href: "/dashboard",
     bobDelay: "0.6s",
@@ -84,7 +84,7 @@ const E: Record<string, ExecData> = {
     id: "deal-sourcer",
     name: "Deal Sourcer",
     shortName: "Deal",
-    card: "/assets/fundexecs/characters/deal-sourcer/card.png",
+    sprite: "/assets/fundexecs/characters/deal-sourcer/sprite.png",
     themeColor: "#f97316",
     href: "/dashboard/deals",
     bobDelay: "0.2s",
@@ -95,7 +95,7 @@ const E: Record<string, ExecData> = {
     id: "capital-raiser",
     name: "Capital Raiser",
     shortName: "Capital",
-    card: "/assets/fundexecs/characters/capital-raiser/card.png",
+    sprite: "/assets/fundexecs/characters/capital-raiser/sprite.png",
     themeColor: "#ec4899",
     href: "/dashboard/deals",
     bobDelay: "0.8s",
@@ -106,7 +106,7 @@ const E: Record<string, ExecData> = {
     id: "workflow-instructor",
     name: "Workflow Instructor",
     shortName: "Workflow",
-    card: "/assets/fundexecs/characters/workflow-instructor/card.png",
+    sprite: "/assets/fundexecs/characters/workflow-instructor/sprite.png",
     themeColor: "#ef4444",
     href: "/dashboard",
     bobDelay: "0.4s",
@@ -117,7 +117,7 @@ const E: Record<string, ExecData> = {
     id: "capital-connector",
     name: "Capital Connector",
     shortName: "Cap. Conn.",
-    card: "/assets/fundexecs/characters/capital-connector/card.png",
+    sprite: "/assets/fundexecs/characters/capital-connector/sprite.png",
     themeColor: "#14b8a6",
     href: "/dashboard/capital",
     bobDelay: "0.4s",
@@ -128,7 +128,7 @@ const E: Record<string, ExecData> = {
     id: "automater",
     name: "Automater",
     shortName: "Automater",
-    card: "/assets/fundexecs/characters/automater/card.png",
+    sprite: "/assets/fundexecs/characters/automater/sprite.png",
     themeColor: "#22c55e",
     href: "/dashboard/automation",
     bobDelay: "0.1s",
@@ -139,7 +139,7 @@ const E: Record<string, ExecData> = {
     id: "rainmaker",
     name: "Rainmaker",
     shortName: "Rainmaker",
-    card: "/assets/fundexecs/characters/rainmaker/card.png",
+    sprite: "/assets/fundexecs/characters/rainmaker/sprite.png",
     themeColor: "#fbbf24",
     href: "/dashboard/capital",
     bobDelay: "0.5s",
@@ -150,7 +150,7 @@ const E: Record<string, ExecData> = {
     id: "pr-director",
     name: "PR Director",
     shortName: "PR",
-    card: "/assets/fundexecs/characters/pr-director/card.png",
+    sprite: "/assets/fundexecs/characters/pr-director/sprite.png",
     themeColor: "#f97316",
     href: "/dashboard/marketing",
     bobDelay: "0s",
@@ -161,7 +161,7 @@ const E: Record<string, ExecData> = {
     id: "lead-generator",
     name: "Lead Generator",
     shortName: "Lead",
-    card: "/assets/fundexecs/characters/lead-generator/card.png",
+    sprite: "/assets/fundexecs/characters/lead-generator/sprite.png",
     themeColor: "#f97316",
     href: "/dashboard/marketing",
     bobDelay: "0.3s",
@@ -172,7 +172,7 @@ const E: Record<string, ExecData> = {
     id: "seo-disruptor",
     name: "SEO Disruptor",
     shortName: "SEO",
-    card: "/assets/fundexecs/characters/seo-disruptor/card.png",
+    sprite: "/assets/fundexecs/characters/seo-disruptor/sprite.png",
     themeColor: "#f97316",
     href: "/dashboard/marketing",
     bobDelay: "0.6s",
@@ -183,7 +183,7 @@ const E: Record<string, ExecData> = {
     id: "curator",
     name: "Curator",
     shortName: "Curator",
-    card: "/assets/fundexecs/characters/curator/card.png",
+    sprite: "/assets/fundexecs/characters/curator/sprite.png",
     themeColor: "#f97316",
     href: "/dashboard/marketing",
     bobDelay: "0.9s",
@@ -194,7 +194,7 @@ const E: Record<string, ExecData> = {
     id: "investor-relations",
     name: "Investor Relations",
     shortName: "IR",
-    card: "/assets/fundexecs/characters/investor-relations/card.png",
+    sprite: "/assets/fundexecs/characters/investor-relations/sprite.png",
     themeColor: "#f59e0b",
     href: "/dashboard/investor-relations",
     bobDelay: "0.3s",
@@ -367,7 +367,7 @@ function ExecAvatar({
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={exec.card}
+        src={exec.sprite}
         alt={exec.name}
         width={size}
         height={size}
@@ -600,6 +600,7 @@ function RoomCell({
 export function ExecutiveHQ() {
   const router = useRouter();
   const [booting, setBooting] = useState(true);
+  const [nightMode, setNightMode] = useState(true);
   const [zoomingRoom, setZoomingRoom] = useState<string | null>(null);
   const [activeBubble, setActiveBubble] = useState<BubbleState>(null);
   const [isVisible, setIsVisible] = useState(true);
@@ -612,6 +613,15 @@ export function ExecutiveHQ() {
     const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const lowPower = navigator.hardwareConcurrency !== undefined && navigator.hardwareConcurrency < 4;
     setReducedEffects(prefersReduced || lowPower);
+  }, []);
+
+  // N key toggles day/night mode
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "n" || e.key === "N") setNightMode((v) => !v);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   // IntersectionObserver for animation pausing
@@ -730,10 +740,33 @@ export function ExecutiveHQ() {
         .hq-paused * { animation-play-state: paused !important; }
       `}</style>
 
+      {/* Day/night toggle hint */}
+      <button
+        onClick={() => setNightMode((v) => !v)}
+        title="Toggle day/night (N)"
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          zIndex: 20,
+          background: "rgba(6,9,15,0.7)",
+          border: "1px solid rgba(180,147,32,0.4)",
+          borderRadius: 4,
+          color: "#b49320",
+          fontFamily: "monospace",
+          fontSize: 10,
+          padding: "2px 7px",
+          cursor: "pointer",
+          letterSpacing: "0.05em",
+        }}
+      >
+        {nightMode ? "☀ DAY" : "☾ NIGHT"}
+      </button>
+
       {/* Office background image */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/assets/fundexecs/office/office-night.png"
+        src={nightMode ? "/assets/fundexecs/office/office-night.png" : "/assets/fundexecs/office/office-day.png"}
         alt="FundExecs Office"
         draggable={false}
         style={{
