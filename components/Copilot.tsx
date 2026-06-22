@@ -1891,6 +1891,8 @@ function WorkflowCard({
               content={primaryArtifact.content}
               artifactType={primaryArtifact.artifact_type}
               title={primaryArtifact.title}
+              sources={primaryArtifact.sources}
+              verificationStatus={primaryArtifact.verification_status}
             />
           </div>
           <p className="mt-2 text-xs text-fg-secondary">

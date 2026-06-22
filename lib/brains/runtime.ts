@@ -12,7 +12,7 @@ import { getBrain } from "@/lib/brains/catalog";
 import { complete, brainsLive } from "@/lib/brains/llm";
 import { vectorStore } from "@/lib/brains/vector";
 import { retrieveBrainKb } from "@/lib/brains/pgvector";
-import type { BrainContext, BrainGoal, BrainResult, BrainKey } from "@/lib/brains/types";
+import type { BrainContext, BrainGoal, BrainResult, BrainKey, BrainSource } from "@/lib/brains/types";
 
 function buildSystem(preamble: string, reasoningStyle: string): string {
   return `${preamble}\n\nReasoning style: ${reasoningStyle}\nBe concrete and useful. Lead with the outcome. No preamble, no filler.`;
@@ -70,6 +70,7 @@ export async function activateBrain(
       output: `Unknown brain: ${brainKey}`,
       toolsUsed: [],
       reasoning: "No such brain in the catalog.",
+      sources: [],
     };
   }
 
@@ -125,6 +126,13 @@ export async function activateBrain(
     runId = data?.id ?? null;
   }
 
+  // The passages this activation actually consulted — supplied documents and the
+  // Brain's own KB — surfaced as verifiable provenance for the produced artifact.
+  const sources: BrainSource[] = [
+    ...retrieved.map((r) => ({ source: r.source, text: r.text, score: r.score, kind: "document" as const })),
+    ...kb.map((r) => ({ source: r.source, text: r.text, score: r.score, kind: "kb" as const })),
+  ];
+
   return {
     runId,
     brainKey: brain.key,
@@ -132,5 +140,6 @@ export async function activateBrain(
     output,
     toolsUsed,
     reasoning,
+    sources,
   };
 }

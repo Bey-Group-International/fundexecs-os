@@ -87,6 +87,15 @@ export type BrainRunStatus =
   | "failed";
 
 // The structured result of a Brain activation, also persisted to brain_runs.
+// A grounding passage a Brain consulted while executing — the evidence behind an
+// output. `kind` distinguishes a supplied document from the Brain's own KB.
+export interface BrainSource {
+  source: string;
+  text: string;
+  score: number;
+  kind: "document" | "kb";
+}
+
 export interface BrainResult {
   runId: string | null;
   brainKey: BrainKey;
@@ -94,6 +103,9 @@ export interface BrainResult {
   output: string;
   toolsUsed: string[];
   reasoning: string;
+  // The passages retrieved for this activation — surfaced so callers can attach
+  // them to the artifact as verifiable provenance.
+  sources: BrainSource[];
 }
 
 // Server-action response shapes (kept here, outside the "use server" file, which

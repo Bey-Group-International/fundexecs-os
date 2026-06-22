@@ -11,6 +11,7 @@ import type { TaskEventType } from "@/lib/events";
 import { generatePlan, generatePlans, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
 import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
+import type { BrainResult } from "@/lib/brains/types";
 import { brainForAgent } from "@/lib/brain-routing";
 import { buildRouting, deskOverride, engineForStage, executiveForStage, EXECUTIVE_LABEL, type Executive } from "@/lib/intelligence";
 import { shouldReuseRecord } from "@/lib/reference-binding";
@@ -634,10 +635,12 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     });
     // Attribute this step's work to a Brain: the engine ORCHESTRATES, Brains
     // EXECUTE. This logs a brain_runs row tagged with the workflow's session so
-    // the step surfaces in the session "Brains at work" theater. Additive and
+    // the step surfaces in the session "Brains at work" theater, and surfaces
+    // the passages the Brain consulted as the artifact's grounding. Additive and
     // defensive — a Brain failure must never break the workflow.
+    let brain: BrainResult | null = null;
     try {
-      await activateBrain(
+      brain = await activateBrain(
         { supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.actorId, sessionId: workflow.session_id ?? null },
         brainForAgent(step.assigned_agent),
         {
@@ -651,6 +654,15 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     }
 
     priorOutputs.push(`${step.title}:\n${output}`);
+
+    // Persist the grounding citations alongside the deliverable so the output is
+    // verifiable — each is the source the Brain consulted, snippet-trimmed.
+    const sources = (brain?.sources ?? []).map((s) => ({
+      source: s.source,
+      snippet: s.text.slice(0, 240),
+      score: s.score,
+      kind: s.kind,
+    }));
 
     const artifactType = classifyArtifact(step.assigned_agent, step.title);
     const [, { data: artifact }] = await Promise.all([
@@ -670,6 +682,12 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           hub: step.hub,
           content: output,
           created_by: ctx.actorId,
+          // Trust layer: AI-produced, unverified until signed off, with the
+          // Brain's retrieved passages as citations and a link to its reasoning.
+          provenance: "ai",
+          verification_status: "unverified",
+          sources: sources as unknown as Json,
+          brain_run_id: brain?.runId ?? null,
         })
         .select("id")
         .single(),
@@ -689,7 +707,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
         type: "artifact.created",
         agent: step.assigned_agent,
         hub: step.hub,
-        payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title },
+        payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title, sources: sources.length },
       }),
       ctx.supabase
         .from("tasks")

@@ -1029,6 +1029,16 @@ export type Artifact = Timestamps & {
   content: string;
   metadata: Json;
   created_by: string | null;
+  // Trust layer (migration 0061). Provenance + verification mirror RecordMeta;
+  // `sources` holds the grounding citations ({ source, snippet, score, kind }[])
+  // and `brain_run_id` links to the reasoning that produced the output.
+  provenance: string; // 'ai' | 'manual' | 'import'
+  verification_status: string; // 'unverified' | 'verified'
+  verified_at: string | null;
+  verified_by: string | null;
+  verification_note: string | null;
+  sources: Json;
+  brain_run_id: string | null;
 };
 
 // Minimal Database shape compatible with @supabase/supabase-js generics.
