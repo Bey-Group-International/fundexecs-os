@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
@@ -92,6 +92,227 @@ function MenuButton({ children, onClick }: { children: ReactNode; onClick?: () =
   );
 }
 
+interface SessionRowProps {
+  s: SessionItem;
+  pathname: string;
+  renamingId: string | null;
+  setRenamingId: (id: string | null) => void;
+  menuId: string | null;
+  setMenuId: (id: string | null) => void;
+  moveOpen: boolean;
+  setMoveOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  groups: GroupItem[];
+  closeMenu: () => void;
+  renameSessionAction: (formData: FormData) => void;
+  pinSessionAction: (formData: FormData) => void;
+  unreadSessionAction: (formData: FormData) => void;
+  shareSessionAction: (formData: FormData) => void;
+  archiveSessionAction: (formData: FormData) => void;
+  deleteSessionAction: (formData: FormData) => void;
+  moveSessionAction: (formData: FormData) => void;
+}
+
+const SessionRow = memo(function SessionRow({
+  s,
+  pathname,
+  renamingId,
+  setRenamingId,
+  menuId,
+  setMenuId,
+  moveOpen,
+  setMoveOpen,
+  groups,
+  closeMenu,
+  renameSessionAction,
+  pinSessionAction,
+  unreadSessionAction,
+  shareSessionAction,
+  archiveSessionAction,
+  deleteSessionAction,
+  moveSessionAction,
+}: SessionRowProps) {
+  const active = pathname === `/session/${s.id}`;
+
+  function copyLink(id: string) {
+    try {
+      void navigator.clipboard.writeText(`${window.location.origin}/session/${id}`);
+    } catch {
+      // clipboard unavailable — no-op
+    }
+  }
+
+  if (renamingId === s.id) {
+    return (
+      <form
+        action={renameSessionAction}
+        onSubmit={() => setRenamingId(null)}
+        className="flex items-center gap-1 px-2 py-0.5 pl-4"
+      >
+        <input type="hidden" name="id" value={s.id} />
+        <input
+          name="name"
+          defaultValue={s.name}
+          autoFocus
+          onBlur={() => setRenamingId(null)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setRenamingId(null);
+          }}
+          className="min-w-0 flex-1 rounded-md border border-line bg-surface-0 px-1.5 py-1 text-[13px] text-fg-primary focus:border-gold-500/60 focus:outline-none"
+        />
+      </form>
+    );
+  }
+
+  const menuItems = (
+    <>
+      <form action={pinSessionAction} onSubmit={closeMenu}>
+        <input type="hidden" name="id" value={s.id} />
+        <input type="hidden" name="pinned" value={s.pinned ? "false" : "true"} />
+        <MenuButton>{s.pinned ? "Unpin" : "Pin"}</MenuButton>
+      </form>
+      <form action={unreadSessionAction} onSubmit={closeMenu}>
+        <input type="hidden" name="id" value={s.id} />
+        <input type="hidden" name="unread" value={s.unread ? "false" : "true"} />
+        <MenuButton>{s.unread ? "Mark as read" : "Mark as unread"}</MenuButton>
+      </form>
+      <MenuButton
+        onClick={() => {
+          setRenamingId(s.id);
+          closeMenu();
+        }}
+      >
+        Rename
+      </MenuButton>
+      <form action={shareSessionAction} onSubmit={closeMenu}>
+        <input type="hidden" name="id" value={s.id} />
+        <input type="hidden" name="scope" value="org" />
+        <MenuButton>Share</MenuButton>
+      </form>
+      <MenuButton
+        onClick={() => {
+          copyLink(s.id);
+          closeMenu();
+        }}
+      >
+        Copy link
+      </MenuButton>
+
+      <button
+        type="button"
+        onClick={() => setMoveOpen((v) => !v)}
+        aria-expanded={moveOpen}
+        className="flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+      >
+        Move to group
+        <span className="text-fg-muted">{moveOpen ? "▾" : "▸"}</span>
+      </button>
+      {moveOpen ? (
+        <div className="flex flex-col gap-0.5 pl-2">
+          {[{ id: "", name: "Ungrouped" }, ...groups].map((g) => {
+            const current = (s.groupId ?? "") === g.id;
+            return (
+              <form key={g.id || "ungrouped"} action={moveSessionAction} onSubmit={closeMenu}>
+                <input type="hidden" name="id" value={s.id} />
+                <input type="hidden" name="group_id" value={g.id} />
+                <button
+                  disabled={current}
+                  className={`w-full truncate rounded-md px-2 py-1 text-left text-xs transition ${
+                    current
+                      ? "text-gold-300"
+                      : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                  }`}
+                >
+                  {current ? "✓ " : ""}
+                  {g.name}
+                </button>
+              </form>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <form action={archiveSessionAction} onSubmit={closeMenu}>
+        <input type="hidden" name="id" value={s.id} />
+        <input type="hidden" name="archived" value="true" />
+        <MenuButton>Archive</MenuButton>
+      </form>
+
+      <div className="my-0.5 border-t border-line" />
+      <form
+        action={deleteSessionAction}
+        onSubmit={(e) => {
+          if (!window.confirm(`Delete "${s.name}"? This can't be undone.`)) {
+            e.preventDefault();
+            return;
+          }
+          closeMenu();
+        }}
+      >
+        <input type="hidden" name="id" value={s.id} />
+        <button className="w-full truncate rounded-md px-2 py-1 text-left text-xs text-status-danger transition hover:bg-status-danger/10 hover:text-status-danger">
+          Delete
+        </button>
+      </form>
+    </>
+  );
+
+  return (
+    <div className="relative flex items-center">
+      <Link
+        href={`/session/${s.id}`}
+        title={s.name}
+        className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 pl-4 transition ${
+          active
+            ? "bg-surface-2 text-fg-primary"
+            : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+        }`}
+      >
+        {s.pinned ? (
+          <span className="shrink-0 text-[10px] leading-none text-gold-400" title="Pinned">
+            📌
+          </span>
+        ) : (
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: s.color ?? "#a1a1aa" }}
+          />
+        )}
+        <span
+          className={`min-w-0 flex-1 truncate text-[13px] ${
+            s.unread ? "font-semibold text-fg-primary" : ""
+          }`}
+        >
+          {s.name}
+        </span>
+        {s.unread ? (
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400"
+            title="Unread"
+          />
+        ) : null}
+      </Link>
+      <button
+        type="button"
+        onClick={() => {
+          setMoveOpen(false);
+          setMenuId(menuId === s.id ? null : s.id);
+        }}
+        aria-label="Session actions"
+        title="Session actions"
+        className="shrink-0 rounded-md px-1.5 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
+      >
+        ⋯
+      </button>
+
+      {menuId === s.id ? (
+        <div className="absolute right-1 top-full z-10 mt-0.5 flex w-44 flex-col gap-0.5 rounded-lg border border-line bg-surface-1 p-1.5 shadow-2xl">
+          {menuItems}
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
 export function AppSidebar({
   name,
   planName,
@@ -137,24 +358,13 @@ export function AppSidebar({
   const [moveOpen, setMoveOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
+  const closeMenu = useCallback(() => {
+    setMenuId(null);
+    setMoveOpen(false);
+  }, []);
+
   const accountRef = useDismiss<HTMLDivElement>(() => setAccountOpen(false));
-  const recentRef = useDismiss<HTMLDivElement>(() => {
-    setMenuId(null);
-    setMoveOpen(false);
-  });
-
-  function closeMenu() {
-    setMenuId(null);
-    setMoveOpen(false);
-  }
-
-  function copyLink(id: string) {
-    try {
-      void navigator.clipboard.writeText(`${window.location.origin}/session/${id}`);
-    } catch {
-      // clipboard unavailable — no-op
-    }
-  }
+  const recentRef = useDismiss<HTMLDivElement>(closeMenu);
 
   // Group the recent sessions: named groups (in catalog order) that actually
   // hold a session, then the ungrouped bucket last.
@@ -176,186 +386,6 @@ export function AppSidebar({
 
   const linkClass =
     "flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary";
-
-  // A single conversation row, Claude Code style: color dot, active highlight,
-  // unread/pin indicators, and a "⋯" menu of session actions.
-  function SessionRow({ s }: { s: SessionItem }) {
-    const active = pathname === `/session/${s.id}`;
-
-    // Inline rename replaces the row with a text field.
-    if (renamingId === s.id) {
-      return (
-        <form
-          action={renameSessionAction}
-          onSubmit={() => setRenamingId(null)}
-          className="flex items-center gap-1 px-2 py-0.5 pl-4"
-        >
-          <input type="hidden" name="id" value={s.id} />
-          <input
-            name="name"
-            defaultValue={s.name}
-            autoFocus
-            onBlur={() => setRenamingId(null)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setRenamingId(null);
-            }}
-            className="min-w-0 flex-1 rounded-md border border-line bg-surface-0 px-1.5 py-1 text-[13px] text-fg-primary focus:border-gold-500/60 focus:outline-none"
-          />
-        </form>
-      );
-    }
-
-    // The eight session actions, in the requested order.
-    const menuItems = (
-      <>
-        <form action={pinSessionAction} onSubmit={closeMenu}>
-          <input type="hidden" name="id" value={s.id} />
-          <input type="hidden" name="pinned" value={s.pinned ? "false" : "true"} />
-          <MenuButton>{s.pinned ? "Unpin" : "Pin"}</MenuButton>
-        </form>
-        <form action={unreadSessionAction} onSubmit={closeMenu}>
-          <input type="hidden" name="id" value={s.id} />
-          <input type="hidden" name="unread" value={s.unread ? "false" : "true"} />
-          <MenuButton>{s.unread ? "Mark as read" : "Mark as unread"}</MenuButton>
-        </form>
-        <MenuButton
-          onClick={() => {
-            setRenamingId(s.id);
-            closeMenu();
-          }}
-        >
-          Rename
-        </MenuButton>
-        <form action={shareSessionAction} onSubmit={closeMenu}>
-          <input type="hidden" name="id" value={s.id} />
-          <input type="hidden" name="scope" value="org" />
-          <MenuButton>Share</MenuButton>
-        </form>
-        <MenuButton
-          onClick={() => {
-            copyLink(s.id);
-            closeMenu();
-          }}
-        >
-          Copy link
-        </MenuButton>
-
-        {/* Move to group — expands an inline submenu of groups. */}
-        <button
-          type="button"
-          onClick={() => setMoveOpen((v) => !v)}
-          aria-expanded={moveOpen}
-          className="flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
-        >
-          Move to group
-          <span className="text-fg-muted">{moveOpen ? "▾" : "▸"}</span>
-        </button>
-        {moveOpen ? (
-          <div className="flex flex-col gap-0.5 pl-2">
-            {[{ id: "", name: "Ungrouped" }, ...groups].map((g) => {
-              const current = (s.groupId ?? "") === g.id;
-              return (
-                <form key={g.id || "ungrouped"} action={moveSessionAction} onSubmit={closeMenu}>
-                  <input type="hidden" name="id" value={s.id} />
-                  <input type="hidden" name="group_id" value={g.id} />
-                  <button
-                    disabled={current}
-                    className={`w-full truncate rounded-md px-2 py-1 text-left text-xs transition ${
-                      current
-                        ? "text-gold-300"
-                        : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
-                    }`}
-                  >
-                    {current ? "✓ " : ""}
-                    {g.name}
-                  </button>
-                </form>
-              );
-            })}
-          </div>
-        ) : null}
-
-        <form action={archiveSessionAction} onSubmit={closeMenu}>
-          <input type="hidden" name="id" value={s.id} />
-          <input type="hidden" name="archived" value="true" />
-          <MenuButton>Archive</MenuButton>
-        </form>
-
-        <div className="my-0.5 border-t border-line" />
-        <form
-          action={deleteSessionAction}
-          onSubmit={(e) => {
-            if (!window.confirm(`Delete “${s.name}”? This can't be undone.`)) {
-              e.preventDefault();
-              return;
-            }
-            closeMenu();
-          }}
-        >
-          <input type="hidden" name="id" value={s.id} />
-          <button className="w-full truncate rounded-md px-2 py-1 text-left text-xs text-status-danger transition hover:bg-status-danger/10 hover:text-status-danger">
-            Delete
-          </button>
-        </form>
-      </>
-    );
-
-    return (
-      <div className="relative flex items-center">
-        <Link
-          href={`/session/${s.id}`}
-          title={s.name}
-          className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 pl-4 transition ${
-            active
-              ? "bg-surface-2 text-fg-primary"
-              : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
-          }`}
-        >
-          {s.pinned ? (
-            <span className="shrink-0 text-[10px] leading-none text-gold-400" title="Pinned">
-              📌
-            </span>
-          ) : (
-            <span
-              className="h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: s.color ?? "#a1a1aa" }}
-            />
-          )}
-          <span
-            className={`min-w-0 flex-1 truncate text-[13px] ${
-              s.unread ? "font-semibold text-fg-primary" : ""
-            }`}
-          >
-            {s.name}
-          </span>
-          {s.unread ? (
-            <span
-              className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400"
-              title="Unread"
-            />
-          ) : null}
-        </Link>
-        <button
-          type="button"
-          onClick={() => {
-            setMoveOpen(false);
-            setMenuId(menuId === s.id ? null : s.id);
-          }}
-          aria-label="Session actions"
-          title="Session actions"
-          className="shrink-0 rounded-md px-1.5 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
-        >
-          ⋯
-        </button>
-
-        {menuId === s.id ? (
-          <div className="absolute right-1 top-full z-10 mt-0.5 flex w-44 flex-col gap-0.5 rounded-lg border border-line bg-surface-1 p-1.5 shadow-2xl">
-            {menuItems}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
 
   return (
     <aside className="hidden w-[224px] shrink-0 flex-col border-r border-line bg-surface-1/95 backdrop-blur-xl md:flex">
@@ -527,7 +557,26 @@ export function AppSidebar({
                   {!isGroupCollapsed ? (
                     <div className="flex flex-col gap-0.5">
                       {sec.sessions.map((s) => (
-                        <SessionRow key={s.id} s={s} />
+                        <SessionRow
+                          key={s.id}
+                          s={s}
+                          pathname={pathname}
+                          renamingId={renamingId}
+                          setRenamingId={setRenamingId}
+                          menuId={menuId}
+                          setMenuId={setMenuId}
+                          moveOpen={moveOpen}
+                          setMoveOpen={setMoveOpen}
+                          groups={groups}
+                          closeMenu={closeMenu}
+                          renameSessionAction={renameSessionAction}
+                          pinSessionAction={pinSessionAction}
+                          unreadSessionAction={unreadSessionAction}
+                          shareSessionAction={shareSessionAction}
+                          archiveSessionAction={archiveSessionAction}
+                          deleteSessionAction={deleteSessionAction}
+                          moveSessionAction={moveSessionAction}
+                        />
                       ))}
                     </div>
                   ) : null}
