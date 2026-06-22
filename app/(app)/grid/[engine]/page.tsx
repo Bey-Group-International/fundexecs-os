@@ -28,10 +28,14 @@ export default async function GridEnginePage({ params }: { params: { engine: str
 
   const workflows = ((data ?? []) as GridWorkflow[]).filter((w) => engineOfWorkflow(w) === engine);
 
+  // Compute "now" on the server so SLA / stuck-workflow flags are deterministic
+  // and don't drift with the client clock.
+  const now = new Date().toISOString();
+
   return (
     <>
       <GridLive orgId={ctx.orgId} />
-      <EnginePaneView engine={engine} workflows={workflows} />
+      <EnginePaneView engine={engine} workflows={workflows} now={now} />
     </>
   );
 }
