@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ExecutiveHQBoot } from "./ExecutiveHQBoot";
 
@@ -13,6 +13,7 @@ type ExecData = {
   href: string;
   bobDelay: string;
   wanderDelay: string;
+  hint: string;
 };
 
 type RoomData = {
@@ -24,6 +25,8 @@ type RoomData = {
   monitorColor: string;
   executives: ExecData[];
 };
+
+type BubbleState = { execId: string; text: string } | null;
 
 // Deterministic particle positions — no Math.random() in render
 const PARTICLE_POSITIONS: Array<{ top: string; left: string; drift: string; delay: string }> = [
@@ -41,6 +44,19 @@ const MONITOR_POSITIONS: Array<{ top: string; left: string; size: string; delay:
 
 const LIGHT_FLICKER_DELAYS = ["0s", "2.3s", "5.1s", "1.7s", "3.8s", "4.2s", "0.9s", "6.1s", "1.2s"];
 
+// Transform origins for each room based on grid position
+const ROOM_TRANSFORM_ORIGINS: Record<string, string> = {
+  ceo: "top left",
+  boardroom: "top center",
+  trading: "top right",
+  research: "top right",
+  investor: "top left",
+  ops: "top center",
+  legal: "top right",
+  marketing: "top right",
+  reception: "bottom center",
+};
+
 const E: Record<string, ExecData> = {
   earnest: {
     id: "earnest-fundmaker",
@@ -51,6 +67,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard",
     bobDelay: "0s",
     wanderDelay: "0s",
+    hint: "Onboarding complete ✓",
   },
   executiveAdvisor: {
     id: "executive-advisor",
@@ -61,6 +78,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard",
     bobDelay: "0.6s",
     wanderDelay: "1.2s",
+    hint: "Market signal detected",
   },
   dealSourcer: {
     id: "deal-sourcer",
@@ -71,6 +89,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/deals",
     bobDelay: "0.2s",
     wanderDelay: "0.5s",
+    hint: "3 targets in pipeline",
   },
   capitalRaiser: {
     id: "capital-raiser",
@@ -81,6 +100,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/deals",
     bobDelay: "0.8s",
     wanderDelay: "2.1s",
+    hint: "Fund room ready",
   },
   workflowInstructor: {
     id: "workflow-instructor",
@@ -91,6 +111,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard",
     bobDelay: "0.4s",
     wanderDelay: "0.9s",
+    hint: "SOP updated",
   },
   capitalConnector: {
     id: "capital-connector",
@@ -101,6 +122,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/capital",
     bobDelay: "0.4s",
     wanderDelay: "1.8s",
+    hint: "Follow-up due",
   },
   automater: {
     id: "automater",
@@ -111,6 +133,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/automation",
     bobDelay: "0.1s",
     wanderDelay: "0.3s",
+    hint: "2 workflows ran today",
   },
   rainmaker: {
     id: "rainmaker",
@@ -121,6 +144,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/capital",
     bobDelay: "0.5s",
     wanderDelay: "1.5s",
+    hint: "High-value lead flagged",
   },
   prDirector: {
     id: "pr-director",
@@ -131,6 +155,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/marketing",
     bobDelay: "0s",
     wanderDelay: "0.7s",
+    hint: "Story opportunity",
   },
   leadGenerator: {
     id: "lead-generator",
@@ -141,6 +166,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/marketing",
     bobDelay: "0.3s",
     wanderDelay: "2.4s",
+    hint: "12 leads captured",
   },
   seoDisruptor: {
     id: "seo-disruptor",
@@ -151,6 +177,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/marketing",
     bobDelay: "0.6s",
     wanderDelay: "1.1s",
+    hint: "Rankings improved",
   },
   curator: {
     id: "curator",
@@ -161,6 +188,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/marketing",
     bobDelay: "0.9s",
     wanderDelay: "3.0s",
+    hint: "Event scheduled",
   },
   investorRelations: {
     id: "investor-relations",
@@ -171,6 +199,7 @@ const E: Record<string, ExecData> = {
     href: "/dashboard/investor-relations",
     bobDelay: "0.3s",
     wanderDelay: "0.6s",
+    hint: "LP update ready",
   },
 };
 
@@ -258,15 +287,60 @@ const ROOMS: RoomData[] = [
   },
 ];
 
+function SpeechBubble({ text, color }: { text: string; color: string }) {
+  return (
+    <div style={{
+      position: "absolute",
+      bottom: "calc(100% + 4px)",
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "#06090f",
+      border: `1px solid ${color}80`,
+      color,
+      fontFamily: "monospace",
+      fontSize: 7,
+      padding: "3px 6px",
+      whiteSpace: "nowrap",
+      maxWidth: 120,
+      textOverflow: "ellipsis",
+      overflow: "hidden",
+      boxShadow: `0 0 8px ${color}30`,
+      animation: "bubble-in 0.2s ease-out",
+      pointerEvents: "none",
+      zIndex: 10,
+    }}>
+      {text}
+      {/* Tail */}
+      <div style={{
+        position: "absolute",
+        bottom: -4,
+        left: "50%",
+        width: 6,
+        height: 4,
+        background: "#06090f",
+        borderBottom: `1px solid ${color}80`,
+        borderRight: `1px solid ${color}80`,
+        transform: "translateX(-50%) rotate(45deg)",
+      }} />
+    </div>
+  );
+}
+
 function ExecAvatar({
   exec,
   size,
   onClick,
+  activeBubble,
+  reducedEffects,
 }: {
   exec: ExecData;
   size: number;
   onClick: () => void;
+  activeBubble: BubbleState;
+  reducedEffects: boolean;
 }) {
+  const showBubble = activeBubble?.execId === exec.id;
+
   return (
     <button
       onClick={(e: React.MouseEvent) => {
@@ -281,11 +355,16 @@ function ExecAvatar({
         flexDirection: "column",
         alignItems: "center",
         gap: 1,
-        animation: `exec-bob 2.6s ease-in-out infinite ${exec.bobDelay}, exec-wander 6s ease-in-out infinite ${exec.wanderDelay}`,
+        animation: reducedEffects
+          ? `exec-bob 2.6s ease-in-out infinite ${exec.bobDelay}`
+          : `exec-bob 2.6s ease-in-out infinite ${exec.bobDelay}, exec-wander 6s ease-in-out infinite ${exec.wanderDelay}`,
         position: "relative",
         zIndex: 4,
       }}
     >
+      {showBubble && (
+        <SpeechBubble text={activeBubble!.text} color={exec.themeColor} />
+      )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={exec.card}
@@ -319,20 +398,28 @@ function RoomCell({
   roomIndex,
   onExecClick,
   onRoomClick,
+  zoomingRoom,
+  activeBubble,
+  reducedEffects,
 }: {
   room: RoomData;
   roomIndex: number;
   onExecClick: (exec: ExecData) => void;
-  onRoomClick: (href: string) => void;
+  onRoomClick: (roomId: string, href: string) => void;
+  zoomingRoom: string | null;
+  activeBubble: BubbleState;
+  reducedEffects: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const execCount = room.executives.length;
   const avatarSize = execCount >= 4 ? 36 : execCount >= 2 ? 42 : 48;
   const flickerDelay = LIGHT_FLICKER_DELAYS[roomIndex % LIGHT_FLICKER_DELAYS.length];
+  const isZooming = zoomingRoom === room.id;
+  const transformOrigin = ROOM_TRANSFORM_ORIGINS[room.id] ?? "center center";
 
   return (
     <div
-      onClick={() => onRoomClick(room.href)}
+      onClick={() => onRoomClick(room.id, room.href)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -341,24 +428,31 @@ function RoomCell({
         cursor: "pointer",
         background: "transparent",
         overflow: "hidden",
-        transition: "box-shadow 0.2s ease",
         boxShadow: hovered
           ? `inset 0 0 0 2px ${room.accentColor}cc, 0 0 20px ${room.accentColor}40`
           : `inset 0 0 0 1px ${room.accentColor}22`,
+        transform: isZooming ? "scale(2.5)" : "scale(1)",
+        transformOrigin,
+        zIndex: isZooming ? 20 : undefined,
+        transition: isZooming
+          ? "transform 0.3s ease-in, box-shadow 0.2s ease"
+          : "box-shadow 0.2s ease",
       }}
     >
       {/* Room breathe overlay */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: room.accentColor,
-          animation: `room-breathe 4s ease-in-out infinite`,
-          animationDelay: `${roomIndex * 0.45}s`,
-          pointerEvents: "none",
-          zIndex: 1,
-        }}
-      />
+      {!reducedEffects && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: room.accentColor,
+            animation: `room-breathe 4s ease-in-out infinite`,
+            animationDelay: `${roomIndex * 0.45}s`,
+            pointerEvents: "none",
+            zIndex: 1,
+          }}
+        />
+      )}
 
       {/* Light flicker overlay */}
       <div
@@ -406,7 +500,7 @@ function RoomCell({
       ))}
 
       {/* Particles */}
-      {PARTICLE_POSITIONS.map((pp, i) => (
+      {!reducedEffects && PARTICLE_POSITIONS.map((pp, i) => (
         <span
           key={i}
           style={{
@@ -454,8 +548,8 @@ function RoomCell({
         </div>
       </div>
 
-      {/* Enter indicator — top right on hover */}
-      {hovered && (
+      {/* Enter indicator — top right on hover or zoom */}
+      {(hovered || isZooming) && (
         <div
           style={{
             position: "absolute",
@@ -471,7 +565,7 @@ function RoomCell({
             zIndex: 5,
           }}
         >
-          → ENTER
+          {isZooming ? "ENTERING..." : "→ ENTER"}
         </div>
       )}
 
@@ -494,6 +588,8 @@ function RoomCell({
             exec={exec}
             size={avatarSize}
             onClick={() => onExecClick(exec)}
+            activeBubble={activeBubble}
+            reducedEffects={reducedEffects}
           />
         ))}
       </div>
@@ -504,21 +600,81 @@ function RoomCell({
 export function ExecutiveHQ() {
   const router = useRouter();
   const [booting, setBooting] = useState(true);
+  const [zoomingRoom, setZoomingRoom] = useState<string | null>(null);
+  const [activeBubble, setActiveBubble] = useState<BubbleState>(null);
+  const [isVisible, setIsVisible] = useState(true);
+  const [reducedEffects, setReducedEffects] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const idleIndexRef = useRef(0);
+
+  // Detect reduced-motion / low-power on mount
+  useEffect(() => {
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const lowPower = navigator.hardwareConcurrency !== undefined && navigator.hardwareConcurrency < 4;
+    setReducedEffects(prefersReduced || lowPower);
+  }, []);
+
+  // IntersectionObserver for animation pausing
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.isIntersecting),
+      { threshold: 0.1 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Listen for earn:exec-activity events
+  useEffect(() => {
+    function handler(e: Event) {
+      const { agentKeys, planTitle } = (e as CustomEvent).detail;
+      const allExecs = ROOMS.flatMap((r) => r.executives);
+      const match = allExecs.find((ex) =>
+        agentKeys.some((k: string) => ex.id.includes(k.replace(/_/g, "-")))
+      );
+      if (match) {
+        setActiveBubble({ execId: match.id, text: planTitle });
+        setTimeout(() => setActiveBubble(null), 4000);
+      }
+    }
+    window.addEventListener("earn:exec-activity", handler);
+    return () => window.removeEventListener("earn:exec-activity", handler);
+  }, []);
+
+  // Idle hint rotation
+  useEffect(() => {
+    const allExecs = ROOMS.flatMap((r) => r.executives);
+    const interval = setInterval(() => {
+      const idx = idleIndexRef.current % allExecs.length;
+      const exec = allExecs[idx];
+      idleIndexRef.current = idx + 1;
+      setActiveBubble({ execId: exec.id, text: exec.hint });
+      setTimeout(() => setActiveBubble(null), 3000);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleRoomClick = useCallback(
-    (href: string) => {
-      router.push(href);
+    (roomId: string, href: string) => {
+      if (zoomingRoom) return;
+      setZoomingRoom(roomId);
+      setTimeout(() => {
+        router.push(href);
+        setZoomingRoom(null);
+      }, 320);
     },
-    [router]
+    [router, zoomingRoom]
   );
 
-  const handleExecClick = useCallback(() => {
+  const handleExecClick = useCallback((exec: ExecData) => {
     window.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "k",
-        metaKey: true,
-        bubbles: true,
-        cancelable: true,
+      new CustomEvent("earn:open-with-context", {
+        detail: {
+          execName: exec.name,
+          prompt: `You are advising ${exec.name}. What can I help you with today?`,
+        },
       })
     );
   }, []);
@@ -529,6 +685,8 @@ export function ExecutiveHQ() {
 
   return (
     <div
+      ref={containerRef}
+      className={isVisible ? "" : "hq-paused"}
       style={{
         position: "relative",
         width: "100%",
@@ -565,6 +723,11 @@ export function ExecutiveHQ() {
           0%, 100% { opacity: 0; }
           50%      { opacity: 0.07; }
         }
+        @keyframes bubble-in {
+          from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        .hq-paused * { animation-play-state: paused !important; }
       `}</style>
 
       {/* Office background image */}
@@ -609,6 +772,9 @@ export function ExecutiveHQ() {
             roomIndex={idx}
             onExecClick={handleExecClick}
             onRoomClick={handleRoomClick}
+            zoomingRoom={zoomingRoom}
+            activeBubble={activeBubble}
+            reducedEffects={reducedEffects}
           />
         ))}
       </div>
