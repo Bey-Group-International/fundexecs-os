@@ -12,6 +12,7 @@ export type TaskEventType =
   | "approval.response"
   | "artifact.created"
   | "artifact.verified"
+  | "artifact.sealed"
   | "graph.update";
 
 interface BaseEvent {
@@ -75,6 +76,16 @@ export interface ArtifactVerifiedEvent extends BaseEvent {
   artifact_type: ArtifactType;
 }
 
+// Trust layer (phase 3.1): a verified artifact was sealed into the attestations
+// rail — its content + sources + verification decision are now provable via an
+// immutable evidence_hash. `attestation_id` points at the sealing row.
+export interface ArtifactSealedEvent extends BaseEvent {
+  event: "artifact.sealed";
+  artifact_id: string;
+  attestation_id: string;
+  evidence_hash: string;
+}
+
 export interface GraphUpdateEvent extends BaseEvent {
   event: "graph.update";
   graph: GraphKind;
@@ -89,4 +100,5 @@ export type FundExecsEvent =
   | ApprovalResponseEvent
   | ArtifactCreatedEvent
   | ArtifactVerifiedEvent
+  | ArtifactSealedEvent
   | GraphUpdateEvent;

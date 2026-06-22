@@ -18,6 +18,7 @@ import { buildRouting, deskOverride, engineForStage, executiveForStage, EXECUTIV
 import { shouldReuseRecord } from "@/lib/reference-binding";
 import { getRoutingCorrections, formatRoutingCorrections } from "@/lib/routing-feedback";
 import { recordOperatorFeedback } from "@/lib/team-tasks";
+import { buildArtifactAttestation } from "@/lib/attestation-seal";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -812,7 +813,7 @@ async function verifyWorkflowArtifacts(ctx: Ctx, wf: Task, note: string) {
     })
     .eq("workflow_id", wf.id)
     .eq("verification_status", "unverified")
-    .select("id, artifact_type");
+    .select("id, artifact_type, content, sources, verification_status, verified_by, verified_at");
 
   for (const row of rows ?? []) {
     await recordEvent(ctx, {
@@ -822,6 +823,44 @@ async function verifyWorkflowArtifacts(ctx: Ctx, wf: Task, note: string) {
       hub: wf.hub,
       payload: { artifact_id: row.id, artifact_type: row.artifact_type },
     });
+
+    // Trust layer (phase 3.1): seal the verified artifact into the attestations
+    // rail for tamper-evidence. Best-effort and fully defensive — a sealing
+    // failure must never break the approval flow.
+    try {
+      const attestation = buildArtifactAttestation({
+        artifactId: row.id,
+        organizationId: ctx.orgId,
+        attestedBy: ctx.actorId,
+        hashInput: {
+          content: row.content ?? "",
+          sources: row.sources ?? null,
+          verification_status: row.verification_status,
+          verified_by: row.verified_by,
+          verified_at: row.verified_at,
+        },
+      });
+      const { data: sealed } = await ctx.supabase
+        .from("attestations")
+        .insert(attestation)
+        .select("id")
+        .single();
+      if (sealed) {
+        await recordEvent(ctx, {
+          taskId: wf.id,
+          type: "artifact.sealed",
+          agent: "associate",
+          hub: wf.hub,
+          payload: {
+            artifact_id: row.id,
+            attestation_id: sealed.id,
+            evidence_hash: attestation.evidence_hash,
+          },
+        });
+      }
+    } catch {
+      // Swallow: tamper-evident sealing is additive trust, never a gate.
+    }
   }
 }
 
