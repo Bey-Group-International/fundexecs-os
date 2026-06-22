@@ -3,6 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { engineFromSlug, engineOfWorkflow, type GridWorkflow } from "@/lib/execution-grid";
 import { EnginePaneView } from "@/components/grid/EnginePaneView";
+import { GridLive } from "@/components/grid/GridLive";
 
 export const dynamic = "force-dynamic";
 
@@ -27,5 +28,10 @@ export default async function GridEnginePage({ params }: { params: { engine: str
 
   const workflows = ((data ?? []) as GridWorkflow[]).filter((w) => engineOfWorkflow(w) === engine);
 
-  return <EnginePaneView engine={engine} workflows={workflows} />;
+  return (
+    <>
+      <GridLive orgId={ctx.orgId} />
+      <EnginePaneView engine={engine} workflows={workflows} />
+    </>
+  );
 }
