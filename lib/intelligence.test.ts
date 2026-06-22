@@ -82,6 +82,7 @@ describe("deriveRouting", () => {
     expect(r.target_engine).toBe("Diligence Engine");
     expect(r.lifecycle_stage).toBe("Diligence");
     expect(r.assigned_to).toBe("analyst");
+    expect(r.confidence).toBe("high");
   });
 
   it("routes capital-stack modeling to the Capital Stack Engine + CIO", () => {
@@ -113,6 +114,7 @@ describe("deriveRouting", () => {
     const r = deriveRouting({ prompt: "Help me think about the quarter", hub: "source", agents: ["associate"] });
     expect(r.target_engine).toBe("Outbound Engine");
     expect(r.lifecycle_stage).toBe("Sourcing");
+    expect(r.confidence).toBe("low");
   });
 
   it("flags priority and extracts entities without inventing data", () => {
@@ -190,6 +192,7 @@ describe("buildRouting (authoritative path)", () => {
     expect(r.target_engine).toBe("Capital Stack Engine");
     expect(r.assigned_to).toBe("cio");
     expect(r.lifecycle_stage).toBe("Underwriting");
+    expect(r.confidence).toBe("high");
   });
   it("applies the CRO override when the stage is compliance", () => {
     const r = buildRouting({ prompt: "KYC review", hub: "execute", agents: ["analyst"], stage: "Compliance & Documentation" });
