@@ -751,6 +751,19 @@ export type DispatchLog = {
   created_at: string;
 };
 
+export type AuditLog = {
+  id: string;
+  organization_id: string | null;
+  principal_id: string | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  before_state: Json | null;
+  after_state: Json | null;
+  ip_address: string | null;
+  created_at: string;
+};
+
 // The Source learning ledger (migration 0041). One append-only row per operator
 // action on an AI suggestion (accept / reject / queue). lib/source-intelligence
 // distills these — per org and per principal — into the learned-preferences
@@ -1083,6 +1096,7 @@ export type Database = {
       automations: TableShape<Automation>;
       mandates: TableShape<MandateRow>;
       dispatch_log: TableShape<DispatchLog>;
+      audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
       operator_feedback: TableShape<OperatorFeedback>;
       session_groups: TableShape<SessionGroup>;
