@@ -61,6 +61,26 @@ describe("verificationView", () => {
     expect(view.detail).toMatch(/grounded in 1 source/i);
   });
 
+  it("surfaces the grounding pct on a verified, sourced artifact", () => {
+    const view = verificationView({
+      verification_status: "verified",
+      sources: [{ source: "ic.pdf", snippet: "x", score: 0.6, kind: "document" }],
+      grounding_score: 0.82,
+    });
+    expect(view.detail).toMatch(/grounded in 1 source/i);
+    expect(view.detail).toContain("82% grounded");
+  });
+
+  it("omits the pct on a verified, sourceless artifact even with a score", () => {
+    const view = verificationView({
+      verification_status: "verified",
+      sources: [],
+      grounding_score: 0.9,
+    });
+    expect(view.detail).toMatch(/no sources cited/i);
+    expect(view.detail).not.toContain("%");
+  });
+
   it("is 'grounded' when there are citations but no sign-off", () => {
     const view = verificationView({
       verification_status: "unverified",

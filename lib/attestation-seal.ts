@@ -63,6 +63,27 @@ export function computeArtifactHash(input: ArtifactHashInput): string {
   return createHash("sha256").update(canonical).digest("hex");
 }
 
+/**
+ * The integrity verdict for a sealed artifact, derived by recomputing its hash:
+ * - "sealed"    — the artifact's current integrity matches its seal (intact).
+ * - "tampered"  — the seal exists but no longer matches (the signed content changed).
+ * - "unsealed"  — no seal was ever written (nothing to verify against).
+ */
+export type SealStatus = "sealed" | "tampered" | "unsealed";
+
+/**
+ * Re-check a seal: recompute the artifact's hash and compare it to the stored
+ * `evidence_hash`. This is what makes the "tamper-evident" promise real — the
+ * write-only seal becomes verifiable by recomputing it on read. Pure (no I/O).
+ */
+export function verifyArtifactSeal(
+  input: ArtifactHashInput,
+  evidenceHash: string | null | undefined,
+): SealStatus {
+  if (!evidenceHash) return "unsealed";
+  return computeArtifactHash(input) === evidenceHash ? "sealed" : "tampered";
+}
+
 export interface BuildArtifactAttestationArgs {
   artifactId: string;
   organizationId: string;

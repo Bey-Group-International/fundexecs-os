@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
+import type { SealStatus } from "@/lib/attestation-seal";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 import { routingFromTask, cursorResponse, routingHeadline, EXECUTIVE_LABEL, EXECUTIVES, type TargetEngine, type Executive } from "@/lib/intelligence";
 import { splitPositions, type SplitPosition } from "@/lib/split-grouping";
@@ -63,10 +64,15 @@ const SLASH_COMMANDS: { command: string; label: string; template: string }[] = [
   { command: "/memo", label: "Draft an IC memo", template: "Draft an investment committee memo for " },
 ];
 
+// An artifact carrying its optional tamper-evidence verdict. The seal is
+// recomputed server-side on load (lib/artifact-seal.ts); undefined means
+// "unsealed / not checked" and renders nothing.
+export type SealedArtifact = Artifact & { seal_status?: SealStatus };
+
 export interface WorkflowBundle {
   workflow: Task;
   steps: Task[];
-  artifacts: Artifact[];
+  artifacts: SealedArtifact[];
   approval: Approval | null;
 }
 
@@ -1894,6 +1900,7 @@ function WorkflowCard({
               sources={primaryArtifact.sources}
               verificationStatus={primaryArtifact.verification_status}
               groundingScore={primaryArtifact.grounding_score}
+              sealStatus={primaryArtifact.seal_status}
             />
           </div>
           <p className="mt-2 text-xs text-fg-secondary">

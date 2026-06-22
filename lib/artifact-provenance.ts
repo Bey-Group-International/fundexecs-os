@@ -75,11 +75,12 @@ export function verificationView(input: {
     // Only claim "grounded in sources" when the artifact actually cites some —
     // an accepted recommendation is signed off but has no retrieved sources.
     const n = citedSourceNames(sources).length;
+    const pct = typeof input.grounding_score === "number" ? ` (${Math.round(input.grounding_score * 100)}% grounded)` : "";
     return {
       level: "verified",
       label: "Verified",
       detail: n > 0
-        ? `Signed off by an operator, grounded in ${n} source${n === 1 ? "" : "s"}.`
+        ? `Signed off by an operator, grounded in ${n} source${n === 1 ? "" : "s"}${pct}.`
         : "Signed off by an operator — no sources cited.",
     };
   }
