@@ -16,6 +16,8 @@ import { getBuildReadiness } from "@/lib/build-readiness";
 import { getInboxThreads } from "@/lib/inbox/data";
 import { buildDigest, priorityBucket, type DigestThread } from "@/lib/inbox/intelligence";
 import { channelMeta } from "@/lib/inbox/channels";
+import { dashboardWorkspaces } from "@/lib/dashboard/config";
+import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
 
 export const dynamic = "force-dynamic";
 
@@ -218,7 +220,7 @@ export default async function DashboardPage() {
       {/* Entry into the Gather-style spatial office where Earn orchestrates the
           executive team in real time. */}
       <Link
-        href="/command-center"
+        href="/dashboard/office"
         className="fx-card fx-card-hover group relative mb-6 flex items-center gap-4 overflow-hidden p-5"
       >
         <span
@@ -238,7 +240,7 @@ export default async function DashboardPage() {
             Enter the spatial office
           </p>
           <p className="mt-0.5 text-sm text-fg-muted">
-            Watch Earn delegate across the Mandate, Relationship, Outbound, Diligence, and Capital
+            Watch Earnest Fundmaker delegate across the Mandate, Relationship, Outbound, Diligence, and Capital
             offices — executives execute in real time.
           </p>
         </div>
@@ -246,6 +248,15 @@ export default async function DashboardPage() {
           →
         </span>
       </Link>
+
+      <section className="mb-8">
+        <SectionHeading>Operating workspaces</SectionHeading>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {dashboardWorkspaces.map((workspace) => (
+            <WorkspaceCard key={workspace.key} workspace={workspace} />
+          ))}
+        </div>
+      </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Workflows" value={workflows.length} />
