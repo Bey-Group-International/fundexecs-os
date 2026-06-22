@@ -1016,6 +1016,16 @@ export type RadarDigestLogEntry = {
   sent_at: string;
 };
 
+// An append-only weekly snapshot of the serialized Source Outcome Funnel
+// (migration 0065). `snapshot` holds the full Funnel (lib/source-funnel.ts);
+// the most recent prior row is the baseline the weekly rollup diffs against.
+export type FunnelSnapshotRow = {
+  id: string;
+  organization_id: string;
+  snapshot: Json;
+  captured_at: string;
+};
+
 // One implicit digest-engagement event (migration 0064): an operator opened a
 // digest or clicked a row. Folded into the Radar learning loop as implicit
 // feedback (clicks > opens, both weaker than an explicit accept).
@@ -1054,6 +1064,9 @@ export type Artifact = Timestamps & {
   verification_note: string | null;
   sources: Json;
   brain_run_id: string | null;
+  // Trust layer (migration 0066). Automated grounding score in [0,1] — how much
+  // of the output reflects its cited sources.
+  grounding_score: number;
 };
 
 // Minimal Database shape compatible with @supabase/supabase-js generics.
@@ -1361,6 +1374,7 @@ export type Database = {
       radar_feedback: TableShape<RadarFeedback>;
       radar_digest_prefs: TableShape<RadarDigestPref>;
       radar_digest_log: TableShape<RadarDigestLogEntry>;
+      funnel_snapshots: TableShape<FunnelSnapshotRow>;
       radar_digest_engagement: TableShape<RadarDigestEngagement>;
     };
     Views: Record<string, never>;

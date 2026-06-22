@@ -19,13 +19,15 @@ const VERIFY_TONE: Record<VerificationLevel, string> = {
 export function ProvenanceBar({
   sources,
   verificationStatus,
+  groundingScore,
 }: {
   sources?: Json | null;
   verificationStatus?: string | null;
+  groundingScore?: number | null;
 }) {
   const [open, setOpen] = useState(false);
   const cited = parseSources(sources);
-  const view = verificationView({ verification_status: verificationStatus, sources });
+  const view = verificationView({ verification_status: verificationStatus, sources, grounding_score: groundingScore });
 
   return (
     <div className="mt-2 border-t border-line/55 pt-2">
@@ -364,6 +366,7 @@ interface ArtifactCardProps {
   // Trust layer: grounding citations + verification badge.
   sources?: Json | null;
   verificationStatus?: string | null;
+  groundingScore?: number | null;
 }
 
 export function ArtifactCard({
@@ -375,6 +378,7 @@ export function ArtifactCard({
   compact = false,
   sources,
   verificationStatus,
+  groundingScore,
 }: ArtifactCardProps) {
   const [expanded, setExpanded] = useState(false);
   const label = ARTIFACT_LABEL[artifact_type] ?? "Artifact";
@@ -410,7 +414,7 @@ export function ArtifactCard({
             {renderContent(content)}
           </div>
           {sources !== undefined || verificationStatus !== undefined ? (
-            <ProvenanceBar sources={sources} verificationStatus={verificationStatus} />
+            <ProvenanceBar sources={sources} verificationStatus={verificationStatus} groundingScore={groundingScore} />
           ) : null}
           <button
             onClick={() => setExpanded(false)}
@@ -431,6 +435,7 @@ export function ArtifactInline({
   title,
   sources,
   verificationStatus,
+  groundingScore,
 }: {
   content: string;
   artifactType?: ArtifactType;
@@ -438,6 +443,7 @@ export function ArtifactInline({
   // Trust layer: grounding citations + verification badge for this deliverable.
   sources?: Json | null;
   verificationStatus?: string | null;
+  groundingScore?: number | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -471,7 +477,7 @@ export function ArtifactInline({
         </button>
       )}
       {sources !== undefined || verificationStatus !== undefined ? (
-        <ProvenanceBar sources={sources} verificationStatus={verificationStatus} />
+        <ProvenanceBar sources={sources} verificationStatus={verificationStatus} groundingScore={groundingScore} />
       ) : null}
       {modalOpen && (
         <ArtifactModal

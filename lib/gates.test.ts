@@ -167,3 +167,36 @@ describe("gateDecision — Tier 2 (external-facing)", () => {
     expect(gateDecision("send_outreach", mandate).requiresApproval).toBe(true);
   });
 });
+
+describe("gateDecision — trust layer (verification-aware auto-approve)", () => {
+  const mandate: Mandate = { autoApprove: ["send_outreach"], autonomyCeiling: 2 };
+
+  it("revokes the auto-approve bypass when the backing output is unverifiable", () => {
+    const decision = gateDecision("send_outreach", mandate, { verifiable: false });
+    expect(decision.tier).toBe(2);
+    expect(decision.requiresApproval).toBe(true);
+    expect(decision.reason).toContain("sign-off required");
+  });
+
+  it("still auto-approves when the backing output is verifiable", () => {
+    const decision = gateDecision("send_outreach", mandate, { verifiable: true });
+    expect(decision.requiresApproval).toBe(false);
+    expect(decision.reason).toBe("Pre-authorized by your active mandate.");
+  });
+
+  it("does not affect Tier-1 internal work even when unverifiable", () => {
+    expect(gateDecision("draft_message", mandate, { verifiable: false }).requiresApproval).toBe(false);
+  });
+
+  it("leaves Tier-3 always gated regardless of backing", () => {
+    expect(gateDecision("move_capital", mandate, { verifiable: true }).requiresApproval).toBe(true);
+  });
+
+  it("is a no-op when no backing is supplied (unchanged behavior)", () => {
+    expect(gateDecision("send_outreach", mandate).requiresApproval).toBe(false);
+  });
+
+  it("does not relax a non-pre-authorized action just because it is verifiable", () => {
+    expect(gateDecision("share_materials", mandate, { verifiable: true }).requiresApproval).toBe(true);
+  });
+});
