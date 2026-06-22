@@ -112,6 +112,19 @@ function roomBgSrc(roomId: string, mode: "day" | "night"): string {
   return `/assets/fundexecs/office/rooms/${mode}/${name}-${mode}-empty.png`;
 }
 
+// objectPosition values so each per-room PNG crop centres on the room subject
+const ROOM_OBJECT_POSITION: Record<string, string> = {
+  ceo:       "left top",
+  boardroom: "center top",
+  trading:   "center top",
+  research:  "right top",
+  investor:  "left center",
+  ops:       "center center",
+  legal:     "center center",
+  marketing: "right center",
+  reception: "center bottom",
+};
+
 // ─── Mini-map ─────────────────────────────────────────────────────────────────
 
 const GOLD = "#c9a84c";
@@ -236,7 +249,8 @@ function RoomCell({
         alt="" aria-hidden="true"
         style={{
           position:"absolute", inset:0, width:"100%", height:"100%",
-          objectFit:"cover", objectPosition:"center top",
+          objectFit:"cover",
+          objectPosition: ROOM_OBJECT_POSITION[room.id] ?? "center top",
           pointerEvents:"none", zIndex:0,
           opacity: hovered ? 0.65 : 0,
           transition:"opacity 0.35s ease",
@@ -506,7 +520,7 @@ export function ExecutiveHQ() {
           width: "100%", height: "100%",
           objectFit: "cover", objectPosition: "center top",
           pointerEvents: "none", userSelect: "none",
-          filter: nightMode ? "brightness(0.75) saturate(0.9)" : "brightness(0.9) saturate(0.95)",
+          filter: nightMode ? "brightness(0.88) saturate(0.88)" : "brightness(0.95) saturate(0.97)",
           transformOrigin: "center center",
           transform: zoomingRoom
             ? `scale(3.5) ${ROOM_ZOOM_TRANSLATE[zoomingRoom] ?? ""}`
@@ -606,10 +620,10 @@ export function ExecutiveHQ() {
       {/* Transparent grid overlay — rooms portion */}
       <div style={{
         position:"absolute",
-        top:"1.5%", left:"1.5%", right:"1.5%", bottom:"19%",
+        top:"2%", left:"2%", right:"2%", bottom:"18%",
         display:"grid",
         gridTemplateColumns:"1fr 1fr 1fr 1fr",
-        gridTemplateRows:"36fr 26fr 17fr",
+        gridTemplateRows:"36fr 26fr 28fr",
         gridTemplateAreas:'"ceo board trading research" "investor ops legal marketing" ". reception reception ."',
         gap:"1%",
         zIndex:4,
