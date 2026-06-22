@@ -6,7 +6,6 @@
 // presentational boards expect. Every read is best-effort — any failure (no
 // org, query error, exception) degrades to an empty board rather than throwing,
 // so the closing page always renders its existing empty states.
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { LPOnboardingStatus } from "@/components/execute/LPOnboardingStatus";
@@ -77,20 +76,16 @@ async function loadClosingData(): Promise<ClosingData> {
     const orgId = ctx.orgId;
 
     const supabase = createServerClient();
-    // The two boards read new tables not yet present in the generated Database
-    // types; query them through an untyped view of the same request-scoped,
-    // RLS-enforced client.
-    const loose = supabase as unknown as SupabaseClient;
 
     const [sessionsRes, contractsRes, fundsRes, investorsRes] = await Promise.all([
-      loose
+      supabase
         .from("lp_onboarding_sessions")
         .select(
           "id, lp_name, lp_email, status, fund_id, commitment_amount, expires_at, token",
         )
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false }),
-      loose
+      supabase
         .from("contracts")
         .select(
           "id, title, document_type, status, investor_id, fund_id, expiry_date, signed_at, effective_date",

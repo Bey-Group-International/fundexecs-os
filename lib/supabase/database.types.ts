@@ -1320,6 +1320,103 @@ export type SessionMessage = {
   created_at: string;
 };
 
+// LP Onboarding Portal (migration 20260622100000). Tracks one LP through the
+// onboarding flow (pending → accreditation → subscription → committed →
+// complete). A unique token drives the public portal route. `wire_instructions`
+// is free-form jsonb. Org-scoped.
+export type LpOnboardingSession = Timestamps & {
+  id: string;
+  organization_id: string;
+  investor_id: string | null;
+  fund_id: string | null;
+  token: string;
+  status: string; // 'pending' | 'accreditation' | 'subscription' | 'committed' | 'complete' | 'expired'
+  lp_name: string;
+  lp_email: string;
+  commitment_amount: number | null;
+  accreditation_type: string | null; // 'accredited_investor' | 'qualified_purchaser' | 'qualified_client' | 'institutional'
+  accreditation_verified_at: string | null;
+  kyc_status: string; // 'pending' | 'in_progress' | 'verified' | 'failed'
+  kyc_verified_at: string | null;
+  docusign_envelope_id: string | null;
+  subscription_signed_at: string | null;
+  capital_received_at: string | null;
+  wire_instructions: Json;
+  notes: string | null;
+  expires_at: string;
+};
+
+// A live contract instance (migration 20260622100000) — generated from a
+// template or uploaded directly. `extracted_clauses` is free-form jsonb. Org-
+// scoped.
+export type Contract = Timestamps & {
+  id: string;
+  organization_id: string;
+  template_id: string | null;
+  fund_id: string | null;
+  deal_id: string | null;
+  investor_id: string | null;
+  created_by: string | null;
+  title: string;
+  document_type: string;
+  status: string; // 'draft' | 'review' | 'sent' | 'signed' | 'active' | 'expired' | 'terminated'
+  docusign_envelope_id: string | null;
+  signed_at: string | null;
+  effective_date: string | null;
+  expiry_date: string | null;
+  renewal_alert_days: number;
+  renewal_alerted_at: string | null;
+  extracted_clauses: Json;
+  file_url: string | null;
+  file_size_bytes: number | null;
+  notes: string | null;
+};
+
+// A deal intelligence signal (migration 0058) — an external market signal tagged
+// by sector. Named DealSignalRow to avoid clashing with the `DealSignal` view
+// model in lib/deal-intelligence.ts. Org-scoped; `created_at`/`updated_at` are
+// defaulted but the table has no updated_at trigger here.
+export type DealSignalRow = {
+  id: string;
+  organization_id: string;
+  deal_id: string | null;
+  source: string; // 'manual' | 'pitchbook' | 'crunchbase' | 'cbinsights' | 'sec_filing' | 'news' | 'ai_extracted'
+  signal_type: string; // 'funding_round' | 'acquisition' | 'ipo' | 'bankruptcy' | 'exec_change' | 'partnership' | 'market_entry' | 'exit' | 'lp_activity' | 'regulatory'
+  title: string;
+  summary: string | null;
+  sector: string | null;
+  subsector: string | null;
+  geography: string | null;
+  company_name: string | null;
+  deal_size_min: number | null;
+  deal_size_max: number | null;
+  deal_stage: string | null;
+  relevance_score: number | null;
+  thesis_match_score: number | null;
+  source_url: string | null;
+  published_at: string | null;
+  read_at: string | null;
+  saved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// A sector heatmap snapshot (migration 0058) — aggregated deal activity per
+// sector/stage for a snapshot date. Org-scoped.
+export type SectorHeatmapSnapshot = {
+  id: string;
+  organization_id: string;
+  sector: string;
+  stage: string;
+  deal_count: number;
+  total_value: number | null;
+  avg_value: number | null;
+  yoy_change_pct: number | null;
+  activity_level: string; // 'low' | 'moderate' | 'high' | 'very_high'
+  snapshot_date: string;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -1415,6 +1512,10 @@ export type Database = {
       radar_digest_engagement: TableShape<RadarDigestEngagement>;
       digest_experiment_variants: TableShape<DigestExperimentVariant>;
       cron_runs: TableShape<CronRun>;
+      lp_onboarding_sessions: TableShape<LpOnboardingSession>;
+      contracts: TableShape<Contract>;
+      deal_signals: TableShape<DealSignalRow>;
+      sector_heatmap_snapshots: TableShape<SectorHeatmapSnapshot>;
     };
     Views: Record<string, never>;
     Functions: {

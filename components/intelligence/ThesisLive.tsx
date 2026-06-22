@@ -85,26 +85,7 @@ async function loadThesisData(): Promise<{
     const ctx = await getSessionContext();
     if (!ctx?.orgId) return { signals: [], cells: [] };
 
-    // These tables (deal_signals, sector_heatmap_snapshots) are not yet in the
-    // hand-authored generated types, so the typed client rejects the names.
-    // Scope the escape hatch to a single untyped view of `.from()`.
-    const sb = createServerClient() as unknown as {
-      from: (table: string) => {
-        select: (cols: string) => {
-          eq: (
-            col: string,
-            val: string,
-          ) => {
-            order: (
-              col: string,
-              opts: { ascending: boolean; nullsFirst?: boolean },
-            ) => {
-              limit: (n: number) => Promise<{ data: unknown[] | null }>;
-            } & Promise<{ data: unknown[] | null }>;
-          };
-        };
-      };
-    };
+    const sb = createServerClient();
 
     const [signalRes, heatmapRes] = await Promise.all([
       sb
