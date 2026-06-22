@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
+import { createServerClient } from "@/lib/supabase/server";
 import { getDealFeed } from "@/lib/deal-share.server";
 import { DealsSeen } from "@/components/inbox/DealsSeen";
+import { DealSignalFeed } from "@/components/intelligence/DealSignalFeed";
+import { SectorHeatmap } from "@/components/intelligence/SectorHeatmap";
+import { buildHeatmap } from "@/lib/deal-intelligence";
+import type { DealSignal } from "@/lib/deal-intelligence";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +20,36 @@ export default async function DealFeedPage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const items = await getDealFeed(ctx.orgId);
+  const supabase = createServerClient();
+
+  const [items, dealsRes] = await Promise.all([
+    getDealFeed(ctx.orgId),
+    supabase
+      .from("deals")
+      .select("id, name, geography, asset_class, stage, target_amount, created_at")
+      .eq("organization_id", ctx.orgId)
+      .order("created_at", { ascending: false })
+      .limit(100),
+  ]);
+
+  // Map internal deals into DealSignal shape for the intelligence feed
+  const signals: DealSignal[] = (dealsRes.data ?? []).map((d) => ({
+    id: d.id,
+    signalType: "funding_round" as const,
+    title: d.name ?? "Unnamed Deal",
+    sector: d.asset_class ?? undefined,
+    geography: d.geography ?? undefined,
+    dealStage: d.stage ?? undefined,
+    dealSizeMin: null,
+    dealSizeMax: d.target_amount ?? null,
+    relevanceScore: 75,
+    thesisMatchScore: 65,
+    publishedAt: d.created_at,
+  }));
+
+  const heatmapCells = buildHeatmap(signals);
+  const sectors = [...new Set(heatmapCells.map((c) => c.sector))];
+  const stages = [...new Set(heatmapCells.map((c) => c.stage))];
 
   return (
     <div className="fx-ambient mx-auto max-w-4xl">
@@ -66,6 +100,40 @@ export default async function DealFeedPage() {
             );
           })}
         </ul>
+      )}
+
+      {signals.length > 0 && (
+        <section className="mt-12">
+          <header className="mb-6">
+            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+              Intelligence
+            </span>
+            <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+              Deal Signal Feed
+            </h2>
+            <p className="mt-1 text-sm text-fg-secondary">
+              Live deal signals across sectors — funding rounds, acquisitions, and market moves mapped to your thesis.
+            </p>
+          </header>
+          <DealSignalFeed signals={signals} />
+        </section>
+      )}
+
+      {heatmapCells.length > 0 && (
+        <section className="mt-12">
+          <header className="mb-6">
+            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+              Intelligence
+            </span>
+            <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+              Sector Heatmap
+            </h2>
+            <p className="mt-1 text-sm text-fg-secondary">
+              Activity intensity by sector and stage — darker cells indicate higher deal velocity.
+            </p>
+          </header>
+          <SectorHeatmap cells={heatmapCells} sectors={sectors} stages={stages} />
+        </section>
       )}
     </div>
   );
