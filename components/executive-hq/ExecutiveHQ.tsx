@@ -668,13 +668,13 @@ export function ExecutiveHQ() {
     [router, zoomingRoom]
   );
 
-  const handleExecClick = useCallback(() => {
+  const handleExecClick = useCallback((exec: ExecData) => {
     window.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "k",
-        metaKey: true,
-        bubbles: true,
-        cancelable: true,
+      new CustomEvent("earn:open-with-context", {
+        detail: {
+          execName: exec.name,
+          prompt: `You are advising ${exec.name}. What can I help you with today?`,
+        },
       })
     );
   }, []);
