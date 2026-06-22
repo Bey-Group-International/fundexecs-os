@@ -18,6 +18,7 @@ import { EntityTree } from "./EntityTree";
 import { EntityOwnership } from "./EntityOwnership";
 import { FormationWizard } from "./FormationWizard";
 import { DilutionModeler } from "./DilutionModeler";
+import { EquityInstruments } from "./EquityInstruments";
 import { StakeholderLinks } from "./StakeholderLinks";
 import { EntityTabs } from "./EntityTabs";
 import { EntityInsights } from "./EntityInsights";
@@ -202,19 +203,23 @@ export async function EntityModule() {
     />
   );
 
-  const modeling =
-    entities.length > 0 ? (
-      <DilutionModeler
-        entities={entities.map((e) => ({ id: e.id, name: e.name }))}
-        holdings={holdings}
-        stakeholders={stakeholders.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))}
-        shareClasses={shareClasses.map((c) => ({ id: c.id, name: c.name }))}
-      />
-    ) : (
-      <p className="rounded-xl border border-dashed border-line bg-surface-1 p-6 text-center text-sm text-fg-muted">
-        Add an entity and its cap table to model rounds and dilution.
-      </p>
-    );
+  const modeling = (
+    <div className="flex flex-col gap-8">
+      {entities.length > 0 ? (
+        <DilutionModeler
+          entities={entities.map((e) => ({ id: e.id, name: e.name }))}
+          holdings={holdings}
+          stakeholders={stakeholders.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))}
+          shareClasses={shareClasses.map((c) => ({ id: c.id, name: c.name }))}
+        />
+      ) : (
+        <p className="rounded-xl border border-dashed border-line bg-surface-1 p-6 text-center text-sm text-fg-muted">
+          Add an entity and its cap table to model rounds and dilution.
+        </p>
+      )}
+      <EquityInstruments />
+    </div>
+  );
 
   const people = (
     <StakeholderLinks
