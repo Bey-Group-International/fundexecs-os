@@ -1,4 +1,10 @@
-import { groupByEngine, engineOfWorkflow, type GridWorkflow } from "@/lib/execution-grid";
+import {
+  groupByEngine,
+  engineOfWorkflow,
+  engineSlug,
+  engineFromSlug,
+  type GridWorkflow,
+} from "@/lib/execution-grid";
 import { TARGET_ENGINES } from "@/lib/intelligence";
 
 function w(over: Partial<GridWorkflow>): GridWorkflow {
@@ -29,6 +35,30 @@ describe("engineOfWorkflow", () => {
     expect(engineOfWorkflow(w({ lifecycle_stage: null, title: "misc", description: null, hub: "source" }))).toBe(
       "Outbound Engine",
     );
+  });
+});
+
+describe("engineSlug / engineFromSlug", () => {
+  it("slugifies an engine into a URL-safe token", () => {
+    expect(engineSlug("Diligence Engine")).toBe("diligence-engine");
+    expect(engineSlug("Relationship Graph")).toBe("relationship-graph");
+    expect(engineSlug("Capital Stack Engine")).toBe("capital-stack-engine");
+  });
+
+  it("round-trips every engine through slug and back", () => {
+    for (const engine of TARGET_ENGINES) {
+      expect(engineFromSlug(engineSlug(engine))).toBe(engine);
+    }
+  });
+
+  it("produces a unique slug per engine", () => {
+    const slugs = TARGET_ENGINES.map(engineSlug);
+    expect(new Set(slugs).size).toBe(TARGET_ENGINES.length);
+  });
+
+  it("returns null for an unknown slug", () => {
+    expect(engineFromSlug("not-an-engine")).toBeNull();
+    expect(engineFromSlug("")).toBeNull();
   });
 });
 

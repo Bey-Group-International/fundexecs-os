@@ -38,6 +38,16 @@ export function engineOfWorkflow(w: GridWorkflow): TargetEngine {
   }).target_engine;
 }
 
+// URL-safe slug for an engine pane (e.g. "Diligence Engine" → "diligence-engine").
+export function engineSlug(engine: TargetEngine): string {
+  return engine.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+// Resolve a slug back to its engine, or null if it matches none of the seven.
+export function engineFromSlug(slug: string): TargetEngine | null {
+  return TARGET_ENGINES.find((e) => engineSlug(e) === slug) ?? null;
+}
+
 /**
  * Group workflows into the seven Execution Grid panes. Every engine is present
  * (empty panes included) and in canonical order; within a pane, input order is
