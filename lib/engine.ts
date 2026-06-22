@@ -5,7 +5,7 @@
 // executes each step in turn — each producing a real deliverable — emitting
 // task_events the live Copilot streams. Human approval gates automation; the
 // operator is never bypassed.
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import type { AgentKey, Hub, GraphKind, ArtifactType, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
 import { generatePlan, generatePlans, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
@@ -19,6 +19,8 @@ import { shouldReuseRecord } from "@/lib/reference-binding";
 import { getRoutingCorrections, formatRoutingCorrections } from "@/lib/routing-feedback";
 import { recordOperatorFeedback } from "@/lib/team-tasks";
 import { buildArtifactAttestation } from "@/lib/attestation-seal";
+import { grantReputation, REPUTATION_POINTS } from "@/lib/reputation";
+import { isPrincipalIdentityVerified } from "@/lib/identity";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -813,9 +815,11 @@ async function verifyWorkflowArtifacts(ctx: Ctx, wf: Task, note: string) {
     })
     .eq("workflow_id", wf.id)
     .eq("verification_status", "unverified")
-    .select("id, artifact_type, content, sources, verification_status, verified_by, verified_at");
+    .select("id, artifact_type, content, sources, verification_status, verified_by, verified_at, grounding_score");
 
-  for (const row of rows ?? []) {
+  const verified = rows ?? [];
+
+  for (const row of verified) {
     await recordEvent(ctx, {
       taskId: wf.id,
       type: "artifact.verified",
@@ -861,6 +865,36 @@ async function verifyWorkflowArtifacts(ctx: Ctx, wf: Task, note: string) {
     } catch {
       // Swallow: tamper-evident sealing is additive trust, never a gate.
     }
+  }
+
+  // Trust layer (compounding loop): producing verified, well-grounded output
+  // builds the org's standing. Fully defensive — a reputation failure must NEVER
+  // break approval (verification has already happened and been sealed above).
+  //
+  // Identity is a SOFT gate on MINTING standing only: standing is granted iff the
+  // verifying principal is itself identity-verified. If not, we simply skip the
+  // grant — verification still stands; only the reputation is withheld (this
+  // avoids locking everyone out before anyone is marked verified).
+  try {
+    if (verified.length > 0 && (await isPrincipalIdentityVerified(ctx.supabase, ctx.actorId))) {
+      const service = createServiceClient();
+      // Per-artifact, grounding-weighted grant: a better-grounded artifact earns
+      // more, floored at 1 so any verified artifact earns something. Bounded by
+      // REPUTATION_POINTS.artifact_verified (grounding_score is in [0,1]), so the
+      // total per approval can never exceed points * (number of verified rows) —
+      // standing is never minted unbounded.
+      for (const row of verified) {
+        const score = typeof row.grounding_score === "number" ? row.grounding_score : 0;
+        const delta = Math.max(1, Math.round(REPUTATION_POINTS.artifact_verified * score));
+        await grantReputation(service, ctx.orgId, delta, "artifact_verified", {
+          sourceType: "artifact",
+          sourceId: row.id,
+          note,
+        });
+      }
+    }
+  } catch {
+    // Swallow: earned standing is additive trust, never a gate on approval.
   }
 }
 

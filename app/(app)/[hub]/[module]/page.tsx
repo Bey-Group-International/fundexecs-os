@@ -30,6 +30,9 @@ const SourceRadar = nextDynamic(() =>
 const SourceFunnel = nextDynamic(() =>
   import("@/components/source/SourceFunnel").then((m) => m.SourceFunnel),
 );
+const RadarAttribution = nextDynamic(() =>
+  import("@/components/source/RadarAttribution").then((m) => m.RadarAttribution),
+);
 const RunSearch = nextDynamic(() =>
   import("@/components/run/RunSearch").then((m) => m.RunSearch),
 );
@@ -107,6 +110,9 @@ export default function ModulePage({
   }
   if (params.hub === "source" && params.module === "funnel") {
     return <SourceFunnel live={sourcingLive()} initialPrompt={initialPrompt} />;
+  }
+  if (params.hub === "source" && params.module === "attribution") {
+    return <RadarAttribution live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;

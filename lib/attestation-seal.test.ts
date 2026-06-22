@@ -6,6 +6,7 @@
 import {
   computeArtifactHash,
   buildArtifactAttestation,
+  verifyArtifactSeal,
   type ArtifactHashInput,
   type BuildArtifactAttestationArgs,
 } from "@/lib/attestation-seal";
@@ -69,6 +70,35 @@ describe("computeArtifactHash", () => {
     const nullHash = computeArtifactHash(hashInput({ sources: null }));
     expect(nullHash).toBe(computeArtifactHash(hashInput({ sources: null })));
     expect(nullHash).not.toBe(computeArtifactHash(hashInput({ sources: [] })));
+  });
+});
+
+describe("verifyArtifactSeal", () => {
+  it("returns 'sealed' when the input still matches its evidence hash", () => {
+    const input = hashInput();
+    const seal = computeArtifactHash(input);
+    expect(verifyArtifactSeal(input, seal)).toBe("sealed");
+  });
+
+  it("returns 'tampered' when the content was changed after sealing", () => {
+    const seal = computeArtifactHash(hashInput());
+    expect(verifyArtifactSeal(hashInput({ content: "Edited after the fact." }), seal)).toBe("tampered");
+  });
+
+  it("returns 'tampered' when the sources were changed after sealing", () => {
+    const seal = computeArtifactHash(hashInput());
+    expect(verifyArtifactSeal(hashInput({ sources: [{ source: "doc-2" }] }), seal)).toBe("tampered");
+  });
+
+  it("returns 'tampered' when the verifier was changed after sealing", () => {
+    const seal = computeArtifactHash(hashInput());
+    expect(verifyArtifactSeal(hashInput({ verified_by: "principal-2" }), seal)).toBe("tampered");
+  });
+
+  it("returns 'unsealed' when there is no evidence hash", () => {
+    expect(verifyArtifactSeal(hashInput(), null)).toBe("unsealed");
+    expect(verifyArtifactSeal(hashInput(), undefined)).toBe("unsealed");
+    expect(verifyArtifactSeal(hashInput(), "")).toBe("unsealed");
   });
 });
 

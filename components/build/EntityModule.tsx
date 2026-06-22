@@ -20,6 +20,9 @@ import { FormationWizard } from "./FormationWizard";
 import { DilutionModeler } from "./DilutionModeler";
 import { EquityInstruments } from "./EquityInstruments";
 import { StakeholderLinks } from "./StakeholderLinks";
+import { EntityTabs } from "./EntityTabs";
+import { EntityInsights } from "./EntityInsights";
+import { computeEntityInsights } from "@/lib/entity-insights";
 
 const ENTITY_TYPES = ["gp", "management_co", "fund", "spv", "holdco", "other"];
 const TYPE_LABEL: Record<string, string> = {
@@ -45,23 +48,28 @@ export async function EntityModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
   const supabase = createServerClient();
-  const [entitiesRes, stakeholdersRes, classesRes, holdingsRes] = await Promise.all([
-    supabase.from("entities").select("*").order("created_at", { ascending: false }),
-    supabase.from("stakeholders").select("*").order("name", { ascending: true }),
-    supabase.from("share_classes").select("*"),
-    supabase.from("equity_holdings").select("*"),
-  ]);
+  // One parallel batch for everything independent (entities, cap-table tables,
+  // team members, investors); principals depend on members so follow after.
+  const [entitiesRes, stakeholdersRes, classesRes, holdingsRes, membersRes, investorRes] =
+    await Promise.all([
+      supabase.from("entities").select("*").order("created_at", { ascending: false }),
+      supabase.from("stakeholders").select("*").order("name", { ascending: true }),
+      supabase.from("share_classes").select("*"),
+      supabase.from("equity_holdings").select("*"),
+      supabase.from("organization_members").select("*").eq("organization_id", ctx.orgId),
+      supabase
+        .from("investors")
+        .select("id,name")
+        .eq("organization_id", ctx.orgId)
+        .order("name", { ascending: true }),
+    ]);
   const entities = (entitiesRes.data ?? []) as Entity[];
   const stakeholders = (stakeholdersRes.data ?? []) as Stakeholder[];
   const shareClasses = (classesRes.data ?? []) as ShareClass[];
   const holdings = (holdingsRes.data ?? []) as EquityHolding[];
+  const members = (membersRes.data ?? []) as OrganizationMember[];
+  const investors = (investorRes.data ?? []) as Pick<Investor, "id" | "name">[];
 
-  // Identities the cap table can link stakeholders to: team members + investors.
-  const { data: memberData } = await supabase
-    .from("organization_members")
-    .select("*")
-    .eq("organization_id", ctx.orgId);
-  const members = (memberData ?? []) as OrganizationMember[];
   let principals: Principal[] = [];
   if (members.length) {
     const { data } = await supabase
@@ -70,24 +78,17 @@ export async function EntityModule() {
       .in("id", members.map((m) => m.principal_id));
     principals = (data ?? []) as Principal[];
   }
-  const { data: investorData } = await supabase
-    .from("investors")
-    .select("id,name")
-    .eq("organization_id", ctx.orgId)
-    .order("name", { ascending: true });
-  const investors = (investorData ?? []) as Pick<Investor, "id" | "name">[];
 
   const principalOptions = principals.map((p) => ({ id: p.id, name: p.full_name || p.email }));
   const investorOptions = investors.map((i) => ({ id: i.id, name: i.name }));
+  const insights = computeEntityInsights(
+    entities.map((e) => ({ id: e.id, name: e.name, entity_type: e.entity_type })),
+    stakeholders.map((s) => ({ principal_id: s.principal_id, investor_id: s.investor_id })),
+    holdings,
+  );
 
-  return (
-    <div>
-      <ModuleHeader
-        title="Entity"
-        blurb="Your legal structure — GP, management company, funds, SPVs."
-        module="entity"
-      />
-
+  const structure = (
+    <>
       {entities.length > 0 ? <EntityTree entities={entities} /> : null}
 
       <div className="mb-4">
@@ -190,13 +191,20 @@ export async function EntityModule() {
         </div>
       )}
 
-      <EntityOwnership
-        entities={entities.map((e) => ({ id: e.id, name: e.name, entity_type: e.entity_type }))}
-        stakeholders={stakeholders.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))}
-        shareClasses={shareClasses.map((c) => ({ id: c.id, entity_id: c.entity_id, name: c.name }))}
-        holdings={holdings}
-      />
+    </>
+  );
 
+  const capTable = (
+    <EntityOwnership
+      entities={entities.map((e) => ({ id: e.id, name: e.name, entity_type: e.entity_type }))}
+      stakeholders={stakeholders.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))}
+      shareClasses={shareClasses.map((c) => ({ id: c.id, entity_id: c.entity_id, name: c.name }))}
+      holdings={holdings}
+    />
+  );
+
+  const modeling = (
+    <div className="flex flex-col gap-8">
       {entities.length > 0 ? (
         <DilutionModeler
           entities={entities.map((e) => ({ id: e.id, name: e.name }))}
@@ -204,23 +212,45 @@ export async function EntityModule() {
           stakeholders={stakeholders.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))}
           shareClasses={shareClasses.map((c) => ({ id: c.id, name: c.name }))}
         />
-      ) : null}
-
+      ) : (
+        <p className="rounded-xl border border-dashed border-line bg-surface-1 p-6 text-center text-sm text-fg-muted">
+          Add an entity and its cap table to model rounds and dilution.
+        </p>
+      )}
       <EquityInstruments />
+    </div>
+  );
 
-      {stakeholders.length > 0 ? (
-        <StakeholderLinks
-          stakeholders={stakeholders.map((s) => ({
-            id: s.id,
-            name: s.name,
-            kind: s.kind,
-            principal_id: s.principal_id,
-            investor_id: s.investor_id,
-          }))}
-          principals={principalOptions}
-          investors={investorOptions}
-        />
-      ) : null}
+  const people = (
+    <StakeholderLinks
+      stakeholders={stakeholders.map((s) => ({
+        id: s.id,
+        name: s.name,
+        kind: s.kind,
+        principal_id: s.principal_id,
+        investor_id: s.investor_id,
+      }))}
+      principals={principalOptions}
+      investors={investorOptions}
+    />
+  );
+
+  return (
+    <div>
+      <ModuleHeader
+        title="Entity"
+        blurb="Your legal structure and ownership — GP, management company, funds, SPVs."
+        module="entity"
+      />
+      <EntityTabs
+        overview={<EntityInsights insights={insights} />}
+        tabs={[
+          { key: "structure", label: "Structure", content: structure },
+          { key: "cap_table", label: "Cap Table", content: capTable },
+          { key: "modeling", label: "Modeling", content: modeling },
+          { key: "people", label: "People", content: people },
+        ]}
+      />
     </div>
   );
 }

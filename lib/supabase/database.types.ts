@@ -123,6 +123,11 @@ export type Principal = {
   full_name: string | null;
   title: string | null;
   avatar_url: string | null;
+  // Internal identity verification (migration 20260623140000). Set by an
+  // owner/admin internal attestation now; an external KYC provider would set the
+  // same columns later. Null until verified.
+  identity_verified_at: string | null;
+  identity_verified_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -149,6 +154,10 @@ export type Organization = Timestamps & {
   tagline: string | null;
   brand_voice: string | null;
   brand_palette: string[];
+  // Org-level KYC posture (migration 20260623140000). 'unverified' by default;
+  // internal attestation now, external-KYC provider hook later.
+  kyc_status: string;
+  kyc_verified_at: string | null;
 }
 
 export type OrganizationMember = {
@@ -1041,6 +1050,19 @@ export type RadarDigestEngagement = {
   occurred_at: string;
 };
 
+// One subject-line A/B assignment for an Act-now Radar digest send (migration
+// 20260623120000): the variant a given radar_digest_log row was sent with.
+// Joined to radar_digest_engagement via digest_log_id to learn which subject
+// variant drives more opens/clicks, so the winner can be preferred.
+export type DigestExperimentVariant = {
+  id: string;
+  organization_id: string;
+  digest_log_id: string | null;
+  experiment_key: string; // 'subject_line'
+  variant: string; // e.g. 'control' | 'urgent' | 'curiosity'
+  assigned_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -1376,6 +1398,7 @@ export type Database = {
       radar_digest_log: TableShape<RadarDigestLogEntry>;
       funnel_snapshots: TableShape<FunnelSnapshotRow>;
       radar_digest_engagement: TableShape<RadarDigestEngagement>;
+      digest_experiment_variants: TableShape<DigestExperimentVariant>;
     };
     Views: Record<string, never>;
     Functions: {

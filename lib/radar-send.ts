@@ -16,6 +16,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json, RadarDigestPref } from "@/lib/supabase/database.types";
 import { buildRadar } from "@/lib/source-radar";
 import { composeDigest, type DigestItem } from "@/lib/radar-digest";
+import {
+  pickVariant,
+  SUBJECT_LINE_EXPERIMENT,
+  type SubjectVariant,
+} from "@/lib/digest-experiments";
 import { dispatchAction } from "@/lib/integrations";
 
 type Client = SupabaseClient<Database>;
@@ -56,6 +61,28 @@ export function isPrefDue(
   const windowMs = (pref.cadence === "weekly" ? 7 : 1) * DAY_MS;
   // Small slack so a cron a few minutes early still fires.
   return now - last >= windowMs - 5 * 60 * 1000;
+}
+
+/**
+ * The cadence bucket a send falls in, used as the deterministic A/B period key
+ * (lib/digest-experiments.pickVariant). Daily → an ISO date ("2026-06-22");
+ * weekly → an ISO-ish year-week ("2026-W25"). Stable within a period so an org
+ * keeps one variant across that period's sends, then reshuffles next period.
+ * Pure given `now`.
+ */
+export function periodKey(cadence: "daily" | "weekly", now: number = Date.now()): string {
+  const d = new Date(now);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  if (cadence !== "weekly") return `${yyyy}-${mm}-${dd}`;
+  // ISO week number (UTC), Thursday-anchored.
+  const t = new Date(Date.UTC(yyyy, d.getUTCMonth(), d.getUTCDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
+  const week = Math.ceil(((t.getTime() - yearStart) / DAY_MS + 1) / 7);
+  return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
 // --- I/O --------------------------------------------------------------------
@@ -170,15 +197,33 @@ export async function sendRadarDigests(supabase: Client): Promise<RadarSendSumma
 
     try {
       const items = await buildRadar(supabase, pref.organization_id, { limit: 20 });
+      const cadence = (pref.cadence === "weekly" ? "weekly" : "daily") as "daily" | "weekly";
       const baseOpts = {
         minScore: pref.min_score,
-        cadence: (pref.cadence === "weekly" ? "weekly" : "daily") as "daily" | "weekly",
+        cadence,
         baseUrl,
       };
-      // First pass (no tracking) just to learn the count + snapshot before we
-      // commit a log row. The deliverable payload is re-composed WITH tracking
-      // below, once we have the log id to attribute engagement to.
+      // First pass (no tracking, no subject override) just to learn the count +
+      // default subject + snapshot before we commit a log row. The deliverable
+      // payload is re-composed WITH the A/B subject + tracking below, once we
+      // have the log id to attribute engagement to.
       const preview = composeDigest(items, baseOpts);
+
+      // Deterministically assign a subject-line A/B variant for this org + period.
+      // Same (org, period) → same variant, so the brief's subject framing is
+      // stable within a period and a test can pin it. The variant rewrites only
+      // the subject/header (lib/digest-experiments); the default path is untouched
+      // when 'control' is chosen.
+      const variant: SubjectVariant = pickVariant(
+        pref.organization_id,
+        periodKey(cadence, now),
+      );
+      const variantSubject = variant.render({
+        defaultSubject: preview.emailSubject,
+        count: preview.count,
+        topName: preview.topItems[0]?.name ?? null,
+        cadenceLabel: cadence === "weekly" ? "Weekly" : "Daily",
+      });
 
       // Nothing clears the bar — record the consideration but don't push noise.
       if (preview.count === 0) {
@@ -213,21 +258,40 @@ export async function sendRadarDigests(supabase: Client): Promise<RadarSendSumma
         digestLogId = null;
       }
 
-      // Re-compose with engagement tracking when we have a secret + log id AND
-      // the channel benefits from it. The in-app inbox keeps raw deep links (no
-      // tracking needed in-app); only Slack/email links get wrapped.
+      // Persist the A/B assignment for this send (best-effort: a failure here
+      // never breaks the send — it only costs the experiment a data point). Tied
+      // to the log row so engagement (radar_digest_engagement) joins via
+      // digest_log_id to attribute opens/clicks back to the variant.
+      if (digestLogId) {
+        try {
+          await supabase.from("digest_experiment_variants").insert({
+            organization_id: pref.organization_id,
+            digest_log_id: digestLogId,
+            experiment_key: SUBJECT_LINE_EXPERIMENT,
+            variant: variant.key,
+          });
+        } catch {
+          // swallow — telemetry only, never block the send.
+        }
+      }
+
+      // Re-compose with the assigned subject variant, plus engagement tracking
+      // when we have a secret + log id AND the channel benefits from it. The
+      // in-app inbox keeps raw deep links (no tracking needed in-app); only
+      // Slack/email links get wrapped.
       const wantsTracking = pref.channel === "slack" || pref.channel === "email";
       const payload =
         trackSecret && digestLogId && wantsTracking
           ? composeDigest(items, {
               ...baseOpts,
+              subject: variantSubject,
               tracking: {
                 secret: trackSecret,
                 digestLogId,
                 orgId: pref.organization_id,
               },
             })
-          : preview;
+          : composeDigest(items, { ...baseOpts, subject: variantSubject });
 
       let detail = "";
       if (pref.channel === "in_app") {
