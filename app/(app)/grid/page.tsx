@@ -3,6 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { groupByEngine, type GridWorkflow } from "@/lib/execution-grid";
 import { ExecutionGrid } from "@/components/grid/ExecutionGrid";
+import { GridLive } from "@/components/grid/GridLive";
 
 export const dynamic = "force-dynamic";
 
@@ -24,5 +25,11 @@ export default async function GridPage() {
 
   const panes = groupByEngine((data ?? []) as GridWorkflow[]);
 
-  return <ExecutionGrid panes={panes} />;
+  return (
+    <>
+      {/* Auto-refresh the grid as workflows are routed/progress (realtime). */}
+      <GridLive orgId={ctx.orgId} />
+      <ExecutionGrid panes={panes} />
+    </>
+  );
 }
