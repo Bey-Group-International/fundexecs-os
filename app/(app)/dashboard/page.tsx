@@ -18,6 +18,8 @@ import { buildDigest, priorityBucket, type DigestThread } from "@/lib/inbox/inte
 import { channelMeta } from "@/lib/inbox/channels";
 import { dashboardWorkspaces } from "@/lib/dashboard/config";
 import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
+import { CommandCenter } from "@/components/CommandCenter";
+import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -215,6 +217,13 @@ export default async function DashboardPage() {
       {/* Mission control — each hub's headline signal + next-best action. */}
       <div className="mb-6">
         <MissionControl orgId={ctx.orgId} />
+      </div>
+
+      {/* Relationship Intelligence — decay alerts, NBA panel, Intelligence Strip. */}
+      <div className="mb-6">
+        <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-surface-2" />}>
+          <CommandCenter />
+        </Suspense>
       </div>
 
       {/* Entry into the Gather-style spatial office where Earn orchestrates the

@@ -3,6 +3,11 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { getDealFeed } from "@/lib/deal-share.server";
 import { DealsSeen } from "@/components/inbox/DealsSeen";
+import { DealSignalFeed } from "@/components/intelligence/DealSignalFeed";
+import { SectorHeatmap } from "@/components/intelligence/SectorHeatmap";
+import { createServerClient } from "@/lib/supabase/server";
+import { buildHeatmap } from "@/lib/deal-intelligence";
+import type { DealSignal, HeatmapCell } from "@/lib/deal-intelligence";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +20,19 @@ export default async function DealFeedPage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const items = await getDealFeed(ctx.orgId);
+  const supabase = createServerClient();
+  const [items, signalsRes] = await Promise.all([
+    getDealFeed(ctx.orgId),
+    supabase
+      .from("deal_signals")
+      .select("*")
+      .order("occurred_at", { ascending: false })
+      .limit(50),
+  ]);
+  const signals = (signalsRes.data ?? []) as DealSignal[];
+  const cells: HeatmapCell[] = buildHeatmap(signals);
+  const sectors = [...new Set(cells.map((c) => c.sector))];
+  const stages = [...new Set(cells.map((c) => c.stage))];
 
   return (
     <div className="fx-ambient mx-auto max-w-4xl">
@@ -33,6 +50,24 @@ export default async function DealFeedPage() {
           sector, and geography. Open the teaser; request the full room when it fits.
         </p>
       </header>
+
+      {sectors.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+            Sector Activity Map
+          </h2>
+          <SectorHeatmap cells={cells} sectors={sectors} stages={stages} />
+        </section>
+      )}
+
+      {signals.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+            Market Signals
+          </h2>
+          <DealSignalFeed signals={signals} />
+        </section>
+      )}
 
       {items.length === 0 ? (
         <p className="fx-card border-dashed p-8 text-center text-sm text-fg-muted">
