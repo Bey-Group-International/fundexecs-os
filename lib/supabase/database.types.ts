@@ -866,6 +866,30 @@ export type SourcingEntity = Timestamps & {
   created_by: string | null;
 };
 
+// A market signal / trigger about a catalog entity (migration 0055). The
+// Signals & Triggers layer: discrete, time-stamped events (funding rounds,
+// hiring, ownership changes, news, growth, raise/sale intent) that
+// lib/sourcing-signals.ts rolls into a deterministic propensity score.
+// `entity_id` is the sourcing_entities row when known (nullable); subject_name +
+// kind keep the row self-describing. Append-style; created_at only.
+export type EntitySignal = {
+  id: string;
+  organization_id: string;
+  entity_id: string | null;
+  subject_name: string;
+  kind: string | null; // the entity kind, when known
+  // 'funding_round' | 'hiring' | 'ownership_change' | 'news' | 'growth' |
+  // 'raise_intent' | 'sale_intent'
+  signal_type: string;
+  strength: number; // 0–100
+  summary: string | null;
+  source_url: string | null;
+  occurred_at: string | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -1137,6 +1161,7 @@ export type Database = {
       audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
       sourcing_entities: TableShape<SourcingEntity>;
+      entity_signals: TableShape<EntitySignal>;
       operator_feedback: TableShape<OperatorFeedback>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
