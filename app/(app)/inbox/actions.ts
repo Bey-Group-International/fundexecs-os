@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { gateDecision, type ActionKind } from "@/lib/gates";
+import { isVerifiable } from "@/lib/grounding";
 import { getActiveMandate } from "@/lib/mandates";
 import { dispatchAction } from "@/lib/integrations";
 import { recordDispatch } from "@/lib/integrations/log";
@@ -61,10 +62,15 @@ export interface ThreadActionResult {
 // vs. email reply, Zoom vs. Google Meet) — and a successful dispatch is recorded
 // back onto the thread as an outbound message + any meeting link it produced.
 // ---------------------------------------------------------------------------
+// The verification standing of a composer artifact an action carries outward.
+// Mirrors the columns the trust layer persists on `artifacts` (migrations 0061 /
+// 0065). Passed in only when an action is backed by real work product.
+type BackingArtifact = { verification_status: string; grounding_score: number };
+
 async function performThreadAction(
   threadId: string,
   action: ActionKind,
-  opts: { sharePreface?: string } = {},
+  opts: { sharePreface?: string; backingArtifact?: BackingArtifact } = {},
 ): Promise<ThreadActionResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
@@ -81,7 +87,14 @@ async function performThreadAction(
   const t = thread as InboxThread;
 
   const mandate = await getActiveMandate(supabase, orgId);
-  const decision = gateDecision(action, mandate);
+  // Trust layer: when an artifact backs this action, fold its verifiability into
+  // the gate so a mandate's Tier-2 auto-approve bypass is revoked for unverified,
+  // weakly-grounded output. With no backing artifact this is a plain decision —
+  // identical to before.
+  const backing = opts.backingArtifact
+    ? { verifiable: isVerifiable(opts.backingArtifact) }
+    : undefined;
+  const decision = gateDecision(action, mandate, backing);
   const agent = AGENT_FOR_INBOX_ACTION[action] ?? "investor_relations";
   const who = t.counterparty_name ?? t.counterparty_email ?? t.subject;
   const title = `${ACTION_LABEL[action] ?? action.replace(/_/g, " ")} — ${who}`;
@@ -154,6 +167,9 @@ async function performThreadAction(
     action,
     channel: t.channel,
     target: { name: t.counterparty_name ?? undefined, email: t.counterparty_email ?? undefined },
+    // Pre-flight trust guard: an unverifiable backing artifact is refused here
+    // before it reaches the counterparty (no-op when none was supplied).
+    backingArtifact: opts.backingArtifact,
   });
 
   await recordDispatch(supabase, {
@@ -239,12 +255,32 @@ export async function shareCommandCenter(formData: FormData): Promise<ThreadActi
     .maybeSingle();
 
   let preface = "Sharing the latest from our Command Center.";
+  // Trust layer: a Command-Center share carries the deal's latest work product
+  // outward, so it is backed by that artifact. We load its verification standing
+  // and thread it through the gate + dispatch pre-flight, so an unverified,
+  // weakly-grounded artifact can't ride a mandate bypass out to a counterparty.
+  let backingArtifact: BackingArtifact | undefined;
   if (thread?.deal_id) {
-    const { data: deal } = await supabase
-      .from("deals")
-      .select("name, stage, asset_class, target_amount")
-      .eq("id", thread.deal_id)
-      .maybeSingle();
+    const [{ data: deal }, { data: artifact }] = await Promise.all([
+      supabase
+        .from("deals")
+        .select("name, stage, asset_class, target_amount")
+        .eq("id", thread.deal_id)
+        .maybeSingle(),
+      supabase
+        .from("artifacts")
+        .select("verification_status, grounding_score")
+        .eq("deal_id", thread.deal_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    if (artifact) {
+      backingArtifact = {
+        verification_status: artifact.verification_status,
+        grounding_score: artifact.grounding_score,
+      };
+    }
     if (deal) {
       const amount = deal.target_amount
         ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(deal.target_amount)
@@ -260,7 +296,7 @@ export async function shareCommandCenter(formData: FormData): Promise<ThreadActi
     if (investor) preface = `Command Center — ${investor.name} (${investor.investor_type}) relationship summary.`;
   }
 
-  return performThreadAction(threadId, "share_materials", { sharePreface: preface });
+  return performThreadAction(threadId, "share_materials", { sharePreface: preface, backingArtifact });
 }
 
 /** Mark a thread open / snoozed / done, and optionally flip its unread flag. */
