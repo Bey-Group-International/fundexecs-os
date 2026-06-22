@@ -1,368 +1,612 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import React, { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ExecutiveHQBoot } from "./ExecutiveHQBoot";
 
-type Executive = {
+type ExecData = {
   id: string;
   name: string;
-  role: string;
+  shortName: string;
   card: string;
   themeColor: string;
-  bobDelay?: string;
+  href: string;
+  bobDelay: string;
 };
 
-type Room = {
+type RoomData = {
   id: string;
   label: string;
   sublabel: string;
   href: string;
-  bgColor: string;
-  borderColor: string;
-  glowColor: string;
-  accentLight: string;
-  executives: Executive[];
   gridArea: string;
+  floorColor: string;
+  accentColor: string;
+  deskColor: string;
+  executives: ExecData[];
 };
 
-const EXECUTIVES: Record<string, Executive> = {
+const E: Record<string, ExecData> = {
   earnest: {
     id: "earnest-fundmaker",
     name: "Earnest Fundmaker",
-    role: "Fund Executive",
+    shortName: "Earnest",
     card: "/assets/fundexecs/characters/earnest-fundmaker/card.png",
     themeColor: "#fbbf24",
+    href: "/dashboard",
     bobDelay: "0s",
-  },
-  capitalConnector: {
-    id: "capital-connector",
-    name: "Capital Connector",
-    role: "Chief Capital Officer",
-    card: "/assets/fundexecs/characters/capital-connector/card.png",
-    themeColor: "#14b8a6",
-    bobDelay: "0.4s",
-  },
-  dealSourcer: {
-    id: "deal-sourcer",
-    name: "Deal Sourcer",
-    role: "Acquisition Executive",
-    card: "/assets/fundexecs/characters/deal-sourcer/card.png",
-    themeColor: "#f97316",
-    bobDelay: "0.2s",
   },
   executiveAdvisor: {
     id: "executive-advisor",
     name: "Executive Advisor",
-    role: "Investor Intelligence",
+    shortName: "Exec Advisor",
     card: "/assets/fundexecs/characters/executive-advisor/card.png",
     themeColor: "#a855f7",
+    href: "/dashboard",
     bobDelay: "0.6s",
+  },
+  dealSourcer: {
+    id: "deal-sourcer",
+    name: "Deal Sourcer",
+    shortName: "Deal",
+    card: "/assets/fundexecs/characters/deal-sourcer/card.png",
+    themeColor: "#f97316",
+    href: "/dashboard/deals",
+    bobDelay: "0.2s",
   },
   capitalRaiser: {
     id: "capital-raiser",
     name: "Capital Raiser",
-    role: "Capital Raising Executive",
+    shortName: "Capital",
     card: "/assets/fundexecs/characters/capital-raiser/card.png",
-    themeColor: "#eab308",
+    themeColor: "#ec4899",
+    href: "/dashboard/fund-room",
     bobDelay: "0.8s",
-  },
-  investorRelations: {
-    id: "investor-relations",
-    name: "Investor Relations",
-    role: "IR Executive",
-    card: "/assets/fundexecs/characters/investor-relations/card.png",
-    themeColor: "#f59e0b",
-    bobDelay: "0.3s",
-  },
-  automater: {
-    id: "automater",
-    name: "Automater",
-    role: "Automation Executive",
-    card: "/assets/fundexecs/characters/automater/card.png",
-    themeColor: "#22c55e",
-    bobDelay: "0.5s",
   },
   workflowInstructor: {
     id: "workflow-instructor",
     name: "Workflow Instructor",
-    role: "Training Executive",
+    shortName: "Workflow",
     card: "/assets/fundexecs/characters/workflow-instructor/card.png",
     themeColor: "#ef4444",
-    bobDelay: "0.7s",
+    href: "/dashboard",
+    bobDelay: "0.4s",
   },
-  prDirector: {
-    id: "pr-director",
-    name: "PR Director",
-    role: "Brand & PR Executive",
-    card: "/assets/fundexecs/characters/pr-director/card.png",
-    themeColor: "#ec4899",
+  capitalConnector: {
+    id: "capital-connector",
+    name: "Capital Connector",
+    shortName: "Capital Conn.",
+    card: "/assets/fundexecs/characters/capital-connector/card.png",
+    themeColor: "#14b8a6",
+    href: "/dashboard/capital",
+    bobDelay: "0.4s",
+  },
+  automater: {
+    id: "automater",
+    name: "Automater",
+    shortName: "Automater",
+    card: "/assets/fundexecs/characters/automater/card.png",
+    themeColor: "#22c55e",
+    href: "/dashboard/automation",
     bobDelay: "0.1s",
-  },
-  leadGenerator: {
-    id: "lead-generator",
-    name: "Lead Generator",
-    role: "Growth Executive",
-    card: "/assets/fundexecs/characters/lead-generator/card.png",
-    themeColor: "#84cc16",
-    bobDelay: "0.9s",
-  },
-  seoDisruptor: {
-    id: "seo-disruptor",
-    name: "SEO Disruptor",
-    role: "SEO Executive",
-    card: "/assets/fundexecs/characters/seo-disruptor/card.png",
-    themeColor: "#8b5cf6",
-    bobDelay: "0.35s",
-  },
-  curator: {
-    id: "curator",
-    name: "Curator",
-    role: "Private Events Executive",
-    card: "/assets/fundexecs/characters/curator/card.png",
-    themeColor: "#d946ef",
-    bobDelay: "0.65s",
   },
   rainmaker: {
     id: "rainmaker",
     name: "Rainmaker",
-    role: "Revenue Executive",
+    shortName: "Rainmaker",
     card: "/assets/fundexecs/characters/rainmaker/card.png",
     themeColor: "#fbbf24",
-    bobDelay: "0.45s",
+    href: "/dashboard/capital",
+    bobDelay: "0.5s",
+  },
+  prDirector: {
+    id: "pr-director",
+    name: "PR Director",
+    shortName: "PR",
+    card: "/assets/fundexecs/characters/pr-director/card.png",
+    themeColor: "#06b6d4",
+    href: "/dashboard/marketing",
+    bobDelay: "0s",
+  },
+  leadGenerator: {
+    id: "lead-generator",
+    name: "Lead Generator",
+    shortName: "Lead",
+    card: "/assets/fundexecs/characters/lead-generator/card.png",
+    themeColor: "#84cc16",
+    href: "/dashboard/marketing",
+    bobDelay: "0.3s",
+  },
+  seoDisruptor: {
+    id: "seo-disruptor",
+    name: "SEO Disruptor",
+    shortName: "SEO",
+    card: "/assets/fundexecs/characters/seo-disruptor/card.png",
+    themeColor: "#8b5cf6",
+    href: "/dashboard/marketing",
+    bobDelay: "0.6s",
+  },
+  curator: {
+    id: "curator",
+    name: "Curator",
+    shortName: "Curator",
+    card: "/assets/fundexecs/characters/curator/card.png",
+    themeColor: "#d946ef",
+    href: "/dashboard/marketing",
+    bobDelay: "0.9s",
+  },
+  investorRelations: {
+    id: "investor-relations",
+    name: "Investor Relations",
+    shortName: "IR",
+    card: "/assets/fundexecs/characters/investor-relations/card.png",
+    themeColor: "#f59e0b",
+    href: "/dashboard/investor-relations",
+    bobDelay: "0.3s",
   },
 };
 
-const ROOMS: Room[] = [
+const ROOMS: RoomData[] = [
   {
-    id: "ceo-office",
+    id: "ceo",
     label: "CEO OFFICE",
-    sublabel: "Command Center",
+    sublabel: "Executive Suite",
     href: "/dashboard",
-    bgColor: "#0f0a04",
-    borderColor: "#b45309",
-    glowColor: "rgba(180,83,9,0.6)",
-    accentLight: "rgba(251,191,36,0.12)",
-    executives: [EXECUTIVES.earnest],
     gridArea: "ceo",
+    floorColor: "#0a0703",
+    accentColor: "#b45309",
+    deskColor: "#2a1204",
+    executives: [E.earnest],
   },
   {
     id: "boardroom",
     label: "BOARDROOM",
     sublabel: "Strategy & Intelligence",
-    href: "/build",
-    bgColor: "#04080f",
-    borderColor: "#1e40af",
-    glowColor: "rgba(30,64,175,0.6)",
-    accentLight: "rgba(59,130,246,0.10)",
-    executives: [EXECUTIVES.executiveAdvisor],
-    gridArea: "board",
-  },
-  {
-    id: "trading-floor",
-    label: "TRADING FLOOR",
-    sublabel: "Deal Flow & Acquisitions",
-    href: "/run",
-    bgColor: "#060a0a",
-    borderColor: "#0f766e",
-    glowColor: "rgba(15,118,110,0.6)",
-    accentLight: "rgba(20,184,166,0.10)",
-    executives: [EXECUTIVES.dealSourcer, EXECUTIVES.capitalRaiser],
-    gridArea: "trading",
-  },
-  {
-    id: "research-hub",
-    label: "RESEARCH HUB",
-    sublabel: "Diligence & Analysis",
-    href: "/source",
-    bgColor: "#04090f",
-    borderColor: "#155e75",
-    glowColor: "rgba(21,94,117,0.6)",
-    accentLight: "rgba(6,182,212,0.10)",
-    executives: [EXECUTIVES.workflowInstructor],
-    gridArea: "research",
-  },
-  {
-    id: "investor-lounge",
-    label: "INVESTOR LOUNGE",
-    sublabel: "Capital & LP Relations",
     href: "/dashboard/capital",
-    bgColor: "#080410",
-    borderColor: "#6b21a8",
-    glowColor: "rgba(107,33,168,0.6)",
-    accentLight: "rgba(168,85,247,0.10)",
-    executives: [EXECUTIVES.capitalConnector, EXECUTIVES.investorRelations],
+    gridArea: "board",
+    floorColor: "#03060e",
+    accentColor: "#3b82f6",
+    deskColor: "#060e20",
+    executives: [E.executiveAdvisor],
+  },
+  {
+    id: "trading",
+    label: "TRADING FLOOR",
+    sublabel: "Deal Flow",
+    href: "/dashboard/deals",
+    gridArea: "trading",
+    floorColor: "#020a09",
+    accentColor: "#14b8a6",
+    deskColor: "#041210",
+    executives: [E.dealSourcer, E.capitalRaiser],
+  },
+  {
+    id: "research",
+    label: "RESEARCH HUB",
+    sublabel: "Intelligence",
+    href: "/dashboard",
+    gridArea: "research",
+    floorColor: "#03060e",
+    accentColor: "#6366f1",
+    deskColor: "#080a1c",
+    executives: [E.workflowInstructor],
+  },
+  {
+    id: "investor",
+    label: "INVESTOR LOUNGE",
+    sublabel: "Capital Pipeline",
+    href: "/dashboard/capital",
     gridArea: "investor",
+    floorColor: "#07030d",
+    accentColor: "#a855f7",
+    deskColor: "#120520",
+    executives: [E.capitalConnector],
   },
   {
-    id: "operations-hub",
+    id: "ops",
     label: "OPERATIONS HUB",
-    sublabel: "Workflow & Automation",
-    href: "/command-center",
-    bgColor: "#040c06",
-    borderColor: "#166534",
-    glowColor: "rgba(22,101,52,0.6)",
-    accentLight: "rgba(34,197,94,0.10)",
-    executives: [EXECUTIVES.automater],
+    sublabel: "Automation",
+    href: "/dashboard/automation",
     gridArea: "ops",
+    floorColor: "#020a03",
+    accentColor: "#22c55e",
+    deskColor: "#041206",
+    executives: [E.automater],
   },
   {
-    id: "legal-corner",
+    id: "legal",
     label: "LEGAL CORNER",
-    sublabel: "Compliance & Reporting",
+    sublabel: "Compliance",
     href: "/settings",
-    bgColor: "#0c0404",
-    borderColor: "#991b1b",
-    glowColor: "rgba(153,27,27,0.6)",
-    accentLight: "rgba(239,68,68,0.10)",
-    executives: [EXECUTIVES.rainmaker],
     gridArea: "legal",
+    floorColor: "#0b0303",
+    accentColor: "#ef4444",
+    deskColor: "#1c0505",
+    executives: [E.rainmaker],
   },
   {
-    id: "marketing-saloon",
+    id: "marketing",
     label: "MARKETING SALOON",
-    sublabel: "Brand, Growth & SEO",
+    sublabel: "Growth & Brand",
     href: "/dashboard/marketing",
-    bgColor: "#0c0803",
-    borderColor: "#92400e",
-    glowColor: "rgba(146,64,14,0.6)",
-    accentLight: "rgba(245,158,11,0.10)",
-    executives: [EXECUTIVES.prDirector, EXECUTIVES.leadGenerator, EXECUTIVES.seoDisruptor, EXECUTIVES.curator],
     gridArea: "marketing",
+    floorColor: "#0a0603",
+    accentColor: "#f97316",
+    deskColor: "#1c0c04",
+    executives: [E.prDirector, E.leadGenerator, E.seoDisruptor, E.curator],
   },
 ];
 
+function Monitor({ color }: { color: string }) {
+  return (
+    <div style={{
+      width: 10,
+      height: 7,
+      background: "#060c14",
+      border: `1px solid ${color}50`,
+      boxShadow: `0 0 4px ${color}40`,
+      flexShrink: 0,
+    }} />
+  );
+}
+
 function ExecAvatar({
   exec,
-  size = "md",
-  onSelect,
+  size,
+  onClick,
 }: {
-  exec: Executive;
-  size?: "sm" | "md";
-  onSelect: (exec: Executive) => void;
+  exec: ExecData;
+  size: number;
+  onClick: () => void;
 }) {
-  const px = size === "sm" ? 44 : 56;
   return (
     <button
-      type="button"
-      onClick={(e: React.MouseEvent) => {
-        e.stopPropagation();
-        onSelect(exec);
+      onClick={(e: React.MouseEvent) => { e.stopPropagation(); onClick(); }}
+      title={exec.name}
+      style={{
+        all: "unset",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 2,
+        animation: `exec-bob 2.6s ease-in-out infinite`,
+        animationDelay: exec.bobDelay,
       }}
-      className="group/exec relative flex flex-col items-center gap-0.5 focus:outline-none"
-      style={{ animationDelay: exec.bobDelay }}
-      title={`${exec.name} — ${exec.role}`}
     >
-      <span
-        className="exec-bob block overflow-hidden rounded-sm border transition-all duration-200 group-hover/exec:scale-110"
-        style={{
-          width: px,
-          height: px,
-          borderColor: exec.themeColor + "60",
-          boxShadow: `0 0 10px ${exec.themeColor}30`,
-          animationDelay: exec.bobDelay,
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={exec.card}
-          alt={exec.name}
-          width={px}
-          height={px}
-          className="h-full w-full object-cover"
-          style={{ imageRendering: "pixelated" }}
-          draggable={false}
-        />
-      </span>
-      <span
-        className="max-w-[60px] truncate text-center font-mono text-[8px] leading-tight opacity-60 transition-opacity group-hover/exec:opacity-100"
-        style={{ color: exec.themeColor }}
-      >
-        {exec.name.split(" ")[0]}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={exec.card}
+        alt={exec.name}
+        width={size}
+        height={size}
+        draggable={false}
+        style={{ imageRendering: "pixelated", display: "block", userSelect: "none" }}
+      />
+      <span style={{
+        fontFamily: "monospace",
+        fontSize: 7,
+        color: exec.themeColor,
+        textShadow: `0 0 6px ${exec.themeColor}`,
+        textTransform: "uppercase",
+        letterSpacing: "0.08em",
+        whiteSpace: "nowrap",
+        userSelect: "none",
+      }}>
+        {exec.shortName}
       </span>
     </button>
   );
 }
 
-function RoomPanel({
+function RoomCell({
   room,
-  onExecSelect,
+  onExecClick,
+  onRoomClick,
 }: {
-  room: Room;
-  onExecSelect: (exec: Executive) => void;
+  room: RoomData;
+  onExecClick: (exec: ExecData) => void;
+  onRoomClick: (href: string) => void;
 }) {
-  const router = useRouter();
   const [hovered, setHovered] = useState(false);
+  const execCount = room.executives.length;
+  const avatarSize = execCount >= 4 ? 40 : execCount >= 3 ? 44 : 50;
+  const deskWidth = execCount >= 4 ? "92%" : execCount >= 2 ? "72%" : "56%";
 
   return (
-    <button
-      type="button"
-      className="room-panel group relative flex w-full cursor-pointer flex-col overflow-hidden rounded-none text-left focus:outline-none"
-      style={{
-        background: room.bgColor,
-        border: `2px solid ${hovered ? room.borderColor : room.borderColor + "80"}`,
-        boxShadow: hovered
-          ? `0 0 24px ${room.glowColor}, inset 0 0 40px ${room.accentLight}`
-          : `inset 0 0 20px ${room.accentLight}`,
-        transition: "all 0.2s ease",
-        gridArea: room.gridArea,
-        minHeight: 160,
-      }}
+    <div
+      onClick={() => onRoomClick(room.href)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={() => router.push(room.href)}
+      style={{
+        gridArea: room.gridArea,
+        position: "relative",
+        cursor: "pointer",
+        // Floor tiles
+        backgroundColor: room.floorColor,
+        backgroundImage: `
+          linear-gradient(${room.accentColor}14 1px, transparent 1px),
+          linear-gradient(90deg, ${room.accentColor}14 1px, transparent 1px)
+        `,
+        backgroundSize: "20px 20px",
+        // Walls
+        border: `2px solid ${room.accentColor}${hovered ? "cc" : "55"}`,
+        boxShadow: hovered
+          ? `inset 0 0 50px ${room.accentColor}18, 0 0 16px ${room.accentColor}28`
+          : `inset 0 0 20px ${room.accentColor}06`,
+        transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+        overflow: "hidden",
+        minHeight: 165,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        paddingBottom: 10,
+      }}
     >
-      {/* Room label bar */}
-      <div
-        className="flex items-center justify-between px-2 py-1"
-        style={{
-          background: `linear-gradient(90deg, ${room.borderColor}30, transparent)`,
-          borderBottom: `1px solid ${room.borderColor}40`,
-        }}
-      >
-        <span
-          className="font-mono text-[9px] font-bold uppercase tracking-widest"
-          style={{ color: room.borderColor, textShadow: `0 0 8px ${room.borderColor}` }}
-        >
+      {/* Room label */}
+      <div style={{
+        position: "absolute",
+        top: 6,
+        left: 7,
+        zIndex: 2,
+        userSelect: "none",
+        lineHeight: 1.5,
+      }}>
+        <div style={{
+          fontFamily: "monospace",
+          fontSize: 8,
+          fontWeight: 700,
+          letterSpacing: "0.2em",
+          textTransform: "uppercase",
+          color: room.accentColor,
+          textShadow: `0 0 10px ${room.accentColor}`,
+          opacity: hovered ? 1 : 0.65,
+          transition: "opacity 0.15s",
+        }}>
           {room.label}
-        </span>
-        <span className="font-mono text-[7px] uppercase tracking-wider text-white/20">
-          {hovered ? "→ ENTER" : ""}
-        </span>
+        </div>
+        <div style={{
+          fontFamily: "monospace",
+          fontSize: 7,
+          letterSpacing: "0.15em",
+          textTransform: "uppercase",
+          color: room.accentColor,
+          opacity: hovered ? 0.5 : 0.3,
+          transition: "opacity 0.15s",
+        }}>
+          {room.sublabel}
+        </div>
       </div>
 
-      {/* Executives */}
-      <div className="flex flex-1 flex-wrap items-end justify-center gap-2 p-2 pb-3">
+      {/* Enter indicator */}
+      {hovered && (
+        <div style={{
+          position: "absolute",
+          top: 7,
+          right: 7,
+          fontFamily: "monospace",
+          fontSize: 7,
+          color: room.accentColor,
+          letterSpacing: "0.12em",
+          opacity: 0.85,
+          userSelect: "none",
+        }}>
+          → ENTER
+        </div>
+      )}
+
+      {/* Wall accent lines (top border stripe) */}
+      <div style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 3,
+        background: `linear-gradient(90deg, ${room.accentColor}00, ${room.accentColor}60, ${room.accentColor}00)`,
+      }} />
+
+      {/* Exec avatars at desks */}
+      <div style={{
+        position: "relative",
+        zIndex: 3,
+        display: "flex",
+        gap: execCount >= 4 ? 4 : 8,
+        alignItems: "flex-end",
+        marginBottom: 2,
+      }}>
         {room.executives.map((exec) => (
           <ExecAvatar
             key={exec.id}
             exec={exec}
-            size={room.executives.length > 2 ? "sm" : "md"}
-            onSelect={onExecSelect}
+            size={avatarSize}
+            onClick={() => onExecClick(exec)}
           />
         ))}
       </div>
 
-      {/* Hover sublabel */}
-      <div
-        className="absolute bottom-1 left-0 right-0 text-center font-mono text-[8px] uppercase tracking-wider transition-opacity duration-200"
-        style={{
-          color: room.borderColor,
-          opacity: hovered ? 0.7 : 0,
-        }}
-      >
-        {room.sublabel}
+      {/* Desk surface */}
+      <div style={{
+        position: "relative",
+        zIndex: 2,
+        width: deskWidth,
+        height: 14,
+        background: `linear-gradient(180deg, ${room.deskColor} 0%, color-mix(in srgb, ${room.deskColor} 70%, #000) 100%)`,
+        border: `1px solid ${room.accentColor}45`,
+        boxShadow: `0 3px 0 rgba(0,0,0,0.6), 0 0 10px ${room.accentColor}18`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: execCount === 1 ? "center" : "space-around",
+        padding: "0 8px",
+        gap: 6,
+      }}>
+        {room.executives.map((exec, i) => (
+          <Monitor key={i} color={exec.themeColor} />
+        ))}
       </div>
-    </button>
+
+      {/* Floor shadow under desk */}
+      <div style={{
+        width: deskWidth,
+        height: 5,
+        background: "rgba(0,0,0,0.55)",
+        marginTop: 1,
+      }} />
+    </div>
   );
 }
 
-type SelectedExec = Executive | null;
+function ReceptionCell({
+  onExecClick,
+  onRoomClick,
+}: {
+  onExecClick: (exec: ExecData) => void;
+  onRoomClick: (href: string) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      onClick={() => onRoomClick("/dashboard")}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        gridArea: "reception",
+        position: "relative",
+        cursor: "pointer",
+        backgroundColor: "#04060e",
+        backgroundImage: `
+          linear-gradient(#b4932016 1px, transparent 1px),
+          linear-gradient(90deg, #b4932016 1px, transparent 1px)
+        `,
+        backgroundSize: "20px 20px",
+        border: `2px solid #b49320${hovered ? "cc" : "50"}`,
+        boxShadow: hovered
+          ? `inset 0 0 60px #b4932018, 0 0 24px #b4932030`
+          : `inset 0 0 30px #b4932008`,
+        transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+        overflow: "hidden",
+        minHeight: 110,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        paddingBottom: 12,
+      }}
+    >
+      {/* Top accent */}
+      <div style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 3,
+        background: "linear-gradient(90deg, #b4932000, #b49320aa, #b4932000)",
+      }} />
+
+      {/* Room label left */}
+      <div style={{
+        position: "absolute",
+        top: 7,
+        left: 10,
+        fontFamily: "monospace",
+        fontSize: 8,
+        fontWeight: 700,
+        letterSpacing: "0.2em",
+        textTransform: "uppercase",
+        color: "#b49320",
+        textShadow: "0 0 10px #b49320",
+        opacity: hovered ? 1 : 0.6,
+        transition: "opacity 0.15s",
+        userSelect: "none",
+      }}>
+        RECEPTION · AFTER HOURS
+      </div>
+
+      {/* Centered FundExecs wordmark */}
+      <div style={{
+        position: "absolute",
+        top: 7,
+        left: "50%",
+        transform: "translateX(-50%)",
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        fontFamily: "monospace",
+        fontSize: 9,
+        fontWeight: 700,
+        letterSpacing: "0.28em",
+        color: "#b49320",
+        textShadow: "0 0 10px #b49320",
+        textTransform: "uppercase",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+      }}>
+        <span style={{ fontSize: 8, opacity: 0.7 }}>⬡</span>
+        FUNDEXECS
+        <span style={{ fontSize: 8, opacity: 0.7 }}>⬡</span>
+      </div>
+
+      {/* IR avatar at desk */}
+      <ExecAvatar
+        exec={E.investorRelations}
+        size={52}
+        onClick={() => onExecClick(E.investorRelations)}
+      />
+
+      {/* Reception desk — U-shape approximated with CSS */}
+      <div style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        marginTop: 2,
+        zIndex: 2,
+      }}>
+        {/* Main desk top */}
+        <div style={{
+          width: 180,
+          height: 14,
+          background: "linear-gradient(180deg, #1c1006 0%, #0e0803 100%)",
+          border: "1px solid #b4932055",
+          boxShadow: "0 3px 0 rgba(0,0,0,0.6), 0 0 16px #b4932025",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-around",
+          padding: "0 16px",
+        }}>
+          <Monitor color="#b49320" />
+          {/* Reception nameplate */}
+          <div style={{
+            fontFamily: "monospace",
+            fontSize: 6,
+            color: "#b49320",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            opacity: 0.7,
+            userSelect: "none",
+          }}>
+            INVESTOR RELATIONS
+          </div>
+          <Monitor color="#b49320" />
+        </div>
+        {/* Desk shadow */}
+        <div style={{ width: 180, height: 5, background: "rgba(0,0,0,0.6)", marginTop: 1 }} />
+      </div>
+    </div>
+  );
+}
+
+type SelectedExec = ExecData | null;
 
 export function ExecutiveHQ() {
-  const [selected, setSelected] = useState<SelectedExec>(null);
+  const router = useRouter();
   const [booting, setBooting] = useState(true);
+  const [selected, setSelected] = useState<SelectedExec>(null);
+
+  const handleRoomClick = useCallback((href: string) => {
+    router.push(href);
+  }, [router]);
 
   if (booting) {
     return <ExecutiveHQBoot onComplete={() => setBooting(false)} />;
@@ -370,155 +614,163 @@ export function ExecutiveHQ() {
 
   return (
     <div
-      className="relative flex min-h-[600px] w-full flex-col select-none"
-      style={{ background: "#030508", fontFamily: "var(--font-mono, monospace)" }}
+      style={{
+        background: "#010204",
+        fontFamily: "var(--font-mono, monospace)",
+        position: "relative",
+        padding: 10,
+      }}
     >
       <style>{`
         @keyframes exec-bob {
           0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-3px); }
-        }
-        .exec-bob {
-          animation: exec-bob 2.8s ease-in-out infinite;
+          50% { transform: translateY(-4px); }
         }
       `}</style>
 
-      {/* Executive details panel */}
+      {/* Building shell */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateRows: "1fr 1fr auto",
+          gridTemplateAreas: `
+            "ceo board trading research"
+            "investor ops legal marketing"
+            ". reception reception ."
+          `,
+          gap: 4,
+          background: "#010204",
+          border: "2px solid #b4932035",
+          boxShadow: "0 0 0 1px #b4932015, inset 0 0 100px rgba(180,147,32,0.03)",
+          padding: 4,
+        }}
+      >
+        {ROOMS.map((room) => (
+          <RoomCell
+            key={room.id}
+            room={room}
+            onExecClick={setSelected}
+            onRoomClick={handleRoomClick}
+          />
+        ))}
+        <ReceptionCell
+          onExecClick={setSelected}
+          onRoomClick={handleRoomClick}
+        />
+      </div>
+
+      {/* Executive detail overlay */}
       {selected && (
         <div
-          className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm"
           onClick={() => setSelected(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            background: "rgba(1,2,4,0.88)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backdropFilter: "blur(2px)",
+          }}
         >
           <div
-            className="relative flex max-w-xs flex-col items-center gap-3 rounded-xl border p-6 text-center shadow-2xl"
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
             style={{
-              background: "#0a0f1a",
-              borderColor: selected.themeColor + "60",
-              boxShadow: `0 0 40px ${selected.themeColor}30`,
+              background: "#06090f",
+              border: `2px solid ${selected.themeColor}70`,
+              boxShadow: `0 0 60px ${selected.themeColor}25, inset 0 0 30px ${selected.themeColor}08`,
+              padding: 24,
+              maxWidth: 280,
+              width: "90%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 14,
             }}
-            onClick={(e) => e.stopPropagation()}
           >
-            <span
-              className="font-mono text-[9px] uppercase tracking-widest"
-              style={{ color: selected.themeColor }}
-            >
-              AI Executive
-            </span>
+            {/* Corner accents */}
+            {["top-left", "top-right", "bottom-left", "bottom-right"].map((pos) => (
+              <span
+                key={pos}
+                style={{
+                  position: "absolute",
+                  top: pos.includes("top") ? 4 : "auto",
+                  bottom: pos.includes("bottom") ? 4 : "auto",
+                  left: pos.includes("left") ? 6 : "auto",
+                  right: pos.includes("right") ? 6 : "auto",
+                  color: selected.themeColor,
+                  fontSize: 8,
+                  opacity: 0.6,
+                  userSelect: "none",
+                }}
+              >
+                ✦
+              </span>
+            ))}
+
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={selected.card}
               alt={selected.name}
-              width={96}
-              height={96}
-              className="rounded-sm border"
-              style={{
-                imageRendering: "pixelated",
-                borderColor: selected.themeColor + "50",
-                boxShadow: `0 0 16px ${selected.themeColor}40`,
-              }}
+              width={120}
+              height={120}
+              style={{ imageRendering: "pixelated" }}
               draggable={false}
             />
-            <div>
-              <p className="font-display text-lg font-semibold text-white">{selected.name}</p>
-              <p className="mt-0.5 font-mono text-xs text-white/50">{selected.role}</p>
+
+            <div style={{ textAlign: "center" }}>
+              <p style={{
+                fontFamily: "monospace",
+                fontSize: 13,
+                fontWeight: 700,
+                color: selected.themeColor,
+                textShadow: `0 0 14px ${selected.themeColor}`,
+                textTransform: "uppercase",
+                letterSpacing: "0.18em",
+                margin: 0,
+              }}>
+                {selected.name}
+              </p>
             </div>
-            <div className="flex gap-2">
-              <Link
-                href={`/dashboard?agent=${selected.id}`}
-                className="rounded-lg border px-3 py-1.5 font-mono text-xs transition hover:opacity-90"
-                style={{
-                  borderColor: selected.themeColor + "60",
-                  color: selected.themeColor,
-                  background: selected.themeColor + "15",
-                }}
-                onClick={() => setSelected(null)}
-              >
-                Open Copilot
-              </Link>
+
+            <div style={{ display: "flex", gap: 8, width: "100%" }}>
               <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="rounded-lg border border-white/10 px-3 py-1.5 font-mono text-xs text-white/40 transition hover:border-white/20 hover:text-white/60"
+                onClick={() => { router.push(selected.href); setSelected(null); }}
+                style={{
+                  flex: 1,
+                  padding: "9px 12px",
+                  background: `${selected.themeColor}18`,
+                  border: `1px solid ${selected.themeColor}70`,
+                  color: selected.themeColor,
+                  fontFamily: "monospace",
+                  fontSize: 9,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.18em",
+                  cursor: "pointer",
+                }}
               >
-                Close
+                Open Workspace
+              </button>
+              <button
+                onClick={() => setSelected(null)}
+                style={{
+                  padding: "9px 14px",
+                  background: "transparent",
+                  border: "1px solid #ffffff18",
+                  color: "#ffffff50",
+                  fontFamily: "monospace",
+                  fontSize: 10,
+                  cursor: "pointer",
+                }}
+              >
+                ✕
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Office grid */}
-      <div
-        className="flex-1 p-3 sm:p-4"
-        style={{
-          display: "grid",
-          gridTemplateAreas: `
-            "ceo    board   trading  research"
-            "investor ops    legal    marketing"
-            ".       reception reception ."
-          `,
-          gridTemplateColumns: "1fr 1fr 1fr 1fr",
-          gridTemplateRows: "1fr 1fr auto",
-          gap: "6px",
-        }}
-      >
-        {ROOMS.map((room) => (
-          <RoomPanel key={room.id} room={room} onExecSelect={setSelected} />
-        ))}
-
-        {/* Reception */}
-        <div
-          className="flex flex-col items-center justify-center gap-2 rounded-none border py-4"
-          style={{
-            gridArea: "reception",
-            background: "#050810",
-            borderColor: "#b4932060",
-            boxShadow: "inset 0 0 30px rgba(180,147,32,0.08)",
-          }}
-        >
-          <div className="flex items-center gap-2">
-            {/* Earnest mini at reception */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/assets/fundexecs/characters/earnest-fundmaker/card.png"
-              alt="Earnest Fundmaker"
-              width={36}
-              height={36}
-              className="exec-bob rounded-sm border border-yellow-500/30"
-              style={{ imageRendering: "pixelated", animationDelay: "1.2s" }}
-              draggable={false}
-            />
-            <div className="text-center">
-              <div className="flex items-center gap-1.5">
-                <span
-                  className="inline-block h-2 w-2 rounded-full bg-yellow-400"
-                  style={{ boxShadow: "0 0 6px #fbbf24" }}
-                />
-                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-yellow-400/80">
-                  FundExecs
-                </span>
-              </div>
-              <span className="font-mono text-[8px] uppercase tracking-[0.2em] text-white/30">
-                RECEPTION · AFTER HOURS
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer brand bar */}
-      <div
-        className="flex items-center justify-center gap-2 border-t px-4 py-2"
-        style={{ borderColor: "#b4932025", background: "#020406" }}
-      >
-        <span
-          className="font-mono text-[9px] uppercase tracking-[0.4em]"
-          style={{ color: "#b49320", textShadow: "0 0 12px rgba(180,147,32,0.4)" }}
-        >
-          ✦ FundExecs OS ✦
-        </span>
-        <span className="font-mono text-[8px] text-white/15">Private Markets Operating System</span>
-      </div>
     </div>
   );
 }
