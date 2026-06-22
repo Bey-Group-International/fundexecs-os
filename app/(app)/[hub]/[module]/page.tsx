@@ -27,6 +27,9 @@ const SourceSignals = nextDynamic(() =>
 const SourceRadar = nextDynamic(() =>
   import("@/components/source/SourceRadar").then((m) => m.SourceRadar),
 );
+const SourceFunnel = nextDynamic(() =>
+  import("@/components/source/SourceFunnel").then((m) => m.SourceFunnel),
+);
 const RunSearch = nextDynamic(() =>
   import("@/components/run/RunSearch").then((m) => m.RunSearch),
 );
@@ -101,6 +104,9 @@ export default function ModulePage({
   }
   if (params.hub === "source" && params.module === "radar") {
     return <SourceRadar live={sourcingLive()} initialPrompt={initialPrompt} />;
+  }
+  if (params.hub === "source" && params.module === "funnel") {
+    return <SourceFunnel live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;
