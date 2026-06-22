@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { loadFunnel } from "@/app/(app)/[hub]/[module]/source-funnel-actions";
 import {
   STAGE_LABELS,
+  type EngagementSummary,
   type Funnel,
   type FunnelStage,
 } from "@/lib/source-funnel";
@@ -140,6 +141,11 @@ export function SourceFunnel({ live }: { live?: boolean; initialPrompt?: string 
               </div>
             </div>
 
+            {/* Act-now performance — the loop's telemetry */}
+            {funnel.engagement ? (
+              <ActNowPanel engagement={funnel.engagement} />
+            ) : null}
+
             {/* Breakdown by source */}
             {funnel.bySource.length ? (
               <BreakdownTable title="Conversion by source" rows={funnel.bySource} />
@@ -165,6 +171,47 @@ export function SourceFunnel({ live }: { live?: boolean; initialPrompt?: string 
       ) : (
         <p className="mt-6 text-sm text-fg-muted">Loading the funnel…</p>
       )}
+    </div>
+  );
+}
+
+// Act-now performance — how the digest + Radar loop is landing. Digest open and
+// click rates over digests sent, plus Radar acceptance. Read-only telemetry that
+// sits beside the conversion funnel; degrades to 0% / "no digests sent yet" when
+// the loop hasn't run.
+function ActNowPanel({ engagement }: { engagement: EngagementSummary }) {
+  const sent = engagement.digestsSent > 0;
+  return (
+    <div>
+      <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        Act-now performance
+      </p>
+      {sent ? (
+        <div className="grid grid-cols-3 gap-2">
+          <Stat label="Open rate" value={`${engagement.openRate}%`} tone={rateTone(engagement.openRate)} />
+          <Stat label="Click rate" value={`${engagement.clickRate}%`} tone={rateTone(engagement.clickRate)} />
+          <Stat
+            label="Radar acceptance"
+            value={`${engagement.acceptanceRate}%`}
+            tone={rateTone(engagement.acceptanceRate)}
+          />
+        </div>
+      ) : (
+        <div className="rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-xs text-fg-secondary">
+          No digests sent yet — open, click, and Radar acceptance rates show up here
+          once the act-now loop runs.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A compact stat card matching the stage-to-stage conversion styling.
+function Stat({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-surface-1 px-3 py-1.5">
+      <div className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</div>
+      <div className={`font-mono text-sm font-semibold ${tone}`}>{value}</div>
     </div>
   );
 }
