@@ -14,9 +14,12 @@
 
 import { createHash } from "crypto";
 
-// The experiment key this module owns. Kept as a constant so the ledger column
-// (digest_experiment_variants.experiment_key) and the code agree.
+// The experiment keys this module owns. Kept as constants so the ledger column
+// (digest_experiment_variants.experiment_key) and the code agree. Both
+// experiments share the same ledger table + the same engagement telemetry — they
+// differ only by `experiment_key`, so a single summary path can measure either.
 export const SUBJECT_LINE_EXPERIMENT = "subject_line";
+export const SEND_TIME_EXPERIMENT = "send_time";
 
 /**
  * One subject-line variant. `key` is the stable id persisted in the ledger;
@@ -119,6 +122,68 @@ export function pickVariant(
   return variants[idx];
 }
 
+// --- Send-time experiment ----------------------------------------------------
+//
+// The second A/B knob: WHEN the digest lands, not just what its subject says.
+// It reuses the exact same ledger (digest_experiment_variants) under
+// experiment_key='send_time' and the same engagement telemetry, so the very
+// same summary path measures open/click rates per send-time window. Recording
+// here is independent of the subject pick (a different hash salt) so the two
+// experiments don't correlate. (Scope: this records + measures the window;
+// gating actual delivery to the window is a follow-up — see PR notes.)
+
+/**
+ * One send-time window variant. `key` is the stable id persisted in the ledger;
+ * `startHour`/`endHour` bound the local hour-of-day window the digest targets.
+ */
+export interface SendTimeVariant {
+  /** Stable id stored in digest_experiment_variants.variant. */
+  key: string;
+  /** Human label for dashboards. */
+  label: string;
+  /** Inclusive start hour of the window (0–23, local). */
+  startHour: number;
+  /** Exclusive end hour of the window (1–24, local). */
+  endHour: number;
+}
+
+/**
+ * The send-time windows under test — a small set of hour-of-day buckets. Order
+ * is stable: it's the deterministic pick's index space.
+ */
+export const SEND_TIME_VARIANTS: readonly SendTimeVariant[] = [
+  { key: "morning", label: "Morning (7–10am)", startHour: 7, endHour: 10 },
+  { key: "midday", label: "Midday (11am–2pm)", startHour: 11, endHour: 14 },
+  { key: "afternoon", label: "Afternoon (3–6pm)", startHour: 15, endHour: 18 },
+];
+
+/** Look up a send-time variant by key, or undefined when unknown. Pure. */
+export function findSendTimeVariant(
+  key: string,
+  variants: readonly SendTimeVariant[] = SEND_TIME_VARIANTS,
+): SendTimeVariant | undefined {
+  return variants.find((v) => v.key === key);
+}
+
+/**
+ * Deterministically pick a send-time window for an org + period. Same approach
+ * as pickVariant (stable hash of org + period → index) but with an independent
+ * salt, so the send-time assignment does NOT correlate with the subject-line
+ * assignment for the same (org, period). Pure: no clock, no random.
+ */
+export function pickSendTimeVariant(
+  orgId: string,
+  periodKey: string,
+  variants: readonly SendTimeVariant[] = SEND_TIME_VARIANTS,
+): SendTimeVariant {
+  if (variants.length === 0) {
+    throw new Error("pickSendTimeVariant requires at least one variant");
+  }
+  // Distinct salt ("send_time::") keeps this pick independent of the subject pick.
+  const idx = stableHash(`${SEND_TIME_EXPERIMENT}::${orgId}::${periodKey}`) % variants.length;
+  return variants[idx];
+}
+
 // --- Performance summary -----------------------------------------------------
 
 /**
@@ -203,4 +268,41 @@ export function summarizeVariantPerformance(
     );
 
   return { variants, leader: variants.length > 0 ? variants[0].variant : null };
+}
+
+/**
+ * A variant-engagement row tagged with the experiment it belongs to, so a mixed
+ * stream of ledger rows (subject_line + send_time, joined to the same engagement
+ * table) can be summarized per experiment in one pass.
+ */
+export interface KeyedVariantEngagementRow extends VariantEngagementRow {
+  experimentKey: string;
+}
+
+/**
+ * Summarize variant performance split by experiment_key. Rows for different
+ * experiments (subject_line vs send_time) are bucketed by `experimentKey`, then
+ * each bucket is run through summarizeVariantPerformance — so each experiment
+ * gets its own per-variant open/click rates + leader from the SAME telemetry.
+ * Pure + deterministic: same rows in (any order) → same map out.
+ */
+export function summarizeByExperiment(
+  rows: KeyedVariantEngagementRow[],
+): Record<string, VariantPerformanceSummary> {
+  const byKey = new Map<string, VariantEngagementRow[]>();
+  for (const row of rows) {
+    const bucket = byKey.get(row.experimentKey) ?? [];
+    bucket.push({
+      variant: row.variant,
+      sends: row.sends,
+      opens: row.opens,
+      clicks: row.clicks,
+    });
+    byKey.set(row.experimentKey, bucket);
+  }
+  const out: Record<string, VariantPerformanceSummary> = {};
+  for (const [key, bucket] of byKey) {
+    out[key] = summarizeVariantPerformance(bucket);
+  }
+  return out;
 }

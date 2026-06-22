@@ -15,7 +15,7 @@ import {
   recipientRequired,
   type DigestChannel,
 } from "@/lib/digest-prefs";
-import { upsertDigestPref } from "./digest-actions";
+import { upsertDigestPref, sendTestDigest } from "./digest-actions";
 
 const CHANNEL_META: Record<
   DigestChannel,
@@ -72,6 +72,61 @@ export function DigestPreferences({ prefs }: { prefs: RadarDigestPref[] }) {
           initial={draftFrom(byChannel.get(channel))}
         />
       ))}
+      <TestSendRow />
+    </div>
+  );
+}
+
+// A one-click preview: build + dispatch this org's digest right now (in-app, so
+// it works without any provider creds) and surface the result inline. Lets an
+// operator see exactly what a real send looks like without waiting for the cron.
+function TestSendRow() {
+  const [result, setResult] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function run() {
+    setResult(null);
+    setIsError(false);
+    startTransition(async () => {
+      const res = await sendTestDigest("in_app");
+      if (!res.ok || !res.result) {
+        setIsError(true);
+        setResult(res.error ?? "Could not send the test digest.");
+        return;
+      }
+      setIsError(false);
+      setResult(res.result.detail);
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-line bg-surface-1 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-sm font-medium text-fg-primary">Test delivery</span>
+          <p className="mt-1 text-xs leading-snug text-fg-secondary">
+            Build and deliver a digest right now to your Unified Inbox so you can preview it.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={run}
+          disabled={pending}
+          className="shrink-0 rounded-lg border border-gold-500/40 bg-gold-500/10 px-2.5 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+        >
+          {pending ? "Sending…" : "Send me a test digest now"}
+        </button>
+      </div>
+      {result ? (
+        <p
+          className={`mt-3 text-xs ${
+            isError ? "text-status-danger" : "text-status-success"
+          }`}
+        >
+          {result}
+        </p>
+      ) : null}
     </div>
   );
 }
