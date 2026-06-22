@@ -905,6 +905,50 @@ export type SourcingEntity = Timestamps & {
   created_by: string | null;
 };
 
+// Outbound Outreach Sequences (migration 0057) — multi-touch cadences built on
+// the gate + dispatch layer. A sequence has ordered steps; targets are enrolled
+// and advanced one due step at a time, each send routed through the gate
+// (queueSourceAction → gateDecision → dispatch), with the gate task recorded on
+// the enrollment.
+export type OutreachSequence = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  channel: string; // 'email' | 'linkedin' | 'call'
+  audience: string | null;
+  status: string; // 'draft' | 'active' | 'paused' | 'archived'
+  metadata: Json;
+  created_by: string | null;
+};
+
+export type OutreachStep = {
+  id: string;
+  organization_id: string;
+  sequence_id: string;
+  step_order: number;
+  delay_days: number;
+  subject: string | null;
+  body: string | null;
+  action: string; // an ActionKind label from lib/gates
+  metadata: Json;
+  created_at: string;
+};
+
+export type OutreachEnrollment = Timestamps & {
+  id: string;
+  organization_id: string;
+  sequence_id: string;
+  subject_name: string;
+  subject_email: string | null;
+  entity_id: string | null;
+  current_step: number;
+  status: string; // 'active' | 'completed' | 'replied' | 'stopped'
+  last_sent_at: string | null;
+  task_id: string | null;
+  metadata: Json;
+  created_by: string | null;
+};
+
 // A market signal / trigger about a catalog entity (migration 0055). The
 // Signals & Triggers layer: discrete, time-stamped events (funding rounds,
 // hiring, ownership changes, news, growth, raise/sale intent) that
@@ -1243,6 +1287,9 @@ export type Database = {
       stake_disputes: TableShape<StakeDispute>;
       integration_connections: TableShape<IntegrationConnection>;
       session_messages: TableShape<SessionMessage>;
+      outreach_sequences: TableShape<OutreachSequence>;
+      outreach_steps: TableShape<OutreachStep>;
+      outreach_enrollments: TableShape<OutreachEnrollment>;
     };
     Views: Record<string, never>;
     Functions: {

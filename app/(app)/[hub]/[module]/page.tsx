@@ -18,6 +18,9 @@ const OwnershipIntel = nextDynamic(() =>
 const SourcingIntel = nextDynamic(() =>
   import("@/components/source/SourcingIntel").then((m) => m.SourcingIntel),
 );
+const OutreachStudio = nextDynamic(() =>
+  import("@/components/source/OutreachStudio").then((m) => m.OutreachStudio),
+);
 const SourceSignals = nextDynamic(() =>
   import("@/components/source/SourceSignals").then((m) => m.SourceSignals),
 );
@@ -61,6 +64,9 @@ export default function ModulePage({
   }
   if (params.hub === "source" && params.module === "intel") {
     return <SourcingIntel live={sourcingLive()} initialPrompt={initialPrompt} />;
+  }
+  if (params.hub === "source" && params.module === "outreach") {
+    return <OutreachStudio live={sourcingLive()} />;
   }
   if (params.hub === "source" && params.module === "signals") {
     return <SourceSignals live={sourcingLive()} initialPrompt={initialPrompt} />;
