@@ -47,11 +47,8 @@ const ExecuteSearch = nextDynamic(() =>
 const AllocatorDirectory = nextDynamic(() =>
   import("@/components/source/AllocatorDirectory").then((m) => m.AllocatorDirectory),
 );
-const LPOnboardingStatus = nextDynamic(() =>
-  import("@/components/execute/LPOnboardingStatus").then((m) => m.LPOnboardingStatus),
-);
-const ContractStatusBoard = nextDynamic(() =>
-  import("@/components/execute/ContractStatusBoard").then((m) => m.ContractStatusBoard),
+const ClosingLive = nextDynamic(() =>
+  import("@/components/execute/ClosingLive").then((m) => m.ClosingLive),
 );
 const PortfolioHealthDashboard = nextDynamic(() =>
   import("@/components/execute/PortfolioHealthDashboard").then(
@@ -139,23 +136,10 @@ export default function ModulePage({
   }
 
   // Execute › Closing — LP Onboarding + Contract Status Board.
-  // TODO: replace mock data with real onboarding sessions and contracts from Supabase.
   if (params.hub === "execute" && params.module === "closing") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 flex flex-col gap-8">
-        <section>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
-            LP Onboarding Status
-          </p>
-          <LPOnboardingStatus sessions={[]} />
-        </section>
-        <div className="border-t border-line" />
-        <section>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
-            Contract Lifecycle
-          </p>
-          <ContractStatusBoard contracts={[]} />
-        </section>
+        <ClosingLive />
         <div className="border-t border-line pt-8">
           <ModuleView hub={params.hub} module={params.module} />
         </div>
