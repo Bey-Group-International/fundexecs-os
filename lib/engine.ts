@@ -12,7 +12,7 @@ import { generatePlan, executeStep, extractDealFields, extractAssetFields, type 
 import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
-import { deriveRouting } from "@/lib/intelligence";
+import { buildRouting } from "@/lib/intelligence";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -102,6 +102,8 @@ async function materializePlan(
         status: "awaiting_approval",
         progress: 0,
         graph_touched: hubToGraph(plan.hub),
+        lifecycle_stage: plan.lifecycle_stage,
+        target_engine: plan.target_engine,
         result: null,
         completed_at: null,
       })
@@ -122,6 +124,8 @@ async function materializePlan(
         status: "awaiting_approval",
         progress: 0,
         graph_touched: hubToGraph(plan.hub),
+        lifecycle_stage: plan.lifecycle_stage,
+        target_engine: plan.target_engine,
         requires_approval: true,
         created_by: ctx.actorId,
         step_order: 0,
@@ -300,10 +304,49 @@ async function createSession(
   return data?.id;
 }
 
+/**
+ * Contextual awareness: surface the session's active deal/asset so the planner
+ * can resolve references like "the deal" or "the model" instead of reading the
+ * follow-up in isolation. Returns short context lines (newest entity first).
+ */
+async function gatherActiveContext(ctx: Ctx, sessionId: string): Promise<string[]> {
+  const [dealRes, assetRes] = await Promise.all([
+    ctx.supabase
+      .from("deals")
+      .select("name, asset_class, stage")
+      .eq("organization_id", ctx.orgId)
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false })
+      .limit(1),
+    ctx.supabase
+      .from("assets")
+      .select("name, asset_type")
+      .eq("organization_id", ctx.orgId)
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false })
+      .limit(1),
+  ]);
+  const lines: string[] = [];
+  const deal = dealRes.data?.[0];
+  if (deal?.name) {
+    lines.push(
+      `Active deal in this session: "${deal.name}"${deal.asset_class ? ` (${deal.asset_class})` : ""}${
+        deal.stage ? `, stage: ${deal.stage}` : ""
+      }. Resolve "the deal" to this.`,
+    );
+  }
+  const asset = assetRes.data?.[0];
+  if (asset?.name) {
+    lines.push(`Active asset in this session: "${asset.name}". Resolve "the asset"/"the model" to this.`);
+  }
+  return lines;
+}
+
 /** POST /prompt — plan the prompt into a workflow awaiting approval. */
 export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
   // Inside an existing session, replay its earlier prompts so Earn plans the
-  // follow-up with the conversation in mind (oldest first).
+  // follow-up with the conversation in mind (oldest first), plus the active
+  // deal/asset so references like "the deal" resolve.
   let priorContext: string[] = [];
   if (sessionId) {
     const { data: prior } = await ctx.supabase
@@ -312,9 +355,11 @@ export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
       .eq("session_id", sessionId)
       .is("parent_task_id", null)
       .order("created_at", { ascending: true });
-    priorContext = ((prior ?? []) as { description: string | null }[])
+    const turns = ((prior ?? []) as { description: string | null }[])
       .map((t) => t.description?.trim() ?? "")
       .filter(Boolean);
+    const active = await gatherActiveContext(ctx, sessionId);
+    priorContext = [...active, ...turns];
   }
 
   const plan = await generatePlan(body, priorContext);
@@ -323,13 +368,14 @@ export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
   // (named from the prompt) unless one was already provided.
   const session = sessionId ?? (await createSession(ctx, { name: plan.title || body, origin: "earn" }));
 
-  // Intelligence Layer: classify intent across the lifecycle and route to the
-  // correct engine + AI executive. Deterministic, so it holds in fallback mode.
-  // Persisted alongside the plan as the structured routing object (section 6).
-  const routing = deriveRouting({
+  // Intelligence Layer: the plan already carries the authoritative lifecycle
+  // stage (classified in the same call); build the structured routing object
+  // from it so persisted routing matches the plan exactly (section 6).
+  const routing = buildRouting({
     prompt: body,
     hub: plan.hub,
     agents: plan.steps.map((s) => s.agent),
+    stage: plan.lifecycle_stage,
   });
 
   const { data: prompt } = await ctx.supabase

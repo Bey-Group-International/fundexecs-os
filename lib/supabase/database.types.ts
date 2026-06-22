@@ -354,6 +354,10 @@ export type Task = Timestamps & {
   step_order: number;
   automation_id: string | null;
   session_id: string | null;
+  // Intelligence Layer routing (migration 0054). Free-text mirrors of the
+  // LifecycleStage / TargetEngine unions in lib/intelligence.ts.
+  lifecycle_stage: string | null;
+  target_engine: string | null;
 }
 
 export type TeamTask = Timestamps & {

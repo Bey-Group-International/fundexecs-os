@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
-import { deriveRouting, cursorResponse, routingHeadline } from "@/lib/intelligence";
+import { routingFromTask, cursorResponse, routingHeadline, EXECUTIVE_LABEL, type TargetEngine } from "@/lib/intelligence";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import {
   EARN_MODELS,
@@ -129,6 +129,9 @@ export default function Copilot({
   const [chatTurns, setChatTurns] = useState<ChatTurn[]>(initialChat);
   const [clarifying, setClarifying] = useState(false);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
+  // Execution Grid: filter the conversation's workflows by the engine they were
+  // routed to. null = show all.
+  const [engineFilter, setEngineFilter] = useState<TargetEngine | null>(null);
   // Which composer popover is open: the model picker, mode picker, "+" menu, or
   // one of its submenus (slash commands / active integrations).
   const [openMenu, setOpenMenu] = useState<"model" | "mode" | "plus" | "slash" | "integrations" | null>(null);
@@ -413,9 +416,23 @@ export default function Copilot({
     setClarifying(false);
   }
 
+  // Execution Grid: the engine each workflow was routed to (persisted, with a
+  // deterministic fallback for older rows).
+  const engineOf = (b: WorkflowBundle): TargetEngine =>
+    routingFromTask({
+      prompt: b.workflow.description || b.workflow.title,
+      hub: b.workflow.hub,
+      agents: b.steps.map((s) => s.assigned_agent),
+      stage: b.workflow.lifecycle_stage,
+    }).target_engine;
+
+  // Engines present across the conversation — drives the filter chips.
+  const enginesPresent = Array.from(new Set(bundles.map(engineOf)));
+  const visibleBundles = engineFilter ? bundles.filter((b) => engineOf(b) === engineFilter) : bundles;
+
   // Conversation order: oldest turn first, newest nearest the composer.
-  const turns = [...bundles].reverse();
-  const empty = turns.length === 0 && chatTurns.length === 0 && !planning;
+  const turns = [...visibleBundles].reverse();
+  const empty = bundles.length === 0 && chatTurns.length === 0 && !planning;
 
   // The work canvas opens once there's a task in flight or on record.
   const hasWork = turns.length > 0 || planning;
@@ -533,10 +550,11 @@ export default function Copilot({
   function renderWorkRef(b: WorkflowBundle) {
     const active = b.workflow.status === "in_progress" || b.workflow.status === "awaiting_approval";
     const isFocused = focusedBundle?.workflow.id === b.workflow.id;
-    const routing = deriveRouting({
+    const routing = routingFromTask({
       prompt: b.workflow.description || b.workflow.title,
       hub: b.workflow.hub,
       agents: b.steps.map((s) => s.assigned_agent),
+      stage: b.workflow.lifecycle_stage,
     });
     return (
       <div key={b.workflow.id} className="flex flex-col gap-2">
@@ -784,6 +802,37 @@ export default function Copilot({
                       </button>
                     ))}
                   </div>
+                </div>
+              ) : null}
+
+              {enginesPresent.length > 1 ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Engines</span>
+                  <button
+                    type="button"
+                    onClick={() => setEngineFilter(null)}
+                    className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
+                      engineFilter === null
+                        ? "border-gold-500/60 bg-gold-500/15 text-gold-200"
+                        : "border-line/80 bg-surface-1/70 text-fg-muted hover:text-fg-secondary"
+                    }`}
+                  >
+                    All
+                  </button>
+                  {enginesPresent.map((eng) => (
+                    <button
+                      key={eng}
+                      type="button"
+                      onClick={() => setEngineFilter((cur) => (cur === eng ? null : eng))}
+                      className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
+                        engineFilter === eng
+                          ? "border-gold-500/60 bg-gold-500/15 text-gold-200"
+                          : "border-line/80 bg-surface-1/70 text-fg-muted hover:text-fg-secondary"
+                      }`}
+                    >
+                      {eng}
+                    </button>
+                  ))}
                 </div>
               ) : null}
 
@@ -1285,12 +1334,14 @@ function WorkflowCard({
 }) {
   const { workflow, approval } = bundle;
   const pending = approval && approval.decision === "pending";
-  // Intelligence Layer: recompute the routing the same way the engine did, so
-  // the card renders the Cursor-style Summary / Action / Output / Next Step.
-  const routing = deriveRouting({
+  // Intelligence Layer: render the routing the engine PERSISTED on the workflow
+  // (falling back to deterministic classification for pre-routing rows), so the
+  // Cursor-style card never drifts from what was actually routed.
+  const routing = routingFromTask({
     prompt: workflow.description || workflow.title,
     hub: workflow.hub,
     agents: bundle.steps.map((s) => s.assigned_agent),
+    stage: workflow.lifecycle_stage,
   });
   const cursor = cursorResponse(routing, { pending: Boolean(pending), stepCount: bundle.steps.length });
   return (
