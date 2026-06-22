@@ -1041,6 +1041,19 @@ export type RadarDigestEngagement = {
   occurred_at: string;
 };
 
+// One subject-line A/B assignment for an Act-now Radar digest send (migration
+// 20260623120000): the variant a given radar_digest_log row was sent with.
+// Joined to radar_digest_engagement via digest_log_id to learn which subject
+// variant drives more opens/clicks, so the winner can be preferred.
+export type DigestExperimentVariant = {
+  id: string;
+  organization_id: string;
+  digest_log_id: string | null;
+  experiment_key: string; // 'subject_line'
+  variant: string; // e.g. 'control' | 'urgent' | 'curiosity'
+  assigned_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -1376,6 +1389,7 @@ export type Database = {
       radar_digest_log: TableShape<RadarDigestLogEntry>;
       funnel_snapshots: TableShape<FunnelSnapshotRow>;
       radar_digest_engagement: TableShape<RadarDigestEngagement>;
+      digest_experiment_variants: TableShape<DigestExperimentVariant>;
     };
     Views: Record<string, never>;
     Functions: {

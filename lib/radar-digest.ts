@@ -51,6 +51,14 @@ export interface DigestOptions {
    * in-app summary always keeps raw deep links (no tracking needed in-app).
    */
   tracking?: DigestTracking;
+  /**
+   * Subject-line A/B override. When set, it REPLACES the default email subject
+   * (and the Slack header reuses it) so a send can be assigned an experiment
+   * variant (lib/digest-experiments.ts). Absent → the default subject is used
+   * verbatim, so default compose stays byte-identical. PURE: it's just the
+   * chosen string; the composer never derives or randomizes it.
+   */
+  subject?: string;
 }
 
 // One digest row — the slice of a RadarItem a brief needs, plus the resolved
@@ -184,7 +192,11 @@ function slackBlock(top: DigestItem[], cadence: string, opts: DigestOptions): st
     const move = href ? `<${href}|${it.moveLabel}>` : it.moveLabel;
     return `${i + 1}. *${it.name}* — score ${it.score} · _${it.signalSummary}_\n   → ${move}`;
   });
-  return [`*${cadence} Act-now Radar — top ${top.length}*`, ...lines].join("\n");
+  // The header echoes the (possibly A/B-overridden) subject so Slack and email
+  // carry the same variant framing; absent an override it's the default header
+  // verbatim, keeping default compose byte-identical.
+  const header = opts.subject ?? `${cadence} Act-now Radar — top ${top.length}`;
+  return [`*${header}*`, ...lines].join("\n");
 }
 
 function emailHtml(top: DigestItem[], cadence: string, opts: DigestOptions): string {
@@ -241,10 +253,13 @@ function inAppSummaryLine(top: DigestItem[], cadence: string): string {
 export function composeDigest(items: RadarItem[], opts: DigestOptions = {}): DigestPayload {
   const cadence = cadenceLabel(opts.cadence);
   const top = selectDigestItems(items, opts);
-  const subject =
+  const defaultSubject =
     top.length === 0
       ? `${cadence} Act-now Radar — quiet today`
       : `${cadence} Act-now Radar — ${top.length} to act on (top: ${top[0].name})`;
+  // An A/B variant may override the subject; absent an override the default is
+  // used verbatim so default compose stays byte-identical (guarded by a test).
+  const subject = opts.subject ?? defaultSubject;
 
   return {
     count: top.length,
