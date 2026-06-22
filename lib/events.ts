@@ -62,6 +62,8 @@ export interface ArtifactCreatedEvent extends BaseEvent {
   artifact_id: string;
   artifact_type: ArtifactType;
   title: string;
+  // Trust layer: how many grounding citations were attached to the artifact.
+  sources?: number;
 }
 
 export interface GraphUpdateEvent extends BaseEvent {

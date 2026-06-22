@@ -1,8 +1,75 @@
 "use client";
 
 import { useState } from "react";
-import type { ArtifactType } from "@/lib/supabase/database.types";
+import type { ArtifactType, Json } from "@/lib/supabase/database.types";
 import { ArtifactModal } from "@/components/ArtifactModal";
+import { parseSources, verificationView, type VerificationLevel } from "@/lib/artifact-provenance";
+
+// Verification badge palette — verified (signed off) / grounded (cites sources,
+// unsigned) / unverified (no sources).
+const VERIFY_TONE: Record<VerificationLevel, string> = {
+  verified: "border-status-success/45 bg-status-success/[0.08] text-status-success",
+  grounded: "border-gold-500/40 bg-gold-500/[0.07] text-gold-300",
+  unverified: "border-line/70 bg-surface-2/50 text-fg-muted",
+};
+
+// Provenance bar — a verification badge plus the openable grounding citations
+// that make a composer output verifiable. Renders the badge always; the sources
+// list expands on demand.
+export function ProvenanceBar({
+  sources,
+  verificationStatus,
+}: {
+  sources?: Json | null;
+  verificationStatus?: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const cited = parseSources(sources);
+  const view = verificationView({ verification_status: verificationStatus, sources });
+
+  return (
+    <div className="mt-2 border-t border-line/55 pt-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${VERIFY_TONE[view.level]}`}
+          title={view.detail}
+        >
+          {view.level === "verified" ? "✓ " : null}
+          {view.label}
+        </span>
+        {cited.length ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+          >
+            {open ? "Hide sources" : `${cited.length} source${cited.length === 1 ? "" : "s"}`}
+          </button>
+        ) : (
+          <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{view.detail}</span>
+        )}
+      </div>
+
+      {open && cited.length ? (
+        <ol className="mt-2 space-y-1.5">
+          {cited.map((s, i) => (
+            <li key={`${s.source}-${i}`} className="rounded-lg border border-line/60 bg-surface-0/40 px-2.5 py-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-mono text-[10px] text-fg-secondary">{s.source}</span>
+                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  {s.kind === "kb" ? "KB" : "Doc"}
+                  {s.score > 0 ? ` · ${(s.score * 100).toFixed(0)}%` : ""}
+                </span>
+              </div>
+              {s.snippet ? <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-fg-muted">{s.snippet}</p> : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </div>
+  );
+}
 
 // Memo-style deliverables read best as markdown documents (.md); everything else
 // (models, plain summaries) downloads as a generic text file.
@@ -294,6 +361,9 @@ interface ArtifactCardProps {
   agent?: string;
   created_at?: string;
   compact?: boolean;
+  // Trust layer: grounding citations + verification badge.
+  sources?: Json | null;
+  verificationStatus?: string | null;
 }
 
 export function ArtifactCard({
@@ -303,6 +373,8 @@ export function ArtifactCard({
   agent,
   created_at,
   compact = false,
+  sources,
+  verificationStatus,
 }: ArtifactCardProps) {
   const [expanded, setExpanded] = useState(false);
   const label = ARTIFACT_LABEL[artifact_type] ?? "Artifact";
@@ -337,6 +409,9 @@ export function ArtifactCard({
           <div className={`space-y-0 ${compact ? "max-h-80 overflow-y-auto" : ""}`}>
             {renderContent(content)}
           </div>
+          {sources !== undefined || verificationStatus !== undefined ? (
+            <ProvenanceBar sources={sources} verificationStatus={verificationStatus} />
+          ) : null}
           <button
             onClick={() => setExpanded(false)}
             className="mt-4 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
@@ -354,10 +429,15 @@ export function ArtifactInline({
   content,
   artifactType,
   title,
+  sources,
+  verificationStatus,
 }: {
   content: string;
   artifactType?: ArtifactType;
   title?: string;
+  // Trust layer: grounding citations + verification badge for this deliverable.
+  sources?: Json | null;
+  verificationStatus?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -390,6 +470,9 @@ export function ArtifactInline({
           {expanded ? "Collapse ↑" : "Read full output ↓"}
         </button>
       )}
+      {sources !== undefined || verificationStatus !== undefined ? (
+        <ProvenanceBar sources={sources} verificationStatus={verificationStatus} />
+      ) : null}
       {modalOpen && (
         <ArtifactModal
           title={fileTitle}
