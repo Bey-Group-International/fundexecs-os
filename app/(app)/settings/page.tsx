@@ -7,6 +7,8 @@ import type { ApiKey, MandateRow } from "@/lib/supabase/database.types";
 import { loadOrgConnections } from "@/lib/integrations/gateway";
 import { NewMandateForm } from "./NewMandateForm";
 import { Connections } from "./Connections";
+import { DigestPreferences } from "./DigestPreferences";
+import { loadDigestPrefs } from "./digest-actions";
 import { ApiKeys, type ApiKeyView } from "./ApiKeys";
 import { GuidedTourSetting } from "./GuidedTourSetting";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
@@ -24,6 +26,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "account", label: "Account" },
   { id: "mandates", label: "Mandates" },
   { id: "integrations", label: "Integrations" },
+  { id: "digest", label: "Digest" },
   { id: "api", label: "API keys" },
   { id: "help", label: "Help" },
   { id: "about", label: "About" },
@@ -73,6 +76,9 @@ export default async function SettingsPage() {
 
   // Per-org integration connections brokered by the unified gateway.
   const connections = await loadOrgConnections(supabase, ctx.orgId);
+
+  // Per-org, per-channel delivery prefs for the Act-now Radar digest.
+  const { prefs: digestPrefs } = await loadDigestPrefs();
 
   const labelFor = (kind: string) =>
     TIER_2_ACTIONS.find((a) => a.kind === kind)?.label ?? kind;
@@ -215,6 +221,16 @@ export default async function SettingsPage() {
             description="Dispatch channels carry approved external actions to the outside world. A connected channel sends for real; an unconnected one runs in mock mode — the action is prepared and queued, not sent — so the gate → dispatch loop works end-to-end before any provider is wired up."
           >
             <Connections connections={connections} />
+          </Section>
+
+          {/* Digest preferences */}
+          <Section
+            id="digest"
+            eyebrow="Cadence"
+            title="Digest preferences"
+            description="Decide how the Act-now Radar digest and weekly funnel rollup reach you. Turn each channel on or off, point it at a Slack channel or inbox, pick a daily or weekly cadence, and set the minimum priority bar an item must clear to make the cut."
+          >
+            <DigestPreferences prefs={digestPrefs} />
           </Section>
 
           {/* API keys */}
