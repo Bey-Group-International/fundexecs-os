@@ -17,6 +17,7 @@ import {
   type SourcingMandate,
 } from "@/lib/source-ai";
 import { buildOperatorContext, recordSourceFeedback, type SourceFeedbackInput } from "@/lib/source-intelligence";
+import { ingestEntities, entityKindForModule, type IntelEntityInput } from "@/lib/sourcing-intel";
 import type { AgentKey, InvestorType, Json } from "@/lib/supabase/database.types";
 
 // The Source agent that owns each sourcing action — drives task assignment.
@@ -243,6 +244,21 @@ export async function addSourcedTargets(
     });
   }
   await recordSourceFeedback(supabase, feedback);
+
+  // Agent-native intelligence: accepted candidates also grow the Sourcing
+  // Intelligence catalog (migration 0042) so they're semantically discoverable
+  // and lookalike-searchable later. Best-effort — never blocks the add.
+  const entityKind = entityKindForModule(key);
+  const catalog: IntelEntityInput[] = clean.map((c) => ({
+    kind: entityKind,
+    name: c.name,
+    description: c.rationale,
+    categories: c.category ? [c.category] : [],
+    metadata: { fitScore: c.fitScore, query: meta?.query ?? null },
+    provenance: c.verification_note ? "web" : "ai",
+    sourceUrl: c.verification_note,
+  }));
+  await ingestEntities(supabase, orgId, auth.ctx.userId, catalog);
 
   revalidatePath(`/${hub}/${module}`);
   return { ok: true, added };

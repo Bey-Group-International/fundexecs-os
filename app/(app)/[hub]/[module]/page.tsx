@@ -1,6 +1,7 @@
 import { ModuleView } from "@/components/ModuleView";
 import { SourceSearch } from "@/components/source/SourceSearch";
 import { SourceTriage } from "@/components/source/SourceTriage";
+import { SourcingIntel } from "@/components/source/SourcingIntel";
 import { RunSearch } from "@/components/run/RunSearch";
 import { ExecuteSearch } from "@/components/execute/ExecuteSearch";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
@@ -33,6 +34,9 @@ export default function ModulePage({
   }
   if (params.hub === "source" && params.module === "triage") {
     return <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />;
+  }
+  if (params.hub === "source" && params.module === "intel") {
+    return <SourcingIntel live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;
