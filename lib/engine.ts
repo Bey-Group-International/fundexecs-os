@@ -14,6 +14,7 @@ import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
 import { buildRouting } from "@/lib/intelligence";
 import { shouldReuseRecord } from "@/lib/reference-binding";
+import { getRoutingCorrections, formatRoutingCorrections } from "@/lib/routing-feedback";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -431,7 +432,19 @@ async function gatherActiveContext(ctx: Ctx, sessionId: string): Promise<string[
 // follow-up with the conversation in mind (oldest first), plus the active
 // deal/asset so references like "the deal" resolve.
 async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[]> {
-  if (!sessionId) return [];
+  // Closed-loop routing learning: prepend a preamble built from the operator's
+  // recent reroute corrections (org-scoped) so the planner stops repeating the
+  // same mis-routes. Purely additive and best-effort — a failure here must never
+  // break planning, so it's swallowed and the session context flows unchanged.
+  let reroute: string[] = [];
+  try {
+    const preamble = formatRoutingCorrections(await getRoutingCorrections(ctx.supabase, ctx.orgId));
+    if (preamble) reroute = [preamble];
+  } catch {
+    // Ignore — routing-feedback is supplementary to the durable session context.
+  }
+
+  if (!sessionId) return reroute;
   const { data: prior } = await ctx.supabase
     .from("tasks")
     .select("description")
@@ -442,7 +455,7 @@ async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[
     .map((t) => t.description?.trim() ?? "")
     .filter(Boolean);
   const active = await gatherActiveContext(ctx, sessionId);
-  return [...active, ...turns];
+  return [...reroute, ...active, ...turns];
 }
 
 export async function planPrompt(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan> {
