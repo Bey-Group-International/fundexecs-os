@@ -1,4 +1,5 @@
 import { requireOrgContext } from "@/lib/auth";
+import { createServerClient } from "@/lib/supabase/server";
 import { earnChatStream, earnChatFallback } from "@/lib/claude";
 import { EARN_MODELS, type EarnModelKey } from "@/lib/earn-conversation";
 
@@ -17,8 +18,9 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
     });
   }
+  const { orgId, userId } = auth.ctx;
 
-  const { body, model, prior } = await request.json().catch(() => ({ body: "" }));
+  const { body, model, prior, session_id } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
@@ -26,10 +28,26 @@ export async function POST(request: Request) {
     });
   }
 
-  const modelLabel = EARN_MODELS.find((m) => m.key === (model as EarnModelKey))?.label ?? "Earn";
+  const modelKey = (model as EarnModelKey) ?? undefined;
+  const modelLabel = EARN_MODELS.find((m) => m.key === modelKey)?.label ?? "Earn";
   const priorContext = Array.isArray(prior)
     ? prior.filter((x): x is string => typeof x === "string").slice(-6)
     : [];
+  const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
+
+  // Persist the turn pair when the chat happens inside a session, so it survives
+  // a reload. Best-effort (RLS-gated insert); a failure never breaks the reply.
+  async function persist(reply: string) {
+    if (!sessionId || !reply.trim()) return;
+    const supabase = createServerClient();
+    await supabase
+      .from("session_messages")
+      .insert([
+        { organization_id: orgId, session_id: sessionId, role: "user", content: body, created_by: userId },
+        { organization_id: orgId, session_id: sessionId, role: "assistant", content: reply, model: modelKey ?? null, created_by: userId },
+      ])
+      .then(undefined, () => {});
+  }
 
   const encoder = new TextEncoder();
   const stream = earnChatStream({ body, modelLabel, priorContext });
@@ -43,13 +61,18 @@ export async function POST(request: Request) {
 
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
+      let reply = "";
       try {
-        stream.on("text", (delta: string) => controller.enqueue(encoder.encode(delta)));
+        stream.on("text", (delta: string) => {
+          reply += delta;
+          controller.enqueue(encoder.encode(delta));
+        });
         await stream.finalMessage();
       } catch {
         controller.enqueue(encoder.encode("\n\n[Earn hit an error generating that reply.]"));
       } finally {
         controller.close();
+        await persist(reply);
       }
     },
   });

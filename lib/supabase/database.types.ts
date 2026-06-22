@@ -1057,6 +1057,20 @@ export type IntegrationConnection = {
   revoked_at: string | null;
 };
 
+// A persisted conversational turn in a session (migration 0053). 'user' is the
+// operator's message, 'assistant' is Earn's reply; `model` records the style
+// engine for assistant turns. Advisory/ungated — no approval state.
+export type SessionMessage = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string;
+  model: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -1137,6 +1151,7 @@ export type Database = {
       attestations: TableShape<Attestation>;
       stake_disputes: TableShape<StakeDispute>;
       integration_connections: TableShape<IntegrationConnection>;
+      session_messages: TableShape<SessionMessage>;
     };
     Views: Record<string, never>;
     Functions: {
