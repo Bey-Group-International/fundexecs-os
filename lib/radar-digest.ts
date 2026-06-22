@@ -11,10 +11,27 @@
 // No DB, no network, no env, no clock surprises: the same items in always yield
 // the same payload out. The server-side send (lib/radar-send.ts) handles I/O.
 import type { RadarItem } from "@/lib/source-radar";
+import { buildTrackingUrl, type DigestTrackParams } from "@/lib/digest-tracking";
 
 // How many items a single digest carries, regardless of how many clear the bar —
 // a digest is a short, actionable brief, not a dump of the whole radar.
 const DEFAULT_TOP = 5;
+
+/**
+ * Implicit-engagement tracking config. When present, Slack/email move links are
+ * wrapped to route through /api/digest/track (signed with `secret`) so a click
+ * is captured as implicit feedback, and the email body carries an open pixel.
+ * Absent → links stay plain deep links (the digest never breaks without it).
+ * PURE: building the signed URL is just an HMAC over the params (lib/digest-tracking).
+ */
+export interface DigestTracking {
+  /** Server secret the tracking links are signed with (DIGEST_TRACK_SECRET / CRON_SECRET). */
+  secret: string;
+  /** The radar_digest_log row id this digest is attributed to. */
+  digestLogId: string;
+  /** The org the digest belongs to. */
+  orgId: string;
+}
 
 export interface DigestOptions {
   /** Minimum RadarItem.score to include. Defaults to 60. */
@@ -28,6 +45,12 @@ export interface DigestOptions {
   baseUrl?: string;
   /** Cadence label for the heading ("daily" | "weekly"). Defaults to "daily". */
   cadence?: "daily" | "weekly";
+  /**
+   * Optional engagement tracking. When set, the Slack/email channels wrap move
+   * links + add an open pixel so the learning loop sees implicit signals. The
+   * in-app summary always keeps raw deep links (no tracking needed in-app).
+   */
+  tracking?: DigestTracking;
 }
 
 // One digest row — the slice of a RadarItem a brief needs, plus the resolved
@@ -40,6 +63,10 @@ export interface DigestItem {
   moveKind: string;
   /** Resolved deep link into the owning cluster, or null for inline moves. */
   moveHref: string | null;
+  /** The radar entity this row points at — for engagement attribution. */
+  entityId: string | null;
+  /** The entity kind, denormalized for engagement attribution. */
+  entityKind: string;
 }
 
 export interface DigestPayload {
@@ -73,6 +100,45 @@ function resolveHref(href: string | undefined, baseUrl: string | undefined): str
 }
 
 /**
+ * The link a digest row should point at. With tracking configured AND a real
+ * deep link present, return a signed /api/digest/track URL (action=clicked) that
+ * records the engagement and redirects to the deep link; otherwise the plain
+ * deep link (so the digest never breaks without a secret). Pure.
+ */
+function trackedHref(
+  it: DigestItem,
+  opts: DigestOptions,
+): string | null {
+  const t = opts.tracking;
+  if (!t || !t.secret || !it.moveHref) return it.moveHref;
+  const params: DigestTrackParams = {
+    digestLogId: t.digestLogId,
+    orgId: t.orgId,
+    entityId: it.entityId,
+    entityKind: it.entityKind,
+    moveKind: it.moveKind,
+    action: "clicked",
+    href: it.moveHref,
+  };
+  return buildTrackingUrl(t.secret, params, opts.baseUrl);
+}
+
+/**
+ * The 1×1 open-pixel tracking URL for an email body, or null when tracking is
+ * not configured. Signed with action=opened (no href). Pure.
+ */
+export function openPixelUrl(opts: DigestOptions): string | null {
+  const t = opts.tracking;
+  if (!t || !t.secret) return null;
+  const params: DigestTrackParams = {
+    digestLogId: t.digestLogId,
+    orgId: t.orgId,
+    action: "opened",
+  };
+  return buildTrackingUrl(t.secret, params, opts.baseUrl);
+}
+
+/**
  * Filter to items that clear the score bar, rank highest-first (ties broken by
  * name for determinism), take the top N, and resolve each move link. Pure.
  */
@@ -91,6 +157,8 @@ export function selectDigestItems(items: RadarItem[], opts: DigestOptions = {}):
       moveLabel: it.move.label,
       moveKind: it.move.kind,
       moveHref: resolveHref(it.move.href, opts.baseUrl),
+      entityId: it.entityId,
+      entityKind: it.kind,
     }));
 }
 
@@ -107,25 +175,33 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function slackBlock(top: DigestItem[], cadence: string): string {
+function slackBlock(top: DigestItem[], cadence: string, opts: DigestOptions): string {
   if (top.length === 0) {
     return `*${cadence} Act-now Radar*\nNothing clears the bar right now — the radar is quiet. Scan signals to surface new triggers.`;
   }
   const lines = top.map((it, i) => {
-    const move = it.moveHref ? `<${it.moveHref}|${it.moveLabel}>` : it.moveLabel;
+    const href = trackedHref(it, opts);
+    const move = href ? `<${href}|${it.moveLabel}>` : it.moveLabel;
     return `${i + 1}. *${it.name}* — score ${it.score} · _${it.signalSummary}_\n   → ${move}`;
   });
   return [`*${cadence} Act-now Radar — top ${top.length}*`, ...lines].join("\n");
 }
 
-function emailHtml(top: DigestItem[], cadence: string): string {
+function emailHtml(top: DigestItem[], cadence: string, opts: DigestOptions): string {
+  // A 1×1 transparent open pixel — fires the "opened" implicit signal when the
+  // email is rendered. Absent when tracking isn't configured.
+  const pixel = openPixelUrl(opts);
+  const pixelTag = pixel
+    ? `<img src="${esc(pixel)}" width="1" height="1" alt="" style="display:none" />`
+    : "";
   if (top.length === 0) {
-    return `<h2>${cadence} Act-now Radar</h2><p>Nothing clears the bar right now — the radar is quiet.</p>`;
+    return `<h2>${cadence} Act-now Radar</h2><p>Nothing clears the bar right now — the radar is quiet.</p>${pixelTag}`;
   }
   const rows = top
     .map((it) => {
-      const move = it.moveHref
-        ? `<a href="${esc(it.moveHref)}">${esc(it.moveLabel)}</a>`
+      const href = trackedHref(it, opts);
+      const move = href
+        ? `<a href="${esc(href)}">${esc(it.moveLabel)}</a>`
         : esc(it.moveLabel);
       return (
         `<li><strong>${esc(it.name)}</strong> — score ${it.score}<br/>` +
@@ -133,15 +209,16 @@ function emailHtml(top: DigestItem[], cadence: string): string {
       );
     })
     .join("");
-  return `<h2>${cadence} Act-now Radar — top ${top.length}</h2><ol>${rows}</ol>`;
+  return `<h2>${cadence} Act-now Radar — top ${top.length}</h2><ol>${rows}</ol>${pixelTag}`;
 }
 
-function emailText(top: DigestItem[], cadence: string): string {
+function emailText(top: DigestItem[], cadence: string, opts: DigestOptions): string {
   if (top.length === 0) {
     return `${cadence} Act-now Radar\n\nNothing clears the bar right now — the radar is quiet.`;
   }
   const lines = top.map((it, i) => {
-    const move = it.moveHref ? `${it.moveLabel} (${it.moveHref})` : it.moveLabel;
+    const href = trackedHref(it, opts);
+    const move = href ? `${it.moveLabel} (${href})` : it.moveLabel;
     return `${i + 1}. ${it.name} — score ${it.score}\n   ${it.signalSummary}\n   -> ${move}`;
   });
   return [`${cadence} Act-now Radar — top ${top.length}`, "", ...lines].join("\n");
@@ -171,9 +248,9 @@ export function composeDigest(items: RadarItem[], opts: DigestOptions = {}): Dig
 
   return {
     count: top.length,
-    slackMarkdown: slackBlock(top, cadence),
+    slackMarkdown: slackBlock(top, cadence, opts),
     emailSubject: subject,
-    emailBody: { html: emailHtml(top, cadence), text: emailText(top, cadence) },
+    emailBody: { html: emailHtml(top, cadence, opts), text: emailText(top, cadence, opts) },
     inAppSummary: inAppSummaryLine(top, cadence),
     topItems: top,
   };

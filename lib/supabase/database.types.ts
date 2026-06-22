@@ -1016,6 +1016,21 @@ export type RadarDigestLogEntry = {
   sent_at: string;
 };
 
+// One implicit digest-engagement event (migration 0064): an operator opened a
+// digest or clicked a row. Folded into the Radar learning loop as implicit
+// feedback (clicks > opens, both weaker than an explicit accept).
+export type RadarDigestEngagement = {
+  id: string;
+  organization_id: string;
+  digest_log_id: string | null;
+  entity_id: string | null;
+  entity_name: string | null;
+  entity_kind: string | null;
+  move_kind: string | null;
+  action: string; // 'opened' | 'clicked'
+  occurred_at: string;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -1349,6 +1364,7 @@ export type Database = {
       radar_feedback: TableShape<RadarFeedback>;
       radar_digest_prefs: TableShape<RadarDigestPref>;
       radar_digest_log: TableShape<RadarDigestLogEntry>;
+      radar_digest_engagement: TableShape<RadarDigestEngagement>;
     };
     Views: Record<string, never>;
     Functions: {
