@@ -116,10 +116,11 @@ export async function buildRelationshipScores(supabase: Client): Promise<Relatio
   const [investorsRes, commitmentsRes, threadsRes] = await Promise.all([
     supabase.from("investors").select("id, name, pipeline_stage").is("archived_at", null).limit(500),
     supabase.from("commitments").select("investor_id").limit(1000),
-    // inbox_threads as interaction proxy — each thread = 1 interaction
+    // inbox_threads has investor_id directly — use it as the interaction proxy
     supabase
       .from("inbox_threads")
-      .select("id, created_at, metadata")
+      .select("id, created_at, investor_id")
+      .not("investor_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(2000),
   ]);
@@ -130,8 +131,7 @@ export async function buildRelationshipScores(supabase: Client): Promise<Relatio
   // Count threads per investor as interaction proxy
   const interactionsByInvestor = new Map<string, { count: number; lastAt: string | null }>();
   for (const thread of threadsRes.data ?? []) {
-    const meta = (thread.metadata ?? {}) as Record<string, unknown>;
-    const investorId = typeof meta.investor_id === "string" ? meta.investor_id : null;
+    const investorId = thread.investor_id;
     if (!investorId) continue;
     const existing = interactionsByInvestor.get(investorId) ?? { count: 0, lastAt: null };
     interactionsByInvestor.set(investorId, {
