@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { TargetEngine } from "@/lib/intelligence";
 import type { GridWorkflow } from "@/lib/execution-grid";
 import { isStuck, stuckHours, stuckCount } from "@/lib/engine-sla";
+import { EscalateButton } from "./EscalateButton";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
@@ -56,6 +57,7 @@ function WorkflowRow({ wf, stuck, hours }: { wf: GridWorkflow; stuck: boolean; h
       <StatusDot status={wf.status} />
       <span className="min-w-0 flex-1 truncate text-fg-secondary group-hover:text-fg-primary">{wf.title}</span>
       {stuck && <StuckPill hours={hours} />}
+      {stuck && <EscalateButton workflowId={wf.id} />}
       <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
         {STATUS_LABEL[wf.status] ?? wf.status}
       </span>
