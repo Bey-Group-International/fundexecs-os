@@ -29,6 +29,27 @@ type RoomData = {
 
 type BubbleState = { execId: string; text: string } | null;
 
+// Enhancement 1: Live data badges
+type RoomStats = { label: string; value: string | number; trend?: "up" | "down" | "flat" };
+
+const ROOM_STATS: Record<string, RoomStats> = {
+  ceo:       { label: "tasks",     value: 4,  trend: "flat" },
+  boardroom: { label: "meetings",  value: 2,  trend: "up"   },
+  trading:   { label: "deals",     value: 7,  trend: "up"   },
+  research:  { label: "reports",   value: 3,  trend: "flat" },
+  investor:  { label: "LPs",       value: 12, trend: "up"   },
+  ops:       { label: "workflows", value: 5,  trend: "flat" },
+  legal:     { label: "docs",      value: 2,  trend: "down" },
+  marketing: { label: "campaigns", value: 3,  trend: "up"   },
+  reception: { label: "visitors",  value: 1,  trend: "flat" },
+};
+
+// Enhancement 3: Activity levels
+const ROOM_ACTIVITY: Record<string, 0 | 1 | 2 | 3> = {
+  ceo: 1, boardroom: 2, trading: 3, research: 1,
+  investor: 2, ops: 3, legal: 0, marketing: 2, reception: 1,
+};
+
 // Deterministic particle positions — no Math.random() in render
 const PARTICLE_POSITIONS: Array<{ top: string; left: string; drift: string; delay: string }> = [
   { top: "20%", left: "15%", drift: "-6px", delay: "0s" },
@@ -380,6 +401,8 @@ function RoomCell({
   activeBubble,
   reducedEffects,
   nightMode,
+  isFocused,
+  activity,
 }: {
   room: RoomData;
   roomIndex: number;
@@ -389,6 +412,8 @@ function RoomCell({
   activeBubble: BubbleState;
   reducedEffects: boolean;
   nightMode: boolean;
+  isFocused: boolean;
+  activity: 0 | 1 | 2 | 3;
 }) {
   const [hovered, setHovered] = useState(false);
   const execCount = room.executives.length;
@@ -396,6 +421,24 @@ function RoomCell({
   const flickerDelay = LIGHT_FLICKER_DELAYS[roomIndex % LIGHT_FLICKER_DELAYS.length];
   const isZooming = zoomingRoom === room.id;
   const transformOrigin = ROOM_TRANSFORM_ORIGINS[room.id] ?? "center center";
+
+  const stats = ROOM_STATS[room.id];
+  const trendArrow = stats?.trend === "up" ? "↑" : stats?.trend === "down" ? "↓" : "→";
+
+  // Activity-based breathe duration
+  const breatheDuration = activity >= 3 ? "2s" : "4s";
+
+  // Box shadow for focused/hover/activity
+  let boxShadow: string;
+  if (isFocused) {
+    boxShadow = `inset 0 0 0 2px ${room.accentColor}, 0 0 0 1px white`;
+  } else if (hovered) {
+    boxShadow = `inset 0 0 0 2px ${room.accentColor}cc, 0 0 20px ${room.accentColor}40`;
+  } else if (activity >= 3) {
+    boxShadow = `inset 0 0 0 1px ${room.accentColor}44, 0 0 12px ${room.accentColor}30`;
+  } else {
+    boxShadow = `inset 0 0 0 1px ${room.accentColor}22`;
+  }
 
   return (
     <div
@@ -408,9 +451,7 @@ function RoomCell({
         cursor: "pointer",
         background: "transparent",
         overflow: "hidden",
-        boxShadow: hovered
-          ? `inset 0 0 0 2px ${room.accentColor}cc, 0 0 20px ${room.accentColor}40`
-          : `inset 0 0 0 1px ${room.accentColor}22`,
+        boxShadow,
         transform: isZooming ? "scale(2.5)" : "scale(1)",
         transformOrigin,
         zIndex: isZooming ? 20 : undefined,
@@ -426,8 +467,25 @@ function RoomCell({
             position: "absolute",
             inset: 0,
             background: room.accentColor,
-            animation: `room-breathe 4s ease-in-out infinite`,
+            opacity: 0,
+            animation: `room-breathe ${breatheDuration} ease-in-out infinite`,
             animationDelay: `${roomIndex * 0.45}s`,
+            pointerEvents: "none",
+            zIndex: 1,
+          }}
+        />
+      )}
+
+      {/* Extra fast pulse overlay for activity level 3 */}
+      {!reducedEffects && activity >= 3 && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: room.accentColor,
+            opacity: 0,
+            animation: `room-breathe 2s ease-in-out infinite`,
+            animationDelay: `${roomIndex * 0.45 + 1}s`,
             pointerEvents: "none",
             zIndex: 1,
           }}
@@ -549,6 +607,82 @@ function RoomCell({
         </div>
       )}
 
+      {/* Enhancement 1: Stats badge — bottom right */}
+      {stats && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 4,
+            right: 5,
+            zIndex: 5,
+            pointerEvents: "none",
+            fontFamily: "monospace",
+            fontSize: 7,
+            textTransform: "uppercase",
+            color: room.accentColor,
+            letterSpacing: "0.08em",
+            userSelect: "none",
+          }}
+        >
+          {stats.value} {stats.label} {trendArrow}
+        </div>
+      )}
+
+      {/* Enhancement 2: Hover preview card */}
+      {hovered && stats && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% - 20px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(6,9,15,0.92)",
+            border: `1px solid ${room.accentColor}60`,
+            fontFamily: "monospace",
+            fontSize: 8,
+            padding: "5px 8px",
+            whiteSpace: "nowrap",
+            zIndex: 10,
+            pointerEvents: "none",
+            animation: "fadeSlideUp 0.15s ease-out",
+            color: "#e2e8f0",
+            textAlign: "center",
+            minWidth: 80,
+          }}
+        >
+          <div style={{ color: room.accentColor, fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>
+            {room.label}
+          </div>
+          <div style={{ opacity: 0.8, marginBottom: 3 }}>
+            {stats.value} {stats.label} {trendArrow}
+          </div>
+          <div style={{ color: room.accentColor, opacity: 0.9, letterSpacing: "0.08em" }}>
+            → ENTER
+          </div>
+        </div>
+      )}
+
+      {/* Enhancement 4: Focused ring label */}
+      {isFocused && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 4,
+            left: 5,
+            zIndex: 5,
+            pointerEvents: "none",
+            fontFamily: "monospace",
+            fontSize: 6,
+            color: "white",
+            opacity: 0.7,
+            letterSpacing: "0.08em",
+            userSelect: "none",
+          }}
+        >
+          [↵ ENTER]
+        </div>
+      )}
+
       {/* Exec avatars — walk across the floor of the room */}
       <div
         style={{
@@ -579,6 +713,12 @@ function RoomCell({
   );
 }
 
+// Enhancement 4: Grid layout for keyboard navigation
+// Row 0: indices 0-3 (ceo, boardroom, trading, research)
+// Row 1: indices 4-7 (investor, ops, legal, marketing)
+// Row 2: index 8 (reception)
+const ROOM_ROWS = [[0, 1, 2, 3], [4, 5, 6, 7], [8]];
+
 export function ExecutiveHQ() {
   const router = useRouter();
   const [booting, setBooting] = useState(true);
@@ -587,6 +727,8 @@ export function ExecutiveHQ() {
   const [activeBubble, setActiveBubble] = useState<BubbleState>(null);
   const [isVisible, setIsVisible] = useState(true);
   const [reducedEffects, setReducedEffects] = useState(false);
+  // Enhancement 4: keyboard navigation state
+  const [focusedRoomIndex, setFocusedRoomIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const idleIndexRef = useRef(0);
 
@@ -597,7 +739,7 @@ export function ExecutiveHQ() {
     setReducedEffects(prefersReduced || lowPower);
   }, []);
 
-  // N key toggles day/night mode
+  // N key toggles day/night mode (global)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "n" || e.key === "N") setNightMode((v) => !v);
@@ -671,6 +813,63 @@ export function ExecutiveHQ() {
     );
   }, []);
 
+  // Enhancement 4: keyboard handler on container
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "n" || e.key === "N") return; // let the global handler handle it
+
+    if (e.key === "Escape") {
+      setFocusedRoomIndex(null);
+      return;
+    }
+
+    if (e.key === "Enter" && focusedRoomIndex !== null) {
+      const room = ROOMS[focusedRoomIndex];
+      if (room) handleRoomClick(room.id, room.href);
+      return;
+    }
+
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+    e.preventDefault();
+
+    const currentIndex = focusedRoomIndex ?? 0;
+
+    // Find current row and col
+    let currentRow = 0;
+    let currentCol = 0;
+    for (let r = 0; r < ROOM_ROWS.length; r++) {
+      const colIdx = ROOM_ROWS[r].indexOf(currentIndex);
+      if (colIdx !== -1) {
+        currentRow = r;
+        currentCol = colIdx;
+        break;
+      }
+    }
+
+    let newIndex = currentIndex;
+
+    if (e.key === "ArrowLeft") {
+      const row = ROOM_ROWS[currentRow];
+      const newCol = (currentCol - 1 + row.length) % row.length;
+      newIndex = row[newCol];
+    } else if (e.key === "ArrowRight") {
+      const row = ROOM_ROWS[currentRow];
+      const newCol = (currentCol + 1) % row.length;
+      newIndex = row[newCol];
+    } else if (e.key === "ArrowUp") {
+      const newRow = (currentRow - 1 + ROOM_ROWS.length) % ROOM_ROWS.length;
+      const targetRow = ROOM_ROWS[newRow];
+      const clampedCol = Math.min(currentCol, targetRow.length - 1);
+      newIndex = targetRow[clampedCol];
+    } else if (e.key === "ArrowDown") {
+      const newRow = (currentRow + 1) % ROOM_ROWS.length;
+      const targetRow = ROOM_ROWS[newRow];
+      const clampedCol = Math.min(currentCol, targetRow.length - 1);
+      newIndex = targetRow[clampedCol];
+    }
+
+    setFocusedRoomIndex(newIndex);
+  }, [focusedRoomIndex, handleRoomClick]);
+
   if (booting) {
     return <ExecutiveHQBoot onComplete={() => setBooting(false)} />;
   }
@@ -678,6 +877,10 @@ export function ExecutiveHQ() {
   return (
     <div
       ref={containerRef}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onFocus={() => { if (focusedRoomIndex === null) setFocusedRoomIndex(0); }}
+      onBlur={() => setFocusedRoomIndex(null)}
       className={isVisible ? "" : "hq-paused"}
       style={{
         position: "relative",
@@ -685,6 +888,7 @@ export function ExecutiveHQ() {
         aspectRatio: "1",
         fontFamily: "monospace",
         overflow: "hidden",
+        outline: "none",
       }}
     >
       <style>{`
@@ -707,6 +911,10 @@ export function ExecutiveHQ() {
         }
         @keyframes bubble-in {
           from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes fadeSlideUp {
+          from { opacity: 0; transform: translateX(-50%) translateY(6px); }
           to   { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
         .hq-paused * { animation-play-state: paused !important; }
@@ -781,6 +989,8 @@ export function ExecutiveHQ() {
             activeBubble={activeBubble}
             reducedEffects={reducedEffects}
             nightMode={nightMode}
+            isFocused={focusedRoomIndex === idx}
+            activity={ROOM_ACTIVITY[room.id] ?? 0}
           />
         ))}
       </div>
