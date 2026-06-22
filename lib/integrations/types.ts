@@ -28,6 +28,12 @@ export interface DispatchContext {
   // Anything else an adapter needs; kept open so adapters can evolve their
   // inputs without churning this contract.
   metadata?: Record<string, unknown>;
+  // Trust layer: the verification standing of the composer artifact this action
+  // would carry outward, when one backs it. dispatchAction reads it through
+  // `isVerifiable` (lib/grounding.ts) and pre-flight-blocks a Tier-2/3 send of
+  // unverified, weakly-grounded work product. Omit for actions with no backing
+  // artifact — those dispatch exactly as before.
+  backingArtifact?: { verification_status: string; grounding_score: number };
 }
 
 export interface DispatchResult {
@@ -41,6 +47,11 @@ export interface DispatchResult {
   // External reference (message id, envelope id, booking url) when one exists.
   reference?: string;
   error?: string;
+  // Trust layer: set when dispatch was refused at the gate rather than attempted
+  // — an unverified, weakly-grounded artifact cannot ride a Tier-2/3 send out to
+  // a counterparty. `gated` results are always `ok: false` and `live: false`;
+  // the reason rides in `detail`. Unset for every normal (attempted) dispatch.
+  gated?: boolean;
 }
 
 export interface DispatchAdapter {
