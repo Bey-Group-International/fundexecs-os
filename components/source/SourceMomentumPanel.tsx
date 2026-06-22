@@ -156,8 +156,14 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
               {stage.label}
             </span>
             <Link
+              href="/source/radar"
+              className="ml-auto rounded-md border border-gold-500/60 bg-gold-500/15 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-100 transition hover:bg-gold-500/25"
+            >
+              ✶ Radar
+            </Link>
+            <Link
               href="/source/search"
-              className="ml-auto rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
             >
               ✶ AI Search
             </Link>

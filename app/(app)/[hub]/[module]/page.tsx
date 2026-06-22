@@ -24,6 +24,9 @@ const OutreachStudio = nextDynamic(() =>
 const SourceSignals = nextDynamic(() =>
   import("@/components/source/SourceSignals").then((m) => m.SourceSignals),
 );
+const SourceRadar = nextDynamic(() =>
+  import("@/components/source/SourceRadar").then((m) => m.SourceRadar),
+);
 const RunSearch = nextDynamic(() =>
   import("@/components/run/RunSearch").then((m) => m.RunSearch),
 );
@@ -70,6 +73,9 @@ export default function ModulePage({
   }
   if (params.hub === "source" && params.module === "signals") {
     return <SourceSignals live={sourcingLive()} initialPrompt={initialPrompt} />;
+  }
+  if (params.hub === "source" && params.module === "radar") {
+    return <SourceRadar live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;
