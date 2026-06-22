@@ -47,6 +47,20 @@ describe("verificationView", () => {
     expect(verificationView({ verification_status: "verified", sources: [] }).level).toBe("verified");
   });
 
+  it("does NOT claim grounding when verified but sourceless (truthfulness)", () => {
+    const view = verificationView({ verification_status: "verified", sources: [] });
+    expect(view.detail).not.toMatch(/grounded in|in sources/i);
+    expect(view.detail).toMatch(/no sources cited/i);
+  });
+
+  it("claims grounding only when a verified artifact actually cites sources", () => {
+    const view = verificationView({
+      verification_status: "verified",
+      sources: [{ source: "ic.pdf", snippet: "x", score: 0.6, kind: "document" }],
+    });
+    expect(view.detail).toMatch(/grounded in 1 source/i);
+  });
+
   it("is 'grounded' when there are citations but no sign-off", () => {
     const view = verificationView({
       verification_status: "unverified",
