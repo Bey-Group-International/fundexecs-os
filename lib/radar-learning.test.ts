@@ -5,11 +5,14 @@ import {
   aggregateDelta,
   applyLearnedAdjustment,
   computeLearnedWeights,
+  outcomeDelta,
   weightKey,
   MIN_FEEDBACK,
   MAX_ADJUSTMENT,
+  MIN_OUTCOME_ACCEPTED,
   type RadarAggregate,
   type EngagementAggregate,
+  type OutcomeAggregate,
 } from "@/lib/radar-learning";
 
 const agg = (over: Partial<RadarAggregate> = {}): RadarAggregate => ({
@@ -26,6 +29,13 @@ const eng = (over: Partial<EngagementAggregate> = {}): EngagementAggregate => ({
   moveKind: "buyers",
   clicked: 0,
   opened: 0,
+  ...over,
+});
+
+const out = (over: Partial<OutcomeAggregate> = {}): OutcomeAggregate => ({
+  moveKind: "buyers",
+  accepted: 0,
+  mandate: 0,
   ...over,
 });
 
@@ -214,6 +224,158 @@ describe("computeLearnedWeights (with engagement)", () => {
     const engagement = [eng({ clicked: 4, opened: 6 })];
     expect(computeLearnedWeights(explicit, engagement)).toEqual(
       computeLearnedWeights(explicit, engagement),
+    );
+  });
+});
+
+// ===========================================================================
+// Real-outcome attribution (accepted → mandate conversion) — the third arg.
+// This is the signal driven by lib/radar-attribution.ts, keyed by move_kind only.
+// ===========================================================================
+
+describe("outcomeDelta (confidence floor)", () => {
+  it("makes no adjustment below the accepted floor", () => {
+    // Even a perfect conversion can't move the ranking on too-few accepts.
+    expect(outcomeDelta(out({ accepted: MIN_OUTCOME_ACCEPTED - 1, mandate: 1 }))).toBe(0);
+  });
+  it("starts adjusting once the accepted floor is cleared", () => {
+    expect(outcomeDelta(out({ accepted: MIN_OUTCOME_ACCEPTED, mandate: 2 }))).toBeGreaterThan(0);
+  });
+});
+
+describe("outcomeDelta (direction)", () => {
+  it("boosts a move_kind that genuinely converts to mandates", () => {
+    const d = outcomeDelta(out({ accepted: 10, mandate: 9 }));
+    expect(d).toBeGreaterThan(0);
+  });
+  it("damps a move_kind that fizzles (real volume, zero mandates)", () => {
+    const d = outcomeDelta(out({ accepted: 20, mandate: 0 }));
+    expect(d).toBeLessThan(0);
+  });
+  it("is ~neutral at the baseline conversion", () => {
+    // ~15% conversion sits at the neutral baseline → no meaningful push.
+    const d = outcomeDelta(out({ accepted: 20, mandate: 3 }));
+    expect(Math.abs(d)).toBeLessThanOrEqual(1);
+  });
+  it("never lets a perfect conversion exceed its own band", () => {
+    const d = outcomeDelta(out({ accepted: 100, mandate: 100 }));
+    expect(d).toBeGreaterThan(0);
+    expect(d).toBeLessThanOrEqual(MAX_ADJUSTMENT);
+  });
+  it("clamps dirty data where mandate exceeds accepted", () => {
+    const d = outcomeDelta(out({ accepted: 5, mandate: 50 }));
+    expect(d).toBeGreaterThan(0);
+    expect(d).toBeLessThanOrEqual(MAX_ADJUSTMENT);
+  });
+});
+
+describe("computeLearnedWeights (with outcomes)", () => {
+  it("is byte-identical to the 2-arg call when outcomes are empty/absent (regression)", () => {
+    const explicit = [
+      agg({ entityKind: "company", moveKind: "buyers", accepted: 10 }),
+      agg({ entityKind: "investor", moveKind: "outreach", dismissed: 10 }),
+    ];
+    const engagement = [eng({ clicked: 4 })];
+    // No outcomes arg, undefined, null, and [] must all equal the prior 2-arg output.
+    expect(computeLearnedWeights(explicit, engagement)).toEqual(
+      computeLearnedWeights(explicit, engagement, undefined),
+    );
+    expect(computeLearnedWeights(explicit, engagement)).toEqual(
+      computeLearnedWeights(explicit, engagement, null),
+    );
+    expect(computeLearnedWeights(explicit, engagement)).toEqual(
+      computeLearnedWeights(explicit, engagement, []),
+    );
+    // And the 1-arg call is unchanged by an empty outcomes arg too.
+    expect(computeLearnedWeights(explicit)).toEqual(
+      computeLearnedWeights(explicit, null, []),
+    );
+  });
+
+  it("boosts every entity_kind sharing a high-converting move_kind", () => {
+    // Two entity_kinds, both on move_kind "buyers", neutral explicit feedback.
+    const explicit = [
+      agg({ entityKind: "company", moveKind: "buyers", accepted: 5, dismissed: 5 }),
+      agg({ entityKind: "investor", moveKind: "buyers", accepted: 5, dismissed: 5 }),
+    ];
+    const base = computeLearnedWeights(explicit);
+    expect(base.deltas[weightKey("company", "buyers")]).toBeUndefined();
+    expect(base.deltas[weightKey("investor", "buyers")]).toBeUndefined();
+
+    const tuned = computeLearnedWeights(explicit, null, [
+      out({ moveKind: "buyers", accepted: 10, mandate: 9 }),
+    ]);
+    expect(tuned.active).toBe(true);
+    // The single move_kind outcome lifts BOTH entity_kinds that share it.
+    expect(tuned.deltas[weightKey("company", "buyers")]).toBeGreaterThan(0);
+    expect(tuned.deltas[weightKey("investor", "buyers")]).toBeGreaterThan(0);
+  });
+
+  it("damps a fizzling move_kind below its neutral feedback", () => {
+    const explicit = [agg({ entityKind: "company", moveKind: "buyers", accepted: 5, dismissed: 5 })];
+    const tuned = computeLearnedWeights(explicit, null, [
+      out({ moveKind: "buyers", accepted: 20, mandate: 0 }),
+    ]);
+    expect(tuned.deltas[weightKey("company", "buyers")]).toBeLessThan(0);
+  });
+
+  it("does not introduce an outcome-only key (no feedback, no engagement)", () => {
+    // An outcome for a move_kind nothing else surfaces has no key to attach to.
+    const tuned = computeLearnedWeights([], null, [
+      out({ moveKind: "research", accepted: 20, mandate: 18 }),
+    ]);
+    expect(tuned.deltas[weightKey("company", "research")]).toBeUndefined();
+    expect(Object.keys(tuned.deltas)).toEqual([]);
+    expect(tuned.active).toBe(false);
+  });
+
+  it("does nothing below the outcome confidence floor", () => {
+    const explicit = [agg({ entityKind: "company", moveKind: "buyers", accepted: 5, dismissed: 5 })];
+    const base = computeLearnedWeights(explicit);
+    const tuned = computeLearnedWeights(explicit, null, [
+      out({ moveKind: "buyers", accepted: MIN_OUTCOME_ACCEPTED - 1, mandate: 3 }),
+    ]);
+    expect(tuned).toEqual(base); // floor not cleared → outcome is a no-op
+  });
+
+  it("stays clamped to ±MAX_ADJUSTMENT when stacked with feedback + engagement", () => {
+    // Strong accepts (+MAX) + heavy clicks + perfect conversion → still capped.
+    const explicit = [agg({ entityKind: "company", moveKind: "buyers", accepted: 50 })];
+    const engagement = [eng({ entityKind: "company", moveKind: "buyers", clicked: 100, opened: 100 })];
+    const outcomes = [out({ moveKind: "buyers", accepted: 100, mandate: 100 })];
+    const tuned = computeLearnedWeights(explicit, engagement, outcomes);
+    const d = tuned.deltas[weightKey("company", "buyers")];
+    expect(d).toBe(MAX_ADJUSTMENT);
+
+    // And a fully damping outcome on a fully negative feedback stays at -MAX.
+    const neg = computeLearnedWeights(
+      [agg({ entityKind: "company", moveKind: "buyers", dismissed: 50 })],
+      null,
+      [out({ moveKind: "buyers", accepted: 50, mandate: 0 })],
+    );
+    expect(neg.deltas[weightKey("company", "buyers")]).toBe(-MAX_ADJUSTMENT);
+  });
+
+  it("is deterministic with outcomes", () => {
+    const explicit = [agg({ accepted: 5, dismissed: 5 })];
+    const engagement = [eng({ clicked: 2 })];
+    const outcomes = [out({ moveKind: "buyers", accepted: 12, mandate: 7 })];
+    expect(computeLearnedWeights(explicit, engagement, outcomes)).toEqual(
+      computeLearnedWeights(explicit, engagement, outcomes),
+    );
+  });
+
+  it("sums duplicate move_kind outcome buckets before scoring", () => {
+    const explicit = [agg({ entityKind: "company", moveKind: "buyers", accepted: 5, dismissed: 5 })];
+    const merged = computeLearnedWeights(explicit, null, [
+      out({ moveKind: "buyers", accepted: 6, mandate: 5 }),
+      out({ moveKind: "buyers", accepted: 6, mandate: 5 }),
+    ]);
+    const single = computeLearnedWeights(explicit, null, [
+      out({ moveKind: "buyers", accepted: 12, mandate: 10 }),
+    ]);
+    expect(merged.deltas[weightKey("company", "buyers")]).toBe(
+      single.deltas[weightKey("company", "buyers")],
     );
   });
 });

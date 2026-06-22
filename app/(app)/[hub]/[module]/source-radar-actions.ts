@@ -9,7 +9,9 @@ import {
   type LearnedWeights,
   type RadarAggregate,
   type EngagementAggregate,
+  type OutcomeAggregate,
 } from "@/lib/radar-learning";
+import { buildAttribution } from "@/lib/radar-attribution";
 import type { EntityKind } from "@/lib/sourcing-intel";
 
 export interface RadarResult {
@@ -52,9 +54,31 @@ async function loadLearnedWeights(
     }
 
     const engagement = await loadEngagementAggregates(supabase, orgId);
-    return computeLearnedWeights([...byKey.values()], engagement);
+    const outcomes = await loadOutcomeAggregates(supabase, orgId);
+    return computeLearnedWeights([...byKey.values()], engagement, outcomes);
   } catch {
     return null;
+  }
+}
+
+// Aggregate this org's radar → outcome attribution (lib/radar-attribution.ts) into
+// the per-move_kind outcome buckets the learning loop folds in alongside explicit
+// feedback + implicit engagement. Attribution traces every ACCEPTED recommendation
+// forward through the funnel; we keep just the accepted→mandate conversion base
+// (accepted volume + mandate count) per move_kind. Best-effort + read-only: any
+// failure degrades to no outcomes, leaving the feedback/engagement weights intact —
+// the radar must never break on attribution.
+async function loadOutcomeAggregates(
+  supabase: ReturnType<typeof createServerClient>,
+  orgId: string,
+): Promise<OutcomeAggregate[]> {
+  try {
+    const attribution = await buildAttribution(supabase, orgId);
+    return attribution.byMoveKind
+      .filter((m) => m.accepted > 0)
+      .map((m) => ({ moveKind: m.moveKind, accepted: m.accepted, mandate: m.mandate }));
+  } catch {
+    return [];
   }
 }
 
