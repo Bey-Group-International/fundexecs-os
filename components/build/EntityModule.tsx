@@ -18,6 +18,7 @@ import { EntityTree } from "./EntityTree";
 import { EntityOwnership } from "./EntityOwnership";
 import { FormationWizard } from "./FormationWizard";
 import { DilutionModeler } from "./DilutionModeler";
+import { EquityInstruments } from "./EquityInstruments";
 import { StakeholderLinks } from "./StakeholderLinks";
 
 const ENTITY_TYPES = ["gp", "management_co", "fund", "spv", "holdco", "other"];
@@ -204,6 +205,8 @@ export async function EntityModule() {
           shareClasses={shareClasses.map((c) => ({ id: c.id, name: c.name }))}
         />
       ) : null}
+
+      <EquityInstruments />
 
       {stakeholders.length > 0 ? (
         <StakeholderLinks
