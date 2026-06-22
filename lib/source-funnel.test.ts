@@ -4,7 +4,17 @@
 // grouping. No DB: every helper is deterministic and runnable in CI.
 import { __test, EMPTY_STAGE_COUNTS, FUNNEL_STAGES, type StageCounts } from "@/lib/source-funnel";
 
-const { pct, conversionRates, overallConversion, breakdownBy, summarizeFunnel, humanizeKey } = __test;
+const {
+  pct,
+  conversionRates,
+  overallConversion,
+  breakdownBy,
+  summarizeFunnel,
+  humanizeKey,
+  engagementRates,
+  feedbackRates,
+  summarizeEngagement,
+} = __test;
 
 describe("pct (safe percentage)", () => {
   it("computes a rounded 0–100 percentage", () => {
@@ -114,5 +124,105 @@ describe("humanizeKey", () => {
   });
   it("handles the empty string", () => {
     expect(humanizeKey("")).toBe("Unknown");
+  });
+});
+
+describe("engagementRates (digest telemetry)", () => {
+  it("derives open / click / click-through as 0–100 integers", () => {
+    expect(engagementRates({ digestsSent: 100, opens: 40, clicks: 10 })).toEqual({
+      openRate: 40,
+      clickRate: 10,
+      clickThroughRate: 25, // clicks / opens
+    });
+  });
+  it("returns 0 on divide-by-zero (no digests sent / nothing opened)", () => {
+    expect(engagementRates({ digestsSent: 0, opens: 5, clicks: 2 })).toEqual({
+      openRate: 0,
+      clickRate: 0,
+      clickThroughRate: 40,
+    });
+    expect(engagementRates({ digestsSent: 10, opens: 0, clicks: 0 })).toEqual({
+      openRate: 0,
+      clickRate: 0,
+      clickThroughRate: 0,
+    });
+  });
+  it("clamps rates above 100", () => {
+    expect(engagementRates({ digestsSent: 10, opens: 30, clicks: 30 })).toEqual({
+      openRate: 100,
+      clickRate: 100,
+      clickThroughRate: 100,
+    });
+  });
+  it("is deterministic — same input, same output", () => {
+    const input = { digestsSent: 73, opens: 31, clicks: 9 };
+    expect(engagementRates(input)).toEqual(engagementRates(input));
+  });
+});
+
+describe("feedbackRates (Radar acceptance)", () => {
+  it("is accepted / (accepted + dismissed + snoozed) as a 0–100 rate", () => {
+    expect(feedbackRates({ accepted: 3, dismissed: 1, snoozed: 0 })).toEqual({ acceptanceRate: 75 });
+  });
+  it("returns 0 when there is no feedback at all (no divide-by-zero)", () => {
+    expect(feedbackRates({ accepted: 0, dismissed: 0, snoozed: 0 })).toEqual({ acceptanceRate: 0 });
+  });
+  it("is deterministic", () => {
+    const input = { accepted: 5, dismissed: 3, snoozed: 2 };
+    expect(feedbackRates(input)).toEqual(feedbackRates(input));
+  });
+});
+
+describe("summarizeEngagement", () => {
+  it("assembles raw tallies and every derived rate", () => {
+    const e = summarizeEngagement({
+      digestsSent: 50,
+      itemsSent: 200,
+      opens: 25,
+      clicks: 5,
+      accepted: 6,
+      dismissed: 2,
+      snoozed: 2,
+    });
+    expect(e).toEqual({
+      digestsSent: 50,
+      itemsSent: 200,
+      opens: 25,
+      clicks: 5,
+      accepted: 6,
+      dismissed: 2,
+      snoozed: 2,
+      openRate: 50,
+      clickRate: 10,
+      clickThroughRate: 20,
+      acceptanceRate: 60,
+    });
+  });
+  it("handles the empty loop cleanly (all zeros, no NaN)", () => {
+    const e = summarizeEngagement({
+      digestsSent: 0,
+      itemsSent: 0,
+      opens: 0,
+      clicks: 0,
+      accepted: 0,
+      dismissed: 0,
+      snoozed: 0,
+    });
+    expect(e.openRate).toBe(0);
+    expect(e.clickRate).toBe(0);
+    expect(e.clickThroughRate).toBe(0);
+    expect(e.acceptanceRate).toBe(0);
+  });
+  it("is deterministic", () => {
+    const input = {
+      digestsSent: 12,
+      itemsSent: 48,
+      opens: 7,
+      clicks: 3,
+      accepted: 4,
+      dismissed: 1,
+      snoozed: 1,
+    };
+    expect(summarizeEngagement(input)).toEqual(summarizeEngagement(input));
   });
 });

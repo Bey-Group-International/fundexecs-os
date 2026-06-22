@@ -2,6 +2,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getExecutePerformance, isExited } from "@/lib/execute-performance";
 import { getValuationMarks, summarizeMarks } from "@/lib/valuation-history";
 import { assetSeries, portfolioSeries } from "@/lib/valuation-series";
+import { assessValuationPolicy } from "@/lib/valuation-policy";
 import { compactUsd, usd, multiple, num, shortDate } from "@/lib/format";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile, EarnAction } from "@/components/execute/ui";
@@ -42,6 +43,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
   const portfolio = portfolioSeries(held, marks);
   const portfolioGain =
     portfolio.length >= 2 ? portfolio[portfolio.length - 1].value - portfolio[0].value : 0;
+  const policy = assessValuationPolicy(held, marks);
 
   const header = (
     <ModuleHeader title="Valuations" blurb="Fair-value marks across the book — value created, and the Analyst to re-mark it." />
@@ -100,6 +102,45 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
           </div>
         </div>
       ) : null}
+
+      {/* Valuation policy — 409A-style freshness discipline over the marks */}
+      <div className="mb-4 rounded-xl border border-line bg-surface-1 p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            Valuation policy
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            quarterly · {policy.cadenceDays}d cadence
+          </span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <span className="text-fg-secondary">
+            <span className="text-fg-primary">{policy.coveragePct}%</span> marked ({policy.markedCount}/{policy.total})
+          </span>
+          <span className={policy.staleCount > 0 ? "text-status-danger" : "text-emerald-300"}>
+            {policy.staleCount > 0 ? `${policy.staleCount} stale / unmarked` : "all current"}
+          </span>
+          {policy.methods.length > 0 ? (
+            <span className="flex flex-wrap items-center gap-1.5">
+              {policy.methods.map((m) => (
+                <span key={m.method} className="rounded-full border border-line px-2 py-0.5 font-mono text-[10px] text-fg-secondary">
+                  {m.method} ×{m.count}
+                </span>
+              ))}
+            </span>
+          ) : null}
+        </div>
+        {policy.staleCount > 0 ? (
+          <p className="mt-2 font-mono text-[11px] text-fg-muted">
+            Oldest:{" "}
+            {policy.assets
+              .filter((a) => a.stale)
+              .slice(0, 3)
+              .map((a) => `${a.name} (${a.daysSince == null ? "never" : `${a.daysSince}d`})`)
+              .join(" · ")}
+          </p>
+        ) : null}
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <EarnAction kind="valuation_run" label="Run valuation pass" />

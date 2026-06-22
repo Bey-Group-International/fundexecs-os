@@ -1077,7 +1077,7 @@ export type Artifact = Timestamps & {
   verification_note: string | null;
   sources: Json;
   brain_run_id: string | null;
-  // Trust layer (migration 0065). Automated grounding score in [0,1] — how much
+  // Trust layer (migration 0066). Automated grounding score in [0,1] — how much
   // of the output reflects its cited sources.
   grounding_score: number;
 };
