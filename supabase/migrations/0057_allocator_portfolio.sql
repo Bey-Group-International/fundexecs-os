@@ -1,12 +1,12 @@
 -- Allocator Intelligence Directory + Portfolio Health
 
 -- Allocator profiles: enriched data on family offices, institutions, RIAs
--- References contacts (LP/allocator contacts) rather than a non-existent investors table
+-- References investors (the LP/allocator table) for the base contact record.
 CREATE TABLE IF NOT EXISTS public.allocator_profiles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  contact_id UUID REFERENCES public.contacts(id) ON DELETE SET NULL,
-  -- Enriched fields beyond the base contacts table
+  contact_id UUID REFERENCES public.investors(id) ON DELETE SET NULL,
+  -- Enriched fields beyond the base investors record
   aum_min NUMERIC(18,2),
   aum_max NUMERIC(18,2),
   aum_currency TEXT DEFAULT 'USD',
@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS allocator_profiles_accreditation_status_idx ON public
 CREATE INDEX IF NOT EXISTS allocator_profiles_kyc_status_idx ON public.allocator_profiles(kyc_status);
 ALTER TABLE public.allocator_profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "allocator_profiles_org_member" ON public.allocator_profiles
-  USING (org_id IN (SELECT org_id FROM public.org_members WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT public.current_principal_org_ids()));
 
 -- Portfolio metrics: computed performance per deal/asset
 CREATE TABLE IF NOT EXISTS public.portfolio_metrics (
@@ -92,7 +92,7 @@ CREATE INDEX IF NOT EXISTS portfolio_metrics_deal_id_idx ON public.portfolio_met
 CREATE INDEX IF NOT EXISTS portfolio_metrics_underperforming_idx ON public.portfolio_metrics(is_underperforming) WHERE is_underperforming = true;
 ALTER TABLE public.portfolio_metrics ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "portfolio_metrics_org_member" ON public.portfolio_metrics
-  USING (org_id IN (SELECT org_id FROM public.org_members WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT public.current_principal_org_ids()));
 
 -- Portfolio risk flags: concentration + allocation analysis
 CREATE TABLE IF NOT EXISTS public.portfolio_risk_alerts (
@@ -114,4 +114,4 @@ CREATE INDEX IF NOT EXISTS portfolio_risk_alerts_severity_idx ON public.portfoli
 CREATE INDEX IF NOT EXISTS portfolio_risk_alerts_unresolved_idx ON public.portfolio_risk_alerts(resolved_at) WHERE resolved_at IS NULL;
 ALTER TABLE public.portfolio_risk_alerts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "portfolio_risk_alerts_org_member" ON public.portfolio_risk_alerts
-  USING (org_id IN (SELECT org_id FROM public.org_members WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT public.current_principal_org_ids()));
