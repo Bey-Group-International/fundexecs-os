@@ -15,9 +15,9 @@ export default async function LoginPage({
   const isSignup = searchParams.mode === "signup";
 
   return (
-    <div className="flex min-h-screen bg-surface-0">
+    <div className="fx-blueprint flex min-h-screen bg-surface-0">
       {/* Left branding panel */}
-      <div className="hidden w-2/5 flex-col justify-between border-r border-line p-12 lg:flex">
+      <div className="hidden w-2/5 flex-col justify-between border-r border-line bg-surface-1/55 p-12 backdrop-blur-xl lg:flex">
         <Logo />
         <div>
           <p className="text-2xl font-semibold leading-snug tracking-tight text-fg-primary">
@@ -33,8 +33,8 @@ export default async function LoginPage({
       </div>
 
       {/* Right form panel */}
-      <div className="flex flex-1 flex-col items-center justify-center px-6">
-        <div className="w-full max-w-sm">
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-20 sm:px-6">
+        <div className="fx-glass w-full max-w-sm p-5 sm:p-6">
           <Logo className="mb-8 block lg:hidden" />
 
           <h1 className="text-2xl font-semibold tracking-tight text-fg-primary">

@@ -3,6 +3,9 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { copilotLive } from "@/lib/claude";
 import { loadWorkflowBundles } from "@/lib/workflows";
+import { getActiveIntegrations } from "@/lib/integrations/active";
+import { orgConnectedChannels } from "@/lib/integrations/gateway";
+import { loadSessionMessages, toChatTurns } from "@/lib/session-messages";
 import Copilot from "@/components/Copilot";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +19,8 @@ export default async function SessionHome({ params }: { params: { id: string } }
 
   const supabase = createServerClient();
   const bundles = await loadWorkflowBundles(supabase, { sessionId: params.id });
+  const connected = await orgConnectedChannels(supabase, ctx.orgId);
+  const chat = toChatTurns(await loadSessionMessages(supabase, params.id));
 
   return (
     <Copilot
@@ -23,6 +28,8 @@ export default async function SessionHome({ params }: { params: { id: string } }
       live={copilotLive()}
       bundles={bundles}
       sessionId={params.id}
+      integrations={getActiveIntegrations(connected)}
+      initialChat={chat}
     />
   );
 }

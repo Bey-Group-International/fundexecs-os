@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { getDealWarRoom } from "@/lib/run-war-room";
 import { DealWarRoom } from "@/components/run/DealWarRoom";
+import { ShareDealBar } from "@/components/run/ShareDealBar";
 
 export const dynamic = "force-dynamic";
 
@@ -15,5 +16,10 @@ export default async function DealPage({ params }: { params: { id: string } }) {
   const data = await getDealWarRoom(ctx.orgId, params.id);
   if (!data) notFound();
 
-  return <DealWarRoom data={data} />;
+  return (
+    <>
+      <ShareDealBar dealId={params.id} />
+      <DealWarRoom data={data} />
+    </>
+  );
 }

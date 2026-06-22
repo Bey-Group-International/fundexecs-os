@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import type { DataRoomShare, Document } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ function safeHref(url: string | null): string | null {
 // redirects to the document's external link. Invalid requests bounce to the room.
 export async function GET(req: Request, { params }: { params: { token: string; id: string } }) {
   const roomUrl = new URL(`/dataroom/${params.token}`, req.url);
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return NextResponse.redirect(roomUrl);
+  if (!hasSupabaseServiceEnv()) return NextResponse.redirect(roomUrl);
 
   const supabase = createServiceClient();
   const { data: shareRow } = await supabase

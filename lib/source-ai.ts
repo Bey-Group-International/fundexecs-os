@@ -51,6 +51,37 @@ export interface SourcingMandate {
   targetMoic: number | null;
 }
 
+// Per-request operator context the engine reasons WITH, on top of the mandate.
+// Assembled DB-side by lib/source-intelligence.ts and passed in, so the engine
+// itself stays DB-free. Every field is an already-distilled string; the engine
+// only formats and injects them. This is what makes sourcing context-aware
+// (recent activity, portfolio), user-aware (identity), and continually learning
+// (the learned digest from past accept/reject signals).
+export interface OperatorContext {
+  /** Per-user distilled preferences from past accept/reject/queue signals. */
+  learned?: string;
+  /** Recent pipeline additions + what's stalling, for the relevant module(s). */
+  activity?: string;
+  /** Cross-hub portfolio/holdings state so Source knows what's already held. */
+  portfolio?: string;
+  /** The current operator's name/title/role, for relevance + tone. */
+  user?: string;
+}
+
+// Render the assembled operator context as a labeled prompt block (or "" when
+// empty). Injected right after the mandate so Claude reasons with who's asking,
+// what's already moving, and what this operator has historically preferred.
+export function operatorContextBlock(ctx?: OperatorContext): string {
+  if (!ctx) return "";
+  const parts = [
+    ctx.user ? `Operator: ${ctx.user}` : null,
+    ctx.portfolio ? `Portfolio context: ${ctx.portfolio}` : null,
+    ctx.activity ? `Recent pipeline activity: ${ctx.activity}` : null,
+    ctx.learned ? `Learned preferences (weight these, don't over-fit): ${ctx.learned}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join("\n") + "\n\n" : "";
+}
+
 export interface SourceCandidate {
   name: string;
   /** A value from the module's category enum (or a free asset class for deals). */
@@ -281,17 +312,19 @@ export async function generateTargets(
   key: string,
   mandate: SourcingMandate | null,
   existingNames: string[] = [],
+  query?: string,
+  context?: OperatorContext,
 ): Promise<SourceCandidate[]> {
   const cfg = sourceConfigFor(key);
   if (!cfg) return [];
   const options = categoryOptions(cfg);
   const anthropic = client();
-  if (!anthropic) return fallbackCandidates(cfg, mandate, existingNames, options);
+  if (!anthropic) return fallbackCandidates(cfg, mandate, existingNames, options, query);
 
   // External enrichment first (opt-in): real, currently-operating targets with
   // a source citation. Falls through to model knowledge if it yields nothing.
   if (sourcingEnrichmentEnabled()) {
-    const enriched = await enrichedTargets(anthropic, cfg, mandate, existingNames, options);
+    const enriched = await enrichedTargets(anthropic, cfg, mandate, existingNames, options, query, context);
     if (enriched.length) return enriched;
   }
 
@@ -299,17 +332,20 @@ export async function generateTargets(
   const catLine = cfg.freeCategory
     ? `Set "category" to the most fitting asset class.`
     : `Set "category" to exactly one of: ${options.join(", ")}.`;
+  const queryLine = query ? `Operator request: ${query}\n` : "";
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1500,
-      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Propose specific, plausible targets that fit the firm's mandate — the kind a sharp ${agentName.toLowerCase()} would put on a call sheet. These are AI suggestions the operator will verify, so be concrete but never fabricate confidential facts. ${catLine}`,
+      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Propose specific, plausible targets that fit the firm's mandate and the operator's request — the kind a sharp ${agentName.toLowerCase()} would put on a call sheet. These are AI suggestions the operator will verify, so be concrete but never fabricate confidential facts. ${catLine}`,
       output_config: { effort: "low", format: { type: "json_schema", schema: CANDIDATES_SCHEMA } },
       messages: [
         {
           role: "user",
           content:
             `Mandate:\n${mandateContext(mandate)}\n\n` +
+            operatorContextBlock(context) +
+            queryLine +
             `Source ${cfg.entities}: ${cfg.hint}.\n` +
             (existingNames.length
               ? `Already in the pipeline (do not repeat): ${existingNames.slice(0, 40).join(", ")}.\n`
@@ -321,9 +357,9 @@ export async function generateTargets(
     const json = textOf(message);
     const raw = json ? (JSON.parse(json) as { candidates?: unknown[] }) : null;
     const out = normalizeCandidates(raw?.candidates ?? [], cfg, options, existingNames);
-    return out.length ? out : fallbackCandidates(cfg, mandate, existingNames, options);
+    return out.length ? out : fallbackCandidates(cfg, mandate, existingNames, options, query);
   } catch {
-    return fallbackCandidates(cfg, mandate, existingNames, options);
+    return fallbackCandidates(cfg, mandate, existingNames, options, query);
   }
 }
 
@@ -341,23 +377,28 @@ async function enrichedTargets(
   mandate: SourcingMandate | null,
   existingNames: string[],
   options: string[],
+  query?: string,
+  context?: OperatorContext,
 ): Promise<SourceCandidate[]> {
   const agentName = AGENT_BY_KEY[cfg.agent]?.name ?? "Sourcing";
   const catLine = cfg.freeCategory
     ? `Set "category" to the most fitting asset class.`
     : `Set "category" to exactly one of: ${options.join(", ")}.`;
+  const queryLine = query ? `Operator request: ${query}\n` : "";
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 3000,
       output_config: { effort: "low" },
-      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Use web search to find REAL, currently-operating ${cfg.entities} that fit the firm's mandate. For each, include "sourceUrl" — a link to a page that supports it. Return ONLY a JSON array (no prose, no markdown) of objects with keys: name, category, fitScore (0-100), rationale, firstMove, sourceUrl. ${catLine}`,
+      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Use web search to find REAL, currently-operating ${cfg.entities} that fit the firm's mandate and the operator's request. For each, include "sourceUrl" — a link to a page that supports it. Return ONLY a JSON array (no prose, no markdown) of objects with keys: name, category, fitScore (0-100), rationale, firstMove, sourceUrl. ${catLine}`,
       tools: WEB_SEARCH_TOOLS,
       messages: [
         {
           role: "user",
           content:
             `Mandate:\n${mandateContext(mandate)}\n\n` +
+            operatorContextBlock(context) +
+            queryLine +
             `Find 3–6 ${cfg.entities}: ${cfg.hint}.\n` +
             (existingNames.length
               ? `Already in the pipeline (do not repeat): ${existingNames.slice(0, 40).join(", ")}.\n`
@@ -412,15 +453,18 @@ function fallbackCandidates(
   mandate: SourcingMandate | null,
   existingNames: string[],
   options: string[],
+  query?: string,
 ): SourceCandidate[] {
   const geos = mandate?.geographies?.length ? mandate.geographies : ["your core market"];
   const classes = mandate?.assetClasses?.length ? mandate.assetClasses : ["the target strategy"];
   const seen = new Set(existingNames.map((n) => n.toLowerCase()));
   const picks: SourceCandidate[] = [];
+  const focus = query?.trim().slice(0, 180);
+  const focusClause = focus ? ` Operator request: ${focus}.` : "";
   const add = (name: string, category: string, fitScore: number, rationale: string, firstMove: string) => {
     if (seen.has(name.toLowerCase()) || picks.length >= 5) return;
     seen.add(name.toLowerCase());
-    picks.push({ name, category, fitScore, rationale, firstMove });
+    picks.push({ name, category, fitScore, rationale: `${rationale}${focusClause}`, firstMove });
   };
   const cat = (i: number) => (cfg.freeCategory ? classes[i % classes.length] : options[i % Math.max(1, options.length)] ?? "other");
 
@@ -451,6 +495,233 @@ function fallbackCandidates(
       break;
   }
   return picks;
+}
+
+// ===========================================================================
+// 1b. PLAN (Earn) — turn an operator's request into a multi-agent search
+// ===========================================================================
+export interface SourceSearchStep {
+  /** A source module key, e.g. "source/lp_pipeline". */
+  module: string;
+  /** The Source agent that owns this step (derived from the module). */
+  agent: AgentKey;
+  /** Short imperative title, e.g. "Surface anchor LPs". */
+  title: string;
+  /** Refined, module-specific query for this step. */
+  query: string;
+}
+export interface SourceSearchPlan {
+  summary: string;
+  steps: SourceSearchStep[];
+}
+
+const SOURCE_MODULE_KEYS = Object.keys(CONFIGS);
+
+const PLAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    summary: { type: "string", description: "One sentence on what this search will do" },
+    steps: {
+      type: "array",
+      description: "1–4 module searches the request implies, best-fit first",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          module: { type: "string", enum: SOURCE_MODULE_KEYS },
+          title: { type: "string", description: "Short imperative step title" },
+          query: { type: "string", description: "Refined query for this module" },
+        },
+        required: ["module", "title", "query"],
+      },
+    },
+  },
+  required: ["summary", "steps"],
+} as const;
+
+function stepFor(module: string, query: string, title?: string): SourceSearchStep | null {
+  const cfg = sourceConfigFor(module);
+  if (!cfg) return null;
+  return { module, agent: cfg.agent, title: title || `Source ${cfg.entities}`, query };
+}
+
+// Deterministic plan when no model key is present (or Claude fails): map the
+// request to modules by keyword, always returning at least the two pipelines.
+function fallbackPlan(prompt: string): SourceSearchPlan {
+  const t = prompt.toLowerCase();
+  const picks: SourceSearchStep[] = [];
+  const add = (module: string) => {
+    if (picks.some((p) => p.module === module)) return;
+    const s = stepFor(module, prompt);
+    if (s) picks.push(s);
+  };
+  if (/\blp\b|lps|investor|allocator|family office|capital/.test(t)) add("source/lp_pipeline");
+  if (/deal|target|acquisition|company|asset|opportunit/.test(t)) add("source/deal_pipeline");
+  if (/lender|debt|credit|loan|mezz|financ/.test(t)) add("source/debt");
+  if (/partner|co-?gp|operating|advisor|introducer/.test(t)) add("source/partners");
+  if (/legal|audit|\btax\b|fund admin|administrator|provider|counsel|placement/.test(t)) add("source/providers");
+  if (picks.length === 0) {
+    add("source/lp_pipeline");
+    add("source/deal_pipeline");
+  }
+  return { summary: `Source against the mandate: ${prompt}`.slice(0, 160), steps: picks.slice(0, 4) };
+}
+
+function normalizePlan(raw: Partial<SourceSearchPlan> | null, prompt: string): SourceSearchPlan {
+  if (!raw || !Array.isArray(raw.steps)) return fallbackPlan(prompt);
+  const seen = new Set<string>();
+  const steps: SourceSearchStep[] = [];
+  for (const r of raw.steps) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as unknown as Record<string, unknown>;
+    const moduleKey = cleanStr(o.module, 60);
+    if (!sourceConfigFor(moduleKey) || seen.has(moduleKey)) continue;
+    seen.add(moduleKey);
+    const s = stepFor(moduleKey, cleanStr(o.query, 280) || prompt, cleanStr(o.title, 80));
+    if (s) steps.push(s);
+    if (steps.length >= 4) break;
+  }
+  if (steps.length === 0) return fallbackPlan(prompt);
+  return { summary: cleanStr(raw.summary, 200) || `Source against the mandate: ${prompt}`.slice(0, 160), steps };
+}
+
+/**
+ * Earn plans an operator's free-text sourcing request into a small set of
+ * module searches, each delegated to the owning Source agent. Claude-backed
+ * with a deterministic keyword fallback.
+ */
+export async function planSourceSearch(
+  prompt: string,
+  mandate: SourcingMandate | null,
+  context?: OperatorContext,
+): Promise<SourceSearchPlan> {
+  const anthropic = client();
+  if (!anthropic) return fallbackPlan(prompt);
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 1200,
+      system:
+        `You are Earn, the command layer of FundExecs OS, coordinating the Source team for a private-market operator. ` +
+        `Given a sourcing request, choose the 1–4 Source modules it actually implies and write a refined query for each. ` +
+        `Modules: source/lp_pipeline (LPs / capital allocators), source/deal_pipeline (acquisition targets), ` +
+        `source/debt (lenders / structured capital), source/partners (co-GPs / operating partners / advisors), ` +
+        `source/providers (legal / audit / tax / fund admin). Only include modules the request implies.`,
+      output_config: { effort: "low", format: { type: "json_schema", schema: PLAN_SCHEMA } },
+      messages: [
+        {
+          role: "user",
+          content: `Mandate:\n${mandateContext(mandate)}\n\n${operatorContextBlock(context)}Request: ${prompt}\n\nReturn the plan.`,
+        },
+      ],
+    });
+    const json = textOf(message);
+    return normalizePlan(json ? (JSON.parse(json) as Partial<SourceSearchPlan>) : null, prompt);
+  } catch {
+    return fallbackPlan(prompt);
+  }
+}
+
+// ===========================================================================
+// 1c. TRIAGE PLAN (Earn) — turn a triage request into the modules to score
+// ===========================================================================
+// Unlike planSourceSearch (which finds NEW targets), triage works on the rows
+// already in the pipeline: Earn picks which Source modules the question implies,
+// then each module's live rows are scored + ranked. DB-free; the server action
+// loads the rows. Claude-backed with a deterministic keyword fallback.
+export interface TriagePlan {
+  summary: string;
+  /** 1–4 source/* module keys to triage, best-fit first. */
+  modules: string[];
+}
+
+const TRIAGE_PLAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    summary: { type: "string", description: "One sentence on what this triage will do" },
+    modules: {
+      type: "array",
+      description: "1–4 module keys the request implies, best-fit first",
+      items: { type: "string", enum: SOURCE_MODULE_KEYS },
+    },
+  },
+  required: ["summary", "modules"],
+} as const;
+
+// Deterministic triage plan: map the request to modules by keyword (same style
+// as fallbackPlan), always returning at least the two pipelines.
+function fallbackTriagePlan(prompt: string): TriagePlan {
+  const t = prompt.toLowerCase();
+  const picks: string[] = [];
+  const add = (moduleKey: string) => {
+    if (picks.includes(moduleKey) || !sourceConfigFor(moduleKey)) return;
+    picks.push(moduleKey);
+  };
+  if (/\blp\b|lps|investor|allocator|family office|capital|chase|raise/.test(t)) add("source/lp_pipeline");
+  if (/deal|target|acquisition|company|asset|opportunit|pipeline/.test(t)) add("source/deal_pipeline");
+  if (/lender|debt|credit|loan|mezz|financ/.test(t)) add("source/debt");
+  if (/partner|co-?gp|operating|advisor|introducer|bench|dormant/.test(t)) add("source/partners");
+  if (/legal|audit|\btax\b|fund admin|administrator|provider|counsel|placement/.test(t)) add("source/providers");
+  if (picks.length === 0) {
+    add("source/lp_pipeline");
+    add("source/deal_pipeline");
+  }
+  return { summary: `Triage the pipeline: ${prompt}`.slice(0, 160), modules: picks.slice(0, 4) };
+}
+
+function normalizeTriagePlan(raw: Partial<TriagePlan> | null, prompt: string): TriagePlan {
+  if (!raw || !Array.isArray(raw.modules)) return fallbackTriagePlan(prompt);
+  const seen = new Set<string>();
+  const modules: string[] = [];
+  for (const m of raw.modules) {
+    const moduleKey = cleanStr(m, 60);
+    if (!sourceConfigFor(moduleKey) || seen.has(moduleKey)) continue;
+    seen.add(moduleKey);
+    modules.push(moduleKey);
+    if (modules.length >= 4) break;
+  }
+  if (modules.length === 0) return fallbackTriagePlan(prompt);
+  return { summary: cleanStr(raw.summary, 200) || `Triage the pipeline: ${prompt}`.slice(0, 160), modules };
+}
+
+/**
+ * Earn plans an operator's free-text triage request into the set of Source
+ * modules whose existing rows should be scored + ranked. Claude-backed with a
+ * deterministic keyword fallback.
+ */
+export async function planTriage(
+  prompt: string,
+  mandate: SourcingMandate | null,
+  context?: OperatorContext,
+): Promise<TriagePlan> {
+  const anthropic = client();
+  if (!anthropic) return fallbackTriagePlan(prompt);
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 800,
+      system:
+        `You are Earn, the command layer of FundExecs OS, coordinating the Source team for a private-market operator. ` +
+        `The operator wants to triage rows ALREADY in their pipeline (not find new targets). ` +
+        `Given a triage request, choose the 1–4 Source modules whose existing rows it implies. ` +
+        `Modules: source/lp_pipeline (LPs / capital allocators), source/deal_pipeline (acquisition targets / deals), ` +
+        `source/debt (lenders / structured capital), source/partners (co-GPs / operating partners / advisors / bench), ` +
+        `source/providers (legal / audit / tax / fund admin). Only include modules the request implies.`,
+      output_config: { effort: "low", format: { type: "json_schema", schema: TRIAGE_PLAN_SCHEMA } },
+      messages: [
+        {
+          role: "user",
+          content: `Mandate:\n${mandateContext(mandate)}\n\n${operatorContextBlock(context)}Triage request: ${prompt}\n\nReturn the plan.`,
+        },
+      ],
+    });
+    const json = textOf(message);
+    return normalizeTriagePlan(json ? (JSON.parse(json) as Partial<TriagePlan>) : null, prompt);
+  } catch {
+    return fallbackTriagePlan(prompt);
+  }
 }
 
 // ===========================================================================
@@ -490,6 +761,7 @@ export async function scorePipeline(
   key: string,
   mandate: SourcingMandate | null,
   rows: ScoreInputRow[],
+  context?: OperatorContext,
 ): Promise<PipelineScore[]> {
   const cfg = sourceConfigFor(key);
   if (!cfg || rows.length === 0) return [];
@@ -507,6 +779,7 @@ export async function scorePipeline(
           role: "user",
           content:
             `Mandate:\n${mandateContext(mandate)}\n\n` +
+            operatorContextBlock(context) +
             `Score these ${cfg.entities}:\n` +
             rows
               .slice(0, 30)
@@ -585,6 +858,7 @@ export const __test = {
   sourceConfigFor,
   categoryOptions,
   mandateContext,
+  operatorContextBlock,
   normalizeCandidates,
   normalizeScores,
   fallbackCandidates,
@@ -593,6 +867,10 @@ export const __test = {
   clampScore,
   cleanUrl,
   parseJsonArray,
+  fallbackPlan,
+  normalizePlan,
+  fallbackTriagePlan,
+  normalizeTriagePlan,
   SOURCE_ACTIONS,
   tierForAction,
 };

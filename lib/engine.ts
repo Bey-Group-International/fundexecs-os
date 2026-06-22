@@ -8,9 +8,16 @@
 import { createServerClient } from "@/lib/supabase/server";
 import type { AgentKey, Hub, GraphKind, ArtifactType, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
-import { generatePlan, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
+import { generatePlan, generatePlans, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
+import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
+import type { BrainResult } from "@/lib/brains/types";
+import { computeGroundingScore } from "@/lib/grounding";
 import { brainForAgent } from "@/lib/brain-routing";
+import { buildRouting, deskOverride, engineForStage, executiveForStage, EXECUTIVE_LABEL, type Executive } from "@/lib/intelligence";
+import { shouldReuseRecord } from "@/lib/reference-binding";
+import { getRoutingCorrections, formatRoutingCorrections } from "@/lib/routing-feedback";
+import { recordOperatorFeedback } from "@/lib/team-tasks";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -18,6 +25,30 @@ interface Ctx {
   supabase: Client;
   orgId: string;
   actorId: string;
+}
+
+/**
+ * Live execution progress, surfaced to a caller that wants to stream step
+ * state into the canvas. Purely observational — emitting these never changes
+ * what the engine persists or how the human-approval gate behaves. Callers that
+ * pass no callback get identical behavior.
+ */
+export type ProgressEvent =
+  | { type: "step_start"; step_id: string; title: string; step_order: number }
+  | { type: "step_done"; step_id: string; title: string }
+  | { type: "workflow_done"; workflow_id: string };
+
+type OnProgress = (ev: ProgressEvent) => void;
+
+// Emit a progress event defensively: an observer throwing must never break the
+// (already-persisted) workflow run.
+function emitProgress(onProgress: OnProgress | undefined, ev: ProgressEvent) {
+  if (!onProgress) return;
+  try {
+    onProgress(ev);
+  } catch {
+    // Swallow — progress is supplementary to the durable task/event writes.
+  }
 }
 
 function hubToGraph(hub: Hub): GraphKind | null {
@@ -100,6 +131,8 @@ async function materializePlan(
         status: "awaiting_approval",
         progress: 0,
         graph_touched: hubToGraph(plan.hub),
+        lifecycle_stage: plan.lifecycle_stage,
+        target_engine: plan.target_engine,
         result: null,
         completed_at: null,
       })
@@ -120,6 +153,8 @@ async function materializePlan(
         status: "awaiting_approval",
         progress: 0,
         graph_touched: hubToGraph(plan.hub),
+        lifecycle_stage: plan.lifecycle_stage,
+        target_engine: plan.target_engine,
         requires_approval: true,
         created_by: ctx.actorId,
         step_order: 0,
@@ -132,10 +167,9 @@ async function materializePlan(
     workflow = data as Task;
   }
 
-  // Steps as child tasks.
-  for (let i = 0; i < plan.steps.length; i++) {
-    const step = plan.steps[i];
-    await ctx.supabase.from("tasks").insert({
+  // Steps as child tasks — batch insert in one round trip.
+  await ctx.supabase.from("tasks").insert(
+    plan.steps.map((step, i) => ({
       organization_id: ctx.orgId,
       parent_task_id: workflow.id,
       title: step.title,
@@ -147,8 +181,8 @@ async function materializePlan(
       requires_approval: false,
       created_by: ctx.actorId,
       step_order: i + 1,
-    });
-  }
+    })),
+  );
 
   await recordEvent(ctx, {
     taskId: workflow.id,
@@ -189,6 +223,13 @@ async function materializePlan(
  *
  * Idempotent: a workflow records its seeded record id on `tasks.result`. A
  * re-approval updates that record in place instead of creating a duplicate.
+ *
+ * Reference binding: a NEW follow-up workflow in the same session has no prior
+ * id of its own, but it often means the session's EXISTING record ("update the
+ * deal", "revise the model"). When no prior id exists, we look up the session's
+ * most-recent deal/asset and — using the conservative, deterministic
+ * `shouldReuseRecord` cue test — bind to it (update in place) instead of minting
+ * a duplicate. A genuinely different request still creates a new record.
  */
 async function persistOutcome(
   ctx: Ctx,
@@ -228,6 +269,31 @@ async function persistOutcome(
         .select("id")
         .maybeSingle();
       if (!error && updated) dealId = updated.id;
+    } else if (workflow.session_id) {
+      // Reference binding: a follow-up workflow with no prior id of its own may
+      // mean the session's existing deal. Bind to the most-recent one when the
+      // prompt/extracted name says so, and update it in place.
+      const { data: existing } = await ctx.supabase
+        .from("deals")
+        .select("id, name")
+        .eq("organization_id", ctx.orgId)
+        .eq("session_id", workflow.session_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (
+        existing &&
+        shouldReuseRecord({ promptText: prompt, existingName: existing.name, extractedName: fields.name })
+      ) {
+        const { data: updated, error } = await ctx.supabase
+          .from("deals")
+          .update(row)
+          .eq("id", existing.id)
+          .eq("organization_id", ctx.orgId)
+          .select("id")
+          .maybeSingle();
+        if (!error && updated) dealId = updated.id;
+      }
     }
     if (!dealId) {
       const { data: deal } = await ctx.supabase
@@ -266,6 +332,31 @@ async function persistOutcome(
         .select("id")
         .maybeSingle();
       if (!error && updated) assetId = updated.id;
+    } else if (workflow.session_id) {
+      // Reference binding: a follow-up workflow with no prior id of its own may
+      // mean the session's existing asset. Bind to the most-recent one when the
+      // prompt/extracted name says so, and update it in place.
+      const { data: existing } = await ctx.supabase
+        .from("assets")
+        .select("id, name")
+        .eq("organization_id", ctx.orgId)
+        .eq("session_id", workflow.session_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (
+        existing &&
+        shouldReuseRecord({ promptText: prompt, existingName: existing.name, extractedName: fields.name })
+      ) {
+        const { data: updated, error } = await ctx.supabase
+          .from("assets")
+          .update(row)
+          .eq("id", existing.id)
+          .eq("organization_id", ctx.orgId)
+          .select("id")
+          .maybeSingle();
+        if (!error && updated) assetId = updated.id;
+      }
     }
     if (!assetId) {
       const { data: asset } = await ctx.supabase.from("assets").insert(row).select("id").single();
@@ -299,52 +390,209 @@ async function createSession(
   return data?.id;
 }
 
-/** POST /prompt — plan the prompt into a workflow awaiting approval. */
-export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
-  // Inside an existing session, replay its earlier prompts so Earn plans the
-  // follow-up with the conversation in mind (oldest first).
-  let priorContext: string[] = [];
-  if (sessionId) {
-    const { data: prior } = await ctx.supabase
-      .from("tasks")
-      .select("description")
+/**
+ * Contextual awareness: surface the session's active deal/asset so the planner
+ * can resolve references like "the deal" or "the model" instead of reading the
+ * follow-up in isolation. Returns short context lines (newest entity first).
+ */
+async function gatherActiveContext(ctx: Ctx, sessionId: string): Promise<string[]> {
+  const [dealRes, assetRes] = await Promise.all([
+    ctx.supabase
+      .from("deals")
+      .select("name, asset_class, stage")
+      .eq("organization_id", ctx.orgId)
       .eq("session_id", sessionId)
-      .is("parent_task_id", null)
-      .order("created_at", { ascending: true });
-    priorContext = ((prior ?? []) as { description: string | null }[])
-      .map((t) => t.description?.trim() ?? "")
-      .filter(Boolean);
+      .order("created_at", { ascending: false })
+      .limit(1),
+    ctx.supabase
+      .from("assets")
+      .select("name, asset_type")
+      .eq("organization_id", ctx.orgId)
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false })
+      .limit(1),
+  ]);
+  const lines: string[] = [];
+  const deal = dealRes.data?.[0];
+  if (deal?.name) {
+    lines.push(
+      `Active deal in this session: "${deal.name}"${deal.asset_class ? ` (${deal.asset_class})` : ""}${
+        deal.stage ? `, stage: ${deal.stage}` : ""
+      }. Resolve "the deal" to this.`,
+    );
+  }
+  const asset = assetRes.data?.[0];
+  if (asset?.name) {
+    lines.push(`Active asset in this session: "${asset.name}". Resolve "the asset"/"the model" to this.`);
+  }
+  return lines;
+}
+
+/** POST /prompt — plan the prompt into a workflow awaiting approval. */
+// Draft the plan for a prompt (no writes). Split out so the streaming endpoint
+// can reveal the plan in the canvas before materializing it.
+// Inside an existing session, replay its earlier prompts so Earn plans the
+// follow-up with the conversation in mind (oldest first), plus the active
+// deal/asset so references like "the deal" resolve.
+async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[]> {
+  // Closed-loop routing learning: prepend a preamble built from the operator's
+  // recent reroute corrections (org-scoped) so the planner stops repeating the
+  // same mis-routes. Purely additive and best-effort — a failure here must never
+  // break planning, so it's swallowed and the session context flows unchanged.
+  let reroute: string[] = [];
+  try {
+    const preamble = formatRoutingCorrections(await getRoutingCorrections(ctx.supabase, ctx.orgId));
+    if (preamble) reroute = [preamble];
+  } catch {
+    // Ignore — routing-feedback is supplementary to the durable session context.
   }
 
-  const plan = await generatePlan(body, priorContext);
+  if (!sessionId) return reroute;
+  const { data: prior } = await ctx.supabase
+    .from("tasks")
+    .select("description")
+    .eq("session_id", sessionId)
+    .is("parent_task_id", null)
+    .order("created_at", { ascending: true });
+  const turns = ((prior ?? []) as { description: string | null }[])
+    .map((t) => t.description?.trim() ?? "")
+    .filter(Boolean);
+  const active = await gatherActiveContext(ctx, sessionId);
+  return [...reroute, ...active, ...turns];
+}
 
-  // Sessions are the first step in operations: an Earn prompt opens a session
-  // (named from the prompt) unless one was already provided.
-  const session = sessionId ?? (await createSession(ctx, { name: plan.title || body, origin: "earn" }));
+// Apply an operator's explicit desk delegation to a generated plan, overriding
+// Earn's auto-routed owner. Repoints the primary step to a representative agent
+// of the desk (and pins a compliance stage for CRO), so the persisted routing —
+// and everything derived from it — reflects the delegation. Pure.
+export function applyDelegation(plan: AgentPlan, desk: Executive): AgentPlan {
+  const ov = deskOverride(desk);
+  // Repoint the primary step to the desk's representative agent so the agent-
+  // derived owner (used by the UI) matches the delegation. Seed one step when a
+  // plan somehow arrives empty, so routing can't silently fall back to a default
+  // desk.
+  const steps = plan.steps.length
+    ? plan.steps.map((s, i) => (i === 0 ? { ...s, agent: ov.primaryAgent } : s))
+    : [{ agent: ov.primaryAgent, title: plan.title, description: plan.summary }];
+  const lifecycle_stage = ov.stage ?? plan.lifecycle_stage;
+  return {
+    ...plan,
+    steps,
+    lifecycle_stage,
+    target_engine: ov.engine ?? engineForStage(lifecycle_stage),
+    assigned_to: executiveForStage(lifecycle_stage, ov.primaryAgent),
+  };
+}
 
+export async function planPrompt(
+  ctx: Ctx,
+  body: string,
+  sessionId?: string,
+  delegate?: Executive,
+): Promise<AgentPlan> {
+  const plan = await generatePlan(body, await gatherPriorContext(ctx, sessionId));
+  return delegate ? applyDelegation(plan, delegate) : plan;
+}
+
+// Multi-intent: plan a prompt into one OR MORE workflows. Returns a single plan
+// in the common case; multiple only when the request spans distinct lifecycle
+// stages that should be executed and approved independently. When `delegate` is
+// set, the operator has overridden routing to a specific desk.
+export async function planPrompts(
+  ctx: Ctx,
+  body: string,
+  sessionId?: string,
+  delegate?: Executive,
+): Promise<AgentPlan[]> {
+  const plans = await generatePlans(body, await gatherPriorContext(ctx, sessionId));
+  return delegate ? plans.map((p) => applyDelegation(p, delegate)) : plans;
+}
+
+// Persist a single (pre-drafted) plan as a gated workflow. Thin wrapper over
+// materializePrompts so the single-workflow path can't drift from the multi one.
+export async function materializePrompt(ctx: Ctx, body: string, plan: AgentPlan, sessionId?: string) {
+  const { workflows, session_id } = await materializePrompts(ctx, body, [plan], sessionId);
+  const primary = workflows[0];
+  return { workflow: primary.workflow, approval_id: primary.approval_id, session_id };
+}
+
+/**
+ * Materialize one OR MORE plans into independent sibling workflows in a single
+ * session. Each workflow keeps its own approval gate and engine routing (the
+ * spec's "split and route independently"). One prompt row records the original
+ * message; each split workflow's description is its own slice (the plan summary)
+ * so the cards read distinctly rather than repeating the full prompt.
+ */
+export async function materializePrompts(ctx: Ctx, body: string, plans: AgentPlan[], sessionId?: string) {
+  const session = sessionId ?? (await createSession(ctx, { name: plans[0]?.title || body, origin: "earn" }));
+  const split = plans.length > 1;
+
+  const routings = plans.map((plan) =>
+    buildRouting({
+      prompt: body,
+      hub: plan.hub,
+      agents: plan.steps.map((s) => s.agent),
+      stage: plan.lifecycle_stage,
+    }),
+  );
+
+  // One prompt row for the operator's message; parsed_intent carries every
+  // routed workflow so the split is auditable.
   const { data: prompt } = await ctx.supabase
     .from("prompts")
     .insert({
       organization_id: ctx.orgId,
       principal_id: ctx.actorId,
       body,
-      routed_hub: plan.hub,
-      routed_agent: plan.steps[0]?.agent ?? "associate",
-      parsed_intent: plan as unknown as Json,
+      routed_hub: plans[0]?.hub ?? "run",
+      routed_agent: plans[0]?.steps[0]?.agent ?? "associate",
+      parsed_intent: {
+        split,
+        workflows: plans.map((plan, i) => ({ ...plan, routing: routings[i] })),
+      } as unknown as Json,
     })
     .select("id")
     .single();
 
-  const { workflow, approvalId } = await materializePlan(ctx, body, plan, {
-    promptId: prompt?.id ?? null,
-    sessionId: session,
-  });
+  const workflows = [];
+  for (const plan of plans) {
+    const { workflow, approvalId } = await materializePlan(
+      ctx,
+      split ? plan.summary || plan.title : body,
+      plan,
+      { promptId: prompt?.id ?? null, sessionId: session },
+    );
+    workflows.push({ plan, workflow, approval_id: approvalId });
+  }
 
-  return { plan, workflow, approval_id: approvalId, session_id: session };
+  return { workflows, session_id: session, split };
 }
 
-/** Run every step of an approved workflow, each producing a deliverable. */
-async function executeWorkflow(ctx: Ctx, workflow: Task) {
+export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string, delegate?: Executive) {
+  const plans = await planPrompts(ctx, body, sessionId, delegate);
+  const { workflows, session_id, split } = await materializePrompts(ctx, body, plans, sessionId);
+  const primary = workflows[0];
+  // Keep the original single-workflow contract (plan/workflow/approval_id) for
+  // existing callers; expose the full set + split flag for richer consumers.
+  return {
+    plan: primary?.plan,
+    workflow: primary?.workflow,
+    approval_id: primary?.approval_id ?? null,
+    workflows,
+    split,
+    session_id,
+  };
+}
+
+/**
+ * Run every step of an approved workflow, each producing a deliverable.
+ *
+ * `onProgress` is an optional observer that receives live step/workflow events
+ * so a streaming caller can light up the canvas as steps execute. It is fired
+ * after the matching DB write, so an emitted event always reflects persisted
+ * state. Omitting it yields identical behavior to the gated path.
+ */
+async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress) {
   await ctx.supabase
     .from("tasks")
     .update({ status: "in_progress", progress: 0.05 })
@@ -362,16 +610,21 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
 
   for (let i = 0; i < list.length; i++) {
     const step = list[i];
-    await ctx.supabase
-      .from("tasks")
-      .update({ status: "in_progress", progress: 0.5 })
-      .eq("id", step.id);
-    await recordEvent(ctx, {
-      taskId: workflow.id,
-      type: "task.progress",
-      agent: step.assigned_agent,
-      hub: step.hub,
-      payload: { step_id: step.id, message: `${step.title}…`, active_step: step.step_order },
+    await Promise.all([
+      ctx.supabase.from("tasks").update({ status: "in_progress", progress: 0.5 }).eq("id", step.id),
+      recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "task.progress",
+        agent: step.assigned_agent,
+        hub: step.hub,
+        payload: { step_id: step.id, message: `${step.title}…`, active_step: step.step_order },
+      }),
+    ]);
+    emitProgress(onProgress, {
+      type: "step_start",
+      step_id: step.id,
+      title: step.title,
+      step_order: step.step_order,
     });
 
     const output = await executeStep({
@@ -383,10 +636,12 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
     });
     // Attribute this step's work to a Brain: the engine ORCHESTRATES, Brains
     // EXECUTE. This logs a brain_runs row tagged with the workflow's session so
-    // the step surfaces in the session "Brains at work" theater. Additive and
+    // the step surfaces in the session "Brains at work" theater, and surfaces
+    // the passages the Brain consulted as the artifact's grounding. Additive and
     // defensive — a Brain failure must never break the workflow.
+    let brain: BrainResult | null = null;
     try {
-      await activateBrain(
+      brain = await activateBrain(
         { supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.actorId, sessionId: workflow.session_id ?? null },
         brainForAgent(step.assigned_agent),
         {
@@ -401,54 +656,70 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
 
     priorOutputs.push(`${step.title}:\n${output}`);
 
-    await ctx.supabase
-      .from("tasks")
-      .update({
-        status: "completed",
-        progress: 1,
-        completed_at: new Date().toISOString(),
-        result: { output } as Json,
-      })
-      .eq("id", step.id);
+    // Persist the grounding citations alongside the deliverable so the output is
+    // verifiable — each is the source the Brain consulted, snippet-trimmed.
+    const sources = (brain?.sources ?? []).map((s) => ({
+      source: s.source,
+      snippet: s.text.slice(0, 240),
+      score: s.score,
+      kind: s.kind as "document" | "kb",
+    }));
+    // Automated grounding signal: how much of the deliverable reflects its
+    // citations. Persisted now; the human approval gate verifies on top of it.
+    const groundingScore = computeGroundingScore(output, sources);
 
-    // Promote the step output to a first-class, typed artifact.
     const artifactType = classifyArtifact(step.assigned_agent, step.title);
-    const { data: artifact } = await ctx.supabase
-      .from("artifacts")
-      .insert({
-        organization_id: ctx.orgId,
-        workflow_id: workflow.id,
-        step_id: step.id,
-        title: step.title,
-        artifact_type: artifactType,
-        agent: step.assigned_agent,
-        hub: step.hub,
-        content: output,
-        created_by: ctx.actorId,
-      })
-      .select("id")
-      .single();
+    const [, { data: artifact }] = await Promise.all([
+      ctx.supabase
+        .from("tasks")
+        .update({ status: "completed", progress: 1, completed_at: new Date().toISOString(), result: { output } as Json })
+        .eq("id", step.id),
+      ctx.supabase
+        .from("artifacts")
+        .insert({
+          organization_id: ctx.orgId,
+          workflow_id: workflow.id,
+          step_id: step.id,
+          title: step.title,
+          artifact_type: artifactType,
+          agent: step.assigned_agent,
+          hub: step.hub,
+          content: output,
+          created_by: ctx.actorId,
+          // Trust layer: AI-produced, unverified until signed off, with the
+          // Brain's retrieved passages as citations and a link to its reasoning.
+          provenance: "ai",
+          verification_status: "unverified",
+          sources: sources as unknown as Json,
+          brain_run_id: brain?.runId ?? null,
+          grounding_score: groundingScore,
+        })
+        .select("id")
+        .single(),
+    ]);
     if (artifact?.id) artifactIds.push(artifact.id);
 
-    await recordEvent(ctx, {
-      taskId: workflow.id,
-      type: "task.completed",
-      agent: step.assigned_agent,
-      hub: step.hub,
-      payload: { step_id: step.id, message: `${step.title} — done` },
-    });
-    await recordEvent(ctx, {
-      taskId: workflow.id,
-      type: "artifact.created",
-      agent: step.assigned_agent,
-      hub: step.hub,
-      payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title },
-    });
-
-    await ctx.supabase
-      .from("tasks")
-      .update({ progress: (i + 1) / Math.max(list.length, 1) })
-      .eq("id", workflow.id);
+    await Promise.all([
+      recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "task.completed",
+        agent: step.assigned_agent,
+        hub: step.hub,
+        payload: { step_id: step.id, message: `${step.title} — done` },
+      }),
+      recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "artifact.created",
+        agent: step.assigned_agent,
+        hub: step.hub,
+        payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title, sources: sources.length },
+      }),
+      ctx.supabase
+        .from("tasks")
+        .update({ progress: (i + 1) / Math.max(list.length, 1) })
+        .eq("id", workflow.id),
+    ]);
+    emitProgress(onProgress, { type: "step_done", step_id: step.id, title: step.title });
   }
 
   // Turn the finished work into a structured record (Deal / Asset).
@@ -479,6 +750,8 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
       payload: { graph: workflow.graph_touched, ...outcome },
     });
   }
+
+  emitProgress(onProgress, { type: "workflow_done", workflow_id: workflow.id });
 }
 
 /**
@@ -516,10 +789,114 @@ export async function runAutomation(
   return { workflowId: workflow.id, executed: false };
 }
 
-/** POST /approve — capture the human decision and drive automation. */
+/**
+ * Accept a plan as the recommendation: no agents execute. The plan (summary +
+ * ordered steps) is promoted to a memo artifact so it's a durable deliverable,
+ * and the workflow is marked complete.
+ */
+/**
+ * The human half of the trust gate: once an operator approves a workflow, its
+ * artifacts are signed off — verification_status flips to 'verified', stamped
+ * with who and when. Emits an `artifact.verified` event per artifact so the
+ * canvas can flip the badge live. Best-effort and idempotent; verifying an
+ * already-verified artifact is a harmless no-op.
+ */
+async function verifyWorkflowArtifacts(ctx: Ctx, wf: Task, note: string) {
+  const { data: rows } = await ctx.supabase
+    .from("artifacts")
+    .update({
+      verification_status: "verified",
+      verified_by: ctx.actorId,
+      verified_at: new Date().toISOString(),
+      verification_note: note,
+    })
+    .eq("workflow_id", wf.id)
+    .eq("verification_status", "unverified")
+    .select("id, artifact_type");
+
+  for (const row of rows ?? []) {
+    await recordEvent(ctx, {
+      taskId: wf.id,
+      type: "artifact.verified",
+      agent: "associate",
+      hub: wf.hub,
+      payload: { artifact_id: row.id, artifact_type: row.artifact_type },
+    });
+  }
+}
+
+async function acceptRecommendation(ctx: Ctx, wf: Task) {
+  const { data: stepData } = await ctx.supabase
+    .from("tasks")
+    .select("*")
+    .eq("parent_task_id", wf.id)
+    .order("step_order", { ascending: true });
+  const steps = (stepData ?? []) as Task[];
+
+  const body =
+    `# ${wf.title}\n\n` +
+    `Accepted as the recommendation — agents were not run.\n\n` +
+    `## Recommended approach\n` +
+    steps
+      .map((s, i) => {
+        const agent = AGENTS.find((a) => a.key === s.assigned_agent)?.name ?? s.assigned_agent;
+        return `${i + 1}. **${s.title}** — ${s.description ?? ""} _(${agent})_`;
+      })
+      .join("\n");
+
+  const { data: artifact } = await ctx.supabase
+    .from("artifacts")
+    .insert({
+      organization_id: ctx.orgId,
+      workflow_id: wf.id,
+      step_id: null,
+      title: `${wf.title} — Recommendation`,
+      artifact_type: "memo",
+      agent: "associate",
+      hub: wf.hub,
+      content: body,
+      created_by: ctx.actorId,
+    })
+    .select("id")
+    .single();
+
+  await ctx.supabase
+    .from("tasks")
+    .update({
+      status: "completed",
+      progress: 1,
+      completed_at: new Date().toISOString(),
+      result: { accepted: true, recommendation: true } as Json,
+    })
+    .eq("id", wf.id);
+
+  await recordEvent(ctx, {
+    taskId: wf.id,
+    type: "artifact.created",
+    agent: "associate",
+    hub: wf.hub,
+    payload: { artifact_id: artifact?.id, artifact_type: "memo", title: `${wf.title} — Recommendation` },
+  });
+}
+
+/**
+ * POST /approve — capture the human decision and drive automation.
+ *
+ * `onProgress` (optional) lets a streaming caller observe live step execution
+ * on the "approved" path; it changes nothing about the gate or persistence and
+ * is ignored for every other decision. Existing callers pass nothing.
+ */
 export async function decideApproval(
   ctx: Ctx,
-  args: { approvalId: string; decision: "approved" | "rejected" | "regenerate"; note?: string },
+  args: {
+    approvalId: string;
+    decision: "approved" | "rejected" | "regenerate" | "accepted";
+    note?: string;
+    // When the operator re-routes from the card, the desk to delegate the
+    // rebuilt plan to. Only honored on "regenerate".
+    delegate?: Executive;
+  },
+  onProgress?: OnProgress,
 ) {
   const { data: approval } = await ctx.supabase
     .from("approvals")
@@ -582,7 +959,14 @@ export async function decideApproval(
           .eq("id", wf.id);
       }
     }
-    await executeWorkflow(ctx, wf);
+    await executeWorkflow(ctx, wf, onProgress);
+    // Operator approval is the authoritative sign-off — verify the deliverables.
+    await verifyWorkflowArtifacts(ctx, wf, `Approved by operator${args.note ? `: ${args.note}` : ""}`);
+  } else if (args.decision === "accepted") {
+    // Accept: the plan stands as the recommendation — no agents run. Capture it
+    // as a first-class artifact and mark the workflow done.
+    await acceptRecommendation(ctx, wf);
+    await verifyWorkflowArtifacts(ctx, wf, "Accepted as recommendation by operator");
   } else if (args.decision === "rejected") {
     await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
     await ctx.supabase
@@ -590,9 +974,41 @@ export async function decideApproval(
       .update({ status: "cancelled" })
       .eq("parent_task_id", wf.id);
   } else {
-    // regenerate: build a fresh plan from the original prompt and re-gate.
-    const plan = await generatePlan(wf.description ?? wf.title);
-    await materializePlan(ctx, wf.description ?? wf.title, plan, { workflowId: wf.id });
+    // regenerate: build a fresh plan from the original prompt and re-gate. A note
+    // (e.g. answers to Earn's clarifying questions) refines the new plan.
+    const base = wf.description ?? wf.title;
+    const context = args.note?.trim() ? [`Operator clarification: ${args.note.trim()}`] : [];
+    const drafted = await generatePlan(base, context);
+    const plan = args.delegate ? applyDelegation(drafted, args.delegate) : drafted;
+    // A desk re-route is an operator routing correction — log it to the same
+    // learning loop the Execution Grid's engine re-route feeds, so the planner
+    // stops repeating the mis-route. Best-effort; never blocks the re-plan.
+    if (args.delegate) {
+      const fromEngine = wf.target_engine ?? "(unrouted)";
+      const engineChanged = fromEngine !== plan.target_engine;
+      await recordOperatorFeedback(ctx.supabase, [
+        {
+          organizationId: ctx.orgId,
+          principalId: ctx.actorId,
+          signal: "reroute",
+          subject: engineChanged
+            ? `${fromEngine} → ${plan.target_engine}`
+            : `Desk → ${EXECUTIVE_LABEL[args.delegate]}`,
+          scope: "copilot_card",
+          module: "copilot",
+          taskId: wf.id,
+          sessionId: wf.session_id ?? null,
+          metadata: {
+            from_engine: fromEngine,
+            to_engine: plan.target_engine,
+            lifecycle_stage: plan.lifecycle_stage,
+            desk: args.delegate,
+            title: wf.title,
+          },
+        },
+      ]);
+    }
+    await materializePlan(ctx, base, plan, { workflowId: wf.id });
   }
 
   return { workflowId: wf.id, decision: args.decision };

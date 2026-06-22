@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { recordConvictionSnapshot, computeDealConviction } from "@/lib/run-war-room";
+import { shareDeal, type ShareDealResult } from "@/lib/deal-share.server";
 import type {
   DiligenceItem,
   DiligenceStatus,
@@ -37,6 +38,18 @@ function revalidateRun(dealId: string) {
   revalidatePath("/run/risk");
   revalidatePath("/run/strategy");
   revalidatePath("/run/stress_test");
+}
+
+// --- Share across the ecosystem --------------------------------------------
+
+// Share a deal: Earn drafts the teaser memo, broadcasts to matched discoverable
+// investors, and mints the tracked link. Returns the result so the client can
+// show the memo + a copyable link; revalidates the deal page so any share state
+// re-renders.
+export async function shareDealAction(dealId: string): Promise<ShareDealResult> {
+  const result = await shareDeal(dealId);
+  if (result.ok) revalidatePath(`/deal/${dealId}`);
+  return result;
 }
 
 // --- Diligence -------------------------------------------------------------

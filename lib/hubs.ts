@@ -12,6 +12,9 @@ export interface HubDefinition {
   label: string;
   purpose: string;
   modules: HubModule[];
+  /** Hubs whose actions reach outside the firm and so run behind an explicit
+   * approval gate (per the mockups, "Approval-gated"). Surfaced as a rail badge. */
+  approvalGated?: boolean;
 }
 
 export const HUBS: HubDefinition[] = [
@@ -45,6 +48,7 @@ export const HUBS: HubDefinition[] = [
     key: "run",
     label: "Run",
     purpose: "Evaluate and manage active deals.",
+    approvalGated: true,
     modules: [
       { key: "strategy", label: "Strategy" },
       { key: "diligence", label: "Diligence" },
@@ -60,10 +64,13 @@ export const HUBS: HubDefinition[] = [
     purpose: "Operate assets post-closing.",
     modules: [
       { key: "closing", label: "Closing" },
+      { key: "signing", label: "Signing" },
+      { key: "issuance", label: "Issuance" },
       { key: "capital_events", label: "Capital Events" },
       { key: "asset_management", label: "Asset Management" },
       { key: "valuations", label: "Valuations" },
       { key: "cap_table", label: "Cap Table" },
+      { key: "ownership", label: "Ownership" },
       { key: "waterfall", label: "Waterfall" },
       { key: "reporting", label: "Reporting" },
       { key: "exit", label: "Exit" },

@@ -28,12 +28,21 @@ export type ActionKind =
   | "score"
   | "research"
   | "build_list"
+  // Inbox: drafting a reply / spinning up a video room are internal prep —
+  // nothing reaches the counterparty until it is sent (a Tier-2 action).
+  | "draft_reply"
+  | "create_video_meeting"
   // Tier 2 — external-facing; touches a counterparty.
   | "send_outreach"
   | "send_intro_request"
   | "share_materials"
   | "send_diligence_request"
   | "distribute_report"
+  // Inbox: replying, proposing a time, or confirming a booking all reach the
+  // counterparty, so they are gated like any other outward move.
+  | "send_reply"
+  | "propose_meeting"
+  | "confirm_booking"
   // Tier 3 — compliance- or capital-binding; creates an obligation.
   | "sign_document"
   | "submit_term_sheet"
@@ -48,6 +57,8 @@ const TIER_1: ActionKind[] = [
   "score",
   "research",
   "build_list",
+  "draft_reply",
+  "create_video_meeting",
 ];
 
 const TIER_2: ActionKind[] = [
@@ -56,6 +67,9 @@ const TIER_2: ActionKind[] = [
   "share_materials",
   "send_diligence_request",
   "distribute_report",
+  "send_reply",
+  "propose_meeting",
+  "confirm_booking",
 ];
 
 const TIER_3: ActionKind[] = [
@@ -102,12 +116,25 @@ export interface GateDecision {
   reason: string;
 }
 
+// The verification standing of the work product an action would send outward.
+// `verifiable` is true when an operator has signed the artifact off or it is
+// automatically well-grounded (see lib/grounding.ts `isVerifiable`). Supplied
+// only for actions that carry a composer artifact; omit it otherwise.
+export interface Backing {
+  verifiable: boolean;
+}
+
 /**
  * Decide whether an action may proceed autonomously or must be gated for the
  * operator. The mandate can only ever relax Tier 2; Tier 1 is always free and
  * Tier 3 is always gated, regardless of what any mandate claims.
+ *
+ * Trust layer: a mandate may only auto-execute a Tier-2 action when the work
+ * product behind it is verifiable. Unverified, weakly-grounded output cannot
+ * ride the auto-approve bypass to a counterparty — it falls back to the human
+ * gate. Internal (Tier 1) work is unaffected; Tier 3 is always gated anyway.
  */
-export function gateDecision(action: ActionKind, mandate?: Mandate): GateDecision {
+export function gateDecision(action: ActionKind, mandate?: Mandate, backing?: Backing): GateDecision {
   const tier = tierForAction(action);
 
   if (tier === 1) {
@@ -126,6 +153,14 @@ export function gateDecision(action: ActionKind, mandate?: Mandate): GateDecisio
   // ceiling that actually reaches Tier 2.
   const preAuthorized =
     !!mandate && mandate.autonomyCeiling >= 2 && mandate.autoApprove.includes(action);
+
+  if (preAuthorized && backing && !backing.verifiable) {
+    return {
+      tier,
+      requiresApproval: true,
+      reason: "Unverified, weakly-grounded output — sign-off required before it reaches a counterparty.",
+    };
+  }
 
   return preAuthorized
     ? { tier, requiresApproval: false, reason: "Pre-authorized by your active mandate." }

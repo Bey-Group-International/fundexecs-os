@@ -37,8 +37,18 @@ export async function computeDealConviction(
 ): Promise<DealConviction | null> {
   const [dealRes, uwRes, dilRes, mandate] = await Promise.all([
     supabase.from("deals").select("*").eq("id", dealId).eq("organization_id", orgId).maybeSingle(),
-    supabase.from("underwritings").select("*").eq("organization_id", orgId).eq("deal_id", dealId),
-    supabase.from("diligence_items").select("*").eq("organization_id", orgId).eq("deal_id", dealId),
+    supabase
+      .from("underwritings")
+      .select("*")
+      .eq("organization_id", orgId)
+      .eq("deal_id", dealId)
+      .is("archived_at", null),
+    supabase
+      .from("diligence_items")
+      .select("*")
+      .eq("organization_id", orgId)
+      .eq("deal_id", dealId)
+      .is("archived_at", null),
     getMandate(orgId),
   ]);
   const deal = dealRes.data as Deal | null;

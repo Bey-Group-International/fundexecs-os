@@ -11,6 +11,7 @@ export type TaskEventType =
   | "approval.requested"
   | "approval.response"
   | "artifact.created"
+  | "artifact.verified"
   | "graph.update";
 
 interface BaseEvent {
@@ -62,6 +63,16 @@ export interface ArtifactCreatedEvent extends BaseEvent {
   artifact_id: string;
   artifact_type: ArtifactType;
   title: string;
+  // Trust layer: how many grounding citations were attached to the artifact.
+  sources?: number;
+}
+
+// Trust layer: an operator's approval signed off an artifact — the badge flips
+// from Grounded/Unverified to Verified.
+export interface ArtifactVerifiedEvent extends BaseEvent {
+  event: "artifact.verified";
+  artifact_id: string;
+  artifact_type: ArtifactType;
 }
 
 export interface GraphUpdateEvent extends BaseEvent {
@@ -77,4 +88,5 @@ export type FundExecsEvent =
   | ApprovalRequestedEvent
   | ApprovalResponseEvent
   | ArtifactCreatedEvent
+  | ArtifactVerifiedEvent
   | GraphUpdateEvent;

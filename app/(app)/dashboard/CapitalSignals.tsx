@@ -36,7 +36,8 @@ export function HottestCapital({ entries }: { entries: CapitalMapEntry[] }) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">
+        <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fg-muted">
+          <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
           Hottest capital
         </h2>
         <Link href="/capital-map" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
@@ -59,11 +60,11 @@ export function HottestCapital({ entries }: { entries: CapitalMapEntry[] }) {
               <Link
                 key={entry.investor.id}
                 href="/capital-map"
-                className="flex items-center gap-2.5 rounded-lg border border-line bg-surface-1 px-3 py-2 transition hover:border-gold-500/60"
+                className="fx-card fx-card-hover flex items-center gap-2.5 px-3 py-2.5"
               >
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: temp.dot }}
+                  style={{ backgroundColor: temp.dot, boxShadow: `0 0 6px ${temp.dot}` }}
                   title={temp.label}
                 />
                 <span className="min-w-0">
@@ -96,7 +97,8 @@ export function PendingGates({ approvals }: { approvals: Approval[] }) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">
+        <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fg-muted">
+          <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
           Pending gates
         </h2>
         {approvals.length > 0 ? (
@@ -121,7 +123,7 @@ export function PendingGates({ approvals }: { approvals: Approval[] }) {
               <Link
                 key={a.id}
                 href="/workspace"
-                className="flex items-center gap-2.5 rounded-lg border border-line bg-surface-1 px-3 py-2 transition hover:border-gold-500/60"
+                className="fx-card fx-card-hover flex items-center gap-2.5 px-3 py-2.5"
               >
                 <span
                   className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_STYLE[tier]}`}

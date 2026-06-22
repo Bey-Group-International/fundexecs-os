@@ -21,6 +21,11 @@ import type {
 } from "@/lib/supabase/database.types";
 import type { ActionKind, GateTier } from "@/lib/gates";
 import { tierForAction } from "@/lib/gates";
+import {
+  ENGAGEMENT_RELATION,
+  engagementBoost,
+  floorTemperatureByEngagement,
+} from "@/lib/engagement";
 
 type Client = SupabaseClient<Database>;
 
@@ -256,7 +261,7 @@ export function findIntroPath(
 export async function buildCapitalMap(supabase: Client): Promise<CapitalMapEntry[]> {
   const [investorsRes, thesisRes, commitmentsRes, relationshipsRes, membersRes] =
     await Promise.all([
-      supabase.from("investors").select("*").limit(500),
+      supabase.from("investors").select("*").is("archived_at", null).limit(500),
       supabase
         .from("investment_theses")
         .select("*")
@@ -266,7 +271,7 @@ export async function buildCapitalMap(supabase: Client): Promise<CapitalMapEntry
       supabase.from("commitments").select("investor_id, committed_amount").limit(1000),
       supabase
         .from("relationships")
-        .select("from_entity_type, from_entity_id, to_entity_type, to_entity_id")
+        .select("from_entity_type, from_entity_id, to_entity_type, to_entity_id, relation, metadata")
         .eq("graph", "relationship")
         .limit(2000),
       supabase.from("organization_members").select("principal_id").limit(200),
@@ -304,6 +309,26 @@ export async function buildCapitalMap(supabase: Client): Promise<CapitalMapEntry
   }
   for (const inv of investors) labels.set(polyId("investor", inv.id), inv.name);
 
+  // Engagement feedback: "engaged" edges the operator's actions wrote back onto
+  // the graph. Each carries a running count in its metadata; we take the highest
+  // count per investor and treat the org as a node we control so an engaged LP
+  // reads as directly reachable.
+  const engagementByInvestor = new Map<string, number>();
+  const orgSelfNodes = new Set<string>();
+  for (const r of relRows) {
+    if (r.relation === ENGAGEMENT_RELATION && r.to_entity_type === "investor") {
+      const meta = (r.metadata ?? {}) as Record<string, unknown>;
+      const count = typeof meta.count === "number" ? meta.count : 1;
+      engagementByInvestor.set(
+        r.to_entity_id,
+        Math.max(engagementByInvestor.get(r.to_entity_id) ?? 0, count),
+      );
+      if (r.from_entity_type === "organization") {
+        orgSelfNodes.add(polyId("organization", r.from_entity_id));
+      }
+    }
+  }
+
   // Resolve principal names for the intro hops (best-effort; RLS-scoped).
   if (memberIds.length) {
     const { data: principals } = await supabase
@@ -315,20 +340,28 @@ export async function buildCapitalMap(supabase: Client): Promise<CapitalMapEntry
     }
   }
 
-  // Nodes the operator controls: the team's principals.
-  const selfNodes = memberIds.map((id) => polyId("principal", id));
+  // Nodes the operator controls: the team's principals plus the org itself
+  // (which owns the engagement edges).
+  const selfNodes = [...memberIds.map((id) => polyId("principal", id)), ...orgSelfNodes];
 
   const entries: CapitalMapEntry[] = investors.map((investor) => {
     const committedAmount = committedByInvestor.get(investor.id) ?? 0;
-    const temperature: Temperature =
+    const engagementCount = engagementByInvestor.get(investor.id) ?? 0;
+    const baseTemperature: Temperature =
       committedAmount > 0 ? "committed" : stageToTemperature(investor.pipeline_stage);
+    // Engagement can only lift a relationship, never cool it.
+    const temperature = floorTemperatureByEngagement(baseTemperature, engagementCount);
     const thesisFit = scoreThesisFit(investor, thesis);
     const introPath = findIntroPath(investor.id, selfNodes, adjacency, labels);
     const nextActions = nextActionsFor(temperature, !!introPath);
 
-    // Warmth blends temperature (70%) and thesis fit (30%) for a single sort key.
+    // Warmth blends temperature (70%) and thesis fit (30%), then adds the
+    // compounding engagement boost — so a worked LP climbs the list over time.
     const fit = thesisFit?.score ?? 0;
-    const warmth = Math.round(TEMPERATURE_WEIGHT[temperature] * 0.7 + fit * 0.3);
+    const warmth = Math.min(
+      100,
+      Math.round(TEMPERATURE_WEIGHT[temperature] * 0.7 + fit * 0.3) + engagementBoost(engagementCount),
+    );
 
     return {
       investor,

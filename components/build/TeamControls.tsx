@@ -5,6 +5,7 @@ import type { MemberRole } from "@/lib/supabase/database.types";
 import { inputClass } from "./DraftWithEarn";
 import {
   updateMyProfile,
+  assignTeamTask,
   changeMemberRole,
   removeMember,
   inviteMember,
@@ -20,6 +21,12 @@ export interface TeamMemberView {
   role: MemberRole;
 }
 
+export interface SeatInfo {
+  used: number;
+  /** Seat allotment for the current plan. `null` = unlimited. */
+  limit: number | null;
+}
+
 interface TeamControlsProps {
   members: TeamMemberView[];
   currentUserId: string;
@@ -29,9 +36,18 @@ interface TeamControlsProps {
     title: string | null;
     avatar_url: string | null;
   };
+  seats: SeatInfo;
 }
 
 const ROLE_OPTIONS: MemberRole[] = ["owner", "admin", "member"];
+const HUB_OPTIONS = [
+  { value: "", label: "No hub" },
+  { value: "build", label: "Build" },
+  { value: "source", label: "Source" },
+  { value: "run", label: "Run" },
+  { value: "execute", label: "Execute" },
+];
+const PRIORITY_OPTIONS = ["low", "normal", "high", "urgent"];
 
 // Only allow user-supplied avatar URLs that resolve to a real http(s)
 // resource. Parsing with the URL constructor and re-emitting `.href` breaks the
@@ -97,8 +113,10 @@ export function TeamControls({
   currentUserId,
   currentRole,
   ownProfile,
+  seats,
 }: TeamControlsProps) {
   const isAdmin = currentRole === "owner" || currentRole === "admin";
+  const canAssign = isAdmin || currentRole === "member";
   const ownerCount = members.filter((m) => m.role === "owner").length;
 
   const byName = (a: TeamMemberView, b: TeamMemberView) =>
@@ -130,7 +148,9 @@ export function TeamControls({
     <div className="flex flex-col gap-6">
       <YourProfile ownProfile={ownProfile} />
 
-      {isAdmin ? <InviteForm /> : null}
+      {canAssign ? <AssignTaskForm members={members} currentUserId={currentUserId} /> : null}
+
+      {isAdmin ? <InviteForm seats={seats} /> : null}
 
       {leaders.length > 0 ? (
         <div className="flex flex-col gap-2">
@@ -150,6 +170,103 @@ export function TeamControls({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// --- Assign tasks ----------------------------------------------------------
+function AssignTaskForm({
+  members,
+  currentUserId,
+}: {
+  members: TeamMemberView[];
+  currentUserId: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const defaultAssignee = members.some((m) => m.principalId === currentUserId)
+    ? currentUserId
+    : members[0]?.principalId;
+
+  return (
+    <form
+      ref={formRef}
+      action={(fd) => {
+        setError(null);
+        setSuccess(false);
+        startTransition(async () => {
+          const res = await assignTeamTask(fd);
+          if (res.error) {
+            setError(res.error);
+          } else {
+            setSuccess(true);
+            formRef.current?.reset();
+          }
+        });
+      }}
+      className="grid gap-3 rounded-xl border border-neural-400/20 bg-neural-400/[0.04] p-4 md:grid-cols-[1.1fr_0.8fr_0.7fr]"
+    >
+      <div className="md:col-span-3">
+        <p className="text-sm font-medium text-fg-primary">Assign team task</p>
+        <p className="mt-0.5 text-xs text-fg-muted">
+          Send work to a teammate&apos;s Earn dock so they can complete it with context.
+        </p>
+      </div>
+      <input
+        name="title"
+        required
+        placeholder="e.g. Refresh LP follow-up list"
+        className={inputClass}
+      />
+      <select name="assigned_to" defaultValue={defaultAssignee ?? ""} className={inputClass}>
+        {members.map((m) => (
+          <option key={m.principalId} value={m.principalId}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+      <select name="priority" defaultValue="normal" className={inputClass}>
+        {PRIORITY_OPTIONS.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </select>
+      <textarea
+        name="description"
+        rows={2}
+        placeholder="What needs to be done?"
+        className={`${inputClass} md:col-span-3`}
+      />
+      <select name="hub" defaultValue="" className={inputClass}>
+        {HUB_OPTIONS.map((h) => (
+          <option key={h.value} value={h.value}>
+            {h.label}
+          </option>
+        ))}
+      </select>
+      <input
+        name="module"
+        placeholder="Module (optional)"
+        className={inputClass}
+      />
+      <input
+        name="due_at"
+        type="date"
+        className={inputClass}
+      />
+      <div className="flex items-center gap-3 md:col-span-3">
+        <button
+          disabled={pending || members.length === 0}
+          className="rounded-md bg-neural-400 px-4 py-2 text-sm font-medium text-black transition hover:bg-neural-300 disabled:opacity-50"
+        >
+          {pending ? "Assigning…" : "Assign task"}
+        </button>
+        {error ? <span className="text-xs text-status-danger">{error}</span> : null}
+        {success ? <span className="text-xs text-status-success">Task assigned.</span> : null}
+      </div>
+    </form>
   );
 }
 
@@ -224,11 +341,17 @@ function YourProfile({
 }
 
 // --- Invite ---------------------------------------------------------------
-function InviteForm() {
+function InviteForm({ seats }: { seats: SeatInfo }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const unlimited = seats.limit === null;
+  const full = !unlimited && seats.used >= (seats.limit ?? 0);
+  const seatLabel = unlimited
+    ? `${seats.used} seat${seats.used === 1 ? "" : "s"} used · unlimited`
+    : `${seats.used} of ${seats.limit} seats used`;
 
   return (
     <form
@@ -248,20 +371,39 @@ function InviteForm() {
       }}
       className="grid gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:grid-cols-[1fr_auto_auto]"
     >
-      <div className="sm:col-span-3">
-        <p className="text-sm font-medium text-fg-primary">Invite member</p>
-        <p className="mt-0.5 text-xs text-fg-muted">
-          Add an existing FundExecs user to the firm by email.
-        </p>
+      <div className="sm:col-span-3 flex flex-wrap items-baseline justify-between gap-x-3">
+        <div>
+          <p className="text-sm font-medium text-fg-primary">Invite member</p>
+          <p className="mt-0.5 text-xs text-fg-muted">
+            Add an existing FundExecs user to the firm by email.
+          </p>
+        </div>
+        <span
+          className={`font-mono text-[10px] uppercase tracking-wider ${
+            full ? "text-status-danger" : "text-fg-muted"
+          }`}
+        >
+          {seatLabel}
+        </span>
       </div>
+      {full ? (
+        <p className="sm:col-span-3 text-xs text-fg-secondary">
+          Your plan’s seats are full.{" "}
+          <a href="/wallet" className="text-gold-400 underline">
+            Upgrade your plan
+          </a>{" "}
+          to add more members.
+        </p>
+      ) : null}
       <input
         name="email"
         type="email"
         required
+        disabled={full}
         placeholder="name@firm.com"
         className={inputClass}
       />
-      <select name="role" defaultValue="member" className={inputClass}>
+      <select name="role" defaultValue="member" disabled={full} className={inputClass}>
         {ROLE_OPTIONS.map((r) => (
           <option key={r} value={r}>
             {r}
@@ -269,7 +411,7 @@ function InviteForm() {
         ))}
       </select>
       <button
-        disabled={pending}
+        disabled={pending || full}
         className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
       >
         {pending ? "Adding…" : "Add"}

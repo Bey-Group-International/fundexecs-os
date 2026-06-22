@@ -25,7 +25,8 @@ function relativeTime(iso: string): string {
 export function Outbox({ rows }: { rows: DispatchLog[] }) {
   return (
     <section className="mt-8">
-      <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
+      <h2 className="mb-3 flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fg-muted">
+        <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
         Outbox
       </h2>
       {rows.length === 0 ? (
@@ -41,7 +42,7 @@ export function Outbox({ rows }: { rows: DispatchLog[] }) {
           {rows.map((row) => (
             <div
               key={row.id}
-              className="flex items-center gap-2.5 rounded-lg border border-line bg-surface-1 px-3 py-2"
+              className="fx-card flex items-center gap-2.5 px-3 py-2.5"
             >
               {/* Live = a real external call; mock/queued = green prep only. */}
               <span

@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import type { ReputationTier } from "@/lib/compounding";
+import { tierLabel } from "@/components/TierBadge";
 import { createListing } from "./actions";
 
 const LISTING_TYPES = [
@@ -12,8 +14,19 @@ const LISTING_TYPES = [
 ];
 
 // The create-listing form. Client-side so validation surfaces inline and the
-// form resets on success without a full reload.
-export function NewListingForm() {
+// form resets on success without a full reload. Linking a deal lets the matching
+// engine score listings on geography too, not just amount + type.
+// `requiredStake` and `tier` are resolved server-side by the parent (page.tsx)
+// and passed in — this client component never fetches.
+export function NewListingForm({
+  deals = [],
+  requiredStake,
+  tier,
+}: {
+  deals?: { id: string; name: string }[];
+  requiredStake?: number;
+  tier?: ReputationTier;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
@@ -29,7 +42,7 @@ export function NewListingForm() {
           else formRef.current?.reset();
         })
       }
-      className="rounded-xl border border-line bg-surface-1 p-4"
+      className="fx-card animate-fade-up p-4"
     >
       <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
         New listing
@@ -86,6 +99,24 @@ export function NewListingForm() {
             </select>
           </label>
 
+          {deals.length ? (
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Deal</span>
+              <select
+                name="deal_id"
+                defaultValue=""
+                className="max-w-[160px] rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary focus:border-gold-500/60 focus:outline-none"
+              >
+                <option value="">None</option>
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
           <label className="flex items-center gap-2 text-xs text-fg-secondary">
             <input type="checkbox" name="is_public" className="h-3.5 w-3.5 accent-gold-500" />
             Public
@@ -101,6 +132,18 @@ export function NewListingForm() {
         </div>
 
         {error ? <p className="text-xs text-red-400">{error}</p> : null}
+
+        {requiredStake != null ? (
+          <p className="rounded-lg border border-neural-400/20 bg-black/30 px-3 py-2 text-[11px] leading-snug text-fg-secondary">
+            Listing locks a refundable{" "}
+            <span className="font-mono text-neural-300">{requiredStake.toLocaleString()}</span>
+            -credit stake, returned when the listing closes in good faith.{" "}
+            {tier && tier !== "unranked"
+              ? `Your ${tierLabel(tier)} standing reduces it.`
+              : "Your tier reduces it."}
+          </p>
+        ) : null}
+
         <p className="text-[11px] leading-snug text-fg-muted">
           Listings start <span className="text-fg-secondary">private</span> and in{" "}
           <span className="text-fg-secondary">draft</span> by default. Mark a listing public and move

@@ -120,16 +120,19 @@ export async function setSessionArchived(formData: FormData): Promise<void> {
   revalidatePath(`/session/${id}`);
 }
 
-// Delete is permanent. The confirm lives in the UI.
+// Delete is permanent. The confirm lives in the UI. Deleting the session you're
+// viewing redirects to /workspace (its page is gone); deleting from a list view
+// (e.g. the Command Center) passes `no_redirect` to stay where you are.
 export async function deleteSession(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
+  const noRedirect = String(formData.get("no_redirect") ?? "") === "true";
   const supabase = createServerClient();
   await supabase.from("sessions").delete().eq("id", id).eq("organization_id", ctx.orgId);
   revalidatePath("/dashboard");
-  redirect("/workspace");
+  if (!noRedirect) redirect("/workspace");
 }
 
 // Share: create a link (scope 'public' read-only via /s/<token>, or 'org').

@@ -140,7 +140,7 @@ export function GuidedTour() {
 
   if (collapsed) {
     return (
-      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-1 rounded-full border border-gold-500/40 bg-surface-1 pr-1 shadow-lg">
+      <div className="fixed bottom-24 right-4 z-40 flex items-center gap-1 rounded-full border border-gold-500/40 bg-surface-1 pr-1 shadow-lg">
         <button
           onClick={() => persistCollapsed(false)}
           className="flex items-center gap-2 rounded-full py-2 pl-3.5 pr-1 text-xs font-medium text-gold-300 transition hover:text-gold-200"
@@ -163,7 +163,7 @@ export function GuidedTour() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[320px] rounded-xl border border-line bg-surface-1 shadow-2xl">
+    <div className="fixed bottom-24 right-4 z-40 w-[320px] rounded-xl border border-line bg-surface-1 shadow-2xl">
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
         <div className="flex items-center gap-2">
           <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
@@ -216,7 +216,7 @@ export function GuidedTour() {
                   aria-label={isDone ? "Mark step incomplete" : "Mark step complete"}
                   className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px] transition ${
                     isDone
-                      ? "border-emerald-400 bg-emerald-400/20 text-emerald-300"
+                      ? "border-status-success bg-status-success/20 text-status-success"
                       : "border-line text-transparent hover:border-gold-500/50"
                   }`}
                 >
@@ -249,7 +249,7 @@ export function GuidedTour() {
         })}
 
         {completed === STEPS.length ? (
-          <p className="px-2.5 py-2 text-center text-xs text-emerald-300">
+          <p className="px-2.5 py-2 text-center text-xs text-status-success">
             🎉 That&rsquo;s the full loop — you&rsquo;ve seen FundExecs OS end to end.
           </p>
         ) : null}

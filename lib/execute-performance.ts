@@ -258,8 +258,8 @@ export const getExecutePerformance = cache(async function getExecutePerformance(
   const supabase = createServerClient();
 
   const [assetsRes, eventsRes, fundsRes] = await Promise.all([
-    supabase.from("assets").select("*").eq("organization_id", orgId),
-    supabase.from("capital_events").select("*").eq("organization_id", orgId),
+    supabase.from("assets").select("*").eq("organization_id", orgId).is("archived_at", null),
+    supabase.from("capital_events").select("*").eq("organization_id", orgId).is("archived_at", null),
     supabase.from("funds").select("*").eq("organization_id", orgId),
   ]);
 

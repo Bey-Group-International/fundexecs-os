@@ -6,12 +6,18 @@ import { AGENTS } from "@/lib/agents";
 import type { Task, Deal, Asset, Artifact, AgentKey } from "@/lib/supabase/database.types";
 import { seedDemoData, clearDemoData } from "./actions";
 import { SessionsSection } from "./SessionsSection";
+import { MissionControl } from "@/components/dashboard/MissionControl";
 import { HottestCapital, PendingGates } from "./CapitalSignals";
 import { Outbox } from "./Outbox";
 import type { Session, SessionGroup, Approval, DispatchLog } from "@/lib/supabase/database.types";
 import { ArtifactCard } from "@/components/ArtifactViewer";
 import { buildCapitalMap } from "@/lib/capital-map";
 import { getBuildReadiness } from "@/lib/build-readiness";
+import { getInboxThreads } from "@/lib/inbox/data";
+import { buildDigest, priorityBucket, type DigestThread } from "@/lib/inbox/intelligence";
+import { channelMeta } from "@/lib/inbox/channels";
+import { dashboardWorkspaces } from "@/lib/dashboard/config";
+import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +42,37 @@ function compactUsd(n: number | null): string | null {
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border border-line bg-surface-1 p-4">
+    <div className="fx-card fx-card-hover group relative overflow-hidden p-4">
+      {/* Top-edge gold hairline that brightens on hover */}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-500/40 to-transparent transition-opacity duration-200 group-hover:via-gold-400/70"
+      />
       <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{label}</p>
-      <p className="mt-1 font-display text-2xl font-semibold text-fg-primary">{value}</p>
+      <p className="mt-1.5 font-display text-3xl font-semibold leading-none tracking-tight text-fg-primary">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+// Standardized section heading — a short gold tick before a mono-cased label,
+// with an optional trailing action. Gives the Command Center a consistent
+// rhythm down the page.
+function SectionHeading({
+  children,
+  action,
+}: {
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fg-muted">
+        <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
+        {children}
+      </h2>
+      {action}
     </div>
   );
 }
@@ -61,6 +95,7 @@ export default async function DashboardPage() {
     dispatchLogRes,
     capitalMap,
     readiness,
+    inboxViews,
   ] = await Promise.all([
     supabase.from("tasks").select("*"),
     supabase
@@ -91,6 +126,9 @@ export default async function DashboardPage() {
     // Build-hub foundation readiness — surfaced here so progress is visible
     // from the Command Center, not just inside the Build hub.
     getBuildReadiness(ctx.orgId),
+    // Unified Inbox threads — surfaced as a digest so the Command Center shows
+    // what's waiting on the operator, not just what Earn produced.
+    getInboxThreads(supabase),
   ]);
 
   const tasks = (allTasksRes.data ?? []) as Task[];
@@ -113,33 +151,112 @@ export default async function DashboardPage() {
   const dealByStage = new Map<string, number>();
   for (const d of deals) dealByStage.set(d.stage, (dealByStage.get(d.stage) ?? 0) + 1);
 
+  // Unified Inbox digest + the few threads that actually need attention today.
+  const inboxDigest = buildDigest(
+    inboxViews.map(({ thread }): DigestThread => ({
+      category: thread.category,
+      status: thread.status,
+      unread: thread.unread,
+      priority: thread.priority,
+    })),
+  );
+  const inboxTop = inboxViews
+    .filter(({ thread }) => thread.status === "open")
+    .slice(0, 4)
+    .map(({ thread, context }) => ({
+      id: thread.id,
+      subject: thread.subject,
+      counterparty: thread.counterparty_name ?? thread.counterparty_email ?? "Unknown",
+      icon: channelMeta(thread.channel).icon,
+      bucket: priorityBucket(thread.priority),
+      contextName: context?.name ?? null,
+    }));
+
   return (
-    <div className="mx-auto max-w-5xl">
-      <header className="mb-6 flex items-start justify-between gap-4">
+    <div className="fx-ambient fx-blueprint mx-auto max-w-6xl">
+      <header className="fx-glass mb-6 flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            <span aria-hidden className="h-4 w-1 rounded-full bg-gradient-to-b from-gold-300 to-gold-500" />
             Command Center
           </span>
-          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
+          <h1 className="mt-2.5 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-4xl">
             Private Markets Command Center
           </h1>
-          <p className="mt-1 text-sm text-fg-secondary">
-            Everything Earn produces, organized.
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">
+            Everything Earn produces, organized into a blue-lit operating surface for deal flow,
+            capital, approvals, and deliverables.
           </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {["Day/night ready", "Desktop optimized", "Mobile compact", "App-safe spacing"].map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-gold-500/25 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <form action={seedDemoData}>
-            <button className="rounded-md bg-gold-500 px-3 py-1.5 text-xs font-medium text-surface-0 transition hover:bg-gold-400">
+            <button className="rounded-lg bg-gold-500 px-3.5 py-2 text-xs font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400 hover:shadow-[0_12px_28px_-14px_rgb(var(--fx-accent-rgb)/0.95)]">
               Load demo data
             </button>
           </form>
           <form action={clearDemoData}>
-            <button className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
+            <button className="rounded-lg border border-line px-3.5 py-2 text-xs text-fg-secondary transition hover:border-line/0 hover:bg-surface-2 hover:text-fg-primary">
               Reset
             </button>
           </form>
         </div>
       </header>
+
+      {/* Mission control — each hub's headline signal + next-best action. */}
+      <div className="mb-6">
+        <MissionControl orgId={ctx.orgId} />
+      </div>
+
+      {/* Entry into the Gather-style spatial office where Earn orchestrates the
+          executive team in real time. */}
+      <Link
+        href="/dashboard/office"
+        className="fx-card fx-card-hover group relative mb-6 flex items-center gap-4 overflow-hidden p-5"
+      >
+        <span
+          aria-hidden
+          className="absolute inset-0 bg-[radial-gradient(60%_120%_at_85%_50%,rgba(56,189,248,0.18),transparent_70%)]"
+        />
+        <div className="relative min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+              Command Center
+            </span>
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+              Live floor
+            </span>
+          </div>
+          <p className="mt-1.5 font-display text-lg font-semibold text-fg-primary">
+            Enter the spatial office
+          </p>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            Watch Earnest Fundmaker delegate across the Mandate, Relationship, Outbound, Diligence, and Capital
+            offices — executives execute in real time.
+          </p>
+        </div>
+        <span className="relative shrink-0 font-mono text-xl text-gold-400 transition group-hover:translate-x-1">
+          →
+        </span>
+      </Link>
+
+      <section className="mb-8">
+        <SectionHeading>Operating workspaces</SectionHeading>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {dashboardWorkspaces.map((workspace) => (
+            <WorkspaceCard key={workspace.key} workspace={workspace} />
+          ))}
+        </div>
+      </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Workflows" value={workflows.length} />
@@ -150,7 +267,7 @@ export default async function DashboardPage() {
 
       <Link
         href="/build"
-        className="mt-3 flex items-center gap-4 rounded-xl border border-line bg-surface-1 p-4 transition hover:border-gold-500/40"
+        className="fx-card fx-card-hover mt-3 flex items-center gap-4 p-4"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -161,16 +278,22 @@ export default async function DashboardPage() {
               {readiness.stage.label}
             </span>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
-            <div className="h-full rounded-full bg-gold-400" style={{ width: `${readiness.overall}%` }} />
+          <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-surface-3/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-gold-500 to-gold-300 shadow-[0_0_12px_rgba(212,175,106,0.5)] transition-[width] duration-500"
+              style={{ width: `${readiness.overall}%` }}
+            />
           </div>
-          <p className="mt-1.5 truncate text-xs text-fg-muted">
+          <p className="mt-2 truncate text-xs text-fg-muted">
             {readiness.nextAction
               ? `Next: ${readiness.nextAction.label} →`
               : "Foundation complete — fundraising-ready."}
           </p>
         </div>
-        <span className="font-display text-2xl font-semibold text-fg-primary">{readiness.overall}%</span>
+        <span className="font-display text-3xl font-semibold tracking-tight text-fg-primary">
+          {readiness.overall}
+          <span className="text-lg text-fg-muted">%</span>
+        </span>
       </Link>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
@@ -178,17 +301,69 @@ export default async function DashboardPage() {
         <PendingGates approvals={pendingGates} />
       </section>
 
+      <section className="mt-8">
+        <SectionHeading
+          action={
+            <Link href="/inbox" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+              Open inbox →
+            </Link>
+          }
+        >
+          Unified Inbox
+        </SectionHeading>
+        {inboxTop.length === 0 ? (
+          <p className="text-sm text-fg-muted">
+            Booking, messaging, and video threads land in your{" "}
+            <Link href="/inbox" className="text-gold-400 hover:underline">
+              unified inbox
+            </Link>
+            , triaged and ranked. Nothing waiting right now.
+          </p>
+        ) : (
+          <div className="fx-card p-4">
+            <p className="mb-3 text-sm text-fg-secondary">{inboxDigest.headline}</p>
+            <div className="flex flex-col gap-2">
+              {inboxTop.map((t) => (
+                <Link
+                  key={t.id}
+                  href="/inbox"
+                  className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-surface-2"
+                >
+                  <span className="font-mono text-base leading-none text-gold-400">{t.icon}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-fg-primary">{t.subject}</span>
+                    <span className="block truncate text-[11px] text-fg-muted">
+                      {t.counterparty}
+                      {t.contextName ? ` · ${t.contextName}` : ""}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 font-mono text-[9px] uppercase tracking-wider ${
+                      t.bucket === "now"
+                        ? "text-status-success"
+                        : t.bucket === "soon"
+                          ? "text-gold-400"
+                          : "text-fg-muted"
+                    }`}
+                  >
+                    {t.bucket}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
       <Outbox rows={dispatches} />
 
       <SessionsSection sessions={sessions} groups={sessionGroups} />
 
       <section className="mt-8">
-        <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
-          AI Agent Workforce
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <SectionHeading>AI Agent Workforce</SectionHeading>
+        <div className="grid gap-3 sm:grid-cols-3">
           {AGENT_GROUPS.map((group) => (
-            <div key={group.label} className="rounded-xl border border-line bg-surface-1 p-4">
+            <div key={group.label} className="fx-card p-4">
               <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
                 {group.label}
               </p>
@@ -196,12 +371,21 @@ export default async function DashboardPage() {
                 {group.keys.map((key) => {
                   const agent = AGENTS.find((a) => a.key === key)!;
                   const count = workload.get(key) ?? 0;
+                  const active = count > 0;
                   return (
                     <div key={key} className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: agent.color }} />
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${active ? "animate-pulse" : ""}`}
+                        style={{
+                          backgroundColor: agent.color,
+                          boxShadow: active ? `0 0 8px ${agent.color}` : "none",
+                        }}
+                      />
                       <span className="text-sm text-fg-primary">{agent.name}</span>
-                      <span className="ml-auto font-mono text-[10px] text-fg-muted">
-                        {count > 0 ? `${count} active` : "idle"}
+                      <span
+                        className={`ml-auto font-mono text-[10px] ${active ? "text-gold-300" : "text-fg-muted"}`}
+                      >
+                        {active ? `${count} active` : "idle"}
                       </span>
                     </div>
                   );
@@ -214,9 +398,7 @@ export default async function DashboardPage() {
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
         <div>
-          <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
-            Recent workflows
-          </h2>
+          <SectionHeading>Recent workflows</SectionHeading>
           <div className="flex flex-col gap-2">
             {workflows.length === 0 ? (
               <p className="text-sm text-fg-muted">
@@ -230,7 +412,7 @@ export default async function DashboardPage() {
             {workflows.map((w) => (
               <div
                 key={w.id}
-                className="flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-2"
+                className="fx-card fx-card-hover flex items-center gap-2 px-3 py-2.5"
               >
                 <span className="truncate text-sm text-fg-primary">{w.title}</span>
                 <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -242,12 +424,10 @@ export default async function DashboardPage() {
         </div>
 
         <div>
-          <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
-            Deal pipeline
-          </h2>
+          <SectionHeading>Deal pipeline</SectionHeading>
           <div className="grid grid-cols-5 gap-1.5">
             {DEAL_STAGES.map((stage) => (
-              <div key={stage} className="rounded-lg border border-line bg-surface-1 p-2 text-center">
+              <div key={stage} className="fx-card p-2 text-center">
                 <p className="font-display text-lg font-semibold text-fg-primary">
                   {dealByStage.get(stage) ?? 0}
                 </p>
@@ -285,9 +465,7 @@ export default async function DashboardPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
-          Latest deliverables
-        </h2>
+        <SectionHeading>Latest deliverables</SectionHeading>
         {artifacts.length === 0 ? (
           <p className="text-sm text-fg-muted">
             Every workflow step now produces a first-class artifact — IC memos,

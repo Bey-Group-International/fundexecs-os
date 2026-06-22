@@ -8,6 +8,16 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { AgentKey, Hub, AssetType } from "@/lib/supabase/database.types";
 import { AGENTS } from "@/lib/agents";
 import { guidanceText } from "@/lib/document-quality";
+import {
+  deriveRouting,
+  engineForStage,
+  executiveForStage,
+  isLifecycleStage,
+  LIFECYCLE_STAGES,
+  type LifecycleStage,
+  type TargetEngine,
+  type Executive,
+} from "@/lib/intelligence";
 
 // Default to Sonnet 4.6 for institutional-quality deliverables.
 // Override with CLAUDE_MODEL env var (e.g. claude-opus-4-8 or claude-haiku-4-5-20251001).
@@ -23,6 +33,11 @@ export interface AgentPlan {
   hub: Hub;
   summary: string;
   steps: PlanStep[];
+  // Intelligence Layer: the planner classifies the lifecycle stage in the same
+  // call; engine and executive are pure functions of it, so routing can't drift.
+  lifecycle_stage: LifecycleStage;
+  target_engine: TargetEngine;
+  assigned_to: Executive;
 }
 
 export interface DealFields {
@@ -57,12 +72,119 @@ function client(): Anthropic | null {
   return apiKey ? new Anthropic({ apiKey }) : null;
 }
 
+// ---------------------------------------------------------------------------
+// Conversational answers — Earn's chat path. When the Intelligence Layer reads
+// a prompt as a question rather than a task, Earn replies directly and
+// conversationally (Claude / ChatGPT / Gemini style) instead of spinning up a
+// gated workflow. The chosen model is honored as a style/persona hint; the
+// engine stays Claude so no extra provider keys are required.
+// ---------------------------------------------------------------------------
+function earnChatSystem(modelLabel: string): string {
+  return (
+    `You are Earn, the command layer of FundExecs OS — an AI operating system for private-market ` +
+    `operators (private equity, family offices, real estate, private credit). Answer the operator's ` +
+    `question directly and conversationally, like a sharp investment partner. Lead with the answer; ` +
+    `be specific, practical, and numerate; prefer short paragraphs or tight bullet lists. Never ` +
+    `fabricate figures — reason from stated facts and flag assumptions. If the request would be ` +
+    `better executed as a multi-step workflow (sourcing, modeling, diligence, outreach, LP work), ` +
+    `answer briefly and offer to run it as a workflow. Respond in the considered, well-structured ` +
+    `style of ${modelLabel}.`
+  );
+}
+
+// Returns a streaming message handle, or null when no API key is configured so
+// the caller can fall back. Earlier turns are replayed so follow-ups build on
+// the conversation.
+export function earnChatStream(args: {
+  body: string;
+  modelLabel: string;
+  priorContext?: string[];
+}) {
+  const anthropic = client();
+  if (!anthropic) return null;
+  const history = (args.priorContext ?? [])
+    .slice(-6)
+    .map((turn) => ({ role: "user" as const, content: turn }));
+  return anthropic.messages.stream({
+    model: MODEL,
+    max_tokens: 1200,
+    // Cache the static persona prompt — it's identical across turns, so this
+    // trims latency and cost on every reply (the planning path caches the same way).
+    system: [{ type: "text", text: earnChatSystem(args.modelLabel), cache_control: { type: "ephemeral" } }],
+    // Chat is latency-sensitive and rarely needs deep reasoning — keep effort low.
+    output_config: { effort: "low" },
+    messages: [...history, { role: "user", content: args.body }],
+  });
+}
+
+const FOLLOWUPS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    suggestions: {
+      type: "array",
+      description: "2-3 short, specific next prompts the operator might send. Imperative or question form.",
+      items: { type: "string" },
+    },
+  },
+  required: ["suggestions"],
+} as const;
+
+// Suggested follow-ups under an answer — 2-3 next prompts. Returns [] with no
+// API key so the UI simply omits them.
+export async function earnFollowups(args: { body: string; reply: string }): Promise<string[]> {
+  const anthropic = client();
+  if (!anthropic || !args.reply.trim()) return [];
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 300,
+      system: [
+        {
+          type: "text",
+          text: "You are Earn inside FundExecs OS. Given the operator's question and your answer, propose 2-3 short, specific follow-up prompts they'd plausibly send next (each one line, under 8 words, no numbering).",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      output_config: { effort: "low", format: { type: "json_schema", schema: FOLLOWUPS_SCHEMA } },
+      messages: [{ role: "user", content: `Question: ${args.body}\n\nAnswer: ${args.reply}` }],
+    });
+    const json = textOf(message);
+    if (!json) return [];
+    const raw = JSON.parse(json) as { suggestions?: unknown };
+    if (!Array.isArray(raw.suggestions)) return [];
+    return raw.suggestions
+      .filter((s): s is string => typeof s === "string")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+// Deterministic reply when no API key is present, so the chat path still
+// responds in fallback mode rather than failing.
+export function earnChatFallback(body: string): string {
+  return (
+    `Earn is in offline mode — no model key is configured, so I can't generate a full answer right now. ` +
+    `Connect ANTHROPIC_API_KEY to enable conversational responses.\n\n` +
+    `You asked: "${body.trim().slice(0, 240)}"`
+  );
+}
+
+
 const PLAN_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
     title: { type: "string", description: "Short title for the overall workflow" },
     hub: { type: "string", enum: HUBS },
+    lifecycle_stage: {
+      type: "string",
+      enum: LIFECYCLE_STAGES,
+      description: "The single private-markets lifecycle stage this request belongs to",
+    },
     summary: { type: "string", description: "One sentence on what the workflow achieves" },
     steps: {
       type: "array",
@@ -79,7 +201,24 @@ const PLAN_SCHEMA = {
       },
     },
   },
-  required: ["title", "hub", "summary", "steps"],
+  required: ["title", "hub", "lifecycle_stage", "summary", "steps"],
+} as const;
+
+// Multi-intent: a prompt may span several DISTINCT lifecycle stages that should
+// be executed and approved independently (e.g. "underwrite the deal AND draft
+// the LP update"). The planner returns 1-3 workflows; one is the common case.
+const PLANS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    workflows: {
+      type: "array",
+      description:
+        "1-3 workflows. Return ONE unless the request clearly spans different lifecycle stages that warrant separate, independently-approved workflows. Never split a single cohesive task.",
+      items: PLAN_SCHEMA,
+    },
+  },
+  required: ["workflows"],
 } as const;
 
 const PLAN_SYSTEM = `You are Earn — the command layer of FundExecs OS, an AI operating system for private-market operators (PE funds, family offices, real estate, private credit).
@@ -99,7 +238,13 @@ Given an operator's prompt, produce a concise multi-step plan. Delegate each ste
 - pr_director: investor decks, CIMs, executive summaries, brand positioning, PR narratives
 - seo_disruptor: content strategy, thought leadership, organic authority, category-defining search presence
 - curator: private investor event design, capital formation salons, room curation, relationship follow-up
-Choose the hub (build/source/run/execute) that best fits the work. Keep to 2-4 steps. Titles are short and imperative.`;
+Choose the hub (build/source/run/execute) that best fits the work. Keep to 2-4 steps. Titles are short and imperative.
+Also classify the request into exactly one lifecycle_stage from the provided enum — the private-markets stage the work belongs to (e.g. Sourcing, Diligence, Underwriting, IC Preparation, Fundraising & LP Engagement, Compliance & Documentation, Portfolio Monitoring). This drives which execution engine the work is routed to.`;
+
+const PLANS_SYSTEM = `${PLAN_SYSTEM}
+
+You may return MULTIPLE workflows, but only when the operator's message clearly bundles work across DIFFERENT lifecycle stages that are best executed and approved separately — for example "underwrite the deal and draft the LP update" (Underwriting + Reporting & Communications), or "build the diligence pack, then prep the IC memo" (Diligence + IC Preparation). Each workflow must have a distinct lifecycle_stage and its summary should describe just its slice of the request.
+Default to ONE workflow. Do NOT split a single cohesive task into pieces, and never return more than 3 workflows. When in doubt, return one.`;
 
 function textOf(message: Anthropic.Message): string {
   return message.content
@@ -121,11 +266,21 @@ function normalizePlan(raw: Partial<AgentPlan> | null, prompt: string): AgentPla
       description: String(s.description ?? "").slice(0, 240),
     }));
   if (steps.length === 0) return fallback;
+  const hub = HUBS.includes(raw.hub as Hub) ? (raw.hub as Hub) : fallback.hub;
+  const agents = steps.map((s) => s.agent);
+  // Trust the planner's lifecycle stage when valid; otherwise classify
+  // deterministically. Engine and executive are derived so they can't diverge.
+  const lifecycle_stage = isLifecycleStage(raw.lifecycle_stage)
+    ? raw.lifecycle_stage
+    : deriveRouting({ prompt, hub, agents }).lifecycle_stage;
   return {
     title: String(raw.title ?? fallback.title).slice(0, 90),
-    hub: HUBS.includes(raw.hub as Hub) ? (raw.hub as Hub) : fallback.hub,
+    hub,
     summary: String(raw.summary ?? fallback.summary).slice(0, 240),
     steps,
+    lifecycle_stage,
+    target_engine: engineForStage(lifecycle_stage),
+    assigned_to: executiveForStage(lifecycle_stage, agents[0] ?? "associate"),
   };
 }
 
@@ -145,7 +300,7 @@ export async function generatePlan(
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 2000,
-      system: PLAN_SYSTEM,
+      system: [{ type: "text", text: PLAN_SYSTEM, cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: { type: "json_schema", schema: PLAN_SCHEMA } },
       messages: [...history, { role: "user", content: prompt }],
     });
@@ -153,6 +308,98 @@ export async function generatePlan(
     return normalizePlan(json ? (JSON.parse(json) as AgentPlan) : null, prompt);
   } catch {
     return fallbackPlan(prompt);
+  }
+}
+
+/**
+ * Normalize a multi-workflow planner response into 1-3 plans. Conservative: it
+ * de-duplicates by lifecycle stage (two workflows with the same stage aren't a
+ * genuine split) and falls back to a single plan when nothing valid comes back.
+ */
+export function normalizePlans(raw: { workflows?: unknown } | null, prompt: string): AgentPlan[] {
+  const arr = raw && Array.isArray(raw.workflows) ? raw.workflows : null;
+  if (!arr || arr.length === 0) return [fallbackPlan(prompt)];
+  const seen = new Set<string>();
+  const plans: AgentPlan[] = [];
+  for (const w of arr) {
+    const plan = normalizePlan(w as Partial<AgentPlan>, prompt);
+    if (seen.has(plan.lifecycle_stage)) continue; // collapse same-stage duplicates
+    seen.add(plan.lifecycle_stage);
+    plans.push(plan);
+    if (plans.length === 3) break; // hard cap
+  }
+  return plans.length ? plans : [fallbackPlan(prompt)];
+}
+
+/**
+ * Plan a prompt into one OR MORE workflows. Returns a single plan in the common
+ * case; multiple only when the request spans distinct lifecycle stages. Holds in
+ * fallback mode (no API key) by returning a single deterministic plan.
+ */
+export async function generatePlans(
+  prompt: string,
+  priorContext: string[] = [],
+): Promise<AgentPlan[]> {
+  const anthropic = client();
+  if (!anthropic) return [fallbackPlan(prompt)];
+  const history = priorContext
+    .slice(-6)
+    .map((turn) => ({ role: "user" as const, content: turn }));
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 3000,
+      system: [{ type: "text", text: PLANS_SYSTEM, cache_control: { type: "ephemeral" } }],
+      output_config: { effort: "low", format: { type: "json_schema", schema: PLANS_SCHEMA } },
+      messages: [...history, { role: "user", content: prompt }],
+    });
+    const json = textOf(message);
+    return normalizePlans(json ? (JSON.parse(json) as { workflows?: unknown }) : null, prompt);
+  } catch {
+    return [fallbackPlan(prompt)];
+  }
+}
+
+const QUESTIONS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    questions: {
+      type: "array",
+      description: "0-3 short clarifying questions. Empty if the request is already clear.",
+      items: { type: "string" },
+    },
+  },
+  required: ["questions"],
+} as const;
+
+// Earn asks the operator: surface the few things it genuinely needs to know to
+// complete the work well. Returns [] when the request is clear — or when there's
+// no API key, so fallback mode never blocks the loop.
+export async function generateClarifyingQuestions(prompt: string): Promise<string[]> {
+  const anthropic = client();
+  if (!anthropic) return [];
+  const CLARIFY_SYSTEM =
+    "You are Earn, the command layer of FundExecs OS. Before executing an operator's request, ask only the clarifying questions that materially change the work (scope, constraints, targets, definitions). Ask nothing if the request is already actionable. Never ask more than 3. Keep each question to one short sentence.";
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      system: [{ type: "text", text: CLARIFY_SYSTEM, cache_control: { type: "ephemeral" } }],
+      output_config: { effort: "low", format: { type: "json_schema", schema: QUESTIONS_SCHEMA } },
+      messages: [{ role: "user", content: prompt }],
+    });
+    const json = textOf(message);
+    if (!json) return [];
+    const raw = JSON.parse(json) as { questions?: unknown };
+    if (!Array.isArray(raw.questions)) return [];
+    return raw.questions
+      .filter((q): q is string => typeof q === "string")
+      .map((q) => q.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  } catch {
+    return [];
   }
 }
 
@@ -263,7 +510,7 @@ export async function extractDealFields(args: {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 600,
-      system: EXTRACT_SYSTEM,
+      system: [{ type: "text", text: EXTRACT_SYSTEM, cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: { type: "json_schema", schema: DEAL_FIELDS_SCHEMA } },
       messages: [{ role: "user", content: extractContent(args) }],
     });
@@ -293,7 +540,7 @@ export async function extractAssetFields(args: {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 600,
-      system: EXTRACT_SYSTEM,
+      system: [{ type: "text", text: EXTRACT_SYSTEM, cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: { type: "json_schema", schema: ASSET_FIELDS_SCHEMA } },
       messages: [{ role: "user", content: extractContent(args) }],
     });
@@ -350,7 +597,16 @@ function fallbackPlan(prompt: string): AgentPlan {
       { agent: "analyst", title: "Execute analysis", description: "Produce the supporting analysis." },
     ];
   }
-  return { title: prompt.trim().slice(0, 80) || "Workflow", hub, summary: "Planned by the Associate.", steps };
+  const det = deriveRouting({ prompt, hub, agents: steps.map((s) => s.agent) });
+  return {
+    title: prompt.trim().slice(0, 80) || "Workflow",
+    hub,
+    summary: "Planned by the Associate.",
+    steps,
+    lifecycle_stage: det.lifecycle_stage,
+    target_engine: det.target_engine,
+    assigned_to: det.assigned_to,
+  };
 }
 
 function fallbackStepOutput(args: { stepTitle: string; agent: AgentKey }): string {

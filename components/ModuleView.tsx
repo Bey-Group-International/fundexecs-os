@@ -26,6 +26,7 @@ import { ExecuteClosingModule } from "@/components/execute/ClosingModule";
 import { ExecuteCapitalEventsModule } from "@/components/execute/CapitalEventsModule";
 import { ExecuteAssetManagementModule } from "@/components/execute/AssetManagementModule";
 import { ExecuteCapTableModule } from "@/components/execute/CapTableModule";
+import { ExecuteOwnershipModule } from "@/components/execute/OwnershipModule";
 import { ExecuteValuationsModule } from "@/components/execute/ValuationsModule";
 import { ExecuteWaterfallModule } from "@/components/execute/WaterfallModule";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
@@ -191,6 +192,7 @@ export async function ModuleView({
       return <ExecuteAssetManagementModule orgId={ctx.orgId} sessionId={sessionId} />;
     if (mod.key === "valuations") return <ExecuteValuationsModule orgId={ctx.orgId} />;
     if (mod.key === "cap_table") return <ExecuteCapTableModule orgId={ctx.orgId} />;
+    if (mod.key === "ownership") return <ExecuteOwnershipModule orgId={ctx.orgId} />;
     if (mod.key === "waterfall") return <ExecuteWaterfallModule orgId={ctx.orgId} />;
     if (mod.key === "reporting") return <ExecuteReportingModule orgId={ctx.orgId} />;
     if (mod.key === "exit") return <ExecuteExitModule orgId={ctx.orgId} />;

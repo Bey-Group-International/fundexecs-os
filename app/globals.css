@@ -3,22 +3,275 @@
 @tailwind utilities;
 
 :root {
-  --background: #0b0a08;
-  --foreground: #f5f1e8;
+  --fx-color-scheme: dark;
+  --fx-surface-0: 5 9 18;
+  --fx-surface-1: 10 17 31;
+  --fx-surface-2: 16 27 46;
+  --fx-surface-3: 24 40 66;
+  --fx-line: 38 61 92;
+  --fx-fg-primary: 241 247 255;
+  --fx-fg-secondary: 175 190 211;
+  --fx-fg-muted: 113 132 158;
+  --fx-accent-300: 125 211 252;
+  --fx-accent-400: 56 189 248;
+  --fx-accent-500: 37 99 235;
+  --fx-accent-rgb: 56 189 248;
+  --fx-accent-strong-rgb: 37 99 235;
+  --background: rgb(var(--fx-surface-0));
+  --foreground: rgb(var(--fx-fg-primary));
+}
+
+html.theme-day {
+  --fx-color-scheme: light;
+  --fx-surface-0: 238 244 252;
+  --fx-surface-1: 248 251 255;
+  --fx-surface-2: 226 236 248;
+  --fx-surface-3: 208 223 242;
+  --fx-line: 178 197 221;
+  --fx-fg-primary: 12 24 44;
+  --fx-fg-secondary: 55 74 103;
+  --fx-fg-muted: 91 112 145;
+  --fx-accent-300: 14 165 233;
+  --fx-accent-400: 37 99 235;
+  --fx-accent-500: 29 78 216;
+  --fx-accent-rgb: 37 99 235;
+  --fx-accent-strong-rgb: 29 78 216;
+  --background: rgb(var(--fx-surface-0));
+  --foreground: rgb(var(--fx-fg-primary));
+}
+
+html.theme-night {
+  --fx-color-scheme: dark;
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: var(--fx-color-scheme);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  min-height: 100dvh;
 }
 
 ::selection {
-  background: rgba(212, 175, 106, 0.3);
+  background: rgb(var(--fx-accent-rgb) / 0.24);
+}
+
+/* Command Center surface language — refined depth & glass. A premium card is a
+   soft top-lit gradient over the surface ramp, a hairline border, and just
+   enough shadow to lift it off the page. The hover variant brightens the border
+   to electric blue and floats the card a hair. */
+@layer components {
+  .fx-card {
+    @apply rounded-2xl border border-line/80 bg-gradient-to-b from-surface-1 to-surface-1/40 shadow-[0_1px_2px_rgb(0_0_0/0.25)];
+  }
+  .fx-card-hover {
+    @apply transition duration-200 hover:-translate-y-px hover:border-gold-500/45 hover:shadow-[0_10px_30px_-16px_rgb(var(--fx-accent-rgb)/0.55)];
+  }
+  /* Glass panel — for the hero/anchor surfaces that should feel set back behind
+     a pane of frosted glass. */
+  .fx-glass {
+    @apply rounded-2xl border border-line/70 bg-surface-1/65 shadow-[0_1px_2px_rgb(0_0_0/0.24)] backdrop-blur-xl;
+  }
+  /* KPI tile — a compact stat cell for the summary rows above each workspace.
+     Slightly brighter top edge so a row of them reads as a single instrument
+     panel. */
+  .fx-stat {
+    @apply rounded-xl border border-line/80 bg-gradient-to-b from-surface-2/70 to-surface-1/30 px-4 py-3 transition duration-200 hover:border-gold-500/30;
+  }
+  /* Segmented control — the pill toggle shared by the graph + marketplace tabs. */
+  .fx-segment {
+    @apply rounded-lg border border-line/80 bg-surface-1/70 p-1 backdrop-blur-sm;
+  }
+  /* Neural console surfaces — a scoped blue data-plane layer for Wallet/Copilot
+     surfaces that need a more technical AI-console treatment without changing
+     the global operating shell. */
+  .fx-neural-panel {
+    @apply relative overflow-hidden rounded-2xl border border-neural-400/25 bg-surface-0/85 shadow-[0_20px_70px_-45px_rgb(var(--fx-accent-rgb)/0.95)];
+  }
+  .fx-neural-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(rgb(var(--fx-accent-rgb) / 0.09) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--fx-accent-rgb) / 0.09) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(circle at 50% 0%, black, transparent 72%);
+  }
+  .fx-neural-panel::after {
+    content: "";
+    position: absolute;
+    inset: -30% -15% auto;
+    height: 260px;
+    pointer-events: none;
+    background: radial-gradient(55% 65% at 50% 20%, rgb(var(--fx-accent-rgb) / 0.24), transparent 72%);
+  }
+  .fx-neural-card {
+    @apply relative overflow-hidden rounded-2xl border border-neural-400/20 bg-[linear-gradient(180deg,rgb(var(--fx-surface-1)/0.96),rgb(var(--fx-surface-0)/0.88))] shadow-[inset_0_1px_0_rgb(var(--fx-accent-rgb)/0.14),0_1px_2px_rgb(0_0_0/0.28)] transition duration-300;
+  }
+  .fx-neural-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, transparent, rgb(var(--fx-accent-rgb) / 0.5), transparent) top left / 140% 1px no-repeat,
+      linear-gradient(180deg, transparent, rgb(var(--fx-accent-rgb) / 0.24), transparent) top right / 1px 120% no-repeat;
+    opacity: 0;
+    transition: opacity 220ms ease;
+  }
+  .fx-neural-card:hover {
+    @apply -translate-y-1 border-neural-400/55 shadow-[0_18px_48px_-28px_rgb(var(--fx-accent-rgb)/0.95)];
+  }
+  .fx-neural-card:hover::before,
+  .fx-neural-card[data-active="true"]::before {
+    opacity: 1;
+  }
+  .fx-data-stream {
+    position: absolute;
+    inset: auto -30% 0;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .fx-data-stream::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgb(var(--fx-accent-rgb) / 0.95), transparent);
+    animation: fxDataStreamCss 1.25s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  }
+  .fx-orbit-card {
+    @apply relative overflow-hidden rounded-[2rem] border border-gold-500/25 bg-surface-1/80 shadow-[0_28px_90px_-52px_rgb(var(--fx-accent-rgb)/0.9)] backdrop-blur-xl;
+  }
+  .fx-orbit-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 50% 30%, rgb(var(--fx-accent-rgb) / 0.2), transparent 34%),
+      linear-gradient(rgb(var(--fx-accent-rgb) / 0.09) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--fx-accent-rgb) / 0.09) 1px, transparent 1px);
+    background-size: auto, 34px 34px, 34px 34px;
+    mask-image: radial-gradient(circle at 50% 35%, black, transparent 78%);
+  }
+  .fx-orbit-card::after {
+    content: "";
+    position: absolute;
+    inset: 18%;
+    border: 1px solid rgb(var(--fx-accent-rgb) / 0.24);
+    border-radius: 9999px;
+    box-shadow:
+      0 0 38px rgb(var(--fx-accent-rgb) / 0.24),
+      inset 0 0 34px rgb(var(--fx-accent-rgb) / 0.08);
+    animation: fxOrbitBreath 5s ease-in-out infinite;
+  }
+  .fx-blueprint {
+    position: relative;
+    isolation: isolate;
+  }
+  .fx-blueprint::before {
+    content: "";
+    position: absolute;
+    inset: -16% -12% auto;
+    height: 420px;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(45% 72% at 70% 8%, rgb(var(--fx-accent-rgb) / 0.22), transparent 74%),
+      radial-gradient(34% 60% at 18% 4%, rgb(var(--fx-accent-strong-rgb) / 0.18), transparent 72%),
+      linear-gradient(rgb(var(--fx-accent-rgb) / 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--fx-accent-rgb) / 0.06) 1px, transparent 1px);
+    background-size: auto, auto, 48px 48px, 48px 48px;
+    mask-image: radial-gradient(circle at 50% 0%, black, transparent 78%);
+  }
+}
+
+/* Ambient blue glow anchored to the top of the Command Center — gives the page
+   a fresh, lit-from-above feel without touching layout. */
+.fx-ambient {
+  position: relative;
+  isolation: isolate;
+}
+.fx-ambient::before {
+  content: "";
+  position: absolute;
+  inset: -10% -20% auto -20%;
+  height: 320px;
+  z-index: -1;
+  background: radial-gradient(60% 100% at 50% 0%, rgb(var(--fx-accent-rgb) / 0.14), transparent 70%);
+  pointer-events: none;
+}
+
+.fx-neural-ambient {
+  position: relative;
+  isolation: isolate;
+}
+.fx-neural-ambient::before {
+  content: "";
+  position: absolute;
+  inset: -8% -20% auto -20%;
+  height: 380px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(45% 70% at 60% 0%, rgb(var(--fx-accent-rgb) / 0.22), transparent 72%),
+    linear-gradient(rgb(var(--fx-accent-rgb) / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--fx-accent-rgb) / 0.06) 1px, transparent 1px);
+  background-size: auto, 44px 44px, 44px 44px;
+  mask-image: radial-gradient(circle at 50% 5%, black, transparent 78%);
+}
+
+@keyframes fxDataStreamCss {
+  0% {
+    opacity: 0;
+    transform: translateX(-120%);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(120%);
+  }
+}
+
+@keyframes fxOrbitBreath {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-neural-ambient *,
+  .fx-neural-ambient *::before,
+  .fx-neural-ambient *::after,
+  .fx-blueprint::before,
+  .fx-orbit-card::after,
+  .fx-neural-panel,
+  .fx-neural-panel::before,
+  .fx-neural-panel::after,
+  .fx-neural-card,
+  .fx-neural-card::before,
+  .fx-data-stream::before {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .fx-neural-card:hover {
+    transform: none;
+  }
 }
 
 /* Print: the investor one-pager exports as a clean light document. App chrome
@@ -33,16 +286,16 @@ body {
   }
 }
 
-/* Thin, warm scrollbars to match the surface ramp */
+/* Thin, blue-tinted scrollbars to match the surface ramp */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2c2820 transparent;
+  scrollbar-color: rgb(var(--fx-line)) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #2c2820;
+  background: rgb(var(--fx-line));
   border-radius: 4px;
 }

@@ -1,4 +1,8 @@
--- 0037_stakeholder_links.sql
+-- 0038_stakeholder_links.sql
+-- (Renumbered from 0037 to resolve a duplicate migration version: two files
+-- shared the 0037 prefix and collided on schema_migrations.version during a
+-- preview-branch replay. The DDL below is idempotent, so re-applying it under
+-- the new version is safe.)
 -- Link cap-table stakeholders to existing identities — a stakeholder may be the
 -- same person as a team member (principal) or the same party as an investor/LP,
 -- so the firm cap table and people/LP records share identities. Optional links;

@@ -155,6 +155,48 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
               {stage.label}
             </span>
+            <Link
+              href="/source/radar"
+              className="ml-auto rounded-md border border-gold-500/60 bg-gold-500/15 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-100 transition hover:bg-gold-500/25"
+            >
+              ✶ Radar
+            </Link>
+            <Link
+              href="/source/search"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            >
+              ✶ AI Search
+            </Link>
+            <Link
+              href="/source/triage"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            >
+              ✶ Triage
+            </Link>
+            <Link
+              href="/source/intel"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            >
+              ✶ Intelligence
+            </Link>
+            <Link
+              href="/source/outreach"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            >
+              ✶ Outreach
+            </Link>
+            <Link
+              href="/source/signals"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            >
+              ✶ Signals
+            </Link>
+            <Link
+              href="/source/buyers"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            >
+              ✶ Buyers
+            </Link>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
 
