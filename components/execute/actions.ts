@@ -87,6 +87,14 @@ const EARN_TASKS: Record<string, string> = {
     "Acting as the Analyst: produce a fair-value mark for this specific holding — method, key assumptions, comps, and a recommended current value with a short rationale.",
   waterfall_model:
     "Acting as Fund Admin: model a distribution waterfall for a proposed distribution — return of capital, preferred return, GP catch-up, and carry split — and give the per-LP allocation by ownership share.",
+  tax_k1:
+    "Acting as Fund Admin: prepare per-LP K-1 tax allocations for the year from our books — allocate ordinary income, capital gains, and expenses by ownership share, and roll each holder's tax capital account forward (beginning, contributions, distributions, allocated income, ending). Flag any estimate that needs a fund-administrator review.",
+  exit_model:
+    "Acting as the Analyst: model exit scenarios for the portfolio across a range of exit values — run each through the distribution waterfall and show gross MOIC, LP net multiple, and annualized IRR over the hold, plus the exit value at which LPs clear their preferred return.",
+  valuation_409a:
+    "Acting as the Analyst: produce a 409A-style fair-value conclusion for the portfolio — weigh the income, market, and cost approaches per holding, apply a defensible discount for lack of marketability where warranted, and reconcile the concluded value against the carried mark.",
+  secondary_model:
+    "Acting as Fund Admin: model a secondary transfer of an LP position — the committed, called, distributed, and unfunded amounts changing hands, the NAV share transferred, and the premium or discount to NAV the price implies — and show the resulting cap-table impact for both seller and buyer.",
 };
 
 export async function runWithEarn(formData: FormData): Promise<void> {
@@ -267,6 +275,84 @@ export async function recordCapitalRun(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/execute/capital_events");
+  revalidatePath("/execute/cap_table");
+  revalidatePath("/execute/ownership");
+}
+
+// --- Secondary transfer (Tier 3 — always operator sign-off) ----------------
+// Books an LP secondary: move a fraction of a seller's commitment to a buyer in
+// the same fund. Splits the seller's capital account (committed / called /
+// distributed) and rolls the transferred amounts onto the buyer's commitment
+// (creating it if the buyer is new to the fund). A change of ownership is Tier 3
+// — never delegable — so this only runs on an explicit operator confirm (the UI
+// previews the transfer and premium/discount to NAV first). The negotiated price
+// is informational here: it changes hands between LPs, not on the fund's books.
+export async function recordSecondaryTransfer(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const sellerCommitmentId = String(formData.get("seller_commitment_id") ?? "");
+  const buyerInvestorId = String(formData.get("buyer_investor_id") ?? "");
+  const fraction = Number(String(formData.get("fraction") ?? "").trim());
+  if (!sellerCommitmentId || !buyerInvestorId) return;
+  if (!Number.isFinite(fraction) || fraction <= 0) return;
+  const f = fraction >= 1 ? 1 : fraction;
+
+  const supabase = createServerClient();
+  const { data: seller } = await supabase
+    .from("commitments")
+    .select("id, fund_id, investor_id, committed_amount, called_amount, distributed_amount")
+    .eq("id", sellerCommitmentId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (!seller || seller.investor_id === buyerInvestorId) return;
+
+  const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
+  const xCommitted = round2((seller.committed_amount ?? 0) * f);
+  const xCalled = round2((seller.called_amount ?? 0) * f);
+  const xDistributed = round2((seller.distributed_amount ?? 0) * f);
+  if (xCommitted <= 0) return;
+
+  // Reduce the seller's position.
+  await supabase
+    .from("commitments")
+    .update({
+      committed_amount: round2((seller.committed_amount ?? 0) - xCommitted),
+      called_amount: round2((seller.called_amount ?? 0) - xCalled),
+      distributed_amount: round2((seller.distributed_amount ?? 0) - xDistributed),
+    })
+    .eq("id", seller.id)
+    .eq("organization_id", ctx.orgId);
+
+  // Roll onto the buyer's commitment in the same fund — create it if new.
+  const { data: buyer } = await supabase
+    .from("commitments")
+    .select("id, committed_amount, called_amount, distributed_amount")
+    .eq("organization_id", ctx.orgId)
+    .eq("fund_id", seller.fund_id)
+    .eq("investor_id", buyerInvestorId)
+    .maybeSingle();
+
+  if (buyer) {
+    await supabase
+      .from("commitments")
+      .update({
+        committed_amount: round2((buyer.committed_amount ?? 0) + xCommitted),
+        called_amount: round2((buyer.called_amount ?? 0) + xCalled),
+        distributed_amount: round2((buyer.distributed_amount ?? 0) + xDistributed),
+      })
+      .eq("id", buyer.id)
+      .eq("organization_id", ctx.orgId);
+  } else {
+    await supabase.from("commitments").insert({
+      organization_id: ctx.orgId,
+      fund_id: seller.fund_id,
+      investor_id: buyerInvestorId,
+      committed_amount: xCommitted,
+      called_amount: xCalled,
+      distributed_amount: xDistributed,
+    });
+  }
+
   revalidatePath("/execute/cap_table");
   revalidatePath("/execute/ownership");
 }
