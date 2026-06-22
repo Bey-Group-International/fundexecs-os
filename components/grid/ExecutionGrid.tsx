@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { engineSlug, type EnginePane } from "@/lib/execution-grid";
+import { RerouteControl } from "@/components/grid/RerouteControl";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
@@ -92,20 +93,21 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
                       </span>
                     </span>
                   );
-                  return wf.session_id ? (
-                    <Link
-                      key={wf.id}
-                      href={`/session/${wf.session_id}`}
-                      className="group rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs transition hover:border-gold-500/40"
-                    >
-                      {inner}
-                    </Link>
-                  ) : (
-                    <div
-                      key={wf.id}
-                      className="rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs"
-                    >
-                      {inner}
+                  return (
+                    <div key={wf.id} className="flex items-center gap-1.5">
+                      {wf.session_id ? (
+                        <Link
+                          href={`/session/${wf.session_id}`}
+                          className="group min-w-0 flex-1 rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs transition hover:border-gold-500/40"
+                        >
+                          {inner}
+                        </Link>
+                      ) : (
+                        <div className="min-w-0 flex-1 rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs">
+                          {inner}
+                        </div>
+                      )}
+                      <RerouteControl workflowId={wf.id} currentEngine={pane.engine} />
                     </div>
                   );
                 })
