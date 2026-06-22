@@ -91,9 +91,17 @@ is missing/new and can trigger re-application or errors. So we never touch
 historical files — the fix is **forward-only**: adopt timestamps from here on.
 
 **Enforced in CI.** `lib/migrations-naming.test.ts` fails any migration that is
-neither a grandfathered legacy `00NN_*.sql` file (the set that exists today) nor
-a valid 14-digit timestamp file. `lib/migrations-unique.test.ts` additionally
-guards against duplicate version prefixes. Run `npm test` before opening a PR.
+neither a grandfathered legacy `00NN_*.sql` file (numeric prefix ≤ the fixed
+`LEGACY_MAX` cutoff, the highest legacy number at adoption) nor a valid 14-digit
+timestamp file — so a *new* `00NN` file fails the build rather than slipping
+through. `lib/migrations-unique.test.ts` additionally guards against duplicate
+version prefixes. Run `npm test` before opening a PR.
+
+> **Maintainers:** make the **`test`** workflow a **required status check** on
+> `main` (Settings → Branches → branch protection). These guards only prevent bad
+> migrations from reaching `main` if a red suite actually blocks merge; without
+> the required check, duplicate-prefix collisions can still merge and need
+> cleanup after the fact.
 
 ## Pull requests
 
