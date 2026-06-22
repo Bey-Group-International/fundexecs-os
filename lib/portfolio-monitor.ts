@@ -13,6 +13,9 @@
 import * as React from "react";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Asset, ValuationMark, Fund } from "@/lib/supabase/database.types";
+import { portfolioSeries, type SeriesPoint } from "@/lib/valuation-series";
+
+export type { SeriesPoint };
 
 // React's per-request cache exists only in the Next runtime; identity fallback for jest.
 const cache: <T extends (...args: never[]) => unknown>(fn: T) => T =
@@ -68,6 +71,8 @@ export interface PortfolioMonitor {
   totals: PortfolioTotals;
   assets: PortfolioAsset[];
   alerts: PortfolioAlert[];
+  /** Portfolio NAV over time, rolled up from the valuation-mark trail. */
+  navSeries: SeriesPoint[];
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +256,7 @@ const EMPTY: PortfolioMonitor = {
   },
   assets: [],
   alerts: [],
+  navSeries: [],
 };
 
 /** Reduce all marks for the org to the latest (max as_of) value per asset. */
@@ -279,7 +285,7 @@ export const getPortfolioMonitor = cache(
       const { data: assetRows } = await supabase
         .from("assets")
         .select(
-          "id, name, asset_type, fund_id, acquisition_cost, current_value, status",
+          "id, name, asset_type, fund_id, acquisition_date, acquisition_cost, current_value, status",
         )
         .eq("organization_id", orgId)
         .is("archived_at", null);
@@ -351,11 +357,23 @@ export const getPortfolioMonitor = cache(
 
       const alerts = portfolioAlerts(portfolioAssets);
 
+      // Portfolio NAV over time, rolled up from the held assets' mark trail.
+      const navSeries = portfolioSeries(
+        held.map((a) => ({
+          id: a.id,
+          acquisition_date: a.acquisition_date,
+          acquisition_cost: a.acquisition_cost,
+          current_value: a.current_value,
+        })),
+        marks.map((m) => ({ asset_id: m.asset_id, as_of: m.as_of, value: m.value })),
+      );
+
       return {
         hasData: true,
         totals,
         assets: portfolioAssets,
         alerts,
+        navSeries,
       };
     } catch {
       return EMPTY;

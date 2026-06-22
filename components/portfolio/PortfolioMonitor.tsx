@@ -5,6 +5,8 @@
 // Renders a totals strip, an alerts list, and a held-asset table sorted by NAV.
 import Link from "next/link";
 import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
+import { Sparkline } from "@/components/execute/Sparkline";
+import { ReviewConcentrationButton } from "@/components/portfolio/ReviewConcentrationButton";
 import type {
   PortfolioMonitor as PortfolioMonitorData,
   PortfolioAsset,
@@ -103,6 +105,27 @@ function TotalsStrip({ data }: { data: PortfolioMonitorData }) {
       <TotalCard label="Weighted MOIC" value={moicLabel(totals.weightedMoic)} />
       <TotalCard label="Held assets" value={String(totals.heldCount)} />
     </div>
+  );
+}
+
+function NavTrend({ series }: { series: { date: string; value: number }[] }) {
+  if (series.length < 2) return null;
+  const first = series[0].value;
+  const last = series[series.length - 1].value;
+  const delta = first !== 0 ? ((last - first) / Math.abs(first)) * 100 : 0;
+  return (
+    <section className="rounded-xl border border-line bg-surface-1 p-4">
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          NAV over time
+        </div>
+        <div className={`font-mono text-[10px] tabular-nums ${gainClass(delta)}`}>
+          {delta > 0 ? "+" : ""}
+          {delta.toFixed(1)}%
+        </div>
+      </div>
+      <Sparkline values={series.map((p) => p.value)} className="mt-2 h-12 w-full" />
+    </section>
   );
 }
 
@@ -265,7 +288,11 @@ export function PortfolioMonitor({ data }: { data: PortfolioMonitorData }) {
   return (
     <div className="flex flex-col gap-8">
       <TotalsStrip data={data} />
-      <AlertsList alerts={data.alerts} />
+      <NavTrend series={data.navSeries} />
+      <section className="flex flex-col gap-3">
+        <AlertsList alerts={data.alerts} />
+        <ReviewConcentrationButton />
+      </section>
       <AssetsTable assets={data.assets} />
     </div>
   );
