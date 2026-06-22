@@ -5,12 +5,19 @@
 import {
   SUBJECT_VARIANTS,
   SUBJECT_LINE_EXPERIMENT,
+  SEND_TIME_EXPERIMENT,
+  SEND_TIME_VARIANTS,
   findVariant,
+  findSendTimeVariant,
   pickVariant,
+  pickSendTimeVariant,
   summarizeVariantPerformance,
+  summarizeByExperiment,
   type SubjectVariant,
+  type SendTimeVariant,
   type SubjectContext,
   type VariantEngagementRow,
+  type KeyedVariantEngagementRow,
 } from "@/lib/digest-experiments";
 
 const ctx = (over: Partial<SubjectContext> = {}): SubjectContext => ({
@@ -146,5 +153,113 @@ describe("summarizeVariantPerformance", () => {
     const a = summarizeVariantPerformance(rows);
     const b = summarizeVariantPerformance([...rows].reverse());
     expect(a).toEqual(b);
+  });
+});
+
+describe("send-time experiment", () => {
+  it("exposes a stable, distinct experiment key", () => {
+    expect(SEND_TIME_EXPERIMENT).toBe("send_time");
+    expect(SEND_TIME_EXPERIMENT).not.toBe(SUBJECT_LINE_EXPERIMENT);
+  });
+
+  it("has a small set of non-overlapping hour-of-day windows", () => {
+    expect(SEND_TIME_VARIANTS.length).toBeGreaterThan(1);
+    for (const v of SEND_TIME_VARIANTS) {
+      expect(v.startHour).toBeGreaterThanOrEqual(0);
+      expect(v.endHour).toBeGreaterThan(v.startHour);
+      expect(v.endHour).toBeLessThanOrEqual(24);
+      expect(v.key.length).toBeGreaterThan(0);
+      expect(v.label.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("findSendTimeVariant resolves a known key and rejects unknown", () => {
+    expect(findSendTimeVariant("morning")?.key).toBe("morning");
+    expect(findSendTimeVariant("nope")).toBeUndefined();
+  });
+
+  describe("pickSendTimeVariant", () => {
+    it("is deterministic: same (org, period) → same window", () => {
+      const a = pickSendTimeVariant("org-1", "2026-06-22");
+      const b = pickSendTimeVariant("org-1", "2026-06-22");
+      expect(a.key).toBe(b.key);
+    });
+
+    it("always returns one of the supplied windows", () => {
+      const valid = new Set(SEND_TIME_VARIANTS.map((v) => v.key));
+      for (let i = 0; i < 20; i++) {
+        expect(valid.has(pickSendTimeVariant(`org-${i}`, "2026-06-22").key)).toBe(true);
+      }
+    });
+
+    it("reshuffles across periods so an org sees more than one window", () => {
+      const keys = new Set(
+        Array.from({ length: 50 }, (_, i) => pickSendTimeVariant("org-1", `2026-W${i}`).key),
+      );
+      expect(keys.size).toBeGreaterThan(1);
+    });
+
+    it("is INDEPENDENT of the subject-line pick (different salt)", () => {
+      // Over many (org, period) pairs the send-time index and subject index must
+      // not be locked together — at least one pair where they disagree proves the
+      // two experiments aren't correlated.
+      let disagreements = 0;
+      for (let i = 0; i < 100; i++) {
+        const period = `2026-D${i}`;
+        const subjIdx = SUBJECT_VARIANTS.findIndex(
+          (v) => v.key === pickVariant("org-x", period).key,
+        );
+        const timeIdx = SEND_TIME_VARIANTS.findIndex(
+          (v) => v.key === pickSendTimeVariant("org-x", period).key,
+        );
+        if (subjIdx !== timeIdx) disagreements++;
+      }
+      expect(disagreements).toBeGreaterThan(0);
+    });
+
+    it("respects a custom window list and throws on empty", () => {
+      const only: SendTimeVariant[] = [
+        { key: "solo", label: "Solo", startHour: 9, endHour: 10 },
+      ];
+      expect(pickSendTimeVariant("any", "any", only).key).toBe("solo");
+      expect(() => pickSendTimeVariant("o", "p", [])).toThrow();
+    });
+  });
+});
+
+describe("summarizeByExperiment", () => {
+  it("returns an empty map for no rows", () => {
+    expect(summarizeByExperiment([])).toEqual({});
+  });
+
+  it("summarizes each experiment_key independently from the same stream", () => {
+    const rows: KeyedVariantEngagementRow[] = [
+      { experimentKey: SUBJECT_LINE_EXPERIMENT, variant: "control", opens: 1, clicks: 0 },
+      { experimentKey: SUBJECT_LINE_EXPERIMENT, variant: "urgent", opens: 1, clicks: 1 },
+      { experimentKey: SEND_TIME_EXPERIMENT, variant: "morning", opens: 0, clicks: 0 },
+      { experimentKey: SEND_TIME_EXPERIMENT, variant: "midday", opens: 1, clicks: 1 },
+    ];
+    const out = summarizeByExperiment(rows);
+    expect(Object.keys(out).sort()).toEqual(
+      [SEND_TIME_EXPERIMENT, SUBJECT_LINE_EXPERIMENT].sort(),
+    );
+    expect(out[SUBJECT_LINE_EXPERIMENT].leader).toBe("urgent");
+    expect(out[SEND_TIME_EXPERIMENT].leader).toBe("midday");
+    // Buckets don't leak into each other.
+    const subjectVariants = new Set(
+      out[SUBJECT_LINE_EXPERIMENT].variants.map((v) => v.variant),
+    );
+    expect(subjectVariants.has("morning")).toBe(false);
+  });
+
+  it("is order-independent for the same multiset of rows", () => {
+    const rows: KeyedVariantEngagementRow[] = [
+      { experimentKey: "send_time", variant: "morning", opens: 2, clicks: 1 },
+      { experimentKey: "subject_line", variant: "control", opens: 1, clicks: 0 },
+      { experimentKey: "send_time", variant: "morning", opens: 0, clicks: 0 },
+    ];
+    expect(summarizeByExperiment(rows)).toEqual(
+      summarizeByExperiment([...rows].reverse()),
+    );
   });
 });

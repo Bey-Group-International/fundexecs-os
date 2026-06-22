@@ -18,8 +18,11 @@ import { buildRadar } from "@/lib/source-radar";
 import { composeDigest, type DigestItem } from "@/lib/radar-digest";
 import {
   pickVariant,
+  pickSendTimeVariant,
   SUBJECT_LINE_EXPERIMENT,
+  SEND_TIME_EXPERIMENT,
   type SubjectVariant,
+  type SendTimeVariant,
 } from "@/lib/digest-experiments";
 import { dispatchAction } from "@/lib/integrations";
 
@@ -214,9 +217,18 @@ export async function sendRadarDigests(supabase: Client): Promise<RadarSendSumma
       // stable within a period and a test can pin it. The variant rewrites only
       // the subject/header (lib/digest-experiments); the default path is untouched
       // when 'control' is chosen.
+      const periodKeyForRun = periodKey(cadence, now);
       const variant: SubjectVariant = pickVariant(
         pref.organization_id,
-        periodKey(cadence, now),
+        periodKeyForRun,
+      );
+      // Independent send-time A/B assignment for the same (org, period). Same
+      // ledger table, experiment_key='send_time'; recorded + measurable via the
+      // same engagement telemetry. (Does not yet gate delivery to the window —
+      // that's a follow-up; see PR notes.)
+      const sendTimeVariant: SendTimeVariant = pickSendTimeVariant(
+        pref.organization_id,
+        periodKeyForRun,
       );
       const variantSubject = variant.render({
         defaultSubject: preview.emailSubject,
@@ -264,12 +276,20 @@ export async function sendRadarDigests(supabase: Client): Promise<RadarSendSumma
       // digest_log_id to attribute opens/clicks back to the variant.
       if (digestLogId) {
         try {
-          await supabase.from("digest_experiment_variants").insert({
-            organization_id: pref.organization_id,
-            digest_log_id: digestLogId,
-            experiment_key: SUBJECT_LINE_EXPERIMENT,
-            variant: variant.key,
-          });
+          await supabase.from("digest_experiment_variants").insert([
+            {
+              organization_id: pref.organization_id,
+              digest_log_id: digestLogId,
+              experiment_key: SUBJECT_LINE_EXPERIMENT,
+              variant: variant.key,
+            },
+            {
+              organization_id: pref.organization_id,
+              digest_log_id: digestLogId,
+              experiment_key: SEND_TIME_EXPERIMENT,
+              variant: sendTimeVariant.key,
+            },
+          ]);
         } catch {
           // swallow — telemetry only, never block the send.
         }
@@ -391,4 +411,119 @@ export async function sendRadarDigests(supabase: Client): Promise<RadarSendSumma
   }
 
   return { orgsConsidered: prefs.length, delivered, results };
+}
+
+// --- Single-org test send ----------------------------------------------------
+
+export interface TestDigestResult {
+  /** True when the digest was composed + handed to dispatch without error. */
+  ok: boolean;
+  /** The channel that handled it ("in_app" | "slack" | "email"). */
+  channel: string;
+  /** How many rows cleared the bar (0 = empty-state brief). */
+  itemCount: number;
+  /** True only when a real external call was made (mock mode → false). */
+  live: boolean;
+  /** Human-readable outcome, surfaced to the operator. */
+  detail: string;
+  error?: string;
+}
+
+/**
+ * Build + dispatch ONE org's digest immediately to a single channel — the engine
+ * behind the "Send me a test digest now" action. Additive: it reuses the same
+ * compose path (lib/radar-digest) and dispatch layer (lib/integrations) as the
+ * sweep, but bypasses cadence/due gating (a test is always "due") and does NOT
+ * write the radar_digest_log / A/B ledger (a preview is not a tracked send).
+ *
+ * Mock-or-real safe: with no provider creds the dispatch layer returns a
+ * well-formed "prepared" result (live=false), so a test send works in any
+ * environment. Never throws — failures come back as { ok:false }.
+ *
+ * `pref` is the channel/recipient/min_score config to preview with; callers can
+ * synthesize one when an org has no saved row yet.
+ */
+export async function sendTestDigestForOrg(
+  supabase: Client,
+  orgId: string,
+  pref: Pick<RadarDigestPref, "channel" | "recipient" | "cadence" | "min_score">,
+): Promise<TestDigestResult> {
+  const channel = pref.channel;
+  try {
+    const items = await buildRadar(supabase, orgId, { limit: 20 });
+    const cadence = (pref.cadence === "weekly" ? "weekly" : "daily") as "daily" | "weekly";
+    const payload = composeDigest(items, {
+      minScore: pref.min_score,
+      cadence,
+      baseUrl: process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || undefined,
+      subject: `[Test] ${composeDigest(items, { minScore: pref.min_score, cadence }).emailSubject}`,
+    });
+
+    if (channel === "in_app") {
+      const ok = await deliverInApp(
+        supabase,
+        orgId,
+        payload.emailSubject,
+        payload.inAppSummary,
+        payload.emailBody.text,
+        payload.topItems[0]?.score ?? 0,
+      );
+      return {
+        ok,
+        channel,
+        itemCount: payload.count,
+        live: ok,
+        detail: ok ? "Test digest dropped into your Unified Inbox." : "Inbox write failed.",
+        error: ok ? undefined : "inbox write failed",
+      };
+    }
+
+    if (channel === "slack") {
+      const res = await dispatchAction({
+        orgId,
+        actorId: "system",
+        action: "distribute_report",
+        channel: "slack",
+        target: { name: pref.recipient ?? undefined, email: pref.recipient ?? undefined },
+        subject: payload.emailSubject,
+        body: payload.slackMarkdown,
+      });
+      return {
+        ok: res.ok,
+        channel,
+        itemCount: payload.count,
+        live: res.live,
+        detail: res.detail,
+        error: res.error,
+      };
+    }
+
+    // email
+    const res = await dispatchAction({
+      orgId,
+      actorId: "system",
+      action: "distribute_report",
+      channel: "gmail",
+      target: { email: pref.recipient ?? undefined },
+      subject: payload.emailSubject,
+      body: payload.emailBody.text,
+    });
+    return {
+      ok: res.ok,
+      channel,
+      itemCount: payload.count,
+      live: res.live,
+      detail: res.detail,
+      error: res.error,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      channel,
+      itemCount: 0,
+      live: false,
+      detail: "Could not build the test digest.",
+      error: e instanceof Error ? e.message : "unknown",
+    };
+  }
 }
