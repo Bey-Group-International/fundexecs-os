@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
+import { planRun, type CommitmentLike, type RunKind } from "@/lib/capital-ops";
 import type { AssetType } from "@/lib/supabase/database.types";
 
 // Best-effort map a deal's free-text asset class onto the asset_type enum so a
@@ -180,4 +181,92 @@ export async function recordValuationMark(formData: FormData): Promise<void> {
     .eq("organization_id", ctx.orgId);
 
   revalidatePath("/execute/valuations");
+}
+
+// --- Agent-run capital operations (Tier 3 — always operator sign-off) -------
+// Books a capital call or distribution RUN to the ledger: allocate across the
+// fund's commitments pro-rata (planRun), write one capital_event per LP, and
+// roll the amounts onto the commitments and the fund. Capital movement is Tier
+// 3 in the gate layer — never delegable — so this only runs on an explicit
+// operator confirm (the UI previews the allocation first).
+export async function recordCapitalRun(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const fundId = String(formData.get("fund_id") ?? "");
+  const kind = String(formData.get("kind") ?? "") as RunKind;
+  const amount = Number(String(formData.get("amount") ?? "").trim());
+  if (!fundId || (kind !== "capital_call" && kind !== "distribution")) return;
+  if (!Number.isFinite(amount) || amount <= 0) return;
+
+  const supabase = createServerClient();
+  const { data: fund } = await supabase
+    .from("funds")
+    .select("id, called_capital, distributed_capital")
+    .eq("id", fundId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (!fund) return;
+
+  const { data: commitRows } = await supabase
+    .from("commitments")
+    .select("id, investor_id, committed_amount, called_amount, distributed_amount")
+    .eq("organization_id", ctx.orgId)
+    .eq("fund_id", fundId);
+  const commitments = (commitRows ?? []) as CommitmentLike[];
+  if (commitments.length === 0) return;
+
+  const plan = planRun(kind, commitments, amount);
+  if (plan.totalAllocated <= 0) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const reference = String(formData.get("reference") ?? "").trim() || null;
+  const byId = new Map(commitments.map((c) => [c.id, c]));
+
+  for (const a of plan.allocations) {
+    if (a.allocation <= 0) continue;
+    await supabase.from("capital_events").insert({
+      organization_id: ctx.orgId,
+      fund_id: fundId,
+      investor_id: a.investorId,
+      event_type: kind,
+      amount: a.allocation,
+      currency: "USD",
+      effective_date: today,
+      reference,
+    });
+    const c = byId.get(a.commitmentId)!;
+    if (kind === "capital_call") {
+      await supabase
+        .from("commitments")
+        .update({ called_amount: (c.called_amount ?? 0) + a.allocation })
+        .eq("id", a.commitmentId)
+        .eq("organization_id", ctx.orgId);
+    } else {
+      await supabase
+        .from("commitments")
+        .update({ distributed_amount: (c.distributed_amount ?? 0) + a.allocation })
+        .eq("id", a.commitmentId)
+        .eq("organization_id", ctx.orgId);
+    }
+  }
+
+  // Roll the fund aggregate so the command center (which prefers fund totals)
+  // stays consistent with the per-LP ledger.
+  if (kind === "capital_call") {
+    await supabase
+      .from("funds")
+      .update({ called_capital: (fund.called_capital ?? 0) + plan.totalAllocated })
+      .eq("id", fundId)
+      .eq("organization_id", ctx.orgId);
+  } else {
+    await supabase
+      .from("funds")
+      .update({ distributed_capital: (fund.distributed_capital ?? 0) + plan.totalAllocated })
+      .eq("id", fundId)
+      .eq("organization_id", ctx.orgId);
+  }
+
+  revalidatePath("/execute/capital_events");
+  revalidatePath("/execute/cap_table");
+  revalidatePath("/execute/ownership");
 }
