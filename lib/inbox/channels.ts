@@ -34,6 +34,9 @@ export const INBOX_CHANNELS: Record<InboxChannel, ChannelMeta> = {
   ecosystem: { channel: "ecosystem", label: "Ecosystem", category: "messaging", icon: "◈" },
   // A deal shared across the ecosystem that fits this org (lib/deal-share).
   deal_share: { channel: "deal_share", label: "Deal flow", category: "messaging", icon: "◆" },
+  // The recurring Act-now Radar digest — the ranked sourcing brief delivered
+  // in-app (lib/radar-digest, lib/radar-send).
+  radar_digest: { channel: "radar_digest", label: "Radar digest", category: "messaging", icon: "◎" },
 };
 
 export interface CategoryMeta {
