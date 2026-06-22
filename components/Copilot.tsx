@@ -28,6 +28,7 @@ import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
 import { ModelCompare, estimateTokens, type ModelComparison } from "@/components/ModelCompare";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
+import { RerouteControl } from "@/components/grid/RerouteControl";
 
 // A conversational turn rendered in the transcript. Chat turns are Earn's
 // answer path (ungated) and live in client state alongside the workflow turns.
@@ -1915,6 +1916,9 @@ function WorkflowCard({
             </div>
           </div>
         ) : null}
+        {/* Operator override: re-route this workflow to a different engine
+            without leaving the Copilot card. */}
+        <RerouteControl workflowId={workflow.id} currentEngine={routing.target_engine} />
       </div>
 
       {pending ? (
