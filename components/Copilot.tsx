@@ -28,12 +28,17 @@ interface ChatTurn {
   id: string;
   role: "you" | "earn";
   content: string;
+  // Creation time, so chat and workflow turns interleave by order in the rail.
+  ts: number;
   streaming?: boolean;
   // For an Earn turn: the question that produced it (drives Regenerate) and the
   // suggested next prompts.
   sourcePrompt?: string;
   followups?: string[];
 }
+
+// localStorage key for the remembered split ratio.
+const PANE_KEY = "fx-copilot-pane";
 
 // Slash commands the composer offers from the "+" menu. Selecting one drops a
 // ready-to-fill prompt scaffold into the input so the operator only supplies
@@ -130,6 +135,13 @@ export default function Copilot({
   // Which integration row in the submenu is expanded to reveal its operational
   // actions.
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
+  // Split-pane (Cursor/Tasklet) state: which workflow the work canvas shows,
+  // the conversation pane's width %, and which pane is visible on mobile.
+  const [focusedWorkflowId, setFocusedWorkflowId] = useState<string | null>(null);
+  const [leftPct, setLeftPct] = useState(50);
+  const [mobileTab, setMobileTab] = useState<"chat" | "work">("chat");
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  const draggingRef = useRef(false);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -159,6 +171,47 @@ export default function Copilot({
       document.removeEventListener("keydown", onKey);
     };
   }, [openMenu]);
+
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  // Restore the remembered split ratio and track the desktop breakpoint (the
+  // split is side-by-side on desktop, tabbed on mobile).
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem(PANE_KEY));
+    if (Number.isFinite(saved) && saved >= 28 && saved <= 72) setLeftPct(saved);
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  // Drag the divider to resize the conversation pane (desktop). Clamped so
+  // neither side collapses; the chosen ratio is remembered.
+  useEffect(() => {
+    function onMove(e: PointerEvent) {
+      if (!draggingRef.current || !splitRef.current) return;
+      const rect = splitRef.current.getBoundingClientRect();
+      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      const clamped = Math.min(72, Math.max(28, pct));
+      setLeftPct(clamped);
+    }
+    function onUp() {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      document.body.style.userSelect = "";
+      setLeftPct((p) => {
+        window.localStorage.setItem(PANE_KEY, String(Math.round(p)));
+        return p;
+      });
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
 
   // Keep the newest turn in view as the conversation grows — chat behavior.
   useEffect(() => {
@@ -252,13 +305,14 @@ export default function Copilot({
     setAttachments([]);
     setVoiceUsed(false);
 
-    const youId = `you-${Date.now()}`;
-    const earnId = `earn-${Date.now()}`;
+    const now = Date.now();
+    const youId = `you-${now}`;
+    const earnId = `earn-${now}`;
     const prior = chatTurns.filter((t) => t.role === "you").map((t) => t.content);
     setChatTurns((prev) => [
       ...prev,
-      { id: youId, role: "you", content: body },
-      { id: earnId, role: "earn", content: "", streaming: true, sourcePrompt: body },
+      { id: youId, role: "you", content: body, ts: now },
+      { id: earnId, role: "earn", content: "", ts: now + 1, streaming: true, sourcePrompt: body },
     ]);
 
     const append = (chunk: string) =>
@@ -363,6 +417,177 @@ export default function Copilot({
   const turns = [...bundles].reverse();
   const empty = turns.length === 0 && chatTurns.length === 0 && !planning;
 
+  // The work canvas opens once there's a task in flight or on record.
+  const hasWork = turns.length > 0 || planning;
+  // The workflow shown in the canvas: the operator's selection, else the newest.
+  const focusedBundle =
+    turns.find((b) => b.workflow.id === focusedWorkflowId) ?? turns[turns.length - 1] ?? null;
+
+  // One time-ordered transcript of chat turns and compact workflow references —
+  // the left rail; the full workflow card lives in the canvas.
+  type RailItem =
+    | { kind: "chat"; ts: number; turn: ChatTurn }
+    | { kind: "work"; ts: number; bundle: WorkflowBundle };
+  const rail: RailItem[] = [
+    ...turns.map((b) => ({ kind: "work" as const, ts: Date.parse(b.workflow.created_at) || 0, bundle: b })),
+    ...chatTurns.map((t) => ({ kind: "chat" as const, ts: t.ts, turn: t })),
+  ].sort((a, b) => a.ts - b.ts);
+
+  function focusWork(id: string) {
+    setFocusedWorkflowId(id);
+    setMobileTab("work");
+  }
+
+  // A chat turn in the conversation rail (you bubble or Earn answer + controls).
+  function renderChatTurn(t: ChatTurn) {
+    if (t.role === "you") {
+      return (
+        <div key={t.id} className="flex justify-end gap-3">
+          <div className="max-w-[84%]">
+            <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              You
+            </div>
+            <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+              {t.content}
+            </div>
+          </div>
+          <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
+            YOU
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div key={t.id} className="flex gap-3">
+        <EarnOrb size={32} pulse={t.streaming} className="mt-5" />
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            Earn
+            <span className="h-1 w-1 rounded-full bg-line" />
+            <span>{t.streaming ? "Answering" : "Answer"}</span>
+          </div>
+          <div className="rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+            {t.content ? <Markdown>{t.content}</Markdown> : null}
+            {t.streaming ? (
+              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom" aria-hidden />
+            ) : null}
+          </div>
+
+          {/* Live controls: stop while streaming; copy/regenerate after. */}
+          <div className="mt-1.5 flex items-center gap-1.5">
+            {t.streaming ? (
+              <button
+                type="button"
+                onClick={stopChat}
+                className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary transition hover:border-status-danger/50 hover:text-status-danger"
+              >
+                Stop
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => copyText(t.content)}
+                  disabled={!t.content}
+                  className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+                >
+                  Copy
+                </button>
+                {t.sourcePrompt ? (
+                  <button
+                    type="button"
+                    onClick={() => dispatchPrompt(t.sourcePrompt!)}
+                    disabled={busy}
+                    className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+                  >
+                    Regenerate
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          {/* Suggested follow-ups — one tap to send the next prompt. */}
+          {t.followups?.length ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {t.followups.map((s, i) => (
+                <button
+                  key={`${t.id}-f${i}`}
+                  type="button"
+                  onClick={() => dispatchPrompt(s)}
+                  disabled={busy}
+                  className="rounded-full border border-line/80 bg-surface-1/75 px-3 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary disabled:opacity-40"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  // A compact workflow reference in the rail — the prompt plus a card that opens
+  // the full plan/steps/artifacts in the work canvas.
+  function renderWorkRef(b: WorkflowBundle) {
+    const active = b.workflow.status === "in_progress" || b.workflow.status === "awaiting_approval";
+    const isFocused = focusedBundle?.workflow.id === b.workflow.id;
+    const routing = deriveRouting({
+      prompt: b.workflow.description || b.workflow.title,
+      hub: b.workflow.hub,
+      agents: b.steps.map((s) => s.assigned_agent),
+    });
+    return (
+      <div key={b.workflow.id} className="flex flex-col gap-2">
+        <div className="flex justify-end gap-3">
+          <div className="max-w-[84%]">
+            <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              You
+            </div>
+            <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+              {b.workflow.description || b.workflow.title}
+            </div>
+          </div>
+          <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
+            YOU
+          </span>
+        </div>
+        <div className="flex gap-3">
+          <EarnOrb size={32} pulse={active} className="mt-5" />
+          <button
+            type="button"
+            onClick={() => focusWork(b.workflow.id)}
+            className={`min-w-0 flex-1 rounded-2xl rounded-bl-md border bg-surface-1/82 px-4 py-3 text-left shadow-[0_1px_2px_rgb(0_0_0/0.2)] transition hover:border-gold-500/45 ${
+              isFocused ? "border-gold-500/50" : "border-line/80"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate font-display text-sm font-semibold text-fg-primary">{b.workflow.title}</span>
+              <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                {STATUS_LABEL[b.workflow.status] ?? b.workflow.status}
+              </span>
+            </div>
+            <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
+              {routingHeadline(routing)}
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-gold-500 to-gold-300"
+                  style={{ width: `${Math.round(b.workflow.progress * 100)}%` }}
+                />
+              </div>
+              <span className="font-mono text-[9px] text-fg-secondary">
+                {isFocused ? "In canvas" : "Open in canvas →"}
+              </span>
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function addFiles(files: FileList | null) {
     if (!files?.length) return;
     setAttachments((prev) => [
@@ -448,14 +673,91 @@ export default function Copilot({
     applySlashCommand(scaffold);
   }
 
+  // The work canvas: a switcher across the session's workflows, then the focused
+  // workflow's full plan / steps / artifacts / approval gate.
+  function renderCanvas() {
+    return (
+      <>
+        {turns.length > 1 ? (
+          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-line/70 px-3 py-2">
+            <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Work</span>
+            {turns.map((b) => (
+              <button
+                key={b.workflow.id}
+                type="button"
+                onClick={() => setFocusedWorkflowId(b.workflow.id)}
+                className={`shrink-0 max-w-[11rem] truncate rounded-full border px-2.5 py-1 text-[11px] transition ${
+                  focusedBundle?.workflow.id === b.workflow.id
+                    ? "border-gold-500/50 bg-gold-500/10 text-gold-200"
+                    : "border-line/70 bg-surface-1/60 text-fg-secondary hover:text-fg-primary"
+                }`}
+              >
+                {b.workflow.title}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+          {focusedBundle ? (
+            <WorkflowCard
+              bundle={focusedBundle}
+              busy={busy}
+              decide={decide}
+              primary={focusedBundle.approval?.decision === "pending"}
+              clarifying={clarifying}
+              clarify={clarify?.workflowId === focusedBundle.workflow.id ? clarify : null}
+              onAsk={() => askQuestions(focusedBundle.workflow.id)}
+              onAnswerChange={(v) => setClarify((c) => (c ? { ...c, answer: v } : c))}
+              onCancelClarify={() => setClarify(null)}
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center px-6 text-center text-sm text-fg-secondary">
+              <EarnOrb size={40} pulse={planning} />
+              <p className="mt-3 max-w-xs leading-6">
+                {planning ? "Drafting the plan…" : "Run a task to see the plan, steps, and deliverables here."}
+              </p>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
+
   return (
-    <div className="fx-neural-ambient mx-auto flex min-h-[calc(100dvh-8rem)] max-w-5xl flex-col">
-      <section className="relative flex min-h-0 flex-1 overflow-hidden rounded-[1.75rem] border border-line/80 bg-surface-0/88 shadow-[0_24px_90px_-58px_rgb(var(--fx-accent-rgb)/0.9)]">
+    <div className={`fx-neural-ambient mx-auto flex min-h-[calc(100dvh-8rem)] flex-col ${hasWork ? "max-w-7xl" : "max-w-5xl"}`}>
+      <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-line/80 bg-surface-0/88 shadow-[0_24px_90px_-58px_rgb(var(--fx-accent-rgb)/0.9)]">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgb(var(--fx-accent-rgb)/0.16),transparent_36%),linear-gradient(rgb(var(--fx-accent-rgb)/0.045)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--fx-accent-rgb)/0.045)_1px,transparent_1px)] bg-[length:auto,32px_32px,32px_32px]"
         />
-        <div className="relative flex min-h-0 flex-1 flex-col">
+
+        {/* Mobile pane tabs — conversation vs work canvas (desktop shows both). */}
+        {hasWork && !isDesktop ? (
+          <div className="relative z-10 flex gap-1 border-b border-line/70 bg-surface-0/80 p-1.5">
+            {(["chat", "work"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setMobileTab(tab)}
+                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  mobileTab === tab ? "bg-surface-2 text-fg-primary" : "text-fg-secondary hover:text-fg-primary"
+                }`}
+              >
+                {tab === "chat" ? "Conversation" : "Work"}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <div ref={splitRef} className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
+          <div
+            className={`relative flex min-h-0 flex-col ${
+              hasWork
+                ? `lg:flex-none lg:border-r lg:border-line/70 ${!isDesktop && mobileTab === "work" ? "hidden" : "flex-1"}`
+                : "flex-1"
+            }`}
+            style={hasWork && isDesktop ? { flexBasis: `${leftPct}%`, flexGrow: 0, flexShrink: 0 } : undefined}
+          >
           <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
               {empty ? (
@@ -485,131 +787,9 @@ export default function Copilot({
                 </div>
               ) : null}
 
-              {turns.map((b) => (
-                <div key={b.workflow.id} className="flex flex-col gap-4">
-                  <div className="flex justify-end gap-3">
-                    <div className="max-w-[84%]">
-                      <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                        You
-                      </div>
-                      <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
-                        {b.workflow.description || b.workflow.title}
-                      </div>
-                    </div>
-                    <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
-                      YOU
-                    </span>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <EarnOrb size={32} pulse={b.workflow.status === "in_progress" || b.workflow.status === "awaiting_approval"} className="mt-5" />
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                        Earn
-                        <span className="h-1 w-1 rounded-full bg-line" />
-                        <span>{STATUS_LABEL[b.workflow.status] ?? b.workflow.status}</span>
-                      </div>
-                      <WorkflowCard
-                        bundle={b}
-                        busy={busy}
-                        decide={decide}
-                        primary={b.approval?.decision === "pending"}
-                        clarifying={clarifying}
-                        clarify={clarify?.workflowId === b.workflow.id ? clarify : null}
-                        onAsk={() => askQuestions(b.workflow.id)}
-                        onAnswerChange={(v) => setClarify((c) => (c ? { ...c, answer: v } : c))}
-                        onCancelClarify={() => setClarify(null)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {/* Conversational answers — Earn's chat path, streamed in. */}
-              {chatTurns.map((t) =>
-                t.role === "you" ? (
-                  <div key={t.id} className="flex justify-end gap-3">
-                    <div className="max-w-[84%]">
-                      <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                        You
-                      </div>
-                      <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
-                        {t.content}
-                      </div>
-                    </div>
-                    <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
-                      YOU
-                    </span>
-                  </div>
-                ) : (
-                  <div key={t.id} className="flex gap-3">
-                    <EarnOrb size={32} pulse={t.streaming} className="mt-5" />
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                        Earn
-                        <span className="h-1 w-1 rounded-full bg-line" />
-                        <span>{t.streaming ? "Answering" : "Answer"}</span>
-                      </div>
-                      <div className="rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
-                        {t.content ? <Markdown>{t.content}</Markdown> : null}
-                        {t.streaming ? (
-                          <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom" aria-hidden />
-                        ) : null}
-                      </div>
-
-                      {/* Live controls: stop while streaming; copy/regenerate after. */}
-                      <div className="mt-1.5 flex items-center gap-1.5">
-                        {t.streaming ? (
-                          <button
-                            type="button"
-                            onClick={stopChat}
-                            className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary transition hover:border-status-danger/50 hover:text-status-danger"
-                          >
-                            Stop
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => copyText(t.content)}
-                              disabled={!t.content}
-                              className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
-                            >
-                              Copy
-                            </button>
-                            {t.sourcePrompt ? (
-                              <button
-                                type="button"
-                                onClick={() => dispatchPrompt(t.sourcePrompt!)}
-                                disabled={busy}
-                                className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
-                              >
-                                Regenerate
-                              </button>
-                            ) : null}
-                          </>
-                        )}
-                      </div>
-
-                      {/* Suggested follow-ups — one tap to send the next prompt. */}
-                      {t.followups?.length ? (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {t.followups.map((s, i) => (
-                            <button
-                              key={`${t.id}-f${i}`}
-                              type="button"
-                              onClick={() => dispatchPrompt(s)}
-                              disabled={busy}
-                              className="rounded-full border border-line/80 bg-surface-1/75 px-3 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary disabled:opacity-40"
-                            >
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ),
+              {/* Unified transcript: chat turns and compact workflow refs, by time. */}
+              {rail.map((item) =>
+                item.kind === "chat" ? renderChatTurn(item.turn) : renderWorkRef(item.bundle),
               )}
 
               {planning ? (
@@ -1003,6 +1183,32 @@ export default function Copilot({
               </div>
             </div>
           </form>
+          </div>
+
+          {/* Drag divider (desktop) — resizes the conversation pane. */}
+          {hasWork && isDesktop ? (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                draggingRef.current = true;
+                document.body.style.userSelect = "none";
+              }}
+              className="relative z-10 hidden w-1.5 cursor-col-resize items-stretch lg:flex"
+            >
+              <span className="m-auto h-10 w-1 rounded-full bg-line/80" />
+            </div>
+          ) : null}
+
+          {/* Work canvas — plan / steps / artifacts for the focused workflow. */}
+          {hasWork ? (
+            <div
+              className={`relative flex min-h-0 flex-1 flex-col ${!isDesktop && mobileTab === "chat" ? "hidden" : ""}`}
+            >
+              {renderCanvas()}
+            </div>
+          ) : null}
         </div>
       </section>
     </div>
