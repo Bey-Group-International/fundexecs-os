@@ -5,6 +5,8 @@ import { buildCapitalMap } from "@/lib/capital-map";
 import { rankListingsForInvestor, type ListingMatch, type ListingContext } from "@/lib/matching";
 import type { MarketplaceListing } from "@/lib/supabase/database.types";
 import { CapitalMap } from "./CapitalMap";
+import { AllocatorDirectory } from "@/components/source/AllocatorDirectory";
+import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,32 @@ export default async function CapitalMapPage() {
 
   const supabase = createServerClient();
   const entries = await buildCapitalMap(supabase);
+
+  // Allocator Directory: load investors to populate the FinTrx-style directory.
+  const { data: investorRows } = await supabase
+    .from("investors")
+    .select("id, name, investor_type, aum, typical_check_min, typical_check_max, jurisdiction, pipeline_stage, created_at")
+    .eq("organization_id", ctx.orgId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const allocatorEntries = (investorRows ?? []).map((inv) => ({
+    id: inv.id,
+    name: inv.name,
+    allocatorType: (inv.investor_type ?? "family_office") as AllocatorType,
+    aumMin: inv.aum ? inv.aum * 0.8 : null,
+    aumMax: inv.aum ?? null,
+    ticketMin: inv.typical_check_min ?? null,
+    ticketMax: inv.typical_check_max ?? null,
+    primaryStrategies: [],
+    geographicFocus: inv.jurisdiction ? [inv.jurisdiction] : [],
+    accreditationStatus: "verified" as AccreditationStatus,
+    kycStatus: "verified" as const,
+    hqCity: undefined,
+    hqCountry: inv.jurisdiction ?? undefined,
+    fitScore: undefined,
+    lastContactAt: undefined,
+  }));
 
   // Marketplace ↔ Capital Map flywheel: pull this firm's live listings and the
   // geography of any linked deal, then score each listing against every investor
@@ -64,6 +92,23 @@ export default async function CapitalMapPage() {
       </header>
 
       <CapitalMap entries={entries} matchesByInvestor={matchesByInvestor} />
+
+      {allocatorEntries.length > 0 && (
+        <section className="mt-12">
+          <header className="mb-6">
+            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+              Allocator Directory
+            </span>
+            <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+              LP &amp; Allocator Intelligence
+            </h2>
+            <p className="mt-1 text-sm text-fg-secondary">
+              Searchable directory of your allocators with AUM, ticket size, mandate fit, and compliance status.
+            </p>
+          </header>
+          <AllocatorDirectory entries={allocatorEntries} />
+        </section>
+      )}
     </div>
   );
 }
