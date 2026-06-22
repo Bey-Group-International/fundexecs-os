@@ -64,8 +64,8 @@ const DealSignalFeed = nextDynamic(() =>
 const SectorHeatmap = nextDynamic(() =>
   import("@/components/intelligence/SectorHeatmap").then((m) => m.SectorHeatmap),
 );
-const WorkspaceDocumentList = nextDynamic(() =>
-  import("@/components/workspace/DocumentCard").then((m) => m.WorkspaceDocumentList),
+const WorkspaceDocumentListLive = nextDynamic(() =>
+  import("@/components/workspace/WorkspaceDocumentListLive").then((m) => m.WorkspaceDocumentListLive),
 );
 
 // The `source` hub's standalone modules: a registry of module key → render fn.
@@ -188,7 +188,6 @@ export default function ModulePage({
   }
 
   // Build › Data Room — Workspace Document List.
-  // TODO: replace mock docs with real workspace documents from Supabase.
   if (params.hub === "build" && params.module === "data_room") {
     return (
       <div className="mx-auto max-w-5xl px-4 py-6">
@@ -196,7 +195,7 @@ export default function ModulePage({
           <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
             Knowledge Workspace
           </p>
-          <WorkspaceDocumentList docs={[]} />
+          <WorkspaceDocumentListLive />
         </section>
         <div className="mt-8 border-t border-line pt-8">
           <ModuleView hub={params.hub} module={params.module} />
