@@ -217,27 +217,11 @@ function RoomCell({
           : "transform 0.2s cubic-bezier(0.2,0,0,1), box-shadow 0.25s ease, opacity 0s",
       }}
     >
-      {/* Room-specific PNG background */}
-      <img
-        src={roomBgSrc(room.id, mode)}
-        alt=""
-        aria-hidden="true"
-        style={{
-          position: "absolute", inset: 0,
-          width: "100%", height: "100%",
-          objectFit: "cover", objectPosition: "center top",
-          pointerEvents: "none", userSelect: "none",
-          zIndex: 0,
-          transition: "filter 0.25s ease",
-          filter: hovered ? "brightness(1.12) saturate(1.1)" : "brightness(1) saturate(1)",
-        }}
-      />
-
-      {/* Dark vignette base — always present, lifts on hover */}
+      {/* Hover brightness lift — applied via a transparent overlay so the full office map shows through */}
       <div style={{
         position:"absolute", inset:0, zIndex:1, pointerEvents:"none",
-        background: `radial-gradient(ellipse at 50% 30%, transparent 30%, rgba(4,3,2,${hovered ? 0.35 : 0.55}) 100%)`,
-        transition:"background 0.3s ease",
+        background: hovered ? "rgba(255,240,180,0.06)" : "transparent",
+        transition:"background 0.25s ease",
       }}/>
 
       {/* Gold shimmer overlay — breathes with activity */}
@@ -487,7 +471,7 @@ export function ExecutiveHQ() {
 
       {/* Full-office PNG background (walls, corridors, lobby) */}
       <img
-        src={`/assets/fundexecs/office/office-${nightMode ? "night" : "day"}.png`}
+        src={`/assets/fundexecs/office/rooms/${nightMode ? "night" : "day"}/office-${nightMode ? "night" : "day"}-empty.png`}
         alt=""
         aria-hidden="true"
         style={{
@@ -495,7 +479,7 @@ export function ExecutiveHQ() {
           width: "100%", height: "100%",
           objectFit: "cover", objectPosition: "center top",
           pointerEvents: "none", userSelect: "none",
-          filter: nightMode ? "brightness(0.7) saturate(0.85)" : "brightness(0.85) saturate(0.9)",
+          filter: nightMode ? "brightness(0.75) saturate(0.9)" : "brightness(0.9) saturate(0.95)",
         }}
       />
 
