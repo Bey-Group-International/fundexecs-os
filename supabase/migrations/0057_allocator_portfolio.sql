@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS allocator_profiles_accreditation_status_idx ON public
 CREATE INDEX IF NOT EXISTS allocator_profiles_kyc_status_idx ON public.allocator_profiles(kyc_status);
 ALTER TABLE public.allocator_profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "allocator_profiles_org_member" ON public.allocator_profiles
-  USING (org_id IN (SELECT org_id FROM public.org_members WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT organization_id FROM public.organization_members WHERE principal_id = auth.uid()));
 
 -- Portfolio metrics: computed performance per deal/asset
 CREATE TABLE IF NOT EXISTS public.portfolio_metrics (
@@ -91,7 +91,7 @@ CREATE INDEX IF NOT EXISTS portfolio_metrics_deal_id_idx ON public.portfolio_met
 CREATE INDEX IF NOT EXISTS portfolio_metrics_underperforming_idx ON public.portfolio_metrics(is_underperforming) WHERE is_underperforming = true;
 ALTER TABLE public.portfolio_metrics ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "portfolio_metrics_org_member" ON public.portfolio_metrics
-  USING (org_id IN (SELECT org_id FROM public.org_members WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT organization_id FROM public.organization_members WHERE principal_id = auth.uid()));
 
 -- Portfolio risk flags: concentration + allocation analysis
 CREATE TABLE IF NOT EXISTS public.portfolio_risk_alerts (
@@ -113,4 +113,4 @@ CREATE INDEX IF NOT EXISTS portfolio_risk_alerts_severity_idx ON public.portfoli
 CREATE INDEX IF NOT EXISTS portfolio_risk_alerts_unresolved_idx ON public.portfolio_risk_alerts(resolved_at) WHERE resolved_at IS NULL;
 ALTER TABLE public.portfolio_risk_alerts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "portfolio_risk_alerts_org_member" ON public.portfolio_risk_alerts
-  USING (org_id IN (SELECT org_id FROM public.org_members WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT organization_id FROM public.organization_members WHERE principal_id = auth.uid()));
