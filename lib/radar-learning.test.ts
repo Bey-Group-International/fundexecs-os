@@ -9,6 +9,7 @@ import {
   MIN_FEEDBACK,
   MAX_ADJUSTMENT,
   type RadarAggregate,
+  type EngagementAggregate,
 } from "@/lib/radar-learning";
 
 const agg = (over: Partial<RadarAggregate> = {}): RadarAggregate => ({
@@ -17,6 +18,14 @@ const agg = (over: Partial<RadarAggregate> = {}): RadarAggregate => ({
   accepted: 0,
   dismissed: 0,
   snoozed: 0,
+  ...over,
+});
+
+const eng = (over: Partial<EngagementAggregate> = {}): EngagementAggregate => ({
+  entityKind: "company",
+  moveKind: "buyers",
+  clicked: 0,
+  opened: 0,
   ...over,
 });
 
@@ -104,5 +113,107 @@ describe("applyLearnedAdjustment", () => {
   it("clamps the adjusted score to 0–100", () => {
     expect(applyLearnedAdjustment(98, "company", "buyers", w)).toBe(100);
     expect(applyLearnedAdjustment(2, "investor", "outreach", w)).toBe(0);
+  });
+});
+
+// ===========================================================================
+// Implicit engagement (digest opens + clicks) — the second arg to the loop.
+// ===========================================================================
+
+describe("aggregateDelta (implicit engagement)", () => {
+  it("is byte-identical to the prior behavior when no engagement is passed", () => {
+    // Regression guard: omitting engagement must equal the explicit-only result.
+    const cases: RadarAggregate[] = [
+      agg({ accepted: 3 }),
+      agg({ accepted: 10 }),
+      agg({ dismissed: 10 }),
+      agg({ accepted: 6, snoozed: 6 }),
+      agg({ accepted: 8, dismissed: 2 }),
+    ];
+    for (const c of cases) {
+      expect(aggregateDelta(c, null)).toBe(aggregateDelta(c));
+      expect(aggregateDelta(c, undefined)).toBe(aggregateDelta(c));
+      expect(aggregateDelta(c, eng({ clicked: 0, opened: 0 }))).toBe(aggregateDelta(c));
+    }
+  });
+
+  it("nudges a neutral explicit bucket UP when clicks pile on", () => {
+    const base = agg({ accepted: 5, dismissed: 5 }); // neutral → 0
+    expect(aggregateDelta(base)).toBe(0);
+    const withClicks = aggregateDelta(base, eng({ clicked: 8 }));
+    expect(withClicks).toBeGreaterThan(0);
+  });
+
+  it("weights a click more strongly than an open", () => {
+    const base = agg({ accepted: 5, dismissed: 5 });
+    const clickPush = aggregateDelta(base, eng({ clicked: 8 }));
+    const openPush = aggregateDelta(base, eng({ opened: 8 }));
+    expect(clickPush).toBeGreaterThan(openPush);
+    expect(openPush).toBeGreaterThanOrEqual(0);
+  });
+
+  it("never manufactures a negative — engagement is positive-only", () => {
+    const dismissals = agg({ accepted: 0, dismissed: 10 });
+    const withOpens = aggregateDelta(dismissals, eng({ opened: 4 }));
+    // Opens can only soften a negative, never push it below the dismiss-only floor.
+    expect(withOpens).toBeGreaterThanOrEqual(aggregateDelta(dismissals));
+    expect(withOpens).toBeLessThanOrEqual(0);
+  });
+
+  it("can lift a thin bucket over the confidence floor on engagement alone", () => {
+    // 1 explicit accept (below MIN_FEEDBACK) but plenty of clicks → clears floor.
+    const thin = agg({ accepted: 1 });
+    expect(aggregateDelta(thin)).toBe(0);
+    const lifted = aggregateDelta(thin, eng({ clicked: 12 }));
+    expect(lifted).toBeGreaterThan(0);
+  });
+
+  it("respects the confidence floor for weak opens", () => {
+    // A couple of opens (fractional weight) on an empty bucket stays under floor.
+    expect(aggregateDelta(agg(), eng({ opened: 3 }))).toBe(0);
+  });
+
+  it("stays clamped to ±MAX_ADJUSTMENT with extreme engagement", () => {
+    const d = aggregateDelta(agg({ accepted: 50 }), eng({ clicked: 1000, opened: 1000 }));
+    expect(d).toBeLessThanOrEqual(MAX_ADJUSTMENT);
+    expect(d).toBeGreaterThanOrEqual(-MAX_ADJUSTMENT);
+  });
+});
+
+describe("computeLearnedWeights (with engagement)", () => {
+  it("is byte-identical to the 1-arg call when engagement is empty/absent", () => {
+    const input = [
+      agg({ entityKind: "company", moveKind: "buyers", accepted: 10 }),
+      agg({ entityKind: "investor", moveKind: "outreach", dismissed: 10 }),
+    ];
+    expect(computeLearnedWeights(input)).toEqual(computeLearnedWeights(input, []));
+    expect(computeLearnedWeights(input)).toEqual(computeLearnedWeights(input, null));
+    expect(computeLearnedWeights(input)).toEqual(computeLearnedWeights(input, undefined));
+  });
+
+  it("joins engagement onto the matching explicit bucket", () => {
+    const explicit = [agg({ entityKind: "company", moveKind: "buyers", accepted: 5, dismissed: 5 })];
+    const base = computeLearnedWeights(explicit);
+    expect(base.deltas[weightKey("company", "buyers")]).toBeUndefined(); // neutral → omitted
+
+    const tuned = computeLearnedWeights(explicit, [eng({ clicked: 10 })]);
+    expect(tuned.active).toBe(true);
+    expect(tuned.deltas[weightKey("company", "buyers")]).toBeGreaterThan(0);
+  });
+
+  it("scores an engagement-only bucket (no explicit feedback yet)", () => {
+    const tuned = computeLearnedWeights(
+      [],
+      [eng({ entityKind: "fund", moveKind: "signals", clicked: 12 })],
+    );
+    expect(tuned.deltas[weightKey("fund", "signals")]).toBeGreaterThan(0);
+  });
+
+  it("is deterministic with engagement", () => {
+    const explicit = [agg({ accepted: 8, dismissed: 2 })];
+    const engagement = [eng({ clicked: 4, opened: 6 })];
+    expect(computeLearnedWeights(explicit, engagement)).toEqual(
+      computeLearnedWeights(explicit, engagement),
+    );
   });
 });

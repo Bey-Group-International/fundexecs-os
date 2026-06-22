@@ -149,6 +149,10 @@ export async function sendRadarDigests(supabase: Client): Promise<RadarSendSumma
 
   const now = Date.now();
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || undefined;
+  // The secret digest-tracking links are signed with. Falls back to CRON_SECRET
+  // so the implicit-feedback loop works out of the box where the cron already
+  // has a secret. Absent → links stay plain deep links (digest never breaks).
+  const trackSecret = process.env.DIGEST_TRACK_SECRET || process.env.CRON_SECRET || undefined;
   let delivered = 0;
 
   for (const pref of prefs) {
@@ -166,14 +170,18 @@ export async function sendRadarDigests(supabase: Client): Promise<RadarSendSumma
 
     try {
       const items = await buildRadar(supabase, pref.organization_id, { limit: 20 });
-      const payload = composeDigest(items, {
+      const baseOpts = {
         minScore: pref.min_score,
-        cadence: pref.cadence === "weekly" ? "weekly" : "daily",
+        cadence: (pref.cadence === "weekly" ? "weekly" : "daily") as "daily" | "weekly",
         baseUrl,
-      });
+      };
+      // First pass (no tracking) just to learn the count + snapshot before we
+      // commit a log row. The deliverable payload is re-composed WITH tracking
+      // below, once we have the log id to attribute engagement to.
+      const preview = composeDigest(items, baseOpts);
 
       // Nothing clears the bar — record the consideration but don't push noise.
-      if (payload.count === 0) {
+      if (preview.count === 0) {
         results.push({
           organizationId: pref.organization_id,
           channel: pref.channel,
@@ -183,6 +191,43 @@ export async function sendRadarDigests(supabase: Client): Promise<RadarSendSumma
         });
         continue;
       }
+
+      // Write the log row UP FRONT so its id can sign the engagement links. The
+      // snapshot is identical to the delivered digest (tracking only rewrites
+      // hrefs, never the items). Best-effort: if the log write fails we fall back
+      // to an untracked digest rather than dropping the send.
+      let digestLogId: string | null = null;
+      try {
+        const { data: logRow } = await supabase
+          .from("radar_digest_log")
+          .insert({
+            organization_id: pref.organization_id,
+            channel: pref.channel,
+            item_count: preview.count,
+            top_items: topItemsSnapshot(preview.topItems),
+          })
+          .select("id")
+          .single();
+        digestLogId = (logRow?.id as string | undefined) ?? null;
+      } catch {
+        digestLogId = null;
+      }
+
+      // Re-compose with engagement tracking when we have a secret + log id AND
+      // the channel benefits from it. The in-app inbox keeps raw deep links (no
+      // tracking needed in-app); only Slack/email links get wrapped.
+      const wantsTracking = pref.channel === "slack" || pref.channel === "email";
+      const payload =
+        trackSecret && digestLogId && wantsTracking
+          ? composeDigest(items, {
+              ...baseOpts,
+              tracking: {
+                secret: trackSecret,
+                digestLogId,
+                orgId: pref.organization_id,
+              },
+            })
+          : preview;
 
       let detail = "";
       if (pref.channel === "in_app") {
@@ -250,13 +295,17 @@ export async function sendRadarDigests(supabase: Client): Promise<RadarSendSumma
         }
       }
 
-      // Log the send so cadence is observable and re-sends are auditable.
-      await supabase.from("radar_digest_log").insert({
-        organization_id: pref.organization_id,
-        channel: pref.channel,
-        item_count: payload.count,
-        top_items: topItemsSnapshot(payload.topItems),
-      });
+      // The send is logged up front (so its id can sign engagement links). If
+      // that early write failed we record the send here as a best-effort backstop
+      // so cadence stays observable even when tracking attribution was skipped.
+      if (!digestLogId) {
+        await supabase.from("radar_digest_log").insert({
+          organization_id: pref.organization_id,
+          channel: pref.channel,
+          item_count: payload.count,
+          top_items: topItemsSnapshot(payload.topItems),
+        });
+      }
 
       delivered += 1;
       results.push({
