@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { loadRadar, scanRadarSignals } from "@/app/(app)/[hub]/[module]/source-radar-actions";
+import { loadRadar, scanRadarSignals, recordRadarFeedback } from "@/app/(app)/[hub]/[module]/source-radar-actions";
 import { addEntityToPipeline } from "@/app/(app)/[hub]/[module]/sourcing-intel-actions";
 import type { RadarItem, RadarMoveKind } from "@/lib/source-radar";
 import type { EntityKind } from "@/lib/sourcing-intel";
@@ -52,8 +52,28 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
   const [note, setNote] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [added, setAdded] = useState<Set<string>>(new Set());
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [tuned, setTuned] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ranInitial = useRef(false);
+
+  // A stable per-row key for tracking accepted/dismissed UI state.
+  function rowKey(it: RadarItem, i: number): string {
+    return it.entityId ?? `${it.name}:${i}`;
+  }
+
+  // The write half of the learning loop — fire-and-forget so it never blocks the
+  // operator's action. Each verdict tunes future rankings via radar_feedback.
+  function sendFeedback(it: RadarItem, action: "accepted" | "dismissed" | "snoozed") {
+    void recordRadarFeedback({
+      entityId: it.entityId,
+      entityName: it.name,
+      entityKind: it.kind,
+      moveKind: it.move.kind,
+      action,
+      scoreAtAction: it.score,
+    }).catch(() => {});
+  }
 
   async function refresh(k: KindFilter = kind) {
     setPhase("loading");
@@ -66,6 +86,7 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
         return;
       }
       setItems(res.items ?? []);
+      setTuned(res.tuned ?? false);
       setPhase("done");
     } catch {
       setError("Could not load the radar.");
@@ -106,13 +127,26 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
     setBusyId(item.entityId);
     try {
       const res = await addEntityToPipeline(item.entityId);
-      if (res.ok) setAdded((prev) => new Set(prev).add(item.entityId!));
-      else setError(res.error ?? "Could not add to pipeline.");
+      if (res.ok) {
+        setAdded((prev) => new Set(prev).add(item.entityId!));
+        sendFeedback(item, "accepted");
+      } else setError(res.error ?? "Could not add to pipeline.");
     } catch {
       setError("Could not add to pipeline.");
     } finally {
       setBusyId(null);
     }
+  }
+
+  // Operator accepted a routed move (the non-pipeline links). Record before nav.
+  function onAcceptMove(item: RadarItem) {
+    sendFeedback(item, "accepted");
+  }
+
+  // Operator dismissed a recommendation — record it and hide the row locally.
+  function onDismiss(item: RadarItem, key: string) {
+    sendFeedback(item, "dismissed");
+    setDismissed((prev) => new Set(prev).add(key));
   }
 
   return (
@@ -125,6 +159,14 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
           {!live ? (
             <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
               local mode
+            </span>
+          ) : null}
+          {tuned ? (
+            <span
+              title="Ranking nudged by your accept/dismiss feedback."
+              className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300"
+            >
+              tuned by your feedback
             </span>
           ) : null}
         </div>
@@ -172,9 +214,11 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
         items.length ? (
           <div className="mt-5 space-y-3">
             {items.map((it, i) => {
+              const key = rowKey(it, i);
+              if (dismissed.has(key)) return null;
               const isAdded = it.entityId ? added.has(it.entityId) : false;
               return (
-                <div key={it.entityId ?? `${it.name}:${i}`} className="rounded-2xl border border-line bg-surface-1 p-4">
+                <div key={key} className="rounded-2xl border border-line bg-surface-1 p-4">
                   <div className="flex items-start gap-3">
                     <span className={`mt-0.5 w-9 shrink-0 font-mono text-lg font-semibold ${scoreTone(it.score)}`}>
                       {it.score}
@@ -211,7 +255,7 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
                         ) : null}
                       </div>
                     </div>
-                    <div className="shrink-0">
+                    <div className="flex shrink-0 flex-col items-end gap-1">
                       {it.move.kind === "pipeline" ? (
                         <button
                           type="button"
@@ -224,11 +268,19 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
                       ) : it.move.href ? (
                         <a
                           href={it.move.href}
+                          onClick={() => onAcceptMove(it)}
                           className={`inline-block rounded-md border px-2.5 py-1 text-[11px] font-medium transition hover:opacity-80 ${MOVE_TONE[it.move.kind]}`}
                         >
                           {it.move.label} →
                         </a>
                       ) : null}
+                      <button
+                        type="button"
+                        onClick={() => onDismiss(it, key)}
+                        className="rounded-md px-2 py-0.5 text-[10px] text-fg-muted transition hover:text-fg-secondary"
+                      >
+                        Dismiss
+                      </button>
                     </div>
                   </div>
                 </div>
