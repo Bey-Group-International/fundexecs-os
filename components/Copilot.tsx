@@ -7,6 +7,7 @@ import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 import { routingFromTask, cursorResponse, routingHeadline, EXECUTIVE_LABEL, type TargetEngine } from "@/lib/intelligence";
+import { splitPositions, type SplitPosition } from "@/lib/split-grouping";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import {
   EARN_MODELS,
@@ -22,6 +23,7 @@ import type { ActiveIntegration } from "@/lib/integrations/active";
 import type { AgentPlan } from "@/lib/claude";
 import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
+import { ModelCompare, estimateTokens, type ModelComparison } from "@/components/ModelCompare";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
 
 // A conversational turn rendered in the transcript. Chat turns are Earn's
@@ -37,6 +39,9 @@ interface ChatTurn {
   // suggested next prompts.
   sourcePrompt?: string;
   followups?: string[];
+  // "Compare models": the same source question rerun across every EARN_MODELS
+  // entry, filled in client-side. Display-only — nothing here is persisted.
+  comparisons?: ModelComparison[];
 }
 
 // localStorage key for the remembered split ratio.
@@ -85,7 +90,7 @@ function StepNode({ status, color }: { status: string; color?: string }) {
   if (status === "in_progress") {
     return (
       <span className="relative flex h-5 w-5 items-center justify-center">
-        <span className="absolute h-5 w-5 animate-pulse rounded-full opacity-40" style={{ backgroundColor: color }} />
+        <span className="absolute h-5 w-5 animate-pulse rounded-full opacity-40 motion-reduce:animate-none" style={{ backgroundColor: color }} />
         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
       </span>
     );
@@ -129,6 +134,9 @@ export default function Copilot({
   // Earn's conversational answers (ungated), interleaved after the workflow
   // turns. Seeded from the session's persisted chat so answers survive a reload.
   const [chatTurns, setChatTurns] = useState<ChatTurn[]>(initialChat);
+  // The id of the chat turn whose "Compare models" run is in flight, so its
+  // button disables while the side-by-side fills in.
+  const [comparingTurnId, setComparingTurnId] = useState<string | null>(null);
   // The plan streamed into the canvas while a task is being drafted, before the
   // real (gated) workflow lands.
   const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(null);
@@ -136,6 +144,11 @@ export default function Copilot({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [clarifying, setClarifying] = useState(false);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
+  // Live step execution streamed from /api/approve/stream after an "approved"
+  // decision: which steps are in-flight vs. completed, so the canvas lights them
+  // up as they execute rather than waiting on the debounce refresh. Keyed by
+  // step id; cleared once the workflow finishes and the refresh lands.
+  const [liveSteps, setLiveSteps] = useState<Record<string, "in_progress" | "completed">>({});
   // Execution Grid: filter the conversation's workflows by the engine they were
   // routed to. null = show all.
   const [engineFilter, setEngineFilter] = useState<TargetEngine | null>(null);
@@ -292,6 +305,9 @@ export default function Copilot({
     } else {
       await runTask(body);
     }
+    // Return focus to the composer so the operator can keep typing without a
+    // mouse — the input may have lost focus when a control was tapped to send.
+    requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   // Non-streaming fallback (and the path when the live stream errors): plan +
@@ -452,8 +468,130 @@ export default function Copilot({
     chatAbortRef.current?.abort();
   }
 
+  // "Compare models": rerun the turn's SAME source question across every model
+  // in EARN_MODELS and fill the per-model cards. Ungated and client-side — each
+  // request omits session_id so nothing persists.
+  async function compareModels(turnId: string, sourcePrompt: string) {
+    if (comparingTurnId) return;
+    setComparingTurnId(turnId);
+    const seeded: ModelComparison[] = EARN_MODELS.map((m) => ({
+      model: m.key,
+      label: m.label,
+      content: "",
+      loading: true,
+    }));
+    setChatTurns((prev) => prev.map((t) => (t.id === turnId ? { ...t, comparisons: seeded } : t)));
+
+    const setCard = (model: EarnModelKey, patch: Partial<ModelComparison>) =>
+      setChatTurns((prev) =>
+        prev.map((t) =>
+          t.id === turnId && t.comparisons
+            ? { ...t, comparisons: t.comparisons.map((c) => (c.model === model ? { ...c, ...patch } : c)) }
+            : t,
+        ),
+      );
+
+    await Promise.all(
+      EARN_MODELS.map(async (m) => {
+        let text = "";
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ body: sourcePrompt, model: m.key }),
+          });
+          if (!res.ok || !res.body) throw new Error("compare failed");
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            text += decoder.decode(value, { stream: true });
+            setCard(m.key, { content: text });
+          }
+        } catch {
+          if (!text) text = "Earn couldn't reach this model — try again.";
+        } finally {
+          setCard(m.key, { content: text, loading: false });
+        }
+      }),
+    );
+
+    setComparingTurnId(null);
+  }
+
   function copyText(text: string) {
     navigator.clipboard?.writeText(text).catch(() => {});
+  }
+
+  // Non-streaming approval (every decision but the live-streamed "approved"
+  // path, and the fallback when the stream is unavailable).
+  async function decidePlain(
+    approvalId: string,
+    decision: "approved" | "rejected" | "regenerate" | "accepted",
+    note?: string,
+  ) {
+    await fetch("/api/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approval_id: approvalId, decision, note }),
+    }).catch(() => {});
+    setClarify(null);
+    setBusy(false);
+    setLiveSteps({});
+    startTransition(() => router.refresh());
+  }
+
+  // Approve & automate, with live step progress streamed into the canvas. Reads
+  // the ndjson from /api/approve/stream and lights up steps as they execute,
+  // then refreshes on workflow_done. Degrades gracefully: any stream failure
+  // falls back to the plain /api/approve call so the gate still resolves.
+  async function decideApproved(approvalId: string, note?: string) {
+    setLiveSteps({});
+    try {
+      const res = await fetch("/api/approve/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approval_id: approvalId, decision: "approved", note }),
+      });
+      if (!res.ok || !res.body) throw new Error("stream unavailable");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let errored = false;
+      let done = false;
+      for (;;) {
+        const { done: readerDone, value } = await reader.read();
+        if (readerDone) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const ev = JSON.parse(line) as {
+            type: string;
+            step_id?: string;
+          };
+          if (ev.type === "step_start" && ev.step_id) {
+            setLiveSteps((prev) => ({ ...prev, [ev.step_id as string]: "in_progress" }));
+          } else if (ev.type === "step_done" && ev.step_id) {
+            setLiveSteps((prev) => ({ ...prev, [ev.step_id as string]: "completed" }));
+          } else if (ev.type === "workflow_done") {
+            done = true;
+          } else if (ev.type === "error") {
+            errored = true;
+          }
+        }
+      }
+      if (errored || !done) throw new Error("approval stream failed");
+      setClarify(null);
+      setBusy(false);
+      startTransition(() => router.refresh());
+    } catch {
+      // The work already runs server-side through the gate; fall back so the
+      // operator still gets the result even if live progress dropped.
+      await decidePlain(approvalId, "approved", note);
+    }
   }
 
   async function decide(
@@ -462,14 +600,11 @@ export default function Copilot({
     note?: string,
   ) {
     setBusy(true);
-    await fetch("/api/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approval_id: approvalId, decision, note }),
-    }).catch(() => {});
-    setClarify(null);
-    setBusy(false);
-    startTransition(() => router.refresh());
+    if (decision === "approved") {
+      await decideApproved(approvalId, note);
+    } else {
+      await decidePlain(approvalId, decision, note);
+    }
   }
 
   // "Ask questions to complete" — Earn surfaces what it needs to know. The
@@ -496,6 +631,12 @@ export default function Copilot({
       agents: b.steps.map((s) => s.assigned_agent),
       stage: b.workflow.lifecycle_stage,
     }).target_engine;
+
+  // Split prompts: when the Intelligence Layer fans one prompt out into several
+  // sibling workflows, they share a non-null prompt_id. Map each such workflow
+  // to its "N of M" position so the card/rail can flag the split. Singletons and
+  // null prompt_ids get no entry (and thus no chip).
+  const splitOf = splitPositions(bundles.map((b) => b.workflow));
 
   // Engines present across the conversation — drives the filter chips.
   const enginesPresent = Array.from(new Set(bundles.map(engineOf)));
@@ -554,10 +695,14 @@ export default function Copilot({
             <span className="h-1 w-1 rounded-full bg-line" />
             <span>{t.streaming ? "Answering" : "Answer"}</span>
           </div>
-          <div className="rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+          <div
+            className="rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)]"
+            aria-live="polite"
+            aria-busy={t.streaming}
+          >
             {t.content ? <Markdown>{t.content}</Markdown> : null}
             {t.streaming ? (
-              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom" aria-hidden />
+              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom motion-reduce:animate-none" aria-hidden />
             ) : null}
           </div>
 
@@ -591,9 +736,29 @@ export default function Copilot({
                     Regenerate
                   </button>
                 ) : null}
+                {t.sourcePrompt ? (
+                  <button
+                    type="button"
+                    onClick={() => compareModels(t.id, t.sourcePrompt!)}
+                    disabled={comparingTurnId !== null}
+                    title="Rerun this question across all models"
+                    className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+                  >
+                    {comparingTurnId === t.id ? "Comparing…" : "Compare models"}
+                  </button>
+                ) : null}
+                {/* Rough client-side length estimate — display only. */}
+                {t.content ? (
+                  <span className="font-mono text-[10px] text-fg-muted">
+                    ≈ {estimateTokens(t.content)} tokens
+                  </span>
+                ) : null}
               </>
             )}
           </div>
+
+          {/* Side-by-side runs of the same question across every model. */}
+          {t.comparisons?.length ? <ModelCompare comparisons={t.comparisons} /> : null}
 
           {/* Suggested follow-ups — one tap to send the next prompt. */}
           {t.followups?.length ? (
@@ -627,6 +792,7 @@ export default function Copilot({
       agents: b.steps.map((s) => s.assigned_agent),
       stage: b.workflow.lifecycle_stage,
     });
+    const split = splitOf.get(b.workflow.id) ?? null;
     return (
       <div key={b.workflow.id} className="flex flex-col gap-2">
         <div className="flex justify-end gap-3">
@@ -660,6 +826,11 @@ export default function Copilot({
             <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
               {routingHeadline(routing)}
             </p>
+            {split ? (
+              <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                Split · {split.index} of {split.total}
+              </p>
+            ) : null}
             <div className="mt-2 flex items-center gap-2">
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
                 <div
@@ -827,6 +998,8 @@ export default function Copilot({
               bundle={focusedBundle}
               busy={busy}
               decide={decide}
+              liveSteps={liveSteps}
+              split={splitOf.get(focusedBundle.workflow.id) ?? null}
               primary={focusedBundle.approval?.decision === "pending"}
               clarifying={clarifying}
               clarify={clarify?.workflowId === focusedBundle.workflow.id ? clarify : null}
@@ -852,7 +1025,7 @@ export default function Copilot({
                     key={`${s.agent}-${i}`}
                     className="flex gap-3 rounded-xl border border-line/60 bg-surface-0/45 px-3 py-2.5"
                   >
-                    <span className="mt-0.5 h-5 w-5 shrink-0 animate-pulse rounded-full border-2 border-gold-500/50" />
+                    <span className="mt-0.5 h-5 w-5 shrink-0 animate-pulse rounded-full border-2 border-gold-500/50 motion-reduce:animate-none" />
                     <div className="min-w-0">
                       <span className="text-sm font-medium text-fg-primary">{s.title}</span>
                       <p className="mt-0.5 text-xs text-fg-secondary">
@@ -889,11 +1062,17 @@ export default function Copilot({
 
         {/* Mobile pane tabs — conversation vs work canvas (desktop shows both). */}
         {hasWork && !isDesktop ? (
-          <div className="relative z-10 flex gap-1 border-b border-line/70 bg-surface-0/80 p-1.5">
+          <div
+            role="tablist"
+            aria-label="Pane"
+            className="relative z-10 flex gap-1 border-b border-line/70 bg-surface-0/80 p-1.5"
+          >
             {(["chat", "work"] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
+                role="tab"
+                aria-selected={mobileTab === tab}
                 onClick={() => setMobileTab(tab)}
                 className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                   mobileTab === tab ? "bg-surface-2 text-fg-primary" : "text-fg-secondary hover:text-fg-primary"
@@ -907,6 +1086,8 @@ export default function Copilot({
 
         <div ref={splitRef} className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
           <div
+            role="region"
+            aria-label="Conversation"
             className={`relative flex min-h-0 flex-col ${
               hasWork
                 ? `lg:flex-none lg:border-r lg:border-line/70 ${!isDesktop && mobileTab === "work" ? "hidden" : "flex-1"}`
@@ -984,10 +1165,10 @@ export default function Copilot({
                   <EarnOrb size={32} pulse className="mt-1" />
                   <div className="relative overflow-hidden rounded-2xl border border-gold-500/25 bg-surface-1/80 px-4 py-3 text-sm text-fg-secondary">
                     <span className="inline-flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-400" />
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-400 motion-reduce:animate-none" />
                       Reading your prompt and drafting the plan...
                     </span>
-                    <span className="fx-data-stream" aria-hidden />
+                    <span className="fx-data-stream motion-reduce:hidden" aria-hidden />
                   </div>
                 </div>
               ) : null}
@@ -1010,6 +1191,7 @@ export default function Copilot({
                       onClick={() => setAttachments((prev) => prev.filter((_, index) => index !== i))}
                       className="rounded-full border border-gold-500/30 bg-gold-500/10 px-2 py-1 font-mono text-[10px] text-gold-300 transition hover:bg-gold-500/15"
                       title="Remove attachment"
+                      aria-label={`Remove attachment ${file.name}`}
                     >
                       {file.type.startsWith("video/") ? "video" : "image"} · {file.name} x
                     </button>
@@ -1391,6 +1573,8 @@ export default function Copilot({
           {/* Work canvas — plan / steps / artifacts for the focused workflow. */}
           {hasWork ? (
             <div
+              role="region"
+              aria-label="Work canvas"
               className={`relative flex min-h-0 flex-1 flex-col ${!isDesktop && mobileTab === "chat" ? "hidden" : ""}`}
             >
               {renderCanvas()}
@@ -1404,7 +1588,16 @@ export default function Copilot({
   );
 }
 
-function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
+function WorkflowSteps({
+  bundle,
+  liveSteps = {},
+}: {
+  bundle: WorkflowBundle;
+  // Live step states streamed during an "approved" run, keyed by step id. Used
+  // only to advance a step's display ahead of the debounce refresh — it never
+  // regresses a persisted status or overrides a terminal one.
+  liveSteps?: Record<string, "in_progress" | "completed">;
+}) {
   const { steps, artifacts } = bundle;
   const artifactByStep = new Map<string, Artifact>();
   for (const a of artifacts) if (a.step_id) artifactByStep.set(a.step_id, a);
@@ -1413,6 +1606,15 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
       {steps.map((step, i) => {
         const agent = AGENT_BY_KEY[step.assigned_agent];
         const artifact = artifactByStep.get(step.id);
+        // Overlay live progress, but only to move a step forward: a persisted
+        // completed/cancelled/failed step is never reopened by a stale event.
+        const live = liveSteps[step.id];
+        const status =
+          step.status === "pending" && (live === "in_progress" || live === "completed")
+            ? live
+            : step.status === "in_progress" && live === "completed"
+              ? "completed"
+              : step.status;
         // Prefer the durable artifact; fall back to the step's inline result.
         const output =
           artifact?.content ??
@@ -1422,7 +1624,7 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
         return (
           <li key={step.id} className="flex gap-3 rounded-xl border border-line/60 bg-surface-0/45 px-3 py-2.5">
             <div className="flex flex-col items-center">
-              <StepNode status={step.status} color={agent?.color} />
+              <StepNode status={status} color={agent?.color} />
               {i < steps.length - 1 ? <span className="mt-1 w-px flex-1 bg-line/80" /> : null}
             </div>
             <div className="flex-1 pb-1">
@@ -1434,7 +1636,7 @@ function WorkflowSteps({ bundle }: { bundle: WorkflowBundle }) {
                   </span>
                 ) : null}
                 <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                  {STATUS_LABEL[step.status] ?? step.status}
+                  {STATUS_LABEL[status] ?? status}
                 </span>
               </div>
               <p className="mt-0.5 text-xs text-fg-secondary">
@@ -1455,6 +1657,8 @@ function WorkflowCard({
   bundle,
   busy,
   decide,
+  liveSteps,
+  split,
   primary,
   clarifying,
   clarify,
@@ -1465,6 +1669,11 @@ function WorkflowCard({
   bundle: WorkflowBundle;
   busy: boolean;
   decide: (id: string, d: "approved" | "rejected" | "regenerate" | "accepted", note?: string) => void;
+  // Live step states streamed during this workflow's "approved" run.
+  liveSteps?: Record<string, "in_progress" | "completed">;
+  // This workflow's position within its split-prompt group, when it has siblings
+  // (the engine fanned one prompt into several). null = not part of a split.
+  split?: SplitPosition | null;
   primary?: boolean;
   clarifying: boolean;
   clarify: { questions: string[]; answer: string } | null;
@@ -1501,12 +1710,23 @@ function WorkflowCard({
         </div>
       </div>
 
-      {/* Routing badge — where the Intelligence Layer sent the work. */}
-      <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
-        <span className="truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
-          {routingHeadline(routing)}
+      {/* Routing badge — where the Intelligence Layer sent the work — plus, when
+          this prompt was split into siblings, a "Split · N of M" chip. */}
+      <div className="mt-3 flex max-w-full flex-wrap items-center gap-2">
+        <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
+          <span className="truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
+            {routingHeadline(routing)}
+          </span>
         </span>
+        {split ? (
+          <span
+            className="inline-flex shrink-0 items-center rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300"
+            title="This workflow was split from one request into sibling workflows"
+          >
+            Split · {split.index} of {split.total}
+          </span>
+        ) : null}
       </div>
 
       {/* Cursor-style response: Summary / Action / Output / Next Step. */}
@@ -1523,7 +1743,7 @@ function WorkflowCard({
 
       <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Output</p>
       <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
-        <WorkflowSteps bundle={bundle} />
+        <WorkflowSteps bundle={bundle} liveSteps={liveSteps} />
       </div>
 
       <p className="mt-3 text-xs text-fg-secondary">

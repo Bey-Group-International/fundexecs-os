@@ -846,7 +846,7 @@ export type InboxMessage = {
   created_at: string;
 };
 
-// Ownership & Buyer Intelligence (migration 0055). The M&A side of the market on
+// Ownership & Buyer Intelligence (migration 0056). The M&A side of the market on
 // top of the sourcing catalog (0042) + deals: who-bought-whom history and the
 // likely-buyer / add-on lists ranked by lib/ownership-intel.ts. Both org-scoped.
 export type Acquisition = {
@@ -880,6 +880,50 @@ export type BuyerProfile = {
   check_max: number | null;
   appetite: number | null;
   source_url: string | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+};
+
+// The Sourcing Intelligence catalog (migration 0042). A first-party, embedded
+// entity store powering semantic discovery + lookalike search. `embedding` is the
+// pgvector column surfaced as the text literal "[..]" the client sends; cosine
+// search runs through the match_sourcing_entities RPC.
+export type SourcingEntity = Timestamps & {
+  id: string;
+  organization_id: string;
+  kind: string; // 'company' | 'investor' | 'fund' | 'advisor' | 'lender' | 'provider'
+  name: string;
+  domain: string | null;
+  description: string | null;
+  categories: string[];
+  geography: string | null;
+  metadata: Json;
+  provenance: string; // 'manual' | 'ai' | 'web' | 'pipeline' | '<provider>'
+  source_url: string | null;
+  embedding: string | null;
+  created_by: string | null;
+};
+
+// A market signal / trigger about a catalog entity (migration 0055). The
+// Signals & Triggers layer: discrete, time-stamped events (funding rounds,
+// hiring, ownership changes, news, growth, raise/sale intent) that
+// lib/sourcing-signals.ts rolls into a deterministic propensity score.
+// `entity_id` is the sourcing_entities row when known (nullable); subject_name +
+// kind keep the row self-describing. Append-style; created_at only.
+export type EntitySignal = {
+  id: string;
+  organization_id: string;
+  entity_id: string | null;
+  subject_name: string;
+  kind: string | null; // the entity kind, when known
+  // 'funding_round' | 'hiring' | 'ownership_change' | 'news' | 'growth' |
+  // 'raise_intent' | 'sale_intent'
+  signal_type: string;
+  strength: number; // 0–100
+  summary: string | null;
+  source_url: string | null;
+  occurred_at: string | null;
   metadata: Json;
   created_by: string | null;
   created_at: string;
@@ -1155,6 +1199,8 @@ export type Database = {
       dispatch_log: TableShape<DispatchLog>;
       audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
+      sourcing_entities: TableShape<SourcingEntity>;
+      entity_signals: TableShape<EntitySignal>;
       acquisitions: TableShape<Acquisition>;
       buyer_profiles: TableShape<BuyerProfile>;
       operator_feedback: TableShape<OperatorFeedback>;
@@ -1225,6 +1271,30 @@ export type Database = {
           p_delta: number;
         };
         Returns: number;
+      };
+      // Cosine-search the org's Sourcing Intelligence catalog (migration 0042).
+      // embedding sent as the pgvector text literal "[0.1,0.2,...]".
+      match_sourcing_entities: {
+        Args: {
+          query_embedding: string;
+          target_org: string;
+          match_count?: number;
+          filter_kind?: string | null;
+          exclude_id?: string | null;
+        };
+        Returns: {
+          id: string;
+          kind: string;
+          name: string;
+          domain: string | null;
+          description: string | null;
+          categories: string[];
+          geography: string | null;
+          metadata: Json;
+          source_url: string | null;
+          provenance: string;
+          similarity: number;
+        }[];
       };
       // Atomically add to an org's reputation score (creating the row if absent),
       // clamped at 0 (migration 0048). Returns the new score.

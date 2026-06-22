@@ -1,4 +1,4 @@
--- 0055_ownership_intel.sql
+-- 0056_ownership_intel.sql
 -- Ownership & Buyer Intelligence — modeling the M&A side of the market on top of
 -- the Sourcing Intelligence catalog (0042) and the deals table. This is the
 -- FundExecs answer to Mergr's acquisition-history + buyer-list + add-on discovery:
