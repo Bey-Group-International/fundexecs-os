@@ -5,6 +5,7 @@ import { inputClass } from "./DraftWithEarn";
 import { vestingSummary, type VestingFrequency } from "@/lib/vesting";
 import { convert, type InstrumentType } from "@/lib/convertibles";
 import { recognizedExpense } from "@/lib/stock-comp";
+import { runEquityWithEarn } from "./equity-actions";
 
 // Build › Entity: the equity-issuance bench for the firm's own vehicles — the
 // engines Carta runs for grants and SAFEs, native here. Three interactive
@@ -44,6 +45,20 @@ function Field({
       <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{label}</span>
       {children}
     </label>
+  );
+}
+
+// Hand the modeled scenario to the agent team, mirroring Execute's "Run with
+// Earn" launchers. The live inputs/outputs ride along as context.
+function EarnButton({ kind, scenario }: { kind: string; scenario: string }) {
+  return (
+    <form action={runEquityWithEarn} className="mt-3">
+      <input type="hidden" name="kind" value={kind} />
+      <input type="hidden" name="scenario" value={scenario} />
+      <button className="inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 hover:text-gold-200">
+        ✶ Run with Earn
+      </button>
+    </form>
   );
 }
 
@@ -135,6 +150,10 @@ function VestingCalc() {
         <Stat label="Next tranche" value={s.nextVestDate ? `${units(s.nextVestUnits)} on ${s.nextVestDate}` : "—"} />
         <Stat label="Fully vested" value={s.fullyVestedOn ?? "—"} />
       </div>
+      <EarnButton
+        kind="vesting"
+        scenario={`${units(num(totalUnits))} units granted ${grantDate}, ${num(cliffMonths)}-month cliff, ${num(vestingMonths)}-month ${frequency} vesting. As of ${TODAY}: ${units(s.vested)} vested (${s.vestedPct}%), ${units(s.unvested)} unvested; next tranche ${s.nextVestDate ? `${units(s.nextVestUnits)} on ${s.nextVestDate}` : "none"}; fully vested ${s.fullyVestedOn ?? "—"}.`}
+      />
     </section>
   );
 }
@@ -210,6 +229,10 @@ function ConvertibleCalc() {
         <Stat label="Accrued" value={usd(r.accrued)} />
         <Stat label="Ownership" value={`${r.ownershipPct}%`} />
       </div>
+      <EarnButton
+        kind="convertible"
+        scenario={`${type === "note" ? "Convertible note" : "SAFE"} of ${usd(num(principal))} principal, cap ${usd(num(valuationCap))}, ${num(discount)}% discount${type === "note" ? `, ${num(interestRate)}%/yr interest from ${issueDate}` : ""}. Converting into a round at $${num(pricePerShare)}/share on ${units(num(preMoneyShares))} pre-money shares. Result: converts at $${r.conversionPrice} (${r.basis} governs), ${units(r.sharesIssued)} shares, ${r.ownershipPct}% ownership, accrued ${usd(r.accrued)}.`}
+      />
     </section>
   );
 }
@@ -263,6 +286,10 @@ function StockCompCalc() {
         <Stat label="Remaining" value={usd(r.remaining)} />
         <Stat label="Term elapsed" value={`${Math.round(r.vestedFraction * 100)}%`} />
       </div>
+      <EarnButton
+        kind="stock_comp"
+        scenario={`${units(num(unitsGranted))} units at $${num(fairValuePerUnit)} grant-date fair value, granted ${grantDate}, ${num(vestingMonths)}-month vesting${num(forfeitureRate) ? `, ${num(forfeitureRate)}% forfeiture assumption` : ""}. As of ${TODAY}: total cost ${usd(r.totalCost)}, recognized ${usd(r.recognized)}, remaining ${usd(r.remaining)} (${Math.round(r.vestedFraction * 100)}% of term elapsed).`}
+      />
     </section>
   );
 }
