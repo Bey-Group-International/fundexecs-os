@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendRadarDigests } from "@/lib/radar-send";
+import { recordCronRun } from "@/lib/cron-health";
 
 // The Act-now Radar digest sweep: build + compose + push the ranked sourcing
 // brief to every org with enabled, due delivery prefs (in-app, Slack, email).
@@ -35,7 +36,18 @@ export async function GET(request: Request) {
     );
   }
 
+  const startedAt = new Date();
   const supabase = createServiceClient();
   const summary = await sendRadarDigests(supabase);
+
+  // Last-run tracking (append-only, best-effort): record that the daily digest
+  // sweep ran. Never throws; never changes the response below.
+  await recordCronRun(supabase, {
+    job: "digest",
+    status: "ok",
+    detail: { orgsConsidered: summary.orgsConsidered, delivered: summary.delivered },
+    startedAt,
+  });
+
   return NextResponse.json(summary);
 }
