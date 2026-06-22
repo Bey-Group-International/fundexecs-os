@@ -108,10 +108,59 @@ export function earnChatStream(args: {
   return anthropic.messages.stream({
     model: MODEL,
     max_tokens: 1200,
-    system: earnChatSystem(args.modelLabel),
+    // Cache the static persona prompt — it's identical across turns, so this
+    // trims latency and cost on every reply (the planning path caches the same way).
+    system: [{ type: "text", text: earnChatSystem(args.modelLabel), cache_control: { type: "ephemeral" } }],
+    // Chat is latency-sensitive and rarely needs deep reasoning — keep effort low.
     output_config: { effort: "low" },
     messages: [...history, { role: "user", content: args.body }],
   });
+}
+
+const FOLLOWUPS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    suggestions: {
+      type: "array",
+      description: "2-3 short, specific next prompts the operator might send. Imperative or question form.",
+      items: { type: "string" },
+    },
+  },
+  required: ["suggestions"],
+} as const;
+
+// Suggested follow-ups under an answer — 2-3 next prompts. Returns [] with no
+// API key so the UI simply omits them.
+export async function earnFollowups(args: { body: string; reply: string }): Promise<string[]> {
+  const anthropic = client();
+  if (!anthropic || !args.reply.trim()) return [];
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 300,
+      system: [
+        {
+          type: "text",
+          text: "You are Earn inside FundExecs OS. Given the operator's question and your answer, propose 2-3 short, specific follow-up prompts they'd plausibly send next (each one line, under 8 words, no numbering).",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      output_config: { effort: "low", format: { type: "json_schema", schema: FOLLOWUPS_SCHEMA } },
+      messages: [{ role: "user", content: `Question: ${args.body}\n\nAnswer: ${args.reply}` }],
+    });
+    const json = textOf(message);
+    if (!json) return [];
+    const raw = JSON.parse(json) as { suggestions?: unknown };
+    if (!Array.isArray(raw.suggestions)) return [];
+    return raw.suggestions
+      .filter((s): s is string => typeof s === "string")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
 }
 
 // Deterministic reply when no API key is present, so the chat path still

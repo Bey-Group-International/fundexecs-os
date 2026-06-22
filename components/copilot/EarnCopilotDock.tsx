@@ -130,6 +130,12 @@ export function EarnCopilotDock({ name }: { name: string }) {
           ...prev,
           { role: "earn", planTitle: r.planTitle, steps: r.steps, sessionId: r.sessionId },
         ]);
+        window.dispatchEvent(new CustomEvent("earn:exec-activity", {
+          detail: {
+            agentKeys: r.steps?.map((s) => s.agent) ?? [],
+            planTitle: r.planTitle ?? "Working on it...",
+          },
+        }));
         setBody("");
       } else {
         setError(r.error ?? "Something went wrong.");
@@ -147,6 +153,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
   }
 
   // ⌘/Ctrl-K toggles the dock; Esc closes it. Inert where the dock is hidden.
+  // Also listens for earn:open-with-context to pre-fill the input and open.
   useEffect(() => {
     if (hidden) return;
     function onKey(e: KeyboardEvent) {
@@ -157,8 +164,18 @@ export function EarnCopilotDock({ name }: { name: string }) {
         setOpen(false);
       }
     }
+    function onExecContext(e: Event) {
+      const detail = (e as CustomEvent<{ execName: string; prompt: string }>).detail;
+      setOpen(true);
+      setBody(detail.prompt);
+      setTimeout(() => inputRef.current?.focus(), 60);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("earn:open-with-context", onExecContext);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("earn:open-with-context", onExecContext);
+    };
   }, [hidden]);
 
   useEffect(() => {
