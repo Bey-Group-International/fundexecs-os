@@ -9,6 +9,11 @@ import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile, EarnAction } from "@/components/execute/ui";
 import { createInvestorPortalShare, revokeInvestorPortalShare } from "@/components/execute/actions";
 import CopyLink from "@/components/execute/CopyLink";
+import SecondaryTransferForm, {
+  type SellerPosition,
+  type BuyerOption,
+} from "@/components/execute/SecondaryTransferForm";
+import type { Commitment, Fund, Investor } from "@/lib/supabase/database.types";
 
 function humanize(s: string): string {
   return s.replace(/_/g, " ");
@@ -51,6 +56,42 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
       .in("share_id", shares.map((s) => s.id));
     engagement = summarizePortalViews((viewRows ?? []) as { share_id: string | null; created_at: string }[]);
   }
+
+  // Secondary transfers operate on a specific commitment (holder × fund), so the
+  // form works the raw commitment rows — not the holder-aggregated cap table.
+  // NAV share per commitment is apportioned by its committed-capital share.
+  const [commitRes, fundRes, invRes] = await Promise.all([
+    supabase
+      .from("commitments")
+      .select("id, fund_id, investor_id, committed_amount, called_amount, distributed_amount")
+      .eq("organization_id", orgId),
+    supabase.from("funds").select("id, name").eq("organization_id", orgId),
+    supabase.from("investors").select("id, name").eq("organization_id", orgId),
+  ]);
+  const commitments = (commitRes.data ?? []) as Pick<
+    Commitment,
+    "id" | "fund_id" | "investor_id" | "committed_amount" | "called_amount" | "distributed_amount"
+  >[];
+  const fundName = new Map(((fundRes.data ?? []) as Pick<Fund, "id" | "name">[]).map((f) => [f.id, f.name]));
+  const investorName = new Map(
+    ((invRes.data ?? []) as Pick<Investor, "id" | "name">[]).map((i) => [i.id, i.name]),
+  );
+  const positions: SellerPosition[] = commitments
+    .filter((c) => (c.committed_amount ?? 0) > 0)
+    .map((c) => ({
+      commitmentId: c.id,
+      investorId: c.investor_id,
+      investorName: investorName.get(c.investor_id) ?? "Unknown holder",
+      fundName: fundName.get(c.fund_id) ?? "Fund",
+      committed: c.committed_amount ?? 0,
+      called: c.called_amount ?? 0,
+      distributed: c.distributed_amount ?? 0,
+      navShare: t.totalCommitted > 0 ? ((c.committed_amount ?? 0) / t.totalCommitted) * t.totalNav : 0,
+    }))
+    .sort((a, b) => b.committed - a.committed);
+  const buyers: BuyerOption[] = ((invRes.data ?? []) as Pick<Investor, "id" | "name">[])
+    .map((i) => ({ investorId: i.id, name: i.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const header = (
     <ModuleHeader
@@ -110,10 +151,14 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
       ) : null}
 
       {/* Agent actions */}
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <EarnAction kind="cap_statements" label="Draft LP statements" />
         <EarnAction kind="cap_reconcile" label="Reconcile accounts" subtle />
+        <EarnAction kind="secondary_model" label="Model a secondary" subtle />
       </div>
+
+      {/* Secondary transfer — LP liquidity, booked on an operator confirm */}
+      <SecondaryTransferForm positions={positions} buyers={buyers} />
 
       {/* Stakeholder-type breakdown — not just LPs */}
       {t.byType.length > 0 ? (

@@ -3,6 +3,7 @@ import { getExecutePerformance, isExited } from "@/lib/execute-performance";
 import { getValuationMarks, summarizeMarks } from "@/lib/valuation-history";
 import { assetSeries, portfolioSeries } from "@/lib/valuation-series";
 import { assessValuationPolicy } from "@/lib/valuation-policy";
+import { markAsset, type Fair409A } from "@/lib/valuation-409a";
 import { compactUsd, usd, multiple, num, shortDate } from "@/lib/format";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile, EarnAction } from "@/components/execute/ui";
@@ -44,6 +45,19 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
   const portfolioGain =
     portfolio.length >= 2 ? portfolio[portfolio.length - 1].value - portfolio[0].value : 0;
   const policy = assessValuationPolicy(held, marks);
+
+  // 409A fair-value engine — a defensible concluded value per holding, weighing
+  // the income (NOI / cap rate) approach against the cost backstop. Surfaced
+  // next to the carried mark so the variance is visible.
+  const fair = held
+    .map((a) => ({
+      asset: a,
+      f: markAsset({ noi: a.noi, capRatePct: a.cap_rate, cost: a.acquisition_cost }),
+    }))
+    .filter((x): x is { asset: Asset; f: Fair409A } => x.f != null);
+  const fairTotal = fair.reduce((s, x) => s + x.f.concludedValue, 0);
+  const fairCarried = fair.reduce((s, x) => s + num(x.asset.current_value), 0);
+  const fairDelta = fairTotal - fairCarried;
 
   const header = (
     <ModuleHeader title="Valuations" blurb="Fair-value marks across the book — value created, and the Analyst to re-mark it." />
@@ -142,8 +156,60 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
         ) : null}
       </div>
 
+      {/* 409A fair-value engine — concluded value per holding vs the carried mark */}
+      {fair.length > 0 ? (
+        <div className="mb-4 rounded-xl border border-line bg-surface-1 p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+              409A fair-value engine
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              {fair.length} of {held.length} valued · income & cost approaches
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+            <span className="text-fg-secondary">
+              Concluded <span className="font-mono text-fg-primary">{compactUsd(fairTotal)}</span>
+            </span>
+            <span className="text-fg-secondary">
+              Carried <span className="font-mono text-fg-primary">{compactUsd(fairCarried)}</span>
+            </span>
+            <span className={fairDelta >= 0 ? "text-emerald-300" : "text-status-danger"}>
+              {fairDelta >= 0 ? "+" : "−"}
+              {compactUsd(Math.abs(fairDelta))} vs carried
+            </span>
+          </div>
+          <div className="mt-3 overflow-hidden rounded-lg border border-line">
+            {fair.map(({ asset, f }, i) => {
+              const carried = num(asset.current_value);
+              const delta = f.concludedValue - carried;
+              return (
+                <div
+                  key={asset.id}
+                  className={`flex items-center gap-3 bg-surface-0/40 px-4 py-2.5 text-sm ${i > 0 ? "border-t border-line/50" : ""}`}
+                >
+                  <span className="min-w-0 flex-1 truncate text-fg-primary">{asset.name}</span>
+                  <span className="hidden shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted sm:inline">
+                    {f.primary ?? "—"}
+                  </span>
+                  <span className="w-24 shrink-0 text-right font-mono text-fg-primary">{usd(f.concludedValue)}</span>
+                  <span
+                    className={`w-24 shrink-0 text-right font-mono text-[12px] ${
+                      carried === 0 ? "text-fg-muted" : delta >= 0 ? "text-emerald-300" : "text-status-danger"
+                    }`}
+                  >
+                    {carried === 0 ? "no mark" : `${delta >= 0 ? "+" : "−"}${usd(Math.abs(delta))}`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <EarnAction kind="valuation_run" label="Run valuation pass" />
+        <EarnAction kind="valuation_409a" label="Conclude 409A fair value" subtle />
       </div>
 
       <RecordMarkForm assets={held.map((a) => ({ id: a.id, name: a.name }))} />
