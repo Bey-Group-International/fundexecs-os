@@ -12,8 +12,10 @@ import { generatePlan, generatePlans, executeStep, extractDealFields, extractAss
 import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
-import { buildRouting } from "@/lib/intelligence";
+import { buildRouting, deskOverride, engineForStage, executiveForStage, EXECUTIVE_LABEL, type Executive } from "@/lib/intelligence";
 import { shouldReuseRecord } from "@/lib/reference-binding";
+import { getRoutingCorrections, formatRoutingCorrections } from "@/lib/routing-feedback";
+import { recordOperatorFeedback } from "@/lib/team-tasks";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -431,7 +433,19 @@ async function gatherActiveContext(ctx: Ctx, sessionId: string): Promise<string[
 // follow-up with the conversation in mind (oldest first), plus the active
 // deal/asset so references like "the deal" resolve.
 async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[]> {
-  if (!sessionId) return [];
+  // Closed-loop routing learning: prepend a preamble built from the operator's
+  // recent reroute corrections (org-scoped) so the planner stops repeating the
+  // same mis-routes. Purely additive and best-effort — a failure here must never
+  // break planning, so it's swallowed and the session context flows unchanged.
+  let reroute: string[] = [];
+  try {
+    const preamble = formatRoutingCorrections(await getRoutingCorrections(ctx.supabase, ctx.orgId));
+    if (preamble) reroute = [preamble];
+  } catch {
+    // Ignore — routing-feedback is supplementary to the durable session context.
+  }
+
+  if (!sessionId) return reroute;
   const { data: prior } = await ctx.supabase
     .from("tasks")
     .select("description")
@@ -442,18 +456,54 @@ async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[
     .map((t) => t.description?.trim() ?? "")
     .filter(Boolean);
   const active = await gatherActiveContext(ctx, sessionId);
-  return [...active, ...turns];
+  return [...reroute, ...active, ...turns];
 }
 
-export async function planPrompt(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan> {
-  return generatePlan(body, await gatherPriorContext(ctx, sessionId));
+// Apply an operator's explicit desk delegation to a generated plan, overriding
+// Earn's auto-routed owner. Repoints the primary step to a representative agent
+// of the desk (and pins a compliance stage for CRO), so the persisted routing —
+// and everything derived from it — reflects the delegation. Pure.
+export function applyDelegation(plan: AgentPlan, desk: Executive): AgentPlan {
+  const ov = deskOverride(desk);
+  // Repoint the primary step to the desk's representative agent so the agent-
+  // derived owner (used by the UI) matches the delegation. Seed one step when a
+  // plan somehow arrives empty, so routing can't silently fall back to a default
+  // desk.
+  const steps = plan.steps.length
+    ? plan.steps.map((s, i) => (i === 0 ? { ...s, agent: ov.primaryAgent } : s))
+    : [{ agent: ov.primaryAgent, title: plan.title, description: plan.summary }];
+  const lifecycle_stage = ov.stage ?? plan.lifecycle_stage;
+  return {
+    ...plan,
+    steps,
+    lifecycle_stage,
+    target_engine: ov.engine ?? engineForStage(lifecycle_stage),
+    assigned_to: executiveForStage(lifecycle_stage, ov.primaryAgent),
+  };
+}
+
+export async function planPrompt(
+  ctx: Ctx,
+  body: string,
+  sessionId?: string,
+  delegate?: Executive,
+): Promise<AgentPlan> {
+  const plan = await generatePlan(body, await gatherPriorContext(ctx, sessionId));
+  return delegate ? applyDelegation(plan, delegate) : plan;
 }
 
 // Multi-intent: plan a prompt into one OR MORE workflows. Returns a single plan
 // in the common case; multiple only when the request spans distinct lifecycle
-// stages that should be executed and approved independently.
-export async function planPrompts(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan[]> {
-  return generatePlans(body, await gatherPriorContext(ctx, sessionId));
+// stages that should be executed and approved independently. When `delegate` is
+// set, the operator has overridden routing to a specific desk.
+export async function planPrompts(
+  ctx: Ctx,
+  body: string,
+  sessionId?: string,
+  delegate?: Executive,
+): Promise<AgentPlan[]> {
+  const plans = await generatePlans(body, await gatherPriorContext(ctx, sessionId));
+  return delegate ? plans.map((p) => applyDelegation(p, delegate)) : plans;
 }
 
 // Persist a single (pre-drafted) plan as a gated workflow. Thin wrapper over
@@ -516,8 +566,8 @@ export async function materializePrompts(ctx: Ctx, body: string, plans: AgentPla
   return { workflows, session_id: session, split };
 }
 
-export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
-  const plans = await planPrompts(ctx, body, sessionId);
+export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string, delegate?: Executive) {
+  const plans = await planPrompts(ctx, body, sessionId, delegate);
   const { workflows, session_id, split } = await materializePrompts(ctx, body, plans, sessionId);
   const primary = workflows[0];
   // Keep the original single-workflow contract (plan/workflow/approval_id) for
@@ -784,7 +834,14 @@ async function acceptRecommendation(ctx: Ctx, wf: Task) {
  */
 export async function decideApproval(
   ctx: Ctx,
-  args: { approvalId: string; decision: "approved" | "rejected" | "regenerate" | "accepted"; note?: string },
+  args: {
+    approvalId: string;
+    decision: "approved" | "rejected" | "regenerate" | "accepted";
+    note?: string;
+    // When the operator re-routes from the card, the desk to delegate the
+    // rebuilt plan to. Only honored on "regenerate".
+    delegate?: Executive;
+  },
   onProgress?: OnProgress,
 ) {
   const { data: approval } = await ctx.supabase
@@ -864,7 +921,36 @@ export async function decideApproval(
     // (e.g. answers to Earn's clarifying questions) refines the new plan.
     const base = wf.description ?? wf.title;
     const context = args.note?.trim() ? [`Operator clarification: ${args.note.trim()}`] : [];
-    const plan = await generatePlan(base, context);
+    const drafted = await generatePlan(base, context);
+    const plan = args.delegate ? applyDelegation(drafted, args.delegate) : drafted;
+    // A desk re-route is an operator routing correction — log it to the same
+    // learning loop the Execution Grid's engine re-route feeds, so the planner
+    // stops repeating the mis-route. Best-effort; never blocks the re-plan.
+    if (args.delegate) {
+      const fromEngine = wf.target_engine ?? "(unrouted)";
+      const engineChanged = fromEngine !== plan.target_engine;
+      await recordOperatorFeedback(ctx.supabase, [
+        {
+          organizationId: ctx.orgId,
+          principalId: ctx.actorId,
+          signal: "reroute",
+          subject: engineChanged
+            ? `${fromEngine} → ${plan.target_engine}`
+            : `Desk → ${EXECUTIVE_LABEL[args.delegate]}`,
+          scope: "copilot_card",
+          module: "copilot",
+          taskId: wf.id,
+          sessionId: wf.session_id ?? null,
+          metadata: {
+            from_engine: fromEngine,
+            to_engine: plan.target_engine,
+            lifecycle_stage: plan.lifecycle_stage,
+            desk: args.delegate,
+            title: wf.title,
+          },
+        },
+      ]);
+    }
     await materializePlan(ctx, base, plan, { workflowId: wf.id });
   }
 

@@ -3,8 +3,10 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { groupByEngine, type GridWorkflow } from "@/lib/execution-grid";
 import { engineAnalytics, type AnalyticsWorkflow } from "@/lib/grid-analytics";
+import { engineTrends, type TrendWorkflow } from "@/lib/grid-trends";
 import { ExecutionGrid } from "@/components/grid/ExecutionGrid";
 import { EngineAnalytics } from "@/components/grid/EngineAnalytics";
+import { EngineTrends } from "@/components/grid/EngineTrends";
 import { GridLive } from "@/components/grid/GridLive";
 
 export const dynamic = "force-dynamic";
@@ -28,12 +30,14 @@ export default async function GridPage() {
   const rows = (data ?? []) as AnalyticsWorkflow[];
   const panes = groupByEngine(rows as GridWorkflow[]);
   const analytics = engineAnalytics(rows);
+  const trends = engineTrends(rows as TrendWorkflow[]);
 
   return (
     <>
       {/* Auto-refresh the grid as workflows are routed/progress (realtime). */}
       <GridLive orgId={ctx.orgId} />
       <EngineAnalytics analytics={analytics} />
+      <EngineTrends trends={trends} />
       <ExecutionGrid panes={panes} />
     </>
   );

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { engineSlug, type EnginePane } from "@/lib/execution-grid";
+import { routingFromTask } from "@/lib/intelligence";
+import { RerouteControl } from "@/components/grid/RerouteControl";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
@@ -81,31 +83,46 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
                 <p className="text-xs text-fg-muted">No work routed here yet.</p>
               ) : (
                 pane.workflows.slice(0, 6).map((wf) => {
+                  // Recompute routing client-side to surface low-confidence
+                  // (hub-default) routes for human review.
+                  const lowConfidence =
+                    routingFromTask({
+                      prompt: wf.description || wf.title,
+                      hub: wf.hub,
+                      agents: [],
+                      stage: wf.lifecycle_stage,
+                    }).confidence === "low";
                   const inner = (
                     <span className="flex items-center gap-2">
                       <StatusDot status={wf.status} />
                       <span className="min-w-0 flex-1 truncate text-fg-secondary group-hover:text-fg-primary">
                         {wf.title}
                       </span>
+                      {lowConfidence ? (
+                        <span className="shrink-0 rounded-full border border-line/60 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                          ~ low-confidence
+                        </span>
+                      ) : null}
                       <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
                         {STATUS_LABEL[wf.status] ?? wf.status}
                       </span>
                     </span>
                   );
-                  return wf.session_id ? (
-                    <Link
-                      key={wf.id}
-                      href={`/session/${wf.session_id}`}
-                      className="group rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs transition hover:border-gold-500/40"
-                    >
-                      {inner}
-                    </Link>
-                  ) : (
-                    <div
-                      key={wf.id}
-                      className="rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs"
-                    >
-                      {inner}
+                  return (
+                    <div key={wf.id} className="flex items-center gap-1.5">
+                      {wf.session_id ? (
+                        <Link
+                          href={`/session/${wf.session_id}`}
+                          className="group min-w-0 flex-1 rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs transition hover:border-gold-500/40"
+                        >
+                          {inner}
+                        </Link>
+                      ) : (
+                        <div className="min-w-0 flex-1 rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs">
+                          {inner}
+                        </div>
+                      )}
+                      <RerouteControl workflowId={wf.id} currentEngine={pane.engine} />
                     </div>
                   );
                 })

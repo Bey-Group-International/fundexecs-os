@@ -1,6 +1,7 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { planPrompts, materializePrompts } from "@/lib/engine";
+import { isExecutive } from "@/lib/intelligence";
 
 // Plan generation calls Claude; give it room beyond the default.
 export const maxDuration = 60;
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { body, session_id } = await request.json().catch(() => ({ body: "" }));
+  const { body, session_id, delegate } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
     });
   }
   const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
+  const desk = isExecutive(delegate) ? delegate : undefined;
 
   const supabase = createServerClient();
   const ctx = { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId };
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
       try {
         send({ type: "planning" });
-        const plans = await planPrompts(ctx, body, sessionId);
+        const plans = await planPrompts(ctx, body, sessionId, desk);
         // Reveal the primary plan in the canvas; `split` tells the client more
         // than one workflow was routed (the rest load with the session).
         send({ type: "plan", plan: plans[0], plans, split: plans.length > 1 });

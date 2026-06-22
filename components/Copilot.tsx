@@ -6,8 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
-import { routingFromTask, cursorResponse, routingHeadline, EXECUTIVE_LABEL, type TargetEngine } from "@/lib/intelligence";
+import { routingFromTask, cursorResponse, routingHeadline, EXECUTIVE_LABEL, EXECUTIVES, type TargetEngine, type Executive } from "@/lib/intelligence";
 import { splitPositions, type SplitPosition } from "@/lib/split-grouping";
+import { buildOutcome } from "@/lib/routing-trace";
+import { RoutingTrace } from "@/components/RoutingTrace";
+import { OutcomeReceipt } from "@/components/OutcomeReceipt";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import {
   EARN_MODELS,
@@ -25,6 +28,7 @@ import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
 import { ModelCompare, estimateTokens, type ModelComparison } from "@/components/ModelCompare";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
+import { RoutePanel } from "@/components/RoutePanel";
 
 // A conversational turn rendered in the transcript. Chat turns are Earn's
 // answer path (ungated) and live in client state alongside the workflow turns.
@@ -152,9 +156,14 @@ export default function Copilot({
   // Execution Grid: filter the conversation's workflows by the engine they were
   // routed to. null = show all.
   const [engineFilter, setEngineFilter] = useState<TargetEngine | null>(null);
+  // Delegate & Route: the desk the operator has chosen to route the NEXT prompt
+  // to, overriding Earn's auto-routing. null = let Earn route (the default).
+  const [delegate, setDelegate] = useState<Executive | null>(null);
+  // Ephemeral confirmations (decision receipts, re-routes) — bottom-right toasts.
+  const [toasts, setToasts] = useState<{ id: string; msg: string; tone: "ok" | "warn" }[]>([]);
   // Which composer popover is open: the model picker, mode picker, "+" menu, or
   // one of its submenus (slash commands / active integrations).
-  const [openMenu, setOpenMenu] = useState<"model" | "mode" | "plus" | "slash" | "integrations" | null>(null);
+  const [openMenu, setOpenMenu] = useState<"model" | "mode" | "route" | "plus" | "slash" | "integrations" | null>(null);
   // Which integration row in the submenu is expanded to reveal its operational
   // actions.
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
@@ -174,6 +183,12 @@ export default function Copilot({
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   // In-flight chat stream, so the Stop control can abort it.
   const chatAbortRef = useRef<AbortController | null>(null);
+  // Pending toast dismissal timers, cleared on unmount.
+  const toastTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  useEffect(() => {
+    const timers = toastTimers.current;
+    return () => timers.forEach(clearTimeout);
+  }, []);
 
   const activeModel = EARN_MODELS.find((m) => m.key === model) ?? EARN_MODELS[0];
   const activeMode = EARN_MODES.find((m) => m.key === mode) ?? EARN_MODES[0];
@@ -300,9 +315,12 @@ export default function Copilot({
   // directives for execution, so those always run as tasks.
   async function dispatchPrompt(body: string) {
     if (!body || busy) return;
-    if (mode === "accept-edits" && classifyIntent(body) === "chat") {
+    // An explicit desk delegation means the operator wants work done, not a
+    // chat answer — so it always takes the agentic (gated) task path.
+    if (!delegate && mode === "accept-edits" && classifyIntent(body) === "chat") {
       await runChat(body);
     } else {
+      if (delegate) pushToast(`Routing to ${EXECUTIVE_LABEL[delegate]}`);
       await runTask(body);
     }
     // Return focus to the composer so the operator can keep typing without a
@@ -316,7 +334,11 @@ export default function Copilot({
     const res = await fetch("/api/prompt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(sessionId ? { body: envelope, session_id: sessionId } : { body: envelope }),
+      body: JSON.stringify({
+        body: envelope,
+        ...(sessionId ? { session_id: sessionId } : {}),
+        ...(delegate ? { delegate } : {}),
+      }),
     }).catch(() => null);
     setBusy(false);
     setPlanning(false);
@@ -349,7 +371,11 @@ export default function Copilot({
       const res = await fetch("/api/prompt/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sessionId ? { body: envelope, session_id: sessionId } : { body: envelope }),
+        body: JSON.stringify({
+          body: envelope,
+          ...(sessionId ? { session_id: sessionId } : {}),
+          ...(delegate ? { delegate } : {}),
+        }),
       });
       if (!res.ok || !res.body) throw new Error("stream unavailable");
       const reader = res.body.getReader();
@@ -524,17 +550,30 @@ export default function Copilot({
     navigator.clipboard?.writeText(text).catch(() => {});
   }
 
+  // Surface a transient confirmation so the operator knows an action landed.
+  // Timers are tracked so they can be cleared if the component unmounts first.
+  function pushToast(msg: string, tone: "ok" | "warn" = "ok") {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((prev) => [...prev, { id, msg, tone }]);
+    const timer = setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+      toastTimers.current.delete(timer);
+    }, 4200);
+    toastTimers.current.add(timer);
+  }
+
   // Non-streaming approval (every decision but the live-streamed "approved"
   // path, and the fallback when the stream is unavailable).
   async function decidePlain(
     approvalId: string,
     decision: "approved" | "rejected" | "regenerate" | "accepted",
     note?: string,
+    desk?: Executive,
   ) {
     await fetch("/api/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approval_id: approvalId, decision, note }),
+      body: JSON.stringify({ approval_id: approvalId, decision, note, ...(desk ? { delegate: desk } : {}) }),
     }).catch(() => {});
     setClarify(null);
     setBusy(false);
@@ -598,13 +637,23 @@ export default function Copilot({
     approvalId: string,
     decision: "approved" | "rejected" | "regenerate" | "accepted",
     note?: string,
+    desk?: Executive,
   ) {
     setBusy(true);
     if (decision === "approved") {
       await decideApproved(approvalId, note);
     } else {
-      await decidePlain(approvalId, decision, note);
+      await decidePlain(approvalId, decision, note, desk);
     }
+    // Confirm the decision landed — the operator shouldn't have to guess.
+    const receipt: Record<typeof decision, { msg: string; tone: "ok" | "warn" }> = {
+      approved: { msg: "✓ Approved & automated", tone: "ok" },
+      accepted: { msg: "✓ Accepted as recommendation", tone: "ok" },
+      rejected: { msg: "Plan declined", tone: "warn" },
+      regenerate: { msg: desk ? `Re-routed to ${EXECUTIVE_LABEL[desk]}` : "Refining the plan…", tone: "ok" },
+    };
+    const r = receipt[decision];
+    pushToast(r.msg, r.tone);
   }
 
   // "Ask questions to complete" — Earn surfaces what it needs to know. The
@@ -1334,6 +1383,70 @@ export default function Copilot({
                   ) : null}
                 </div>
 
+                {/* Route selector — Delegate & Route. "Auto" lets Earn route;
+                    choosing a desk delegates the next prompt to it. */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenu((m) => (m === "route" ? null : "route"))}
+                    aria-haspopup="menu"
+                    aria-expanded={openMenu === "route"}
+                    className={`flex h-8 items-center gap-1.5 rounded-lg border bg-surface-0/80 px-2.5 text-xs transition hover:border-gold-500/45 hover:text-fg-primary ${
+                      delegate ? "border-gold-500/50 text-gold-300" : "border-line text-fg-secondary"
+                    }`}
+                    title="Delegate & route — choose which desk handles the next request"
+                  >
+                    <span aria-hidden className="text-fg-muted">▾</span>
+                    {delegate ? EXECUTIVE_LABEL[delegate] : "Route: Auto"}
+                  </button>
+                  {openMenu === "route" ? (
+                    <div
+                      role="menu"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                    >
+                      <p className="px-2.5 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        Delegate &amp; route
+                      </p>
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={delegate === null}
+                        onClick={() => {
+                          setDelegate(null);
+                          setOpenMenu(null);
+                        }}
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-2 ${
+                          delegate === null ? "text-fg-primary" : "text-fg-secondary"
+                        }`}
+                      >
+                        <span className="flex flex-col">
+                          <span className="text-sm">Auto</span>
+                          <span className="text-[10px] text-fg-muted">Earn routes to the best desk</span>
+                        </span>
+                        {delegate === null ? <span className="text-gold-300" aria-hidden>✓</span> : null}
+                      </button>
+                      {EXECUTIVES.map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={d === delegate}
+                          onClick={() => {
+                            setDelegate(d);
+                            setOpenMenu(null);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-2 ${
+                            d === delegate ? "text-fg-primary" : "text-fg-secondary"
+                          }`}
+                        >
+                          <span className="text-sm">{EXECUTIVE_LABEL[d]}</span>
+                          {d === delegate ? <span className="text-gold-300" aria-hidden>✓</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
                 {/* "+" menu — Add files or photos · /Slash command · Integrations. */}
                 <div className="relative">
                   <button
@@ -1584,6 +1697,25 @@ export default function Copilot({
       </section>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+
+      {/* Toast viewport — transient confirmations that an action landed. */}
+      {toasts.length ? (
+        <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2" aria-live="polite">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`pointer-events-auto rounded-xl border px-3.5 py-2.5 text-sm shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl ${
+                t.tone === "warn"
+                  ? "border-status-danger/40 bg-surface-1/95 text-fg-primary"
+                  : "border-gold-500/40 bg-surface-1/95 text-fg-primary"
+              }`}
+              role="status"
+            >
+              {t.msg}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1668,7 +1800,7 @@ function WorkflowCard({
 }: {
   bundle: WorkflowBundle;
   busy: boolean;
-  decide: (id: string, d: "approved" | "rejected" | "regenerate" | "accepted", note?: string) => void;
+  decide: (id: string, d: "approved" | "rejected" | "regenerate" | "accepted", note?: string, desk?: Executive) => void;
   // Live step states streamed during this workflow's "approved" run.
   liveSteps?: Record<string, "in_progress" | "completed">;
   // This workflow's position within its split-prompt group, when it has siblings
@@ -1683,6 +1815,7 @@ function WorkflowCard({
 }) {
   const { workflow, approval } = bundle;
   const pending = approval && approval.decision === "pending";
+  const decided = approval && approval.decision !== "pending";
   // Intelligence Layer: render the routing the engine PERSISTED on the workflow
   // (falling back to deterministic classification for pre-routing rows), so the
   // Cursor-style card never drifts from what was actually routed.
@@ -1693,6 +1826,17 @@ function WorkflowCard({
     stage: workflow.lifecycle_stage,
   });
   const cursor = cursorResponse(routing, { pending: Boolean(pending), stepCount: bundle.steps.length });
+  const outcome = buildOutcome(bundle);
+  // Lead with the result: the workflow's primary deliverable (the first artifact
+  // it produced) shown up top once work has run.
+  const primaryArtifact = bundle.artifacts[0] ?? null;
+  // Details (routing trace, summary/action, full step list) follow the workflow's
+  // phase by default — open while a decision is pending or the run is live (so the
+  // plan and streaming steps are visible), collapsed once the outcome leads — until
+  // the operator toggles, after which their choice sticks.
+  const livePhase = Boolean(pending) || workflow.status === "in_progress";
+  const [detailsOverride, setDetailsOverride] = useState<boolean | null>(null);
+  const detailsOpen = detailsOverride ?? livePhase;
   return (
     <article className={`rounded-2xl border bg-surface-1/82 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)] sm:p-5 ${primary ? "border-gold-500/40 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)]" : "border-line/80"}`}>
       <div className="flex items-start justify-between gap-3">
@@ -1710,51 +1854,96 @@ function WorkflowCard({
         </div>
       </div>
 
-      {/* Routing badge — where the Intelligence Layer sent the work — plus, when
-          this prompt was split into siblings, a "Split · N of M" chip. */}
-      <div className="mt-3 flex max-w-full flex-wrap items-center gap-2">
-        <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
-          <span className="truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
-            {routingHeadline(routing)}
-          </span>
-        </span>
-        {split ? (
+      {/* Outcome receipt — durable proof a decision went through (when decided). */}
+      {decided ? (
+        <div className="mt-3">
+          <OutcomeReceipt outcome={outcome} />
+        </div>
+      ) : null}
+
+      {/* When this prompt was split into siblings, a "Split · N of M" chip. */}
+      {split ? (
+        <div className="mt-3 flex max-w-full flex-wrap items-center gap-2">
           <span
             className="inline-flex shrink-0 items-center rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300"
             title="This workflow was split from one request into sibling workflows"
           >
             Split · {split.index} of {split.total}
           </span>
+        </div>
+      ) : null}
+
+      {/* Lead with the result: the headline deliverable + the single next step. */}
+      {!pending && primaryArtifact ? (
+        <div className="mt-3">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Deliverable</p>
+          <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
+            <ArtifactInline
+              content={primaryArtifact.content}
+              artifactType={primaryArtifact.artifact_type}
+              title={primaryArtifact.title}
+            />
+          </div>
+          <p className="mt-2 text-xs text-fg-secondary">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Next step</span>
+            {" · "}
+            {cursor.nextStep}
+          </p>
+        </div>
+      ) : null}
+
+      {/* Layered detail — routing trace, summary/action, and the full step run
+          fold behind a disclosure so the card stays scannable. */}
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() => setDetailsOverride(!detailsOpen)}
+          aria-expanded={detailsOpen}
+          className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+        >
+          <span className={`transition ${detailsOpen ? "rotate-90" : ""}`} aria-hidden>▸</span>
+          {detailsOpen ? "Hide details" : pending ? "Plan & routing" : "Details & full run"}
+        </button>
+
+        {detailsOpen ? (
+          <div className="mt-2 space-y-3">
+            <RoutingTrace bundle={bundle} />
+
+            <dl className="space-y-2 text-sm">
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Summary</dt>
+                <dd className="text-fg-secondary">{cursor.summary}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Action</dt>
+                <dd className="text-fg-secondary">{cursor.action}</dd>
+              </div>
+            </dl>
+
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Output</p>
+              <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
+                <WorkflowSteps bundle={bundle} liveSteps={liveSteps} />
+              </div>
+            </div>
+          </div>
         ) : null}
+        {/* Unified Delegate & Route — change the engine or delegate to a desk in
+            one place. Desk delegation re-plans, so it's only offered while pending. */}
+        <RoutePanel
+          workflowId={workflow.id}
+          currentEngine={routing.target_engine}
+          currentDesk={routing.assigned_to}
+          canDelegate={Boolean(pending)}
+          busy={busy}
+          onDelegate={(d) => approval && decide(approval.id, "regenerate", undefined, d)}
+        />
       </div>
-
-      {/* Cursor-style response: Summary / Action / Output / Next Step. */}
-      <dl className="mt-3 space-y-2 text-sm">
-        <div>
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Summary</dt>
-          <dd className="text-fg-secondary">{cursor.summary}</dd>
-        </div>
-        <div>
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Action</dt>
-          <dd className="text-fg-secondary">{cursor.action}</dd>
-        </div>
-      </dl>
-
-      <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Output</p>
-      <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
-        <WorkflowSteps bundle={bundle} liveSteps={liveSteps} />
-      </div>
-
-      <p className="mt-3 text-xs text-fg-secondary">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Next step</span>
-        {" · "}
-        {cursor.nextStep}
-      </p>
 
       {pending ? (
         <div className="mt-4 border-t border-line/75 pt-4">
-          <p className="text-xs text-fg-secondary">{approval.summary}</p>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Your decision</p>
+          <p className="mt-1 text-xs text-fg-secondary">{approval.summary}</p>
 
           {/* Clarify panel — Earn's questions for the operator. */}
           {clarify ? (

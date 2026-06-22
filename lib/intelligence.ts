@@ -116,6 +116,11 @@ export interface RoutingPayload {
   tags: string[];
 }
 
+// Whether routing came from a positive classification (a RULES match or an
+// explicitly classified stage) or fell back to a hub default. `low` rows are
+// surfaced for human review.
+export type RoutingConfidence = "high" | "low";
+
 // The structured internal object (section 6). Persisted on prompts.parsed_intent.
 export interface RoutingObject {
   intent: string;
@@ -123,6 +128,7 @@ export interface RoutingObject {
   target_engine: TargetEngine;
   assigned_to: Executive;
   payload: RoutingPayload;
+  confidence: RoutingConfidence;
   status: "routed";
 }
 
@@ -164,6 +170,45 @@ export function executiveForAgent(agent: AgentKey): Executive {
 // the executive follows the primary agent. Single rule, reused everywhere.
 export function executiveForStage(stage: LifecycleStage, primaryAgent: AgentKey): Executive {
   return COMPLIANCE_STAGES.has(stage) ? "cro" : executiveForAgent(primaryAgent);
+}
+
+// --- Delegate & Route -----------------------------------------------------
+//
+// The operator can override Earn's auto-routing and DELEGATE a request to a
+// specific executive desk. Because `assigned_to` is a pure function of the
+// primary agent (and stage), delegating is just repointing the primary agent to
+// a representative of that desk — and, for CRO (which has no native agent and is
+// only reachable structurally), forcing a compliance stage.
+export const DESK_PRIMARY_AGENT: Record<Executive, AgentKey> = {
+  earn_coo: "portfolio_ops",
+  cio: "analyst",
+  analyst: "diligence",
+  associate: "associate",
+  cmo: "investor_relations",
+  // CRO is reached via a compliance stage; the agent only seeds the step.
+  cro: "associate",
+};
+
+// Desks that can only be reached by pinning a particular lifecycle stage.
+export const DESK_FORCE_STAGE: Partial<Record<Executive, LifecycleStage>> = {
+  cro: "Compliance & Documentation",
+};
+
+export interface DeskOverride {
+  primaryAgent: AgentKey;
+  // When the desk forces a stage (CRO), the stage/engine to pin; else null.
+  stage: LifecycleStage | null;
+  engine: TargetEngine | null;
+}
+
+// The concrete routing changes that delegating to `desk` implies. Pure.
+export function deskOverride(desk: Executive): DeskOverride {
+  const stage = DESK_FORCE_STAGE[desk] ?? null;
+  return {
+    primaryAgent: DESK_PRIMARY_AGENT[desk],
+    stage,
+    engine: stage ? engineForStage(stage) : null,
+  };
 }
 
 // --- Classification rules -------------------------------------------------
@@ -261,6 +306,8 @@ export function buildRouting(input: {
     target_engine: engineForStage(stage),
     assigned_to: executiveForStage(stage, primaryAgent),
     payload: makePayload(input.prompt.trim(), input.hub, input.agents, stage),
+    // The stage was explicitly classified (by the planner), so this is authoritative.
+    confidence: "high",
     status: "routed",
   };
 }
@@ -281,6 +328,8 @@ export function deriveRouting(input: RoutingInput): RoutingObject {
     target_engine: engineForStage(stage),
     assigned_to: executiveForStage(stage, input.agents[0] ?? "associate"),
     payload: makePayload(prompt, input.hub, input.agents, tag),
+    // High when a rule matched; low when we fell back to the hub default.
+    confidence: matched ? "high" : "low",
     status: "routed",
   };
 }

@@ -13,6 +13,9 @@ import {
   EXECUTIVE_LABEL,
   STAGE_TO_ENGINE,
   LIFECYCLE_STAGES,
+  deskOverride,
+  DESK_PRIMARY_AGENT,
+  EXECUTIVES,
 } from "@/lib/intelligence";
 
 describe("executiveForAgent (mapping layer)", () => {
@@ -31,6 +34,31 @@ describe("executiveForAgent (mapping layer)", () => {
   it("maps back-office/ops agents to COO (Earn)", () => {
     expect(executiveForAgent("fund_admin")).toBe("earn_coo");
     expect(executiveForAgent("portfolio_ops")).toBe("earn_coo");
+  });
+});
+
+describe("deskOverride (Delegate & Route)", () => {
+  it("every desk's representative agent resolves back to that desk", () => {
+    // The delegation contract: repointing the primary agent to a desk's
+    // representative must make `assigned_to` that desk (except CRO, which is
+    // reached structurally via a forced compliance stage).
+    for (const desk of EXECUTIVES) {
+      const ov = deskOverride(desk);
+      expect(ov.primaryAgent).toBe(DESK_PRIMARY_AGENT[desk]);
+      const stage = ov.stage ?? "Sourcing";
+      expect(executiveForStage(stage, ov.primaryAgent)).toBe(desk);
+    }
+  });
+
+  it("pins a compliance stage + engine for CRO (no native agent)", () => {
+    const ov = deskOverride("cro");
+    expect(ov.stage).toBe("Compliance & Documentation");
+    expect(ov.engine).toBe(engineForStage("Compliance & Documentation"));
+  });
+
+  it("leaves the stage to the plan for non-CRO desks", () => {
+    expect(deskOverride("cio").stage).toBeNull();
+    expect(deskOverride("cio").engine).toBeNull();
   });
 });
 
@@ -54,6 +82,7 @@ describe("deriveRouting", () => {
     expect(r.target_engine).toBe("Diligence Engine");
     expect(r.lifecycle_stage).toBe("Diligence");
     expect(r.assigned_to).toBe("analyst");
+    expect(r.confidence).toBe("high");
   });
 
   it("routes capital-stack modeling to the Capital Stack Engine + CIO", () => {
@@ -85,6 +114,7 @@ describe("deriveRouting", () => {
     const r = deriveRouting({ prompt: "Help me think about the quarter", hub: "source", agents: ["associate"] });
     expect(r.target_engine).toBe("Outbound Engine");
     expect(r.lifecycle_stage).toBe("Sourcing");
+    expect(r.confidence).toBe("low");
   });
 
   it("flags priority and extracts entities without inventing data", () => {
@@ -162,6 +192,7 @@ describe("buildRouting (authoritative path)", () => {
     expect(r.target_engine).toBe("Capital Stack Engine");
     expect(r.assigned_to).toBe("cio");
     expect(r.lifecycle_stage).toBe("Underwriting");
+    expect(r.confidence).toBe("high");
   });
   it("applies the CRO override when the stage is compliance", () => {
     const r = buildRouting({ prompt: "KYC review", hub: "execute", agents: ["analyst"], stage: "Compliance & Documentation" });
