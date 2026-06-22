@@ -55,11 +55,8 @@ const PortfolioHealthDashboard = nextDynamic(() =>
     (m) => m.PortfolioHealthDashboard,
   ),
 );
-const DealSignalFeed = nextDynamic(() =>
-  import("@/components/intelligence/DealSignalFeed").then((m) => m.DealSignalFeed),
-);
-const SectorHeatmap = nextDynamic(() =>
-  import("@/components/intelligence/SectorHeatmap").then((m) => m.SectorHeatmap),
+const ThesisLive = nextDynamic(() =>
+  import("@/components/intelligence/ThesisLive").then((m) => m.ThesisLive),
 );
 const WorkspaceDocumentListLive = nextDynamic(() =>
   import("@/components/workspace/WorkspaceDocumentListLive").then((m) => m.WorkspaceDocumentListLive),
@@ -183,23 +180,12 @@ export default function ModulePage({
   }
 
   // Build › Thesis — Deal Signal Feed + Sector Heatmap.
-  // TODO: replace mock data with real signals and heatmap cells from Supabase / external enrichment.
+  // ThesisLive loads real signals + heatmap snapshots for the active org
+  // (migration 0058), best-effort, and renders both sections.
   if (params.hub === "build" && params.module === "thesis") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 flex flex-col gap-8">
-        <section>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
-            Deal Signal Feed
-          </p>
-          <DealSignalFeed signals={[]} />
-        </section>
-        <div className="border-t border-line" />
-        <section>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
-            Sector Heatmap
-          </p>
-          <SectorHeatmap cells={[]} sectors={[]} stages={[]} />
-        </section>
+        <ThesisLive />
         <div className="border-t border-line pt-8">
           <ModuleView hub={params.hub} module={params.module} />
         </div>
