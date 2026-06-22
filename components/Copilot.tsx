@@ -89,7 +89,7 @@ function StepNode({ status, color }: { status: string; color?: string }) {
   if (status === "in_progress") {
     return (
       <span className="relative flex h-5 w-5 items-center justify-center">
-        <span className="absolute h-5 w-5 animate-pulse rounded-full opacity-40" style={{ backgroundColor: color }} />
+        <span className="absolute h-5 w-5 animate-pulse rounded-full opacity-40 motion-reduce:animate-none" style={{ backgroundColor: color }} />
         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
       </span>
     );
@@ -299,6 +299,9 @@ export default function Copilot({
     } else {
       await runTask(body);
     }
+    // Return focus to the composer so the operator can keep typing without a
+    // mouse — the input may have lost focus when a control was tapped to send.
+    requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   // Non-streaming fallback (and the path when the live stream errors): plan +
@@ -613,10 +616,14 @@ export default function Copilot({
             <span className="h-1 w-1 rounded-full bg-line" />
             <span>{t.streaming ? "Answering" : "Answer"}</span>
           </div>
-          <div className="rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+          <div
+            className="rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)]"
+            aria-live="polite"
+            aria-busy={t.streaming}
+          >
             {t.content ? <Markdown>{t.content}</Markdown> : null}
             {t.streaming ? (
-              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom" aria-hidden />
+              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom motion-reduce:animate-none" aria-hidden />
             ) : null}
           </div>
 
@@ -931,7 +938,7 @@ export default function Copilot({
                     key={`${s.agent}-${i}`}
                     className="flex gap-3 rounded-xl border border-line/60 bg-surface-0/45 px-3 py-2.5"
                   >
-                    <span className="mt-0.5 h-5 w-5 shrink-0 animate-pulse rounded-full border-2 border-gold-500/50" />
+                    <span className="mt-0.5 h-5 w-5 shrink-0 animate-pulse rounded-full border-2 border-gold-500/50 motion-reduce:animate-none" />
                     <div className="min-w-0">
                       <span className="text-sm font-medium text-fg-primary">{s.title}</span>
                       <p className="mt-0.5 text-xs text-fg-secondary">
@@ -968,11 +975,17 @@ export default function Copilot({
 
         {/* Mobile pane tabs — conversation vs work canvas (desktop shows both). */}
         {hasWork && !isDesktop ? (
-          <div className="relative z-10 flex gap-1 border-b border-line/70 bg-surface-0/80 p-1.5">
+          <div
+            role="tablist"
+            aria-label="Pane"
+            className="relative z-10 flex gap-1 border-b border-line/70 bg-surface-0/80 p-1.5"
+          >
             {(["chat", "work"] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
+                role="tab"
+                aria-selected={mobileTab === tab}
                 onClick={() => setMobileTab(tab)}
                 className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                   mobileTab === tab ? "bg-surface-2 text-fg-primary" : "text-fg-secondary hover:text-fg-primary"
@@ -986,6 +999,8 @@ export default function Copilot({
 
         <div ref={splitRef} className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
           <div
+            role="region"
+            aria-label="Conversation"
             className={`relative flex min-h-0 flex-col ${
               hasWork
                 ? `lg:flex-none lg:border-r lg:border-line/70 ${!isDesktop && mobileTab === "work" ? "hidden" : "flex-1"}`
@@ -1063,10 +1078,10 @@ export default function Copilot({
                   <EarnOrb size={32} pulse className="mt-1" />
                   <div className="relative overflow-hidden rounded-2xl border border-gold-500/25 bg-surface-1/80 px-4 py-3 text-sm text-fg-secondary">
                     <span className="inline-flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-400" />
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-400 motion-reduce:animate-none" />
                       Reading your prompt and drafting the plan...
                     </span>
-                    <span className="fx-data-stream" aria-hidden />
+                    <span className="fx-data-stream motion-reduce:hidden" aria-hidden />
                   </div>
                 </div>
               ) : null}
@@ -1089,6 +1104,7 @@ export default function Copilot({
                       onClick={() => setAttachments((prev) => prev.filter((_, index) => index !== i))}
                       className="rounded-full border border-gold-500/30 bg-gold-500/10 px-2 py-1 font-mono text-[10px] text-gold-300 transition hover:bg-gold-500/15"
                       title="Remove attachment"
+                      aria-label={`Remove attachment ${file.name}`}
                     >
                       {file.type.startsWith("video/") ? "video" : "image"} · {file.name} x
                     </button>
@@ -1470,6 +1486,8 @@ export default function Copilot({
           {/* Work canvas — plan / steps / artifacts for the focused workflow. */}
           {hasWork ? (
             <div
+              role="region"
+              aria-label="Work canvas"
               className={`relative flex min-h-0 flex-1 flex-col ${!isDesktop && mobileTab === "chat" ? "hidden" : ""}`}
             >
               {renderCanvas()}
