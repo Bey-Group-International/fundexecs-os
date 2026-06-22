@@ -1091,6 +1091,21 @@ export type Artifact = Timestamps & {
   grounding_score: number;
 };
 
+// The cron-run ledger (migration 20260623160000). Last-run tracking for the
+// three scheduled entrypoints — 'cron' (hourly), 'digest' (daily),
+// 'digest_weekly' (weekly). An org-agnostic OPS table: written only by the
+// service role at the end of each cron run, readable by any authenticated
+// principal (no organization_id — the sweeps span every org). `detail` holds a
+// small per-run summary (counts).
+export type CronRun = {
+  id: string;
+  job: string;
+  status: string;
+  detail: Json | null;
+  started_at: string | null;
+  finished_at: string;
+};
+
 // Minimal Database shape compatible with @supabase/supabase-js generics.
 // The Brain layer (migration 0023). brain_runs is the audit + session-
 // visualization log of every Brain activation; brain_documents holds the inline
@@ -1399,6 +1414,7 @@ export type Database = {
       funnel_snapshots: TableShape<FunnelSnapshotRow>;
       radar_digest_engagement: TableShape<RadarDigestEngagement>;
       digest_experiment_variants: TableShape<DigestExperimentVariant>;
+      cron_runs: TableShape<CronRun>;
     };
     Views: Record<string, never>;
     Functions: {

@@ -4,6 +4,7 @@ import { runAutomation } from "@/lib/engine";
 import { nextRun } from "@/lib/cron";
 import { findDueOrgsForScan, scanOrgRadarSignals } from "@/lib/radar-scan";
 import { runSlaEscalations } from "@/lib/sla-cron";
+import { recordCronRun } from "@/lib/cron-health";
 import type { Automation } from "@/lib/supabase/database.types";
 
 // Each due automation plans + (if trusted) executes a full workflow via Claude.
@@ -137,6 +138,21 @@ export async function GET(request: Request) {
   } catch {
     escalated = 0;
   }
+
+  // Last-run tracking (append-only, best-effort): record that the hourly sweep
+  // ran so the pipeline's liveness is observable. Never throws; never changes the
+  // response below.
+  await recordCronRun(supabase, {
+    job: "cron",
+    status: "ok",
+    detail: {
+      swept: due.length,
+      scannedOrgs: radar.scannedOrgs,
+      generated: radar.generated,
+      escalated,
+    },
+    startedAt: now,
+  });
 
   return NextResponse.json({ swept: due.length, results, radar, escalated });
 }
