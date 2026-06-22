@@ -1,4 +1,4 @@
--- 0061_artifact_provenance.sql
+-- 0063_artifact_provenance.sql
 -- The trust layer, phase 1: make every composer-produced artifact real and
 -- verifiable. Artifacts gain the same provenance/verification columns the rest
 -- of the record modules already carry (migration 0034), plus two grounding

@@ -12,6 +12,7 @@ import { generatePlan, generatePlans, executeStep, extractDealFields, extractAss
 import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import type { BrainResult } from "@/lib/brains/types";
+import { computeGroundingScore } from "@/lib/grounding";
 import { brainForAgent } from "@/lib/brain-routing";
 import { buildRouting, deskOverride, engineForStage, executiveForStage, EXECUTIVE_LABEL, type Executive } from "@/lib/intelligence";
 import { shouldReuseRecord } from "@/lib/reference-binding";
@@ -661,8 +662,11 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
       source: s.source,
       snippet: s.text.slice(0, 240),
       score: s.score,
-      kind: s.kind,
+      kind: s.kind as "document" | "kb",
     }));
+    // Automated grounding signal: how much of the deliverable reflects its
+    // citations. Persisted now; the human approval gate verifies on top of it.
+    const groundingScore = computeGroundingScore(output, sources);
 
     const artifactType = classifyArtifact(step.assigned_agent, step.title);
     const [, { data: artifact }] = await Promise.all([
@@ -688,6 +692,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           verification_status: "unverified",
           sources: sources as unknown as Json,
           brain_run_id: brain?.runId ?? null,
+          grounding_score: groundingScore,
         })
         .select("id")
         .single(),
@@ -789,6 +794,37 @@ export async function runAutomation(
  * ordered steps) is promoted to a memo artifact so it's a durable deliverable,
  * and the workflow is marked complete.
  */
+/**
+ * The human half of the trust gate: once an operator approves a workflow, its
+ * artifacts are signed off — verification_status flips to 'verified', stamped
+ * with who and when. Emits an `artifact.verified` event per artifact so the
+ * canvas can flip the badge live. Best-effort and idempotent; verifying an
+ * already-verified artifact is a harmless no-op.
+ */
+async function verifyWorkflowArtifacts(ctx: Ctx, wf: Task, note: string) {
+  const { data: rows } = await ctx.supabase
+    .from("artifacts")
+    .update({
+      verification_status: "verified",
+      verified_by: ctx.actorId,
+      verified_at: new Date().toISOString(),
+      verification_note: note,
+    })
+    .eq("workflow_id", wf.id)
+    .eq("verification_status", "unverified")
+    .select("id, artifact_type");
+
+  for (const row of rows ?? []) {
+    await recordEvent(ctx, {
+      taskId: wf.id,
+      type: "artifact.verified",
+      agent: "associate",
+      hub: wf.hub,
+      payload: { artifact_id: row.id, artifact_type: row.artifact_type },
+    });
+  }
+}
+
 async function acceptRecommendation(ctx: Ctx, wf: Task) {
   const { data: stepData } = await ctx.supabase
     .from("tasks")
@@ -924,10 +960,13 @@ export async function decideApproval(
       }
     }
     await executeWorkflow(ctx, wf, onProgress);
+    // Operator approval is the authoritative sign-off — verify the deliverables.
+    await verifyWorkflowArtifacts(ctx, wf, `Approved by operator${args.note ? `: ${args.note}` : ""}`);
   } else if (args.decision === "accepted") {
     // Accept: the plan stands as the recommendation — no agents run. Capture it
     // as a first-class artifact and mark the workflow done.
     await acceptRecommendation(ctx, wf);
+    await verifyWorkflowArtifacts(ctx, wf, "Accepted as recommendation by operator");
   } else if (args.decision === "rejected") {
     await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
     await ctx.supabase

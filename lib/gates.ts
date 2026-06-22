@@ -116,12 +116,25 @@ export interface GateDecision {
   reason: string;
 }
 
+// The verification standing of the work product an action would send outward.
+// `verifiable` is true when an operator has signed the artifact off or it is
+// automatically well-grounded (see lib/grounding.ts `isVerifiable`). Supplied
+// only for actions that carry a composer artifact; omit it otherwise.
+export interface Backing {
+  verifiable: boolean;
+}
+
 /**
  * Decide whether an action may proceed autonomously or must be gated for the
  * operator. The mandate can only ever relax Tier 2; Tier 1 is always free and
  * Tier 3 is always gated, regardless of what any mandate claims.
+ *
+ * Trust layer: a mandate may only auto-execute a Tier-2 action when the work
+ * product behind it is verifiable. Unverified, weakly-grounded output cannot
+ * ride the auto-approve bypass to a counterparty — it falls back to the human
+ * gate. Internal (Tier 1) work is unaffected; Tier 3 is always gated anyway.
  */
-export function gateDecision(action: ActionKind, mandate?: Mandate): GateDecision {
+export function gateDecision(action: ActionKind, mandate?: Mandate, backing?: Backing): GateDecision {
   const tier = tierForAction(action);
 
   if (tier === 1) {
@@ -140,6 +153,14 @@ export function gateDecision(action: ActionKind, mandate?: Mandate): GateDecisio
   // ceiling that actually reaches Tier 2.
   const preAuthorized =
     !!mandate && mandate.autonomyCeiling >= 2 && mandate.autoApprove.includes(action);
+
+  if (preAuthorized && backing && !backing.verifiable) {
+    return {
+      tier,
+      requiresApproval: true,
+      reason: "Unverified, weakly-grounded output — sign-off required before it reaches a counterparty.",
+    };
+  }
 
   return preAuthorized
     ? { tier, requiresApproval: false, reason: "Pre-authorized by your active mandate." }

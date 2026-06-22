@@ -62,10 +62,12 @@ export function citedSourceNames(sources: ArtifactSource[]): string[] {
 
 // Derive the verification badge from an artifact's status + its citations.
 // Human sign-off (verification_status === 'verified') wins; otherwise the
-// presence of citations earns "grounded"; nothing → "unverified".
+// presence of citations earns "grounded"; nothing → "unverified". When a
+// grounding score is known, it sharpens the "grounded" detail line.
 export function verificationView(input: {
   verification_status?: string | null;
   sources?: unknown;
+  grounding_score?: number | null;
 }): VerificationView {
   const sources = parseSources(input.sources);
   if (input.verification_status === "verified") {
@@ -77,10 +79,11 @@ export function verificationView(input: {
   }
   if (sources.length > 0) {
     const n = citedSourceNames(sources).length;
+    const pct = typeof input.grounding_score === "number" ? ` (${Math.round(input.grounding_score * 100)}% grounded)` : "";
     return {
       level: "grounded",
       label: "Grounded",
-      detail: `Cites ${n} source${n === 1 ? "" : "s"} — awaiting operator sign-off.`,
+      detail: `Cites ${n} source${n === 1 ? "" : "s"}${pct} — awaiting operator sign-off.`,
     };
   }
   return {
