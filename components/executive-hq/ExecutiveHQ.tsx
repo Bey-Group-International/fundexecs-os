@@ -105,24 +105,34 @@ function roomBgSrc(roomId: string, mode: "day" | "night"): string {
 
 // ─── Mini-map ─────────────────────────────────────────────────────────────────
 
+const GOLD = "#c9a84c";
+const GOLD_DIM = "#c9a84c55";
+
 function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: boolean }) {
   const W = 20; const H = 13; const G = 2;
   const cells = [
-    {id:"ceo",       c:0,r:0,s:1,col:"#b45309"},
-    {id:"boardroom", c:1,r:0,s:1,col:"#3b82f6"},
-    {id:"trading",   c:2,r:0,s:1,col:"#14b8a6"},
-    {id:"research",  c:3,r:0,s:1,col:"#6366f1"},
-    {id:"investor",  c:0,r:1,s:1,col:"#a855f7"},
-    {id:"ops",       c:1,r:1,s:1,col:"#22c55e"},
-    {id:"legal",     c:2,r:1,s:1,col:"#ef4444"},
-    {id:"marketing", c:3,r:1,s:1,col:"#f97316"},
-    {id:"reception", c:1,r:2,s:2,col:"#b49320"},
+    {id:"ceo",       c:0,r:0,s:1,col:"#c9a84c"},
+    {id:"boardroom", c:1,r:0,s:1,col:"#a8c4e0"},
+    {id:"trading",   c:2,r:0,s:1,col:"#5eead4"},
+    {id:"research",  c:3,r:0,s:1,col:"#a5b4fc"},
+    {id:"investor",  c:0,r:1,s:1,col:"#d8b4fe"},
+    {id:"ops",       c:1,r:1,s:1,col:"#86efac"},
+    {id:"legal",     c:2,r:1,s:1,col:"#fca5a5"},
+    {id:"marketing", c:3,r:1,s:1,col:"#fdba74"},
+    {id:"reception", c:1,r:2,s:2,col:"#c9a84c"},
   ];
   const tw = 4*(W+G)-G;
   const th = 3*(H+G)-G;
   return (
-    <div style={{ position:"absolute", bottom:8, right:8, zIndex:20, background:"rgba(6,9,15,0.82)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:4, padding:"4px 5px", pointerEvents:"none" }}>
-      <div style={{ fontFamily:"monospace", fontSize:6, color:"rgba(255,255,255,0.35)", marginBottom:3, letterSpacing:"0.12em" }}>FLOOR MAP</div>
+    <div style={{
+      position:"absolute", bottom:12, right:12, zIndex:20,
+      background:"rgba(8,6,4,0.88)",
+      border:`1px solid ${GOLD_DIM}`,
+      borderRadius:3, padding:"5px 6px", pointerEvents:"none",
+      backdropFilter:"blur(8px)",
+      boxShadow:`0 0 20px rgba(201,168,76,0.08), inset 0 1px 0 rgba(201,168,76,0.12)`,
+    }}>
+      <div style={{ fontFamily:"Georgia,serif", fontSize:5.5, color:GOLD_DIM, marginBottom:3, letterSpacing:"0.18em", textTransform:"uppercase" }}>Floor Plan</div>
       <svg width={tw} height={th} viewBox={`0 0 ${tw} ${th}`}>
         {cells.map(cell=>{
           const active = cell.id === activeId;
@@ -130,9 +140,10 @@ function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: 
             <rect key={cell.id}
               x={cell.c*(W+G)} y={cell.r*(H+G)}
               width={W*cell.s+G*(cell.s-1)} height={H}
-              fill={active ? cell.col : `${cell.col}35`}
-              stroke={active ? cell.col : `${cell.col}55`}
+              fill={active ? `${cell.col}40` : `${cell.col}18`}
+              stroke={active ? cell.col : `${cell.col}40`}
               strokeWidth={active ? 1 : 0.5}
+              rx={1}
             />
           );
         })}
@@ -174,11 +185,15 @@ function RoomCell({
   const handleEnter = () => { setHovered(true); onHoverChange(room.id); };
   const handleLeave = () => { setHovered(false); onHoverChange(null); };
 
+  const isActive = hovered || isFocused;
+  const goldBorder = `rgba(201,168,76,${isActive ? 0.7 : activity >= 3 ? 0.3 : 0.15})`;
+  const shimmerOpacity = isActive ? 0.18 : activity >= 2 ? 0.06 : 0.02;
+
   let boxShadow: string;
-  if (isFocused)        boxShadow = `inset 0 0 0 2px ${room.accentColor}, 0 0 0 1px white`;
-  else if (hovered)     boxShadow = `inset 0 0 0 2px ${room.accentColor}cc, 0 0 20px ${room.accentColor}40`;
-  else if (activity>=3) boxShadow = `inset 0 0 0 1px ${room.accentColor}55, 0 0 10px ${room.accentColor}25`;
-  else                  boxShadow = `inset 0 0 0 1px ${room.accentColor}20`;
+  if (isFocused)        boxShadow = `inset 0 0 0 1.5px ${GOLD}, 0 0 32px rgba(201,168,76,0.25), 0 8px 40px rgba(0,0,0,0.6)`;
+  else if (hovered)     boxShadow = `inset 0 0 0 1px ${GOLD}aa, 0 0 24px rgba(201,168,76,0.18), 0 8px 40px rgba(0,0,0,0.5)`;
+  else if (activity>=3) boxShadow = `inset 0 0 0 1px ${GOLD}33, 0 4px 20px rgba(0,0,0,0.4)`;
+  else                  boxShadow = `inset 0 0 0 1px rgba(201,168,76,0.1), 0 2px 12px rgba(0,0,0,0.3)`;
 
   return (
     <div
@@ -192,13 +207,14 @@ function RoomCell({
         background: "transparent",
         overflow: "hidden",
         boxShadow,
-        transform: isZooming ? "scale(6)" : hovered ? "scale(1.015)" : "scale(1)",
+        borderRadius: 2,
+        transform: isZooming ? "scale(6)" : hovered ? "scale(1.018)" : "scale(1)",
         transformOrigin,
         zIndex: isZooming ? 30 : hovered ? 5 : undefined,
         opacity: isZooming ? 0 : 1,
         transition: isZooming
           ? "transform 0.4s cubic-bezier(0.4,0,1,1), opacity 0.35s ease-in 0.05s"
-          : "transform 0.15s ease, box-shadow 0.2s ease, opacity 0s",
+          : "transform 0.2s cubic-bezier(0.2,0,0,1), box-shadow 0.25s ease, opacity 0s",
       }}
     >
       {/* Room-specific PNG background */}
@@ -212,105 +228,122 @@ function RoomCell({
           objectFit: "cover", objectPosition: "center top",
           pointerEvents: "none", userSelect: "none",
           zIndex: 0,
+          transition: "filter 0.25s ease",
+          filter: hovered ? "brightness(1.12) saturate(1.1)" : "brightness(1) saturate(1)",
         }}
       />
 
-      {/* Subtle breathe tint — very low opacity so map shows through */}
-      {!reducedEffects && (
-        <div style={{
-          position:"absolute", inset:0, background: room.accentColor, opacity:0,
-          animation:`room-breathe ${breatheDuration} ease-in-out infinite`,
-          animationDelay:`${roomIndex*0.45}s`, pointerEvents:"none", zIndex:1,
-        }}/>
-      )}
-
-      {/* Light flicker */}
+      {/* Dark vignette base — always present, lifts on hover */}
       <div style={{
-        position:"absolute", inset:0, background:"rgba(255,255,200,0.03)",
-        animation:`light-flicker 8s ease-in-out infinite ${flickerDelay}`,
-        pointerEvents:"none", zIndex:1,
+        position:"absolute", inset:0, zIndex:1, pointerEvents:"none",
+        background: `radial-gradient(ellipse at 50% 30%, transparent 30%, rgba(4,3,2,${hovered ? 0.35 : 0.55}) 100%)`,
+        transition:"background 0.3s ease",
       }}/>
 
-      {/* Hover glow */}
-      {hovered && (
+      {/* Gold shimmer overlay — breathes with activity */}
+      <div style={{
+        position:"absolute", inset:0, pointerEvents:"none", zIndex:2,
+        background:`linear-gradient(135deg, rgba(201,168,76,${shimmerOpacity}) 0%, transparent 50%, rgba(201,168,76,${shimmerOpacity * 0.5}) 100%)`,
+        animation: !reducedEffects ? `room-breathe ${breatheDuration} ease-in-out infinite` : "none",
+        animationDelay:`${roomIndex*0.55}s`,
+        transition:"opacity 0.3s ease",
+      }}/>
+
+      {/* Hover radial glow — warm gold center */}
+      {isActive && (
         <div style={{
-          position:"absolute", inset:0,
-          background:`radial-gradient(ellipse at center, ${room.accentColor}15 0%, transparent 65%)`,
-          pointerEvents:"none", zIndex:2,
+          position:"absolute", inset:0, pointerEvents:"none", zIndex:3,
+          background:`radial-gradient(ellipse at 50% 60%, rgba(201,168,76,0.12) 0%, transparent 70%)`,
+          animation:"fadeSlideUp 0.2s ease-out",
         }}/>
       )}
 
-      {/* Door-scan line on entry */}
+      {/* Cinematic scan line on entry */}
       {isZooming && (
         <div style={{
-          position:"absolute", left:0, right:0, height:2,
-          background:`linear-gradient(90deg, transparent 0%, ${room.accentColor} 30%, white 50%, ${room.accentColor} 70%, transparent 100%)`,
-          animation:"door-scan 0.3s ease-in forwards",
-          pointerEvents:"none", zIndex:8,
+          position:"absolute", left:0, right:0, height:1,
+          background:`linear-gradient(90deg, transparent 0%, ${GOLD}88 20%, #fff8e8 50%, ${GOLD}88 80%, transparent 100%)`,
+          boxShadow:`0 0 12px ${GOLD}`,
+          animation:"door-scan 0.35s ease-in forwards",
+          pointerEvents:"none", zIndex:9,
         }}/>
       )}
 
-      {/* Hover preview card */}
-      {hovered && stats && (
-        <div style={{
-          position:"absolute", bottom:"calc(100% - 20px)", left:"50%",
-          transform:"translateX(-50%)",
-          background:"rgba(6,9,15,0.92)",
-          border:`1px solid ${room.accentColor}55`,
-          fontFamily:"monospace", fontSize:8, padding:"5px 8px",
-          whiteSpace:"nowrap", zIndex:12, pointerEvents:"none",
-          animation:"fadeSlideUp 0.15s ease-out",
-          color:"#e2e8f0", textAlign:"center", minWidth:80,
-        }}>
-          <div style={{ color:room.accentColor, fontWeight:700, letterSpacing:"0.1em", marginBottom:2 }}>{room.label}</div>
-          <div style={{ opacity:0.8, marginBottom:3 }}>{stats.value} {stats.label} {trendArrow}</div>
-          <div style={{ color:room.accentColor, opacity:0.9, letterSpacing:"0.08em" }}>→ ENTER</div>
-        </div>
-      )}
+      {/* Particle shimmer dots — luxury sparkle on hover */}
+      {isActive && !reducedEffects && [0,1,2].map(i => (
+        <div key={i} aria-hidden="true" style={{
+          position:"absolute",
+          left:`${20 + i * 30}%`, top:`${30 + i * 15}%`,
+          width:2, height:2, borderRadius:"50%",
+          background:GOLD,
+          boxShadow:`0 0 6px ${GOLD}, 0 0 12px ${GOLD}88`,
+          pointerEvents:"none", zIndex:4,
+          animation:`light-flicker ${3+i}s ease-in-out infinite`,
+          animationDelay:`${i*0.4}s`,
+        }}/>
+      ))}
 
       {/* Exec avatars (hidden for now) */}
-      <div style={{ position:"absolute", bottom:24, left:0, right:0, zIndex:4, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
+      <div style={{ position:"absolute", bottom:28, left:0, right:0, zIndex:5, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
         {room.executives.map(exec=>(
           <ExecAvatar key={exec.id} exec={exec} size={42} onClick={()=>onExecClick(exec)}
             activeBubble={activeBubble} reducedEffects={reducedEffects} nightMode={nightMode}/>
         ))}
       </div>
 
-      {/* Bottom frosted-glass info bar */}
+      {/* Bottom glass panel */}
       <div style={{
         position:"absolute", bottom:0, left:0, right:0, zIndex:6,
-        background:`rgba(6,9,15,${hovered?"0.88":"0.72"})`,
-        backdropFilter:"blur(6px)",
-        borderTop:`1px solid ${room.accentColor}${hovered?"55":"22"}`,
-        display:"flex", alignItems:"center", justifyContent:"space-between",
-        padding:"3px 6px",
+        background: isActive
+          ? "linear-gradient(180deg, rgba(8,6,4,0) 0%, rgba(8,6,4,0.82) 100%)"
+          : "linear-gradient(180deg, rgba(8,6,4,0) 0%, rgba(8,6,4,0.65) 100%)",
+        backdropFilter: isActive ? "blur(8px)" : "blur(4px)",
+        borderTop:`1px solid ${goldBorder}`,
+        display:"flex", flexDirection:"column",
+        padding:"5px 7px 4px",
         pointerEvents:"none", userSelect:"none",
-        transition:"background 0.2s, border-color 0.2s",
+        transition:"all 0.25s ease",
       }}>
+        {/* Gold rule */}
         <div style={{
-          fontFamily:"monospace", fontSize:7, fontWeight:700,
-          letterSpacing:"0.12em", textTransform:"uppercase",
-          color: room.accentColor,
-          textShadow: hovered ? `0 0 8px ${room.accentColor}80` : "none",
-          transition:"text-shadow 0.2s",
-        }}>
-          {isZooming ? "ENTERING..." : room.label}
-        </div>
-        {stats && (
-          <div style={{ fontFamily:"monospace", fontSize:7, letterSpacing:"0.06em", color:room.accentColor, opacity:0.8 }}>
-            {stats.value} {stats.label} {trendArrow}
+          width: isActive ? "100%" : "40%", height:1,
+          background:`linear-gradient(90deg, ${GOLD}88 0%, transparent 100%)`,
+          marginBottom:3,
+          transition:"width 0.35s ease",
+        }}/>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{
+            fontFamily:"Georgia,'Times New Roman',serif",
+            fontSize:7, fontWeight:400,
+            letterSpacing:"0.16em", textTransform:"uppercase",
+            color: isActive ? GOLD : `${GOLD}88`,
+            textShadow: isActive ? `0 0 16px ${GOLD}66` : "none",
+            transition:"all 0.25s ease",
+          }}>
+            {isZooming ? "Entering…" : room.label}
           </div>
-        )}
+          {stats && (
+            <div style={{
+              fontFamily:"'Courier New',monospace", fontSize:6.5,
+              color: isActive ? "rgba(255,248,220,0.9)" : "rgba(255,248,220,0.45)",
+              letterSpacing:"0.06em",
+              transition:"color 0.25s ease",
+            }}>
+              <span style={{ color: stats.trend==="up" ? "#86efac" : stats.trend==="down" ? "#fca5a5" : "rgba(255,248,220,0.5)" }}>{trendArrow}</span>
+              {" "}{stats.value} {stats.label}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Keyboard focus indicator */}
       {isFocused && !hovered && (
         <div style={{
-          position:"absolute", top:4, right:4, zIndex:6, pointerEvents:"none",
-          fontFamily:"monospace", fontSize:6, color:"white", opacity:0.6,
-          letterSpacing:"0.08em", userSelect:"none",
+          position:"absolute", top:5, right:6, zIndex:7, pointerEvents:"none",
+          fontFamily:"Georgia,serif", fontSize:6.5, color:GOLD, opacity:0.7,
+          letterSpacing:"0.1em", userSelect:"none",
         }}>
-          [↵]
+          ↵
         </div>
       )}
     </div>
@@ -434,16 +467,21 @@ export function ExecutiveHQ() {
         fontFamily: "monospace",
         overflow: "hidden",
         outline: "none",
-        background: nightMode ? "#050810" : "#0d0d1a",
+        background: nightMode ? "#06050a" : "#0a0908",
       }}
     >
       <style>{`
-        @keyframes monitor-pulse { 0%,100%{opacity:0.5} 50%{opacity:0.9} }
+        @keyframes monitor-pulse  { 0%,100%{opacity:0.5} 50%{opacity:0.9} }
         @keyframes light-flicker  { 0%,97%,100%{opacity:1} 98%{opacity:0.88} 99%{opacity:0.96} }
-        @keyframes room-breathe   { 0%,100%{opacity:0} 50%{opacity:0.06} }
+        @keyframes room-breathe   { 0%,100%{opacity:0} 50%{opacity:1} }
         @keyframes bubble-in      { from{opacity:0;transform:translateX(-50%) translateY(4px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
         @keyframes fadeSlideUp    { from{opacity:0;transform:translateX(-50%) translateY(6px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
         @keyframes door-scan      { 0%{top:-2px;opacity:1} 100%{top:100%;opacity:0} }
+        @keyframes hq-scanline    { 0%{transform:translateY(-100%)} 100%{transform:translateY(200%)} }
+        @keyframes gold-particle  { 0%{transform:translate(0,0) scale(1);opacity:0} 15%{opacity:1} 85%{opacity:0.7} 100%{transform:translate(var(--pdx),var(--pdy)) scale(0.4);opacity:0} }
+        @keyframes pulse-ring-lux { 0%{r:12;opacity:0.6;stroke-width:1.5} 100%{r:40;opacity:0;stroke-width:0.5} }
+        @keyframes hud-sweep      { 0%{transform:translateX(-100%)} 100%{transform:translateX(400%)} }
+        @keyframes brand-fade     { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
         .hq-paused * { animation-play-state: paused !important; }
       `}</style>
 
@@ -457,26 +495,148 @@ export function ExecutiveHQ() {
           width: "100%", height: "100%",
           objectFit: "cover", objectPosition: "center top",
           pointerEvents: "none", userSelect: "none",
+          filter: nightMode ? "brightness(0.7) saturate(0.85)" : "brightness(0.85) saturate(0.9)",
         }}
       />
 
-      {/* Controls row — top right */}
-      <div style={{ position:"absolute", top:8, right:8, zIndex:20, display:"flex", gap:4 }}>
-        {/* Sound toggle */}
+      {/* ── Luxury cinematic vignette ── */}
+      <div aria-hidden="true" style={{
+        position:"absolute", inset:0, zIndex:2, pointerEvents:"none",
+        background:"radial-gradient(ellipse 85% 70% at 50% 45%, transparent 30%, rgba(4,3,2,0.72) 100%)",
+      }}/>
+
+      {/* ── Subtle scanline HUD overlay ── */}
+      {!reducedEffects && (
+        <div aria-hidden="true" style={{
+          position:"absolute", inset:0, zIndex:2, pointerEvents:"none", overflow:"hidden",
+          background:"repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(201,168,76,0.018) 2px, rgba(201,168,76,0.018) 3px)",
+        }}>
+          <div style={{
+            position:"absolute", left:0, right:0, height:"25%",
+            background:"linear-gradient(180deg, transparent 0%, rgba(201,168,76,0.05) 50%, transparent 100%)",
+            animation:"hq-scanline 6s linear infinite",
+          }}/>
+        </div>
+      )}
+
+      {/* ── Gold particle data stream ── */}
+      {!reducedEffects && (
+        <div aria-hidden="true" style={{ position:"absolute", inset:0, zIndex:2, pointerEvents:"none", overflow:"hidden" }}>
+          {([
+            {l:"8%",  t:"20%", dx:"60px",  dy:"-50px", dur:7,   delay:"0s"   },
+            {l:"22%", t:"55%", dx:"-45px", dy:"-70px", dur:8.5, delay:"1.2s" },
+            {l:"38%", t:"12%", dx:"35px",  dy:"55px",  dur:6.5, delay:"2.4s" },
+            {l:"55%", t:"68%", dx:"-60px", dy:"-30px", dur:9,   delay:"0.6s" },
+            {l:"70%", t:"35%", dx:"50px",  dy:"-45px", dur:7.5, delay:"3.1s" },
+            {l:"85%", t:"60%", dx:"-35px", dy:"-55px", dur:8,   delay:"1.8s" },
+            {l:"14%", t:"40%", dx:"40px",  dy:"60px",  dur:6,   delay:"4.0s" },
+            {l:"48%", t:"78%", dx:"-25px", dy:"-65px", dur:7,   delay:"2.7s" },
+            {l:"76%", t:"18%", dx:"-50px", dy:"40px",  dur:9.5, delay:"0.3s" },
+          ] as {l:string;t:string;dx:string;dy:string;dur:number;delay:string}[]).map((p, i) => (
+            <div key={i} style={{
+              position:"absolute", left:p.l, top:p.t,
+              width: i%3===0 ? 2 : 1.5, height: i%3===0 ? 2 : 1.5,
+              borderRadius:"50%",
+              background: i%4===0 ? GOLD : i%4===1 ? "#e8d5a0" : i%4===2 ? "#f8ecc0" : "#c9a84c99",
+              boxShadow:`0 0 ${i%2===0?8:5}px ${GOLD}`,
+              ["--pdx" as string]: p.dx, ["--pdy" as string]: p.dy,
+              animation:`gold-particle ${p.dur}s ease-in-out ${p.delay} infinite`,
+            }}/>
+          ))}
+        </div>
+      )}
+
+      {/* ── Pulse rings — active rooms ── */}
+      {!reducedEffects && (
+        <svg aria-hidden="true" style={{ position:"absolute", inset:0, width:"100%", height:"100%", zIndex:2, pointerEvents:"none", overflow:"visible" }}>
+          <defs>
+            <linearGradient id="pg1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor={GOLD} stopOpacity="0"/>
+              <stop offset="50%" stopColor={GOLD} stopOpacity="0.8"/>
+              <stop offset="100%" stopColor={GOLD} stopOpacity="0"/>
+            </linearGradient>
+          </defs>
+          {([
+            {cx:"13%", cy:"21%", delay:"0s"},
+            {cx:"62%", cy:"21%", delay:"1.4s"},
+            {cx:"38%", cy:"57%", delay:"0.7s"},
+            {cx:"87%", cy:"57%", delay:"2.1s"},
+          ] as {cx:string;cy:string;delay:string}[]).map((r,i) => (
+            <circle key={i} cx={r.cx} cy={r.cy} r="12"
+              fill="none" stroke={GOLD} strokeWidth="1"
+              style={{
+                transformOrigin:`${r.cx} ${r.cy}`,
+                animation:`pulse-ring-lux 3.5s ease-out ${r.delay} infinite`,
+                opacity:0,
+              }}
+            />
+          ))}
+        </svg>
+      )}
+
+      {/* ── HUD sweep line (top) ── */}
+      {!reducedEffects && (
+        <div aria-hidden="true" style={{
+          position:"absolute", top:0, left:0, right:0, height:1, zIndex:3, pointerEvents:"none", overflow:"hidden",
+        }}>
+          <div style={{
+            position:"absolute", top:0, width:"25%", height:"100%",
+            background:`linear-gradient(90deg, transparent, ${GOLD}55, transparent)`,
+            animation:"hud-sweep 8s ease-in-out 2s infinite",
+          }}/>
+        </div>
+      )}
+
+      {/* ── Brand header (top left) ── */}
+      <div style={{
+        position:"absolute", top:10, left:12, zIndex:20, pointerEvents:"none",
+        animation:"brand-fade 0.6s ease-out",
+      }}>
+        <div style={{
+          fontFamily:"Georgia,'Times New Roman',serif",
+          fontSize:9, letterSpacing:"0.28em", textTransform:"uppercase",
+          color:GOLD, opacity:0.85,
+          textShadow:`0 0 20px ${GOLD}55`,
+        }}>
+          FundExecs OS
+        </div>
+        <div style={{
+          fontFamily:"'Courier New',monospace",
+          fontSize:6, letterSpacing:"0.18em", textTransform:"uppercase",
+          color:"rgba(255,248,220,0.35)", marginTop:2,
+        }}>
+          Executive Headquarters · {ROOMS.length} Sectors
+        </div>
+      </div>
+
+      {/* ── Controls (top right) ── */}
+      <div style={{ position:"absolute", top:10, right:12, zIndex:20, display:"flex", gap:6, alignItems:"center" }}>
         <button
           onClick={() => setSoundMuted(v => !v)}
           title={soundMuted ? "Enable ambient sound" : "Mute sound"}
-          style={{ background:"rgba(6,9,15,0.75)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:4, color:"rgba(255,255,255,0.55)", fontFamily:"monospace", fontSize:10, padding:"2px 6px", cursor:"pointer", letterSpacing:"0.05em" }}
+          style={{
+            background:"rgba(8,6,4,0.8)", backdropFilter:"blur(8px)",
+            border:`1px solid ${GOLD_DIM}`, borderRadius:2,
+            color:"rgba(255,248,220,0.5)", fontFamily:"Georgia,serif",
+            fontSize:9, padding:"3px 8px", cursor:"pointer", letterSpacing:"0.12em",
+            transition:"all 0.2s ease",
+          }}
         >
-          {soundMuted ? "♪ OFF" : "♪ ON"}
+          {soundMuted ? "♩" : "♪"}
         </button>
-        {/* Day/night toggle */}
         <button
           onClick={() => setNightMode(v => !v)}
           title="Toggle day/night (N)"
-          style={{ background:"rgba(6,9,15,0.75)", border:"1px solid rgba(180,147,32,0.4)", borderRadius:4, color:"#b49320", fontFamily:"monospace", fontSize:10, padding:"2px 7px", cursor:"pointer", letterSpacing:"0.05em" }}
+          style={{
+            background:"rgba(8,6,4,0.8)", backdropFilter:"blur(8px)",
+            border:`1px solid ${GOLD}66`, borderRadius:2,
+            color:GOLD, fontFamily:"Georgia,serif",
+            fontSize:9, padding:"3px 9px", cursor:"pointer", letterSpacing:"0.12em",
+            boxShadow:`0 0 12px ${GOLD}22`,
+            transition:"all 0.2s ease",
+          }}
         >
-          {nightMode ? "☀ DAY" : "☾ NIGHT"}
+          {nightMode ? "Day" : "Night"}
         </button>
       </div>
 
@@ -489,7 +649,7 @@ export function ExecutiveHQ() {
         gridTemplateRows:"36fr 26fr 17fr",
         gridTemplateAreas:'"ceo board trading research" "investor ops legal marketing" ". reception reception ."',
         gap:"1%",
-        zIndex:3,
+        zIndex:4,
       }}>
         {ROOMS.map((room, idx) => (
           <RoomCell
