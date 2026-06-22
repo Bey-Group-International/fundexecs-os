@@ -43,10 +43,19 @@ const ROOM_FREQUENCIES: Record<string, number> = {
   investor: 392, ops: 440, legal: 494, marketing: 523, reception: 220,
 };
 
-const ROOM_TRANSFORM_ORIGINS: Record<string, string> = {
-  ceo: "top left", boardroom: "top center", trading: "top right",
-  research: "top right", investor: "top left", ops: "top center",
-  legal: "top right", marketing: "top right", reception: "bottom center",
+// Translate values to pan the full office image to center on each room
+// Formula: translate(50%-cx, 50%-cy) where cx/cy are approximate room centers
+// relative to the full office image dimensions
+const ROOM_ZOOM_TRANSLATE: Record<string, string> = {
+  ceo:       "translate(36%,   30%)",
+  boardroom: "translate(11%,   30%)",
+  trading:   "translate(-15%,  30%)",
+  research:  "translate(-40%,  30%)",
+  investor:  "translate(36%,  -1%)",
+  ops:       "translate(11%,  -1%)",
+  legal:     "translate(-15%, -1%)",
+  marketing: "translate(-40%, -1%)",
+  reception: "translate(0%,  -23%)",
 };
 
 const LIGHT_FLICKER_DELAYS = ["0s","2.3s","5.1s","1.7s","3.8s","4.2s","0.9s","6.1s","1.2s"];
@@ -173,17 +182,22 @@ function RoomCell({
   isFocused: boolean; activity: 0 | 1 | 2 | 3;
   onHoverChange: (id: string | null) => void;
 }) {
-  const mode = nightMode ? "night" : "day";
   const [hovered, setHovered] = useState(false);
+  const [roomNight, setRoomNight] = useState(nightMode);
+  const mode = roomNight ? "night" : "day";
   const flickerDelay = LIGHT_FLICKER_DELAYS[roomIndex % LIGHT_FLICKER_DELAYS.length];
   const isZooming = zoomingRoom === room.id;
-  const transformOrigin = ROOM_TRANSFORM_ORIGINS[room.id] ?? "center center";
   const breatheDuration = activity >= 3 ? "2s" : "4s";
   const stats = ROOM_STATS[room.id];
   const trendArrow = stats?.trend === "up" ? "↑" : stats?.trend === "down" ? "↓" : "→";
 
   const handleEnter = () => { setHovered(true); onHoverChange(room.id); };
   const handleLeave = () => { setHovered(false); onHoverChange(null); };
+
+  const handleToggleNight = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRoomNight(v => !v);
+  };
 
   const isActive = hovered || isFocused;
   const goldBorder = `rgba(201,168,76,${isActive ? 0.7 : activity >= 3 ? 0.3 : 0.15})`;
@@ -208,15 +222,46 @@ function RoomCell({
         overflow: "hidden",
         boxShadow,
         borderRadius: 2,
-        transform: isZooming ? "scale(6)" : hovered ? "scale(1.018)" : "scale(1)",
-        transformOrigin,
+        transform: hovered ? "scale(1.018)" : "scale(1)",
         zIndex: isZooming ? 30 : hovered ? 5 : undefined,
         opacity: isZooming ? 0 : 1,
         transition: isZooming
-          ? "transform 0.4s cubic-bezier(0.4,0,1,1), opacity 0.35s ease-in 0.05s"
+          ? "opacity 0.3s ease-in 0.1s"
           : "transform 0.2s cubic-bezier(0.2,0,0,1), box-shadow 0.25s ease, opacity 0s",
       }}
     >
+      {/* Per-room PNG overlay — independent day/night mode */}
+      <img
+        src={roomBgSrc(room.id, mode)}
+        alt="" aria-hidden="true"
+        style={{
+          position:"absolute", inset:0, width:"100%", height:"100%",
+          objectFit:"cover", objectPosition:"center top",
+          pointerEvents:"none", zIndex:0,
+          opacity: hovered ? 0.55 : 0.3,
+          transition:"opacity 0.3s ease",
+        }}
+      />
+
+      {/* Per-room day/night toggle — visible on hover */}
+      {hovered && (
+        <button
+          onClick={handleToggleNight}
+          title={roomNight ? "Switch to day" : "Switch to night"}
+          style={{
+            position:"absolute", top:5, left:6, zIndex:8,
+            background:"rgba(8,6,4,0.78)", backdropFilter:"blur(6px)",
+            border:`1px solid ${GOLD}55`, borderRadius:2,
+            color:GOLD, fontFamily:"Georgia,serif",
+            fontSize:8, padding:"2px 6px", cursor:"pointer",
+            letterSpacing:"0.1em", lineHeight:1.2,
+            transition:"border-color 0.2s ease",
+          }}
+        >
+          {roomNight ? "☀" : "☾"}
+        </button>
+      )}
+
       {/* Hover brightness lift — applied via a transparent overlay so the full office map shows through */}
       <div style={{
         position:"absolute", inset:0, zIndex:1, pointerEvents:"none",
@@ -480,6 +525,13 @@ export function ExecutiveHQ() {
           objectFit: "cover", objectPosition: "center top",
           pointerEvents: "none", userSelect: "none",
           filter: nightMode ? "brightness(0.75) saturate(0.9)" : "brightness(0.9) saturate(0.95)",
+          transformOrigin: "center center",
+          transform: zoomingRoom
+            ? `scale(3.5) ${ROOM_ZOOM_TRANSLATE[zoomingRoom] ?? ""}`
+            : "scale(1) translate(0,0)",
+          transition: zoomingRoom
+            ? "transform 0.45s cubic-bezier(0.4,0,0.6,1)"
+            : "transform 0s",
         }}
       />
 
