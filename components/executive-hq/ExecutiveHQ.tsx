@@ -131,7 +131,7 @@ const GOLD = "#c9a84c";
 const GOLD_DIM = "#c9a84c55";
 
 function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: boolean }) {
-  const W = 20; const H = 13; const G = 2;
+  const W = 28; const H = 18; const G = 2;
   const cells = [
     {id:"ceo",       c:0,r:0,s:1,col:"#c9a84c"},
     {id:"boardroom", c:1,r:0,s:1,col:"#a8c4e0"},
@@ -147,14 +147,14 @@ function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: 
   const th = 3*(H+G)-G;
   return (
     <div style={{
-      position:"absolute", bottom:12, right:12, zIndex:20,
+      position:"absolute", bottom:16, right:16, zIndex:20,
       background:"rgba(8,6,4,0.88)",
       border:`1px solid ${GOLD_DIM}`,
-      borderRadius:3, padding:"5px 6px", pointerEvents:"none",
+      borderRadius:4, padding:"7px 8px", pointerEvents:"none",
       backdropFilter:"blur(8px)",
       boxShadow:`0 0 20px rgba(201,168,76,0.08), inset 0 1px 0 rgba(201,168,76,0.12)`,
     }}>
-      <div style={{ fontFamily:"Georgia,serif", fontSize:5.5, color:GOLD_DIM, marginBottom:3, letterSpacing:"0.18em", textTransform:"uppercase" }}>Floor Plan</div>
+      <div style={{ fontFamily:"Georgia,serif", fontSize:6.5, color:GOLD_DIM, marginBottom:4, letterSpacing:"0.18em", textTransform:"uppercase" }}>Floor Plan</div>
       <svg width={tw} height={th} viewBox={`0 0 ${tw} ${th}`}>
         {cells.map(cell=>{
           const active = cell.id === activeId;
@@ -185,7 +185,7 @@ function ExecAvatar(_: { exec: ExecData; size: number; onClick: () => void; acti
 function RoomCell({
   room, roomIndex, onExecClick, onRoomClick, zoomingRoom,
   activeBubble, reducedEffects, nightMode, isFocused, activity,
-  onHoverChange,
+  onHoverChange, debugGrid,
 }: {
   room: RoomData; roomIndex: number;
   onExecClick: (exec: ExecData) => void;
@@ -194,6 +194,7 @@ function RoomCell({
   reducedEffects: boolean; nightMode: boolean;
   isFocused: boolean; activity: 0 | 1 | 2 | 3;
   onHoverChange: (id: string | null) => void;
+  debugGrid: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [roomNight, setRoomNight] = useState(nightMode);
@@ -216,8 +217,10 @@ function RoomCell({
   const goldBorder = `rgba(201,168,76,${isActive ? 0.7 : activity >= 3 ? 0.3 : 0.15})`;
   const shimmerOpacity = isActive ? 0.18 : activity >= 2 ? 0.06 : 0.02;
 
+  const DEBUG_COLORS = ["#ff4444","#44ff44","#4488ff","#ffaa00","#ff44ff","#44ffff","#ff8844","#88ff44","#aa44ff"];
   let boxShadow: string;
-  if (isFocused)        boxShadow = `inset 0 0 0 1.5px ${GOLD}, 0 0 32px rgba(201,168,76,0.25), 0 8px 40px rgba(0,0,0,0.6)`;
+  if (debugGrid)        boxShadow = `inset 0 0 0 2px ${DEBUG_COLORS[roomIndex % DEBUG_COLORS.length]}`;
+  else if (isFocused)   boxShadow = `inset 0 0 0 1.5px ${GOLD}, 0 0 32px rgba(201,168,76,0.25), 0 8px 40px rgba(0,0,0,0.6)`;
   else if (hovered)     boxShadow = `inset 0 0 0 1px ${GOLD}aa, 0 0 24px rgba(201,168,76,0.18), 0 8px 40px rgba(0,0,0,0.5)`;
   else if (activity>=3) boxShadow = `inset 0 0 0 1px ${GOLD}33, 0 4px 20px rgba(0,0,0,0.4)`;
   else                  boxShadow = `inset 0 0 0 1px rgba(201,168,76,0.1), 0 2px 12px rgba(0,0,0,0.3)`;
@@ -310,13 +313,13 @@ function RoomCell({
         backdropFilter: isActive ? "blur(8px)" : "blur(4px)",
         borderTop:`1px solid ${goldBorder}`,
         display:"flex", flexDirection:"column",
-        padding:"5px 7px 4px",
+        padding:"4px 8px 5px",
         pointerEvents:"none", userSelect:"none",
         transition:"all 0.25s ease",
       }}>
         {/* Gold rule */}
         <div style={{
-          width: isActive ? "100%" : "40%", height:1,
+          width: isActive ? "100%" : "35%", height:1,
           background:`linear-gradient(90deg, ${GOLD}88 0%, transparent 100%)`,
           marginBottom:3,
           transition:"width 0.35s ease",
@@ -324,8 +327,8 @@ function RoomCell({
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:4 }}>
           <div style={{
             fontFamily:"Georgia,'Times New Roman',serif",
-            fontSize:7, fontWeight:400,
-            letterSpacing:"0.16em", textTransform:"uppercase",
+            fontSize:8.5, fontWeight:400,
+            letterSpacing:"0.14em", textTransform:"uppercase",
             color: isActive ? GOLD : `${GOLD}88`,
             textShadow: isActive ? `0 0 16px ${GOLD}66` : "none",
             transition:"all 0.25s ease",
@@ -335,7 +338,7 @@ function RoomCell({
           </div>
           {!isZooming && stats && !hovered && (
             <div style={{
-              fontFamily:"'Courier New',monospace", fontSize:6.5,
+              fontFamily:"'Courier New',monospace", fontSize:7.5,
               color:"rgba(255,248,220,0.45)",
               letterSpacing:"0.06em", whiteSpace:"nowrap",
             }}>
@@ -371,6 +374,19 @@ function RoomCell({
           ↵
         </div>
       )}
+
+      {/* Debug grid label — press D to toggle */}
+      {debugGrid && (
+        <div style={{
+          position:"absolute", top:4, left:4, zIndex:10, pointerEvents:"none",
+          fontFamily:"monospace", fontSize:9, fontWeight:700,
+          color:DEBUG_COLORS[roomIndex % DEBUG_COLORS.length],
+          background:"rgba(0,0,0,0.75)", padding:"1px 4px", borderRadius:2,
+          userSelect:"none",
+        }}>
+          {roomIndex}: {room.id}
+        </div>
+      )}
     </div>
   );
 }
@@ -388,6 +404,7 @@ export function ExecutiveHQ() {
   const [focusedRoomIndex, setFocusedRoomIndex] = useState<number | null>(null);
   const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
   const [soundMuted, setSoundMuted]       = useState(true);
+  const [debugGrid, setDebugGrid]         = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const audioCtxRef  = useRef<AudioContext | null>(null);
 
@@ -397,10 +414,11 @@ export function ExecutiveHQ() {
     setReducedEffects(prefersReduced || lowPower);
   }, []);
 
-  // N = day/night toggle
+  // N = day/night toggle, D = debug grid
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "n" || e.key === "N") setNightMode(v => !v);
+      if (e.key === "d" || e.key === "D") setDebugGrid(v => !v);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -488,7 +506,7 @@ export function ExecutiveHQ() {
       style={{
         position: "relative",
         width: "100%",
-        height: "clamp(480px, calc(100svh - 160px), 920px)",
+        height: "clamp(520px, calc(100svh - 100px), 980px)",
         fontFamily: "monospace",
         overflow: "hidden",
         outline: "none",
@@ -582,7 +600,7 @@ export function ExecutiveHQ() {
           fontSize:6, letterSpacing:"0.18em", textTransform:"uppercase",
           color:"rgba(255,248,220,0.35)", marginTop:2,
         }}>
-          Executive Headquarters · {ROOMS.length} Sectors
+          Executive Headquarters · {ROOMS.length} Sectors{debugGrid ? " · DEBUG [D]" : ""}
         </div>
       </div>
 
@@ -642,6 +660,7 @@ export function ExecutiveHQ() {
             isFocused={focusedRoomIndex === idx}
             activity={ROOM_ACTIVITY[room.id] ?? 0}
             onHoverChange={handleHoverChange}
+            debugGrid={debugGrid}
           />
         ))}
       </div>
