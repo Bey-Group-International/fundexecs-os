@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCapTable } from "@/lib/cap-table";
 import { getUnifiedOwnership, type UnifiedHolder } from "@/lib/ownership";
 import { compactUsd, usd, multiple } from "@/lib/format";
@@ -99,6 +100,12 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
             {ownership.holderCount === 1 ? "holder" : "holders"} also hold direct equity in your vehicles —
             their fund commitments and entity stakes, reconciled into one position.
           </p>
+          <Link
+            href="/execute/ownership"
+            className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:text-gold-200"
+          >
+            → View unified ownership
+          </Link>
         </div>
       ) : null}
 
