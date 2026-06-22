@@ -1,4 +1,4 @@
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import { ModuleView } from "@/components/ModuleView";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 import { copilotLive } from "@/lib/claude";
@@ -6,16 +6,16 @@ import { copilotLive } from "@/lib/claude";
 // Lazily loaded — each search/triage surface is heavy and hub-specific.
 // next/dynamic splits them into separate chunks loaded only when the matching
 // route is visited, rather than bundling all four on every module page.
-const SourceSearch = dynamic(() =>
+const SourceSearch = nextDynamic(() =>
   import("@/components/source/SourceSearch").then((m) => m.SourceSearch),
 );
-const SourceTriage = dynamic(() =>
+const SourceTriage = nextDynamic(() =>
   import("@/components/source/SourceTriage").then((m) => m.SourceTriage),
 );
-const RunSearch = dynamic(() =>
+const RunSearch = nextDynamic(() =>
   import("@/components/run/RunSearch").then((m) => m.RunSearch),
 );
-const ExecuteSearch = dynamic(() =>
+const ExecuteSearch = nextDynamic(() =>
   import("@/components/execute/ExecuteSearch").then((m) => m.ExecuteSearch),
 );
 
