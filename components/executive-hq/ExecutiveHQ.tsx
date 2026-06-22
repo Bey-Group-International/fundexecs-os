@@ -760,35 +760,8 @@ export function ExecutiveHQ() {
     return () => obs.disconnect();
   }, []);
 
-  // Listen for earn:exec-activity events
-  useEffect(() => {
-    function handler(e: Event) {
-      const { agentKeys, planTitle } = (e as CustomEvent).detail;
-      const allExecs = ROOMS.flatMap((r) => r.executives);
-      const match = allExecs.find((ex) =>
-        agentKeys.some((k: string) => ex.id.includes(k.replace(/_/g, "-")))
-      );
-      if (match) {
-        setActiveBubble({ execId: match.id, text: planTitle });
-        setTimeout(() => setActiveBubble(null), 4000);
-      }
-    }
-    window.addEventListener("earn:exec-activity", handler);
-    return () => window.removeEventListener("earn:exec-activity", handler);
-  }, []);
-
-  // Idle hint rotation
-  useEffect(() => {
-    const allExecs = ROOMS.flatMap((r) => r.executives);
-    const interval = setInterval(() => {
-      const idx = idleIndexRef.current % allExecs.length;
-      const exec = allExecs[idx];
-      idleIndexRef.current = idx + 1;
-      setActiveBubble({ execId: exec.id, text: exec.hint });
-      setTimeout(() => setActiveBubble(null), 3000);
-    }, 8000);
-    return () => clearInterval(interval);
-  }, []);
+  // earn:exec-activity and idle hints disabled — no visible exec sprites yet
+  // (re-enable when sprites are re-introduced)
 
   const handleRoomClick = useCallback(
     (roomId: string, href: string) => {
