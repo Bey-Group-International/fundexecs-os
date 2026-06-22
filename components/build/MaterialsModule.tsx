@@ -134,7 +134,6 @@ export async function MaterialsModule() {
   }
   const byId = new Map(principals.map((p) => [p.id, p]));
 
-  const readiness = computeBuildReadiness({ org, theses, entities, records, members, principals });
   const docsBySection = new Map<string, Document[]>();
   for (const d of documents) {
     const k = d.doc_type ?? "other";
@@ -144,6 +143,7 @@ export async function MaterialsModule() {
   }
   const docCounts: Record<string, number> = {};
   for (const [k, v] of docsBySection) docCounts[k] = v.length;
+  const readiness = computeBuildReadiness({ org, theses, entities, records, members, principals, docCounts });
   const summary = summarizeDataRoom(readiness.statuses, docCounts);
 
   const roomOpens = views.filter((v) => v.kind === "room").length;

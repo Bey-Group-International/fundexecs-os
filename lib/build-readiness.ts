@@ -5,6 +5,7 @@
 // This is what makes the Build hub *compound* — every field added moves a
 // visible meter and surfaces the next highest-leverage step.
 import { createServerClient } from "@/lib/supabase/server";
+import { summarizeDataRoom } from "@/lib/data-room";
 import type {
   Organization,
   InvestmentThesis,
@@ -99,12 +100,13 @@ const STAGE_DEFS: Omit<ReadinessStage, "unlocked" | "current">[] = [
 export async function getBuildReadiness(orgId: string): Promise<BuildReadiness> {
   const supabase = createServerClient();
 
-  const [orgRes, thesesRes, entitiesRes, recordsRes, membersRes] = await Promise.all([
+  const [orgRes, thesesRes, entitiesRes, recordsRes, membersRes, docsRes] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
     supabase.from("investment_theses").select("*").eq("organization_id", orgId),
     supabase.from("entities").select("*").eq("organization_id", orgId),
     supabase.from("track_records").select("*").eq("organization_id", orgId),
     supabase.from("organization_members").select("*").eq("organization_id", orgId),
+    supabase.from("documents").select("doc_type").eq("organization_id", orgId),
   ]);
 
   const org = (orgRes.data ?? null) as Organization | null;
@@ -112,6 +114,11 @@ export async function getBuildReadiness(orgId: string): Promise<BuildReadiness> 
   const entities = (entitiesRes.data ?? []) as Entity[];
   const records = (recordsRes.data ?? []) as TrackRecord[];
   const members = (membersRes.data ?? []) as OrganizationMember[];
+  const docCounts: Record<string, number> = {};
+  for (const d of (docsRes.data ?? []) as { doc_type: string | null }[]) {
+    const k = d.doc_type ?? "other";
+    docCounts[k] = (docCounts[k] ?? 0) + 1;
+  }
 
   // Resolve member titles for the Team checks (best-effort; failure → no titles).
   let principals: Principal[] = [];
@@ -123,7 +130,7 @@ export async function getBuildReadiness(orgId: string): Promise<BuildReadiness> 
     principals = (data ?? []) as Principal[];
   }
 
-  return computeBuildReadiness({ org, theses, entities, records, members, principals });
+  return computeBuildReadiness({ org, theses, entities, records, members, principals, docCounts });
 }
 
 export interface BuildReadinessInput {
@@ -133,6 +140,8 @@ export interface BuildReadinessInput {
   records: TrackRecord[];
   members: OrganizationMember[];
   principals: Principal[];
+  /** Per-section (doc_type) document counts, for scoring the data room. */
+  docCounts?: Record<string, number>;
 }
 
 /**
@@ -227,7 +236,33 @@ export function computeBuildReadiness(input: BuildReadinessInput): BuildReadines
     },
   ]);
 
-  const modules = [profile, thesisMod, brand, entity, trackRecord, team];
+  // Materials & Data Room — the assembly of everything an allocator's ODD/IDD
+  // team expects. Build-backed sections (overview, thesis, track record, team,
+  // legal) are satisfied by the foundation above; the remaining sections (fund
+  // terms, financials, compliance, marketing collateral…) are earned by adding
+  // real documents. Scored off the same weighted coverage the Materials module
+  // shows, so the meter here and the checklist there always agree.
+  const foundationStatuses = Object.fromEntries(
+    [profile, thesisMod, brand, entity, trackRecord, team].map((m) => [m.key, m.status]),
+  ) as Record<string, ModuleStatus>;
+  const dataRoomSummary = summarizeDataRoom(foundationStatuses, input.docCounts ?? {});
+  const dataRoom = scoreModule(
+    "data_room",
+    "Materials & Data Room",
+    // Heaviest sections first so, once the foundation is complete, the
+    // next-best action points at the highest-leverage missing material
+    // (fund terms, financials…) rather than walking the taxonomy in order.
+    [...dataRoomSummary.items]
+      .sort((a, b) => b.weight - a.weight)
+      .map((i) => ({
+        label: i.label,
+        done: i.ready,
+        weight: i.weight,
+        action: i.suggestion,
+      })),
+  );
+
+  const modules = [profile, thesisMod, brand, entity, trackRecord, team, dataRoom];
   const overall = Math.round(modules.reduce((s, m) => s + m.score, 0) / modules.length);
 
   const stages: ReadinessStage[] = STAGE_DEFS.map((s) => ({
