@@ -110,3 +110,4 @@ guards against duplicate version prefixes. Run `npm test` before opening a PR.
 - Match the surrounding code's naming and comment density.
 - Prefer the simpler implementation and flag follow-ups rather than
   over-engineering.
+
