@@ -367,75 +367,8 @@ function ExecAvatar({
   reducedEffects: boolean;
   nightMode: boolean;
 }) {
-  const showBubble = activeBubble?.execId === exec.id;
-
-  // Outer wrapper: walks left↔right across the room, flipping on turnaround
-  const walkAnim = reducedEffects
-    ? `exec-bob 2.6s ease-in-out infinite ${exec.bobDelay}`
-    : `exec-walk ${exec.walkDuration} linear infinite ${exec.wanderDelay}`;
-
-  // Inner image: step-bounce for foot-fall feel (2 steps per second)
-  const stepAnim = reducedEffects ? "none" : `exec-step 0.42s steps(2, end) infinite`;
-
-  // mix-blend-mode: screen removes dark backgrounds on dark map; multiply on light map
-  const blendMode = nightMode ? "screen" : "multiply";
-
-  return (
-    <button
-      onClick={(e: React.MouseEvent) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      title={exec.name}
-      style={{
-        all: "unset",
-        cursor: "pointer",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 1,
-        animation: walkAnim,
-        position: "relative",
-        zIndex: 4,
-        willChange: "transform",
-      }}
-    >
-      {showBubble && (
-        <SpeechBubble text={activeBubble!.text} color={exec.themeColor} />
-      )}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={exec.sprite}
-        alt={exec.name}
-        width={size}
-        height={size}
-        draggable={false}
-        style={{
-          imageRendering: "pixelated",
-          display: "block",
-          userSelect: "none",
-          animation: stepAnim,
-          mixBlendMode: blendMode,
-          filter: `drop-shadow(0 2px 6px ${exec.themeColor}88)`,
-        }}
-      />
-      <span
-        style={{
-          fontFamily: "monospace",
-          fontSize: 6,
-          color: exec.themeColor,
-          textShadow: `0 0 6px ${exec.themeColor}`,
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          whiteSpace: "nowrap",
-          userSelect: "none",
-          lineHeight: 1,
-        }}
-      >
-        {exec.shortName}
-      </span>
-    </button>
-  );
+  // Sprites hidden for now — room map stands on its own
+  return null;
 }
 
 function RoomCell({
@@ -755,22 +688,6 @@ export function ExecutiveHQ() {
       }}
     >
       <style>{`
-        @keyframes exec-bob {
-          0%, 100% { transform: translateY(0px); }
-          50%       { transform: translateY(-4px); }
-        }
-        @keyframes exec-walk {
-          0%        { transform: translateX(-38%) scaleX(1); }
-          49.9%     { transform: translateX(38%) scaleX(1); }
-          50%       { transform: translateX(38%) scaleX(-1); }
-          99.9%     { transform: translateX(-38%) scaleX(-1); }
-          100%      { transform: translateX(-38%) scaleX(1); }
-        }
-        @keyframes exec-step {
-          0%   { transform: translateY(0) scaleY(1) scaleX(1); }
-          50%  { transform: translateY(-3px) scaleY(1.06) scaleX(0.96); }
-          100% { transform: translateY(0) scaleY(1) scaleX(1); }
-        }
         @keyframes monitor-pulse {
           0%, 100% { opacity: 0.6; }
           50%      { opacity: 1; }
