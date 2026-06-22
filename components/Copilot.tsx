@@ -90,6 +90,7 @@ export default function Copilot({
   bundles,
   sessionId,
   integrations = [],
+  initialChat = [],
 }: {
   orgId: string;
   live: boolean;
@@ -100,6 +101,9 @@ export default function Copilot({
   // The dispatch channels the operator currently has connected — surfaced in the
   // composer's "+" menu so they can see what's active without leaving the page.
   integrations?: ActiveIntegration[];
+  // Persisted conversational turns for this session, so Earn's answers survive a
+  // reload. Seeds the chat transcript on mount.
+  initialChat?: ChatTurn[];
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -110,8 +114,9 @@ export default function Copilot({
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const [planning, setPlanning] = useState(false);
-  // Earn's conversational answers (ungated), interleaved after the workflow turns.
-  const [chatTurns, setChatTurns] = useState<ChatTurn[]>([]);
+  // Earn's conversational answers (ungated), interleaved after the workflow
+  // turns. Seeded from the session's persisted chat so answers survive a reload.
+  const [chatTurns, setChatTurns] = useState<ChatTurn[]>(initialChat);
   const [clarifying, setClarifying] = useState(false);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
   // Which composer popover is open: the model picker, mode picker, "+" menu, or
@@ -252,7 +257,7 @@ export default function Copilot({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body, model, prior }),
+        body: JSON.stringify(sessionId ? { body, model, prior, session_id: sessionId } : { body, model, prior }),
       });
       if (!res.ok || !res.body) throw new Error("chat failed");
       const reader = res.body.getReader();
