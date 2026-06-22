@@ -22,6 +22,7 @@ import type { ActiveIntegration } from "@/lib/integrations/active";
 import type { AgentPlan } from "@/lib/claude";
 import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
+import { ModelCompare, estimateTokens, type ModelComparison } from "@/components/ModelCompare";
 
 // A conversational turn rendered in the transcript. Chat turns are Earn's
 // answer path (ungated) and live in client state alongside the workflow turns.
@@ -36,6 +37,9 @@ interface ChatTurn {
   // suggested next prompts.
   sourcePrompt?: string;
   followups?: string[];
+  // "Compare models": the same source question rerun across every EARN_MODELS
+  // entry, filled in client-side. Display-only — nothing here is persisted.
+  comparisons?: ModelComparison[];
 }
 
 // localStorage key for the remembered split ratio.
@@ -128,6 +132,9 @@ export default function Copilot({
   // Earn's conversational answers (ungated), interleaved after the workflow
   // turns. Seeded from the session's persisted chat so answers survive a reload.
   const [chatTurns, setChatTurns] = useState<ChatTurn[]>(initialChat);
+  // The id of the chat turn whose "Compare models" run is in flight, so its
+  // button disables while the side-by-side fills in.
+  const [comparingTurnId, setComparingTurnId] = useState<string | null>(null);
   // The plan streamed into the canvas while a task is being drafted, before the
   // real (gated) workflow lands.
   const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(null);
@@ -431,6 +438,58 @@ export default function Copilot({
     chatAbortRef.current?.abort();
   }
 
+  // "Compare models": rerun the turn's SAME source question across every model
+  // in EARN_MODELS and fill the per-model cards. Ungated and client-side — each
+  // request omits session_id so nothing persists.
+  async function compareModels(turnId: string, sourcePrompt: string) {
+    if (comparingTurnId) return;
+    setComparingTurnId(turnId);
+    const seeded: ModelComparison[] = EARN_MODELS.map((m) => ({
+      model: m.key,
+      label: m.label,
+      content: "",
+      loading: true,
+    }));
+    setChatTurns((prev) => prev.map((t) => (t.id === turnId ? { ...t, comparisons: seeded } : t)));
+
+    const setCard = (model: EarnModelKey, patch: Partial<ModelComparison>) =>
+      setChatTurns((prev) =>
+        prev.map((t) =>
+          t.id === turnId && t.comparisons
+            ? { ...t, comparisons: t.comparisons.map((c) => (c.model === model ? { ...c, ...patch } : c)) }
+            : t,
+        ),
+      );
+
+    await Promise.all(
+      EARN_MODELS.map(async (m) => {
+        let text = "";
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ body: sourcePrompt, model: m.key }),
+          });
+          if (!res.ok || !res.body) throw new Error("compare failed");
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            text += decoder.decode(value, { stream: true });
+            setCard(m.key, { content: text });
+          }
+        } catch {
+          if (!text) text = "Earn couldn't reach this model — try again.";
+        } finally {
+          setCard(m.key, { content: text, loading: false });
+        }
+      }),
+    );
+
+    setComparingTurnId(null);
+  }
+
   function copyText(text: string) {
     navigator.clipboard?.writeText(text).catch(() => {});
   }
@@ -570,9 +629,29 @@ export default function Copilot({
                     Regenerate
                   </button>
                 ) : null}
+                {t.sourcePrompt ? (
+                  <button
+                    type="button"
+                    onClick={() => compareModels(t.id, t.sourcePrompt!)}
+                    disabled={comparingTurnId !== null}
+                    title="Rerun this question across all models"
+                    className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+                  >
+                    {comparingTurnId === t.id ? "Comparing…" : "Compare models"}
+                  </button>
+                ) : null}
+                {/* Rough client-side length estimate — display only. */}
+                {t.content ? (
+                  <span className="font-mono text-[10px] text-fg-muted">
+                    ≈ {estimateTokens(t.content)} tokens
+                  </span>
+                ) : null}
               </>
             )}
           </div>
+
+          {/* Side-by-side runs of the same question across every model. */}
+          {t.comparisons?.length ? <ModelCompare comparisons={t.comparisons} /> : null}
 
           {/* Suggested follow-ups — one tap to send the next prompt. */}
           {t.followups?.length ? (
