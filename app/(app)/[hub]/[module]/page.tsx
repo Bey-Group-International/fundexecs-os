@@ -50,9 +50,9 @@ const AllocatorDirectoryLive = nextDynamic(() =>
 const ClosingLive = nextDynamic(() =>
   import("@/components/execute/ClosingLive").then((m) => m.ClosingLive),
 );
-const PortfolioHealthDashboard = nextDynamic(() =>
-  import("@/components/execute/PortfolioHealthDashboard").then(
-    (m) => m.PortfolioHealthDashboard,
+const PortfolioHealthLive = nextDynamic(() =>
+  import("@/components/execute/PortfolioHealthLive").then(
+    (m) => m.PortfolioHealthLive,
   ),
 );
 const ThesisLive = nextDynamic(() =>
@@ -139,22 +139,10 @@ export default function ModulePage({
   }
 
   // Execute › Asset Management — Portfolio Health Dashboard.
-  // TODO: replace mock data with real portfolio metrics from Supabase.
   if (params.hub === "execute" && params.module === "asset_management") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <section>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
-            Portfolio Health
-          </p>
-          <PortfolioHealthDashboard
-            // TODO: fetch real healthScore, assets, riskAlerts, totalNAV from Supabase.
-            healthScore={{ overall: 0, performance: 0, diversification: 0, momentum: 0, grade: "F", summary: "" }}
-            assets={[]}
-            riskAlerts={[]}
-            totalNAV={0}
-          />
-        </section>
+        <PortfolioHealthLive />
         <div className="mt-8 border-t border-line pt-8">
           <ModuleView hub={params.hub} module={params.module} />
         </div>
