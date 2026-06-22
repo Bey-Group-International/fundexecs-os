@@ -1,5 +1,6 @@
 import Link from "next/link";
-import type { EnginePane } from "@/lib/execution-grid";
+import { engineSlug, type EnginePane } from "@/lib/execution-grid";
+import { RerouteControl } from "@/components/grid/RerouteControl";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
@@ -57,12 +58,14 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
             className="flex flex-col rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)]"
           >
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h2 className="truncate font-display text-sm font-semibold text-fg-primary">{pane.engine}</h2>
+              <Link href={`/grid/${engineSlug(pane.engine)}`} className="group min-w-0">
+                <h2 className="truncate font-display text-sm font-semibold text-fg-primary group-hover:text-gold-300">
+                  {pane.engine}
+                </h2>
                 <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                   {ENGINE_BLURB[pane.engine]}
                 </p>
-              </div>
+              </Link>
               <span className="shrink-0 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2 py-0.5 font-mono text-[10px] text-gold-300">
                 {pane.total}
               </span>
@@ -90,26 +93,32 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
                       </span>
                     </span>
                   );
-                  return wf.session_id ? (
-                    <Link
-                      key={wf.id}
-                      href={`/session/${wf.session_id}`}
-                      className="group rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs transition hover:border-gold-500/40"
-                    >
-                      {inner}
-                    </Link>
-                  ) : (
-                    <div
-                      key={wf.id}
-                      className="rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs"
-                    >
-                      {inner}
+                  return (
+                    <div key={wf.id} className="flex items-center gap-1.5">
+                      {wf.session_id ? (
+                        <Link
+                          href={`/session/${wf.session_id}`}
+                          className="group min-w-0 flex-1 rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs transition hover:border-gold-500/40"
+                        >
+                          {inner}
+                        </Link>
+                      ) : (
+                        <div className="min-w-0 flex-1 rounded-lg border border-line/50 bg-surface-0/40 px-2.5 py-1.5 text-xs">
+                          {inner}
+                        </div>
+                      )}
+                      <RerouteControl workflowId={wf.id} currentEngine={pane.engine} />
                     </div>
                   );
                 })
               )}
               {pane.workflows.length > 6 ? (
-                <p className="mt-0.5 font-mono text-[10px] text-fg-muted">+{pane.workflows.length - 6} more</p>
+                <Link
+                  href={`/grid/${engineSlug(pane.engine)}`}
+                  className="mt-0.5 font-mono text-[10px] text-fg-muted transition hover:text-gold-300"
+                >
+                  +{pane.workflows.length - 6} more
+                </Link>
               ) : null}
             </div>
           </section>
