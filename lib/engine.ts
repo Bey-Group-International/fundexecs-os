@@ -13,6 +13,7 @@ import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
 import { buildRouting } from "@/lib/intelligence";
+import { shouldReuseRecord } from "@/lib/reference-binding";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -218,6 +219,13 @@ async function materializePlan(
  *
  * Idempotent: a workflow records its seeded record id on `tasks.result`. A
  * re-approval updates that record in place instead of creating a duplicate.
+ *
+ * Reference binding: a NEW follow-up workflow in the same session has no prior
+ * id of its own, but it often means the session's EXISTING record ("update the
+ * deal", "revise the model"). When no prior id exists, we look up the session's
+ * most-recent deal/asset and — using the conservative, deterministic
+ * `shouldReuseRecord` cue test — bind to it (update in place) instead of minting
+ * a duplicate. A genuinely different request still creates a new record.
  */
 async function persistOutcome(
   ctx: Ctx,
@@ -257,6 +265,31 @@ async function persistOutcome(
         .select("id")
         .maybeSingle();
       if (!error && updated) dealId = updated.id;
+    } else if (workflow.session_id) {
+      // Reference binding: a follow-up workflow with no prior id of its own may
+      // mean the session's existing deal. Bind to the most-recent one when the
+      // prompt/extracted name says so, and update it in place.
+      const { data: existing } = await ctx.supabase
+        .from("deals")
+        .select("id, name")
+        .eq("organization_id", ctx.orgId)
+        .eq("session_id", workflow.session_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (
+        existing &&
+        shouldReuseRecord({ promptText: prompt, existingName: existing.name, extractedName: fields.name })
+      ) {
+        const { data: updated, error } = await ctx.supabase
+          .from("deals")
+          .update(row)
+          .eq("id", existing.id)
+          .eq("organization_id", ctx.orgId)
+          .select("id")
+          .maybeSingle();
+        if (!error && updated) dealId = updated.id;
+      }
     }
     if (!dealId) {
       const { data: deal } = await ctx.supabase
@@ -295,6 +328,31 @@ async function persistOutcome(
         .select("id")
         .maybeSingle();
       if (!error && updated) assetId = updated.id;
+    } else if (workflow.session_id) {
+      // Reference binding: a follow-up workflow with no prior id of its own may
+      // mean the session's existing asset. Bind to the most-recent one when the
+      // prompt/extracted name says so, and update it in place.
+      const { data: existing } = await ctx.supabase
+        .from("assets")
+        .select("id, name")
+        .eq("organization_id", ctx.orgId)
+        .eq("session_id", workflow.session_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (
+        existing &&
+        shouldReuseRecord({ promptText: prompt, existingName: existing.name, extractedName: fields.name })
+      ) {
+        const { data: updated, error } = await ctx.supabase
+          .from("assets")
+          .update(row)
+          .eq("id", existing.id)
+          .eq("organization_id", ctx.orgId)
+          .select("id")
+          .maybeSingle();
+        if (!error && updated) assetId = updated.id;
+      }
     }
     if (!assetId) {
       const { data: asset } = await ctx.supabase.from("assets").insert(row).select("id").single();
