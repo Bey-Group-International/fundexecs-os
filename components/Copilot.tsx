@@ -22,6 +22,7 @@ import type { ActiveIntegration } from "@/lib/integrations/active";
 import type { AgentPlan } from "@/lib/claude";
 import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
+import { CommandPalette, type Command } from "@/components/CommandPalette";
 
 // A conversational turn rendered in the transcript. Chat turns are Earn's
 // answer path (ungated) and live in client state alongside the workflow turns.
@@ -131,6 +132,8 @@ export default function Copilot({
   // The plan streamed into the canvas while a task is being drafted, before the
   // real (gated) workflow lands.
   const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(null);
+  // ⌘K command palette.
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [clarifying, setClarifying] = useState(false);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
   // Execution Grid: filter the conversation's workflows by the engine they were
@@ -219,6 +222,24 @@ export default function Copilot({
       window.removeEventListener("pointerup", onUp);
     };
   }, []);
+
+  // Global shortcuts: ⌘K/Ctrl+K opens the command palette; Esc stops an
+  // in-progress answer (when no menu/palette is capturing it).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+        return;
+      }
+      if (e.key === "Escape" && !paletteOpen && !openMenu && chatAbortRef.current) {
+        stopChat();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paletteOpen, openMenu]);
 
   // Keep the newest turn in view as the conversation grows — chat behavior.
   useEffect(() => {
@@ -740,6 +761,41 @@ export default function Copilot({
     setExpandedIntegration(null);
     applySlashCommand(scaffold);
   }
+
+  // ⌘K command palette actions — models, modes, slash inserts, jump-to-workflow,
+  // and navigation.
+  const commands: Command[] = [
+    ...EARN_MODELS.map((m) => ({
+      id: `model-${m.key}`,
+      group: "Model",
+      label: `Use ${m.label}`,
+      hint: m.key === model ? "current" : undefined,
+      run: () => setModel(m.key),
+    })),
+    ...EARN_MODES.map((m) => ({
+      id: `mode-${m.key}`,
+      group: "Mode",
+      label: m.label,
+      hint: m.key === mode ? "current" : undefined,
+      run: () => setMode(m.key),
+    })),
+    ...SLASH_COMMANDS.map((c) => ({
+      id: `slash-${c.command}`,
+      group: "Insert",
+      label: c.label,
+      hint: c.command,
+      run: () => applySlashCommand(c.template),
+    })),
+    ...turns.map((b) => ({
+      id: `wf-${b.workflow.id}`,
+      group: "Open",
+      label: b.workflow.title,
+      run: () => focusWork(b.workflow.id),
+    })),
+    ...(chatAbortRef.current ? [{ id: "stop", group: "Action", label: "Stop generating", run: stopChat }] : []),
+    { id: "integrations", group: "Go", label: "Manage integrations", run: () => router.push("/settings#integrations") },
+    { id: "new", group: "Go", label: "New conversation", run: () => router.push("/workspace") },
+  ];
 
   // The work canvas: a switcher across the session's workflows, then the focused
   // workflow's full plan / steps / artifacts / approval gate.
@@ -1302,7 +1358,7 @@ export default function Copilot({
                 </button>
 
                 <span className="ml-auto hidden font-mono text-[10px] text-fg-muted sm:inline">
-                  {listening ? "Recording — release to send" : "Enter to send · Shift+Enter for newline"}
+                  {listening ? "Recording — release to send" : "Enter to send · Shift+Enter newline · ⌘K commands"}
                 </span>
                 <button
                   disabled={busy || !prompt.trim()}
@@ -1342,6 +1398,8 @@ export default function Copilot({
           ) : null}
         </div>
       </section>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
     </div>
   );
 }
