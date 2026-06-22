@@ -120,6 +120,35 @@ describe("composeDigest", () => {
     const b = composeDigest(items, { minScore: 60, baseUrl: "https://app.test" });
     expect(a).toEqual(b);
   });
+
+  // A/B subject-line override (lib/digest-experiments). Default compose (no
+  // subject) must stay byte-identical; an override replaces the email subject
+  // AND the Slack header but nothing else.
+  describe("subject-line variant override", () => {
+    it("default compose (no subject) is unchanged by the new option", () => {
+      const withOpt = composeDigest(items, { minScore: 60, baseUrl: "https://app.test" });
+      // The option key simply being absent must equal omitting it entirely.
+      const without = composeDigest(items, {
+        minScore: 60,
+        baseUrl: "https://app.test",
+        subject: undefined,
+      });
+      expect(withOpt).toEqual(without);
+      // And the default subject is still the original derived one.
+      expect(withOpt.emailSubject).toContain("Act-now Radar");
+    });
+
+    it("overrides the email subject and Slack header, leaving rows intact", () => {
+      const def = composeDigest(items, { minScore: 60 });
+      const over = composeDigest(items, { minScore: 60, subject: "Act now: 2 moves" });
+      expect(over.emailSubject).toBe("Act now: 2 moves");
+      expect(over.slackMarkdown).toContain("Act now: 2 moves");
+      // Items + bodies (beyond the header line) are unchanged.
+      expect(over.topItems).toEqual(def.topItems);
+      expect(over.count).toBe(def.count);
+      expect(over.emailBody.html).toBe(def.emailBody.html);
+    });
+  });
 });
 
 describe("isPrefDue", () => {
