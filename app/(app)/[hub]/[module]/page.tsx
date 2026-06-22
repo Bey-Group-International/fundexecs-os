@@ -12,6 +12,9 @@ const SourceSearch = nextDynamic(() =>
 const SourceTriage = nextDynamic(() =>
   import("@/components/source/SourceTriage").then((m) => m.SourceTriage),
 );
+const SourcingIntel = nextDynamic(() =>
+  import("@/components/source/SourcingIntel").then((m) => m.SourcingIntel),
+);
 const RunSearch = nextDynamic(() =>
   import("@/components/run/RunSearch").then((m) => m.RunSearch),
 );
@@ -46,6 +49,9 @@ export default function ModulePage({
   }
   if (params.hub === "source" && params.module === "triage") {
     return <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />;
+  }
+  if (params.hub === "source" && params.module === "intel") {
+    return <SourcingIntel live={sourcingLive()} initialPrompt={initialPrompt} />;
   }
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;

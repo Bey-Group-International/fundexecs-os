@@ -846,6 +846,26 @@ export type InboxMessage = {
   created_at: string;
 };
 
+// The Sourcing Intelligence catalog (migration 0042). A first-party, embedded
+// entity store powering semantic discovery + lookalike search. `embedding` is the
+// pgvector column surfaced as the text literal "[..]" the client sends; cosine
+// search runs through the match_sourcing_entities RPC.
+export type SourcingEntity = Timestamps & {
+  id: string;
+  organization_id: string;
+  kind: string; // 'company' | 'investor' | 'fund' | 'advisor' | 'lender' | 'provider'
+  name: string;
+  domain: string | null;
+  description: string | null;
+  categories: string[];
+  geography: string | null;
+  metadata: Json;
+  provenance: string; // 'manual' | 'ai' | 'web' | 'pipeline' | '<provider>'
+  source_url: string | null;
+  embedding: string | null;
+  created_by: string | null;
+};
+
 export type Artifact = Timestamps & {
   id: string;
   organization_id: string;
@@ -1116,6 +1136,7 @@ export type Database = {
       dispatch_log: TableShape<DispatchLog>;
       audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
+      sourcing_entities: TableShape<SourcingEntity>;
       operator_feedback: TableShape<OperatorFeedback>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
@@ -1184,6 +1205,30 @@ export type Database = {
           p_delta: number;
         };
         Returns: number;
+      };
+      // Cosine-search the org's Sourcing Intelligence catalog (migration 0042).
+      // embedding sent as the pgvector text literal "[0.1,0.2,...]".
+      match_sourcing_entities: {
+        Args: {
+          query_embedding: string;
+          target_org: string;
+          match_count?: number;
+          filter_kind?: string | null;
+          exclude_id?: string | null;
+        };
+        Returns: {
+          id: string;
+          kind: string;
+          name: string;
+          domain: string | null;
+          description: string | null;
+          categories: string[];
+          geography: string | null;
+          metadata: Json;
+          source_url: string | null;
+          provenance: string;
+          similarity: number;
+        }[];
       };
       // Atomically add to an org's reputation score (creating the row if absent),
       // clamped at 0 (migration 0048). Returns the new score.
