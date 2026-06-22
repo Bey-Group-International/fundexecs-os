@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
+import { createServerClient } from "@/lib/supabase/server";
 import { getPortfolioMonitor } from "@/lib/portfolio-monitor";
 import { PortfolioMonitor } from "@/components/portfolio/PortfolioMonitor";
 import { PortfolioHealthDashboard } from "@/components/execute/PortfolioHealthDashboard";
-import { LPOnboardingStatus } from "@/components/execute/LPOnboardingStatus";
 import { ContractStatusBoard } from "@/components/execute/ContractStatusBoard";
-import { createServerClient } from "@/lib/supabase/server";
 import { computePortfolioHealth } from "@/lib/portfolio-analytics";
+import type { ConcentrationRisk } from "@/lib/portfolio-analytics";
+import type { ContractStatus, DocumentType } from "@/lib/contracts";
 
 export const dynamic = "force-dynamic";
 
@@ -16,20 +17,71 @@ export default async function PortfolioPage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = createServerClient();
-  const [data, onboardingRes, contractsRes] = await Promise.all([
+
+  const [data, docsRes] = await Promise.all([
     getPortfolioMonitor(ctx.orgId),
-    supabase.from("lp_onboarding_sessions").select("*").eq("organization_id", ctx.orgId).order("created_at", { ascending: false }).limit(20),
-    supabase.from("contracts").select("*").eq("organization_id", ctx.orgId).order("created_at", { ascending: false }).limit(50),
+    supabase
+      .from("documents")
+      .select("id, name, doc_type, created_at")
+      .eq("organization_id", ctx.orgId)
+      .order("created_at", { ascending: false })
+      .limit(100),
   ]);
-  const onboardingSessions = onboardingRes.data ?? [];
-  const contracts = contractsRes.data ?? [];
+
+  // Map documents into Contract shape for ContractStatusBoard
+  const contracts = (docsRes.data ?? []).map((d) => ({
+    id: d.id,
+    title: d.name ?? "Untitled Document",
+    documentType: (d.doc_type ?? "other") as DocumentType,
+    status: "signed" as ContractStatus,
+    expiryDate: null,
+    signedAt: d.created_at,
+    effectiveDate: d.created_at,
+  }));
+
+  // Derive PortfolioHealthDashboard props from existing monitor data
+  const totalNAV = data.totals.nav;
+  const assetMetrics = data.assets.map((a) => ({
+    id: a.id,
+    name: a.name,
+    sector: a.assetType,
+    geography: "",
+    assetClass: a.assetType,
+    moic: a.moic,
+    irr: null,
+    underwriteMOIC: null,
+    equityInvested: a.cost,
+    currentValue: a.nav,
+    concentrationPct: a.concentrationPct,
+    isUnderperforming: a.moic != null && a.moic < 1,
+    holdPeriodMonths: a.markAgeDays != null ? Math.round(a.markAgeDays / 30) : null,
+  }));
+
+  const maxConcentration = Math.max(0, ...data.assets.map((a) => a.concentrationPct));
+  const underperformingCount = data.assets.filter((a) => a.moic != null && a.moic < 1).length;
+  const avgMOIC =
+    data.totals.weightedMoic ??
+    (data.assets.reduce((s, a) => s + (a.moic ?? 1), 0) / Math.max(data.assets.length, 1));
+
+  const riskAlerts: ConcentrationRisk[] = data.assets
+    .filter((a) => a.concentrationPct > 25)
+    .map((a) => ({
+      type: "single_asset" as const,
+      label: a.name,
+      actualPct: a.concentrationPct,
+      thresholdPct: 25,
+      severity: a.concentrationPct > 40 ? "critical" : a.concentrationPct > 30 ? "high" : "medium",
+      affectedAssets: [a.id],
+      recommendation: `Reduce ${a.name} allocation from ${a.concentrationPct.toFixed(1)}% to below 25%.`,
+    }));
+
   const healthScore = computePortfolioHealth({
-    avgMOIC: 0,
-    targetMOIC: 2,
-    underperformingCount: 0,
-    totalAssets: 0,
-    maxConcentrationPct: 0,
-    riskAlertCount: 0,
+    avgMOIC,
+    targetMOIC: 2.0,
+    underperformingCount,
+    totalAssets: data.assets.length,
+    maxConcentrationPct: maxConcentration,
+    riskAlertCount: riskAlerts.length,
   });
 
   return (
@@ -49,33 +101,42 @@ export default async function PortfolioPage() {
 
       <PortfolioMonitor data={data} />
 
-      <section className="mt-10">
-        <h2 className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-          Portfolio Health
-        </h2>
-        <PortfolioHealthDashboard
-          healthScore={healthScore}
-          assets={[]}
-          riskAlerts={[]}
-          totalNAV={0}
-        />
-      </section>
-
-      {onboardingSessions.length > 0 && (
-        <section className="mt-10">
-          <h2 className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-            LP Onboarding
-          </h2>
-          <LPOnboardingStatus sessions={onboardingSessions as Parameters<typeof LPOnboardingStatus>[0]["sessions"]} />
+      {data.hasData && (
+        <section className="mt-12">
+          <header className="mb-6">
+            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+              Health Dashboard
+            </span>
+            <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+              Portfolio Health
+            </h2>
+            <p className="mt-1 text-sm text-fg-secondary">
+              Composite health score, allocation breakdown, concentration risks, and per-asset metrics.
+            </p>
+          </header>
+          <PortfolioHealthDashboard
+            healthScore={healthScore}
+            assets={assetMetrics}
+            riskAlerts={riskAlerts}
+            totalNAV={totalNAV}
+          />
         </section>
       )}
 
       {contracts.length > 0 && (
-        <section className="mt-10">
-          <h2 className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-            Contracts
-          </h2>
-          <ContractStatusBoard contracts={contracts as Parameters<typeof ContractStatusBoard>[0]["contracts"]} />
+        <section className="mt-12">
+          <header className="mb-6">
+            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+              Execute
+            </span>
+            <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+              Contract Status Board
+            </h2>
+            <p className="mt-1 text-sm text-fg-secondary">
+              All fund and investment contracts grouped by lifecycle stage, with renewal alerts.
+            </p>
+          </header>
+          <ContractStatusBoard contracts={contracts} />
         </section>
       )}
     </div>
