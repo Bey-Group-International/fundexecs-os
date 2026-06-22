@@ -123,6 +123,11 @@ export type Principal = {
   full_name: string | null;
   title: string | null;
   avatar_url: string | null;
+  // Internal identity verification (migration 20260623140000). Set by an
+  // owner/admin internal attestation now; an external KYC provider would set the
+  // same columns later. Null until verified.
+  identity_verified_at: string | null;
+  identity_verified_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -149,6 +154,10 @@ export type Organization = Timestamps & {
   tagline: string | null;
   brand_voice: string | null;
   brand_palette: string[];
+  // Org-level KYC posture (migration 20260623140000). 'unverified' by default;
+  // internal attestation now, external-KYC provider hook later.
+  kyc_status: string;
+  kyc_verified_at: string | null;
 }
 
 export type OrganizationMember = {

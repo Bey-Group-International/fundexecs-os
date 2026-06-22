@@ -18,16 +18,20 @@ export type ReputationReason =
   | "diligence_cleared" // a diligence item was cleared/waived
   | "listing_honored" // a marketplace listing completed in good faith
   | "vouch_received" // a principal-tier org vouched for this one
+  | "artifact_verified" // an operator approval verified a workflow's grounded artifact
   | "bad_faith_penalty"; // misrepresentation / ghosting a matched counterparty
 
 // Points each earnable event is worth. Aligned with the Phase 0 proxy constants
 // (a closed deal = 25) so the stored score and the proxy live on one scale and
 // the transition is seamless. Penalties are applied as explicit negative deltas.
+// Keep this map in lockstep with the ReputationReason union above (every reason
+// except bad_faith_penalty must have a point value).
 export const REPUTATION_POINTS: Record<Exclude<ReputationReason, "bad_faith_penalty">, number> = {
   close_verified: 25,
   diligence_cleared: 3,
   listing_honored: 8,
   vouch_received: 10,
+  artifact_verified: 2,
 };
 
 export interface GrantReputationOpts {
