@@ -40,7 +40,7 @@ export function ExecutiveDialoguePanel({
             </p>
             <p className="mt-1 text-xs leading-5 text-fg-muted">{character.promptBoundary}</p>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             {character.workspaceHref ? (
               <Link
                 href={character.workspaceHref}
@@ -49,12 +49,7 @@ export function ExecutiveDialoguePanel({
                 Open workspace
               </Link>
             ) : null}
-            <Link
-              href="/workspace"
-              className="rounded-lg border border-line px-3 py-2 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-            >
-              Create task
-            </Link>
+            <span className="text-xs text-fg-muted">Task creation lives in Quick action.</span>
           </div>
           <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
             {context}
