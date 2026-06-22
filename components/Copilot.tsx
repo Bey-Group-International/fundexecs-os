@@ -19,6 +19,7 @@ import {
   type EarnModeKey,
 } from "@/lib/earn-conversation";
 import type { ActiveIntegration } from "@/lib/integrations/active";
+import type { AgentPlan } from "@/lib/claude";
 import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
 
@@ -127,6 +128,9 @@ export default function Copilot({
   // Earn's conversational answers (ungated), interleaved after the workflow
   // turns. Seeded from the session's persisted chat so answers survive a reload.
   const [chatTurns, setChatTurns] = useState<ChatTurn[]>(initialChat);
+  // The plan streamed into the canvas while a task is being drafted, before the
+  // real (gated) workflow lands.
+  const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(null);
   const [clarifying, setClarifying] = useState(false);
   const [clarify, setClarify] = useState<{ workflowId: string; questions: string[]; answer: string } | null>(null);
   // Which composer popover is open: the model picker, mode picker, "+" menu, or
@@ -266,15 +270,9 @@ export default function Copilot({
     }
   }
 
-  // Launch the agentic workflow path (plan → gate → dispatch).
-  async function runTask(body: string) {
-    const envelope = buildEarnPromptEnvelope({ body, model, mode, attachments, voiceUsed });
-    setBusy(true);
-    setPlanning(true);
-    setOpenMenu(null);
-    setPrompt("");
-    setAttachments([]);
-    setVoiceUsed(false);
+  // Non-streaming fallback (and the path when the live stream errors): plan +
+  // materialize in one shot, then follow into the session or refresh in place.
+  async function runTaskFallback(envelope: string) {
     const res = await fetch("/api/prompt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -282,10 +280,7 @@ export default function Copilot({
     }).catch(() => null);
     setBusy(false);
     setPlanning(false);
-
-    // From the launcher (no session yet), the prompt opens a session — follow
-    // it in, Claude Code style, so the work continues at /session/<id>. Inside
-    // a session we just refresh to surface the new workflow in place.
+    setPendingPlan(null);
     if (!sessionId && res?.ok) {
       const data = await res.json().catch(() => null);
       if (data?.session_id) {
@@ -294,6 +289,61 @@ export default function Copilot({
       }
     }
     startTransition(() => router.refresh());
+  }
+
+  // Launch the agentic workflow path (plan → gate → dispatch). The plan streams
+  // into the work canvas as Earn drafts it; on ready we hand off to the live
+  // (gated) workflow.
+  async function runTask(body: string) {
+    const envelope = buildEarnPromptEnvelope({ body, model, mode, attachments, voiceUsed });
+    setBusy(true);
+    setPlanning(true);
+    setOpenMenu(null);
+    setPrompt("");
+    setAttachments([]);
+    setVoiceUsed(false);
+    setPendingPlan(null);
+    setMobileTab("work");
+
+    try {
+      const res = await fetch("/api/prompt/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sessionId ? { body: envelope, session_id: sessionId } : { body: envelope }),
+      });
+      if (!res.ok || !res.body) throw new Error("stream unavailable");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let ready: { session_id?: string; workflow_id?: string } | null = null;
+      let errored = false;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const ev = JSON.parse(line) as { type: string; plan?: AgentPlan; session_id?: string; workflow_id?: string };
+          if (ev.type === "plan" && ev.plan) setPendingPlan(ev.plan);
+          else if (ev.type === "ready") ready = ev;
+          else if (ev.type === "error") errored = true;
+        }
+      }
+      if (errored || !ready) throw new Error("plan failed");
+
+      setBusy(false);
+      setPlanning(false);
+      if (!sessionId && ready.session_id) {
+        router.push(`/session/${ready.session_id}`);
+        return;
+      }
+      setPendingPlan(null);
+      startTransition(() => router.refresh());
+    } catch {
+      await runTaskFallback(envelope);
+    }
   }
 
   // Stream a conversational answer from Earn into the transcript, token by
@@ -418,7 +468,7 @@ export default function Copilot({
   const empty = turns.length === 0 && chatTurns.length === 0 && !planning;
 
   // The work canvas opens once there's a task in flight or on record.
-  const hasWork = turns.length > 0 || planning;
+  const hasWork = turns.length > 0 || planning || pendingPlan !== null;
   // The workflow shown in the canvas: the operator's selection, else the newest.
   const focusedBundle =
     turns.find((b) => b.workflow.id === focusedWorkflowId) ?? turns[turns.length - 1] ?? null;
@@ -710,6 +760,38 @@ export default function Copilot({
               onAnswerChange={(v) => setClarify((c) => (c ? { ...c, answer: v } : c))}
               onCancelClarify={() => setClarify(null)}
             />
+          ) : pendingPlan ? (
+            // Live plan reveal — the steps appear as Earn drafts them, before the
+            // gated workflow lands.
+            <article className="rounded-2xl border border-gold-500/30 bg-surface-1/82 p-4 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)] sm:p-5">
+              <div className="flex items-center gap-2">
+                <EarnOrb size={26} pulse />
+                <h2 className="font-display text-lg font-semibold tracking-tight text-fg-primary">{pendingPlan.title}</h2>
+              </div>
+              <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                {pendingPlan.hub} · Drafting
+              </p>
+              {pendingPlan.summary ? <p className="mt-2 text-sm text-fg-secondary">{pendingPlan.summary}</p> : null}
+              <ol className="mt-3 flex flex-col gap-2">
+                {pendingPlan.steps.map((s, i) => (
+                  <li
+                    key={`${s.agent}-${i}`}
+                    className="flex gap-3 rounded-xl border border-line/60 bg-surface-0/45 px-3 py-2.5"
+                  >
+                    <span className="mt-0.5 h-5 w-5 shrink-0 animate-pulse rounded-full border-2 border-gold-500/50" />
+                    <div className="min-w-0">
+                      <span className="text-sm font-medium text-fg-primary">{s.title}</span>
+                      <p className="mt-0.5 text-xs text-fg-secondary">
+                        <span className="font-mono uppercase text-fg-muted">{AGENT_BY_KEY[s.agent]?.name ?? s.agent}</span>
+                        {" · "}
+                        {s.description}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-gold-300">Preparing the approval gate…</p>
+            </article>
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center text-sm text-fg-secondary">
               <EarnOrb size={40} pulse={planning} />
