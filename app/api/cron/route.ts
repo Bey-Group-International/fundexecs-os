@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { runAutomation } from "@/lib/engine";
 import { nextRun } from "@/lib/cron";
 import { findDueOrgsForScan, scanOrgRadarSignals } from "@/lib/radar-scan";
+import { runSlaEscalations } from "@/lib/sla-cron";
 import type { Automation } from "@/lib/supabase/database.types";
 
 // Each due automation plans + (if trusted) executes a full workflow via Claude.
@@ -126,5 +127,16 @@ export async function GET(request: Request) {
     // radar scan is additive — never fail the whole cron over it
   }
 
-  return NextResponse.json({ swept: due.length, results, radar });
+  // Best-effort SLA auto-escalation: raise tracked team tasks for workflows
+  // stuck past their SLA so nothing depends on someone watching the grid.
+  // Defensive — runSlaEscalations never throws, but wrap anyway so it can never
+  // break or block the automation sweep above.
+  let escalated = 0;
+  try {
+    escalated = await runSlaEscalations(supabase, now);
+  } catch {
+    escalated = 0;
+  }
+
+  return NextResponse.json({ swept: due.length, results, radar, escalated });
 }

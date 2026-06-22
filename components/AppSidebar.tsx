@@ -43,6 +43,7 @@ interface GroupItem {
 const MORE_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Command Center" },
   { href: "/grid", label: "Execution Grid" },
+  { href: "/grid/review", label: "Routing Review" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/agenda", label: "Agenda" },
   { href: "/reports", label: "LP Report" },
