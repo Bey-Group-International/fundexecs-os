@@ -44,8 +44,8 @@ const ExecuteSearch = nextDynamic(() =>
 );
 
 // Hub-specific feature components (lazy-loaded for code splitting).
-const AllocatorDirectory = nextDynamic(() =>
-  import("@/components/source/AllocatorDirectory").then((m) => m.AllocatorDirectory),
+const AllocatorDirectoryLive = nextDynamic(() =>
+  import("@/components/source/AllocatorDirectoryLive").then((m) => m.AllocatorDirectoryLive),
 );
 const LPOnboardingStatus = nextDynamic(() =>
   import("@/components/execute/LPOnboardingStatus").then((m) => m.LPOnboardingStatus),
@@ -121,16 +121,10 @@ export default function ModulePage({
   }
 
   // Source › LP Pipeline — Allocator Intelligence Directory.
-  // TODO: replace mock entries with real data fetched from the allocators table.
   if (params.hub === "source" && params.module === "lp_pipeline") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <section>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
-            Allocator Intelligence Directory
-          </p>
-          <AllocatorDirectory entries={[]} />
-        </section>
+        <AllocatorDirectoryLive />
         <div className="mt-8 border-t border-line pt-8">
           <ModuleView hub={params.hub} module={params.module} />
         </div>
