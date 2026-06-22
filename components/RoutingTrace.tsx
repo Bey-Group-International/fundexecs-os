@@ -1,19 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { buildRoutingTrace, type TraceState } from "@/lib/routing-trace";
+import { buildRoutingTrace, fmtClockTime, type TraceState } from "@/lib/routing-trace";
 import type { Task, Approval } from "@/lib/supabase/database.types";
 
 // The routing trace — WHEN and WHERE a request was routed, made legible.
 // Collapsed it's a one-line path; expanded it's a timestamped stepper:
 // Intent → Engine → Hub → Desk → Gate. Read-only; the operator re-routes from
 // the card's "Re-route" control, not here.
-
-function fmtTime(at: string | null): string {
-  if (!at) return "—";
-  const d = new Date(at);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
 
 const DOT: Record<TraceState, string> = {
   done: "bg-gold-400",
@@ -59,7 +53,7 @@ export function RoutingTrace({
               <div className="min-w-0 flex-1 pb-2">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{n.label}</span>
-                  <span className="shrink-0 font-mono text-[9px] text-fg-muted">{fmtTime(n.at)}</span>
+                  <span className="shrink-0 font-mono text-[9px] text-fg-muted">{fmtClockTime(n.at, "—")}</span>
                 </div>
                 <p className="truncate text-xs text-fg-primary">
                   {n.value}

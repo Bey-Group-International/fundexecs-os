@@ -1,4 +1,4 @@
-import { buildRoutingTrace, buildOutcome, desksForSteps } from "@/lib/routing-trace";
+import { buildRoutingTrace, buildOutcome, desksForSteps, fmtClockTime } from "@/lib/routing-trace";
 import { deriveRouting } from "@/lib/intelligence";
 import type { Task, Approval } from "@/lib/supabase/database.types";
 
@@ -99,6 +99,28 @@ describe("buildRoutingTrace", () => {
     const gate = trace.find((n) => n.key === "gate")!;
     expect(gate.value).toBe("Internal — auto-run");
     expect(gate.state).toBe("done");
+  });
+
+  it("labels a re-routing gate (regenerate) without showing 'Pending'", () => {
+    const trace = buildRoutingTrace({
+      workflow: task(),
+      steps: [step()],
+      approval: approval({ decision: "regenerate", decided_at: "2026-06-22T14:05:00.000Z" }),
+    });
+    const gate = trace.find((n) => n.key === "gate")!;
+    expect(gate.value).toBe("Re-routing");
+  });
+});
+
+describe("fmtClockTime", () => {
+  it("returns the fallback for null or invalid timestamps", () => {
+    expect(fmtClockTime(null, "—")).toBe("—");
+    expect(fmtClockTime("not-a-date", "—")).toBe("—");
+    expect(fmtClockTime(null)).toBe("");
+  });
+
+  it("formats a valid ISO timestamp as a clock time", () => {
+    expect(fmtClockTime("2026-06-22T14:05:00.000Z")).toMatch(/\d/);
   });
 });
 

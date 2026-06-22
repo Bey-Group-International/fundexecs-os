@@ -159,9 +159,22 @@ function decisionVerb(decision: Approval["decision"]): string {
       return "Accepted";
     case "rejected":
       return "Declined";
+    case "regenerate":
+      return "Re-routing";
     default:
       return "Pending";
   }
+}
+
+// Format an ISO timestamp as a short local clock time (e.g. "2:35 PM). Shared by
+// the routing trace and the outcome receipt so they read identically. Returns
+// `fallback` for a null/invalid timestamp.
+export function fmtClockTime(at: string | null, fallback = ""): string {
+  if (!at) return fallback;
+  const d = new Date(at);
+  return Number.isNaN(d.getTime())
+    ? fallback
+    : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 // Build the durable outcome receipt for a workflow's decision.

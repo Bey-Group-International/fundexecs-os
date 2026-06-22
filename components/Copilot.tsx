@@ -28,7 +28,7 @@ import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
 import { ModelCompare, estimateTokens, type ModelComparison } from "@/components/ModelCompare";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
-import { RerouteControl } from "@/components/grid/RerouteControl";
+import { RoutePanel } from "@/components/RoutePanel";
 
 // A conversational turn rendered in the transcript. Chat turns are Earn's
 // answer path (ungated) and live in client state alongside the workflow turns.
@@ -183,6 +183,12 @@ export default function Copilot({
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   // In-flight chat stream, so the Stop control can abort it.
   const chatAbortRef = useRef<AbortController | null>(null);
+  // Pending toast dismissal timers, cleared on unmount.
+  const toastTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  useEffect(() => {
+    const timers = toastTimers.current;
+    return () => timers.forEach(clearTimeout);
+  }, []);
 
   const activeModel = EARN_MODELS.find((m) => m.key === model) ?? EARN_MODELS[0];
   const activeMode = EARN_MODES.find((m) => m.key === mode) ?? EARN_MODES[0];
@@ -545,10 +551,15 @@ export default function Copilot({
   }
 
   // Surface a transient confirmation so the operator knows an action landed.
+  // Timers are tracked so they can be cleared if the component unmounts first.
   function pushToast(msg: string, tone: "ok" | "warn" = "ok") {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setToasts((prev) => [...prev, { id, msg, tone }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4200);
+    const timer = setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+      toastTimers.current.delete(timer);
+    }, 4200);
+    toastTimers.current.add(timer);
   }
 
   // Non-streaming approval (every decision but the live-streamed "approved"
@@ -642,7 +653,7 @@ export default function Copilot({
       regenerate: { msg: desk ? `Re-routed to ${EXECUTIVE_LABEL[desk]}` : "Refining the plan…", tone: "ok" },
     };
     const r = receipt[decision];
-    if (r) pushToast(r.msg, r.tone);
+    pushToast(r.msg, r.tone);
   }
 
   // "Ask questions to complete" — Earn surfaces what it needs to know. The
@@ -1816,15 +1827,16 @@ function WorkflowCard({
   });
   const cursor = cursorResponse(routing, { pending: Boolean(pending), stepCount: bundle.steps.length });
   const outcome = buildOutcome(bundle);
-  // Lead with the result: the primary deliverable (a real artifact, else the
-  // first completed step's output) shown up top once work has run.
+  // Lead with the result: the workflow's primary deliverable (the first artifact
+  // it produced) shown up top once work has run.
   const primaryArtifact = bundle.artifacts[0] ?? null;
-  // Details (routing trace, summary/action, full step list) start collapsed once
-  // a decision has landed — the operator leads with the outcome — and open while
-  // a decision is pending so the plan is visible for review.
-  const [detailsOpen, setDetailsOpen] = useState<boolean>(Boolean(pending));
-  // Re-route: the desk picker shown when the operator overrides routing.
-  const [rerouteOpen, setRerouteOpen] = useState(false);
+  // Details (routing trace, summary/action, full step list) follow the workflow's
+  // phase by default — open while a decision is pending or the run is live (so the
+  // plan and streaming steps are visible), collapsed once the outcome leads — until
+  // the operator toggles, after which their choice sticks.
+  const livePhase = Boolean(pending) || workflow.status === "in_progress";
+  const [detailsOverride, setDetailsOverride] = useState<boolean | null>(null);
+  const detailsOpen = detailsOverride ?? livePhase;
   return (
     <article className={`rounded-2xl border bg-surface-1/82 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)] sm:p-5 ${primary ? "border-gold-500/40 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)]" : "border-line/80"}`}>
       <div className="flex items-start justify-between gap-3">
@@ -1885,7 +1897,7 @@ function WorkflowCard({
       <div className="mt-3">
         <button
           type="button"
-          onClick={() => setDetailsOpen((v) => !v)}
+          onClick={() => setDetailsOverride(!detailsOpen)}
           aria-expanded={detailsOpen}
           className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
         >
@@ -1916,9 +1928,16 @@ function WorkflowCard({
             </div>
           </div>
         ) : null}
-        {/* Operator override: re-route this workflow to a different engine
-            without leaving the Copilot card. */}
-        <RerouteControl workflowId={workflow.id} currentEngine={routing.target_engine} />
+        {/* Unified Delegate & Route — change the engine or delegate to a desk in
+            one place. Desk delegation re-plans, so it's only offered while pending. */}
+        <RoutePanel
+          workflowId={workflow.id}
+          currentEngine={routing.target_engine}
+          currentDesk={routing.assigned_to}
+          canDelegate={Boolean(pending)}
+          busy={busy}
+          onDelegate={(d) => approval && decide(approval.id, "regenerate", undefined, d)}
+        />
       </div>
 
       {pending ? (
@@ -2010,51 +2029,12 @@ function WorkflowCard({
             <button
               type="button"
               disabled={busy}
-              onClick={() => setRerouteOpen((v) => !v)}
-              aria-expanded={rerouteOpen}
-              title="Override Earn's routing — delegate this work to a different desk"
-              className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
-            >
-              Re-route
-            </button>
-            <button
-              type="button"
-              disabled={busy}
               onClick={() => decide(approval.id, "rejected")}
               className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-status-danger transition hover:bg-surface-3 disabled:opacity-50"
             >
               Decline
             </button>
           </div>
-
-          {/* Delegate & Route — override Earn's auto-routing to a chosen desk.
-              Re-plans the work for that desk; the gate still applies. */}
-          {rerouteOpen ? (
-            <div className="mt-3 rounded-xl border border-line/70 bg-surface-0/40 p-3">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                Delegate to desk
-              </p>
-              <p className="mt-1 text-xs text-fg-muted">
-                Earn routed this to {EXECUTIVE_LABEL[routing.assigned_to]}. Pick a desk to re-route — the plan rebuilds and still needs your sign-off.
-              </p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {EXECUTIVES.filter((d) => d !== routing.assigned_to).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      setRerouteOpen(false);
-                      decide(approval.id, "regenerate", undefined, d);
-                    }}
-                    className="rounded-full border border-line/80 bg-surface-1/75 px-3 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary disabled:opacity-40"
-                  >
-                    {EXECUTIVE_LABEL[d]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       ) : null}
     </article>
