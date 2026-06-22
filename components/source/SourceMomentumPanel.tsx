@@ -173,6 +173,12 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
             >
               ✶ Intelligence
             </Link>
+            <Link
+              href="/source/outreach"
+              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            >
+              ✶ Outreach
+            </Link>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
 
