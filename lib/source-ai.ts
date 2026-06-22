@@ -319,7 +319,7 @@ export async function generateTargets(
   if (!cfg) return [];
   const options = categoryOptions(cfg);
   const anthropic = client();
-  if (!anthropic) return fallbackCandidates(cfg, mandate, existingNames, options);
+  if (!anthropic) return fallbackCandidates(cfg, mandate, existingNames, options, query);
 
   // External enrichment first (opt-in): real, currently-operating targets with
   // a source citation. Falls through to model knowledge if it yields nothing.
@@ -357,9 +357,9 @@ export async function generateTargets(
     const json = textOf(message);
     const raw = json ? (JSON.parse(json) as { candidates?: unknown[] }) : null;
     const out = normalizeCandidates(raw?.candidates ?? [], cfg, options, existingNames);
-    return out.length ? out : fallbackCandidates(cfg, mandate, existingNames, options);
+    return out.length ? out : fallbackCandidates(cfg, mandate, existingNames, options, query);
   } catch {
-    return fallbackCandidates(cfg, mandate, existingNames, options);
+    return fallbackCandidates(cfg, mandate, existingNames, options, query);
   }
 }
 
@@ -453,15 +453,18 @@ function fallbackCandidates(
   mandate: SourcingMandate | null,
   existingNames: string[],
   options: string[],
+  query?: string,
 ): SourceCandidate[] {
   const geos = mandate?.geographies?.length ? mandate.geographies : ["your core market"];
   const classes = mandate?.assetClasses?.length ? mandate.assetClasses : ["the target strategy"];
   const seen = new Set(existingNames.map((n) => n.toLowerCase()));
   const picks: SourceCandidate[] = [];
+  const focus = query?.trim().slice(0, 180);
+  const focusClause = focus ? ` Operator request: ${focus}.` : "";
   const add = (name: string, category: string, fitScore: number, rationale: string, firstMove: string) => {
     if (seen.has(name.toLowerCase()) || picks.length >= 5) return;
     seen.add(name.toLowerCase());
-    picks.push({ name, category, fitScore, rationale, firstMove });
+    picks.push({ name, category, fitScore, rationale: `${rationale}${focusClause}`, firstMove });
   };
   const cat = (i: number) => (cfg.freeCategory ? classes[i % classes.length] : options[i % Math.max(1, options.length)] ?? "other");
 

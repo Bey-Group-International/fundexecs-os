@@ -7,6 +7,7 @@ import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EmptyState, StatTile, EarnAction } from "@/components/execute/ui";
 import { Sparkline } from "@/components/execute/Sparkline";
 import RecordMarkForm from "@/components/execute/RecordMarkForm";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 import type { Asset } from "@/lib/supabase/database.types";
 
 function humanize(s: string): string {
@@ -26,7 +27,12 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
   const supabase = createServerClient();
   const [perf, assetsRes, marks] = await Promise.all([
     getExecutePerformance(orgId),
-    supabase.from("assets").select("*").eq("organization_id", orgId).order("current_value", { ascending: false, nullsFirst: false }),
+    supabase
+      .from("assets")
+      .select("*")
+      .eq("organization_id", orgId)
+      .is("archived_at", null)
+      .order("current_value", { ascending: false, nullsFirst: false }),
     getValuationMarks(orgId),
   ]);
   const allAssets = (assetsRes.data ?? []) as Asset[];
@@ -166,7 +172,16 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
                     })()}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right">
-                    <EarnAction kind="valuation_asset" label="Re-mark" subject={a.name} subtle />
+                    <div className="flex justify-end gap-2">
+                      <EarnAction kind="valuation_asset" label="Re-mark" subject={a.name} subtle />
+                      <RecordLifecycleActions
+                        hub="execute"
+                        module="valuations"
+                        table="assets"
+                        id={a.id}
+                        deleteClassName=""
+                      />
+                    </div>
                   </td>
                 </tr>
               );

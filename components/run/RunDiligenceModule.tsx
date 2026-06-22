@@ -20,6 +20,7 @@ async function activeDeals(orgId: string): Promise<Deal[]> {
     .from("deals")
     .select("*")
     .eq("organization_id", orgId)
+    .is("archived_at", null)
     .not("stage", "in", "(passed,dead)")
     .order("created_at", { ascending: false });
   return (data ?? []) as Deal[];
@@ -65,6 +66,7 @@ export async function RunDiligenceModule({ orgId }: { orgId: string }) {
       .from("diligence_items")
       .select("*")
       .eq("organization_id", orgId)
+      .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(200),
   ]);

@@ -1,16 +1,8 @@
 "use client";
 
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  verifyRecord,
-  unverifyRecord,
-  archiveRecord,
-  restoreRecord,
-  deleteRecord,
-} from "@/app/(app)/[hub]/[module]/record-actions";
-import type { RecordActionResult } from "@/lib/managed-tables";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 
 interface Column {
   key: string;
@@ -109,21 +101,6 @@ export default function ModuleTable({
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [noteFor, setNoteFor] = useState<string | null>(null);
-  const [noteText, setNoteText] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const router = useRouter();
-
-  const run = (fn: () => Promise<RecordActionResult>) => {
-    setError(null);
-    start(async () => {
-      const res = await fn();
-      if (!res.ok) setError(res.error ?? "Action failed.");
-      else router.refresh();
-    });
-  };
 
   const visible: Row[] = showArchived ? [...rows, ...archivedRows] : rows;
   const colSpan = columns.length + 2; // chevron + status columns
@@ -132,7 +109,7 @@ export default function ModuleTable({
     <div>
       {archivedRows.length > 0 ? (
         <div className="mb-2 flex items-center justify-between">
-          {error ? <span className="text-xs text-status-danger">{error}</span> : <span />}
+          <span />
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
@@ -141,8 +118,6 @@ export default function ModuleTable({
             {showArchived ? "Hide archived" : `Show archived (${archivedRows.length})`}
           </button>
         </div>
-      ) : error ? (
-        <p className="mb-2 text-xs text-status-danger">{error}</p>
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-line">
@@ -245,114 +220,16 @@ export default function ModuleTable({
                         </div>
 
                         {/* Actions */}
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          {archived ? (
-                            <button
-                              type="button"
-                              disabled={pending}
-                              onClick={() => run(() => restoreRecord(hub, module, table, id))}
-                              className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
-                            >
-                              Restore
-                            </button>
-                          ) : (
-                            <>
-                              {row.verification_status === "verified" ? (
-                                <button
-                                  type="button"
-                                  disabled={pending}
-                                  onClick={() => run(() => unverifyRecord(hub, module, table, id))}
-                                  className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
-                                >
-                                  Unverify
-                                </button>
-                              ) : noteFor === id ? (
-                                <span className="flex items-center gap-1.5">
-                                  <input
-                                    autoFocus
-                                    value={noteText}
-                                    onChange={(e) => setNoteText(e.target.value)}
-                                    placeholder="Evidence URL or note (optional)"
-                                    className="w-56 rounded-md border border-line bg-surface-0 px-2.5 py-1.5 text-xs text-fg-primary outline-none focus:border-gold-500"
-                                  />
-                                  <button
-                                    type="button"
-                                    disabled={pending}
-                                    onClick={() => {
-                                      run(() => verifyRecord(hub, module, table, id, noteText));
-                                      setNoteFor(null);
-                                      setNoteText("");
-                                    }}
-                                    className="rounded-md bg-status-success/90 px-3 py-1.5 text-xs font-medium text-surface-0 transition hover:bg-status-success disabled:opacity-50"
-                                  >
-                                    Confirm verify
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setNoteFor(null);
-                                      setNoteText("");
-                                    }}
-                                    className="text-xs text-fg-muted hover:text-fg-secondary"
-                                  >
-                                    Cancel
-                                  </button>
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={pending}
-                                  onClick={() => {
-                                    setNoteFor(id);
-                                    setNoteText("");
-                                  }}
-                                  className="rounded-md border border-status-success/40 bg-status-success/10 px-3 py-1.5 text-xs font-medium text-status-success transition hover:bg-status-success/20 disabled:opacity-50"
-                                >
-                                  ✓ Verify
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                disabled={pending}
-                                onClick={() => run(() => archiveRecord(hub, module, table, id))}
-                                className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
-                              >
-                                Archive
-                              </button>
-                            </>
-                          )}
-                          {confirmDelete === id ? (
-                            <span className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                disabled={pending}
-                                onClick={() => {
-                                  run(() => deleteRecord(hub, module, table, id));
-                                  setConfirmDelete(null);
-                                }}
-                                className="rounded-md bg-status-danger/90 px-3 py-1.5 text-xs font-medium text-surface-0 transition hover:bg-status-danger disabled:opacity-50"
-                              >
-                                Confirm delete
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmDelete(null)}
-                                className="text-xs text-fg-muted hover:text-fg-secondary"
-                              >
-                                Cancel
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={pending}
-                              onClick={() => setConfirmDelete(id)}
-                              className="ml-auto rounded-md border border-status-danger/40 px-3 py-1.5 text-xs text-status-danger transition hover:bg-status-danger/10 disabled:opacity-50"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
+                        <RecordLifecycleActions
+                          hub={hub}
+                          module={module}
+                          table={table}
+                          id={id}
+                          archived={archived}
+                          verificationStatus={String(row.verification_status ?? "")}
+                          showVerify
+                          className="mt-3"
+                        />
                       </td>
                     </tr>
                   ) : null}

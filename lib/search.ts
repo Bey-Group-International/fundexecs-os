@@ -117,6 +117,7 @@ export async function searchAll(
         .from("deals")
         .select("id, name, stage, asset_class")
         .eq("organization_id", orgId)
+        .is("archived_at", null)
         .ilike("name", pattern)
         .order("created_at", { ascending: false })
         .limit(PER_TABLE_LIMIT),
@@ -124,6 +125,7 @@ export async function searchAll(
         .from("investors")
         .select("id, name, investor_type, pipeline_stage")
         .eq("organization_id", orgId)
+        .is("archived_at", null)
         .ilike("name", pattern)
         .order("created_at", { ascending: false })
         .limit(PER_TABLE_LIMIT),
@@ -131,6 +133,7 @@ export async function searchAll(
         .from("assets")
         .select("id, name, asset_type, status")
         .eq("organization_id", orgId)
+        .is("archived_at", null)
         .ilike("name", pattern)
         .order("created_at", { ascending: false })
         .limit(PER_TABLE_LIMIT),

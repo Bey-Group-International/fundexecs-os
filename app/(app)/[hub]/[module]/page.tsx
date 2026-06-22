@@ -1,11 +1,26 @@
+import nextDynamic from "next/dynamic";
 import { ModuleView } from "@/components/ModuleView";
-import { SourceSearch } from "@/components/source/SourceSearch";
-import { SourceTriage } from "@/components/source/SourceTriage";
-import { SourcingIntel } from "@/components/source/SourcingIntel";
-import { RunSearch } from "@/components/run/RunSearch";
-import { ExecuteSearch } from "@/components/execute/ExecuteSearch";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 import { copilotLive } from "@/lib/claude";
+
+// Lazily loaded — each search/triage surface is heavy and hub-specific.
+// next/dynamic splits them into separate chunks loaded only when the matching
+// route is visited, rather than bundling all four on every module page.
+const SourceSearch = nextDynamic(() =>
+  import("@/components/source/SourceSearch").then((m) => m.SourceSearch),
+);
+const SourceTriage = nextDynamic(() =>
+  import("@/components/source/SourceTriage").then((m) => m.SourceTriage),
+);
+const SourcingIntel = nextDynamic(() =>
+  import("@/components/source/SourcingIntel").then((m) => m.SourcingIntel),
+);
+const RunSearch = nextDynamic(() =>
+  import("@/components/run/RunSearch").then((m) => m.RunSearch),
+);
+const ExecuteSearch = nextDynamic(() =>
+  import("@/components/execute/ExecuteSearch").then((m) => m.ExecuteSearch),
+);
 
 export const dynamic = "force-dynamic";
 

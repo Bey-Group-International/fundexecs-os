@@ -14,8 +14,16 @@ export async function GET(request: Request) {
   }
 
   const supabase = createServerClient();
+  // RLS already scopes every query below to the caller's org; the explicit
+  // organization_id filter on the keystone lookup is defense-in-depth so a
+  // future RLS regression can't turn this into a cross-org task read.
   const [task, events, approvals, handoffs, artifacts] = await Promise.all([
-    supabase.from("tasks").select("*").eq("id", taskId).maybeSingle(),
+    supabase
+      .from("tasks")
+      .select("*")
+      .eq("id", taskId)
+      .eq("organization_id", auth.ctx.orgId)
+      .maybeSingle(),
     supabase
       .from("task_events")
       .select("*")

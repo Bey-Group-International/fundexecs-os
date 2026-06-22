@@ -29,6 +29,11 @@ export const INBOX_CHANNELS: Record<InboxChannel, ChannelMeta> = {
   zoom: { channel: "zoom", label: "Zoom", category: "video", icon: "▷" },
   google_meet: { channel: "google_meet", label: "Google Meet", category: "video", icon: "◉" },
   docusign: { channel: "docusign", label: "Docusign", category: "signing", icon: "✍" },
+  // Earn's instant ecosystem match alerts — a new org matched across the
+  // Capital/LP, Debt, Partners, Providers, and Deals lanes (lib/ecosystem-match).
+  ecosystem: { channel: "ecosystem", label: "Ecosystem", category: "messaging", icon: "◈" },
+  // A deal shared across the ecosystem that fits this org (lib/deal-share).
+  deal_share: { channel: "deal_share", label: "Deal flow", category: "messaging", icon: "◆" },
 };
 
 export interface CategoryMeta {

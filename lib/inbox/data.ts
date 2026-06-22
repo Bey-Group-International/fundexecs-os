@@ -30,6 +30,9 @@ export async function getInboxThreads(
   const { data, error } = await supabase
     .from("inbox_threads")
     .select("*")
+    // The inbox focuses on messages — capital, partners, providers, and comms.
+    // Shared-deal updates live in their own "deals that fit you" feed.
+    .neq("channel", "deal_share")
     .order("priority", { ascending: false })
     .order("last_message_at", { ascending: false, nullsFirst: false })
     .limit(100);

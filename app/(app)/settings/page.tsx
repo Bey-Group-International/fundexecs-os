@@ -3,13 +3,15 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
-import type { MandateRow } from "@/lib/supabase/database.types";
+import type { ApiKey, MandateRow } from "@/lib/supabase/database.types";
+import { loadOrgConnections } from "@/lib/integrations/gateway";
 import { NewMandateForm } from "./NewMandateForm";
 import { Connections } from "./Connections";
+import { ApiKeys, type ApiKeyView } from "./ApiKeys";
 import { GuidedTourSetting } from "./GuidedTourSetting";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { TIER_2_ACTIONS } from "./tier2-actions";
-import { deactivateMandate } from "./actions";
+import { deactivateMandate, setDiscoverable } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "account", label: "Account" },
   { id: "mandates", label: "Mandates" },
   { id: "integrations", label: "Integrations" },
+  { id: "api", label: "API keys" },
   { id: "help", label: "Help" },
   { id: "about", label: "About" },
 ];
@@ -40,6 +43,36 @@ export default async function SettingsPage() {
     .limit(1)
     .maybeSingle();
   const activeMandate = (data as MandateRow | null) ?? null;
+
+  // Issued API keys and stored third-party secrets for this org. We never send
+  // the secret hash or ciphertext to the client — only the display fragments.
+  const { data: keyRows } = await supabase
+    .from("api_keys")
+    .select("*")
+    .order("created_at", { ascending: false });
+  const apiKeys: ApiKeyView[] = ((keyRows as ApiKey[] | null) ?? []).map((k) => ({
+    id: k.id,
+    name: k.name,
+    mode: k.mode,
+    publishable_key: k.publishable_key,
+    secret_prefix: k.secret_prefix,
+    secret_last4: k.secret_last4,
+    last_used_at: k.last_used_at,
+    revoked_at: k.revoked_at,
+    created_at: k.created_at,
+  }));
+
+  // Ecosystem discoverability — drives the toggle below. Defaults to on for a
+  // freshly onboarded org (the column default), so treat a null as discoverable.
+  const { data: orgRow } = await supabase
+    .from("organizations")
+    .select("discoverable")
+    .eq("id", ctx.orgId)
+    .maybeSingle();
+  const discoverable = (orgRow as { discoverable: boolean | null } | null)?.discoverable !== false;
+
+  // Per-org integration connections brokered by the unified gateway.
+  const connections = await loadOrgConnections(supabase, ctx.orgId);
 
   const labelFor = (kind: string) =>
     TIER_2_ACTIONS.find((a) => a.kind === kind)?.label ?? kind;
@@ -80,6 +113,30 @@ export default async function SettingsPage() {
               <Link href="/build/profile" className="fx-card fx-card-hover group p-4">
                 <RowLink label="Organization profile" hint="Name, focus, and public details" />
               </Link>
+              <div className="fx-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-fg-primary">Ecosystem discoverability</p>
+                    <p className="mt-1 text-xs leading-snug text-fg-secondary">
+                      {discoverable
+                        ? "On — Earn matches your profile across the ecosystem and alerts matching LPs, capital, partners, providers, and deals."
+                        : "Off — your firm is dark. No match alerts go out about you, and you receive none."}
+                    </p>
+                  </div>
+                  <form action={setDiscoverable} className="shrink-0">
+                    <input type="hidden" name="discoverable" value={discoverable ? "false" : "true"} />
+                    <button
+                      className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
+                        discoverable
+                          ? "border-line text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                          : "border-gold-500/40 bg-gold-500/10 text-gold-300 hover:bg-gold-500/20"
+                      }`}
+                    >
+                      {discoverable ? "Go dark" : "Make discoverable"}
+                    </button>
+                  </form>
+                </div>
+              </div>
               <Link href="/wallet" className="fx-card fx-card-hover group p-4">
                 <RowLink label="Wallet & credits" hint="Balance, plan, and billing" />
               </Link>
@@ -157,7 +214,17 @@ export default async function SettingsPage() {
             title="Integrations"
             description="Dispatch channels carry approved external actions to the outside world. A connected channel sends for real; an unconnected one runs in mock mode — the action is prepared and queued, not sent — so the gate → dispatch loop works end-to-end before any provider is wired up."
           >
-            <Connections />
+            <Connections connections={connections} />
+          </Section>
+
+          {/* API keys */}
+          <Section
+            id="api"
+            eyebrow="Developers"
+            title="API keys"
+            description="Issue FundExecs-native credentials to call the FundExecs OS API. Each key is a publishable/secret pair: the publishable key is safe to embed, the secret authenticates server-to-server (send it as an Authorization: Bearer header). The secret is shown once at creation — store it safely, and rotate or revoke any time."
+          >
+            <ApiKeys keys={apiKeys} />
           </Section>
 
           {/* Help */}

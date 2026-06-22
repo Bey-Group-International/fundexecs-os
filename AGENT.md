@@ -77,6 +77,15 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
   Command Center (deals, assets, deliverables, completed workflows, a sample
   automation — org-scoped, idempotent); and a floating Guided Tour that walks a
   tester through the full loop end-to-end (localStorage-persisted).
+- ✅ Human team task loop — `team_tasks` lets work be assigned to principals,
+  surfaced inside the Earn dock, launched through the normal Earn session loop,
+  and marked complete with cross-hub `operator_feedback` learning signals.
+- ✅ Source learning optimization — the in-module AI Sourcing panel now passes
+  operator queries into target generation, records accepted and rejected
+  candidate signals with fit scores, and surfaces personalization state.
+- ✅ Earn conversation theater — sessions now have a 2D live workspace with
+  clickable agent avatars, computation panels, active model display, expanding
+  composer, media attachment manifests, and browser voice transcript capture.
 
 ### What has not been built yet
 
@@ -87,6 +96,11 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - 🔧 Remaining hub modules (Source, Run, Execute; most of Build)
 - 🔧 Marketplace layer (schema exists; no logic/UI)
 - 🔧 Graph query layer (`/graph/*` endpoints + visualizations)
+- 🔧 Org-specific artifact embedding into Brain recall (operator feedback now
+  learns from behavior; completed work is not yet vectorized into recall)
+- 🔧 True multimodal/model backends for Earn inputs (UI captures attachment and
+  voice metadata; provider switching is visible but still routes through the
+  current Claude-backed execution path until OpenAI/Gemini adapters and storage land)
 
 ### What you must never do
 
@@ -145,15 +159,33 @@ Run       →  Strategy, diligence, underwriting, stress test, comms, risk
 Execute   →  Closing, capital events, asset management, reporting, exit
 ```
 
-### The Six Agents
+### The Fifteen Agents (grouped by hub; see `lib/agents.ts`)
 
 ```
-Analyst           →  Deal data, pro formas, valuations, sensitivities
-Associate         →  Workflow coordination, task execution (YOU)
-Investor Relations →  LP comms, capital calls, reporting
-Portfolio Ops     →  Asset KPIs, budgets, capex, variance
-Diligence         →  Document parsing, risk flags, diligence memos
-Fund Admin        →  Waterfall calculations, fund accounting, audit prep
+Orchestration
+  Earn (Associate)   →  Workflow coordination, task execution across all hubs (YOU)
+
+Run
+  Analyst            →  Deal data, pro formas, valuations, sensitivities
+  Diligence          →  Document parsing, risk flags, diligence memos
+
+Execute
+  Investor Relations →  LP comms, capital calls, reporting
+  Portfolio Ops      →  Asset KPIs, budgets, capex, variance
+  Fund Admin         →  Waterfall calculations, fund accounting, audit prep
+
+Source
+  Executive Advisor  →  Investor research, targeting, first-contact intel
+  Capital Raiser     →  LP fundraising, capital formation, investor pipeline
+  Capital Connector  →  Deal financing, capital stack, lender relations
+  Deal Sourcer       →  Deal flow, acquisition strategy, seller outreach
+  Rainmaker          →  Prospect conversion, capital closing, qualification
+
+Build
+  Lead Generator     →  Funnels, lead capture, CRM integration, campaign ops
+  PR Director        →  Investor materials, pitch decks, CIMs, brand narrative
+  SEO Disruptor      →  Search authority, content, organic leads
+  Curator            →  Private investor rooms, salons, post-event conversion
 ```
 
 ### The Three Graphs
@@ -444,6 +476,71 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Integrated, not yet tested.
              |  Next: three-graph query layer (/graph/*); email/webhook/event triggers;
              |  retry/adapt-on-failure autonomy; external integrations (MCP/HTTP connections).
+
+2026-06-20  |  Team task loop + operator learning  |  Earn now carries human work.
+             |  Built: 0050_team_tasks_and_operator_feedback.sql; team_tasks queue
+             |  (assignee/principal scoped, hub/module context, priority, session link);
+             |  operator_feedback ledger for cross-hub approval/task signals; Team page
+             |  assignment form; Earn dock "Your tasks" card with Run with Earn + Done;
+             |  learned operator digest injected into dock asks and team-task launches.
+             |  Decision: keep human task completion separate from AI workflow task rows,
+             |  then link through session_id/source_task_id so the sacred Earn loop remains
+             |  unchanged and audit-friendly.
+             |  Confidence: Integrated, not yet tested.
+             |  Next: vectorize high-quality completed artifacts into org-scoped Brain recall
+             |  and expand feedback capture beyond dock/team flows.
+
+2026-06-20  |  Source sourcing optimization  |  The module panel now learns like Search.
+             |  Built: shared source-selection helper for accepted/rejected candidate
+             |  payloads; AI Sourcing panel passes the operator's ask into generation,
+             |  records unchecked candidates as rejected source_feedback with fit scores,
+             |  and shows a personalized chip when learned preferences are active.
+             |  Also made deterministic fallback candidates carry the operator query so
+             |  no-key environments still reflect the ask.
+             |  Confidence: Tested by unit/type/lint/build; authenticated UI blocked by
+             |  missing local Supabase env.
+             |  Next: align Source activity staleness/live-stage filters and add DB-backed
+             |  action tests once local Supabase is available.
+
+2026-06-20  |  Earn conversation theater  |  The session now feels like active work.
+             |  Built: session-theater model helpers + tests; live 2D Earn Workspace in
+             |  Copilot sessions with clickable agent avatars, status/progress lanes, and
+             |  computation panels; expanding two-line composer; model selector state
+             |  (Claude / ChatGPT / Gemini) shown in the workspace and embedded in the
+             |  prompt envelope; image/video attachment manifests; browser speech
+             |  transcript capture when available.
+             |  Decision: ship a 2D inspectable theater first, before Three.js/GSAP and
+             |  binary media/storage/provider adapters, so operators immediately see agents
+             |  working without destabilizing the sacred prompt→plan→approve loop.
+             |  Confidence: Tested by unit/type/lint/build; authenticated UI blocked by
+             |  local login/autofill environment.
+             |  Next: persist attachments to storage, add true multimodal provider routing,
+             |  and store per-session preferred model once provider adapters exist.
+
+2026-06-21  |  Homepage private-market campus  |  The public hero became the OS.
+             |  Built: immediate 2D/8-bit private-market campus hero with real SVG
+             |  sprite/building assets, visible walking executive agents, NVIDIA-green and
+             |  electric-blue neural paths, high-contrast headline overlay, persistent
+             |  computation inspector, and clean Build → Source → Run → Execute loop below.
+             |  Decision: visual identity is a balanced hybrid — 70% private-market campus,
+             |  30% GPU command center. The homepage should feel like a living capital
+             |  ecosystem, not a dashboard screenshot or generic office map.
+             |  Confidence: Tested by lint/build/typecheck/Jest and browser video walkthrough.
+             |  Next: expand the sprite library into a reusable product asset system for
+             |  authenticated Earn sessions and future avatar workspace surfaces.
+
+2026-06-21  |  Landing split-pane HQ state machine  |  Pixel campus rolled into a cleaner OS demo.
+             |  Built: restored the clean landing structure from the pre-pixel baseline and
+             |  replaced the hero visual with a persistent Cursor/Tasklet-style split-pane
+             |  workspace: Earn conversation on the left, Digital HQ on the right, explicit
+             |  Executive Offices of FundExecs suite labels, HQ state machine (idle →
+             |  activation → Earn lead → team takeover), and contained Workclaw automation
+             |  console.
+             |  Decision: public landing should show a product interaction, not a standalone
+             |  game map. Visual motion now maps directly to session milestones and approval
+             |  state.
+             |  Confidence: Tested by unit/lint/typecheck/build/Jest and browser video
+             |  walkthrough.
 ```
 
 ---

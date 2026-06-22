@@ -6,7 +6,7 @@ import { decideApproval } from "@/lib/engine";
 // Approval triggers step execution, which calls Claude per step.
 export const maxDuration = 300;
 
-const DECISIONS = ["approved", "rejected", "regenerate"] as const;
+const DECISIONS = ["approved", "rejected", "regenerate", "accepted"] as const;
 type Decision = (typeof DECISIONS)[number];
 
 // POST /api/approve — capture the human decision on an approval request.
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const decision = payload?.decision as Decision;
   if (!payload?.approval_id || !DECISIONS.includes(decision)) {
     return NextResponse.json(
-      { error: "Required: approval_id, decision (approved|rejected|regenerate)" },
+      { error: "Required: approval_id, decision (approved|rejected|regenerate|accepted)" },
       { status: 400 },
     );
   }

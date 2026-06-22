@@ -3,11 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
-import type { MemberRole } from "@/lib/supabase/database.types";
+import { planSeatLimit, seatLimitReached } from "@/lib/billing";
+import {
+  createTeamTask,
+  normalizeTeamTaskPriority,
+  recordOperatorFeedback,
+} from "@/lib/team-tasks";
+import type { Hub, MemberRole } from "@/lib/supabase/database.types";
 
 const TEAM = "/build/team";
 
 const ROLES: MemberRole[] = ["owner", "admin", "member"];
+const HUBS: Hub[] = ["build", "source", "run", "execute"];
 
 function isAdmin(role: MemberRole | null): boolean {
   return role === "owner" || role === "admin";
@@ -16,6 +23,17 @@ function isAdmin(role: MemberRole | null): boolean {
 function parseRole(raw: FormDataEntryValue | null): MemberRole | null {
   const r = String(raw ?? "").trim();
   return (ROLES as string[]).includes(r) ? (r as MemberRole) : null;
+}
+
+function parseHub(raw: FormDataEntryValue | null): Hub | null {
+  const hub = String(raw ?? "").trim();
+  return (HUBS as string[]).includes(hub) ? (hub as Hub) : null;
+}
+
+function parseDueDate(raw: FormDataEntryValue | null): string | null {
+  const value = String(raw ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  return new Date(`${value}T12:00:00.000Z`).toISOString();
 }
 
 // Count current owners in the org. Uses the service client so the check is
@@ -48,6 +66,64 @@ export async function updateMyProfile(formData: FormData): Promise<void> {
     .eq("id", ctx.userId);
 
   revalidatePath(TEAM);
+}
+
+// Assign work to a human teammate. The task appears in their Earn dock and can
+// be launched with all assignment context preloaded.
+export async function assignTeamTask(formData: FormData): Promise<{ error?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "No active organization." };
+  if (!isAdmin(ctx.role) && ctx.role !== "member") {
+    return { error: "Only active team members can assign tasks." };
+  }
+
+  const assignedTo = String(formData.get("assigned_to") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  if (!assignedTo) return { error: "Choose a teammate." };
+  if (!title) return { error: "Add a task title." };
+
+  const supabase = createServerClient();
+  const { data: member } = await supabase
+    .from("organization_members")
+    .select("principal_id")
+    .eq("organization_id", ctx.orgId)
+    .eq("principal_id", assignedTo)
+    .maybeSingle();
+  if (!member) return { error: "That teammate is not in this organization." };
+
+  const hub = parseHub(formData.get("hub"));
+  const taskModule = String(formData.get("module") ?? "").trim() || null;
+  const task = await createTeamTask(supabase, {
+    organizationId: ctx.orgId,
+    assignedTo,
+    assignedBy: ctx.userId,
+    title,
+    description: String(formData.get("description") ?? "").trim() || null,
+    hub,
+    module: taskModule,
+    priority: normalizeTeamTaskPriority(String(formData.get("priority") ?? "")),
+    dueAt: parseDueDate(formData.get("due_at")),
+    contextSnapshot: {
+      created_from: "build/team",
+      assigned_by_role: ctx.role,
+    },
+  });
+  if (!task) return { error: "Could not assign that task. Please try again." };
+
+  await recordOperatorFeedback(supabase, [
+    {
+      organizationId: ctx.orgId,
+      principalId: ctx.userId,
+      signal: "team_task_assigned",
+      subject: task.title,
+      scope: hub && taskModule ? `${hub}/${taskModule}` : hub ?? "build/team",
+      module: taskModule,
+      teamTaskId: task.id,
+      metadata: { assigned_to: assignedTo },
+    },
+  ]);
+  revalidatePath(TEAM);
+  return {};
 }
 
 // 2. Change a member's role. Admin/owner only. Cannot demote the last owner.
@@ -157,6 +233,25 @@ export async function inviteMember(
     .maybeSingle();
   if (existing) {
     return { error: "That person is already a member of this organization." };
+  }
+
+  // Seat limit: an org can only add members up to its plan's seat allotment.
+  // Read the plan and current member count with the service client so the
+  // check is reliable regardless of the caller's row-level visibility.
+  const { data: wallet } = await svc
+    .from("wallets")
+    .select("plan")
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  const { count: memberCount } = await svc
+    .from("organization_members")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", ctx.orgId);
+  if (seatLimitReached(wallet?.plan, memberCount ?? 0)) {
+    const limit = planSeatLimit(wallet?.plan);
+    return {
+      error: `Your plan includes ${limit} seat${limit === 1 ? "" : "s"}. Upgrade your plan to add more members.`,
+    };
   }
 
   const { error } = await svc.from("organization_members").insert({

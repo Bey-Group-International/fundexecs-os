@@ -1,9 +1,9 @@
 import type { Config } from "tailwindcss";
 
 // Visual system adopted from the FundExecs OS Command Center / Agent Copilot
-// designs: warm near-black surfaces, a gold accent, and the Space Grotesk /
-// DM Sans / JetBrains Mono type stack. The six per-agent colors are preserved
-// for agent identity.
+// designs: CSS-variable surfaces, electric-blue accents, and the Space
+// Grotesk / DM Sans / JetBrains Mono type stack. The six per-agent colors are
+// preserved for agent identity.
 const config: Config = {
   content: [
     "./app/**/*.{ts,tsx}",
@@ -13,23 +13,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Warm-black surface ramp (0 = page background)
+        // Theme-aware surface ramp (0 = page background)
         surface: {
-          0: "#0B0A08",
-          1: "#141310",
-          2: "#1C1A16",
-          3: "#26231D",
+          0: "rgb(var(--fx-surface-0) / <alpha-value>)",
+          1: "rgb(var(--fx-surface-1) / <alpha-value>)",
+          2: "rgb(var(--fx-surface-2) / <alpha-value>)",
+          3: "rgb(var(--fx-surface-3) / <alpha-value>)",
         },
-        line: "#2C2820",
+        line: "rgb(var(--fx-line) / <alpha-value>)",
+        // Kept as `gold` to avoid churn across existing components; the token
+        // now resolves to the requested blue accent family.
         gold: {
-          300: "#E4CD93",
-          400: "#D4AF6A",
-          500: "#C2974A",
+          300: "rgb(var(--fx-accent-300) / <alpha-value>)",
+          400: "rgb(var(--fx-accent-400) / <alpha-value>)",
+          500: "rgb(var(--fx-accent-500) / <alpha-value>)",
+        },
+        neural: {
+          300: "rgb(var(--fx-accent-300) / <alpha-value>)",
+          400: "rgb(var(--fx-accent-400) / <alpha-value>)",
+          500: "rgb(var(--fx-accent-500) / <alpha-value>)",
         },
         fg: {
-          primary: "#F5F1E8",
-          secondary: "#B7B0A1",
-          muted: "#7E7869",
+          primary: "rgb(var(--fx-fg-primary) / <alpha-value>)",
+          secondary: "rgb(var(--fx-fg-secondary) / <alpha-value>)",
+          muted: "rgb(var(--fx-fg-muted) / <alpha-value>)",
         },
         status: {
           success: "#5FB87A",
@@ -68,11 +75,39 @@ const config: Config = {
           "0%, 100%": { opacity: "0.55" },
           "50%": { opacity: "1" },
         },
+        // Thin data streams used by the wallet purchase/activation states.
+        fxDataStream: {
+          "0%": { transform: "translateX(-120%)", opacity: "0" },
+          "20%": { opacity: "1" },
+          "100%": { transform: "translateX(120%)", opacity: "0" },
+        },
+        // Terminal boot aura for the Earn copilot reveal and launcher.
+        fxBoot: {
+          "0%, 100%": { transform: "scale(1)", opacity: "0.45" },
+          "50%": { transform: "scale(1.08)", opacity: "0.9" },
+        },
+        // One-shot wiggle for the mailbox when a new message arrives.
+        fxShake: {
+          "0%, 100%": { transform: "translateX(0) rotate(0deg)" },
+          "20%": { transform: "translateX(-2px) rotate(-9deg)" },
+          "40%": { transform: "translateX(2px) rotate(9deg)" },
+          "60%": { transform: "translateX(-2px) rotate(-6deg)" },
+          "80%": { transform: "translateX(2px) rotate(6deg)" },
+        },
+        // One-shot pop for the lightbulb when a new deal lands.
+        fxNudge: {
+          "0%, 100%": { transform: "scale(1)" },
+          "45%": { transform: "scale(1.28)" },
+        },
       },
       animation: {
         pulse: "fxPulse 1.6s ease-in-out infinite",
         "fade-up": "fxFadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
         glow: "fxGlow 3.2s ease-in-out infinite",
+        "data-stream": "fxDataStream 1.35s cubic-bezier(0.22, 1, 0.36, 1) infinite",
+        boot: "fxBoot 2.8s ease-in-out infinite",
+        shake: "fxShake 0.6s ease-in-out",
+        nudge: "fxNudge 0.5s ease-in-out",
       },
     },
   },

@@ -7,9 +7,17 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  // If Supabase env isn't configured (e.g. a preview deployment without the
+  // vars), skip the refresh rather than throwing — a missing env var must never
+  // 500 every route, including the public landing page. Trim guards against a
+  // value pasted with stray whitespace.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  if (!url || !anonKey) return response;
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       cookies: {
         getAll() {
@@ -34,8 +42,14 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Touch the session so the cookie is refreshed when near expiry.
-  await supabase.auth.getUser();
+  // Touch the session so the cookie is refreshed when near expiry. Never let a
+  // transient auth/network error crash the request — gating happens in the
+  // authed layout, not here.
+  try {
+    await supabase.auth.getUser();
+  } catch {
+    // ignore
+  }
 
   return response;
 }

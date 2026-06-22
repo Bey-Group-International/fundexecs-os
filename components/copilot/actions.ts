@@ -18,7 +18,16 @@ import { getBuildReadiness } from "@/lib/build-readiness";
 import { getRunConviction } from "@/lib/run-conviction";
 import { getSourceMomentum } from "@/lib/source-readiness";
 import { getExecutePerformance } from "@/lib/execute-performance";
-import type { AgentKey, Task, Approval, TaskStatus } from "@/lib/supabase/database.types";
+import {
+  buildTeamTaskEarnPrompt,
+  getOperatorLearningDigest,
+  getTeamTaskForAssignee,
+  listMyTeamTasks,
+  operatorLearningPreamble,
+  recordOperatorFeedback,
+  updateTeamTaskStatus,
+} from "@/lib/team-tasks";
+import type { AgentKey, Task, Approval, TaskStatus, TeamTask } from "@/lib/supabase/database.types";
 
 export interface AskEarnResult {
   ok: boolean;
@@ -47,9 +56,11 @@ export async function askEarn(input: {
   const location = copilotContextFromPath(input.pathname);
   const supabase = createServerClient();
   try {
+    const learned = await getOperatorLearningDigest(supabase, ctx.orgId, ctx.userId, location.scope);
+    const learnedBlock = operatorLearningPreamble(learned);
     const result = await handlePrompt(
       { supabase, orgId: ctx.orgId, actorId: ctx.userId },
-      `${contextPreamble(location)} ${body}`,
+      `${contextPreamble(location)} ${learnedBlock} ${body}`,
       input.sessionId,
     );
     return {
@@ -173,6 +184,116 @@ export async function getRecentRuns(): Promise<RunSummary[]> {
   }
 }
 
+// --- Personal team tasks ----------------------------------------------------
+export interface TeamTaskSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  hub: string | null;
+  module: string | null;
+  status: TaskStatus;
+  priority: string;
+  dueAt: string | null;
+  sessionId: string | null;
+}
+
+function taskSummary(t: TeamTask): TeamTaskSummary {
+  return {
+    id: t.id,
+    title: t.title,
+    description: t.description,
+    hub: t.hub,
+    module: t.module,
+    status: t.status,
+    priority: t.priority,
+    dueAt: t.due_at,
+    sessionId: t.session_id,
+  };
+}
+
+/** Principal-scoped queue surfaced in the Earn dock. */
+export async function getMyTeamTasks(): Promise<TeamTaskSummary[]> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return [];
+  const supabase = createServerClient();
+  const tasks = await listMyTeamTasks(supabase, ctx.orgId, ctx.userId, 5);
+  return tasks.map(taskSummary);
+}
+
+/** Mark a personal task complete from the dock. */
+export async function completeMyTeamTask(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const taskId = String(formData.get("team_task_id") ?? "").trim();
+  if (!taskId) return;
+  const supabase = createServerClient();
+  const task = await getTeamTaskForAssignee(supabase, ctx.orgId, ctx.userId, taskId);
+  if (!task) return;
+  const ok = await updateTeamTaskStatus(supabase, {
+    organizationId: ctx.orgId,
+    taskId,
+    status: "completed",
+  });
+  if (ok) {
+    await recordOperatorFeedback(supabase, [
+      {
+        organizationId: ctx.orgId,
+        principalId: ctx.userId,
+        signal: "team_task_completed",
+        subject: task.title,
+        scope: task.hub && task.module ? `${task.hub}/${task.module}` : task.hub,
+        module: task.module,
+        teamTaskId: task.id,
+        sessionId: task.session_id,
+      },
+    ]);
+  }
+}
+
+/** Launch a personal task through Earn and open the full session. */
+export async function launchTeamTaskWithEarn(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) redirect("/login");
+  const taskId = String(formData.get("team_task_id") ?? "").trim();
+  const pathname = String(formData.get("pathname") ?? "/");
+  if (!taskId) redirect("/workspace");
+
+  const supabase = createServerClient();
+  const task = await getTeamTaskForAssignee(supabase, ctx.orgId, ctx.userId, taskId);
+  if (!task) redirect("/workspace");
+
+  const location = copilotContextFromPath(pathname);
+  const learned = await getOperatorLearningDigest(supabase, ctx.orgId, ctx.userId, location.scope);
+  const result = await handlePrompt(
+    { supabase, orgId: ctx.orgId, actorId: ctx.userId },
+    `${contextPreamble(location)} ${operatorLearningPreamble(learned)} ${buildTeamTaskEarnPrompt(task)}`,
+    task.session_id ?? undefined,
+  );
+
+  await updateTeamTaskStatus(supabase, {
+    organizationId: ctx.orgId,
+    taskId: task.id,
+    status: "in_progress",
+    sessionId: result.session_id,
+  });
+  await recordOperatorFeedback(supabase, [
+    {
+      organizationId: ctx.orgId,
+      principalId: ctx.userId,
+      signal: "team_task_earn_assisted",
+      subject: task.title,
+      scope: task.hub && task.module ? `${task.hub}/${task.module}` : task.hub,
+      module: task.module,
+      agent: "associate",
+      teamTaskId: task.id,
+      taskId: result.workflow.id,
+      sessionId: result.session_id,
+    },
+  ]);
+
+  redirect(result.session_id ? `/session/${result.session_id}` : "/workspace");
+}
+
 /** Approve a run from the dock's feed — runs the workflow end-to-end. No-op if missing. */
 export async function approveRun(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
@@ -185,6 +306,16 @@ export async function approveRun(formData: FormData): Promise<void> {
       { supabase, orgId: ctx.orgId, actorId: ctx.userId },
       { approvalId, decision: "approved" },
     );
+    await recordOperatorFeedback(supabase, [
+      {
+        organizationId: ctx.orgId,
+        principalId: ctx.userId,
+        signal: "approval_approved",
+        subject: "Earn run approved",
+        scope: "dock/recent_runs",
+        agent: "associate",
+      },
+    ]);
   } catch {
     // Best-effort: the dock re-fetches and the run simply stays awaiting approval.
   }
@@ -202,6 +333,16 @@ export async function dismissRun(formData: FormData): Promise<void> {
       { supabase, orgId: ctx.orgId, actorId: ctx.userId },
       { approvalId, decision: "rejected" },
     );
+    await recordOperatorFeedback(supabase, [
+      {
+        organizationId: ctx.orgId,
+        principalId: ctx.userId,
+        signal: "approval_rejected",
+        subject: "Earn run rejected",
+        scope: "dock/recent_runs",
+        agent: "associate",
+      },
+    ]);
   } catch {
     // Best-effort: ignore and let the dock re-fetch.
   }

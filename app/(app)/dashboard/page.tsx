@@ -16,6 +16,8 @@ import { getBuildReadiness } from "@/lib/build-readiness";
 import { getInboxThreads } from "@/lib/inbox/data";
 import { buildDigest, priorityBucket, type DigestThread } from "@/lib/inbox/intelligence";
 import { channelMeta } from "@/lib/inbox/channels";
+import { dashboardWorkspaces } from "@/lib/dashboard/config";
+import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
 
 export const dynamic = "force-dynamic";
 
@@ -171,23 +173,34 @@ export default async function DashboardPage() {
     }));
 
   return (
-    <div className="fx-ambient mx-auto max-w-5xl">
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="fx-ambient fx-blueprint mx-auto max-w-6xl">
+      <header className="fx-glass mb-6 flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
             <span aria-hidden className="h-4 w-1 rounded-full bg-gradient-to-b from-gold-300 to-gold-500" />
             Command Center
           </span>
-          <h1 className="mt-2.5 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-[2rem]">
+          <h1 className="mt-2.5 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-4xl">
             Private Markets Command Center
           </h1>
-          <p className="mt-1.5 text-sm text-fg-secondary">
-            Everything Earn produces, organized.
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">
+            Everything Earn produces, organized into a blue-lit operating surface for deal flow,
+            capital, approvals, and deliverables.
           </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {["Day/night ready", "Desktop optimized", "Mobile compact", "App-safe spacing"].map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-gold-500/25 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <form action={seedDemoData}>
-            <button className="rounded-lg bg-gold-500 px-3.5 py-2 text-xs font-medium text-surface-0 shadow-[0_4px_14px_-6px_rgba(196,151,74,0.6)] transition hover:bg-gold-400 hover:shadow-[0_6px_18px_-6px_rgba(196,151,74,0.7)]">
+            <button className="rounded-lg bg-gold-500 px-3.5 py-2 text-xs font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400 hover:shadow-[0_12px_28px_-14px_rgb(var(--fx-accent-rgb)/0.95)]">
               Load demo data
             </button>
           </form>
@@ -203,6 +216,47 @@ export default async function DashboardPage() {
       <div className="mb-6">
         <MissionControl orgId={ctx.orgId} />
       </div>
+
+      {/* Entry into the Gather-style spatial office where Earn orchestrates the
+          executive team in real time. */}
+      <Link
+        href="/dashboard/office"
+        className="fx-card fx-card-hover group relative mb-6 flex items-center gap-4 overflow-hidden p-5"
+      >
+        <span
+          aria-hidden
+          className="absolute inset-0 bg-[radial-gradient(60%_120%_at_85%_50%,rgba(56,189,248,0.18),transparent_70%)]"
+        />
+        <div className="relative min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+              Command Center
+            </span>
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+              Live floor
+            </span>
+          </div>
+          <p className="mt-1.5 font-display text-lg font-semibold text-fg-primary">
+            Enter the spatial office
+          </p>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            Watch Earnest Fundmaker delegate across the Mandate, Relationship, Outbound, Diligence, and Capital
+            offices — executives execute in real time.
+          </p>
+        </div>
+        <span className="relative shrink-0 font-mono text-xl text-gold-400 transition group-hover:translate-x-1">
+          →
+        </span>
+      </Link>
+
+      <section className="mb-8">
+        <SectionHeading>Operating workspaces</SectionHeading>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {dashboardWorkspaces.map((workspace) => (
+            <WorkspaceCard key={workspace.key} workspace={workspace} />
+          ))}
+        </div>
+      </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Workflows" value={workflows.length} />

@@ -1,4 +1,4 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { rollupCapTable } from "@/lib/cap-table";
 import { compactUsd, usd, multiple, shortDate } from "@/lib/format";
 import type {
@@ -41,7 +41,7 @@ function Stat({ value, label, tone }: { value: string; label: string; tone?: str
 }
 
 export default async function InvestorPortal({ params }: { params: { token: string } }) {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return <Unavailable />;
+  if (!hasSupabaseServiceEnv()) return <Unavailable />;
   const supabase = createServiceClient();
 
   const { data: shareRow } = await supabase

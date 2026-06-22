@@ -251,6 +251,7 @@ export async function getAssetWarRoom(
       .select("*")
       .eq("organization_id", orgId)
       .eq("reference", assetId)
+      .is("archived_at", null)
       .order("effective_date", { ascending: false })
       .limit(200),
   ]);
@@ -267,6 +268,7 @@ export async function getAssetWarRoom(
       .select("*")
       .eq("organization_id", orgId)
       .eq("fund_id", asset.fund_id)
+      .is("archived_at", null)
       .order("effective_date", { ascending: false })
       .limit(200);
     capitalEvents = (fundEvents ?? []) as CapitalEvent[];

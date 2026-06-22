@@ -5,6 +5,10 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { isManagedTable, type RecordActionResult } from "@/lib/managed-tables";
 
+function revalidationPath(hub: string, module: string): string {
+  return module ? `/${hub}/${module}` : `/${hub}`;
+}
+
 // Shared update path. RLS scopes the row to the caller's org and enforces writer
 // access; the literal `as "investors"` keeps the typed client happy while the
 // allow-list guarantees the runtime value is a real managed table.
@@ -27,7 +31,7 @@ async function patch(
     .eq("id", id);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath(`/${hub}/${module}`);
+  revalidatePath(revalidationPath(hub, module));
   return { ok: true };
 }
 
@@ -95,6 +99,6 @@ export async function deleteRecord(
   const { error } = await supabase.from(table as "investors").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath(`/${hub}/${module}`);
+  revalidatePath(revalidationPath(hub, module));
   return { ok: true };
 }

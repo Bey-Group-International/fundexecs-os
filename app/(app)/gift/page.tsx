@@ -14,6 +14,8 @@ import {
   REFERRAL_WELCOME_BONUS,
   rankFor,
 } from "@/lib/referrals";
+import { stripeConfigured, stripePublishableKeyValue } from "@/lib/stripe";
+import { CheckoutBanner } from "../wallet/CheckoutBanner";
 import { ReferralLink } from "./ReferralLink";
 import { GiftForm } from "./GiftForm";
 import { RedeemBox } from "./RedeemBox";
@@ -23,10 +25,17 @@ export const dynamic = "force-dynamic";
 
 const LEVEL_LABEL: Record<number, string> = { 1: "Direct", 2: "2nd level", 3: "3rd level" };
 
-export default async function GiftEarnPage() {
+export default async function GiftEarnPage({
+  searchParams,
+}: {
+  searchParams: { checkout?: string };
+}) {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
+
+  const live = stripeConfigured();
+  const publishableKey = stripePublishableKeyValue();
 
   const [code, summary, gifts, balance] = await Promise.all([
     getOrCreateReferralCode(ctx.orgId, ctx.userId),
@@ -40,7 +49,7 @@ export default async function GiftEarnPage() {
   const stats = [
     { label: "Referral credits earned", value: formatCredits(summary.earnedTotal), accent: true },
     { label: "Direct referrals", value: formatCredits(summary.directCount) },
-    { label: "Total downline", value: formatCredits(summary.totalDownline) },
+    { label: "Total network", value: formatCredits(summary.totalDownline) },
     { label: "Wallet balance", value: formatCredits(balance) },
   ];
 
@@ -48,16 +57,19 @@ export default async function GiftEarnPage() {
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-8">
         <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-          Gift Earn
+          Network & Gifting
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
-          Grow your downline
+          Build your partner network
         </h1>
         <p className="mt-2 max-w-prose text-sm text-fg-secondary">
-          Invite other firms to FundExecs. You earn escalating credits on every org you bring in —
-          and keep earning when they invite others, up to three levels deep. It compounds.
+          Introduce other firms to FundExecs. You earn escalating credits on every firm you bring
+          in — and keep earning when they introduce others, up to three levels deep. Rewards
+          accrue and compound as your network grows.
         </p>
       </header>
+
+      <CheckoutBanner status={searchParams.checkout} />
 
       {/* Stat strip */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -114,7 +126,13 @@ export default async function GiftEarnPage() {
             </p>
           </div>
           <div className="fx-card p-4">
-            <ReferralLink code={code} />
+            {code ? (
+              <ReferralLink code={code} />
+            ) : (
+              <p className="text-sm text-fg-muted">
+                Your invite link is being set up — check back in a moment.
+              </p>
+            )}
           </div>
 
           <div className="fx-card p-5">
@@ -136,7 +154,7 @@ export default async function GiftEarnPage() {
               <li className="flex items-start gap-2">
                 <span className="text-gold-400">→</span>
                 <span>
-                  <span className="text-fg-primary">Downline overrides.</span> Earn{" "}
+                  <span className="text-fg-primary">Network overrides.</span> Earn{" "}
                   {formatCredits(LEVEL_OVERRIDES[2])} when your referrals refer someone, and{" "}
                   {formatCredits(LEVEL_OVERRIDES[3])} a level deeper.
                 </span>
@@ -164,15 +182,15 @@ export default async function GiftEarnPage() {
         <section className="flex flex-col gap-4">
           <div>
             <h2 className="font-display text-xl font-semibold tracking-tight text-fg-primary">
-              Your downline
+              Your network
             </h2>
             <p className="mt-1 text-sm text-fg-secondary">
-              Everyone you’ve brought in, and everyone they’ve brought in.
+              Every firm you’ve brought in, and everyone they’ve brought in.
             </p>
           </div>
           {summary.downline.length === 0 ? (
             <p className="fx-card border-dashed p-6 text-center text-sm text-fg-muted">
-              No referrals yet. Share your link above to start your downline.
+              No introductions yet. Share your link above to start your network.
             </p>
           ) : (
             <div className="fx-card divide-y divide-line">
@@ -208,7 +226,7 @@ export default async function GiftEarnPage() {
             </p>
           </div>
           <div className="fx-card p-5">
-            <GiftForm />
+            <GiftForm live={live} publishableKey={publishableKey} />
           </div>
 
           {gifts.length > 0 ? (

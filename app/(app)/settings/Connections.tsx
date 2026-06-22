@@ -1,91 +1,112 @@
 // app/(app)/settings/Connections.tsx
-// Read-only "Connections" panel for Settings. It reflects the dispatch layer's
-// wiring: which channels (Gmail, Docusign, …) have real credentials and which
-// are running in mock mode. It makes NO writes and offers no connect/OAuth flow
-// — it only mirrors each adapter's isConfigured() state so the operator can see
-// at a glance where the gate → dispatch loop will reach the outside world vs.
-// where it will prepare/queue without sending.
-import { ADAPTERS } from "@/lib/integrations/adapters";
+// The "Connections" panel for Settings. It reflects the unified gateway's
+// per-org connection state: which channels (Gmail, Docusign, …) this org has
+// connected, which fall back to a deploy-wide environment default, and which are
+// still in mock mode. Connect / disconnect run through the gateway server
+// actions; the gateway holds any OAuth tokens, so nothing secret is shown here.
+import type { IntegrationConnection } from "@/lib/supabase/database.types";
+import { integrationCatalog, envConfiguredChannels } from "@/lib/integrations/catalog";
+import { ConnectionControls } from "./ConnectionControls";
 
-// Turn an ActionKind ("send_diligence_request") into a readable label
-// ("Send diligence request"). Mirrors how the adapters declare their handles in
-// snake_case while the UI speaks prose.
-function humanizeKind(kind: string): string {
-  const words = kind.replace(/_/g, " ").trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
+type ChannelState = "connected_gateway" | "connected_env" | "mock";
 
-export function Connections() {
+export function Connections({ connections }: { connections: IntegrationConnection[] }) {
+  // One row per (org, channel) by the table's unique constraint.
+  const rowByChannel = new Map(connections.map((c) => [c.channel, c]));
+  const env = envConfiguredChannels();
+
   return (
     <div className="flex flex-col gap-2">
-        {ADAPTERS.map(({ adapter, handles }) => {
-          const live = adapter.isConfigured();
-          return (
-            <div key={adapter.channel} className="rounded-xl border border-line bg-surface-1 p-4">
-              <div className="flex items-start gap-3">
-                <span
-                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                    live ? "bg-status-success" : "bg-fg-muted"
-                  }`}
-                  aria-label={live ? "connected" : "mock mode"}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium capitalize text-fg-primary">
-                      {adapter.channel}
-                    </span>
-                    {live ? (
-                      <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
-                        Connected
-                      </span>
-                    ) : (
-                      <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                        Mock mode
-                      </span>
-                    )}
-                  </div>
-                  {handles.length ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {handles.map((kind) => (
-                        <span
-                          key={kind}
-                          className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[10px] text-fg-secondary"
-                        >
-                          {humanizeKind(kind)}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                      No actions routed
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      {integrationCatalog().map((descriptor) => {
+        const row = rowByChannel.get(descriptor.channel);
+        const state: ChannelState = row
+          ? row.status === "connected"
+            ? "connected_gateway"
+            : "mock"
+          : env.has(descriptor.channel)
+            ? "connected_env"
+            : "mock";
+        const connected = state !== "mock";
 
-        {/* The mock fallback is not a registered adapter: any ActionKind that no
-            module above claims routes to the built-in "mock" channel. We surface
-            it here so the catch-all behaviour is visible alongside the real
-            channels. */}
-        <div className="rounded-xl border border-dashed border-line bg-surface-1 p-4">
-          <div className="flex items-start gap-3">
-            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-fg-muted" aria-label="mock mode" />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-fg-primary">Mock fallback</span>
-                <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                  Mock mode
-                </span>
+        return (
+          <div key={descriptor.channel} className="rounded-xl border border-line bg-surface-1 p-4">
+            <div className="flex items-start gap-3">
+              <span
+                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                  connected ? "bg-status-success" : "bg-fg-muted"
+                }`}
+                aria-label={connected ? "connected" : "mock mode"}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-fg-primary">{descriptor.label}</span>
+                  {state === "connected_gateway" ? (
+                    <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                      Connected
+                    </span>
+                  ) : state === "connected_env" ? (
+                    <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                      Connected · environment
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                      Mock mode
+                    </span>
+                  )}
+                  {row?.status === "connected" && row.account_label ? (
+                    <span className="font-mono text-[10px] text-fg-muted">{row.account_label}</span>
+                  ) : null}
+                </div>
+
+                {descriptor.capabilities.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {descriptor.capabilities.map((cap) => (
+                      <span
+                        key={cap.kind}
+                        className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[10px] text-fg-secondary"
+                      >
+                        {cap.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    No actions routed
+                  </p>
+                )}
               </div>
-              <p className="mt-2 text-xs leading-snug text-fg-secondary">
-                Actions no channel above claims route here and are prepared/queued rather than sent.
-              </p>
+
+              {/* Connect / disconnect through the gateway. The env fallback is
+                  deploy-wide, so it can be pinned off with an explicit row. */}
+              <ConnectionControls
+                channel={descriptor.channel}
+                connected={connected}
+                gatewayConnected={state === "connected_gateway"}
+              />
             </div>
+          </div>
+        );
+      })}
+
+      {/* The mock fallback is not a registered channel: any ActionKind that no
+          adapter claims routes to the built-in "mock" channel. We surface it so
+          the catch-all behaviour is visible alongside the real channels. */}
+      <div className="rounded-xl border border-dashed border-line bg-surface-1 p-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-fg-muted" aria-label="mock mode" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-fg-primary">Mock fallback</span>
+              <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                Mock mode
+              </span>
+            </div>
+            <p className="mt-2 text-xs leading-snug text-fg-secondary">
+              Actions no channel above claims route here and are prepared/queued rather than sent.
+            </p>
           </div>
         </div>
       </div>
+    </div>
   );
 }

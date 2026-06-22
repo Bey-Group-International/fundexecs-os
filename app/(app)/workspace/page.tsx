@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
+import { createServerClient } from "@/lib/supabase/server";
 import { copilotLive } from "@/lib/claude";
+import { getActiveIntegrations } from "@/lib/integrations/active";
+import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import Copilot from "@/components/Copilot";
 
 export const dynamic = "force-dynamic";
@@ -13,5 +16,14 @@ export default async function WorkspacePage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  return <Copilot orgId={ctx.orgId} live={copilotLive()} bundles={[]} />;
+  const connected = await orgConnectedChannels(createServerClient(), ctx.orgId);
+
+  return (
+    <Copilot
+      orgId={ctx.orgId}
+      live={copilotLive()}
+      bundles={[]}
+      integrations={getActiveIntegrations(connected)}
+    />
+  );
 }

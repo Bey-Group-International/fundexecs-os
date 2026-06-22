@@ -2,7 +2,7 @@
 // the principal's first membership (multi-org switching comes later). Returns
 // enough context for the authed layout to gate routes and for API handlers to
 // scope writes.
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, hasSupabaseServerEnv } from "@/lib/supabase/server";
 import type { MemberRole } from "@/lib/supabase/database.types";
 
 export interface SessionContext {
@@ -13,6 +13,8 @@ export interface SessionContext {
 }
 
 export async function getSessionContext(): Promise<SessionContext | null> {
+  if (!hasSupabaseServerEnv()) return null;
+
   const supabase = createServerClient();
   const {
     data: { user },

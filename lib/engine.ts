@@ -8,9 +8,11 @@
 import { createServerClient } from "@/lib/supabase/server";
 import type { AgentKey, Hub, GraphKind, ArtifactType, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
-import { generatePlan, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
+import { generatePlan, generatePlans, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
+import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import { brainForAgent } from "@/lib/brain-routing";
+import { buildRouting } from "@/lib/intelligence";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -100,6 +102,8 @@ async function materializePlan(
         status: "awaiting_approval",
         progress: 0,
         graph_touched: hubToGraph(plan.hub),
+        lifecycle_stage: plan.lifecycle_stage,
+        target_engine: plan.target_engine,
         result: null,
         completed_at: null,
       })
@@ -120,6 +124,8 @@ async function materializePlan(
         status: "awaiting_approval",
         progress: 0,
         graph_touched: hubToGraph(plan.hub),
+        lifecycle_stage: plan.lifecycle_stage,
+        target_engine: plan.target_engine,
         requires_approval: true,
         created_by: ctx.actorId,
         step_order: 0,
@@ -132,10 +138,9 @@ async function materializePlan(
     workflow = data as Task;
   }
 
-  // Steps as child tasks.
-  for (let i = 0; i < plan.steps.length; i++) {
-    const step = plan.steps[i];
-    await ctx.supabase.from("tasks").insert({
+  // Steps as child tasks — batch insert in one round trip.
+  await ctx.supabase.from("tasks").insert(
+    plan.steps.map((step, i) => ({
       organization_id: ctx.orgId,
       parent_task_id: workflow.id,
       title: step.title,
@@ -147,8 +152,8 @@ async function materializePlan(
       requires_approval: false,
       created_by: ctx.actorId,
       step_order: i + 1,
-    });
-  }
+    })),
+  );
 
   await recordEvent(ctx, {
     taskId: workflow.id,
@@ -299,48 +304,150 @@ async function createSession(
   return data?.id;
 }
 
-/** POST /prompt — plan the prompt into a workflow awaiting approval. */
-export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
-  // Inside an existing session, replay its earlier prompts so Earn plans the
-  // follow-up with the conversation in mind (oldest first).
-  let priorContext: string[] = [];
-  if (sessionId) {
-    const { data: prior } = await ctx.supabase
-      .from("tasks")
-      .select("description")
+/**
+ * Contextual awareness: surface the session's active deal/asset so the planner
+ * can resolve references like "the deal" or "the model" instead of reading the
+ * follow-up in isolation. Returns short context lines (newest entity first).
+ */
+async function gatherActiveContext(ctx: Ctx, sessionId: string): Promise<string[]> {
+  const [dealRes, assetRes] = await Promise.all([
+    ctx.supabase
+      .from("deals")
+      .select("name, asset_class, stage")
+      .eq("organization_id", ctx.orgId)
       .eq("session_id", sessionId)
-      .is("parent_task_id", null)
-      .order("created_at", { ascending: true });
-    priorContext = ((prior ?? []) as { description: string | null }[])
-      .map((t) => t.description?.trim() ?? "")
-      .filter(Boolean);
+      .order("created_at", { ascending: false })
+      .limit(1),
+    ctx.supabase
+      .from("assets")
+      .select("name, asset_type")
+      .eq("organization_id", ctx.orgId)
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false })
+      .limit(1),
+  ]);
+  const lines: string[] = [];
+  const deal = dealRes.data?.[0];
+  if (deal?.name) {
+    lines.push(
+      `Active deal in this session: "${deal.name}"${deal.asset_class ? ` (${deal.asset_class})` : ""}${
+        deal.stage ? `, stage: ${deal.stage}` : ""
+      }. Resolve "the deal" to this.`,
+    );
   }
+  const asset = assetRes.data?.[0];
+  if (asset?.name) {
+    lines.push(`Active asset in this session: "${asset.name}". Resolve "the asset"/"the model" to this.`);
+  }
+  return lines;
+}
 
-  const plan = await generatePlan(body, priorContext);
+/** POST /prompt — plan the prompt into a workflow awaiting approval. */
+// Draft the plan for a prompt (no writes). Split out so the streaming endpoint
+// can reveal the plan in the canvas before materializing it.
+// Inside an existing session, replay its earlier prompts so Earn plans the
+// follow-up with the conversation in mind (oldest first), plus the active
+// deal/asset so references like "the deal" resolve.
+async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[]> {
+  if (!sessionId) return [];
+  const { data: prior } = await ctx.supabase
+    .from("tasks")
+    .select("description")
+    .eq("session_id", sessionId)
+    .is("parent_task_id", null)
+    .order("created_at", { ascending: true });
+  const turns = ((prior ?? []) as { description: string | null }[])
+    .map((t) => t.description?.trim() ?? "")
+    .filter(Boolean);
+  const active = await gatherActiveContext(ctx, sessionId);
+  return [...active, ...turns];
+}
 
-  // Sessions are the first step in operations: an Earn prompt opens a session
-  // (named from the prompt) unless one was already provided.
-  const session = sessionId ?? (await createSession(ctx, { name: plan.title || body, origin: "earn" }));
+export async function planPrompt(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan> {
+  return generatePlan(body, await gatherPriorContext(ctx, sessionId));
+}
 
+// Multi-intent: plan a prompt into one OR MORE workflows. Returns a single plan
+// in the common case; multiple only when the request spans distinct lifecycle
+// stages that should be executed and approved independently.
+export async function planPrompts(ctx: Ctx, body: string, sessionId?: string): Promise<AgentPlan[]> {
+  return generatePlans(body, await gatherPriorContext(ctx, sessionId));
+}
+
+// Persist a single (pre-drafted) plan as a gated workflow. Thin wrapper over
+// materializePrompts so the single-workflow path can't drift from the multi one.
+export async function materializePrompt(ctx: Ctx, body: string, plan: AgentPlan, sessionId?: string) {
+  const { workflows, session_id } = await materializePrompts(ctx, body, [plan], sessionId);
+  const primary = workflows[0];
+  return { workflow: primary.workflow, approval_id: primary.approval_id, session_id };
+}
+
+/**
+ * Materialize one OR MORE plans into independent sibling workflows in a single
+ * session. Each workflow keeps its own approval gate and engine routing (the
+ * spec's "split and route independently"). One prompt row records the original
+ * message; each split workflow's description is its own slice (the plan summary)
+ * so the cards read distinctly rather than repeating the full prompt.
+ */
+export async function materializePrompts(ctx: Ctx, body: string, plans: AgentPlan[], sessionId?: string) {
+  const session = sessionId ?? (await createSession(ctx, { name: plans[0]?.title || body, origin: "earn" }));
+  const split = plans.length > 1;
+
+  const routings = plans.map((plan) =>
+    buildRouting({
+      prompt: body,
+      hub: plan.hub,
+      agents: plan.steps.map((s) => s.agent),
+      stage: plan.lifecycle_stage,
+    }),
+  );
+
+  // One prompt row for the operator's message; parsed_intent carries every
+  // routed workflow so the split is auditable.
   const { data: prompt } = await ctx.supabase
     .from("prompts")
     .insert({
       organization_id: ctx.orgId,
       principal_id: ctx.actorId,
       body,
-      routed_hub: plan.hub,
-      routed_agent: plan.steps[0]?.agent ?? "associate",
-      parsed_intent: plan as unknown as Json,
+      routed_hub: plans[0]?.hub ?? "run",
+      routed_agent: plans[0]?.steps[0]?.agent ?? "associate",
+      parsed_intent: {
+        split,
+        workflows: plans.map((plan, i) => ({ ...plan, routing: routings[i] })),
+      } as unknown as Json,
     })
     .select("id")
     .single();
 
-  const { workflow, approvalId } = await materializePlan(ctx, body, plan, {
-    promptId: prompt?.id ?? null,
-    sessionId: session,
-  });
+  const workflows = [];
+  for (const plan of plans) {
+    const { workflow, approvalId } = await materializePlan(
+      ctx,
+      split ? plan.summary || plan.title : body,
+      plan,
+      { promptId: prompt?.id ?? null, sessionId: session },
+    );
+    workflows.push({ plan, workflow, approval_id: approvalId });
+  }
 
-  return { plan, workflow, approval_id: approvalId, session_id: session };
+  return { workflows, session_id: session, split };
+}
+
+export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string) {
+  const plans = await planPrompts(ctx, body, sessionId);
+  const { workflows, session_id, split } = await materializePrompts(ctx, body, plans, sessionId);
+  const primary = workflows[0];
+  // Keep the original single-workflow contract (plan/workflow/approval_id) for
+  // existing callers; expose the full set + split flag for richer consumers.
+  return {
+    plan: primary?.plan,
+    workflow: primary?.workflow,
+    approval_id: primary?.approval_id ?? null,
+    workflows,
+    split,
+    session_id,
+  };
 }
 
 /** Run every step of an approved workflow, each producing a deliverable. */
@@ -362,17 +469,16 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
 
   for (let i = 0; i < list.length; i++) {
     const step = list[i];
-    await ctx.supabase
-      .from("tasks")
-      .update({ status: "in_progress", progress: 0.5 })
-      .eq("id", step.id);
-    await recordEvent(ctx, {
-      taskId: workflow.id,
-      type: "task.progress",
-      agent: step.assigned_agent,
-      hub: step.hub,
-      payload: { step_id: step.id, message: `${step.title}…`, active_step: step.step_order },
-    });
+    await Promise.all([
+      ctx.supabase.from("tasks").update({ status: "in_progress", progress: 0.5 }).eq("id", step.id),
+      recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "task.progress",
+        agent: step.assigned_agent,
+        hub: step.hub,
+        payload: { step_id: step.id, message: `${step.title}…`, active_step: step.step_order },
+      }),
+    ]);
 
     const output = await executeStep({
       workflowTitle: workflow.title,
@@ -401,54 +507,50 @@ async function executeWorkflow(ctx: Ctx, workflow: Task) {
 
     priorOutputs.push(`${step.title}:\n${output}`);
 
-    await ctx.supabase
-      .from("tasks")
-      .update({
-        status: "completed",
-        progress: 1,
-        completed_at: new Date().toISOString(),
-        result: { output } as Json,
-      })
-      .eq("id", step.id);
-
-    // Promote the step output to a first-class, typed artifact.
     const artifactType = classifyArtifact(step.assigned_agent, step.title);
-    const { data: artifact } = await ctx.supabase
-      .from("artifacts")
-      .insert({
-        organization_id: ctx.orgId,
-        workflow_id: workflow.id,
-        step_id: step.id,
-        title: step.title,
-        artifact_type: artifactType,
-        agent: step.assigned_agent,
-        hub: step.hub,
-        content: output,
-        created_by: ctx.actorId,
-      })
-      .select("id")
-      .single();
+    const [, { data: artifact }] = await Promise.all([
+      ctx.supabase
+        .from("tasks")
+        .update({ status: "completed", progress: 1, completed_at: new Date().toISOString(), result: { output } as Json })
+        .eq("id", step.id),
+      ctx.supabase
+        .from("artifacts")
+        .insert({
+          organization_id: ctx.orgId,
+          workflow_id: workflow.id,
+          step_id: step.id,
+          title: step.title,
+          artifact_type: artifactType,
+          agent: step.assigned_agent,
+          hub: step.hub,
+          content: output,
+          created_by: ctx.actorId,
+        })
+        .select("id")
+        .single(),
+    ]);
     if (artifact?.id) artifactIds.push(artifact.id);
 
-    await recordEvent(ctx, {
-      taskId: workflow.id,
-      type: "task.completed",
-      agent: step.assigned_agent,
-      hub: step.hub,
-      payload: { step_id: step.id, message: `${step.title} — done` },
-    });
-    await recordEvent(ctx, {
-      taskId: workflow.id,
-      type: "artifact.created",
-      agent: step.assigned_agent,
-      hub: step.hub,
-      payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title },
-    });
-
-    await ctx.supabase
-      .from("tasks")
-      .update({ progress: (i + 1) / Math.max(list.length, 1) })
-      .eq("id", workflow.id);
+    await Promise.all([
+      recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "task.completed",
+        agent: step.assigned_agent,
+        hub: step.hub,
+        payload: { step_id: step.id, message: `${step.title} — done` },
+      }),
+      recordEvent(ctx, {
+        taskId: workflow.id,
+        type: "artifact.created",
+        agent: step.assigned_agent,
+        hub: step.hub,
+        payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title },
+      }),
+      ctx.supabase
+        .from("tasks")
+        .update({ progress: (i + 1) / Math.max(list.length, 1) })
+        .eq("id", workflow.id),
+    ]);
   }
 
   // Turn the finished work into a structured record (Deal / Asset).
@@ -516,10 +618,69 @@ export async function runAutomation(
   return { workflowId: workflow.id, executed: false };
 }
 
+/**
+ * Accept a plan as the recommendation: no agents execute. The plan (summary +
+ * ordered steps) is promoted to a memo artifact so it's a durable deliverable,
+ * and the workflow is marked complete.
+ */
+async function acceptRecommendation(ctx: Ctx, wf: Task) {
+  const { data: stepData } = await ctx.supabase
+    .from("tasks")
+    .select("*")
+    .eq("parent_task_id", wf.id)
+    .order("step_order", { ascending: true });
+  const steps = (stepData ?? []) as Task[];
+
+  const body =
+    `# ${wf.title}\n\n` +
+    `Accepted as the recommendation — agents were not run.\n\n` +
+    `## Recommended approach\n` +
+    steps
+      .map((s, i) => {
+        const agent = AGENTS.find((a) => a.key === s.assigned_agent)?.name ?? s.assigned_agent;
+        return `${i + 1}. **${s.title}** — ${s.description ?? ""} _(${agent})_`;
+      })
+      .join("\n");
+
+  const { data: artifact } = await ctx.supabase
+    .from("artifacts")
+    .insert({
+      organization_id: ctx.orgId,
+      workflow_id: wf.id,
+      step_id: null,
+      title: `${wf.title} — Recommendation`,
+      artifact_type: "memo",
+      agent: "associate",
+      hub: wf.hub,
+      content: body,
+      created_by: ctx.actorId,
+    })
+    .select("id")
+    .single();
+
+  await ctx.supabase
+    .from("tasks")
+    .update({
+      status: "completed",
+      progress: 1,
+      completed_at: new Date().toISOString(),
+      result: { accepted: true, recommendation: true } as Json,
+    })
+    .eq("id", wf.id);
+
+  await recordEvent(ctx, {
+    taskId: wf.id,
+    type: "artifact.created",
+    agent: "associate",
+    hub: wf.hub,
+    payload: { artifact_id: artifact?.id, artifact_type: "memo", title: `${wf.title} — Recommendation` },
+  });
+}
+
 /** POST /approve — capture the human decision and drive automation. */
 export async function decideApproval(
   ctx: Ctx,
-  args: { approvalId: string; decision: "approved" | "rejected" | "regenerate"; note?: string },
+  args: { approvalId: string; decision: "approved" | "rejected" | "regenerate" | "accepted"; note?: string },
 ) {
   const { data: approval } = await ctx.supabase
     .from("approvals")
@@ -583,6 +744,10 @@ export async function decideApproval(
       }
     }
     await executeWorkflow(ctx, wf);
+  } else if (args.decision === "accepted") {
+    // Accept: the plan stands as the recommendation — no agents run. Capture it
+    // as a first-class artifact and mark the workflow done.
+    await acceptRecommendation(ctx, wf);
   } else if (args.decision === "rejected") {
     await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
     await ctx.supabase
@@ -590,9 +755,12 @@ export async function decideApproval(
       .update({ status: "cancelled" })
       .eq("parent_task_id", wf.id);
   } else {
-    // regenerate: build a fresh plan from the original prompt and re-gate.
-    const plan = await generatePlan(wf.description ?? wf.title);
-    await materializePlan(ctx, wf.description ?? wf.title, plan, { workflowId: wf.id });
+    // regenerate: build a fresh plan from the original prompt and re-gate. A note
+    // (e.g. answers to Earn's clarifying questions) refines the new plan.
+    const base = wf.description ?? wf.title;
+    const context = args.note?.trim() ? [`Operator clarification: ${args.note.trim()}`] : [];
+    const plan = await generatePlan(base, context);
+    await materializePlan(ctx, base, plan, { workflowId: wf.id });
   }
 
   return { workflowId: wf.id, decision: args.decision };

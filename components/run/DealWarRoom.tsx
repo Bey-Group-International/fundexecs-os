@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PrintButton } from "@/components/PrintButton";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 import type { DealWarRoom as WarRoom } from "@/lib/run-war-room";
 import { buildHeatmap, SEVERITY_AXIS } from "@/lib/run-war-room";
 import { toPercent } from "@/lib/run-conviction";
@@ -171,10 +172,20 @@ function Underwriting({ data }: { data: WarRoom }) {
                   <span className="capitalize text-fg-primary">{u.scenario.replace("_", " ")}</span>
                   <span className="truncate text-fg-muted">{u.name}</span>
                 </span>
-                <span className="font-mono text-fg-secondary">
-                  {irr != null ? `${irr}% IRR` : "—"}
-                  {u.projected_moic != null ? ` · ${u.projected_moic}x` : ""}
-                </span>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <span className="font-mono text-fg-secondary">
+                    {irr != null ? `${irr}% IRR` : "—"}
+                    {u.projected_moic != null ? ` · ${u.projected_moic}x` : ""}
+                  </span>
+                  <RecordLifecycleActions
+                    hub="deal"
+                    module={deal.id}
+                    table="underwritings"
+                    id={u.id}
+                    className="print:hidden"
+                    deleteClassName=""
+                  />
+                </div>
               </div>
             );
           })}
@@ -231,6 +242,14 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
             Save
           </button>
         </form>
+        <RecordLifecycleActions
+          hub="deal"
+          module={item.deal_id}
+          table="diligence_items"
+          id={item.id}
+          className="print:hidden"
+          deleteClassName=""
+        />
       </div>
       {/* Mitigation: only meaningful for severe, unresolved findings */}
       {!resolved && item.risk_severity && (item.risk_severity === "high" || item.risk_severity === "critical") ? (
@@ -441,7 +460,18 @@ export function DealWarRoom({ data }: { data: WarRoom }) {
         <Link href="/run/strategy" className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400">
           ← Run hub
         </Link>
-        <PrintButton />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <RecordLifecycleActions
+            hub="deal"
+            module={data.conviction.deal.id}
+            table="deals"
+            id={data.conviction.deal.id}
+            archived={Boolean(data.conviction.deal.archived_at)}
+            className="print:hidden"
+            deleteClassName=""
+          />
+          <PrintButton />
+        </div>
       </div>
       <Header data={data} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

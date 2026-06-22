@@ -65,7 +65,7 @@ export type TaskStatus =
   | "completed"
   | "failed"
   | "cancelled";
-export type ApprovalDecision = "pending" | "approved" | "rejected" | "regenerate";
+export type ApprovalDecision = "pending" | "approved" | "rejected" | "regenerate" | "accepted";
 export type DiligenceStatus = "open" | "in_review" | "cleared" | "flagged" | "waived";
 export type ArtifactType =
   | "ic_memo"
@@ -80,6 +80,7 @@ export type RiskSeverity = "low" | "medium" | "high" | "critical";
 export type MarketplaceStatus = "draft" | "listed" | "paused" | "closed";
 export type TriggerType = "schedule" | "manual" | "email" | "webhook" | "event";
 export type SessionOrigin = "earn" | "workflow";
+export type TeamTaskPriority = "low" | "normal" | "high" | "urgent";
 
 // The Unified Inbox enums (migration 0038).
 export type InboxChannel =
@@ -89,7 +90,9 @@ export type InboxChannel =
   | "google_calendar"
   | "zoom"
   | "google_meet"
-  | "docusign";
+  | "docusign"
+  | "ecosystem"
+  | "deal_share";
 export type InboxCategory = "messaging" | "booking" | "video" | "signing";
 export type InboxThreadStatus = "open" | "snoozed" | "done";
 export type InboxDirection = "inbound" | "outbound";
@@ -141,6 +144,7 @@ export type Organization = Timestamps & {
   fund_count: number | null;
   primary_strategy: string | null;
   first_hub: string | null;
+  discoverable: boolean;
   tagline: string | null;
   brand_voice: string | null;
   brand_palette: string[];
@@ -350,6 +354,30 @@ export type Task = Timestamps & {
   step_order: number;
   automation_id: string | null;
   session_id: string | null;
+  // Intelligence Layer routing (migration 0054). Free-text mirrors of the
+  // LifecycleStage / TargetEngine unions in lib/intelligence.ts.
+  lifecycle_stage: string | null;
+  target_engine: string | null;
+}
+
+export type TeamTask = Timestamps & {
+  id: string;
+  organization_id: string;
+  assigned_to: string;
+  assigned_by: string | null;
+  title: string;
+  description: string | null;
+  hub: Hub | null;
+  module: string | null;
+  priority: TeamTaskPriority;
+  status: TaskStatus;
+  due_at: string | null;
+  session_id: string | null;
+  source_task_id: string | null;
+  deal_id: string | null;
+  asset_id: string | null;
+  context_snapshot: Json;
+  completed_at: string | null;
 }
 
 export type SessionGroup = Timestamps & {
@@ -465,6 +493,64 @@ export type Wallet = Timestamps & {
   credits: number;
   plan: string | null;
   plan_interval: string | null;
+};
+
+// Tokenization layers (migration 0048). Earned standing, credit stakes, and
+// immutable attestations — see docs/TOKENIZATION_LAYERS.md.
+export type ReputationTierName = "unranked" | "verified" | "established" | "principal";
+export type ReputationScore = {
+  organization_id: string;
+  score: number;
+  tier: ReputationTierName;
+  updated_at: string;
+};
+export type ReputationLedgerEntry = {
+  id: string;
+  organization_id: string;
+  delta: number;
+  reason: string;
+  source_type: string | null;
+  source_id: string | null;
+  note: string | null;
+  created_at: string;
+};
+export type StakePosition = {
+  id: string;
+  organization_id: string;
+  purpose: "listing" | "governance";
+  ref_id: string | null;
+  amount: number;
+  status: "locked" | "returned" | "forfeited";
+  note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
+export type Attestation = {
+  id: string;
+  organization_id: string;
+  subject_type: string;
+  subject_id: string;
+  claim: string;
+  attested_by: string | null;
+  witness_org_id: string | null;
+  evidence_hash: string | null;
+  settlement: "internal" | "anchored" | "onchain";
+  anchor_ref: string | null;
+  created_at: string;
+};
+// Stake forfeiture due-process record (migration 0051). An appealable challenge
+// against a locked stake; no credit moves until it is resolved. See
+// docs/TOKENIZATION_LAYERS.md §9.
+export type StakeDispute = {
+  id: string;
+  organization_id: string;
+  stake_id: string;
+  status: "open" | "upheld" | "dismissed";
+  reason: string | null;
+  opened_by: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  resolved_at: string | null;
 };
 
 export type SessionShare = {
@@ -669,6 +755,19 @@ export type DispatchLog = {
   created_at: string;
 };
 
+export type AuditLog = {
+  id: string;
+  organization_id: string | null;
+  principal_id: string | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  before_state: Json | null;
+  after_state: Json | null;
+  ip_address: string | null;
+  created_at: string;
+};
+
 // The Source learning ledger (migration 0041). One append-only row per operator
 // action on an AI suggestion (accept / reject / queue). lib/source-intelligence
 // distills these — per org and per principal — into the learned-preferences
@@ -688,6 +787,22 @@ export type SourceFeedback = {
   action: string | null;
   record_id: string | null;
   task_id: string | null;
+  session_id: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
+export type OperatorFeedback = {
+  id: string;
+  organization_id: string;
+  principal_id: string | null;
+  scope: string | null;
+  module: string | null;
+  agent: string | null;
+  signal: string;
+  subject: string;
+  task_id: string | null;
+  team_task_id: string | null;
   session_id: string | null;
   metadata: Json;
   created_at: string;
@@ -859,6 +974,127 @@ export type CreditGift = {
   redeemed_at: string | null;
 };
 
+// A FundExecs-issued API credential pair (migration 0044). The publishable key
+// is public; only a keyed HMAC-SHA256 of the secret is stored, alongside
+// non-secret display fragments (`secret_prefix` + `secret_last4`) so the UI can
+// render a masked form. `mode` separates test from live credentials.
+export type ApiKeyMode = "test" | "live";
+
+export type ApiKey = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  mode: ApiKeyMode;
+  publishable_key: string;
+  secret_hash: string;
+  secret_prefix: string;
+  secret_last4: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_by: string | null;
+};
+
+// A third-party secret an org stores for FundExecs to use on its behalf
+// (migration 0044). The value is AES-256-GCM encrypted at rest; `last4` is the
+// only plaintext fragment kept, for a recognizable masked display.
+export type OrgSecret = Timestamps & {
+  id: string;
+  organization_id: string;
+  provider: string;
+  label: string | null;
+  ciphertext: string;
+  iv: string;
+  auth_tag: string;
+  last4: string;
+  created_by: string | null;
+};
+
+// Stripe hosted-Checkout session tracking (migration 0043). One row per Checkout
+// Session, flipped to 'fulfilled' exactly once so credits/plan/gift effects are
+// never double-applied. `metadata` mirrors the session metadata used to fulfill.
+export type StripeCheckout = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  kind: "plan" | "pack" | "gift";
+  status: "pending" | "fulfilled" | "cancelled";
+  amount_usd: number | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+  fulfilled_at: string | null;
+};
+
+// A shareable teaser of a deal (migration 0046): the public token + Earn's
+// confidential memo. The full deal room is never exposed — only this travels.
+export type DealShare = Timestamps & {
+  id: string;
+  organization_id: string;
+  deal_id: string;
+  token: string;
+  memo: string;
+  created_by: string | null;
+  revoked_at: string | null;
+};
+
+// A matched (or forwarded) target of a shared deal (migration 0046). The
+// recipient org reads these as its "deals that fit you" feed; `investor_id` is
+// the recipient's own profile the deal fit, so the deep link resolves for them.
+export type DealShareRecipient = {
+  id: string;
+  share_id: string;
+  organization_id: string;
+  investor_id: string | null;
+  score: number;
+  rationale: Json;
+  source: "matched" | "forwarded";
+  created_at: string;
+};
+
+// One view of a tracked deal-share link (migration 0046). `organization_id` is
+// the sharer (who reads the access log); `viewer_org_id` is the viewing org
+// when known, else null for an anonymous open.
+export type DealShareView = {
+  id: string;
+  share_id: string;
+  organization_id: string;
+  viewer_org_id: string | null;
+  viewer_label: string | null;
+  created_at: string;
+};
+
+// One per-org integration connection brokered by the unified "merge gateway"
+// (migration 0052). `status` 'revoked' explicitly overrides any env-level
+// default. No secrets: `account_ref` is an opaque handle the gateway resolves.
+export type IntegrationConnectionStatus = "connected" | "revoked";
+export type IntegrationConnection = {
+  id: string;
+  organization_id: string;
+  channel: string;
+  status: IntegrationConnectionStatus;
+  gateway: string;
+  account_label: string | null;
+  account_ref: string | null;
+  connected_by: string | null;
+  created_at: string;
+  updated_at: string;
+  revoked_at: string | null;
+};
+
+// A persisted conversational turn in a session (migration 0053). 'user' is the
+// operator's message, 'assistant' is Earn's reply; `model` records the style
+// engine for assistant turns. Advisory/ungated — no approval state.
+export type SessionMessage = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string;
+  model: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -890,6 +1126,7 @@ export type Database = {
       ai_agents: TableShape<AiAgent>;
       prompts: TableShape<Prompt>;
       tasks: TableShape<Task>;
+      team_tasks: TableShape<TeamTask>;
       task_handoffs: TableShape<TaskHandoff>;
       approvals: TableShape<Approval>;
       task_events: TableShape<TaskEvent>;
@@ -897,8 +1134,10 @@ export type Database = {
       automations: TableShape<Automation>;
       mandates: TableShape<MandateRow>;
       dispatch_log: TableShape<DispatchLog>;
+      audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
       sourcing_entities: TableShape<SourcingEntity>;
+      operator_feedback: TableShape<OperatorFeedback>;
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
       wallets: TableShape<Wallet>;
@@ -925,6 +1164,19 @@ export type Database = {
       referrals: TableShape<Referral>;
       credit_ledger: TableShape<CreditLedgerEntry>;
       credit_gifts: TableShape<CreditGift>;
+      stripe_checkouts: TableShape<StripeCheckout>;
+      api_keys: TableShape<ApiKey>;
+      org_secrets: TableShape<OrgSecret>;
+      deal_shares: TableShape<DealShare>;
+      deal_share_recipients: TableShape<DealShareRecipient>;
+      deal_share_views: TableShape<DealShareView>;
+      reputation_scores: TableShape<ReputationScore>;
+      reputation_ledger: TableShape<ReputationLedgerEntry>;
+      stake_positions: TableShape<StakePosition>;
+      attestations: TableShape<Attestation>;
+      stake_disputes: TableShape<StakeDispute>;
+      integration_connections: TableShape<IntegrationConnection>;
+      session_messages: TableShape<SessionMessage>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -977,6 +1229,15 @@ export type Database = {
           provenance: string;
           similarity: number;
         }[];
+      };
+      // Atomically add to an org's reputation score (creating the row if absent),
+      // clamped at 0 (migration 0048). Returns the new score.
+      increment_org_reputation: {
+        Args: {
+          p_org: string;
+          p_delta: number;
+        };
+        Returns: number;
       };
     };
     Enums: {

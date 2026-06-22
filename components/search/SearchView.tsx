@@ -8,6 +8,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { SearchResults, SearchHit, SearchKind } from "@/lib/search";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 
 const KIND_LABEL: Record<SearchKind, string> = {
   deal: "Deal",
@@ -24,21 +25,32 @@ function KindBadge({ kind }: { kind: SearchKind }) {
 }
 
 function HitRow({ hit }: { hit: SearchHit }) {
+  const lifecycle =
+    hit.kind === "deal"
+      ? { hub: "deal", table: "deals" }
+      : hit.kind === "investor"
+        ? { hub: "investor", table: "investors" }
+        : { hub: "asset", table: "assets" };
+
   return (
-    <Link
-      href={hit.href}
-      className="fx-card fx-card-hover flex items-center gap-3 px-3 py-2.5"
-    >
-      <div className="min-w-0 flex-1">
-        <span className="block truncate text-sm text-fg-primary">{hit.title}</span>
+    <div className="fx-card fx-card-hover flex items-center gap-3 px-3 py-2.5">
+      <Link href={hit.href} className="min-w-0 flex-1">
+        <span className="block truncate text-sm text-fg-primary transition hover:text-gold-300">{hit.title}</span>
         {hit.subtitle ? (
           <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-fg-muted">
             {hit.subtitle}
           </span>
         ) : null}
-      </div>
+      </Link>
       <KindBadge kind={hit.kind} />
-    </Link>
+      <RecordLifecycleActions
+        hub={lifecycle.hub}
+        module={hit.id}
+        table={lifecycle.table}
+        id={hit.id}
+        deleteClassName=""
+      />
+    </div>
   );
 }
 

@@ -16,7 +16,7 @@ import {
   type PipelineScore,
   type SourcingMandate,
 } from "@/lib/source-ai";
-import { buildOperatorContext, recordSourceFeedback, type SourceFeedbackInput } from "@/lib/source-intelligence";
+import { buildOperatorContext, isPersonalized, recordSourceFeedback, type SourceFeedbackInput } from "@/lib/source-intelligence";
 import { ingestEntities, entityKindForModule, type IntelEntityInput } from "@/lib/sourcing-intel";
 import type { AgentKey, InvestorType, Json } from "@/lib/supabase/database.types";
 
@@ -48,10 +48,11 @@ async function loadMandate(orgId: string): Promise<SourcingMandate | null> {
 export interface SourceTargetsResult {
   ok: boolean;
   candidates?: SourceCandidate[];
+  personalized?: boolean;
   error?: string;
 }
 
-export async function sourceTargets(hub: string, module: string): Promise<SourceTargetsResult> {
+export async function sourceTargets(hub: string, module: string, query?: string): Promise<SourceTargetsResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const key = `${hub}/${module}`;
@@ -73,8 +74,9 @@ export async function sourceTargets(hub: string, module: string): Promise<Source
     role: auth.ctx.role,
     module: key,
   });
-  const candidates = await generateTargets(key, mandate, existing, undefined, context);
-  return { ok: true, candidates };
+  const request = query?.trim().slice(0, 500) || undefined;
+  const candidates = await generateTargets(key, mandate, existing, request, context);
+  return { ok: true, candidates, personalized: isPersonalized(context) };
 }
 
 // --- 2. ACCEPT → INSERT -----------------------------------------------------

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PrintButton } from "@/components/PrintButton";
+import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 import type { AssetWarRoom as WarRoom, LifecycleStage, AssetNextAction } from "@/lib/execute-war-room";
 import { formatCompactCurrency } from "@/lib/execute-war-room";
 import type { AssetType, CapitalEventType } from "@/lib/supabase/database.types";
@@ -176,7 +177,7 @@ function CapitalFlows({ data }: { data: WarRoom }) {
           {capitalEvents.map((event) => {
             const outflow = OUTFLOW_EVENTS.has(event.event_type);
             return (
-              <div key={event.id} className="flex items-center gap-2.5 text-sm">
+              <div key={event.id} className="flex flex-wrap items-center gap-2.5 text-sm">
                 <span className="shrink-0 font-mono text-[10px] text-fg-muted">
                   {new Date(event.effective_date).toLocaleDateString()}
                 </span>
@@ -192,6 +193,14 @@ function CapitalFlows({ data }: { data: WarRoom }) {
                   {outflow ? "+" : "−"}
                   {formatCompactCurrency(event.amount)}
                 </span>
+                <RecordLifecycleActions
+                  hub="asset"
+                  module={data.asset.id}
+                  table="capital_events"
+                  id={event.id}
+                  className="ml-auto print:hidden"
+                  deleteClassName=""
+                />
               </div>
             );
           })}
@@ -281,7 +290,18 @@ export function AssetWarRoom({ data }: { data: WarRoom }) {
         >
           ← Asset management
         </Link>
-        <PrintButton />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <RecordLifecycleActions
+            hub="asset"
+            module={data.asset.id}
+            table="assets"
+            id={data.asset.id}
+            archived={Boolean(data.asset.archived_at)}
+            className="print:hidden"
+            deleteClassName=""
+          />
+          <PrintButton />
+        </div>
       </div>
       <Header data={data} />
       <Value data={data} />

@@ -16,20 +16,21 @@ import {
   setSessionUnread,
 } from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
-import { getInboxCount } from "@/lib/inbox";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
 import { GlobalTopBar } from "@/components/GlobalTopBar";
+import { MatchToast } from "@/components/inbox/MatchToast";
 import { AppSidebar } from "@/components/AppSidebar";
 import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 
-// The four hubs, in operating order, as shown in the side rail.
-const HUB_ORDER: Hub[] = ["build", "run", "source", "execute"];
+// The four hubs, in operating order, as shown in the side rail (per the
+// product mockups: Build · Source · Run · Execute).
+const HUB_ORDER: Hub[] = ["build", "source", "run", "execute"];
 
-// Authed shell. Side rail (see AppSidebar): Logo · New Session · Workflows ·
-// More, the four operational hubs (Build / Run / Source / Execute) whose
-// modules expand on click, then Recent sessions filed under group names, and
-// the account footer. Each hub has its own page with a top module switcher.
+// Authed shell. Side rail (see AppSidebar): Logo · Sessions · Workflows ·
+// Inbox · More, the four operational hubs (Build / Source / Run / Execute)
+// whose modules expand on click, then Recent sessions filed under group names,
+// and the account footer. Each hub has its own page with a top module switcher.
 export default async function AppLayout({
   children,
 }: {
@@ -39,10 +40,7 @@ export default async function AppLayout({
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const [balance, inboxCount] = await Promise.all([
-    getWalletBalance(ctx.orgId),
-    getInboxCount(ctx.orgId),
-  ]);
+  const balance = await getWalletBalance(ctx.orgId);
 
   // Account display + the rail's "Recent" conversation list (Claude Code
   // style): sessions filed under group names with an Ungrouped bucket.
@@ -52,7 +50,9 @@ export default async function AppLayout({
     { data: wallet },
     { data: recentSessions },
     { data: groupRows },
-    { count: inboxUnread },
+    { count: messagesUnread },
+    { count: dealsUnread },
+    { data: matchAlertRow },
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
       supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
@@ -69,14 +69,52 @@ export default async function AppLayout({
         .select("id, name")
         .eq("organization_id", ctx.orgId)
         .order("created_at", { ascending: true }),
-      // Unread, still-open inbox threads — drives the sidebar badge.
+      // Unread messages — the mailbox icon + sidebar badge. Capital, partners,
+      // providers, and comms; everything EXCEPT shared deals (those go to the
+      // lightbulb).
       supabase
         .from("inbox_threads")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", ctx.orgId)
         .eq("unread", true)
-        .eq("status", "open"),
+        .eq("status", "open")
+        .neq("channel", "deal_share"),
+      // Unread shared-deal updates — the lightbulb icon (botmemo deal flow).
+      supabase
+        .from("inbox_threads")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", ctx.orgId)
+        .eq("unread", true)
+        .eq("status", "open")
+        .eq("channel", "deal_share"),
+      // The newest unread match alert — an ecosystem match or a shared deal that
+      // fits — surfaced as the quick toast by the bell. Read-later lives in the
+      // inbox / feed; this is just the pop-in.
+      supabase
+        .from("inbox_threads")
+        .select("id, channel, subject, preview, ai_summary")
+        .eq("organization_id", ctx.orgId)
+        .in("channel", ["ecosystem", "deal_share"])
+        .eq("unread", true)
+        .eq("status", "open")
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
+
+  // Shape the freshest match for the toast (null when there is none). A deal
+  // match opens the "deals that fit you" feed; an ecosystem match opens the inbox.
+  const matchRow = matchAlertRow as
+    | { id: string; channel: string; subject: string; preview: string | null; ai_summary: string | null }
+    | null;
+  const matchAlert = matchRow
+    ? {
+        id: matchRow.id,
+        title: matchRow.subject,
+        body: matchRow.ai_summary ?? matchRow.preview ?? "",
+        href: matchRow.channel === "deal_share" ? "/deals/feed" : "/inbox",
+      }
+    : null;
   const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
   const planKey = wallet?.plan as PlanKey | null;
   const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
@@ -119,6 +157,7 @@ export default async function AppLayout({
     return {
       key: hub.key,
       label: hub.label,
+      approvalGated: hub.approvalGated ?? false,
       modules: hub.modules.map((mod) => ({
         href: `/${hub.key}/${mod.key}`,
         label: mod.label,
@@ -127,7 +166,7 @@ export default async function AppLayout({
   });
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-0 text-fg-primary print:block print:h-auto print:overflow-visible">
+    <div className="flex h-dvh overflow-hidden bg-surface-0 text-fg-primary print:block print:h-auto print:overflow-visible">
       <div className="contents print:hidden">
       <AppSidebar
         name={name}
@@ -135,7 +174,7 @@ export default async function AppLayout({
         hubs={hubs}
         sessions={sessions}
         groups={groups}
-        inboxUnread={inboxUnread ?? 0}
+        inboxUnread={messagesUnread ?? 0}
         signOutAction={signOut}
         createGroupAction={createSessionGroup}
         moveSessionAction={moveSessionToGroup}
@@ -151,9 +190,18 @@ export default async function AppLayout({
       <ActiveSessionProvider>
         <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
           <div className="print:hidden">
-            <GlobalTopBar balance={balance} inboxCount={inboxCount} />
+            {/* Mailbox = unread messages (capital/partners/providers + comms);
+                lightbulb = unread shared deals. Both shake/pop on a new arrival. */}
+            <GlobalTopBar
+              balance={balance}
+              messagesUnread={messagesUnread ?? 0}
+              dealsUnread={dealsUnread ?? 0}
+            />
+            {/* The quick alert that pops in by the bell on a fresh ecosystem
+                match — click to open, or let it fade and read it later. */}
+            <MatchToast alert={matchAlert} />
           </div>
-          <main className="flex-1 overflow-y-auto px-8 py-8 print:overflow-visible print:p-0">
+          <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 print:overflow-visible print:p-0">
             {children}
           </main>
         </div>

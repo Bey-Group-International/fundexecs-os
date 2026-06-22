@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import type { ReputationTier } from "@/lib/compounding";
+import { tierLabel } from "@/components/TierBadge";
 import { createListing } from "./actions";
 
 const LISTING_TYPES = [
@@ -14,7 +16,17 @@ const LISTING_TYPES = [
 // The create-listing form. Client-side so validation surfaces inline and the
 // form resets on success without a full reload. Linking a deal lets the matching
 // engine score listings on geography too, not just amount + type.
-export function NewListingForm({ deals = [] }: { deals?: { id: string; name: string }[] }) {
+// `requiredStake` and `tier` are resolved server-side by the parent (page.tsx)
+// and passed in — this client component never fetches.
+export function NewListingForm({
+  deals = [],
+  requiredStake,
+  tier,
+}: {
+  deals?: { id: string; name: string }[];
+  requiredStake?: number;
+  tier?: ReputationTier;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
@@ -120,6 +132,18 @@ export function NewListingForm({ deals = [] }: { deals?: { id: string; name: str
         </div>
 
         {error ? <p className="text-xs text-red-400">{error}</p> : null}
+
+        {requiredStake != null ? (
+          <p className="rounded-lg border border-neural-400/20 bg-black/30 px-3 py-2 text-[11px] leading-snug text-fg-secondary">
+            Listing locks a refundable{" "}
+            <span className="font-mono text-neural-300">{requiredStake.toLocaleString()}</span>
+            -credit stake, returned when the listing closes in good faith.{" "}
+            {tier && tier !== "unranked"
+              ? `Your ${tierLabel(tier)} standing reduces it.`
+              : "Your tier reduces it."}
+          </p>
+        ) : null}
+
         <p className="text-[11px] leading-snug text-fg-muted">
           Listings start <span className="text-fg-secondary">private</span> and in{" "}
           <span className="text-fg-secondary">draft</span> by default. Mark a listing public and move

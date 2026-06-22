@@ -1,4 +1,4 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import type {
   Session,
   Task,
@@ -49,7 +49,7 @@ export default async function SharedSessionPage({
 }) {
   // No service role key configured (e.g. a preview without secrets) — fail
   // closed rather than crashing.
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return <Unavailable />;
+  if (!hasSupabaseServiceEnv()) return <Unavailable />;
 
   const supabase = createServiceClient();
 
