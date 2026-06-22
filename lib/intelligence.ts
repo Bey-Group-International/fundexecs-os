@@ -116,6 +116,11 @@ export interface RoutingPayload {
   tags: string[];
 }
 
+// Whether routing came from a positive classification (a RULES match or an
+// explicitly classified stage) or fell back to a hub default. `low` rows are
+// surfaced for human review.
+export type RoutingConfidence = "high" | "low";
+
 // The structured internal object (section 6). Persisted on prompts.parsed_intent.
 export interface RoutingObject {
   intent: string;
@@ -123,6 +128,7 @@ export interface RoutingObject {
   target_engine: TargetEngine;
   assigned_to: Executive;
   payload: RoutingPayload;
+  confidence: RoutingConfidence;
   status: "routed";
 }
 
@@ -300,6 +306,8 @@ export function buildRouting(input: {
     target_engine: engineForStage(stage),
     assigned_to: executiveForStage(stage, primaryAgent),
     payload: makePayload(input.prompt.trim(), input.hub, input.agents, stage),
+    // The stage was explicitly classified (by the planner), so this is authoritative.
+    confidence: "high",
     status: "routed",
   };
 }
@@ -320,6 +328,8 @@ export function deriveRouting(input: RoutingInput): RoutingObject {
     target_engine: engineForStage(stage),
     assigned_to: executiveForStage(stage, input.agents[0] ?? "associate"),
     payload: makePayload(prompt, input.hub, input.agents, tag),
+    // High when a rule matched; low when we fell back to the hub default.
+    confidence: matched ? "high" : "low",
     status: "routed",
   };
 }
