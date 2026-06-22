@@ -6,7 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
-import { routingFromTask, cursorResponse, routingHeadline, EXECUTIVE_LABEL, type TargetEngine } from "@/lib/intelligence";
+import { routingFromTask, cursorResponse, routingHeadline, EXECUTIVE_LABEL, EXECUTIVES, type TargetEngine, type Executive } from "@/lib/intelligence";
+import { buildOutcome } from "@/lib/routing-trace";
+import { RoutingTrace } from "@/components/RoutingTrace";
+import { OutcomeReceipt } from "@/components/OutcomeReceipt";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import {
   EARN_MODELS,
@@ -151,9 +154,14 @@ export default function Copilot({
   // Execution Grid: filter the conversation's workflows by the engine they were
   // routed to. null = show all.
   const [engineFilter, setEngineFilter] = useState<TargetEngine | null>(null);
+  // Delegate & Route: the desk the operator has chosen to route the NEXT prompt
+  // to, overriding Earn's auto-routing. null = let Earn route (the default).
+  const [delegate, setDelegate] = useState<Executive | null>(null);
+  // Ephemeral confirmations (decision receipts, re-routes) — bottom-right toasts.
+  const [toasts, setToasts] = useState<{ id: string; msg: string; tone: "ok" | "warn" }[]>([]);
   // Which composer popover is open: the model picker, mode picker, "+" menu, or
   // one of its submenus (slash commands / active integrations).
-  const [openMenu, setOpenMenu] = useState<"model" | "mode" | "plus" | "slash" | "integrations" | null>(null);
+  const [openMenu, setOpenMenu] = useState<"model" | "mode" | "route" | "plus" | "slash" | "integrations" | null>(null);
   // Which integration row in the submenu is expanded to reveal its operational
   // actions.
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
@@ -299,9 +307,12 @@ export default function Copilot({
   // directives for execution, so those always run as tasks.
   async function dispatchPrompt(body: string) {
     if (!body || busy) return;
-    if (mode === "accept-edits" && classifyIntent(body) === "chat") {
+    // An explicit desk delegation means the operator wants work done, not a
+    // chat answer — so it always takes the agentic (gated) task path.
+    if (!delegate && mode === "accept-edits" && classifyIntent(body) === "chat") {
       await runChat(body);
     } else {
+      if (delegate) pushToast(`Routing to ${EXECUTIVE_LABEL[delegate]}`);
       await runTask(body);
     }
     // Return focus to the composer so the operator can keep typing without a
@@ -315,7 +326,11 @@ export default function Copilot({
     const res = await fetch("/api/prompt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(sessionId ? { body: envelope, session_id: sessionId } : { body: envelope }),
+      body: JSON.stringify({
+        body: envelope,
+        ...(sessionId ? { session_id: sessionId } : {}),
+        ...(delegate ? { delegate } : {}),
+      }),
     }).catch(() => null);
     setBusy(false);
     setPlanning(false);
@@ -348,7 +363,11 @@ export default function Copilot({
       const res = await fetch("/api/prompt/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sessionId ? { body: envelope, session_id: sessionId } : { body: envelope }),
+        body: JSON.stringify({
+          body: envelope,
+          ...(sessionId ? { session_id: sessionId } : {}),
+          ...(delegate ? { delegate } : {}),
+        }),
       });
       if (!res.ok || !res.body) throw new Error("stream unavailable");
       const reader = res.body.getReader();
@@ -523,17 +542,25 @@ export default function Copilot({
     navigator.clipboard?.writeText(text).catch(() => {});
   }
 
+  // Surface a transient confirmation so the operator knows an action landed.
+  function pushToast(msg: string, tone: "ok" | "warn" = "ok") {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((prev) => [...prev, { id, msg, tone }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4200);
+  }
+
   // Non-streaming approval (every decision but the live-streamed "approved"
   // path, and the fallback when the stream is unavailable).
   async function decidePlain(
     approvalId: string,
     decision: "approved" | "rejected" | "regenerate" | "accepted",
     note?: string,
+    desk?: Executive,
   ) {
     await fetch("/api/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approval_id: approvalId, decision, note }),
+      body: JSON.stringify({ approval_id: approvalId, decision, note, ...(desk ? { delegate: desk } : {}) }),
     }).catch(() => {});
     setClarify(null);
     setBusy(false);
@@ -597,13 +624,23 @@ export default function Copilot({
     approvalId: string,
     decision: "approved" | "rejected" | "regenerate" | "accepted",
     note?: string,
+    desk?: Executive,
   ) {
     setBusy(true);
     if (decision === "approved") {
       await decideApproved(approvalId, note);
     } else {
-      await decidePlain(approvalId, decision, note);
+      await decidePlain(approvalId, decision, note, desk);
     }
+    // Confirm the decision landed — the operator shouldn't have to guess.
+    const receipt: Record<typeof decision, { msg: string; tone: "ok" | "warn" }> = {
+      approved: { msg: "✓ Approved & automated", tone: "ok" },
+      accepted: { msg: "✓ Accepted as recommendation", tone: "ok" },
+      rejected: { msg: "Plan declined", tone: "warn" },
+      regenerate: { msg: desk ? `Re-routed to ${EXECUTIVE_LABEL[desk]}` : "Refining the plan…", tone: "ok" },
+    };
+    const r = receipt[decision];
+    if (r) pushToast(r.msg, r.tone);
   }
 
   // "Ask questions to complete" — Earn surfaces what it needs to know. The
@@ -1320,6 +1357,70 @@ export default function Copilot({
                   ) : null}
                 </div>
 
+                {/* Route selector — Delegate & Route. "Auto" lets Earn route;
+                    choosing a desk delegates the next prompt to it. */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenu((m) => (m === "route" ? null : "route"))}
+                    aria-haspopup="menu"
+                    aria-expanded={openMenu === "route"}
+                    className={`flex h-8 items-center gap-1.5 rounded-lg border bg-surface-0/80 px-2.5 text-xs transition hover:border-gold-500/45 hover:text-fg-primary ${
+                      delegate ? "border-gold-500/50 text-gold-300" : "border-line text-fg-secondary"
+                    }`}
+                    title="Delegate & route — choose which desk handles the next request"
+                  >
+                    <span aria-hidden className="text-fg-muted">▾</span>
+                    {delegate ? EXECUTIVE_LABEL[delegate] : "Route: Auto"}
+                  </button>
+                  {openMenu === "route" ? (
+                    <div
+                      role="menu"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                    >
+                      <p className="px-2.5 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        Delegate &amp; route
+                      </p>
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={delegate === null}
+                        onClick={() => {
+                          setDelegate(null);
+                          setOpenMenu(null);
+                        }}
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-2 ${
+                          delegate === null ? "text-fg-primary" : "text-fg-secondary"
+                        }`}
+                      >
+                        <span className="flex flex-col">
+                          <span className="text-sm">Auto</span>
+                          <span className="text-[10px] text-fg-muted">Earn routes to the best desk</span>
+                        </span>
+                        {delegate === null ? <span className="text-gold-300" aria-hidden>✓</span> : null}
+                      </button>
+                      {EXECUTIVES.map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={d === delegate}
+                          onClick={() => {
+                            setDelegate(d);
+                            setOpenMenu(null);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-2 ${
+                            d === delegate ? "text-fg-primary" : "text-fg-secondary"
+                          }`}
+                        >
+                          <span className="text-sm">{EXECUTIVE_LABEL[d]}</span>
+                          {d === delegate ? <span className="text-gold-300" aria-hidden>✓</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
                 {/* "+" menu — Add files or photos · /Slash command · Integrations. */}
                 <div className="relative">
                   <button
@@ -1570,6 +1671,25 @@ export default function Copilot({
       </section>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+
+      {/* Toast viewport — transient confirmations that an action landed. */}
+      {toasts.length ? (
+        <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2" aria-live="polite">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`pointer-events-auto rounded-xl border px-3.5 py-2.5 text-sm shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl ${
+                t.tone === "warn"
+                  ? "border-status-danger/40 bg-surface-1/95 text-fg-primary"
+                  : "border-gold-500/40 bg-surface-1/95 text-fg-primary"
+              }`}
+              role="status"
+            >
+              {t.msg}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1653,7 +1773,7 @@ function WorkflowCard({
 }: {
   bundle: WorkflowBundle;
   busy: boolean;
-  decide: (id: string, d: "approved" | "rejected" | "regenerate" | "accepted", note?: string) => void;
+  decide: (id: string, d: "approved" | "rejected" | "regenerate" | "accepted", note?: string, desk?: Executive) => void;
   // Live step states streamed during this workflow's "approved" run.
   liveSteps?: Record<string, "in_progress" | "completed">;
   primary?: boolean;
@@ -1665,6 +1785,7 @@ function WorkflowCard({
 }) {
   const { workflow, approval } = bundle;
   const pending = approval && approval.decision === "pending";
+  const decided = approval && approval.decision !== "pending";
   // Intelligence Layer: render the routing the engine PERSISTED on the workflow
   // (falling back to deterministic classification for pre-routing rows), so the
   // Cursor-style card never drifts from what was actually routed.
@@ -1675,6 +1796,16 @@ function WorkflowCard({
     stage: workflow.lifecycle_stage,
   });
   const cursor = cursorResponse(routing, { pending: Boolean(pending), stepCount: bundle.steps.length });
+  const outcome = buildOutcome(bundle);
+  // Lead with the result: the primary deliverable (a real artifact, else the
+  // first completed step's output) shown up top once work has run.
+  const primaryArtifact = bundle.artifacts[0] ?? null;
+  // Details (routing trace, summary/action, full step list) start collapsed once
+  // a decision has landed — the operator leads with the outcome — and open while
+  // a decision is pending so the plan is visible for review.
+  const [detailsOpen, setDetailsOpen] = useState<boolean>(Boolean(pending));
+  // Re-route: the desk picker shown when the operator overrides routing.
+  const [rerouteOpen, setRerouteOpen] = useState(false);
   return (
     <article className={`rounded-2xl border bg-surface-1/82 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)] sm:p-5 ${primary ? "border-gold-500/40 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)]" : "border-line/80"}`}>
       <div className="flex items-start justify-between gap-3">
@@ -1692,40 +1823,74 @@ function WorkflowCard({
         </div>
       </div>
 
-      {/* Routing badge — where the Intelligence Layer sent the work. */}
-      <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
-        <span className="truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
-          {routingHeadline(routing)}
-        </span>
-      </div>
-
-      {/* Cursor-style response: Summary / Action / Output / Next Step. */}
-      <dl className="mt-3 space-y-2 text-sm">
-        <div>
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Summary</dt>
-          <dd className="text-fg-secondary">{cursor.summary}</dd>
+      {/* Outcome receipt — durable proof a decision went through (when decided). */}
+      {decided ? (
+        <div className="mt-3">
+          <OutcomeReceipt outcome={outcome} />
         </div>
-        <div>
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Action</dt>
-          <dd className="text-fg-secondary">{cursor.action}</dd>
+      ) : null}
+
+      {/* Lead with the result: the headline deliverable + the single next step. */}
+      {!pending && primaryArtifact ? (
+        <div className="mt-3">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Deliverable</p>
+          <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
+            <ArtifactInline
+              content={primaryArtifact.content}
+              artifactType={primaryArtifact.artifact_type}
+              title={primaryArtifact.title}
+            />
+          </div>
+          <p className="mt-2 text-xs text-fg-secondary">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Next step</span>
+            {" · "}
+            {cursor.nextStep}
+          </p>
         </div>
-      </dl>
+      ) : null}
 
-      <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Output</p>
-      <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
-        <WorkflowSteps bundle={bundle} liveSteps={liveSteps} />
+      {/* Layered detail — routing trace, summary/action, and the full step run
+          fold behind a disclosure so the card stays scannable. */}
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((v) => !v)}
+          aria-expanded={detailsOpen}
+          className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+        >
+          <span className={`transition ${detailsOpen ? "rotate-90" : ""}`} aria-hidden>▸</span>
+          {detailsOpen ? "Hide details" : pending ? "Plan & routing" : "Details & full run"}
+        </button>
+
+        {detailsOpen ? (
+          <div className="mt-2 space-y-3">
+            <RoutingTrace bundle={bundle} />
+
+            <dl className="space-y-2 text-sm">
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Summary</dt>
+                <dd className="text-fg-secondary">{cursor.summary}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Action</dt>
+                <dd className="text-fg-secondary">{cursor.action}</dd>
+              </div>
+            </dl>
+
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Output</p>
+              <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
+                <WorkflowSteps bundle={bundle} liveSteps={liveSteps} />
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
-
-      <p className="mt-3 text-xs text-fg-secondary">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Next step</span>
-        {" · "}
-        {cursor.nextStep}
-      </p>
 
       {pending ? (
         <div className="mt-4 border-t border-line/75 pt-4">
-          <p className="text-xs text-fg-secondary">{approval.summary}</p>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Your decision</p>
+          <p className="mt-1 text-xs text-fg-secondary">{approval.summary}</p>
 
           {/* Clarify panel — Earn's questions for the operator. */}
           {clarify ? (
@@ -1811,12 +1976,51 @@ function WorkflowCard({
             <button
               type="button"
               disabled={busy}
+              onClick={() => setRerouteOpen((v) => !v)}
+              aria-expanded={rerouteOpen}
+              title="Override Earn's routing — delegate this work to a different desk"
+              className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
+            >
+              Re-route
+            </button>
+            <button
+              type="button"
+              disabled={busy}
               onClick={() => decide(approval.id, "rejected")}
               className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-status-danger transition hover:bg-surface-3 disabled:opacity-50"
             >
               Decline
             </button>
           </div>
+
+          {/* Delegate & Route — override Earn's auto-routing to a chosen desk.
+              Re-plans the work for that desk; the gate still applies. */}
+          {rerouteOpen ? (
+            <div className="mt-3 rounded-xl border border-line/70 bg-surface-0/40 p-3">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                Delegate to desk
+              </p>
+              <p className="mt-1 text-xs text-fg-muted">
+                Earn routed this to {EXECUTIVE_LABEL[routing.assigned_to]}. Pick a desk to re-route — the plan rebuilds and still needs your sign-off.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {EXECUTIVES.filter((d) => d !== routing.assigned_to).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setRerouteOpen(false);
+                      decide(approval.id, "regenerate", undefined, d);
+                    }}
+                    className="rounded-full border border-line/80 bg-surface-1/75 px-3 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary disabled:opacity-40"
+                  >
+                    {EXECUTIVE_LABEL[d]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </article>

@@ -166,6 +166,45 @@ export function executiveForStage(stage: LifecycleStage, primaryAgent: AgentKey)
   return COMPLIANCE_STAGES.has(stage) ? "cro" : executiveForAgent(primaryAgent);
 }
 
+// --- Delegate & Route -----------------------------------------------------
+//
+// The operator can override Earn's auto-routing and DELEGATE a request to a
+// specific executive desk. Because `assigned_to` is a pure function of the
+// primary agent (and stage), delegating is just repointing the primary agent to
+// a representative of that desk — and, for CRO (which has no native agent and is
+// only reachable structurally), forcing a compliance stage.
+export const DESK_PRIMARY_AGENT: Record<Executive, AgentKey> = {
+  earn_coo: "portfolio_ops",
+  cio: "analyst",
+  analyst: "diligence",
+  associate: "associate",
+  cmo: "investor_relations",
+  // CRO is reached via a compliance stage; the agent only seeds the step.
+  cro: "associate",
+};
+
+// Desks that can only be reached by pinning a particular lifecycle stage.
+export const DESK_FORCE_STAGE: Partial<Record<Executive, LifecycleStage>> = {
+  cro: "Compliance & Documentation",
+};
+
+export interface DeskOverride {
+  primaryAgent: AgentKey;
+  // When the desk forces a stage (CRO), the stage/engine to pin; else null.
+  stage: LifecycleStage | null;
+  engine: TargetEngine | null;
+}
+
+// The concrete routing changes that delegating to `desk` implies. Pure.
+export function deskOverride(desk: Executive): DeskOverride {
+  const stage = DESK_FORCE_STAGE[desk] ?? null;
+  return {
+    primaryAgent: DESK_PRIMARY_AGENT[desk],
+    stage,
+    engine: stage ? engineForStage(stage) : null,
+  };
+}
+
 // --- Classification rules -------------------------------------------------
 //
 // Ordered; first match wins. Mirrors the spec's Routing Rules (section 2). Each
