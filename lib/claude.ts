@@ -306,7 +306,8 @@ export async function generatePlan(
     });
     const json = textOf(message);
     return normalizePlan(json ? (JSON.parse(json) as AgentPlan) : null, prompt);
-  } catch {
+  } catch (err) {
+    console.error("[generatePlan] Claude API error:", err);
     return fallbackPlan(prompt);
   }
 }
@@ -355,7 +356,8 @@ export async function generatePlans(
     });
     const json = textOf(message);
     return normalizePlans(json ? (JSON.parse(json) as { workflows?: unknown }) : null, prompt);
-  } catch {
+  } catch (err) {
+    console.error("[generatePlans] Claude API error:", err);
     return [fallbackPlan(prompt)];
   }
 }
@@ -562,7 +564,11 @@ export async function extractAssetFields(args: {
 // Deterministic fallbacks (no API key) — keep the loop demoable everywhere.
 // ---------------------------------------------------------------------------
 function fallbackPlan(prompt: string): AgentPlan {
-  const t = prompt.toLowerCase();
+  // Strip any operator-context prefix ("[The operator is working in ...]") that
+  // the client prepends to the body before it reaches the engine. This prefix
+  // must never surface in plan titles or session names.
+  const cleanPrompt = prompt.replace(/^\[[\s\S]*?\]\s*/, "").trim();
+  const t = cleanPrompt.toLowerCase();
   const has = (...w: string[]) => w.some((x) => t.includes(x));
   let hub: Hub = "run";
   let steps: PlanStep[];
@@ -599,7 +605,7 @@ function fallbackPlan(prompt: string): AgentPlan {
   }
   const det = deriveRouting({ prompt, hub, agents: steps.map((s) => s.agent) });
   return {
-    title: prompt.trim().slice(0, 80) || "Workflow",
+    title: cleanPrompt.slice(0, 80) || "Workflow",
     hub,
     summary: "Planned by the Associate.",
     steps,
