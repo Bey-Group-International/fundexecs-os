@@ -245,21 +245,7 @@ function RoomCell({
           : "transform 0.2s cubic-bezier(0.2,0,0,1), box-shadow 0.25s ease, opacity 0s",
       }}
     >
-      {/* Per-room PNG overlay — hidden at rest, reveals on hover */}
-      <img
-        src={roomBgSrc(room.id, mode)}
-        alt="" aria-hidden="true"
-        style={{
-          position:"absolute", inset:0, width:"100%", height:"100%",
-          objectFit:"cover",
-          objectPosition: ROOM_OBJECT_POSITION[room.id] ?? "center top",
-          pointerEvents:"none", zIndex:0,
-          opacity: hovered ? 0.65 : 0,
-          transition:"opacity 0.35s ease",
-        }}
-      />
-
-      {/* Hover brightness lift */}
+{/* Hover brightness lift */}
       <div style={{
         position:"absolute", inset:0, zIndex:1, pointerEvents:"none",
         background: hovered ? "rgba(255,240,180,0.04)" : "transparent",
