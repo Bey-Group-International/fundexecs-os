@@ -161,16 +161,30 @@ export async function ThesisLive() {
   return (
     <>
       <section>
-        <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
           Deal Signal Feed
         </p>
+        {signals.length === 0 && (
+          <p className="mb-4 text-xs text-fg-muted">
+            Signals surface automatically once your investment thesis is complete.
+            Finish your thesis above — Earn will start matching inbound deal flow
+            to your mandate.
+          </p>
+        )}
         <DealSignalFeed signals={signals} />
       </section>
       <div className="border-t border-line" />
       <section>
-        <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
           Sector Heatmap
         </p>
+        {cells.length === 0 && (
+          <p className="mb-4 text-xs text-fg-muted">
+            Activity levels across your target sectors will appear here as deal
+            signals accumulate. Add your asset classes and geographies in the
+            thesis editor to activate this view.
+          </p>
+        )}
         <SectorHeatmap cells={cells} sectors={sectors} stages={stages} />
       </section>
     </>
