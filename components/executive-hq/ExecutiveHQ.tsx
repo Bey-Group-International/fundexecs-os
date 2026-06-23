@@ -78,7 +78,7 @@ const E: Record<string, ExecData> = {
   seoDisruptor:      { id:"seo-disruptor",       name:"SEO Disruptor",       shortName:"SEO",          sprite:"/assets/fundexecs/characters/seo-disruptor/sprite.png",       themeColor:"#f97316", href:"/dashboard/marketing",       bobDelay:"0.6s", wanderDelay:"1.1s", hint:"Rankings improved",        walkDuration:"10.5s"},
   curator:           { id:"curator",             name:"Curator",             shortName:"Curator",      sprite:"/assets/fundexecs/characters/curator/sprite.png",             themeColor:"#f97316", href:"/dashboard/marketing",       bobDelay:"0.9s", wanderDelay:"3.0s", hint:"Event scheduled",          walkDuration:"11.5s"},
   investorRelations: { id:"investor-relations",  name:"Investor Relations",  shortName:"IR",           sprite:"/assets/fundexecs/characters/investor-relations/sprite.png",  themeColor:"#f59e0b", href:"/dashboard/investor-relations",bobDelay:"0.3s",wanderDelay:"0.6s", hint:"LP update ready",          walkDuration:"12.5s"},
-  officeManager:     { id:"office-manager",      name:"Office Manager",      shortName:"Manager",      sprite:"/assets/fundexecs/characters/office-manager/sprite.svg",      themeColor:"#94a3b8", href:"/dashboard",                 bobDelay:"0.1s", wanderDelay:"0.2s", hint:"All systems operational",  walkDuration:"9s"  },
+  officeManager:     { id:"office-manager",      name:"Office Manager",      shortName:"Manager",      sprite:"/assets/fundexecs/characters/office-manager/sprite.png",      themeColor:"#94a3b8", href:"/dashboard",                 bobDelay:"0.1s", wanderDelay:"0.2s", hint:"All systems operational",  walkDuration:"9s"  },
 };
 
 const ROOMS: RoomData[] = [
@@ -174,10 +174,69 @@ function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: 
   );
 }
 
-// ─── ExecAvatar (hidden until sprites re-introduced) ─────────────────────────
+// ─── ExecAvatar ───────────────────────────────────────────────────────────────
 
-function ExecAvatar(_: { exec: ExecData; size: number; onClick: () => void; activeBubble: BubbleState; reducedEffects: boolean; nightMode: boolean }) {
-  return null;
+function ExecAvatar({ exec, size, reducedEffects }: { exec: ExecData; size: number; onClick: () => void; activeBubble: BubbleState; reducedEffects: boolean; nightMode: boolean; pose?: 'stand' | 'talk' | 'walk' }) {
+  const anim = !reducedEffects;
+  const delay = exec.bobDelay ?? '0s';
+  const color = exec.themeColor ?? '#d4af37';
+  const colorHex = color.replace('#', '');
+  const glowColor = colorHex.length === 6 ? `#${colorHex}66` : color;
+
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        position: 'relative',
+        pointerEvents: 'none',
+      }}
+    >
+      {/* Glow wrapper — pulsing drop-shadow */}
+      <div
+        style={{
+          width: size,
+          height: size,
+          animation: anim ? `exec-glow 2s ease-in-out ${delay} infinite` : undefined,
+          filter: `drop-shadow(0 2px 8px ${glowColor})`,
+        }}
+      >
+        {/* Float wrapper */}
+        <div
+          style={{
+            width: size,
+            height: size,
+            animation: anim ? `exec-float 3s ease-in-out ${delay} infinite` : undefined,
+          }}
+        >
+          {/* Breathe wrapper */}
+          <div
+            style={{
+              width: size,
+              height: size,
+              animation: anim ? `exec-breathe 2.5s ease-in-out ${delay} infinite` : undefined,
+              transformOrigin: 'bottom center',
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={exec.sprite}
+              alt={exec.name}
+              width={size}
+              height={size}
+              style={{
+                objectFit: 'contain',
+                width: size,
+                height: size,
+                display: 'block',
+                pointerEvents: 'none',
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── RoomCell ─────────────────────────────────────────────────────────────────
@@ -510,6 +569,9 @@ export function ExecutiveHQ() {
         @keyframes pulse-ring-lux { 0%{r:12;opacity:0.6;stroke-width:1.5} 100%{r:40;opacity:0;stroke-width:0.5} }
         @keyframes hud-sweep      { 0%{transform:translateX(-100%)} 100%{transform:translateX(400%)} }
         @keyframes brand-fade     { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes exec-float     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+        @keyframes exec-breathe   { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
+        @keyframes exec-glow      { 0%,100%{opacity:0.4} 50%{opacity:0.85} }
         .hq-paused * { animation-play-state: paused !important; }
       `}</style>
 
