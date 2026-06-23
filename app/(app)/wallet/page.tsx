@@ -20,6 +20,7 @@ import { compoundingProfile, type ReputationTier } from "@/lib/compounding";
 import { PlanSelector, type PlanView } from "./PlanSelector";
 import { CreditPacks } from "./CreditPacks";
 import { CheckoutBanner } from "./CheckoutBanner";
+import { CreditHistory } from "./CreditHistory";
 
 export const dynamic = "force-dynamic";
 
@@ -143,12 +144,12 @@ export default async function WalletPage({
             <p className="mt-5 max-w-2xl text-sm leading-6 text-fg-secondary">
               {planName ? (
                 <>
-                  You’re on <span className="text-fg-primary">{planName}</span>. Unused credits
+                  You&apos;re on <span className="text-fg-primary">{planName}</span>. Unused credits
                   roll over while your plan is active, keeping agent throughput reserved for
                   sourcing, diligence, reporting, and ops runs.
                 </>
               ) : balance === 0 ? (
-                "You’re out of credits. Choose a plan or purchase a credit pack below to restore your AI workspace."
+                "You're out of credits. Choose a plan or purchase a credit pack below to restore your AI workspace."
               ) : (
                 "Choose a plan below to unlock monthly credits, rollover, and a growing loyalty bonus."
               )}
@@ -272,10 +273,13 @@ export default async function WalletPage({
         <span className="font-mono text-fg-muted transition group-hover:text-neural-300">→</span>
       </Link>
 
+      {/* Transaction history — ledger entries newest-first */}
+      <CreditHistory />
+
       <p className="mt-6 text-center text-xs text-fg-muted">
         {live
           ? "Payments are processed securely by Stripe. Plans renew automatically; cancel anytime."
-          : "Stripe isn’t configured in this environment — choices activate in mock mode (no charge). Set STRIPE_SECRET_KEY to enable real checkout."}
+          : "Stripe isn't configured in this environment — choices activate in mock mode (no charge). Set STRIPE_SECRET_KEY to enable real checkout."}
       </p>
     </div>
   );
