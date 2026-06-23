@@ -88,9 +88,11 @@ export function workflowToApprovalItem(task: Pick<Task, "id" | "title" | "sessio
     kind: "approval",
     title: task.title,
     subtitle: "Workflow awaiting your approval",
-    // Approvals are reviewed inside the war-room session that owns them; fall
-    // back to the workspace when a workflow has no session.
-    href: task.session_id ? `/session/${task.session_id}` : "/workspace",
+    // Approvals are reviewed inside the war-room session that owns them.
+    // When a workflow has no session (created directly, not via Copilot),
+    // stay in the inbox (/inbox) so the operator can act from the approval
+    // queue — never redirect to /workspace which is the session launcher.
+    href: task.session_id ? `/session/${task.session_id}` : "/inbox",
     tone: "approval",
   };
 }
