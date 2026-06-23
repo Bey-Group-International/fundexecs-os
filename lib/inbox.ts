@@ -197,7 +197,16 @@ async function fetchAwaitingApproval(
     .is("parent_task_id", null)
     .eq("status", "awaiting_approval")
     .order("created_at", { ascending: false });
-  return (data ?? []) as Pick<Task, "id" | "title" | "session_id">[];
+  const rows = (data ?? []) as Pick<Task, "id" | "title" | "session_id">[];
+  // Deduplicate by title — multiple pending approvals with identical titles
+  // are the same logical action queued more than once. Keep the most recent.
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const key = (r.title ?? "").trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**

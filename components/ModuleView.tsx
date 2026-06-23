@@ -196,6 +196,43 @@ export async function ModuleView({
     if (mod.key === "waterfall") return <ExecuteWaterfallModule orgId={ctx.orgId} />;
     if (mod.key === "reporting") return <ExecuteReportingModule orgId={ctx.orgId} />;
     if (mod.key === "exit") return <ExecuteExitModule orgId={ctx.orgId} />;
+
+    // Modules with defined roadmap scope — structured Coming Soon states so
+    // the operator knows what's shipping and can use Earn in the interim.
+    const EXECUTE_COMING_SOON: Record<string, { blurb: string; earnPrompt: string }> = {
+      signing: {
+        blurb:
+          "Counterparty e-signature flows, signature-status tracking, and automatic filing into the Data Room — all wired to your deal records.",
+        earnPrompt: "Help me track signing status for my active closing",
+      },
+      issuance: {
+        blurb:
+          "Equity and unit issuance ledger: issue securities, record cap-table entries, generate certificates, and push events to LP notices.",
+        earnPrompt: "Help me record a new equity issuance for a portfolio company",
+      },
+    };
+    const comingSoon = EXECUTE_COMING_SOON[mod.key];
+    if (comingSoon) {
+      return (
+        <div className="flex flex-col items-center rounded-2xl border border-line bg-surface-1 px-8 py-14 text-center">
+          <span className="mb-1 font-mono text-[10px] uppercase tracking-[0.3em] text-fg-muted">
+            Coming soon
+          </span>
+          <h3 className="mt-2 font-display text-xl font-semibold text-fg-primary">
+            {mod.label}
+          </h3>
+          <p className="mt-3 max-w-sm text-sm leading-6 text-fg-secondary">
+            {comingSoon.blurb}
+          </p>
+          <Link
+            href={`/workspace?q=${encodeURIComponent(comingSoon.earnPrompt)}`}
+            className="mt-6 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+          >
+            ✶ Handle with Earn now
+          </Link>
+        </div>
+      );
+    }
   }
 
   // --- Build hub: dedicated editable modules -------------------------------
@@ -365,22 +402,22 @@ export async function ModuleView({
     <div>
       {mandateStrip}
       <ModuleHeader title={mod.label} blurb={`Part of the ${hub.label} hub.`} />
-      <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
-        <span
-          aria-hidden
-          className="mb-3 flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/5 font-mono text-sm text-gold-400"
-        >
-          ✶
+      <div className="flex flex-col items-center rounded-2xl border border-line bg-surface-1 px-8 py-14 text-center">
+        <span className="mb-1 font-mono text-[10px] uppercase tracking-[0.3em] text-fg-muted">
+          Coming soon
         </span>
-        <p className="max-w-sm text-sm text-fg-secondary">
-          The <span className="text-fg-primary">{mod.label}</span> module isn&apos;t wired up yet —
-          describe the work in Earn and the agents will handle it here.
+        <h3 className="mt-2 font-display text-xl font-semibold text-fg-primary">
+          {mod.label}
+        </h3>
+        <p className="max-w-sm mt-3 text-sm leading-6 text-fg-secondary">
+          This module is on the roadmap. Use Earn to handle this work now — your
+          session records will appear here once the module ships.
         </p>
         <Link
           href="/workspace"
-          className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+          className="mt-6 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
         >
-          ✶ Open Earn
+          ✶ Handle with Earn now
         </Link>
       </div>
     </div>

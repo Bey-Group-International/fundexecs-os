@@ -73,6 +73,29 @@ export default async function HubLayout({
           {hub.purpose}
         </p>
       </header>
+      {hub.approvalGated && (
+        <div className="mb-5 flex flex-wrap items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3.5">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 font-mono text-[11px] text-amber-400">
+            ⚑
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-fg-primary">Approval-gated actions</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-fg-secondary">
+              Every AI action in this hub that touches deal records, sends communications, or
+              modifies diligence requires your explicit approval before executing. Review pending
+              approvals in your{" "}
+              <a href="/inbox" className="text-gold-400 underline-offset-2 hover:underline">
+                Inbox
+              </a>
+              . To widen or restrict AI permissions, visit{" "}
+              <a href="/settings#ai-permissions" className="text-gold-400 underline-offset-2 hover:underline">
+                AI Permissions
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+      )}
       {momentumPanel}
       <HubTabs hubKey={hub.key} modules={hub.modules} statuses={moduleStatuses} />
       {children}

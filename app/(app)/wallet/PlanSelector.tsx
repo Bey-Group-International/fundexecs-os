@@ -131,7 +131,8 @@ export function PlanSelector({
         </span>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+      <div className="grid min-w-[640px] gap-4 sm:min-w-0 sm:grid-cols-3">
         {plans.map((p) => {
           const isCurrent = currentPlan === p.key;
           const isRecommended = recommendedKey === p.key && !isCurrent;
@@ -209,6 +210,7 @@ export function PlanSelector({
             </div>
           );
         })}
+      </div>
       </div>
 
       {error ? <p className="mt-3 text-xs text-status-danger">{error}</p> : null}
