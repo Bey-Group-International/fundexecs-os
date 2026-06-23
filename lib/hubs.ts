@@ -21,7 +21,8 @@ export const HUBS: HubDefinition[] = [
   {
     key: "build",
     label: "Build",
-    purpose: "Define identity and foundation.",
+    purpose:
+      "Build your firm's investor-facing identity — profile, thesis, materials, and team. Earn reads everything here to draft LP memos, score deal fit, and position you accurately in the ecosystem.",
     modules: [
       { key: "profile", label: "Profile" },
       { key: "thesis", label: "Thesis" },
@@ -35,7 +36,8 @@ export const HUBS: HubDefinition[] = [
   {
     key: "source",
     label: "Source",
-    purpose: "Manage pipelines and relationships.",
+    purpose:
+      "Build LP, deal, and partner pipelines that move. Earn surfaces qualified matches, scores relationship momentum, and alerts you the moment a counterparty is ready for the next step.",
     modules: [
       { key: "lp_pipeline", label: "LP Pipeline" },
       { key: "debt", label: "Debt & Hybrid" },
@@ -47,7 +49,8 @@ export const HUBS: HubDefinition[] = [
   {
     key: "run",
     label: "Run",
-    purpose: "Evaluate and manage active deals.",
+    purpose:
+      "Underwrite and advance active deals with conviction. Earn scores diligence coverage, flags open risks, and keeps your IC package current — every action that touches deal records or sends communications runs behind your explicit sign-off.",
     approvalGated: true,
     modules: [
       { key: "strategy", label: "Strategy" },
@@ -61,7 +64,8 @@ export const HUBS: HubDefinition[] = [
   {
     key: "execute",
     label: "Execute",
-    purpose: "Operate assets post-closing.",
+    purpose:
+      "Operate assets from close to exit — cap table, capital calls, LP reporting, waterfall, and valuations. Every action that moves capital or modifies ownership requires your approval before it executes.",
     modules: [
       { key: "closing", label: "Closing" },
       { key: "signing", label: "Signing" },
