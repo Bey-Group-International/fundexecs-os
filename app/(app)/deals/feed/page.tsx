@@ -26,26 +26,32 @@ export default async function DealFeedPage() {
     getDealFeed(ctx.orgId),
     supabase
       .from("deals")
-      .select("id, name, geography, asset_class, stage, target_amount, created_at")
+      .select("id, name, geography, asset_class, stage, target_amount, created_at, source")
       .eq("organization_id", ctx.orgId)
       .order("created_at", { ascending: false })
       .limit(100),
   ]);
 
-  // Map internal deals into DealSignal shape for the intelligence feed
-  const signals: DealSignal[] = (dealsRes.data ?? []).map((d) => ({
-    id: d.id,
-    signalType: "funding_round" as const,
-    title: d.name ?? "Unnamed Deal",
-    sector: d.asset_class ?? undefined,
-    geography: d.geography ?? undefined,
-    dealStage: d.stage ?? undefined,
-    dealSizeMin: null,
-    dealSizeMax: d.target_amount ?? null,
-    relevanceScore: 75,
-    thesisMatchScore: 65,
-    publishedAt: d.created_at,
-  }));
+  // Map external/demo deals into DealSignal shape for the intelligence feed.
+  // AI-drafted pipeline items (source === "Copilot") are intentionally excluded:
+  // they represent internal work product, not ecosystem signals, and showing
+  // them here creates a confusing mix of "my deals" and "market intelligence."
+  const INTERNAL_SOURCES = new Set(["Copilot", "copilot"]);
+  const signals: DealSignal[] = (dealsRes.data ?? [])
+    .filter((d) => !INTERNAL_SOURCES.has(d.source ?? ""))
+    .map((d) => ({
+      id: d.id,
+      signalType: "funding_round" as const,
+      title: d.name ?? "Unnamed Deal",
+      sector: d.asset_class ?? undefined,
+      geography: d.geography ?? undefined,
+      dealStage: d.stage ?? undefined,
+      dealSizeMin: null,
+      dealSizeMax: d.target_amount ?? null,
+      relevanceScore: 75,
+      thesisMatchScore: 65,
+      publishedAt: d.created_at,
+    }));
 
   const heatmapCells = buildHeatmap(signals);
   const sectors = [...new Set(heatmapCells.map((c) => c.sector))];
