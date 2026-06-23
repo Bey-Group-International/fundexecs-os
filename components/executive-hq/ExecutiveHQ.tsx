@@ -505,8 +505,9 @@ export function ExecutiveHQ() {
       className={isVisible ? "" : "hq-paused"}
       style={{
         position: "relative",
-        width: "100%",
+        width: "min(100%, calc((100svh - 80px) * 16 / 9))",
         aspectRatio: "16 / 9",
+        margin: "0 auto",
         fontFamily: "monospace",
         overflow: "hidden",
         outline: "none",
