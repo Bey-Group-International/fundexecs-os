@@ -496,7 +496,6 @@ export function ExecutiveHQ() {
   if (booting) return <ExecutiveHQBoot onComplete={() => setBooting(false)} />;
 
   return (
-    <div style={{ width: "100%", display: "flex", justifyContent: "center", background: nightMode ? "#06050a" : "#0a0908" }}>
     <div
       ref={containerRef}
       tabIndex={0}
@@ -506,8 +505,8 @@ export function ExecutiveHQ() {
       className={isVisible ? "" : "hq-paused"}
       style={{
         position: "relative",
-        width: "min(100%, calc(100svh - 80px))",
-        aspectRatio: "1 / 1",
+        width: "100%",
+        height: "clamp(520px, calc(100svh - 80px), 1100px)",
         fontFamily: "monospace",
         overflow: "hidden",
         outline: "none",
@@ -537,7 +536,7 @@ export function ExecutiveHQ() {
         style={{
           position: "absolute", inset: 0,
           width: "100%", height: "100%",
-          objectFit: "cover", objectPosition: "center center",
+          objectFit: "contain", objectPosition: "center center",
           pointerEvents: "none", userSelect: "none",
           filter: nightMode ? "brightness(0.88) saturate(0.88)" : "brightness(0.95) saturate(0.97)",
           transformOrigin: "center center",
@@ -637,6 +636,14 @@ export function ExecutiveHQ() {
       </div>
 
       {/* Transparent grid overlay — rooms portion */}
+      {/* Square anchor — matches rendered contain-image area, centered horizontally */}
+      <div style={{
+        position:"absolute",
+        top:0, bottom:0,
+        left:"50%", transform:"translateX(-50%)",
+        aspectRatio:"1 / 1",
+        zIndex:4,
+      }}>
       <div style={{
         position:"absolute",
         top:"5%", left:"2%", right:"2%", bottom:"14%",
@@ -645,7 +652,6 @@ export function ExecutiveHQ() {
         gridTemplateRows:"38fr 30fr 32fr",
         gridTemplateAreas:'"ceo board trading research" "legal ops ops marketing" "investor reception reception ."',
         gap:"1%",
-        zIndex:4,
       }}>
         {ROOMS.map((room, idx) => (
           <RoomCell
@@ -665,10 +671,10 @@ export function ExecutiveHQ() {
           />
         ))}
       </div>
+      </div>
 
       {/* Mini-map */}
       <MiniMap activeId={hoveredRoomId ?? (focusedRoomIndex !== null ? ROOMS[focusedRoomIndex]?.id ?? null : null)} nightMode={nightMode} />
-    </div>
     </div>
   );
 }
