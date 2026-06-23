@@ -23,7 +23,7 @@ interface HubItem {
   label: string;
   modules: NavItem[];
   // Hubs that act outside the firm run behind an approval gate — flagged in the
-  // rail with a small "Approval-gated" badge (per the product mockups).
+  // rail with a small "Approval gate" badge (per the product mockups).
   approvalGated?: boolean;
 }
 
@@ -469,10 +469,10 @@ export function AppSidebar({
                   {hub.label}
                   {hub.approvalGated ? (
                     <span
-                      title="Approval-gated — actions here run behind your approval"
+                      title="Approval gate — actions in this hub run behind your explicit sign-off before any outward-facing work executes"
                       className="rounded border border-gold-500/40 bg-gold-500/10 px-1 py-px font-mono text-[8px] font-medium uppercase leading-none tracking-wider text-gold-300"
                     >
-                      Gated
+                      Approval gate
                     </span>
                   ) : null}
                 </span>
