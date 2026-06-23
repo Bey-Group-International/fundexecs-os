@@ -160,8 +160,30 @@ export function artifactTypeLabel(type: ArtifactType): string {
   return type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " ");
 }
 
+/**
+ * Guard against task descriptions that contain internal system-prompt prefixes
+ * or raw user instructions being surfaced in the public activity feed. These
+ * strings should never appear as visible copy — if they do, suppress the summary
+ * rather than leaking them.
+ */
+function isInternalPrompt(text: string): boolean {
+  return (
+    text.includes("[Selected reasoning engine:") ||
+    text.startsWith("You are ") ||
+    text.startsWith("You're ") ||
+    // Bare imperative user prompts (no leading bracket or period) are also
+    // suppressed — they read as instructions, not as activity descriptions.
+    /^(Im |I'm |I am |Use the browser|Find |Source |Reach out|Run |Build |Draft |Create |Generate |Search |Pull |Scan |Analyze )/i.test(text)
+  );
+}
+
 /** Shape a parent workflow Task into an ActivityEntry. */
 export function workflowToEntry(task: Task): ActivityEntry {
+  const raw = task.description?.trim();
+  // Only surface the description as a summary when it reads as a human-written
+  // task description, not as an internal prompt or a raw user instruction that
+  // was inadvertently stored in the column.
+  const summary = raw && !isInternalPrompt(raw) ? raw : undefined;
   return {
     id: `task:${task.id}`,
     kind: "workflow",
@@ -171,7 +193,7 @@ export function workflowToEntry(task: Task): ActivityEntry {
     status: task.status,
     sessionId: task.session_id ?? undefined,
     when: task.completed_at ?? task.updated_at ?? task.created_at,
-    summary: task.description?.trim() || undefined,
+    summary,
   };
 }
 
