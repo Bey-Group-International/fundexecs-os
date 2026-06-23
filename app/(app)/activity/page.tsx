@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
-import { getActivity } from "@/lib/activity";
+import { getActivity } from "@/lib/activity.server";
 import { ActivityFeed } from "@/components/activity/ActivityFeed";
 
 export const dynamic = "force-dynamic";
