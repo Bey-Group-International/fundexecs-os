@@ -415,24 +415,62 @@ export function EarnCopilotDock({ name }: { name: string }) {
                       {turn.text}
                     </div>
                   ) : (
-                    <div key={i} className="mr-6 rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
-                      {turn.planTitle ? (
-                        <p className="break-words text-sm font-medium text-fg-primary">{turn.planTitle}</p>
-                      ) : null}
-                      {turn.steps?.length ? (
-                        <ul className="mt-1.5 flex flex-col gap-1">
-                          {turn.steps.map((st, j) => {
-                            const a = AGENT_BY_KEY[st.agent];
-                            return (
-                              <li key={j} className="flex items-center gap-2 text-xs text-fg-secondary">
-                                <AgentDot color={a?.color ?? "#888"} />
-                                <span className="shrink-0 text-fg-muted">{a?.name ?? st.agent}</span>
-                                <span className="min-w-0 truncate">{st.title}</span>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : null}
+                    <div key={i} className="mr-6 space-y-2">
+                      <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
+                        {turn.planTitle ? (
+                          <p className="break-words text-sm font-medium text-fg-primary">{turn.planTitle}</p>
+                        ) : null}
+                        {turn.steps?.length ? (
+                          <ul className="mt-1.5 flex flex-col gap-1">
+                            {turn.steps.map((st, j) => {
+                              const a = AGENT_BY_KEY[st.agent];
+                              return (
+                                <li key={j} className="flex items-center gap-2 text-xs text-fg-secondary">
+                                  <AgentDot color={a?.color ?? "#888"} />
+                                  <span className="shrink-0 text-fg-muted">{a?.name ?? st.agent}</span>
+                                  <span className="min-w-0 truncate">{st.title}</span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : null}
+                      </div>
+                      {/* Action bar */}
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          onClick={() => {
+                            window.dispatchEvent(new CustomEvent("earn-delegate", {
+                              detail: { planTitle: turn.planTitle, steps: turn.steps },
+                            }));
+                            setOpen(false);
+                          }}
+                          className="flex-1 rounded border border-[#c9a84c]/60 bg-[#c9a84c]/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#c9a84c] transition hover:bg-[#c9a84c]/20 hover:border-[#c9a84c] active:scale-95"
+                        >
+                          Approve &amp; Automate
+                        </button>
+                        <button
+                          onClick={() => {/* accept without automation */}}
+                          className="rounded border border-white/15 bg-white/5 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-fg-secondary transition hover:bg-white/10 active:scale-95"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          onClick={() => {
+                            setThread((prev) => prev.slice(0, i));
+                          }}
+                          className="rounded border border-white/15 bg-white/5 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-fg-muted transition hover:bg-white/10 active:scale-95"
+                        >
+                          Regenerate
+                        </button>
+                        <button
+                          onClick={() => {
+                            setThread((prev) => prev.slice(0, i - 1 < 0 ? 0 : i - 1));
+                          }}
+                          className="rounded border border-status-danger/30 bg-status-danger/5 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-status-danger/70 transition hover:bg-status-danger/10 active:scale-95"
+                        >
+                          Decline
+                        </button>
+                      </div>
                     </div>
                   ),
                 )}
