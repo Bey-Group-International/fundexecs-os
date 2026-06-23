@@ -581,28 +581,6 @@ export function ExecutiveHQ() {
         </div>
       )}
 
-      {/* ── Brand header (top left) ── */}
-      <div style={{
-        position:"absolute", top:10, left:12, zIndex:20, pointerEvents:"none",
-        animation:"brand-fade 0.6s ease-out",
-      }}>
-        <div style={{
-          fontFamily:"Georgia,'Times New Roman',serif",
-          fontSize:9, letterSpacing:"0.28em", textTransform:"uppercase",
-          color:GOLD, opacity:0.85,
-          textShadow:`0 0 20px ${GOLD}55`,
-        }}>
-          FundExecs OS
-        </div>
-        <div style={{
-          fontFamily:"'Courier New',monospace",
-          fontSize:6, letterSpacing:"0.18em", textTransform:"uppercase",
-          color:"rgba(255,248,220,0.35)", marginTop:2,
-        }}>
-          Executive Headquarters · {ROOMS.length} Sectors{debugGrid ? " · DEBUG [D]" : ""}
-        </div>
-      </div>
-
       {/* ── Controls (top right) ── */}
       <div style={{ position:"absolute", top:10, right:12, zIndex:20, display:"flex", gap:6, alignItems:"center" }}>
         <button
