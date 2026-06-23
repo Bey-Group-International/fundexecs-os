@@ -521,7 +521,7 @@ export function ExecutiveHQ() {
         style={{
           position: "absolute", inset: 0,
           width: "100%", height: "100%",
-          objectFit: nightMode ? "contain" : "cover", objectPosition: "center center",
+          objectFit: "cover", objectPosition: "center center",
           pointerEvents: "none", userSelect: "none",
           filter: nightMode ? "brightness(1.6) saturate(1.1) contrast(1.05)" : "brightness(0.95) saturate(0.97)",
           transformOrigin: "center center",
@@ -602,11 +602,11 @@ export function ExecutiveHQ() {
       <div style={{
         position:"absolute",
         ...(nightMode ? {
-          // Night: square 1024×1024 PNG with objectFit:contain → occupies center 56.25% width
-          top:"1%", left:"22%", right:"22%", bottom:"6%",
-          gridTemplateColumns:"1fr 1fr 1fr 1fr",
-          gridTemplateRows:"42fr 28fr 28fr",
-          gridTemplateAreas:'"ceo board trading research" "investor ops legal marketing" "reception reception reception reception"',
+          // Night: landscape 1647×955 PNG with objectFit:cover — same floor plan, minimal 1.5% crop
+          top:"0%", left:"0.7%", right:"0.7%", bottom:"11%",
+          gridTemplateColumns:"27fr 24fr 24fr 25fr",
+          gridTemplateRows:"49fr 24fr 27fr",
+          gridTemplateAreas:'"ceo board trading research" "legal ops ops marketing" "investor reception reception ."',
         } : {
           // Day: landscape 1577×997 PNG with objectFit:cover
           top:"0%", left:"0.7%", right:"0.7%", bottom:"11%",
