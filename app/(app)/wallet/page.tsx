@@ -144,7 +144,7 @@ export default async function WalletPage({
             <p className="mt-5 max-w-2xl text-sm leading-6 text-fg-secondary">
               {planName ? (
                 <>
-                  You're on <span className="text-fg-primary">{planName}</span>. Unused credits
+                  You&apos;re on <span className="text-fg-primary">{planName}</span>. Unused credits
                   roll over while your plan is active, keeping agent throughput reserved for
                   sourcing, diligence, reporting, and ops runs.
                 </>
