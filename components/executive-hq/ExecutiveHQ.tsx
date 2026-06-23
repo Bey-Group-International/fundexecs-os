@@ -506,7 +506,7 @@ export function ExecutiveHQ() {
       style={{
         position: "relative",
         width: "100%",
-        height: "clamp(520px, calc(100svh - 80px), 1100px)",
+        aspectRatio: "16 / 9",
         fontFamily: "monospace",
         overflow: "hidden",
         outline: "none",
