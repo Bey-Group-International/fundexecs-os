@@ -46,10 +46,13 @@ function StatCard({
   label,
   value,
   tone,
+  dim,
 }: {
   label: string;
   value: string;
   tone?: "gold" | "positive" | "default";
+  /** When true, the value renders at reduced opacity (e.g. no-fund state). */
+  dim?: boolean;
 }) {
   const valueClass =
     tone === "gold"
@@ -61,7 +64,7 @@ function StatCard({
     <div className="rounded-lg border border-line bg-surface-1 p-4">
       <Eyebrow>{label}</Eyebrow>
       <div
-        className={`mt-2 font-display text-xl font-semibold tracking-tight ${valueClass}`}
+        className={`mt-2 font-display text-xl font-semibold tracking-tight ${valueClass} ${dim ? "opacity-40" : ""}`}
       >
         {value}
       </div>
@@ -72,6 +75,7 @@ function StatCard({
 export function LpReport({ report }: { report: LpReportData }) {
   const { capital, multiples, holdings, activity, navSeries, funds } = report;
   const net = netCashflow(activity);
+  const noFunds = report.fundCount === 0;
 
   return (
     <div className="rounded-xl border border-line bg-surface-0 p-6 sm:p-8">
@@ -109,16 +113,36 @@ export function LpReport({ report }: { report: LpReportData }) {
             <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
               Capital Summary
             </h2>
+
+            {/* Fund setup prompt — shown when assets exist but no fund record is configured */}
+            {noFunds && (
+              <div className="mb-4 flex items-start gap-3 rounded-lg border border-gold-500/20 bg-gold-500/5 px-4 py-3 text-sm text-fg-secondary print:hidden">
+                <span className="mt-0.5 shrink-0 text-gold-400">◆</span>
+                <p>
+                  <span className="font-medium text-gold-300">Add a fund record</span>{" "}
+                  to populate Committed, Paid-in, Distributed, and performance
+                  multiples. NAV reflects your current portfolio value.{" "}
+                  <a
+                    href="/settings#account"
+                    className="text-gold-300 underline underline-offset-2 hover:text-gold-200"
+                  >
+                    Go to Settings →
+                  </a>
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <StatCard label="Committed" value={usd(capital.committed)} />
-              <StatCard label="Paid-in" value={usd(capital.paidIn)} />
+              <StatCard label="Committed" value={usd(capital.committed)} dim={noFunds} />
+              <StatCard label="Paid-in" value={usd(capital.paidIn)} dim={noFunds} />
               <StatCard
                 label="Distributed"
                 value={usd(capital.distributed)}
                 tone="positive"
+                dim={noFunds}
               />
               <StatCard label="NAV" value={usd(capital.nav)} tone="gold" />
-              <StatCard label="Uncalled" value={usd(capital.uncalled)} />
+              <StatCard label="Uncalled" value={usd(capital.uncalled)} dim={noFunds} />
             </div>
           </section>
 
@@ -199,10 +223,10 @@ export function LpReport({ report }: { report: LpReportData }) {
               Performance
             </h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatCard label="TVPI" value={mult(multiples.tvpi)} tone="gold" />
-              <StatCard label="DPI" value={mult(multiples.dpi)} />
-              <StatCard label="RVPI" value={mult(multiples.rvpi)} />
-              <StatCard label="MOIC" value={mult(multiples.moic)} tone="gold" />
+              <StatCard label="TVPI" value={mult(multiples.tvpi)} tone="gold" dim={noFunds} />
+              <StatCard label="DPI" value={mult(multiples.dpi)} dim={noFunds} />
+              <StatCard label="RVPI" value={mult(multiples.rvpi)} dim={noFunds} />
+              <StatCard label="MOIC" value={mult(multiples.moic)} tone="gold" dim={noFunds} />
             </div>
           </section>
 
