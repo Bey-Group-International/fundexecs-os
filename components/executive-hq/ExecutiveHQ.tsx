@@ -222,8 +222,7 @@ function RoomCell({
   if (debugGrid)        boxShadow = `inset 0 0 0 2px ${DEBUG_COLORS[roomIndex % DEBUG_COLORS.length]}`;
   else if (isFocused)   boxShadow = `inset 0 0 0 1.5px ${GOLD}, 0 0 32px rgba(201,168,76,0.25), 0 8px 40px rgba(0,0,0,0.6)`;
   else if (hovered)     boxShadow = `inset 0 0 0 1px ${GOLD}aa, 0 0 24px rgba(201,168,76,0.18), 0 8px 40px rgba(0,0,0,0.5)`;
-  else if (activity>=3) boxShadow = `inset 0 0 0 1px ${GOLD}33, 0 4px 20px rgba(0,0,0,0.4)`;
-  else                  boxShadow = `inset 0 0 0 1px rgba(201,168,76,0.1), 0 2px 12px rgba(0,0,0,0.3)`;
+  else                  boxShadow = "none";
 
   return (
     <div
@@ -237,7 +236,7 @@ function RoomCell({
         background: "transparent",
         overflow: "hidden",
         boxShadow,
-        borderRadius: 2,
+        borderRadius: isActive ? 2 : 0,
         transform: hovered ? "scale(1.018)" : "scale(1)",
         zIndex: isZooming ? 30 : hovered ? 5 : undefined,
         opacity: isZooming ? 0 : 1,
