@@ -39,7 +39,8 @@ export async function saveOrgProfile(
   const supabase = createServerClient();
   const { error } = await supabase
     .from("organizations")
-    .update(update)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(update as any)
     .eq("id", ctx.orgId);
 
   if (error) return { error: error.message };

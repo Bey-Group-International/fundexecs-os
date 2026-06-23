@@ -94,7 +94,7 @@ export default async function ProfilePage() {
         </p>
       </header>
 
-      <form action={saveOrgProfile} className="flex flex-col gap-10">
+      <form action={saveOrgProfile as (fd: FormData) => Promise<void>} className="flex flex-col gap-10">
         {/* ── Identity ─────────────────────────────────────────── */}
         <Section
           eyebrow="Who you are"
@@ -263,7 +263,7 @@ export default async function ProfilePage() {
                     <span className="italic text-fg-muted">Display name</span>
                   )}
                 </span>
-                {(o as Record<string, unknown>).discoverable && (
+                {!!(o as Record<string, unknown>).discoverable && (
                   <span className="rounded-full border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-green-400">
                     Discoverable
                   </span>
@@ -305,10 +305,10 @@ export default async function ProfilePage() {
 
           {/* Stats row */}
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-4">
-            {(o as Record<string, unknown>).primary_strategy && (
+            {!!(o as Record<string, unknown>).primary_strategy && (
               <Stat label="Strategy" value={(o as Record<string, unknown>).primary_strategy as string} />
             )}
-            {(o as Record<string, unknown>).aum_range && (
+            {!!(o as Record<string, unknown>).aum_range && (
               <Stat label="AUM" value={(o as Record<string, unknown>).aum_range as string} />
             )}
             {(o as Record<string, unknown>).fund_count != null && (
@@ -317,10 +317,10 @@ export default async function ProfilePage() {
                 value={String((o as Record<string, unknown>).fund_count)}
               />
             )}
-            {(o as Record<string, unknown>).jurisdiction && (
+            {!!(o as Record<string, unknown>).jurisdiction && (
               <Stat label="Jurisdiction" value={(o as Record<string, unknown>).jurisdiction as string} />
             )}
-            {(o as Record<string, unknown>).website && (
+            {!!(o as Record<string, unknown>).website && (
               <a
                 href={(o as Record<string, unknown>).website as string}
                 target="_blank"
