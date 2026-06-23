@@ -601,12 +601,12 @@ export function ExecutiveHQ() {
       {/* Transparent grid overlay — rooms portion */}
       <div style={{
         position:"absolute",
-        top:"5%", left:"2%", right:"2%", bottom:"14%",
+        top:"0%", left:"0.7%", right:"0.7%", bottom:"11%",
         display:"grid",
-        gridTemplateColumns:"1fr 1fr 1fr 1fr",
-        gridTemplateRows:"38fr 30fr 32fr",
+        gridTemplateColumns:"27fr 24fr 24fr 25fr",
+        gridTemplateRows:"49fr 24fr 27fr",
         gridTemplateAreas:'"ceo board trading research" "legal ops ops marketing" "investor reception reception ."',
-        gap:"1%",
+        gap:"0.9%",
         zIndex:4,
       }}>
         {ROOMS.map((room, idx) => (
