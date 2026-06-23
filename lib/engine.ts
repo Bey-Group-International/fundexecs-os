@@ -527,7 +527,10 @@ export async function materializePrompt(ctx: Ctx, body: string, plan: AgentPlan,
  * so the cards read distinctly rather than repeating the full prompt.
  */
 export async function materializePrompts(ctx: Ctx, body: string, plans: AgentPlan[], sessionId?: string) {
-  const session = sessionId ?? (await createSession(ctx, { name: plans[0]?.title || body, origin: "earn" }));
+  // Strip any operator-context prefix from the body before using it as a
+  // fallback session name (the client prepends "[The operator is working in …]").
+  const sessionName = plans[0]?.title || body.replace(/^\[[\s\S]*?\]\s*/, "").trim() || "Untitled session";
+  const session = sessionId ?? (await createSession(ctx, { name: sessionName, origin: "earn" }));
   const split = plans.length > 1;
 
   const routings = plans.map((plan) =>
