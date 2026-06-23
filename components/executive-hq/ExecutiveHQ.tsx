@@ -181,7 +181,7 @@ function ExecAvatar({ exec, size, reducedEffects }: { exec: ExecData; size: numb
   const delay = exec.bobDelay ?? '0s';
   const color = exec.themeColor ?? '#d4af37';
   const colorHex = color.replace('#', '');
-  const glowColor = colorHex.length === 6 ? `#${colorHex}66` : color;
+  const glowColor = colorHex.length === 6 ? `#${colorHex}88` : color;
 
   return (
     <div
@@ -192,13 +192,13 @@ function ExecAvatar({ exec, size, reducedEffects }: { exec: ExecData; size: numb
         pointerEvents: 'none',
       }}
     >
-      {/* Glow wrapper — pulsing drop-shadow */}
+      {/* Glow wrapper — pulsing drop-shadow, always visible */}
       <div
         style={{
           width: size,
           height: size,
           animation: anim ? `exec-glow 2s ease-in-out ${delay} infinite` : undefined,
-          filter: `drop-shadow(0 2px 8px ${glowColor})`,
+          filter: `drop-shadow(0 2px 6px ${glowColor}) drop-shadow(0 1px 2px rgba(0,0,0,0.9))`,
         }}
       >
         {/* Float wrapper */}
@@ -340,26 +340,27 @@ function RoomCell({
       )}
 
 
-      {/* Exec avatars (hidden for now) */}
-      <div style={{ position:"absolute", bottom:28, left:0, right:0, zIndex:5, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
+      {/* Exec avatars — idle sprites always present, reactive on hover */}
+      <div style={{ position:"absolute", bottom:4, left:0, right:0, zIndex:8, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
         {room.executives.map(exec=>(
-          <ExecAvatar key={exec.id} exec={exec} size={42} onClick={()=>onExecClick(exec)}
+          <ExecAvatar key={exec.id} exec={exec} size={32} onClick={()=>onExecClick(exec)}
             activeBubble={activeBubble} reducedEffects={reducedEffects} nightMode={nightMode}/>
         ))}
       </div>
 
-      {/* Bottom glass panel */}
+      {/* Bottom glass panel — hidden at rest, revealed on hover/focus */}
       <div style={{
-        position:"absolute", bottom:0, left:0, right:0, zIndex:6,
+        position:"absolute", bottom:0, left:0, right:0, zIndex:7,
         background: isActive
           ? "linear-gradient(180deg, rgba(8,6,4,0) 0%, rgba(8,6,4,0.82) 100%)"
-          : "linear-gradient(180deg, rgba(8,6,4,0) 0%, rgba(8,6,4,0.65) 100%)",
-        backdropFilter: isActive ? "blur(8px)" : "blur(4px)",
-        borderTop:`1px solid ${goldBorder}`,
+          : "transparent",
+        backdropFilter: isActive ? "blur(8px)" : "none",
+        borderTop: isActive ? `1px solid ${goldBorder}` : "1px solid transparent",
         display:"flex", flexDirection:"column",
         padding:"4px 8px 5px",
         pointerEvents:"none", userSelect:"none",
-        transition:"all 0.25s ease",
+        opacity: isActive ? 1 : 0,
+        transition:"opacity 0.25s ease, background 0.25s ease",
       }}>
         {/* Gold rule */}
         <div style={{
