@@ -638,7 +638,7 @@ export function ExecutiveHQ() {
       {/* Transparent grid overlay — rooms portion */}
       <div style={{
         position:"absolute",
-        top:"2%", left:"2%", right:"2%", bottom:"18%",
+        top:"5%", left:"2%", right:"2%", bottom:"14%",
         display:"grid",
         gridTemplateColumns:"1fr 1fr 1fr 1fr",
         gridTemplateRows:"38fr 30fr 32fr",
