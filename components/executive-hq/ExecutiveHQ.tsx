@@ -495,7 +495,7 @@ export function ExecutiveHQ() {
         fontFamily: "monospace",
         overflow: "hidden",
         outline: "none",
-        background: nightMode ? "#06050a" : "#0a0908",
+        background: nightMode ? "#010207" : "#0a0908",
       }}
     >
       <style>{`
@@ -601,11 +601,20 @@ export function ExecutiveHQ() {
       {/* Transparent grid overlay — rooms portion */}
       <div style={{
         position:"absolute",
-        top:"0%", left:"0.7%", right:"0.7%", bottom:"11%",
+        ...(nightMode ? {
+          // Night: square 1024×1024 PNG with objectFit:contain → occupies center 56.25% width
+          top:"1%", left:"22%", right:"22%", bottom:"6%",
+          gridTemplateColumns:"1fr 1fr 1fr 1fr",
+          gridTemplateRows:"42fr 28fr 28fr",
+          gridTemplateAreas:'"ceo board trading research" "investor ops legal marketing" "reception reception reception reception"',
+        } : {
+          // Day: landscape 1577×997 PNG with objectFit:cover
+          top:"0%", left:"0.7%", right:"0.7%", bottom:"11%",
+          gridTemplateColumns:"27fr 24fr 24fr 25fr",
+          gridTemplateRows:"49fr 24fr 27fr",
+          gridTemplateAreas:'"ceo board trading research" "legal ops ops marketing" "investor reception reception ."',
+        }),
         display:"grid",
-        gridTemplateColumns:"27fr 24fr 24fr 25fr",
-        gridTemplateRows:"49fr 24fr 27fr",
-        gridTemplateAreas:'"ceo board trading research" "legal ops ops marketing" "investor reception reception ."',
         gap:"0.9%",
         zIndex:4,
       }}>
