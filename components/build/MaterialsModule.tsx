@@ -231,7 +231,7 @@ export async function MaterialsModule() {
                       ? `${item.docCount} doc${item.docCount > 1 ? "s" : ""}`
                       : item.viaBuild
                         ? "from Build"
-                        : "missing"}
+                        : "not yet added"}
                   </span>
                   <button
                     type="submit"

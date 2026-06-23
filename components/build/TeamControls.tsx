@@ -375,7 +375,16 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
         <div>
           <p className="text-sm font-medium text-fg-primary">Invite member</p>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Add an existing FundExecs user to the firm by email.
+            Enter your teammate&apos;s email. They&apos;ll need a FundExecs account —{" "}
+            <a
+              href="https://fundexecs.com"
+              className="text-gold-400 underline hover:text-gold-300"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              share fundexecs.com
+            </a>{" "}
+            so they can sign up first.
           </p>
         </div>
         <span

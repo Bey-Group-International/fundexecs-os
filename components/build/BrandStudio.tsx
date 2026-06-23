@@ -56,7 +56,12 @@ function ContrastBadge({ label, ratio }: { label: string; ratio: number }) {
   const pass = ratio >= 4.5;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] uppercase tracking-wider ${
+      title={
+        pass
+          ? "WCAG AA ✓ — meets readability standard for LP materials (≥4.5:1 contrast ratio)"
+          : "Below WCAG AA threshold (4.5:1). Text on LP materials may be hard to read — consider a darker or lighter shade."
+      }
+      className={`inline-flex cursor-help items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] uppercase tracking-wider ${
         pass
           ? "border-status-success/40 bg-status-success/10 text-status-success"
           : "border-status-warning/40 bg-status-warning/10 text-status-warning"
@@ -209,6 +214,9 @@ export function BrandStudio({
             <ContrastBadge label="on dark" ratio={darkRatio} />
             <ContrastBadge label="on white" ratio={whiteRatio} />
           </div>
+          <p className="text-[11px] text-fg-muted">
+            Readability scores — WCAG AA requires ≥4.5:1 so your brand color stays legible on LP materials. Hover a badge for details.
+          </p>
         </div>
       </div>
 
