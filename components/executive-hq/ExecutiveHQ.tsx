@@ -45,17 +45,17 @@ const ROOM_FREQUENCIES: Record<string, number> = {
 
 // Translate values to pan the full office image to center on each room
 // Formula: translate(50%-cx, 50%-cy) where cx/cy are approximate room centers
-// relative to the full office image dimensions
+// Grid: top 2%, bottom 18% → 80% height. Rows: 38/30/32fr. 4 equal cols.
 const ROOM_ZOOM_TRANSLATE: Record<string, string> = {
-  ceo:       "translate(36%,   30%)",
-  boardroom: "translate(11%,   30%)",
-  trading:   "translate(-15%,  30%)",
-  research:  "translate(-40%,  30%)",
-  investor:  "translate(36%,  -1%)",
-  ops:       "translate(11%,  -1%)",
-  legal:     "translate(-15%, -1%)",
-  marketing: "translate(-40%, -1%)",
-  reception: "translate(0%,  -23%)",
+  ceo:       "translate(36%,   33%)",
+  boardroom: "translate(12%,   33%)",
+  trading:   "translate(-12%,  33%)",
+  research:  "translate(-36%,  33%)",
+  legal:     "translate(36%,   6%)",
+  ops:       "translate(0%,    6%)",
+  marketing: "translate(-36%,  6%)",
+  investor:  "translate(36%,  -19%)",
+  reception: "translate(0%,   -19%)",
 };
 
 const LIGHT_FLICKER_DELAYS = ["0s","2.3s","5.1s","1.7s","3.8s","4.2s","0.9s","6.1s","1.2s"];
@@ -137,10 +137,10 @@ function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: 
     {id:"boardroom", c:1,r:0,s:1,col:"#a8c4e0"},
     {id:"trading",   c:2,r:0,s:1,col:"#5eead4"},
     {id:"research",  c:3,r:0,s:1,col:"#a5b4fc"},
-    {id:"investor",  c:0,r:1,s:1,col:"#d8b4fe"},
-    {id:"ops",       c:1,r:1,s:1,col:"#86efac"},
-    {id:"legal",     c:2,r:1,s:1,col:"#fca5a5"},
+    {id:"legal",     c:0,r:1,s:1,col:"#fca5a5"},
+    {id:"ops",       c:1,r:1,s:2,col:"#86efac"},
     {id:"marketing", c:3,r:1,s:1,col:"#fdba74"},
+    {id:"investor",  c:0,r:2,s:1,col:"#d8b4fe"},
     {id:"reception", c:1,r:2,s:2,col:"#c9a84c"},
   ];
   const tw = 4*(W+G)-G;
@@ -641,8 +641,8 @@ export function ExecutiveHQ() {
         top:"2%", left:"2%", right:"2%", bottom:"18%",
         display:"grid",
         gridTemplateColumns:"1fr 1fr 1fr 1fr",
-        gridTemplateRows:"36fr 26fr 28fr",
-        gridTemplateAreas:'"ceo board trading research" "investor ops legal marketing" ". reception reception ."',
+        gridTemplateRows:"38fr 30fr 32fr",
+        gridTemplateAreas:'"ceo board trading research" "legal ops ops marketing" "investor reception reception ."',
         gap:"1%",
         zIndex:4,
       }}>
