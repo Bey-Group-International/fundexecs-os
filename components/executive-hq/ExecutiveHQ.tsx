@@ -535,7 +535,7 @@ export function ExecutiveHQ() {
         style={{
           position: "absolute", inset: 0,
           width: "100%", height: "100%",
-          objectFit: "contain", objectPosition: "center center",
+          objectFit: nightMode ? "contain" : "cover", objectPosition: "center center",
           pointerEvents: "none", userSelect: "none",
           filter: nightMode ? "brightness(0.88) saturate(0.88)" : "brightness(0.95) saturate(0.97)",
           transformOrigin: "center center",
