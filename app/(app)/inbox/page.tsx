@@ -96,18 +96,6 @@ export default async function InboxPage() {
             ranked place. {digest.headline}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <form action={seedInboxDemo}>
-            <button className="rounded-lg bg-gold-500 px-3.5 py-2 text-xs font-medium text-surface-0 shadow-[0_4px_14px_-6px_rgba(196,151,74,0.6)] transition hover:bg-gold-400">
-              Load demo inbox
-            </button>
-          </form>
-          <form action={clearInbox}>
-            <button className="rounded-lg border border-line px-3.5 py-2 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
-              Reset
-            </button>
-          </form>
-        </div>
       </header>
 
       {/* Lane 1 — the action queue: what the operator must act on. */}

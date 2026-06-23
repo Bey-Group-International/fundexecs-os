@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 
 const SECTIONS: SettingsSection[] = [
   { id: "account", label: "Account" },
-  { id: "mandates", label: "Mandates" },
+  { id: "mandates", label: "AI Permissions" },
   { id: "integrations", label: "Integrations" },
   { id: "digest", label: "Digest" },
   { id: "api", label: "API keys" },
@@ -152,9 +152,9 @@ export default async function SettingsPage() {
           {/* Mandates */}
           <Section
             id="mandates"
-            eyebrow="Autonomy"
-            title="Mandates"
-            description="A mandate is your standing job-description for Earn: pre-authorize specific external (Tier 2) actions to run unattended. Capital- and compliance-binding work (Tier 3) always stays with you."
+            eyebrow="AI Permissions"
+            title="What Earn Can Do"
+            description="A mandate defines your AI permissions: pre-authorize specific external actions to run without manual approval each time. Capital- and compliance-binding actions always require your explicit approval."
           >
             {activeMandate ? (
               <div className="fx-card mb-4 p-4">
