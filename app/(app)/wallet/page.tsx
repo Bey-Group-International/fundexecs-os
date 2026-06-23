@@ -24,9 +24,6 @@ import { CreditHistory } from "./CreditHistory";
 
 export const dynamic = "force-dynamic";
 
-// Recommend the cheapest plan whose monthly credit allotment covers the org's
-// recent 30-day spend (with headroom). With no usage history yet, suggest Pro as
-// the balanced default.
 function recommendPlan(spend30d: number): string {
   if (spend30d <= 0) return "pro";
   const need = spend30d * 1.2;
@@ -34,7 +31,6 @@ function recommendPlan(spend30d: number): string {
   return fit?.key ?? PLANS[PLANS.length - 1].key;
 }
 
-// How each reputation tier presents on the Wallet "Standing" card.
 const TIER_META: Record<ReputationTier, { label: string; blurb: string }> = {
   unranked: {
     label: "New Member",
@@ -64,8 +60,6 @@ export default async function WalletPage({
   if (!ctx.orgId) redirect("/onboarding");
 
   const live = stripeConfigured();
-  // Publishable key is client-safe; passed to the embedded checkout so Stripe.js
-  // can mount the in-app form without exposing it via NEXT_PUBLIC_.
   const publishableKey = stripePublishableKeyValue();
 
   const [wallet, spend30d, profile] = await Promise.all([
@@ -78,7 +72,6 @@ export default async function WalletPage({
   const currentPlan = wallet?.plan ?? null;
   const recommendedKey = recommendPlan(spend30d);
 
-  // Loyalty tenure runs from when the current plan was last set (wallet.updated_at).
   const months = currentPlan ? tenureMonths(wallet?.updated_at) : 0;
   const loyalty = loyaltyBonus(months);
   const planName = currentPlan ? PLAN_BY_KEY[currentPlan as keyof typeof PLAN_BY_KEY]?.name : null;
@@ -98,7 +91,7 @@ export default async function WalletPage({
             FundExecs wallet core
           </span>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-4xl">
-            Credits & plans
+            Credits &amp; plans
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-fg-secondary">
             A high-control credit console for keeping the operating agents funded,
@@ -113,7 +106,6 @@ export default async function WalletPage({
 
       <CheckoutBanner status={searchParams.checkout} />
 
-      {/* Balance + loyalty */}
       <section className="fx-neural-panel p-5 sm:p-6">
         <div className="relative z-10 grid gap-4 lg:grid-cols-[1.45fr_1fr]">
           <div className="rounded-2xl border border-neural-400/20 bg-black/45 p-5 shadow-[inset_0_1px_0_rgba(199,255,107,0.08)]">
@@ -222,9 +214,6 @@ export default async function WalletPage({
         </div>
       </section>
 
-      {/* Standing — the compounding profile, made visible. Reputation earned from
-          closed deals and verified records discounts every action and lifts a
-          firm's listings in the marketplace. */}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-neural-400/20 bg-black/45 px-4 py-3 text-sm">
         <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
           Standing
@@ -254,7 +243,6 @@ export default async function WalletPage({
       </h2>
       <CreditPacks live={live} publishableKey={publishableKey} />
 
-      {/* Gift Earn cross-sell */}
       <Link
         href="/gift"
         className="fx-neural-card group mt-8 flex items-center gap-3 p-5"
@@ -273,7 +261,6 @@ export default async function WalletPage({
         <span className="font-mono text-fg-muted transition group-hover:text-neural-300">→</span>
       </Link>
 
-      {/* Transaction history — ledger entries newest-first */}
       <CreditHistory />
 
       <p className="mt-6 text-center text-xs text-fg-muted">
