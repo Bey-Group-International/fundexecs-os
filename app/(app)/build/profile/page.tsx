@@ -88,8 +88,8 @@ export default async function ProfilePage() {
           Organization profile
         </h1>
         <p className="mt-2 max-w-prose text-sm text-fg-secondary">
-          This is your firm's public identity across the FundExecs ecosystem — shown to LPs,
-          deal counterparties, and service providers when you're discoverable. Earn also reads
+          This is your firm&apos;s public identity across the FundExecs ecosystem — shown to LPs,
+          deal counterparties, and service providers when you&apos;re discoverable. Earn also reads
           this profile to draft communications and assess fit.
         </p>
       </header>
