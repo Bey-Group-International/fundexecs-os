@@ -78,7 +78,7 @@ const E: Record<string, ExecData> = {
   seoDisruptor:      { id:"seo-disruptor",       name:"SEO Disruptor",       shortName:"SEO",          sprite:"/assets/fundexecs/characters/seo-disruptor/sprite.png",       themeColor:"#f97316", href:"/dashboard/marketing",       bobDelay:"0.6s", wanderDelay:"1.1s", hint:"Rankings improved",        walkDuration:"10.5s"},
   curator:           { id:"curator",             name:"Curator",             shortName:"Curator",      sprite:"/assets/fundexecs/characters/curator/sprite.png",             themeColor:"#f97316", href:"/dashboard/marketing",       bobDelay:"0.9s", wanderDelay:"3.0s", hint:"Event scheduled",          walkDuration:"11.5s"},
   investorRelations: { id:"investor-relations",  name:"Investor Relations",  shortName:"IR",           sprite:"/assets/fundexecs/characters/investor-relations/sprite.png",  themeColor:"#f59e0b", href:"/dashboard/investor-relations",bobDelay:"0.3s",wanderDelay:"0.6s", hint:"LP update ready",          walkDuration:"12.5s"},
-  officeManager:     { id:"office-manager",      name:"Office Manager",      shortName:"Manager",      sprite:"/assets/fundexecs/characters/office-manager/sprite.png",      themeColor:"#94a3b8", href:"/dashboard",                 bobDelay:"0.1s", wanderDelay:"0.2s", hint:"All systems operational",  walkDuration:"9s"  },
+  officeManager:     { id:"office-manager",      name:"Office Manager",      shortName:"Manager",      sprite:"/assets/fundexecs/characters/office-manager/sprite.svg",      themeColor:"#94a3b8", href:"/dashboard",                 bobDelay:"0.1s", wanderDelay:"0.2s", hint:"All systems operational",  walkDuration:"9s"  },
 };
 
 const ROOMS: RoomData[] = [
@@ -174,69 +174,10 @@ function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: 
   );
 }
 
-// ─── ExecAvatar ───────────────────────────────────────────────────────────────
+// ─── ExecAvatar (hidden until sprites re-introduced) ─────────────────────────
 
-function ExecAvatar({ exec, size, reducedEffects }: { exec: ExecData; size: number; onClick: () => void; activeBubble: BubbleState; reducedEffects: boolean; nightMode: boolean; pose?: 'stand' | 'talk' | 'walk' }) {
-  const anim = !reducedEffects;
-  const delay = exec.bobDelay ?? '0s';
-  const color = exec.themeColor ?? '#d4af37';
-  const colorHex = color.replace('#', '');
-  const glowColor = colorHex.length === 6 ? `#${colorHex}88` : color;
-
-  return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        position: 'relative',
-        pointerEvents: 'none',
-      }}
-    >
-      {/* Glow wrapper — pulsing drop-shadow, always visible */}
-      <div
-        style={{
-          width: size,
-          height: size,
-          animation: anim ? `exec-glow 2s ease-in-out ${delay} infinite` : undefined,
-          filter: `drop-shadow(0 2px 6px ${glowColor}) drop-shadow(0 1px 2px rgba(0,0,0,0.9))`,
-        }}
-      >
-        {/* Float wrapper */}
-        <div
-          style={{
-            width: size,
-            height: size,
-            animation: anim ? `exec-float 3s ease-in-out ${delay} infinite` : undefined,
-          }}
-        >
-          {/* Breathe wrapper */}
-          <div
-            style={{
-              width: size,
-              height: size,
-              animation: anim ? `exec-breathe 2.5s ease-in-out ${delay} infinite` : undefined,
-              transformOrigin: 'bottom center',
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={exec.sprite}
-              alt={exec.name}
-              width={size}
-              height={size}
-              style={{
-                objectFit: 'contain',
-                width: size,
-                height: size,
-                display: 'block',
-                pointerEvents: 'none',
-              }}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+function ExecAvatar(_: { exec: ExecData; size: number; onClick: () => void; activeBubble: BubbleState; reducedEffects: boolean; nightMode: boolean }) {
+  return null;
 }
 
 // ─── RoomCell ─────────────────────────────────────────────────────────────────
@@ -340,27 +281,26 @@ function RoomCell({
       )}
 
 
-      {/* Exec avatars — idle sprites always present, reactive on hover */}
-      <div style={{ position:"absolute", bottom:4, left:0, right:0, zIndex:8, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
+      {/* Exec avatars (hidden for now) */}
+      <div style={{ position:"absolute", bottom:28, left:0, right:0, zIndex:5, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
         {room.executives.map(exec=>(
-          <ExecAvatar key={exec.id} exec={exec} size={32} onClick={()=>onExecClick(exec)}
+          <ExecAvatar key={exec.id} exec={exec} size={42} onClick={()=>onExecClick(exec)}
             activeBubble={activeBubble} reducedEffects={reducedEffects} nightMode={nightMode}/>
         ))}
       </div>
 
-      {/* Bottom glass panel — hidden at rest, revealed on hover/focus */}
+      {/* Bottom glass panel */}
       <div style={{
-        position:"absolute", bottom:0, left:0, right:0, zIndex:7,
+        position:"absolute", bottom:0, left:0, right:0, zIndex:6,
         background: isActive
           ? "linear-gradient(180deg, rgba(8,6,4,0) 0%, rgba(8,6,4,0.82) 100%)"
-          : "transparent",
-        backdropFilter: isActive ? "blur(8px)" : "none",
-        borderTop: isActive ? `1px solid ${goldBorder}` : "1px solid transparent",
+          : "linear-gradient(180deg, rgba(8,6,4,0) 0%, rgba(8,6,4,0.65) 100%)",
+        backdropFilter: isActive ? "blur(8px)" : "blur(4px)",
+        borderTop:`1px solid ${goldBorder}`,
         display:"flex", flexDirection:"column",
         padding:"4px 8px 5px",
         pointerEvents:"none", userSelect:"none",
-        opacity: isActive ? 1 : 0,
-        transition:"opacity 0.25s ease, background 0.25s ease",
+        transition:"all 0.25s ease",
       }}>
         {/* Gold rule */}
         <div style={{
@@ -432,6 +372,188 @@ function RoomCell({
           {roomIndex}: {room.id}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Room positions (% of 16:9 container) for delegation walk ────────────────
+const EXEC_ROOM_POS: Record<string, { x: number; y: number }> = {
+  "earnest-fundmaker":    { x: 50, y: 45 },
+  "executive-advisor":   { x: 37, y: 22 },
+  "deal-sourcer":        { x: 56, y: 22 },
+  "capital-raiser":      { x: 61, y: 25 },
+  "workflow-instructor": { x: 82, y: 22 },
+  "capital-connector":   { x: 14, y: 60 },
+  "automater":           { x: 47, y: 56 },
+  "office-manager":      { x: 53, y: 58 },
+  "rainmaker":           { x: 14, y: 52 },
+  "pr-director":         { x: 76, y: 55 },
+  "lead-generator":      { x: 81, y: 57 },
+  "seo-disruptor":       { x: 79, y: 60 },
+  "curator":             { x: 86, y: 60 },
+  "investor-relations":  { x: 50, y: 77 },
+};
+
+// Semicircle arc around Earn — agents in a curved row
+const AGENT_ARC: { x: number; y: number }[] = [
+  { x: 15, y: 68 }, { x: 26, y: 64 }, { x: 37, y: 61 }, { x: 46, y: 59 },
+  { x: 54, y: 59 }, { x: 63, y: 61 }, { x: 74, y: 64 }, { x: 85, y: 68 },
+];
+
+function BoardroomScene({
+  animPhase, delegateDetail, reducedEffects,
+}: {
+  animPhase: 'huddle'|'brief'|'dispatch'|'working';
+  delegateDetail: { planTitle?: string; steps?: {agent: string; title: string}[] } | null;
+  reducedEffects: boolean;
+}) {
+  const [atArc, setAtArc] = React.useState(false);
+
+  React.useEffect(() => {
+    if (animPhase === 'huddle') {
+      const t = setTimeout(() => setAtArc(true), 80);
+      return () => clearTimeout(t);
+    }
+    if (animPhase === 'dispatch') setAtArc(false);
+  }, [animPhase]);
+
+  const isWalking = (animPhase === 'huddle' && !atArc) || animPhase === 'dispatch';
+  const isBriefing = animPhase === 'brief';
+  const allExecs = ROOMS.flatMap(r => r.executives);
+  const nonEarn = allExecs.filter(ex => ex.id !== 'earnest-fundmaker').slice(0, 8);
+
+  return (
+    <div
+      aria-live="polite"
+      style={{
+        position:"absolute", inset:0, zIndex:50,
+        background:"rgba(4,3,2,0.82)",
+        backdropFilter:"blur(6px)",
+      }}
+    >
+      {/* Phase label */}
+      <div style={{
+        position:"absolute", top:"8%", left:0, right:0, textAlign:"center",
+        fontFamily:"Georgia,'Times New Roman',serif",
+        fontSize:10, letterSpacing:"0.28em", textTransform:"uppercase",
+        color:GOLD, opacity:0.75,
+        animation: "board-in 0.4s ease-out",
+      }}>
+        {animPhase === 'huddle' ? "Assembling the team…" : isBriefing ? "Earn is briefing the team" : "Agents dispatched"}
+      </div>
+
+      {/* Plan title */}
+      {delegateDetail?.planTitle && isBriefing && (
+        <div style={{
+          position:"absolute", top:"14%", left:"10%", right:"10%", textAlign:"center",
+          fontFamily:"Georgia,serif", fontSize:14, fontWeight:400,
+          color:"rgba(255,248,220,0.9)", letterSpacing:"0.04em",
+          textShadow:`0 0 32px ${GOLD}44`,
+          animation:"board-in 0.4s ease-out",
+        }}>
+          {delegateDetail.planTitle}
+        </div>
+      )}
+
+      {/* Earn — always at center */}
+      {(() => {
+        const earnPos = atArc ? { x: 50, y: 42 } : (EXEC_ROOM_POS["earnest-fundmaker"] ?? { x: 50, y: 45 });
+        const movingRight = 50 > (EXEC_ROOM_POS["earnest-fundmaker"]?.x ?? 50);
+        return (
+          <div key="earn" style={{
+            position:"absolute",
+            left:`${earnPos.x}%`,
+            top:`${earnPos.y}%`,
+            transform:"translate(-50%,-100%)",
+            transition: "left 1.4s ease-in-out, top 1.2s ease-in-out",
+            zIndex:10,
+            display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+          }}>
+            <div style={{
+              width:72, height:72,
+              animation: isBriefing ? "earn-brief 0.7s ease-in-out infinite" : (isWalking ? "exec-stride 0.45s linear infinite" : "exec-float 3s ease-in-out infinite"),
+              filter:`drop-shadow(0 4px 20px ${E.earnest.themeColor}aa)`,
+              transformOrigin:"bottom center",
+            }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={E.earnest.sprite} alt="Earn" width={72} height={72} style={{ objectFit:"contain", display:"block", transform: isWalking && !movingRight ? "scaleX(-1)" : undefined }} />
+            </div>
+            {isBriefing && (
+              <div style={{ fontFamily:"Georgia,serif", fontSize:7, color:GOLD, letterSpacing:"0.14em", textTransform:"uppercase" }}>Earn</div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Agents */}
+      {nonEarn.map((exec, idx) => {
+        const roomPos = EXEC_ROOM_POS[exec.id] ?? { x: 50, y: 50 };
+        const arcPos = AGENT_ARC[idx] ?? { x: 50, y: 65 };
+        const pos = atArc ? arcPos : roomPos;
+        const movingRight = arcPos.x > roomPos.x;
+        const shouldFlip = isWalking && (animPhase === 'huddle' ? !movingRight : movingRight);
+        return (
+          <div key={exec.id} style={{
+            position:"absolute",
+            left:`${pos.x}%`,
+            top:`${pos.y}%`,
+            transform:"translate(-50%,-100%)",
+            transition: "left 1.4s ease-in-out, top 1.2s ease-in-out",
+            zIndex:5,
+            display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+            transitionDelay: `${idx * 0.08}s`,
+          }}>
+            <div style={{
+              width:48, height:48,
+              animation: isWalking ? "exec-stride 0.45s linear infinite" : "exec-float 3s ease-in-out infinite",
+              filter:`drop-shadow(0 2px 12px ${exec.themeColor}88) drop-shadow(0 1px 2px rgba(0,0,0,0.9))`,
+              transformOrigin:"bottom center",
+              animationDelay: exec.bobDelay,
+            }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={exec.sprite} alt={exec.name} width={48} height={48} style={{ objectFit:"contain", display:"block", transform: shouldFlip ? "scaleX(-1)" : undefined }} />
+            </div>
+            {(isBriefing || animPhase === 'dispatch') && (
+              <div style={{ fontFamily:"Georgia,serif", fontSize:6, color:`${exec.themeColor}cc`, letterSpacing:"0.1em", textTransform:"uppercase", maxWidth:48, textAlign:"center", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                {exec.shortName}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Steps list during brief */}
+      {delegateDetail?.steps?.length && isBriefing ? (
+        <div style={{
+          position:"absolute", bottom:"8%", left:"50%", transform:"translateX(-50%)",
+          display:"flex", flexDirection:"column", gap:5, width:"min(380px,80%)",
+        }}>
+          {delegateDetail.steps.map((st, i) => {
+            const agentData = ROOMS.flatMap(r=>r.executives).find(ex=>
+              ex.id.replace(/-/g,'') === st.agent.replace(/_/g,'') ||
+              ex.shortName.toLowerCase().includes(st.agent.toLowerCase().split('_')[0])
+            );
+            const color = agentData?.themeColor ?? GOLD;
+            return (
+              <div key={i} style={{
+                display:"flex", alignItems:"center", gap:10,
+                background:"rgba(201,168,76,0.04)", border:`1px solid ${color}28`,
+                borderRadius:3, padding:"4px 10px",
+                animation:`board-in 0.3s ease-out ${i * 0.08}s both`,
+              }}>
+                <div style={{ width:5, height:5, borderRadius:"50%", background:color, flexShrink:0 }}/>
+                <div style={{ fontFamily:"'Courier New',monospace", fontSize:8.5, color:"rgba(255,248,220,0.65)", letterSpacing:"0.06em", flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {st.title}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* Gold rule top/bottom */}
+      <div style={{ position:"absolute", top:"6%", left:"20%", right:"20%", height:1, background:`linear-gradient(90deg,transparent,${GOLD}66,transparent)` }}/>
+      <div style={{ position:"absolute", bottom:"6%", left:"20%", right:"20%", height:1, background:`linear-gradient(90deg,transparent,${GOLD}66,transparent)` }}/>
     </div>
   );
 }
@@ -591,6 +713,8 @@ export function ExecutiveHQ() {
         @keyframes exec-breathe   { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
         @keyframes exec-glow      { 0%,100%{opacity:0.4} 50%{opacity:0.85} }
         @keyframes exec-talk      { 0%,100%{transform:scale(1) translateY(0)} 25%{transform:scale(1.06) translateY(-3px)} 75%{transform:scale(0.97) translateY(1px)} }
+        @keyframes exec-stride    { 0%,100%{transform:rotate(-5deg) translateY(0px)} 25%{transform:rotate(-1deg) translateY(-4px)} 50%{transform:rotate(5deg) translateY(0px)} 75%{transform:rotate(1deg) translateY(-4px)} }
+        @keyframes earn-brief     { 0%,100%{transform:scale(1) rotate(0deg) translateY(0)} 20%{transform:scale(1.08) rotate(-3deg) translateY(-5px)} 50%{transform:scale(1.1) rotate(1deg) translateY(-7px)} 80%{transform:scale(1.07) rotate(-1deg) translateY(-3px)} }
         @keyframes exec-huddle    { 0%{transform:translateX(0)} 100%{transform:translateX(var(--huddle-dx,0))} }
         @keyframes board-in       { from{opacity:0;transform:scale(0.94)} to{opacity:1;transform:scale(1)} }
         @keyframes board-out      { from{opacity:1;transform:scale(1)} to{opacity:0;transform:scale(1.04)} }
@@ -607,9 +731,9 @@ export function ExecutiveHQ() {
         style={{
           position: "absolute", inset: 0,
           width: "100%", height: "100%",
-          objectFit: "cover", objectPosition: "center center",
+          objectFit: nightMode ? "contain" : "cover", objectPosition: "center center",
           pointerEvents: "none", userSelect: "none",
-          filter: nightMode ? "brightness(1.6) saturate(1.1) contrast(1.05)" : "brightness(0.95) saturate(0.97)",
+          filter: nightMode ? "brightness(0.88) saturate(0.88)" : "brightness(0.95) saturate(0.97)",
           transformOrigin: "center center",
           transform: zoomingRoom
             ? `scale(3.5) ${ROOM_ZOOM_TRANSLATE[zoomingRoom] ?? ""}`
@@ -684,147 +808,16 @@ export function ExecutiveHQ() {
         </button>
       </div>
 
-      {/* Room grid — seamless, no gap */}
-      <div style={{
-        position:"absolute",
-        top:"0%", left:"0.7%", right:"0.7%", bottom:"11%",
-        display:"grid",
-        gridTemplateColumns:"27fr 24fr 24fr 25fr",
-        gridTemplateRows:"49fr 24fr 27fr",
-        gridTemplateAreas:'"ceo board trading research" "legal ops ops marketing" "investor reception reception ."',
-        zIndex:4,
-      }}>
-        {ROOMS.map((room, idx) => (
-          <RoomCell
-            key={room.id}
-            room={room}
-            roomIndex={idx}
-            onExecClick={handleExecClick}
-            onRoomClick={handleRoomClick}
-            zoomingRoom={zoomingRoom}
-            activeBubble={activeBubble}
-            reducedEffects={reducedEffects}
-            nightMode={nightMode}
-            isFocused={focusedRoomIndex === idx}
-            activity={ROOM_ACTIVITY[room.id] ?? 0}
-            onHoverChange={handleHoverChange}
-            debugGrid={debugGrid}
-          />
-        ))}
-      </div>
-
       {/* Mini-map */}
       <MiniMap activeId={hoveredRoomId ?? (focusedRoomIndex !== null ? ROOMS[focusedRoomIndex]?.id ?? null : null)} nightMode={nightMode} />
 
       {/* ── Boardroom delegation scene ── */}
       {(animPhase === 'huddle' || animPhase === 'brief' || animPhase === 'dispatch') && (
-        <div
-          aria-live="polite"
-          style={{
-            position:"absolute", inset:0, zIndex:50,
-            background:"rgba(4,3,2,0.92)",
-            backdropFilter:"blur(12px)",
-            display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-            animation: animPhase === 'dispatch'
-              ? "board-out 0.6s ease-in forwards"
-              : "board-in 0.5s ease-out forwards",
-          }}
-        >
-          {/* Gold rule top */}
-          <div style={{ width:"60%", height:1, background:`linear-gradient(90deg,transparent,${GOLD},transparent)`, marginBottom:24, opacity:0.6 }}/>
-
-          {/* Phase label */}
-          <div style={{
-            fontFamily:"Georgia,'Times New Roman',serif",
-            fontSize:10, letterSpacing:"0.28em", textTransform:"uppercase",
-            color:GOLD, opacity:0.7, marginBottom:20,
-          }}>
-            {animPhase === 'huddle' ? "Assembling the team…" : animPhase === 'brief' ? "Earn is briefing the team" : "Agents dispatched"}
-          </div>
-
-          {/* Plan title */}
-          {delegateDetail?.planTitle && (
-            <div style={{
-              fontFamily:"Georgia,serif", fontSize:15, fontWeight:400,
-              color:"rgba(255,248,220,0.92)", letterSpacing:"0.04em",
-              marginBottom:28, textAlign:"center", maxWidth:"70%",
-              textShadow:`0 0 32px ${GOLD}44`,
-            }}>
-              {delegateDetail.planTitle}
-            </div>
-          )}
-
-          {/* Character stage */}
-          <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"center", gap:16, marginBottom:28 }}>
-            {/* Earn at center */}
-            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, order:999 }}>
-              <div style={{
-                width:72, height:72,
-                animation: animPhase === 'brief' ? "exec-talk 0.55s ease-in-out infinite" : "exec-float 3s ease-in-out infinite",
-                filter:`drop-shadow(0 4px 18px ${E.earnest.themeColor}88)`,
-              }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={E.earnest.sprite} alt="Earn" width={72} height={72} style={{ objectFit:"contain", display:"block" }} />
-              </div>
-              <div style={{ fontFamily:"Georgia,serif", fontSize:7.5, color:GOLD, letterSpacing:"0.12em", textTransform:"uppercase" }}>Earn</div>
-              {/* Talk ring */}
-              {animPhase === 'brief' && (
-                <svg width={0} height={0} style={{ position:"absolute", overflow:"visible" }} aria-hidden>
-                  <circle cx={36} cy={-36} r={18} fill="none" stroke={GOLD} strokeWidth={2}
-                    style={{ animation:"gold-pulse-ring 1.4s ease-out infinite" }}/>
-                </svg>
-              )}
-            </div>
-            {/* Other agents */}
-            {ROOMS.flatMap(r => r.executives)
-              .filter(ex => ex.id !== "earnest-fundmaker")
-              .slice(0, 6)
-              .map((exec, idx) => (
-                <div key={exec.id} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, order: idx < 3 ? idx : idx + 1 }}>
-                  <div style={{
-                    width:48, height:48,
-                    animation: animPhase === 'dispatch'
-                      ? `dispatch-glow 0.8s ease-out ${idx * 0.12}s forwards`
-                      : `exec-float 3s ease-in-out ${exec.bobDelay} infinite`,
-                    filter:`drop-shadow(0 2px 10px ${exec.themeColor}66)`,
-                  }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={exec.sprite} alt={exec.name} width={48} height={48} style={{ objectFit:"contain", display:"block" }} />
-                  </div>
-                  <div style={{ fontFamily:"Georgia,serif", fontSize:6.5, color:"rgba(255,248,220,0.55)", letterSpacing:"0.1em", textTransform:"uppercase", maxWidth:52, textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    {exec.shortName}
-                  </div>
-                </div>
-              ))
-            }
-          </div>
-
-          {/* Steps list */}
-          {delegateDetail?.steps?.length && animPhase === 'brief' ? (
-            <div style={{ display:"flex", flexDirection:"column", gap:6, maxWidth:360, width:"100%" }}>
-              {delegateDetail.steps.map((st, i) => {
-                const agentData = ROOMS.flatMap(r=>r.executives).find(ex=>ex.id.replace(/-/g,'') === st.agent.replace(/_/g,'') || ex.shortName.toLowerCase().includes(st.agent.toLowerCase().split('_')[0]));
-                const color = agentData?.themeColor ?? GOLD;
-                return (
-                  <div key={i} style={{
-                    display:"flex", alignItems:"center", gap:10,
-                    background:"rgba(201,168,76,0.05)", border:`1px solid ${color}30`,
-                    borderRadius:3, padding:"5px 10px",
-                    animation:`board-in 0.35s ease-out ${i * 0.1}s both`,
-                  }}>
-                    <div style={{ width:6, height:6, borderRadius:"50%", background:color, flexShrink:0 }}/>
-                    <div style={{ fontFamily:"'Courier New',monospace", fontSize:9, color:"rgba(255,248,220,0.7)", letterSpacing:"0.06em", flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {st.title}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {/* Gold rule bottom */}
-          <div style={{ width:"60%", height:1, background:`linear-gradient(90deg,transparent,${GOLD},transparent)`, marginTop:24, opacity:0.6 }}/>
-        </div>
+        <BoardroomScene
+          animPhase={animPhase}
+          delegateDetail={delegateDetail}
+          reducedEffects={reducedEffects}
+        />
       )}
     </div>
   );
