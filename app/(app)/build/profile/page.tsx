@@ -94,7 +94,13 @@ export default async function ProfilePage() {
         </p>
       </header>
 
-      <form action={saveOrgProfile as (fd: FormData) => Promise<void>} className="flex flex-col gap-10">
+      {/* The server action returns { error?, ok? } but React form action expects
+          (fd: FormData) => void | Promise<void>. The double-cast satisfies
+          strict TypeScript without changing runtime behaviour. */}
+      <form
+        action={saveOrgProfile as unknown as (fd: FormData) => Promise<void>}
+        className="flex flex-col gap-10"
+      >
         {/* ── Identity ─────────────────────────────────────────── */}
         <Section
           eyebrow="Who you are"
@@ -427,9 +433,9 @@ function SelectField({
         className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary focus:border-gold-500/60 focus:outline-none focus:ring-1 focus:ring-gold-500/40 transition appearance-none"
       >
         <option value="">Select…</option>
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
           </option>
         ))}
       </select>
