@@ -3,6 +3,11 @@
 // Renders activity grouped by day (mono-uppercase headings), each entry showing
 // the authoring agent badge, the hub chip, the title, a status pill, a relative
 // timestamp, and a deep link into the originating session when present.
+//
+// Client component so filter pills can run without a round-trip to the server.
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import {
   groupByDay,
@@ -14,6 +19,7 @@ import {
 } from "@/lib/activity";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import { HUB_BY_KEY } from "@/lib/hubs";
+import type { Hub, TaskStatus } from "@/lib/supabase/database.types";
 
 const TONE_CLASS: Record<StatusTone, string> = {
   active: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300",
@@ -105,32 +111,108 @@ function EntryRow({ entry }: { entry: ActivityEntry }) {
   );
 }
 
-export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
-  if (entries.length === 0) {
-    return (
-      <p className="rounded-xl border border-dashed border-line bg-surface-1 p-6 text-center text-sm text-fg-muted">
-        Nothing yet. As Earn and the agent team run workflows across your hubs,
-        their work appears here as one timeline.
-      </p>
-    );
-  }
+// Filter pill options
+type StatusFilter = TaskStatus | "all";
+type HubFilter = Hub | "all";
 
-  const groups = groupByDay(entries);
+const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
+  { label: "All", value: "all" },
+  { label: "Active", value: "in_progress" },
+  { label: "Awaiting", value: "awaiting_approval" },
+  { label: "Completed", value: "completed" },
+];
+
+const HUB_FILTERS: { label: string; value: HubFilter }[] = [
+  { label: "All hubs", value: "all" },
+  { label: "Build", value: "build" },
+  { label: "Source", value: "source" },
+  { label: "Run", value: "run" },
+  { label: "Execute", value: "execute" },
+];
+
+export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [hubFilter, setHubFilter] = useState<HubFilter>("all");
+
+  const filtered = entries.filter((e) => {
+    if (statusFilter !== "all" && e.status !== statusFilter) return false;
+    if (hubFilter !== "all" && e.hub !== hubFilter) return false;
+    return true;
+  });
+
+  const groups = groupByDay(filtered);
 
   return (
-    <div className="flex flex-col gap-8">
-      {groups.map((group) => (
-        <section key={group.day}>
-          <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
-            {group.label}
-          </h2>
-          <div className="flex flex-col gap-2">
-            {group.entries.map((entry) => (
-              <EntryRow key={entry.id} entry={entry} />
-            ))}
-          </div>
-        </section>
-      ))}
+    <div className="flex flex-col gap-6">
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Status filters */}
+        <div className="flex flex-wrap gap-1.5">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setStatusFilter(f.value)}
+              className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
+                statusFilter === f.value
+                  ? "border-gold-500/60 bg-gold-500/15 text-gold-300"
+                  : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/30 hover:text-fg-secondary"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <span className="hidden h-4 w-px bg-line sm:block" aria-hidden />
+
+        {/* Hub filters */}
+        <div className="flex flex-wrap gap-1.5">
+          {HUB_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setHubFilter(f.value)}
+              className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
+                hubFilter === f.value
+                  ? "border-gold-500/60 bg-gold-500/15 text-gold-300"
+                  : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/30 hover:text-fg-secondary"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Result count */}
+        {(statusFilter !== "all" || hubFilter !== "all") && (
+          <span className="ml-auto font-mono text-[10px] text-fg-muted">
+            {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {/* Timeline */}
+      {filtered.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-line bg-surface-1 p-6 text-center text-sm text-fg-muted">
+          {entries.length === 0
+            ? "Nothing yet. As Earn and the agent team run workflows across your hubs, their work appears here as one timeline."
+            : "No activity matches the current filters."}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-8">
+          {groups.map((group) => (
+            <section key={group.day}>
+              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+                {group.label}
+              </h2>
+              <div className="flex flex-col gap-2">
+                {group.entries.map((entry) => (
+                  <EntryRow key={entry.id} entry={entry} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
