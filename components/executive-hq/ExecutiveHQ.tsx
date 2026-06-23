@@ -496,6 +496,7 @@ export function ExecutiveHQ() {
   if (booting) return <ExecutiveHQBoot onComplete={() => setBooting(false)} />;
 
   return (
+    <div style={{ width: "100%", display: "flex", justifyContent: "center", background: nightMode ? "#06050a" : "#0a0908" }}>
     <div
       ref={containerRef}
       tabIndex={0}
@@ -505,8 +506,8 @@ export function ExecutiveHQ() {
       className={isVisible ? "" : "hq-paused"}
       style={{
         position: "relative",
-        width: "100%",
-        height: "clamp(520px, calc(100svh - 100px), 980px)",
+        width: "min(100%, calc(100svh - 80px))",
+        aspectRatio: "1 / 1",
         fontFamily: "monospace",
         overflow: "hidden",
         outline: "none",
@@ -536,7 +537,7 @@ export function ExecutiveHQ() {
         style={{
           position: "absolute", inset: 0,
           width: "100%", height: "100%",
-          objectFit: "cover", objectPosition: "center top",
+          objectFit: "cover", objectPosition: "center center",
           pointerEvents: "none", userSelect: "none",
           filter: nightMode ? "brightness(0.88) saturate(0.88)" : "brightness(0.95) saturate(0.97)",
           transformOrigin: "center center",
@@ -667,6 +668,7 @@ export function ExecutiveHQ() {
 
       {/* Mini-map */}
       <MiniMap activeId={hoveredRoomId ?? (focusedRoomIndex !== null ? ROOMS[focusedRoomIndex]?.id ?? null : null)} nightMode={nightMode} />
+    </div>
     </div>
   );
 }
