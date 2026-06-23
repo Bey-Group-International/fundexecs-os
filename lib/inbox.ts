@@ -89,8 +89,8 @@ export function workflowToApprovalItem(task: Pick<Task, "id" | "title" | "sessio
     title: task.title,
     subtitle: "Workflow awaiting your approval",
     // Approvals are reviewed inside the war-room session that owns them; fall
-    // back to the workspace when a workflow has no session.
-    href: task.session_id ? `/session/${task.session_id}` : "/workspace",
+    // back to /inbox so sessionless approvals stay in the approval queue.
+    href: task.session_id ? `/session/${task.session_id}` : "/inbox",
     tone: "approval",
   };
 }
