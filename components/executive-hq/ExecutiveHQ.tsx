@@ -523,7 +523,7 @@ export function ExecutiveHQ() {
           width: "100%", height: "100%",
           objectFit: nightMode ? "contain" : "cover", objectPosition: "center center",
           pointerEvents: "none", userSelect: "none",
-          filter: nightMode ? "brightness(0.88) saturate(0.88)" : "brightness(0.95) saturate(0.97)",
+          filter: nightMode ? "brightness(1.6) saturate(1.1) contrast(1.05)" : "brightness(0.95) saturate(0.97)",
           transformOrigin: "center center",
           transform: zoomingRoom
             ? `scale(3.5) ${ROOM_ZOOM_TRANSLATE[zoomingRoom] ?? ""}`
