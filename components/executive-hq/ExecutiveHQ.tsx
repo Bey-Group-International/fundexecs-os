@@ -536,7 +536,7 @@ export function ExecutiveHQ() {
         style={{
           position: "absolute", inset: 0,
           width: "100%", height: "100%",
-          objectFit: "contain", objectPosition: "center center",
+          objectFit: "cover", objectPosition: "center top",
           pointerEvents: "none", userSelect: "none",
           filter: nightMode ? "brightness(0.88) saturate(0.88)" : "brightness(0.95) saturate(0.97)",
           transformOrigin: "center center",
@@ -636,14 +636,6 @@ export function ExecutiveHQ() {
       </div>
 
       {/* Transparent grid overlay — rooms portion */}
-      {/* Square anchor — matches rendered contain-image area, centered horizontally */}
-      <div style={{
-        position:"absolute",
-        top:0, bottom:0,
-        left:"50%", transform:"translateX(-50%)",
-        aspectRatio:"1 / 1",
-        zIndex:4,
-      }}>
       <div style={{
         position:"absolute",
         top:"5%", left:"2%", right:"2%", bottom:"14%",
@@ -652,6 +644,7 @@ export function ExecutiveHQ() {
         gridTemplateRows:"38fr 30fr 32fr",
         gridTemplateAreas:'"ceo board trading research" "legal ops ops marketing" "investor reception reception ."',
         gap:"1%",
+        zIndex:4,
       }}>
         {ROOMS.map((room, idx) => (
           <RoomCell
@@ -670,7 +663,6 @@ export function ExecutiveHQ() {
             debugGrid={debugGrid}
           />
         ))}
-      </div>
       </div>
 
       {/* Mini-map */}
