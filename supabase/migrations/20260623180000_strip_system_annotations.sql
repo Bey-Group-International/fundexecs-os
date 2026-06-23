@@ -38,20 +38,3 @@ SET title = trim(
 )
 WHERE title ~ '\[(Selected reasoning engine|Operator mode):[^\]]*\]';
 
--- tasks.instruction: same cleanup for the instruction body
-UPDATE tasks
-SET instruction = trim(
-  regexp_replace(
-    regexp_replace(
-      instruction,
-      '\[Selected reasoning engine:[^\]]*\]\s*',
-      '',
-      'g'
-    ),
-    '\[Operator mode:[^\]]*\]\s*',
-    '',
-    'g'
-  )
-)
-WHERE instruction IS NOT NULL
-  AND instruction ~ '\[(Selected reasoning engine|Operator mode):[^\]]*\]';
