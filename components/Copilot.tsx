@@ -52,6 +52,16 @@ interface ChatTurn {
 // localStorage key for the remembered split ratio.
 const PANE_KEY = "fx-copilot-pane";
 
+// Strip internal operator annotations that were prepended to prompts for routing
+// purposes. These must never surface in the investor-facing conversation view.
+function stripSystemAnnotations(content: string): string {
+  return content
+    .replace(/\[Selected reasoning engine:[^\]]*\]\s*/g, "")
+    .replace(/\[Operator mode:[^\]]*\]\s*/g, "")
+    .replace(/\[Voice input:[^\]]*\]\s*/g, "")
+    .trim();
+}
+
 // Slash commands the composer offers from the "+" menu. Selecting one drops a
 // ready-to-fill prompt scaffold into the input so the operator only supplies
 // the specifics.
@@ -732,7 +742,7 @@ export default function Copilot({
               You
             </div>
             <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
-              {t.content}
+              {stripSystemAnnotations(t.content)}
             </div>
           </div>
           <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
@@ -1477,7 +1487,7 @@ export default function Copilot({
                 </button>
 
                 <span className="ml-auto hidden font-mono text-[10px] text-fg-muted sm:inline">
-                  {listening ? "Recording — release to send" : "Enter to send · Shift+Enter newline · ⌘K commands"}
+                  {listening ? "Recording — release to send" : "Enter to send · Shift+Enter for new line"}
                 </span>
                 <button
                   disabled={busy || !prompt.trim()}

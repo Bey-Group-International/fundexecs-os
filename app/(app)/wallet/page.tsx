@@ -211,7 +211,7 @@ export default async function WalletPage({
                   </>
                 ) : (
                   <>
-                    Most teams start on <span className="text-fg-primary">{recommendedPlan?.name}</span>{" "}
+                    Most fund managers start on <span className="text-fg-primary">{recommendedPlan?.name}</span>{" "}
                     for balanced monthly capacity.
                   </>
                 )}

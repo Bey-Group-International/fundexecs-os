@@ -47,15 +47,14 @@ export default async function AutomationsPage() {
     <div className="fx-ambient mx-auto max-w-4xl">
       <header className="mb-6">
         <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-          Workflows
+          Automations
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
-          Automated sessions
+          Automations
         </h1>
         <p className="mt-1 text-sm text-fg-secondary">
-          A workflow is an automated session: save an instruction once — on a schedule or whenever
-          you approve &amp; automate a run — and it plans itself with the Associate and executes
-          end-to-end. Edit any workflow inline, or pause it to stop spending credits.
+          Save an instruction once — on a schedule or triggered by your approval — and Earn plans
+          and executes it end-to-end. Edit any automation inline, or pause it to stop spending credits.
         </p>
       </header>
 

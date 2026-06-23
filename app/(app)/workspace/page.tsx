@@ -1,71 +1,155 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { copilotLive } from "@/lib/claude";
 import { getActiveIntegrations } from "@/lib/integrations/active";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import Copilot from "@/components/Copilot";
-import { WorkspaceDocumentList } from "@/components/workspace/DocumentCard";
-import type { DocType } from "@/lib/workspace";
+import type { Session, SessionGroup } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
 
-// The workspace hub: knowledge documents (Notion-style) pinned above the
-// Earn copilot so operators can access memos and theses alongside the chat.
-export default async function WorkspacePage() {
+function relativeTime(iso: string | null): string {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+export default async function SessionsPage() {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = createServerClient();
 
-  const [connected, docsRes] = await Promise.all([
+  const [connected, sessionsRes, groupsRes] = await Promise.all([
     orgConnectedChannels(supabase, ctx.orgId),
     supabase
-      .from("documents")
-      .select("id, name, doc_type, content, created_at")
+      .from("sessions")
+      .select("id, name, color, group_id, pinned_at, created_at, updated_at")
       .eq("organization_id", ctx.orgId)
-      .order("created_at", { ascending: false })
+      .is("archived_at", null)
+      .order("updated_at", { ascending: false })
       .limit(50),
+    supabase
+      .from("session_groups")
+      .select("id, name")
+      .eq("organization_id", ctx.orgId)
+      .order("created_at", { ascending: true }),
   ]);
 
-  // Map DB documents to WorkspaceDoc shape
-  const workspaceDocs = (docsRes.data ?? []).map((d) => ({
-    id: d.id,
-    title: d.name ?? "Untitled",
-    docType: (d.doc_type ?? "note") as DocType,
-    blocks: d.content
-      ? [{ id: d.id, type: "paragraph" as const, content: d.content }]
-      : [],
-    isPinned: false,
-    updatedAt: d.created_at,
-  }));
+  const sessions = (sessionsRes.data ?? []) as (Session & { updated_at: string | null })[];
+  const groups = (groupsRes.data ?? []) as SessionGroup[];
+
+  const groupById = new Map(groups.map((g) => [g.id, g.name]));
+  const pinned = sessions.filter((s) => s.pinned_at);
+  const recent = sessions.filter((s) => !s.pinned_at);
 
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
-      {workspaceDocs.length > 0 && (
-        <section className="mb-10">
-          <header className="mb-6">
-            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-              Workspace
-            </span>
-            <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
-              Documents
-            </h1>
-            <p className="mt-1 text-sm text-fg-secondary">
-              IC memos, fund theses, and deal notes — your firm&apos;s knowledge base.
-            </p>
-          </header>
-          <WorkspaceDocumentList docs={workspaceDocs} />
-        </section>
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            FundExecs OS
+          </span>
+          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
+            Sessions
+          </h1>
+          <p className="mt-1 text-sm text-fg-secondary">
+            Every conversation with Earn — pick up where you left off or start something new.
+          </p>
+        </div>
+      </header>
+
+      {sessions.length === 0 ? (
+        <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-14 text-center">
+          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            No sessions yet
+          </span>
+          <p className="mt-2 max-w-sm text-sm text-fg-secondary">
+            Ask Earn to source LPs, draft an IC memo, run diligence, or build an LBO model.
+            Each conversation becomes a session you can return to.
+          </p>
+          <p className="mt-4 text-sm text-fg-muted">
+            Type your first request in the composer below.
+          </p>
+        </div>
+      ) : (
+        <>
+          {pinned.length > 0 && (
+            <section className="mb-8">
+              <h2 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+                Pinned
+              </h2>
+              <div className="flex flex-col gap-1.5">
+                {pinned.map((s) => (
+                  <SessionCard key={s.id} s={s} groupName={s.group_id ? groupById.get(s.group_id) ?? null : null} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section>
+            <h2 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+              Recent
+            </h2>
+            <div className="flex flex-col gap-1.5">
+              {recent.map((s) => (
+                <SessionCard key={s.id} s={s} groupName={s.group_id ? groupById.get(s.group_id) ?? null : null} />
+              ))}
+            </div>
+          </section>
+        </>
       )}
 
-      <Copilot
-        orgId={ctx.orgId}
-        live={copilotLive()}
-        bundles={[]}
-        integrations={getActiveIntegrations(connected)}
-      />
+      <div className="mt-10">
+        <Copilot
+          orgId={ctx.orgId}
+          live={copilotLive()}
+          bundles={[]}
+          integrations={getActiveIntegrations(connected)}
+        />
+      </div>
     </div>
+  );
+}
+
+function SessionCard({
+  s,
+  groupName,
+}: {
+  s: Session & { updated_at: string | null };
+  groupName: string | null;
+}) {
+  return (
+    <Link
+      href={`/session/${s.id}`}
+      className="fx-card fx-card-hover group flex items-center gap-3 px-4 py-3"
+    >
+      <span
+        className="h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: s.color ?? "#a1a1aa" }}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-fg-primary">{s.name}</span>
+        {groupName && (
+          <span className="block truncate text-[11px] text-fg-muted">{groupName}</span>
+        )}
+      </span>
+      <span className="shrink-0 font-mono text-[10px] text-fg-muted">
+        {relativeTime(s.updated_at ?? s.created_at ?? null)}
+      </span>
+      <span className="shrink-0 font-mono text-fg-muted transition group-hover:translate-x-0.5 group-hover:text-gold-400">
+        →
+      </span>
+    </Link>
   );
 }
