@@ -4,7 +4,6 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { AGENTS } from "@/lib/agents";
 import type { Task, Deal, Asset, Artifact, AgentKey } from "@/lib/supabase/database.types";
-import { seedDemoData, clearDemoData } from "./actions";
 import { SessionsSection } from "./SessionsSection";
 import { MissionControl } from "@/components/dashboard/MissionControl";
 import { HottestCapital, PendingGates } from "./CapitalSignals";
@@ -199,16 +198,12 @@ export default async function DashboardPage() {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <form action={seedDemoData}>
-            <button className="rounded-lg bg-gold-500 px-3.5 py-2 text-xs font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400 hover:shadow-[0_12px_28px_-14px_rgb(var(--fx-accent-rgb)/0.95)]">
-              Load demo data
-            </button>
-          </form>
-          <form action={clearDemoData}>
-            <button className="rounded-lg border border-line px-3.5 py-2 text-xs text-fg-secondary transition hover:border-line/0 hover:bg-surface-2 hover:text-fg-primary">
-              Reset
-            </button>
-          </form>
+          <Link
+            href="/workspace"
+            className="rounded-lg bg-gold-500 px-3.5 py-2 text-xs font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400 hover:shadow-[0_12px_28px_-14px_rgb(var(--fx-accent-rgb)/0.95)]"
+          >
+            New Session
+          </Link>
         </div>
       </header>
 
@@ -272,7 +267,7 @@ export default async function DashboardPage() {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
-              Foundation readiness
+              Investor Readiness
             </span>
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
               {readiness.stage.label}

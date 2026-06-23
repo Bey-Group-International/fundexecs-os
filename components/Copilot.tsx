@@ -886,7 +886,7 @@ export default function Copilot({
                   mirroring the Execution Grid's low-confidence idiom. */}
               {routing.confidence === "low" ? (
                 <span className="shrink-0 rounded-full border border-line/60 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                  ~ low-confidence
+                  Early Signal · Verify before acting
                 </span>
               ) : null}
             </div>
@@ -1188,36 +1188,6 @@ export default function Copilot({
                 </div>
               ) : null}
 
-              {enginesPresent.length > 1 ? (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Engines</span>
-                  <button
-                    type="button"
-                    onClick={() => setEngineFilter(null)}
-                    className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
-                      engineFilter === null
-                        ? "border-gold-500/60 bg-gold-500/15 text-gold-200"
-                        : "border-line/80 bg-surface-1/70 text-fg-muted hover:text-fg-secondary"
-                    }`}
-                  >
-                    All
-                  </button>
-                  {enginesPresent.map((eng) => (
-                    <button
-                      key={eng}
-                      type="button"
-                      onClick={() => setEngineFilter((cur) => (cur === eng ? null : eng))}
-                      className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
-                        engineFilter === eng
-                          ? "border-gold-500/60 bg-gold-500/15 text-gold-200"
-                          : "border-line/80 bg-surface-1/70 text-fg-muted hover:text-fg-secondary"
-                      }`}
-                    >
-                      {eng}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
 
               {/* Unified transcript: chat turns and compact workflow refs, by time. */}
               {rail.map((item) =>
@@ -1300,167 +1270,6 @@ export default function Copilot({
                 ref={toolbarRef}
                 className="flex flex-wrap items-center gap-2 border-t border-line/70 px-1 pt-2"
               >
-                {/* Model picker — "LLM models: <model> (Default)". */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setOpenMenu((m) => (m === "model" ? null : "model"))}
-                    aria-haspopup="menu"
-                    aria-expanded={openMenu === "model"}
-                    className="flex h-8 max-w-[15rem] items-center gap-1.5 rounded-lg border border-line bg-surface-0/80 px-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/45 hover:text-fg-primary"
-                    title="Reasoning model"
-                  >
-                    <span aria-hidden className="text-fg-muted">▾</span>
-                    <span className="truncate">
-                      LLM models: {activeModel.label}
-                      {activeModel.default ? " (Default)" : ""}
-                    </span>
-                  </button>
-                  {openMenu === "model" ? (
-                    <div
-                      role="menu"
-                      className="absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
-                    >
-                      <p className="px-2.5 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Models</p>
-                      {EARN_MODELS.map((m) => (
-                        <button
-                          key={m.key}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={m.key === model}
-                          onClick={() => {
-                            setModel(m.key);
-                            setOpenMenu(null);
-                          }}
-                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${
-                            m.key === model ? "text-fg-primary" : "text-fg-secondary"
-                          }`}
-                        >
-                          <span className="flex flex-col">
-                            <span className="flex items-center gap-1.5">
-                              {m.label}
-                              {m.default ? (
-                                <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-gold-300">
-                                  Default
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{m.provider}</span>
-                          </span>
-                          {m.key === model ? <span className="text-gold-300" aria-hidden>✓</span> : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* Mode selector — Accept edits / Plan Mode / Auto Mode. */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setOpenMenu((m) => (m === "mode" ? null : "mode"))}
-                    aria-haspopup="menu"
-                    aria-expanded={openMenu === "mode"}
-                    className="flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface-0/80 px-2.5 text-xs text-fg-secondary transition hover:border-gold-500/45 hover:text-fg-primary"
-                    title="Operator mode"
-                  >
-                    <span aria-hidden className="text-fg-muted">▾</span>
-                    {activeMode.label}
-                  </button>
-                  {openMenu === "mode" ? (
-                    <div
-                      role="menu"
-                      className="absolute bottom-full left-0 z-20 mb-2 w-56 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
-                    >
-                      <p className="px-2.5 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Mode</p>
-                      {EARN_MODES.map((m) => (
-                        <button
-                          key={m.key}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={m.key === mode}
-                          onClick={() => {
-                            setMode(m.key);
-                            setOpenMenu(null);
-                          }}
-                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-2 ${
-                            m.key === mode ? "text-fg-primary" : "text-fg-secondary"
-                          }`}
-                        >
-                          <span className="flex flex-col">
-                            <span className="text-sm">{m.label}</span>
-                            <span className="text-[10px] text-fg-muted">{m.hint}</span>
-                          </span>
-                          {m.key === mode ? <span className="text-gold-300" aria-hidden>✓</span> : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* Route selector — Delegate & Route. "Auto" lets Earn route;
-                    choosing a desk delegates the next prompt to it. */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setOpenMenu((m) => (m === "route" ? null : "route"))}
-                    aria-haspopup="menu"
-                    aria-expanded={openMenu === "route"}
-                    className={`flex h-8 items-center gap-1.5 rounded-lg border bg-surface-0/80 px-2.5 text-xs transition hover:border-gold-500/45 hover:text-fg-primary ${
-                      delegate ? "border-gold-500/50 text-gold-300" : "border-line text-fg-secondary"
-                    }`}
-                    title="Delegate & route — choose which desk handles the next request"
-                  >
-                    <span aria-hidden className="text-fg-muted">▾</span>
-                    {delegate ? EXECUTIVE_LABEL[delegate] : "Route: Auto"}
-                  </button>
-                  {openMenu === "route" ? (
-                    <div
-                      role="menu"
-                      className="absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
-                    >
-                      <p className="px-2.5 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                        Delegate &amp; route
-                      </p>
-                      <button
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={delegate === null}
-                        onClick={() => {
-                          setDelegate(null);
-                          setOpenMenu(null);
-                        }}
-                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-2 ${
-                          delegate === null ? "text-fg-primary" : "text-fg-secondary"
-                        }`}
-                      >
-                        <span className="flex flex-col">
-                          <span className="text-sm">Auto</span>
-                          <span className="text-[10px] text-fg-muted">Earn routes to the best desk</span>
-                        </span>
-                        {delegate === null ? <span className="text-gold-300" aria-hidden>✓</span> : null}
-                      </button>
-                      {EXECUTIVES.map((d) => (
-                        <button
-                          key={d}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={d === delegate}
-                          onClick={() => {
-                            setDelegate(d);
-                            setOpenMenu(null);
-                          }}
-                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-2 ${
-                            d === delegate ? "text-fg-primary" : "text-fg-secondary"
-                          }`}
-                        >
-                          <span className="text-sm">{EXECUTIVE_LABEL[d]}</span>
-                          {d === delegate ? <span className="text-gold-300" aria-hidden>✓</span> : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
 
                 {/* "+" menu — Add files or photos · /Slash command · Integrations. */}
                 <div className="relative">

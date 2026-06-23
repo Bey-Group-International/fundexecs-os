@@ -34,7 +34,7 @@ export function GlobalTopBar({
 
   return (
     <div className="flex min-h-12 items-center gap-2 border-b border-line bg-surface-0/82 px-3 py-2 backdrop-blur-xl sm:h-12 sm:px-4">
-      <span className="font-mono text-xs uppercase tracking-wider text-fg-muted">Workspace</span>
+      <span className="font-mono text-xs uppercase tracking-wider text-fg-muted">FundExecs OS</span>
       <div className="ml-auto flex items-center gap-1">
         <TopNavAlerts initialMessages={messagesUnread} initialDeals={dealsUnread} />
         <Link

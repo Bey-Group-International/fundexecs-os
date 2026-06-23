@@ -36,8 +36,8 @@ function recommendPlan(spend30d: number): string {
 // How each reputation tier presents on the Wallet "Standing" card.
 const TIER_META: Record<ReputationTier, { label: string; blurb: string }> = {
   unranked: {
-    label: "Unranked",
-    blurb: "Close deals and verify records to earn standing — it lowers the cost of every action.",
+    label: "New Member",
+    blurb: "Complete verified transactions to build your standing — it reduces the cost of every AI action.",
   },
   verified: {
     label: "Verified Operator",
@@ -148,7 +148,7 @@ export default async function WalletPage({
                   sourcing, diligence, reporting, and ops runs.
                 </>
               ) : balance === 0 ? (
-                "You’re out of credits. Choose a plan or buy a pack below to bring the agent mesh back online."
+                "You’re out of credits. Choose a plan or purchase a credit pack below to restore your AI workspace."
               ) : (
                 "Choose a plan below to unlock monthly credits, rollover, and a growing loyalty bonus."
               )}

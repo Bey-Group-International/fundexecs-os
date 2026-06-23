@@ -7,7 +7,7 @@ import type { ReputationTier } from "@/lib/compounding";
 // the brightest.
 
 const TIER_LABEL: Record<ReputationTier, string> = {
-  unranked: "Unranked",
+  unranked: "New Member",
   verified: "Verified",
   established: "Established",
   principal: "Principal",

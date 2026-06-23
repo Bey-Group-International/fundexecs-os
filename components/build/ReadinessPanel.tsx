@@ -67,7 +67,7 @@ export function ReadinessPanel({ readiness }: { readiness: BuildReadiness }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
-              Foundation readiness
+              Investor Readiness
             </span>
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
               {stage.label}

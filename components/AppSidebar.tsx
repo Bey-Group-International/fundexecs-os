@@ -406,16 +406,13 @@ export function AppSidebar({
             href="/workspace"
             className={`${linkClass} ${pathname === "/workspace" ? "bg-surface-2 text-fg-primary" : ""}`}
           >
-            <span className="font-mono text-base leading-none text-gold-400">✦</span>
             Sessions
           </Link>
           <Link href="/automations" className={linkClass}>
-            <span className="font-mono text-base leading-none text-gold-400">↻</span>
-            Workflows
+            Automations
           </Link>
           <Link href="/inbox" className={`${linkClass} justify-between`}>
             <span className="flex items-center gap-2">
-              <span className="font-mono text-base leading-none text-gold-400">⊞</span>
               Inbox
             </span>
             {inboxUnread > 0 ? (
