@@ -186,16 +186,6 @@ export default async function DashboardPage() {
             Everything Earn produces, organized into a blue-lit operating surface for deal flow,
             capital, approvals, and deliverables.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {["Day/night ready", "Desktop optimized", "Mobile compact", "App-safe spacing"].map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full border border-gold-500/25 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Link
@@ -235,8 +225,7 @@ export default async function DashboardPage() {
             Enter the spatial office
           </p>
           <p className="mt-0.5 text-sm text-fg-muted">
-            Watch Earnest Fundmaker delegate across the Mandate, Relationship, Outbound, Diligence, and Capital
-            offices — executives execute in real time.
+            Watch your AI executive team operate across mandate, sourcing, diligence, and capital offices — executing in real time.
           </p>
         </div>
         <span className="relative shrink-0 font-mono text-xl text-gold-400 transition group-hover:translate-x-1">
