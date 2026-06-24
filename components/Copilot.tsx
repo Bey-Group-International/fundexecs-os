@@ -1745,52 +1745,40 @@ function WorkflowCard({
             </div>
           ) : null}
 
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => decide(approval.id, "approved")}
-                className="rounded-lg bg-gold-400 px-4 py-2 text-sm font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
-              >
-                Approve &amp; automate
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => decide(approval.id, "rejected")}
-                className="rounded-lg border border-line/80 bg-surface-2/60 px-4 py-2 text-sm font-medium text-status-danger transition hover:bg-surface-3 disabled:opacity-50"
-              >
-                Decline
-              </button>
-            </div>
-            <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-wider">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => decide(approval.id, "accepted")}
-                title="Accept the plan as the recommendation — agents won't run"
-                className="text-fg-muted transition hover:text-gold-300 disabled:opacity-40"
-              >
-                Accept plan
-              </button>
-              <button
-                type="button"
-                disabled={busy || clarifying}
-                onClick={onAsk}
-                className="text-fg-muted transition hover:text-fg-secondary disabled:opacity-40"
-              >
-                {clarifying ? "Asking…" : "Ask"}
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => decide(approval.id, "regenerate")}
-                className="text-fg-muted transition hover:text-fg-secondary disabled:opacity-40"
-              >
-                Regenerate
-              </button>
-            </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => decide(approval.id, "approved")}
+              className="rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+            >
+              Approve &amp; automate
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => decide(approval.id, "accepted")}
+              title="Accept the plan as the recommendation — agents won't run"
+              className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-medium text-fg-primary transition hover:bg-surface-3 disabled:opacity-50"
+            >
+              Accept recommendation
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => decide(approval.id, "regenerate")}
+              className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
+            >
+              Regenerate
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => decide(approval.id, "rejected")}
+              className="rounded-lg bg-status-danger/15 px-3 py-1.5 text-xs font-medium text-status-danger transition hover:bg-status-danger/25 disabled:opacity-50"
+            >
+              Decline
+            </button>
           </div>
         </div>
       ) : null}
