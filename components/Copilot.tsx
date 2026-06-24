@@ -1142,7 +1142,7 @@ export default function Copilot({
   }
 
   return (
-    <div className={`fx-neural-ambient mx-auto flex min-h-[calc(100dvh-8rem)] flex-col ${hasWork ? "max-w-7xl" : "max-w-5xl"}`}>
+    <div className={`fx-neural-ambient mx-auto flex h-[calc(100dvh-8rem)] flex-col ${hasWork ? "max-w-7xl" : "max-w-5xl"}`}>
       <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-line/80 bg-surface-0/88 shadow-[0_24px_90px_-58px_rgb(var(--fx-accent-rgb)/0.9)]">
         <div
           aria-hidden
