@@ -192,7 +192,6 @@ export default function Copilot({
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   // In-flight chat stream, so the Stop control can abort it.
@@ -1030,6 +1029,15 @@ export default function Copilot({
     ].slice(0, 6));
   }
 
+  function openFilePicker() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,video/*";
+    input.multiple = true;
+    input.onchange = () => addFiles(input.files);
+    input.click();
+  }
+
   // Microphone is hold-to-record: recording starts on pointer-down and the
   // transcript lands when the operator releases (or the recognizer ends).
   function startVoice() {
@@ -1287,33 +1295,6 @@ export default function Copilot({
                 </button>
               </div>
 
-              {/* Hidden picker the Tools menu drives — keeps file selection out of
-                  the default composer while staying one tap away. */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*"
-                multiple
-                tabIndex={-1}
-                aria-hidden="true"
-                className="sr-only"
-                style={{
-                  position: "absolute",
-                  width: 1,
-                  height: 1,
-                  overflow: "hidden",
-                  clip: "rect(0 0 0 0)",
-                  whiteSpace: "nowrap",
-                  opacity: 0,
-                  pointerEvents: "none",
-                }}
-                onChange={(e) => {
-                  addFiles(e.target.files);
-                  e.currentTarget.value = "";
-                  setOpenMenu(null);
-                }}
-              />
-
               <div ref={toolbarRef} className="mt-1 flex items-center justify-between gap-2 px-1">
                 <div className="relative">
                   <button
@@ -1341,7 +1322,7 @@ export default function Copilot({
                         role="menuitem"
                         onClick={() => {
                           setOpenMenu(null);
-                          fileInputRef.current?.click();
+                          openFilePicker();
                         }}
                         className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
                       >
