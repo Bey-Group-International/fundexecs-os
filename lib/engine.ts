@@ -633,13 +633,40 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
       step_order: step.step_order,
     });
 
-    const output = await executeStep({
-      workflowTitle: workflow.title,
-      agent: step.assigned_agent,
-      stepTitle: step.title,
-      stepDescription: step.description ?? "",
-      priorOutputs,
-    });
+    let output: string;
+    try {
+      output = await executeStep({
+        workflowTitle: workflow.title,
+        agent: step.assigned_agent,
+        stepTitle: step.title,
+        stepDescription: step.description ?? "",
+        priorOutputs,
+      });
+    } catch (stepErr) {
+      // A step failure must never abort the remaining steps. Mark this step
+      // failed, record the error, and continue so later steps still execute.
+      const errMsg = stepErr instanceof Error ? stepErr.message : String(stepErr);
+      await Promise.all([
+        ctx.supabase
+          .from("tasks")
+          .update({ status: "failed", progress: 0, result: { error: errMsg } as Json })
+          .eq("id", step.id),
+        recordEvent(ctx, {
+          taskId: workflow.id,
+          type: "task.completed",
+          agent: step.assigned_agent,
+          hub: step.hub,
+          payload: { step_id: step.id, message: `${step.title} — failed: ${errMsg}` },
+        }),
+        ctx.supabase
+          .from("tasks")
+          .update({ progress: (i + 1) / Math.max(list.length, 1) })
+          .eq("id", workflow.id),
+      ]);
+      emitProgress(onProgress, { type: "step_done", step_id: step.id, title: step.title });
+      continue;
+    }
+
     // Attribute this step's work to a Brain: the engine ORCHESTRATES, Brains
     // EXECUTE. This logs a brain_runs row tagged with the workflow's session so
     // the step surfaces in the session "Brains at work" theater, and surfaces
