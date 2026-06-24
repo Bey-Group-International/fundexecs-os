@@ -151,7 +151,6 @@ export function getWorkspaceViewModel(
     "investor-relations": (task) => task.hub === "execute",
     automation: (task) => Boolean(task.automation_id),
     marketing: (task) => task.hub === "build",
-    arcade: () => true,
   };
 
   return {

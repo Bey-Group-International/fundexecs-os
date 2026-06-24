@@ -103,7 +103,6 @@ function QuickActionPanel({ view }: { view: WorkspaceViewModel }) {
     "investor-relations": "execute",
     automation: "execute",
     marketing: "build",
-    arcade: "build",
     command: "source",
   } as const;
 
@@ -186,7 +185,7 @@ export function WorkspacePage({ view, data }: { view: WorkspaceViewModel; data: 
               )}
             </section>
           ) : null}
-          {view.key === "marketing" || view.key === "arcade" ? (
+          {view.key === "marketing" ? (
             <section className="fx-card p-4">
               <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
                 Prototype board

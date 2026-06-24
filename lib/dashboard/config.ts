@@ -61,14 +61,4 @@ export const dashboardWorkspaces: WorkspaceConfig[] = [
     characterId: "pr-director",
     recommendation: "Turn milestone proof into investor-safe authority content before launching more campaigns.",
   },
-  {
-    key: "arcade",
-    title: "Executive Arcade",
-    eyebrow: "Prototype",
-    description: "A future sprite-driven alternate navigation layer for guided operating rooms.",
-    href: "/dashboard/arcade",
-    primaryAction: { label: "Enter office", href: "/dashboard/office" },
-    characterId: "earnest-fundmaker",
-    recommendation: "Use the office prototype as a guided map, while the dashboard remains the production command center.",
-  },
 ];

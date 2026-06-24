@@ -16,8 +16,7 @@ export type DashboardWorkspaceKey =
   | "fund-room"
   | "investor-relations"
   | "automation"
-  | "marketing"
-  | "arcade";
+  | "marketing";
 
 export type DashboardMetric = {
   label: string;
