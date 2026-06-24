@@ -345,7 +345,7 @@ function renderContent(content: string): React.ReactNode[] {
         nodes.push(
           <div key={i} className="mt-2 flex gap-2 text-sm">
             <span className="font-semibold text-fg-primary shrink-0">{match[1]}:</span>
-            <span className="text-fg-secondary">{formatInline(match[2], `kv-${i}`)}</span>
+            <span className="min-w-0 break-words text-fg-secondary">{formatInline(match[2], `kv-${i}`)}</span>
           </div>
         );
         i++;
@@ -492,7 +492,7 @@ export function ArtifactInline({
   const fileTitle = title?.trim() || label || "Artifact";
 
   return (
-    <div className="group/artifact mt-2 rounded-lg border border-line bg-surface-0 px-4 py-3">
+    <div className="group/artifact mt-2 overflow-hidden rounded-lg border border-line bg-surface-0 px-4 py-3">
       <div className="mb-2 flex items-center justify-end opacity-0 transition group-hover/artifact:opacity-100 focus-within:opacity-100">
         <ArtifactActions
           content={content}

@@ -89,7 +89,7 @@ const COMPONENTS: Components = {
 
 export function Markdown({ children }: { children: string }) {
   return (
-    <div className="text-sm leading-6 text-fg-primary">
+    <div className="min-w-0 overflow-hidden text-sm leading-6 text-fg-primary">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
         {children}
       </ReactMarkdown>
