@@ -23,7 +23,7 @@ async function jsonPrompt<T>(systemPrompt: string, userPrompt: string): Promise<
     messages: [{ role: 'user', content: userPrompt }],
   });
 
-  const text = msg.content.find((b: { type: string; text?: string }) => b.type === 'text')?.text ?? '';
+  const text = msg.content.filter((b): b is Anthropic.TextBlock => b.type === 'text')[0]?.text ?? '';
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return null;
 
