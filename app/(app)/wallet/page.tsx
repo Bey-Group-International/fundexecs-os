@@ -266,7 +266,7 @@ export default async function WalletPage({
       <p className="mt-6 text-center text-xs text-fg-muted">
         {live
           ? "Payments are processed securely by Stripe. Plans renew automatically; cancel anytime."
-          : "Stripe isn't configured in this environment — choices activate in mock mode (no charge). Set STRIPE_SECRET_KEY to enable real checkout."}
+          : "Billing is being configured for this organization. Contact support to activate plans and credit purchases."}
       </p>
     </div>
   );

@@ -102,7 +102,7 @@ export function PendingGates({ approvals }: { approvals: Approval[] }) {
           Pending gates
         </h2>
         {approvals.length > 0 ? (
-          <Link href="/workspace" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+          <Link href="/grid/review" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
             Review →
           </Link>
         ) : null}
@@ -122,7 +122,7 @@ export function PendingGates({ approvals }: { approvals: Approval[] }) {
             return (
               <Link
                 key={a.id}
-                href="/workspace"
+                href={`/grid/review?approval=${a.id}`}
                 className="fx-card fx-card-hover flex items-center gap-2.5 px-3 py-2.5"
               >
                 <span

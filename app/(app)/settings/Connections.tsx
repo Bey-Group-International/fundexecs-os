@@ -2,13 +2,13 @@
 // The "Connections" panel for Settings. It reflects the unified gateway's
 // per-org connection state: which channels (Gmail, Docusign, …) this org has
 // connected, which fall back to a deploy-wide environment default, and which are
-// still in mock mode. Connect / disconnect run through the gateway server
+// still waiting on a channel connection. Connect / disconnect run through the gateway server
 // actions; the gateway holds any OAuth tokens, so nothing secret is shown here.
 import type { IntegrationConnection } from "@/lib/supabase/database.types";
 import { integrationCatalog, envConfiguredChannels } from "@/lib/integrations/catalog";
 import { ConnectionControls } from "./ConnectionControls";
 
-type ChannelState = "connected_gateway" | "connected_env" | "mock";
+type ChannelState = "connected_gateway" | "connected_env" | "prepared";
 
 export function Connections({ connections }: { connections: IntegrationConnection[] }) {
   // One row per (org, channel) by the table's unique constraint.
@@ -22,11 +22,11 @@ export function Connections({ connections }: { connections: IntegrationConnectio
         const state: ChannelState = row
           ? row.status === "connected"
             ? "connected_gateway"
-            : "mock"
+            : "prepared"
           : env.has(descriptor.channel)
             ? "connected_env"
-            : "mock";
-        const connected = state !== "mock";
+            : "prepared";
+        const connected = state !== "prepared";
 
         return (
           <div key={descriptor.channel} className="rounded-xl border border-line bg-surface-1 p-4">
@@ -35,7 +35,7 @@ export function Connections({ connections }: { connections: IntegrationConnectio
                 className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
                   connected ? "bg-status-success" : "bg-fg-muted"
                 }`}
-                aria-label={connected ? "connected" : "mock mode"}
+                aria-label={connected ? "connected" : "prepared only"}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -50,7 +50,7 @@ export function Connections({ connections }: { connections: IntegrationConnectio
                     </span>
                   ) : (
                     <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                      Mock mode
+                      Prepared only
                     </span>
                   )}
                   {row?.status === "connected" && row.account_label ? (
@@ -88,17 +88,16 @@ export function Connections({ connections }: { connections: IntegrationConnectio
         );
       })}
 
-      {/* The mock fallback is not a registered channel: any ActionKind that no
-          adapter claims routes to the built-in "mock" channel. We surface it so
-          the catch-all behaviour is visible alongside the real channels. */}
+      {/* The prepared fallback is not a registered channel: any ActionKind that no
+          adapter claims is prepared and queued rather than sent. */}
       <div className="rounded-xl border border-dashed border-line bg-surface-1 p-4">
         <div className="flex items-start gap-3">
-          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-fg-muted" aria-label="mock mode" />
+          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-fg-muted" aria-label="prepared only" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium text-fg-primary">Mock fallback</span>
+              <span className="text-sm font-medium text-fg-primary">Prepared fallback</span>
               <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                Mock mode
+                Not sent
               </span>
             </div>
             <p className="mt-2 text-xs leading-snug text-fg-secondary">

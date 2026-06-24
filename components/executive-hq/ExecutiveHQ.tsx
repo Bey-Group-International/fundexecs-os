@@ -16,21 +16,10 @@ type RoomData = {
   accentColor: string; monitorColor: string; executives: ExecData[];
 };
 type BubbleState = { execId: string; text: string } | null;
-type RoomStats = { label: string; value: string | number; trend?: "up" | "down" | "flat" };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ROOM_STATS: Record<string, RoomStats> = {
-  ceo:       { label: "tasks",     value: 4,  trend: "flat" },
-  boardroom: { label: "meetings",  value: 2,  trend: "up"   },
-  trading:   { label: "deals",     value: 7,  trend: "up"   },
-  research:  { label: "reports",   value: 3,  trend: "flat" },
-  investor:  { label: "LPs",       value: 12, trend: "up"   },
-  ops:       { label: "workflows", value: 5,  trend: "flat" },
-  legal:     { label: "docs",      value: 2,  trend: "down" },
-  marketing: { label: "campaigns", value: 3,  trend: "up"   },
-  reception: { label: "visitors",  value: 1,  trend: "flat" },
-};
+const HQ_BOOT_SEEN_KEY = "fx-hq-boot-seen-v1";
 
 const ROOM_ACTIVITY: Record<string, 0 | 1 | 2 | 3> = {
   ceo: 1, boardroom: 2, trading: 3, research: 1,
@@ -174,10 +163,54 @@ function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: 
   );
 }
 
-// ─── ExecAvatar (hidden until sprites re-introduced) ─────────────────────────
+// ─── ExecAvatar ───────────────────────────────────────────────────────────────
 
-function ExecAvatar(_: { exec: ExecData; size: number; onClick: () => void; activeBubble: BubbleState; reducedEffects: boolean; nightMode: boolean }) {
-  return null;
+function ExecAvatar({
+  exec,
+  size,
+  onClick,
+  activeBubble,
+  reducedEffects,
+  nightMode,
+}: {
+  exec: ExecData;
+  size: number;
+  onClick: () => void;
+  activeBubble: BubbleState;
+  reducedEffects: boolean;
+  nightMode: boolean;
+}) {
+  const speaking = activeBubble?.execId === exec.id;
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      title={`${exec.name} — ${exec.hint}`}
+      aria-label={`${exec.name}. ${exec.hint}`}
+      style={{
+        width: size,
+        height: size,
+        border: `1px solid ${exec.themeColor}55`,
+        borderRadius: "50%",
+        background:
+          `radial-gradient(circle at 50% 35%, ${exec.themeColor}30, transparent 66%), ` +
+          `rgba(8,6,4,${nightMode ? 0.82 : 0.66})`,
+        backgroundImage: `url(${exec.sprite}), radial-gradient(circle at 50% 35%, ${exec.themeColor}30, transparent 66%)`,
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "center",
+        backgroundSize: exec.sprite.endsWith(".svg") ? "72%" : "86%",
+        boxShadow: `0 0 ${speaking ? 22 : 12}px ${exec.themeColor}${speaking ? "88" : "33"}`,
+        cursor: "pointer",
+        pointerEvents: "auto",
+        transform: speaking ? "translateY(-3px) scale(1.04)" : "translateY(0)",
+        transition: "transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease",
+        animation: reducedEffects ? "none" : `exec-float ${exec.walkDuration} ease-in-out ${exec.bobDelay} infinite`,
+      }}
+    />
+  );
 }
 
 // ─── RoomCell ─────────────────────────────────────────────────────────────────
@@ -202,8 +235,6 @@ function RoomCell({
   const flickerDelay = LIGHT_FLICKER_DELAYS[roomIndex % LIGHT_FLICKER_DELAYS.length];
   const isZooming = zoomingRoom === room.id;
   const breatheDuration = activity >= 3 ? "2s" : "4s";
-  const stats = ROOM_STATS[room.id];
-  const trendArrow = stats?.trend === "up" ? "↑" : stats?.trend === "down" ? "↓" : "→";
 
   const handleEnter = () => { setHovered(true); onHoverChange(room.id); };
   const handleLeave = () => { setHovered(false); onHoverChange(null); };
@@ -281,7 +312,7 @@ function RoomCell({
       )}
 
 
-      {/* Exec avatars (hidden for now) */}
+      {/* Active executives */}
       <div style={{ position:"absolute", bottom:28, left:0, right:0, zIndex:5, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
         {room.executives.map(exec=>(
           <ExecAvatar key={exec.id} exec={exec} size={42} onClick={()=>onExecClick(exec)}
@@ -321,14 +352,13 @@ function RoomCell({
           }}>
             {isZooming ? "Entering…" : room.label}
           </div>
-          {!isZooming && stats && !hovered && (
+          {!isZooming && !hovered && (
             <div style={{
               fontFamily:"'Courier New',monospace", fontSize:7.5,
               color:"rgba(255,248,220,0.45)",
               letterSpacing:"0.06em", whiteSpace:"nowrap",
             }}>
-              <span style={{ color: stats.trend==="up" ? "#86efac" : stats.trend==="down" ? "#fca5a5" : "rgba(255,248,220,0.4)" }}>{trendArrow}</span>
-              {" "}{stats.value} {stats.label}
+              Open →
             </div>
           )}
           {hovered && (
@@ -562,7 +592,10 @@ function BoardroomScene({
 
 export function ExecutiveHQ() {
   const router = useRouter();
-  const [booting, setBooting]             = useState(true);
+  const [booting, setBooting]             = useState(() => {
+    if (typeof window === "undefined") return true;
+    return sessionStorage.getItem(HQ_BOOT_SEEN_KEY) !== "1";
+  });
   const [nightMode, setNightMode]         = useState(() => new Date().getHours() >= 18);
   const [zoomingRoom, setZoomingRoom]     = useState<string | null>(null);
   const [activeBubble]                    = useState<BubbleState>(null);
@@ -581,16 +614,6 @@ export function ExecutiveHQ() {
     const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const lowPower = navigator.hardwareConcurrency !== undefined && navigator.hardwareConcurrency < 4;
     setReducedEffects(prefersReduced || lowPower);
-  }, []);
-
-  // N = day/night toggle, D = debug grid
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "n" || e.key === "N") setNightMode(v => !v);
-      if (e.key === "d" || e.key === "D") setDebugGrid(v => !v);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   // Pause animations when off-screen
@@ -654,7 +677,8 @@ export function ExecutiveHQ() {
   }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "n" || e.key === "N") return;
+    if (e.key === "n" || e.key === "N") { setNightMode(v => !v); return; }
+    if (e.key === "d" || e.key === "D") { setDebugGrid(v => !v); return; }
     if (e.key === "Escape") { setFocusedRoomIndex(null); return; }
     if (e.key === "Enter" && focusedRoomIndex !== null) {
       const room = ROOMS[focusedRoomIndex];
@@ -677,7 +701,16 @@ export function ExecutiveHQ() {
     setFocusedRoomIndex(next);
   }, [focusedRoomIndex, handleRoomClick]);
 
-  if (booting) return <ExecutiveHQBoot onComplete={() => setBooting(false)} />;
+  if (booting) {
+    return (
+      <ExecutiveHQBoot
+        onComplete={() => {
+          try { sessionStorage.setItem(HQ_BOOT_SEEN_KEY, "1"); } catch { /* ignore */ }
+          setBooting(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div

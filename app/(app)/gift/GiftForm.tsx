@@ -7,7 +7,7 @@ import { purchaseGiftAction } from "./actions";
 
 // Buy a credit pack as a gift for a colleague. Mirrors the mandate form's
 // inline-validation pattern: a transition runs the server action and we surface
-// the error, open the in-app embedded checkout, or reset on a mock success.
+// the error, open the in-app embedded checkout, or reset after a paid gift is created.
 export function GiftForm({
   live = false,
   publishableKey = "",
@@ -109,7 +109,7 @@ export function GiftForm({
       <p className="text-[11px] leading-snug text-fg-muted">
         {live
           ? "Secure checkout by Stripe. After payment the gift is created and becomes a redeemable code you can share; credits move to the recipient when they redeem it."
-          : "Stripe isn’t configured here, so no card is charged — the gift is created immediately as a redeemable code. Credits move to the recipient when they redeem it."}
+          : "Billing is being configured for this organization. Contact support to enable paid credit gifts."}
       </p>
     </form>
   );

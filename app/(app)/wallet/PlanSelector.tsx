@@ -60,8 +60,8 @@ function ComputeLayerGraphic({ featured = false }: { featured?: boolean }) {
 
 // The plans grid with a monthly/annual toggle. Annual surfaces the two-months-
 // free saving; the recommended plan and the current plan are badged. Choosing a
-// plan opens an in-app embedded Stripe Checkout (or mock-activates when Stripe
-// isn't configured).
+// plan opens an in-app embedded Stripe Checkout. When Stripe is not configured,
+// the server action returns a configuration error instead of activating credits.
 export function PlanSelector({
   plans,
   currentPlan,

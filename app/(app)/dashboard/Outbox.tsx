@@ -4,7 +4,7 @@ import type { DispatchLog } from "@/lib/supabase/database.types";
 // The Outbox — the Command Center's read on the dispatch audit log. Every
 // Tier-1 action Earn runs through the integration layer is recorded in
 // `dispatch_log`; this surfaces the most recent ones so the operator can see
-// what actually went out (and whether it was a real send or a mock). Server-
+// what actually went out (or what is prepared while a channel is not connected). Server-
 // rendered, no interactivity — a mirror of the dispatch ledger, nothing more.
 
 // Compact relative time, e.g. "3m ago" / "2h ago" / "Apr 3". Mirrors the
@@ -44,16 +44,16 @@ export function Outbox({ rows }: { rows: DispatchLog[] }) {
               key={row.id}
               className="fx-card flex items-center gap-2.5 px-3 py-2.5"
             >
-              {/* Live = a real external call; mock/queued = green prep only. */}
+              {/* Live = a real external call; prepared = queued but not sent. */}
               <span
                 className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
                   row.live
                     ? "border-gold-500/50 text-gold-400"
                     : "border-line text-fg-muted"
                 }`}
-                title={row.live ? "Sent live" : "Mock — prepared, not sent"}
+                title={row.live ? "Sent live" : "Prepared, not sent — connect the channel in Settings"}
               >
-                {row.live ? "Live" : "Mock"}
+                {row.live ? "Live" : "Prepared"}
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-sm text-fg-primary">
