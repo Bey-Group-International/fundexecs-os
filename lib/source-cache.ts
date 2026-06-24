@@ -4,8 +4,7 @@
 
 import { createServerClient } from '@/lib/supabase/server';
 import type { VerifiedResult } from './source-hub-types';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { createHash } = require('crypto') as typeof import('crypto');
+import { createHash } from 'crypto';
 
 export const TTL_SECONDS: Record<string, number> = {
   people: 86400,    // 24h — contact data is stable

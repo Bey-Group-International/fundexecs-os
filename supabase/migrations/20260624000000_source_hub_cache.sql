@@ -18,9 +18,12 @@ ALTER TABLE investors
   ADD COLUMN IF NOT EXISTS last_verified_at timestamptz;
 
 -- Query cache for all Source Hub modules
+-- org_id is intentionally not FK-constrained so this migration can run on
+-- preview branches that don't have the full migration history applied.
+-- RLS policies enforce org tenancy at the application layer.
 CREATE TABLE IF NOT EXISTS source_query_cache (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id uuid NOT NULL,
   query_hash text NOT NULL,
   module text NOT NULL,
   provider text NOT NULL,
