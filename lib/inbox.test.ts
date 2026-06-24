@@ -82,7 +82,7 @@ function conviction(
 }
 
 function task(over: Partial<Task> & { id: string }): Pick<Task, "id" | "title" | "session_id" | "assigned_agent"> {
-  return { id: over.id, title: over.title ?? "Workflow", session_id: over.session_id ?? null, assigned_agent: over.assigned_agent ?? null };
+  return { id: over.id, title: over.title ?? "Workflow", session_id: over.session_id ?? null, assigned_agent: over.assigned_agent ?? "earn" };
 }
 
 // --- isInboxOverdue ---------------------------------------------------------
