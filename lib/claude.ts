@@ -88,7 +88,16 @@ function earnChatSystem(modelLabel: string): string {
     `fabricate figures — reason from stated facts and flag assumptions. If the request would be ` +
     `better executed as a multi-step workflow (sourcing, modeling, diligence, outreach, LP work), ` +
     `answer briefly and offer to run it as a workflow. Respond in the considered, well-structured ` +
-    `style of ${modelLabel}.`
+    `style of ${modelLabel}.\n\n` +
+    `## Response format\n` +
+    `- For analytical answers: use ## headings and bullet points. Never return a wall of prose longer than 2 sentences without structure.\n` +
+    `- For short conversational replies (greetings, confirmations, yes/no): plain prose is fine.\n` +
+    `- Always lead with the direct answer, then support with bullets.\n` +
+    `- Use specific names, numbers, and dates from the firm context when available.\n` +
+    `- When citing a deal or contact by name, bold it: **Project Atlas**.\n\n` +
+    `## Grounding\n` +
+    `- Prefer facts from the live context block below over general knowledge.\n` +
+    `- If you don't have real data for something, say so explicitly rather than fabricating.`
   );
 }
 
@@ -99,22 +108,45 @@ export function earnChatStream(args: {
   body: string;
   modelLabel: string;
   priorContext?: string[];
+  liveContext?: string;
+  sessionSummary?: string;
 }) {
   const anthropic = client();
   if (!anthropic) return null;
   const history = (args.priorContext ?? [])
     .slice(-6)
     .map((turn) => ({ role: "user" as const, content: turn }));
+  let systemContent = earnChatSystem(args.modelLabel);
+  if (args.liveContext) {
+    systemContent += `\n\n## Live workspace state\n${args.liveContext}`;
+  }
+  if (args.sessionSummary) {
+    systemContent += `\n\n## Prior session context\n${args.sessionSummary}`;
+  }
   return anthropic.messages.stream({
     model: MODEL,
     max_tokens: 1200,
     // Cache the static persona prompt — it's identical across turns, so this
     // trims latency and cost on every reply (the planning path caches the same way).
-    system: [{ type: "text", text: earnChatSystem(args.modelLabel), cache_control: { type: "ephemeral" } }],
+    system: [{ type: "text", text: systemContent, cache_control: { type: "ephemeral" } }],
     // Chat is latency-sensitive and rarely needs deep reasoning — keep effort low.
     output_config: { effort: "low" },
     messages: [...history, { role: "user", content: args.body }],
   });
+}
+
+export async function summarizeSessionMessages(messages: Array<{role: string; content: string}>): Promise<string> {
+  if (messages.length === 0) return "";
+  const apiClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const truncated = messages.slice(-20); // last 20 messages max
+  const transcript = truncated.map(m => `${m.role}: ${m.content}`).join("\n");
+  const resp = await apiClient.messages.create({
+    model: process.env.CLAUDE_MODEL ?? "claude-haiku-4-5-20251001",
+    max_tokens: 300,
+    messages: [{ role: "user", content: `Summarize this conversation in 3-5 bullet points, focusing on decisions made, deals discussed, and actions taken:\n\n${transcript}` }],
+  });
+  const block = resp.content[0];
+  return block.type === "text" ? block.text : "";
 }
 
 const FOLLOWUPS_SCHEMA = {
