@@ -718,6 +718,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           stepDescription: step.description ?? "",
           priorOutputs,
           orgContext,
+          documentMode: stepIntent === "draft_document",
         });
       }
     } catch (stepErr) {

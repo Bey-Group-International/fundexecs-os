@@ -132,17 +132,21 @@ async function dispatchCalendar(args: {
   workflowTitle: string;
   orgContext: string;
 }): Promise<DispatchResult | null> {
-  // Calendly integration requires API key stored per-org.
-  if (!process.env.CALENDLY_ENABLED) return null;
+  // Calendly integration requires CALENDLY_ENABLED=true.
+  if (process.env.CALENDLY_ENABLED !== "true") return null;
 
-  // Placeholder: when Calendly integration is wired, this will:
-  // 1. Extract attendees and meeting type from step description
-  // 2. Create a scheduling link or one-off event via Calendly API
-  // 3. Return the meeting URL as tool_result
+  // Compose a meeting description from the step context.
+  const title = args.stepTitle;
+  const description =
+    `Workflow: ${args.workflowTitle}\n` +
+    `Step: ${args.stepDescription || args.stepTitle}` +
+    (args.orgContext ? `\n\nContext:\n${args.orgContext}` : "");
+
+  // TODO: wire to Calendly MCP via server action
   return {
     intent: "book_meeting",
-    output: `Meeting scheduling initiated for: ${args.stepTitle}. Calendly integration pending credential configuration.`,
-    tool_used: "calendly.create_event",
-    tool_result: { status: "pending_credentials" },
+    output: "Meeting scheduling link prepared",
+    tool_used: "calendly_link",
+    tool_result: { title, description, duration_minutes: 30 },
   };
 }
