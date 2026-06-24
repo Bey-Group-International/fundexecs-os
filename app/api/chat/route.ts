@@ -40,81 +40,70 @@ export async function POST(request: Request) {
     /\b(news|recent|latest|current|market|rate|price|comps|comparable|filing|SEC|EDGAR)\b/i.test(body) ||
     /\b[A-Z][a-z]+ (Capital|Partners|Group|Fund|REIT|Inc|LLC|Corp)\b/.test(body);
 
-  // --- Live DB context loading ---
+  // --- Live DB context loading — parallel queries to minimize latency ---
   let liveContext = "";
   try {
     const supabase = createServerClient();
 
-    // Active deals
-    const activeDealsLines: string[] = [];
-    try {
-      const { data: deals } = await supabase
+    const [dealsResult, diligenceResult, tasksResult, contactsResult] = await Promise.allSettled([
+      supabase
         .from("deals")
-        .select("name, stage, asset_class")
+        .select("name, stage, asset_class, updated_at")
         .eq("organization_id", orgId)
         .not("stage", "in", '("closed","rejected")')
         .order("updated_at", { ascending: false })
-        .limit(5);
-
-      if (deals && deals.length > 0) {
-        // Open diligence counts per deal
-        const { data: diligenceCounts } = await supabase
-          .from("diligence_items")
-          .select("deal_id, id")
-          .eq("organization_id", orgId)
-          .eq("status", "open");
-
-        const countMap: Record<string, number> = {};
-        if (diligenceCounts) {
-          for (const item of diligenceCounts) {
-            if (item.deal_id) countMap[item.deal_id] = (countMap[item.deal_id] ?? 0) + 1;
-          }
-        }
-
-        for (const deal of deals) {
-          const openItems = deal.name && countMap[deal.name] ? ` (${countMap[deal.name]} open items)` : "";
-          activeDealsLines.push(`${deal.name} (${deal.stage}${openItems})`);
-        }
-        liveContext += `Active deals: ${activeDealsLines.join(", ")}\n`;
-      }
-    } catch {
-      // skip — table may not exist or RLS blocks access
-    }
-
-    // Running tasks count
-    try {
-      const { count: runningTasks } = await supabase
+        .limit(8),
+      supabase
+        .from("diligence_items")
+        .select("deal_id, id")
+        .eq("organization_id", orgId)
+        .eq("status", "open"),
+      supabase
         .from("tasks")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", orgId)
-        .eq("status", "in_progress");
-
-      if (runningTasks !== null) {
-        liveContext += `Running workflows: ${runningTasks}\n`;
-      }
-    } catch {
-      // skip
-    }
-
-    // LP pipeline count
-    try {
-      const { count: lpCount } = await supabase
+        .eq("status", "in_progress"),
+      supabase
         .from("contacts")
         .select("id", { count: "exact", head: true })
-        .eq("organization_id", orgId);
+        .eq("organization_id", orgId),
+    ]);
 
-      if (lpCount !== null) {
-        liveContext += `LP pipeline: ${lpCount} contacts\n`;
+    // Active deals with open diligence counts
+    if (dealsResult.status === "fulfilled" && dealsResult.value.data?.length) {
+      const deals = dealsResult.value.data;
+      const countMap: Record<string, number> = {};
+      if (diligenceResult.status === "fulfilled" && diligenceResult.value.data) {
+        for (const item of diligenceResult.value.data) {
+          if (item.deal_id) countMap[item.deal_id] = (countMap[item.deal_id] ?? 0) + 1;
+        }
       }
-    } catch {
-      // skip — contacts table may not exist
+      const activeDealsLines = deals.map((deal) => {
+        const openItems = deal.name && countMap[deal.name] ? ` · ${countMap[deal.name]} open items` : "";
+        const daysAgo = deal.updated_at
+          ? Math.round((Date.now() - new Date(deal.updated_at).getTime()) / 86400000)
+          : null;
+        const recency = daysAgo !== null ? ` · updated ${daysAgo}d ago` : "";
+        return `${deal.name} [${deal.stage}${deal.asset_class ? ` · ${deal.asset_class}` : ""}${openItems}${recency}]`;
+      });
+      liveContext += `Active pipeline (${deals.length}):\n${activeDealsLines.map((l) => `  - ${l}`).join("\n")}\n`;
+    }
+
+    if (tasksResult.status === "fulfilled") {
+      const count = (tasksResult.value as { count: number | null }).count;
+      if (count !== null) liveContext += `Running workflows: ${count}\n`;
+    }
+
+    if (contactsResult.status === "fulfilled") {
+      const count = (contactsResult.value as { count: number | null }).count;
+      if (count !== null) liveContext += `LP pipeline: ${count} contacts\n`;
     }
 
     if (needsWebSearch) {
       liveContext += "\n[Web search recommended for this query — live data not fetched]\n";
     }
   } catch {
-    // If any outer error occurs, proceed without live context
+    // proceed without live context
   }
 
   // --- Prior artifact context: last 5 completed deliverables so Earn can
