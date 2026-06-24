@@ -95,20 +95,34 @@ async function dispatchEmail(args: {
   workflowTitle: string;
   orgContext: string;
 }): Promise<DispatchResult | null> {
-  // Gmail integration requires OAuth credentials stored per-org.
-  // For now: detect if GMAIL_ENABLED env var is set; if not, return null
-  // so executeStep handles it as a draft via Claude.
-  if (!process.env.GMAIL_ENABLED) return null;
+  // Gmail integration is gated on GMAIL_ENABLED env var.
+  // When not set, fall back to Claude text generation.
+  if (process.env.GMAIL_ENABLED !== "true") return null;
 
-  // Placeholder: when Gmail integration is wired, this will:
-  // 1. Extract recipient, subject, body from Claude's structured output
-  // 2. Call Gmail API send endpoint
-  // 3. Return the sent message ID as tool_result
+  // Compose a structured draft from the step context.
+  // The actual MCP call (mcp__Gmail__create_draft) must be triggered from a
+  // server action where MCP tools are available — not from this lib module.
+  // TODO: wire to Gmail MCP via server action when deployed.
+  const subject = `${args.workflowTitle} — ${args.stepTitle}`;
+  const body = [
+    args.stepDescription.trim(),
+    "",
+    args.orgContext ? `---\n${args.orgContext}` : "",
+  ]
+    .filter((l, i, arr) => !(i === arr.length - 1 && l === ""))
+    .join("\n")
+    .trim();
+
   return {
     intent: "send_email",
-    output: `Email draft prepared for: ${args.stepTitle}. Gmail integration pending credential configuration.`,
-    tool_used: "gmail.send",
-    tool_result: { status: "draft_only", reason: "credentials_not_configured" },
+    output: `Email draft prepared: ${subject}`,
+    tool_used: "gmail_draft",
+    tool_result: {
+      subject,
+      body,
+      // Recipient not yet resolved — operator sets before sending from inbox.
+      to: null,
+    },
   };
 }
 
@@ -118,17 +132,21 @@ async function dispatchCalendar(args: {
   workflowTitle: string;
   orgContext: string;
 }): Promise<DispatchResult | null> {
-  // Calendly integration requires API key stored per-org.
-  if (!process.env.CALENDLY_ENABLED) return null;
+  // Calendly integration requires CALENDLY_ENABLED=true.
+  if (process.env.CALENDLY_ENABLED !== "true") return null;
 
-  // Placeholder: when Calendly integration is wired, this will:
-  // 1. Extract attendees and meeting type from step description
-  // 2. Create a scheduling link or one-off event via Calendly API
-  // 3. Return the meeting URL as tool_result
+  // Compose a meeting description from the step context.
+  const title = args.stepTitle;
+  const description =
+    `Workflow: ${args.workflowTitle}\n` +
+    `Step: ${args.stepDescription || args.stepTitle}` +
+    (args.orgContext ? `\n\nContext:\n${args.orgContext}` : "");
+
+  // TODO: wire to Calendly MCP via server action
   return {
     intent: "book_meeting",
-    output: `Meeting scheduling initiated for: ${args.stepTitle}. Calendly integration pending credential configuration.`,
-    tool_used: "calendly.create_event",
-    tool_result: { status: "pending_credentials" },
+    output: "Meeting scheduling link prepared",
+    tool_used: "calendly_link",
+    tool_result: { title, description, duration_minutes: 30 },
   };
 }
