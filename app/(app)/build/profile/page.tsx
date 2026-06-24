@@ -94,7 +94,7 @@ export default async function ProfilePage() {
         </p>
       </header>
 
-      <form action={saveOrgProfile as (fd: FormData) => Promise<void>} className="flex flex-col gap-10">
+      <form action={saveOrgProfile as unknown as (fd: FormData) => Promise<void>} className="flex flex-col gap-10">
         {/* ── Identity ─────────────────────────────────────────── */}
         <Section
           eyebrow="Who you are"
