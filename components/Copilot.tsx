@@ -1351,7 +1351,7 @@ export default function Copilot({
                         className="flex w-full items-center justify-between gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
                       >
                         <span className="flex items-center gap-2.5">
-                          <span aria-hidden className="font-mono text-fg-muted">⤬</span>
+                          <span aria-hidden className="font-mono text-fg-muted">⇆</span>
                           Connected actions
                         </span>
                         <span className="flex items-center gap-1.5">
