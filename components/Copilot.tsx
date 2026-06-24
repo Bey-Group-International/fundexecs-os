@@ -741,7 +741,7 @@ export default function Copilot({
             <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
               You
             </div>
-            <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+            <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
               {stripSystemAnnotations(t.content)}
             </div>
           </div>
@@ -865,7 +865,7 @@ export default function Copilot({
             <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
               You
             </div>
-            <div className="whitespace-pre-wrap rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+            <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
               {b.workflow.description || b.workflow.title}
             </div>
           </div>
@@ -1554,6 +1554,34 @@ export default function Copilot({
   );
 }
 
+// Renders a step's plain-text deliverable (from step.result.output when there's
+// no durable artifact) in a subtle pre block, truncated to ~6 lines with a
+// "Show more" expand so the step card stays scannable by default.
+function StepDeliverable({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const LINE_LIMIT = 6;
+  const lines = text.split("\n");
+  const truncated = !expanded && lines.length > LINE_LIMIT;
+  const displayed = truncated ? lines.slice(0, LINE_LIMIT).join("\n") : text;
+  return (
+    <div className="mt-2 rounded-lg border border-line/60 bg-surface-0/50">
+      <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-5 text-fg-secondary">
+        {displayed}
+        {truncated ? "…" : ""}
+      </pre>
+      {lines.length > LINE_LIMIT ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full border-t border-line/60 px-3 py-1.5 text-left font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+        >
+          {expanded ? "Show less ▴" : `Show more (${lines.length - LINE_LIMIT} more lines) ▾`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function WorkflowSteps({
   bundle,
   liveSteps = {},
@@ -1593,9 +1621,9 @@ function WorkflowSteps({
               <StepNode status={status} color={agent?.color} />
               {i < steps.length - 1 ? <span className="mt-1 w-px flex-1 bg-line/80" /> : null}
             </div>
-            <div className="flex-1 pb-1">
+            <div className="min-w-0 flex-1 pb-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-fg-primary">{step.title}</span>
+                <span className="min-w-0 truncate text-sm font-medium text-fg-primary">{step.title}</span>
                 {artifact ? (
                   <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
                     {ARTIFACT_LABEL[artifact.artifact_type]}
@@ -1605,11 +1633,17 @@ function WorkflowSteps({
                   {STATUS_LABEL[status] ?? status}
                 </span>
               </div>
-              <p className="mt-0.5 text-xs text-fg-secondary">
+              <p className="mt-0.5 break-words text-xs text-fg-secondary">
                 <span className="font-mono uppercase text-fg-muted">{agent?.name}</span> · {step.description}
               </p>
               {output ? (
-                <ArtifactInline content={output} artifactType={artifact?.artifact_type} title={step.title} />
+                artifact ? (
+                  // Durable artifact: render with full ArtifactInline (type-aware display).
+                  <ArtifactInline content={output} artifactType={artifact.artifact_type} title={step.title} />
+                ) : (
+                  // Inline step result: plain-text deliverable with truncation + expand.
+                  <StepDeliverable text={output} />
+                )
               ) : null}
             </div>
           </li>

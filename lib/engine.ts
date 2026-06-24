@@ -384,7 +384,7 @@ async function createSession(
     .from("sessions")
     .insert({
       organization_id: ctx.orgId,
-      name: args.name.trim().slice(0, 120) || "Untitled session",
+      name: args.name.replace(/^\[.*?\]\s*/, "").trim().slice(0, 120) || "Untitled session",
       origin: args.origin,
       automation_id: args.automationId ?? null,
       created_by: ctx.actorId,
@@ -689,16 +689,18 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
 
     const stepIntent = classifyStepIntent(step.title, step.description ?? "");
     let output: string;
-    if (stepIntent !== "text_generation" && stepIntent !== "draft_document") {
-      const dispatched = await dispatchStepTool({
-        intent: stepIntent,
-        stepTitle: step.title,
-        stepDescription: step.description ?? "",
-        workflowTitle: workflow.title,
-        agent: step.assigned_agent,
-        orgContext,
-        orgId: ctx.orgId,
-      });
+    try {
+      const dispatched = (stepIntent !== "text_generation" && stepIntent !== "draft_document")
+        ? await dispatchStepTool({
+            intent: stepIntent,
+            stepTitle: step.title,
+            stepDescription: step.description ?? "",
+            workflowTitle: workflow.title,
+            agent: step.assigned_agent,
+            orgContext,
+            orgId: ctx.orgId,
+          })
+        : null;
       if (dispatched) {
         output = formatDispatchOutput(dispatched);
       } else {
@@ -711,16 +713,31 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           orgContext,
         });
       }
-    } else {
-      output = await executeStep({
-        workflowTitle: workflow.title,
-        agent: step.assigned_agent,
-        stepTitle: step.title,
-        stepDescription: step.description ?? "",
-        priorOutputs,
-        orgContext,
-      });
+    } catch (stepErr) {
+      // A step failure must never abort the remaining steps. Mark this step
+      // failed, record the error, and continue so later steps still execute.
+      const errMsg = stepErr instanceof Error ? stepErr.message : String(stepErr);
+      await Promise.all([
+        ctx.supabase
+          .from("tasks")
+          .update({ status: "failed", progress: 0, result: { error: errMsg } as Json })
+          .eq("id", step.id),
+        recordEvent(ctx, {
+          taskId: workflow.id,
+          type: "task.completed",
+          agent: step.assigned_agent,
+          hub: step.hub,
+          payload: { step_id: step.id, message: `${step.title} — failed: ${errMsg}` },
+        }),
+        ctx.supabase
+          .from("tasks")
+          .update({ progress: (i + 1) / Math.max(list.length, 1) })
+          .eq("id", workflow.id),
+      ]);
+      emitProgress(onProgress, { type: "step_done", step_id: step.id, title: step.title });
+      continue;
     }
+
     // Attribute this step's work to a Brain: the engine ORCHESTRATES, Brains
     // EXECUTE. This logs a brain_runs row tagged with the workflow's session so
     // the step surfaces in the session "Brains at work" theater, and surfaces
