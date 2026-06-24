@@ -724,6 +724,7 @@ export function ExecutiveHQ() {
       `}</style>
 
       {/* Full-office PNG background (walls, corridors, lobby) */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`/assets/fundexecs/office/rooms/${nightMode ? "night" : "day"}/office-${nightMode ? "night" : "day"}-empty.png`}
         alt=""
