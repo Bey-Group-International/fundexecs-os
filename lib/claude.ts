@@ -413,17 +413,21 @@ export async function executeStep(args: {
   stepTitle: string;
   stepDescription: string;
   priorOutputs: string[];
+  orgContext?: string;
 }): Promise<string> {
   const anthropic = client();
   if (!anthropic) return fallbackStepOutput(args);
   const agentName = AGENTS.find((a) => a.key === args.agent)?.name ?? args.agent;
+  const systemPrompt =
+    `You are the ${agentName} agent inside FundExecs OS. Produce a crisp, professional deliverable for your assigned step. Lead with the outcome. No preamble.` +
+    (args.orgContext ? `\n\nFirm context:\n${args.orgContext}` : "");
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1400,
       thinking: { type: "adaptive" },
       output_config: { effort: "medium" },
-      system: `You are the ${agentName} agent inside FundExecs OS. Produce a crisp, professional deliverable for your assigned step. Lead with the outcome. No preamble.`,
+      system: systemPrompt,
       messages: [
         {
           role: "user",

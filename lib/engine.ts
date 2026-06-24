@@ -18,6 +18,7 @@ import { buildRouting, deskOverride, engineForStage, executiveForStage, EXECUTIV
 import { shouldReuseRecord } from "@/lib/reference-binding";
 import { getRoutingCorrections, formatRoutingCorrections } from "@/lib/routing-feedback";
 import { recordOperatorFeedback } from "@/lib/team-tasks";
+import { classifyStepIntent, dispatchStepTool, formatDispatchOutput } from "@/lib/tool-dispatch";
 import { buildArtifactAttestation } from "@/lib/attestation-seal";
 import { grantReputation, REPUTATION_POINTS } from "@/lib/reputation";
 import { isPrincipalIdentityVerified } from "@/lib/identity";
@@ -590,6 +591,57 @@ export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string, d
   };
 }
 
+/** Load org + active deal context for grounding step prompts. Never throws. */
+async function loadOrgContext(ctx: Ctx, workflow: Task): Promise<string> {
+  try {
+    const { data: org } = await ctx.supabase
+      .from("organizations")
+      .select("name, entity_type, primary_strategy, description, hq_location, operator_role, aum_range")
+      .eq("id", ctx.orgId)
+      .single();
+
+    let deal: { name: string; asset_class: string | null; stage: string | null; geography: string | null; target_amount: number | null } | null = null;
+    if (workflow.session_id) {
+      const { data } = await ctx.supabase
+        .from("deals")
+        .select("name, asset_class, stage, geography, target_amount")
+        .eq("organization_id", ctx.orgId)
+        .eq("session_id", workflow.session_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      deal = data ?? null;
+    }
+
+    if (!org) return "";
+
+    const lines: string[] = [];
+    const firmParts = [
+      org.name ? `Firm: ${org.name}` : null,
+      org.primary_strategy ? `Strategy: ${org.primary_strategy}` : null,
+      org.entity_type ? `Entity: ${org.entity_type}` : null,
+      org.aum_range ? `AUM: ${org.aum_range}` : null,
+    ].filter(Boolean);
+    if (firmParts.length) lines.push(firmParts.join(" | "));
+    if (org.description) lines.push(`Description: ${org.description}`);
+    const locationParts = [
+      org.hq_location ? `HQ: ${org.hq_location}` : null,
+      org.operator_role ? `Role: ${org.operator_role}` : null,
+    ].filter(Boolean);
+    if (locationParts.length) lines.push(locationParts.join(" | "));
+    if (deal) {
+      const dealDesc = `Active deal: ${deal.name}` +
+        (deal.asset_class || deal.stage ? ` (${[deal.asset_class, deal.stage].filter(Boolean).join(", ")})` : "") +
+        (deal.target_amount ? ` target $${deal.target_amount.toLocaleString()}` : "");
+      lines.push(dealDesc);
+    }
+
+    return lines.join("\n");
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Run every step of an approved workflow, each producing a deliverable.
  *
@@ -614,6 +666,8 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
   const priorOutputs: string[] = [];
   const artifactIds: string[] = [];
 
+  const orgContext = await loadOrgContext(ctx, workflow);
+
   for (let i = 0; i < list.length; i++) {
     const step = list[i];
     await Promise.all([
@@ -633,15 +687,32 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
       step_order: step.step_order,
     });
 
+    const stepIntent = classifyStepIntent(step.title, step.description ?? "");
     let output: string;
     try {
-      output = await executeStep({
-        workflowTitle: workflow.title,
-        agent: step.assigned_agent,
-        stepTitle: step.title,
-        stepDescription: step.description ?? "",
-        priorOutputs,
-      });
+      const dispatched = (stepIntent !== "text_generation" && stepIntent !== "draft_document")
+        ? await dispatchStepTool({
+            intent: stepIntent,
+            stepTitle: step.title,
+            stepDescription: step.description ?? "",
+            workflowTitle: workflow.title,
+            agent: step.assigned_agent,
+            orgContext,
+            orgId: ctx.orgId,
+          })
+        : null;
+      if (dispatched) {
+        output = formatDispatchOutput(dispatched);
+      } else {
+        output = await executeStep({
+          workflowTitle: workflow.title,
+          agent: step.assigned_agent,
+          stepTitle: step.title,
+          stepDescription: step.description ?? "",
+          priorOutputs,
+          orgContext,
+        });
+      }
     } catch (stepErr) {
       // A step failure must never abort the remaining steps. Mark this step
       // failed, record the error, and continue so later steps still execute.
