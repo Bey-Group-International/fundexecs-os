@@ -67,6 +67,9 @@ const ThesisLive = nextDynamic(() =>
 const WorkspaceDocumentListLive = nextDynamic(() =>
   import("@/components/workspace/WorkspaceDocumentListLive").then((m) => m.WorkspaceDocumentListLive),
 );
+const PeopleLookupLive = nextDynamic(() =>
+  import("@/components/source/PeopleLookupLive").then((m) => m.PeopleLookupLive),
+);
 
 // The `source` hub's standalone modules: a registry of module key → render fn.
 // Each shares the same shape (a sourcing-live surface keyed off ?q), so they live
@@ -191,6 +194,23 @@ export default function ModulePage({
           <WorkspaceDocumentListLive />
         </section>
         <div className="mt-8 border-t border-line pt-8">
+          <ModuleView hub={params.hub} module={params.module} />
+        </div>
+      </div>
+    );
+  }
+
+  // Source › People Lookups — live Apollo people search + email verification.
+  if (params.hub === "source" && params.module === "people_lookups") {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-6 flex flex-col gap-8">
+        <section>
+          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+            People Lookups
+          </p>
+          <PeopleLookupLive />
+        </section>
+        <div className="border-t border-line pt-8">
           <ModuleView hub={params.hub} module={params.module} />
         </div>
       </div>

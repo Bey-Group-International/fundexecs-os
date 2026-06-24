@@ -1,8 +1,12 @@
 // components/source/DealPipelineLive.tsx
-// Async server component — renders the active deal pipeline for this org.
-// Best-effort: any auth/DB failure degrades to an empty state, never a crash.
+// Async server component — renders the active deal pipeline for this org,
+// enriched with live Apollo company data and verification badges.
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { VerificationPill } from "@/components/source/VerificationBadge";
+import { getCached, setCached } from "@/lib/source-cache";
+import { enrichOrganization } from "@/lib/integrations/providers/apollo";
+import type { VerifiedCompany } from "@/lib/source-hub-types";
 
 const STAGE_STYLES: Record<string, string> = {
   sourced: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
@@ -21,7 +25,73 @@ function formatCurrency(n: number | null | undefined): string {
   return `$${n.toLocaleString()}`;
 }
 
-async function loadDeals() {
+interface DealRow {
+  id: string;
+  name: string;
+  stage: string | null;
+  asset_class: string | null;
+  geography: string | null;
+  target_amount: number | null;
+  thesis_fit: number | null;
+  expected_close: string | null;
+  website: string | null;
+}
+
+interface EnrichedDeal extends DealRow {
+  _enriched?: VerifiedCompany;
+  _verified: boolean;
+  _confidence: number;
+  _provider: string;
+}
+
+async function enrichDealRow(
+  orgId: string,
+  deal: DealRow
+): Promise<{ enriched?: VerifiedCompany; verified: boolean; confidence: number; provider: string }> {
+  const domain = deal.website
+    ? deal.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+    : null;
+
+  if (!domain && !deal.name) {
+    return { verified: false, confidence: 0.2, provider: "manual" };
+  }
+
+  const params = { domain: domain ?? undefined, name: deal.name };
+  const cached = await getCached<VerifiedCompany | null>(
+    orgId,
+    "company",
+    "apollo",
+    params as Record<string, unknown>
+  );
+
+  if (cached?.data) {
+    return {
+      enriched: cached.data,
+      verified: cached.verified,
+      confidence: cached.confidence,
+      provider: "apollo",
+    };
+  }
+
+  try {
+    const result = await enrichOrganization(params);
+    if (result.status !== "failed" && result.data) {
+      await setCached(orgId, "company", "apollo", params as Record<string, unknown>, result);
+      return {
+        enriched: result.data,
+        verified: result.verified,
+        confidence: result.confidence,
+        provider: "apollo",
+      };
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  return { verified: false, confidence: 0.2, provider: "manual" };
+}
+
+async function loadDeals(): Promise<EnrichedDeal[]> {
   try {
     const auth = await requireOrgContext();
     if (!auth.ok) return [];
@@ -29,12 +99,29 @@ async function loadDeals() {
     const { data } = await supabase
       .from("deals")
       .select(
-        "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, notes",
+        "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website",
       )
       .eq("organization_id", auth.ctx.orgId)
       .order("created_at", { ascending: false })
       .limit(200);
-    return data ?? [];
+
+    const rows = (data ?? []) as unknown as DealRow[];
+
+    // Enrich up to 20 deals in parallel
+    const enrichments = await Promise.all(
+      rows.slice(0, 20).map((d) => enrichDealRow(auth.ctx.orgId, d))
+    );
+
+    return rows.map((d, i) => {
+      const enr = enrichments[i] ?? { verified: false, confidence: 0.2, provider: "manual" };
+      return {
+        ...d,
+        _enriched: enr.enriched,
+        _verified: enr.verified,
+        _confidence: enr.confidence,
+        _provider: enr.provider,
+      };
+    });
   } catch {
     return [];
   }
@@ -42,6 +129,7 @@ async function loadDeals() {
 
 export async function DealPipelineLive() {
   const deals = await loadDeals();
+  const verifiedCount = deals.filter((d) => d._verified).length;
 
   return (
     <section>
@@ -49,9 +137,16 @@ export async function DealPipelineLive() {
         <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
           Deal Pipeline
         </p>
-        <span className="font-mono text-[11px] text-fg-muted">
-          {deals.length} deal{deals.length !== 1 ? "s" : ""}
-        </span>
+        <div className="flex items-center gap-3">
+          {verifiedCount > 0 && (
+            <span className="text-xs text-fg-muted">
+              {verifiedCount}/{Math.min(deals.length, 20)} enriched via Apollo
+            </span>
+          )}
+          <span className="font-mono text-[11px] text-fg-muted">
+            {deals.length} deal{deals.length !== 1 ? "s" : ""}
+          </span>
+        </div>
       </div>
 
       {deals.length === 0 ? (
@@ -82,6 +177,9 @@ export async function DealPipelineLive() {
                   Fit
                 </th>
                 <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                  Source
+                </th>
+                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
                   Close
                 </th>
               </tr>
@@ -90,33 +188,35 @@ export async function DealPipelineLive() {
               {deals.map((d, i) => (
                 <tr
                   key={d.id}
-                  className={
-                    i < deals.length - 1 ? "border-b border-line" : ""
-                  }
+                  className={i < deals.length - 1 ? "border-b border-line" : ""}
                 >
                   <td className="px-4 py-3">
                     <p className="font-medium text-fg">{d.name}</p>
-                    {d.geography && (
-                      <p className="mt-0.5 text-xs text-fg-muted">
-                        {d.geography}
-                      </p>
+                    {/* Show Apollo-enriched data if available */}
+                    {d._enriched?.industry ? (
+                      <p className="mt-0.5 text-xs text-fg-muted">{d._enriched.industry}</p>
+                    ) : d.geography ? (
+                      <p className="mt-0.5 text-xs text-fg-muted">{d.geography}</p>
+                    ) : null}
+                    {d._enriched?.employee_range && (
+                      <p className="mt-0.5 text-xs text-fg-muted/60">{d._enriched.employee_range} employees</p>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${
-                        STAGE_STYLES[d.stage ?? ""] ??
-                        "bg-neutral-100 text-neutral-500"
+                        STAGE_STYLES[d.stage ?? ""] ?? "bg-neutral-100 text-neutral-500"
                       }`}
                     >
                       {(d.stage ?? "unknown").replace(/_/g, " ")}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-fg-muted">
-                    {d.asset_class ?? "—"}
+                    {d._enriched?.industry ?? d.asset_class ?? "—"}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-fg">
-                    {formatCurrency(d.target_amount)}
+                    {/* Prefer Apollo revenue range over stored target amount */}
+                    {d._enriched?.revenue_range ?? formatCurrency(d.target_amount)}
                   </td>
                   <td className="px-4 py-3">
                     {d.thesis_fit != null ? (
@@ -126,6 +226,13 @@ export async function DealPipelineLive() {
                     ) : (
                       <span className="text-fg-muted">—</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <VerificationPill
+                      verified={d._verified}
+                      confidence={d._confidence}
+                      provider={d._provider}
+                    />
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-fg-muted">
                     {d.expected_close ?? "—"}
