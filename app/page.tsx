@@ -159,7 +159,7 @@ export default function LandingPage({
 
       <footer className="border-t border-line px-4 py-6 sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-          <span className="font-mono text-xs text-fg-muted">FundExecs OS · Alpha</span>
+          <span className="font-mono text-xs text-fg-muted">FundExecs OS · Early Access</span>
           <span className="font-mono text-xs text-fg-muted">
             Build &gt; Source &gt; Run &gt; Execute
           </span>

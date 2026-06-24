@@ -20,7 +20,7 @@ export type ProfileValues = {
 };
 
 const ENTITY_TYPE_OPTIONS = ["LLC", "LP", "LLP", "Inc.", "GP/LP", "Other"];
-const AUM_RANGE_OPTIONS = ["<$50M", "$50–250M", "$250M–1B", "$1–5B", "$5B+"];
+const AUM_RANGE_OPTIONS = ["<$50M", "$50\u2013250M", "$250M\u20131B", "$1\u20135B", "$5B+"];
 const OPERATOR_ROLE_OPTIONS = [
   "GP / Fund Manager",
   "Family Office",
@@ -46,14 +46,23 @@ const COMPLETENESS_KEYS: (keyof ProfileValues)[] = [
 
 function Field({
   label,
+  hint,
   children,
 }: {
   label: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-1.5 text-sm">
-      <span className="text-fg-secondary">{label}</span>
+      <span className="flex items-center gap-1.5 text-fg-secondary">
+        {label}
+        {hint && (
+          <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+            {hint}
+          </span>
+        )}
+      </span>
       {children}
     </label>
   );
@@ -125,7 +134,7 @@ export function ProfileForm({
   const identityMeta = [form.entity_type, form.jurisdiction, form.website]
     .map((v) => v.trim())
     .filter(Boolean)
-    .join(" · ");
+    .join(" \u00b7 ");
 
   const firmMeta = [
     form.hq_location.trim(),
@@ -136,7 +145,7 @@ export function ProfileForm({
     form.primary_strategy.trim(),
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(" \u00b7 ");
 
   return (
     <div className="flex flex-col gap-6 pt-5 lg:flex-row lg:items-start">
@@ -160,13 +169,13 @@ export function ProfileForm({
               className={`${inputClass} bg-surface-1`}
             />
           </Field>
-          <Field label="Entity type">
+          <Field label="Entity type" hint="required for Earn">
             <PresetSelect
               name="entity_type"
               value={form.entity_type}
               onChange={set("entity_type")}
               options={ENTITY_TYPE_OPTIONS}
-              placeholder="Select entity type…"
+              placeholder="Select entity type\u2026"
             />
           </Field>
           <Field label="Jurisdiction">
@@ -205,7 +214,7 @@ export function ProfileForm({
               value={form.aum_range}
               onChange={set("aum_range")}
               options={AUM_RANGE_OPTIONS}
-              placeholder="Select AUM range…"
+              placeholder="Select AUM range\u2026"
             />
           </Field>
           <Field label="Fund count">
@@ -218,7 +227,7 @@ export function ProfileForm({
               className={`${inputClass} bg-surface-1`}
             />
           </Field>
-          <Field label="Primary strategy">
+          <Field label="Primary strategy" hint="required for Earn">
             <input
               name="primary_strategy"
               value={form.primary_strategy}
@@ -232,7 +241,7 @@ export function ProfileForm({
               value={form.operator_role}
               onChange={set("operator_role")}
               options={OPERATOR_ROLE_OPTIONS}
-              placeholder="Select operator role…"
+              placeholder="Select operator role\u2026"
             />
           </Field>
         </fieldset>
@@ -275,7 +284,7 @@ export function ProfileForm({
           </div>
 
           <p className="mt-3 line-clamp-1 text-xs text-fg-muted">
-            {firmMeta || "HQ · AUM · funds · strategy"}
+            {firmMeta || "HQ \u00b7 AUM \u00b7 funds \u00b7 strategy"}
           </p>
 
           <div className="mt-5">

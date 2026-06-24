@@ -214,10 +214,20 @@ export function BrandStudio({
             <ContrastBadge label="on dark" ratio={darkRatio} />
             <ContrastBadge label="on white" ratio={whiteRatio} />
           </div>
+        </div>
+        {isValidHex(color) && (whiteRatio < 4.5 || darkRatio < 4.5) ? (
+          <p className="text-[11px] text-status-warning">
+            Fails AA on{" "}
+            {[darkRatio < 4.5 && "dark backgrounds", whiteRatio < 4.5 && "white backgrounds"]
+              .filter(Boolean)
+              .join(" & ")}{" "}
+            — try <span className="font-mono">#a07840</span> or a darker shade to reach ≥4.5:1.
+          </p>
+        ) : (
           <p className="text-[11px] text-fg-muted">
             Readability scores — WCAG AA requires ≥4.5:1 so your brand color stays legible on LP materials. Hover a badge for details.
           </p>
-        </div>
+        )}
       </div>
 
       {/* Palette */}

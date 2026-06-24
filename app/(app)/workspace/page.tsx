@@ -10,6 +10,14 @@ import type { Session, SessionGroup } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
 
+const EARN_EXAMPLES = [
+  "Source family offices matching our mandate",
+  "Draft an LP update memo",
+  "Run IC diligence on a target",
+  "Build an LBO model",
+  "Map the capital network",
+];
+
 function relativeTime(iso: string | null): string {
   if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
@@ -78,7 +86,19 @@ export default async function SessionsPage() {
             Ask Earn to source LPs, draft an IC memo, run diligence, or build an LBO model.
             Each conversation becomes a session you can return to.
           </p>
-
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {EARN_EXAMPLES.map((example) => (
+              <span
+                key={example}
+                className="rounded-full border border-line/60 bg-surface-2/60 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide text-fg-muted"
+              >
+                {example}
+              </span>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-fg-muted">
+            Type any of these in the composer below ↓
+          </p>
         </div>
       ) : (
         <>
@@ -109,6 +129,9 @@ export default async function SessionsPage() {
       )}
 
       <div className="sticky bottom-0 z-10 mt-6 border-t border-line/60 bg-surface-0/95 pb-2 pt-3 backdrop-blur-xl">
+        <p className="mb-2 px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          Earn can · source LPs · draft memos · run diligence · build models · map capital networks
+        </p>
         <Copilot
           orgId={ctx.orgId}
           live={copilotLive()}
