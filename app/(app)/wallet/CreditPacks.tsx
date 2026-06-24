@@ -6,8 +6,8 @@ import { StripeCheckoutModal } from "@/components/StripeCheckoutModal";
 import { purchasePackAction } from "./actions";
 
 // One-off credit packs (no subscription). With Stripe configured, buying opens
-// an in-app embedded Checkout; otherwise it mock-grants the pack's credits so
-// the flow is real end-to-end.
+// an in-app embedded Checkout; otherwise the action reports that billing needs
+// configuration for this organization.
 export function CreditPacks({
   live = false,
   publishableKey = "",
@@ -76,7 +76,7 @@ export function CreditPacks({
       <p className="mt-3 text-xs text-fg-muted">
         {live
           ? "Secure one-time checkout by Stripe. Credits land in your wallet as soon as payment completes."
-          : "Stripe isn’t configured here — packs are granted in mock mode (no charge)."}
+          : "Billing is being configured for this organization. Contact support to add credits before live checkout is enabled."}
       </p>
     </div>
   );

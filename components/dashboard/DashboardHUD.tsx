@@ -19,7 +19,7 @@ export function DashboardHUD({ data }: { data: DashboardData }) {
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-secondary sm:ml-auto">
           <span>{activeTasks} active task{activeTasks === 1 ? "" : "s"}</span>
-          <Link href="/workspace" className="hover:text-gold-300">
+          <Link href="/grid/review" className="hover:text-gold-300">
             {approvals} approval gate{approvals === 1 ? "" : "s"}
           </Link>
           <Link href="/automations" className="hover:text-gold-300">

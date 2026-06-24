@@ -1,14 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
-import { grantCredits } from "@/lib/credits";
 import { stripeConfigured, createCheckout } from "@/lib/stripe";
 import {
   PLAN_BY_KEY,
   CREDIT_PACKS,
-  planGrantCredits,
   type PlanInterval,
   type PlanKey,
 } from "@/lib/billing";
@@ -17,9 +13,8 @@ type ActionResult = { error?: string; ok?: boolean; clientSecret?: string };
 
 // Subscribe to a plan. With Stripe configured this opens an in-app embedded
 // Checkout (subscription) and returns its client_secret; the plan is activated
-// and credits granted on payment return. Without Stripe it falls back to mock
-// activation. Every path is guarded so a provider/DB error surfaces inline
-// instead of throwing a 500 that blanks the page.
+// and credits granted on payment return. Without Stripe we fail closed so
+// credits are never granted without payment.
 export async function selectPlanAction(formData: FormData): Promise<ActionResult> {
   try {
     const ctx = await getSessionContext();
@@ -41,28 +36,15 @@ export async function selectPlanAction(formData: FormData): Promise<ActionResult
       });
     }
 
-    // Mock fallback.
-    const service = createServiceClient();
-    const { error } = await service
-      .from("wallets")
-      .upsert(
-        { organization_id: ctx.orgId, plan: plan.key, plan_interval: interval },
-        { onConflict: "organization_id" },
-      );
-    if (error) return { error: error.message };
-    await grantCredits(service, ctx.orgId, planGrantCredits(plan, interval), "plan_grant", {
-      note: `${plan.name} plan (${interval})`,
-    });
-    revalidatePath("/wallet");
-    return { ok: true };
+    return { error: "Billing is not enabled for this organization yet. Contact support to activate checkout." };
   } catch (err) {
     console.error("[wallet] selectPlanAction failed:", err);
     return { error: "Something went wrong starting checkout. Please try again." };
   }
 }
 
-// Buy a one-off credit pack. Embedded Checkout when configured; mock grant
-// otherwise. Guarded so failures surface inline rather than crashing the page.
+// Buy a one-off credit pack. Embedded Checkout when configured; otherwise fail
+// closed so credits are never granted without payment.
 export async function purchasePackAction(formData: FormData): Promise<ActionResult> {
   try {
     const ctx = await getSessionContext();
@@ -76,12 +58,7 @@ export async function purchasePackAction(formData: FormData): Promise<ActionResu
       return await createCheckout({ kind: "pack", orgId: ctx.orgId, createdBy: ctx.userId, packKey });
     }
 
-    const service = createServiceClient();
-    await grantCredits(service, ctx.orgId, pack.credits, "pack_purchase", {
-      note: `${pack.credits} credit pack`,
-    });
-    revalidatePath("/wallet");
-    return { ok: true };
+    return { error: "Billing is not enabled for this organization yet. Contact support to add credits." };
   } catch (err) {
     console.error("[wallet] purchasePackAction failed:", err);
     return { error: "Something went wrong starting checkout. Please try again." };

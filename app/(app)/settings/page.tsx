@@ -218,7 +218,7 @@ export default async function SettingsPage() {
             id="integrations"
             eyebrow="Reach"
             title="Integrations"
-            description="Dispatch channels carry approved external actions to the outside world. A connected channel sends for real; an unconnected one runs in mock mode — the action is prepared and queued, not sent — so the gate → dispatch loop works end-to-end before any provider is wired up."
+            description="Dispatch channels carry approved external actions to the outside world. Connected channels send live; unconnected channels prepare and queue the action until you connect the provider."
           >
             <Connections connections={connections} />
           </Section>

@@ -103,7 +103,6 @@ function QuickActionPanel({ view }: { view: WorkspaceViewModel }) {
     "investor-relations": "execute",
     automation: "execute",
     marketing: "build",
-    arcade: "build",
     command: "source",
   } as const;
 
@@ -186,14 +185,14 @@ export function WorkspacePage({ view, data }: { view: WorkspaceViewModel; data: 
               )}
             </section>
           ) : null}
-          {view.key === "marketing" || view.key === "arcade" ? (
+          {view.key === "marketing" ? (
             <section className="fx-card p-4">
               <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
-                Prototype board
+                Authority pipeline
               </h2>
               <p className="text-sm leading-6 text-fg-secondary">
-                This workspace is data-ready for the next sprint. Queue tasks now; deeper native workflows can bind to
-                campaigns, rooms, and sprite navigation as those assets arrive.
+                Turn signed proof, portfolio milestones, and LP-ready narratives into authority content. Queue
+                tasks here, then route approved drafts through Brand Studio before anything leaves the firm.
               </p>
             </section>
           ) : null}

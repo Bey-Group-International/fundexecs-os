@@ -20,7 +20,7 @@ export function PWAInstallPrompt() {
     return () => window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
   }, []);
 
-  if (dismissed) return null;
+  if (dismissed || !installEvent) return null;
 
   return (
     <div className="rounded-2xl border border-line bg-surface-1/80 p-3 text-xs text-fg-secondary">
@@ -30,26 +30,24 @@ export function PWAInstallPrompt() {
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
-            Native mode preview
+            Install FundExecs
           </p>
           <p className="mt-1 leading-5">
-            The manifest is ready. Service-worker caching and sprite cache rules are pending your PWA decision.
+            Add the workspace to this device for focused desktop access.
           </p>
         </div>
-        {installEvent ? (
-          <button
-            type="button"
-            onClick={async () => {
-              await installEvent.prompt();
-              await installEvent.userChoice;
-              setInstallEvent(null);
-              setDismissed(true);
-            }}
-            className="rounded-lg bg-gold-500 px-2.5 py-1.5 text-[11px] font-medium text-surface-0 transition hover:bg-gold-400"
-          >
-            Install
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={async () => {
+            await installEvent.prompt();
+            await installEvent.userChoice;
+            setInstallEvent(null);
+            setDismissed(true);
+          }}
+          className="rounded-lg bg-gold-500 px-2.5 py-1.5 text-[11px] font-medium text-surface-0 transition hover:bg-gold-400"
+        >
+          Install
+        </button>
         <button
           type="button"
           onClick={() => setDismissed(true)}

@@ -5,8 +5,8 @@
 //
 // Only STRIPE_SECRET_KEY is required to operate; STRIPE_PUBLISHABLE_KEY is
 // documented for client-side Stripe.js but unused by the redirect flow. When no
-// secret is set, stripeConfigured() is false and callers fall back to the
-// existing mock grants, so local/dev without keys still works end-to-end.
+// secret is set, stripeConfigured() is false and paid-credit callers fail closed
+// instead of granting credits without checkout.
 //
 // Fulfillment is driven by the success redirect (we verify payment_status server
 // side), so no webhook secret is needed. An optional webhook route additionally
