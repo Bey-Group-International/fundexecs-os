@@ -107,15 +107,20 @@ function earnChatSystem(modelLabel: string): string {
 export function earnChatStream(args: {
   body: string;
   modelLabel: string;
-  priorContext?: string[];
+  priorContext?: Array<{role: string; content: string} | string>;
   liveContext?: string;
   sessionSummary?: string;
+  model?: string;
 }) {
   const anthropic = client();
   if (!anthropic) return null;
   const history = (args.priorContext ?? [])
-    .slice(-6)
-    .map((turn) => ({ role: "user" as const, content: turn }));
+    .slice(-30)
+    .map((turn) =>
+      typeof turn === "string"
+        ? { role: "user" as const, content: turn }
+        : { role: (turn.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: turn.content }
+    );
   let systemContent = earnChatSystem(args.modelLabel);
   if (args.liveContext) {
     systemContent += `\n\n## Live workspace state\n${args.liveContext}`;
@@ -124,7 +129,7 @@ export function earnChatStream(args: {
     systemContent += `\n\n## Prior session context\n${args.sessionSummary}`;
   }
   return anthropic.messages.stream({
-    model: MODEL,
+    model: args.model ?? MODEL,
     max_tokens: 1200,
     // Cache the static persona prompt — it's identical across turns, so this
     // trims latency and cost on every reply (the planning path caches the same way).

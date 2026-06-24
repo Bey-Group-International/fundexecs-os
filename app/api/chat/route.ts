@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   }
   const { orgId, userId } = auth.ctx;
 
-  const { body, model: requestedModel, prior, session_id } = await request.json().catch(() => ({ body: "" }));
+  const { body, model: requestedModel, prior, session_id, prior_session_id } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
@@ -120,9 +120,34 @@ export async function POST(request: Request) {
   const modelKey = (requestedModel as EarnModelKey) ?? undefined;
   const modelLabel = EARN_MODELS.find((m) => m.key === modelKey)?.label ?? "Earn";
   const priorContext = Array.isArray(prior)
-    ? prior.filter((x): x is string => typeof x === "string").slice(-6)
+    ? prior.filter((x: unknown) => x && typeof x === "object").slice(-30)
     : [];
   const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
+
+  // Cross-session summary: if the client sent a prior_session_id, load its last
+  // messages and summarize them as context for this reply.
+  let sessionSummary: string | undefined;
+  const priorSessId = typeof prior_session_id === "string" && prior_session_id ? prior_session_id : null;
+  if (priorSessId) {
+    try {
+      const supabase = createServerClient();
+      const { data: prevMsgs } = await supabase
+        .from("session_messages")
+        .select("role, content")
+        .eq("session_id", priorSessId)
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (prevMsgs && prevMsgs.length > 0) {
+        const { summarizeSessionMessages } = await import("@/lib/claude");
+        sessionSummary = await summarizeSessionMessages(
+          prevMsgs.reverse().map((m) => ({ role: m.role as string, content: m.content as string }))
+        );
+      }
+    } catch {
+      // skip — best effort
+    }
+  }
 
   // Persist the turn pair when the chat happens inside a session, so it survives
   // a reload. Best-effort (RLS-gated insert); a failure never breaks the reply.
@@ -139,8 +164,7 @@ export async function POST(request: Request) {
   }
 
   const encoder = new TextEncoder();
-  // @ts-expect-error — liveContext and model override added; lib/claude.ts will be updated to accept them
-  const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, model });
+  const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, sessionSummary, model });
 
   // No API key — stream the deterministic fallback as a single chunk.
   if (!stream) {
