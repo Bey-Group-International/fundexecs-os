@@ -78,9 +78,7 @@ export default async function SessionsPage() {
             Ask Earn to source LPs, draft an IC memo, run diligence, or build an LBO model.
             Each conversation becomes a session you can return to.
           </p>
-          <p className="mt-4 text-sm text-fg-muted">
-            Type your first request in the composer below.
-          </p>
+
         </div>
       ) : (
         <>
@@ -110,7 +108,7 @@ export default async function SessionsPage() {
         </>
       )}
 
-      <div className="mt-10">
+      <div className="sticky bottom-0 z-10 mt-6 border-t border-line/60 bg-surface-0/95 pb-2 pt-3 backdrop-blur-xl">
         <Copilot
           orgId={ctx.orgId}
           live={copilotLive()}

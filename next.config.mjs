@@ -10,6 +10,13 @@ const nextConfig = {
         destination: "/build/data_room",
         permanent: true,
       },
+      {
+        // /source/lp was a legacy URL surfaced during QA — now redirects to
+        // the correct module key.
+        source: "/source/lp",
+        destination: "/source/lp_pipeline",
+        permanent: false,
+      },
     ];
   },
 };

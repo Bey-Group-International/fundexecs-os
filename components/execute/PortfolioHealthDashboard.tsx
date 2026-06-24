@@ -118,6 +118,23 @@ function AssetRow({ asset }: { asset: AssetMetric }) {
 }
 
 export function PortfolioHealthDashboard({ healthScore, assets, riskAlerts, totalNAV }: Props) {
+  // Guard: no assets yet — show a clean onboarding state instead of a
+  // meaningless Grade F with all-zero sub-scores.
+  if (assets.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-line bg-surface-1 p-10 text-center">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 text-gold-400">
+          ◇
+        </div>
+        <p className="mt-3 text-sm font-medium text-fg-primary">Portfolio health score builds here</p>
+        <p className="mt-1 text-xs text-fg-secondary">
+          Add assets in Asset Management — once you have holdings, your NAV,
+          MOIC, diversification score, and grade will populate here automatically.
+        </p>
+      </div>
+    );
+  }
+
   const totalAssets = assets.length;
   const underperforming = assets.filter((a) => a.isUnderperforming).length;
 

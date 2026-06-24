@@ -73,8 +73,8 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
     return (
       <div className="fx-card animate-fade-up p-10 text-center">
         <p className="text-sm text-fg-muted">
-          Your unified inbox is empty. Booking, messaging, and video threads land
-          here triaged and ranked — load the demo inbox to see it in action.
+          Your unified inbox is empty. Connect your channels and booking, messaging,
+          video, and signing threads will land here — triaged, ranked, and ready to act on.
         </p>
       </div>
     );
