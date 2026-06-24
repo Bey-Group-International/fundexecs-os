@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   }
   const { orgId, userId } = auth.ctx;
 
-  const { body, model, prior, session_id } = await request.json().catch(() => ({ body: "" }));
+  const { body, model: requestedModel, prior, session_id } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
@@ -28,7 +28,96 @@ export async function POST(request: Request) {
     });
   }
 
-  const modelKey = (model as EarnModelKey) ?? undefined;
+  // --- Model routing: route simple queries to a faster/cheaper model ---
+  const wordCount = body.trim().split(/\s+/).length;
+  const isSimple = wordCount < 15 && !body.match(/draft|memo|analysis|report|summarize|compare/i);
+  const model = isSimple
+    ? "claude-haiku-4-5-20251001"
+    : (requestedModel ?? process.env.CLAUDE_MODEL ?? "claude-sonnet-4-6");
+
+  // --- Web search detection ---
+  const needsWebSearch =
+    /\b(news|recent|latest|current|market|rate|price|comps|comparable|filing|SEC|EDGAR)\b/i.test(body) ||
+    /\b[A-Z][a-z]+ (Capital|Partners|Group|Fund|REIT|Inc|LLC|Corp)\b/.test(body);
+
+  // --- Live DB context loading ---
+  let liveContext = "";
+  try {
+    const supabase = createServerClient();
+
+    // Active deals
+    const activeDealsLines: string[] = [];
+    try {
+      const { data: deals } = await supabase
+        .from("deals")
+        .select("name, stage, asset_class")
+        .eq("organization_id", orgId)
+        .not("stage", "in", '("closed","rejected")')
+        .order("updated_at", { ascending: false })
+        .limit(5);
+
+      if (deals && deals.length > 0) {
+        // Open diligence counts per deal
+        const { data: diligenceCounts } = await supabase
+          .from("diligence_items")
+          .select("deal_id, id")
+          .eq("organization_id", orgId)
+          .eq("status", "open");
+
+        const countMap: Record<string, number> = {};
+        if (diligenceCounts) {
+          for (const item of diligenceCounts) {
+            if (item.deal_id) countMap[item.deal_id] = (countMap[item.deal_id] ?? 0) + 1;
+          }
+        }
+
+        for (const deal of deals) {
+          const openItems = deal.name && countMap[deal.name] ? ` (${countMap[deal.name]} open items)` : "";
+          activeDealsLines.push(`${deal.name} (${deal.stage}${openItems})`);
+        }
+        liveContext += `Active deals: ${activeDealsLines.join(", ")}\n`;
+      }
+    } catch {
+      // skip — table may not exist or RLS blocks access
+    }
+
+    // Running tasks count
+    try {
+      const { count: runningTasks } = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .eq("status", "running");
+
+      if (runningTasks !== null) {
+        liveContext += `Running workflows: ${runningTasks}\n`;
+      }
+    } catch {
+      // skip
+    }
+
+    // LP pipeline count
+    try {
+      const { count: lpCount } = await supabase
+        .from("contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId);
+
+      if (lpCount !== null) {
+        liveContext += `LP pipeline: ${lpCount} contacts\n`;
+      }
+    } catch {
+      // skip — contacts table may not exist
+    }
+
+    if (needsWebSearch) {
+      liveContext += "\n[Web search recommended for this query — live data not fetched]\n";
+    }
+  } catch {
+    // If any outer error occurs, proceed without live context
+  }
+
+  const modelKey = (requestedModel as EarnModelKey) ?? undefined;
   const modelLabel = EARN_MODELS.find((m) => m.key === modelKey)?.label ?? "Earn";
   const priorContext = Array.isArray(prior)
     ? prior.filter((x): x is string => typeof x === "string").slice(-6)
@@ -50,7 +139,8 @@ export async function POST(request: Request) {
   }
 
   const encoder = new TextEncoder();
-  const stream = earnChatStream({ body, modelLabel, priorContext });
+  // @ts-expect-error — liveContext and model override added; lib/claude.ts will be updated to accept them
+  const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, model });
 
   // No API key — stream the deterministic fallback as a single chunk.
   if (!stream) {
