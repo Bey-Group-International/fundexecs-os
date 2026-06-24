@@ -502,7 +502,7 @@ export default function Copilot({
         signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error("chat failed");
-      earnedModelId = res.headers.get("X-Earn-Model") ?? model;
+      earnedModelId = (res.headers.get("X-Earn-Model") ?? model) as EarnModelKey;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       for (;;) {
