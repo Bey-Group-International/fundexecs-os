@@ -47,30 +47,36 @@ function FunnelRow({ stage }: { stage: FunnelStage }) {
   );
 }
 
-// The dashboard header for a Source module: a KPI strip over a stage/status
-// funnel, both derived from the rows already on the page. Renders nothing when
-// there are no rows yet (the empty state below it carries the call to action).
 export function ModuleDashboard({ summary, empty }: { summary: ModuleSummary; empty: boolean }) {
   if (empty) return null;
   return (
-    <div className="mb-5 space-y-4">
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        {summary.stats.map((s) => (
-          <StatCard key={s.label} stat={s} />
-        ))}
-      </div>
-      {summary.funnel ? (
-        <div className="rounded-xl border border-line bg-surface-1 p-4">
-          <div className="mb-3 font-mono text-[10px] uppercase tracking-wider text-gold-400">
-            {summary.funnel.title}
-          </div>
-          <div className="space-y-2">
-            {summary.funnel.stages.map((s) => (
-              <FunnelRow key={s.key} stage={s} />
-            ))}
-          </div>
+    <details className="mb-5 group">
+      <summary className="mb-3 flex cursor-pointer items-center gap-2 select-none list-none">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted group-open:text-gold-400">
+          Stats
+        </span>
+        <span className="font-mono text-[9px] text-fg-muted group-open:hidden">▸</span>
+        <span className="font-mono text-[9px] text-fg-muted hidden group-open:inline">▾</span>
+      </summary>
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          {summary.stats.map((s) => (
+            <StatCard key={s.label} stat={s} />
+          ))}
         </div>
-      ) : null}
-    </div>
+        {summary.funnel ? (
+          <div className="rounded-xl border border-line bg-surface-1 p-4">
+            <div className="mb-3 font-mono text-[10px] uppercase tracking-wider text-gold-400">
+              {summary.funnel.title}
+            </div>
+            <div className="space-y-2">
+              {summary.funnel.stages.map((s) => (
+                <FunnelRow key={s.key} stage={s} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </details>
   );
 }

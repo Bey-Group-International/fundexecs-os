@@ -8,7 +8,7 @@ import {
   type SearchStep,
 } from "@/app/(app)/[hub]/[module]/source-search-actions";
 import { addSourcedTargets } from "@/app/(app)/[hub]/[module]/source-ai-actions";
-import { AGENTS, AGENT_BY_KEY } from "@/lib/agents";
+import { AGENT_BY_KEY } from "@/lib/agents";
 import type { SourceCandidate } from "@/lib/source-ai";
 import { buildSourceSelectionPayload } from "@/lib/source-selection";
 import type { AgentKey } from "@/lib/supabase/database.types";
@@ -20,9 +20,6 @@ interface LiveStep extends SearchStep {
   candidates?: SourceCandidate[];
 }
 type Phase = "idle" | "planning" | "running" | "done";
-
-// The Source team: Earn (coordinator) + the five Source-hub agents.
-const TEAM = [AGENT_BY_KEY.associate, ...AGENTS.filter((a) => a.hub === "source")];
 
 const EXAMPLES = [
   "Family offices in Texas that back first-time managers",
@@ -201,34 +198,7 @@ export function SourceSearch({
             </span>
           ) : null}
         </div>
-        <p className="mt-1 text-sm text-fg-secondary">
-          Describe what you&apos;re looking for. Earn briefs the Source team — each specialist works
-          its part, and you review what comes back before anything enters the pipeline.
-        </p>
       </header>
-
-      {/* The team */}
-      <div className="mb-4 flex flex-wrap gap-1.5">
-        {TEAM.map((a) => {
-          const on = activeAgent === a.key || (phase === "planning" && a.key === "associate");
-          return (
-            <span
-              key={a.key}
-              title={a.role}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${
-                on ? "border-gold-500/50 bg-gold-500/10 text-fg-primary" : "border-line text-fg-muted"
-              }`}
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${on ? "animate-pulse" : ""}`}
-                style={{ backgroundColor: a.color }}
-                aria-hidden
-              />
-              {a.name}
-            </span>
-          );
-        })}
-      </div>
 
       {/* Prompt */}
       <form
@@ -390,10 +360,6 @@ export function SourceSearch({
                 </div>
               );
             })}
-          <p className="text-[11px] text-fg-muted">
-            Added records land as AI-sourced and unverified — confirm them in the module with the
-            evidence link attached.
-          </p>
         </div>
       ) : phase === "done" ? (
         <p className="mt-6 rounded-xl border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">
