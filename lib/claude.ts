@@ -110,6 +110,7 @@ export function earnChatStream(args: {
   priorContext?: Array<{role: string; content: string} | string>;
   liveContext?: string;
   sessionSummary?: string;
+  priorArtifacts?: string;
   model?: string;
 }) {
   const anthropic = client();
@@ -127,6 +128,9 @@ export function earnChatStream(args: {
   }
   if (args.sessionSummary) {
     systemContent += `\n\n## Prior session context\n${args.sessionSummary}`;
+  }
+  if (args.priorArtifacts) {
+    systemContent += `\n\n## Recent deliverables from prior workflows\n${args.priorArtifacts}`;
   }
   return anthropic.messages.stream({
     model: args.model ?? MODEL,

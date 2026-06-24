@@ -117,6 +117,30 @@ export async function POST(request: Request) {
     // If any outer error occurs, proceed without live context
   }
 
+  // --- Prior artifact context: last 5 completed deliverables so Earn can
+  //     reference prior work (memos, models, analyses) in its answers. ---
+  let priorArtifacts: string | undefined;
+  try {
+    const supabase = createServerClient();
+    const { data: artifacts } = await supabase
+      .from("artifacts")
+      .select("title, artifact_type, content")
+      .eq("organization_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (artifacts && artifacts.length > 0) {
+      priorArtifacts = artifacts
+        .map((a) => {
+          const preview = typeof a.content === "string" ? a.content.slice(0, 300) : "";
+          return `[${a.artifact_type}] ${a.title}${preview ? `: ${preview}…` : ""}`;
+        })
+        .join("\n");
+    }
+  } catch {
+    // skip — best effort
+  }
+
   const modelKey = (requestedModel as EarnModelKey) ?? undefined;
   const modelLabel = EARN_MODELS.find((m) => m.key === modelKey)?.label ?? "Earn";
   const priorContext = Array.isArray(prior)
@@ -164,7 +188,7 @@ export async function POST(request: Request) {
   }
 
   const encoder = new TextEncoder();
-  const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, sessionSummary, model });
+  const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, sessionSummary, priorArtifacts, model });
 
   // No API key — stream the deterministic fallback as a single chunk.
   if (!stream) {
@@ -196,6 +220,7 @@ export async function POST(request: Request) {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Accel-Buffering": "no",
+      "X-Earn-Model": model,
     },
   });
 }

@@ -47,6 +47,8 @@ interface ChatTurn {
   // "Compare models": the same source question rerun across every EARN_MODELS
   // entry, filled in client-side. Display-only — nothing here is persisted.
   comparisons?: ModelComparison[];
+  // Response quality metrics — latency, character count, model used.
+  metrics?: { latencyMs: number; chars: number; modelId: string };
 }
 
 // localStorage key for the remembered split ratio.
@@ -484,6 +486,8 @@ export default function Copilot({
     const controller = new AbortController();
     chatAbortRef.current = controller;
     let replyText = "";
+    const startMs = performance.now();
+    let earnedModelId = model;
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -498,6 +502,7 @@ export default function Copilot({
         signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error("chat failed");
+      earnedModelId = res.headers.get("X-Earn-Model") ?? model;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       for (;;) {
@@ -520,7 +525,14 @@ export default function Copilot({
       }
     } finally {
       chatAbortRef.current = null;
-      setChatTurns((prev) => prev.map((t) => (t.id === earnId ? { ...t, streaming: false } : t)));
+      const latencyMs = Math.round(performance.now() - startMs);
+      setChatTurns((prev) =>
+        prev.map((t) =>
+          t.id === earnId
+            ? { ...t, streaming: false, metrics: { latencyMs, chars: replyText.length, modelId: earnedModelId } }
+            : t,
+        ),
+      );
       setBusy(false);
     }
 
@@ -797,6 +809,16 @@ export default function Copilot({
             ) : null}
           </div>
 
+          {t.metrics && !t.streaming ? (
+            <div className="mt-2 flex items-center gap-2 font-mono text-[9px] tracking-wider text-fg-muted/60">
+              <span className="text-gold-500/70">{t.metrics.latencyMs}ms</span>
+              <span>·</span>
+              <span>{t.metrics.chars.toLocaleString()} chars</span>
+              <span>·</span>
+              <span className="uppercase">{t.metrics.modelId.replace("claude-", "").replace(/-\d{8}$/, "")}</span>
+            </div>
+          ) : null}
+
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line/60 pt-2">
             {t.streaming ? (
               <button
@@ -1048,6 +1070,47 @@ export default function Copilot({
         />
 
         <div ref={splitRef} className="relative flex min-h-0 flex-1 flex-col">
+          {/* Terminal stats bar — session telemetry in a command-center ticker. */}
+          {!empty ? (() => {
+            const lastEarnTurn = [...chatTurns].reverse().find((t) => t.role === "earn" && t.metrics);
+            const activeWorkflows = turns.filter((b) => b.workflow.status === "in_progress" || b.workflow.status === "awaiting_approval").length;
+            const totalTurns = chatTurns.filter((t) => t.role === "you").length + turns.length;
+            return (
+              <div className="flex items-center gap-0 overflow-x-auto border-b border-line/40 bg-surface-0/60 px-4 py-1.5 backdrop-blur-sm">
+                <span className="shrink-0 font-mono text-[9px] font-semibold uppercase tracking-[0.2em] text-gold-400">Earn</span>
+                <span className="mx-2.5 text-line/60">·</span>
+                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  {activeModel.label}
+                </span>
+                {lastEarnTurn?.metrics ? (
+                  <>
+                    <span className="mx-2.5 text-line/60">·</span>
+                    <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider">
+                      <span className="text-gold-500/80">{lastEarnTurn.metrics.latencyMs}ms</span>
+                    </span>
+                    <span className="mx-2.5 text-line/60">·</span>
+                    <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                      {lastEarnTurn.metrics.chars.toLocaleString()} chars
+                    </span>
+                  </>
+                ) : null}
+                <span className="mx-2.5 text-line/60">·</span>
+                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  {totalTurns} {totalTurns === 1 ? "turn" : "turns"}
+                </span>
+                {activeWorkflows > 0 ? (
+                  <>
+                    <span className="mx-2.5 text-line/60">·</span>
+                    <span className="shrink-0 inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-400 motion-reduce:animate-none" />
+                      {activeWorkflows} active
+                    </span>
+                  </>
+                ) : null}
+              </div>
+            );
+          })() : null}
+
           <div
             role="region"
             aria-label="Conversation"
