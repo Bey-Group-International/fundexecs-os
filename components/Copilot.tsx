@@ -885,15 +885,27 @@ export default function Copilot({
 
   // A workflow response in the same conversation stream — no second pane.
   function renderWorkRef(b: WorkflowBundle) {
+    const { workflow, approval } = b;
+    const routing = routingFromTask({
+      prompt: workflow.description || workflow.title,
+      hub: workflow.hub,
+      agents: b.steps.map((s) => s.assigned_agent),
+      stage: workflow.lifecycle_stage,
+    });
+    const split = splitOf.get(workflow.id) ?? null;
+    const pending = approval?.decision === "pending";
+    const topSteps = b.steps.slice(0, 3);
+    const primaryArtifact = b.artifacts[0] ?? null;
+
     return (
-      <div key={b.workflow.id} id={`workflow-${b.workflow.id}`} className="flex flex-col gap-2 scroll-mt-6">
+      <div key={workflow.id} id={`workflow-${workflow.id}`} className="flex flex-col gap-2 scroll-mt-6">
         <div className="flex justify-end gap-3">
           <div className="max-w-[84%]">
             <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
               You
             </div>
             <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
-              {b.workflow.description || b.workflow.title}
+              {workflow.description || workflow.title}
             </div>
           </div>
           <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
@@ -903,7 +915,7 @@ export default function Copilot({
         <div className="flex gap-3">
           <EarnOrb
             size={24}
-            pulse={b.workflow.status === "in_progress" || b.workflow.status === "awaiting_approval"}
+            pulse={workflow.status === "in_progress" || workflow.status === "awaiting_approval"}
             className="mt-2"
           />
           <div className="min-w-0 flex-1">
@@ -912,19 +924,96 @@ export default function Copilot({
               <span className="h-1 w-1 rounded-full bg-line" />
               <span>Workflow response</span>
             </div>
-            <WorkflowCard
-              bundle={b}
-              busy={busy}
-              decide={decide}
-              liveSteps={liveSteps}
-              split={splitOf.get(b.workflow.id) ?? null}
-              primary={b.approval?.decision === "pending"}
-              clarifying={clarifying}
-              clarify={clarify?.workflowId === b.workflow.id ? clarify : null}
-              onAsk={() => askQuestions(b.workflow.id)}
-              onAnswerChange={(v) => setClarify((c) => (c ? { ...c, answer: v } : c))}
-              onCancelClarify={() => setClarify(null)}
-            />
+            <article className="rounded-2xl border border-line/75 bg-surface-1/82 px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="font-display text-base font-semibold tracking-tight text-fg-primary">
+                    {workflow.title}
+                  </h2>
+                  <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    {workflow.hub} · {STATUS_LABEL[workflow.status] ?? workflow.status}
+                  </p>
+                </div>
+                <div className="w-24 shrink-0 pt-1">
+                  <div className="mb-1 text-right font-mono text-[9px] text-fg-muted">
+                    {Math.round(workflow.progress * 100)}%
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-surface-3">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-gold-500 to-gold-300 transition-all"
+                      style={{ width: `${Math.round(workflow.progress * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-fg-secondary">{routingHeadline(routing)}</p>
+              {routing.confidence === "low" ? (
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  Early signal · verify before acting
+                </p>
+              ) : null}
+              {split ? (
+                <p className="mt-2 inline-flex rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                  Split · {split.index} of {split.total}
+                </p>
+              ) : null}
+
+              {primaryArtifact ? (
+                <div className="mt-3 rounded-xl border border-line/60 bg-surface-0/35 p-2.5">
+                  <ArtifactInline
+                    content={primaryArtifact.content}
+                    artifactType={primaryArtifact.artifact_type}
+                    title={primaryArtifact.title}
+                    sources={primaryArtifact.sources}
+                    verificationStatus={primaryArtifact.verification_status}
+                    groundingScore={primaryArtifact.grounding_score}
+                    sealStatus={primaryArtifact.seal_status}
+                  />
+                </div>
+              ) : topSteps.length ? (
+                <ol className="mt-3 space-y-1.5">
+                  {topSteps.map((step) => (
+                    <li key={step.id} className="flex items-center gap-2 text-xs text-fg-secondary">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" aria-hidden />
+                      <span className="min-w-0 truncate">{step.title}</span>
+                      <span className="ml-auto shrink-0 font-mono text-[9px] uppercase text-fg-muted">
+                        {STATUS_LABEL[step.status] ?? step.status}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+
+              {pending && approval ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => decide(approval.id, "approved")}
+                    className="rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => decide(approval.id, "accepted")}
+                    className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => decide(approval.id, "regenerate")}
+                    className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
+                  >
+                    Regenerate
+                  </button>
+                </div>
+              ) : null}
+            </article>
           </div>
         </div>
       </div>
