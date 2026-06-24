@@ -145,8 +145,14 @@ export default function Copilot({
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState<EarnModelKey>(DEFAULT_EARN_MODEL);
-  const [mode, setMode] = useState<EarnModeKey>(DEFAULT_EARN_MODE);
+  const [model, setModel] = useState<EarnModelKey>(() => {
+    if (typeof window === "undefined") return DEFAULT_EARN_MODEL;
+    return (localStorage.getItem("earn:model") as EarnModelKey) ?? DEFAULT_EARN_MODEL;
+  });
+  const [mode, setMode] = useState<EarnModeKey>(() => {
+    if (typeof window === "undefined") return DEFAULT_EARN_MODE;
+    return (localStorage.getItem("earn:mode") as EarnModeKey) ?? DEFAULT_EARN_MODE;
+  });
   const [attachments, setAttachments] = useState<EarnAttachmentInput[]>([]);
   const [voiceUsed, setVoiceUsed] = useState(false);
   const [listening, setListening] = useState(false);
@@ -257,6 +263,10 @@ export default function Copilot({
 
   const activeModel = EARN_MODELS.find((m) => m.key === model) ?? EARN_MODELS[0];
   const activeMode = EARN_MODES.find((m) => m.key === mode) ?? EARN_MODES[0];
+
+  // Persist model/mode selections so they survive reload.
+  useEffect(() => { localStorage.setItem("earn:model", model); }, [model]);
+  useEffect(() => { localStorage.setItem("earn:mode", mode); }, [mode]);
 
   // Close any open composer popover on an outside click or Escape.
   useEffect(() => {
@@ -1264,7 +1274,9 @@ export default function Copilot({
               />
 
               <div ref={toolbarRef} className="mt-1 flex items-center justify-between gap-2 px-1">
-                <div className="relative">
+                <div className="flex items-center gap-1">
+                  {/* Tools menu */}
+                  <div className="relative">
                   <button
                     type="button"
                     onClick={() =>
@@ -1278,7 +1290,7 @@ export default function Copilot({
                     title="Open composer tools"
                   >
                     Tools
-                    <span aria-hidden>{openMenu ? "▾" : "▸"}</span>
+                    <span aria-hidden>{openMenu === "plus" || openMenu === "slash" || openMenu === "integrations" ? "▾" : "▸"}</span>
                   </button>
                   {openMenu === "plus" ? (
                     <div
@@ -1465,9 +1477,81 @@ export default function Copilot({
                     </div>
                   ) : null}
                 </div>
-                <span className="hidden font-mono text-[10px] text-fg-muted sm:inline">
-                  Enter to send · Shift+Enter for newline
-                </span>
+                </div>{/* end tools + left group */}
+
+                {/* Right: model + mode pickers */}
+                <div className="flex items-center gap-1">
+                  {/* Model picker */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenMenu((m) => m === "model" ? null : "model")}
+                      aria-haspopup="menu"
+                      aria-expanded={openMenu === "model"}
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-line/50 bg-surface-2/60 px-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary"
+                      title="Switch model"
+                    >
+                      {activeModel.label}
+                      <span aria-hidden className="text-[8px]">▾</span>
+                    </button>
+                    {openMenu === "model" ? (
+                      <div
+                        role="menu"
+                        className="absolute bottom-full right-0 mb-1.5 min-w-[160px] rounded-xl border border-line/80 bg-surface-1/95 py-1 shadow-[0_8px_32px_-8px_rgb(0_0_0/0.5)] backdrop-blur-sm"
+                      >
+                        {EARN_MODELS.map((m) => (
+                          <button
+                            key={m.key}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setModel(m.key); setOpenMenu(null); }}
+                            className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-surface-2 ${model === m.key ? "text-gold-300" : "text-fg-secondary"}`}
+                          >
+                            <span className="text-sm">{m.label}</span>
+                            {model === m.key ? <span className="font-mono text-[9px] text-gold-400">✓</span> : null}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Mode picker */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenMenu((m) => m === "mode" ? null : "mode")}
+                      aria-haspopup="menu"
+                      aria-expanded={openMenu === "mode"}
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-line/50 bg-surface-2/60 px-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary"
+                      title="Switch mode"
+                    >
+                      {activeMode.label}
+                      <span aria-hidden className="text-[8px]">▾</span>
+                    </button>
+                    {openMenu === "mode" ? (
+                      <div
+                        role="menu"
+                        className="absolute bottom-full right-0 mb-1.5 min-w-[200px] rounded-xl border border-line/80 bg-surface-1/95 py-1 shadow-[0_8px_32px_-8px_rgb(0_0_0/0.5)] backdrop-blur-sm"
+                      >
+                        {EARN_MODES.map((m) => (
+                          <button
+                            key={m.key}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setMode(m.key); setOpenMenu(null); }}
+                            className={`flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 text-left transition hover:bg-surface-2 ${mode === m.key ? "text-gold-300" : "text-fg-secondary"}`}
+                          >
+                            <span className="flex items-center justify-between gap-2 text-sm">
+                              {m.label}
+                              {mode === m.key ? <span className="font-mono text-[9px] text-gold-400">✓</span> : null}
+                            </span>
+                            <span className="font-mono text-[9px] text-fg-muted">{m.hint}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </div>
           </form>
