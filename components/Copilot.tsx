@@ -1554,6 +1554,34 @@ export default function Copilot({
   );
 }
 
+// Renders a step's plain-text deliverable (from step.result.output when there's
+// no durable artifact) in a subtle pre block, truncated to ~6 lines with a
+// "Show more" expand so the step card stays scannable by default.
+function StepDeliverable({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const LINE_LIMIT = 6;
+  const lines = text.split("\n");
+  const truncated = !expanded && lines.length > LINE_LIMIT;
+  const displayed = truncated ? lines.slice(0, LINE_LIMIT).join("\n") : text;
+  return (
+    <div className="mt-2 rounded-lg border border-line/60 bg-surface-0/50">
+      <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-5 text-fg-secondary">
+        {displayed}
+        {truncated ? "…" : ""}
+      </pre>
+      {lines.length > LINE_LIMIT ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full border-t border-line/60 px-3 py-1.5 text-left font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+        >
+          {expanded ? "Show less ▴" : `Show more (${lines.length - LINE_LIMIT} more lines) ▾`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function WorkflowSteps({
   bundle,
   liveSteps = {},
@@ -1609,7 +1637,13 @@ function WorkflowSteps({
                 <span className="font-mono uppercase text-fg-muted">{agent?.name}</span> · {step.description}
               </p>
               {output ? (
-                <ArtifactInline content={output} artifactType={artifact?.artifact_type} title={step.title} />
+                artifact ? (
+                  // Durable artifact: render with full ArtifactInline (type-aware display).
+                  <ArtifactInline content={output} artifactType={artifact.artifact_type} title={step.title} />
+                ) : (
+                  // Inline step result: plain-text deliverable with truncation + expand.
+                  <StepDeliverable text={output} />
+                )
               ) : null}
             </div>
           </li>
