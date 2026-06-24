@@ -3,59 +3,53 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-// A self-guided demo walkthrough. Floats bottom-right on every authed page so a
-// tester always knows the next thing to do. Progress + collapsed state persist
-// in localStorage, so it survives navigation and can be resumed or reset.
+// First-run setup guide. Surfaces on every authed page until the operator
+// completes the 5-step foundation. Progress + collapsed state persist in
+// localStorage so it survives navigation and can be resumed or reset.
 
-interface TourStep {
+interface SetupStep {
   title: string;
   body: string;
   href: string;
   cta: string;
 }
 
-const STEPS: TourStep[] = [
+const STEPS: SetupStep[] = [
   {
-    title: "Load demo data",
-    body: "On the Command Center, click “Load demo data” to populate deals, assets, and deliverables instantly.",
-    href: "/dashboard",
-    cta: "Open Command Center",
+    title: "Complete your firm profile",
+    body: "Add your firm name, entity type, and primary strategy so Earn can match you with the right counterparties.",
+    href: "/build/profile",
+    cta: "Open Profile",
   },
   {
-    title: "Give Earn a prompt",
-    body: "Open Earn and type, e.g. “Source multifamily targets in Texas under $50M.” The Associate plans it into steps.",
+    title: "Define your investment thesis",
+    body: "Set target sectors, check size, geography, and stage. This is Earn's mandate — the tighter it is, the better the matches.",
+    href: "/build/thesis",
+    cta: "Open Thesis",
+  },
+  {
+    title: "Set up your brand kit",
+    body: "Upload your logo and set primary colors. Earn uses these in every memo, deck, and investor package it produces.",
+    href: "/build/brand",
+    cta: "Open Brand Studio",
+  },
+  {
+    title: "Build your LP pipeline",
+    body: "Add your target LPs, family offices, or capital partners. Source Hub shows your full outreach funnel in one view.",
+    href: "/source/lp_pipeline",
+    cta: "Open LP Pipeline",
+  },
+  {
+    title: "Give Earn your first command",
+    body: "Type a plain-language objective — "Source multifamily targets under $50M in Texas" — and watch Earn plan, delegate, and execute.",
     href: "/workspace",
     cta: "Open Earn",
   },
-  {
-    title: "Approve & automate",
-    body: "Review the plan, then Approve & automate. The agents execute each step and stream real deliverables.",
-    href: "/workspace",
-    cta: "Go to Earn",
-  },
-  {
-    title: "Create an automation",
-    body: "In Automations, save “Every Monday, summarize what moved in our pipeline” and hit Run now to see it work.",
-    href: "/automations",
-    cta: "Open Automations",
-  },
-  {
-    title: "See it in the Command Center",
-    body: "Deals, assets, and the latest deliverables now populate the Command Center — the system of record for the work.",
-    href: "/dashboard",
-    cta: "Back to Command Center",
-  },
-  {
-    title: "Open a session, see its work",
-    body: "In Sessions, open “Source multifamily targets in Texas,” then its Deal Pipeline. You’ll see only the deal that session produced — while the Source hub still shows the whole book.",
-    href: "/dashboard",
-    cta: "Open Sessions",
-  },
 ];
 
-const DONE_KEY = "fx_tour_done_v1";
-const COLLAPSED_KEY = "fx_tour_collapsed_v1";
-const HIDDEN_KEY = "fx_tour_hidden_v1";
+const DONE_KEY = "fx_setup_done_v2";
+const COLLAPSED_KEY = "fx_setup_collapsed_v2";
+const HIDDEN_KEY = "fx_setup_hidden_v2";
 
 export function GuidedTour() {
   const [mounted, setMounted] = useState(false);
@@ -74,13 +68,10 @@ export function GuidedTour() {
       // ignore malformed storage
     }
 
-    // The account menu's "Walkthrough" item — and the Settings toggle —
-    // re-open the tour from anywhere: unhide it and expand it.
     function openTour() {
       persistHidden(false);
       persistCollapsed(false);
     }
-    // Settings can also dismiss the tour entirely.
     function hideTour() {
       persistHidden(true);
     }
@@ -94,49 +85,29 @@ export function GuidedTour() {
 
   function persistDone(next: number[]) {
     setDone(next);
-    try {
-      localStorage.setItem(DONE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore
-    }
+    try { localStorage.setItem(DONE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }
-
   function persistCollapsed(v: boolean) {
     setCollapsed(v);
-    try {
-      localStorage.setItem(COLLAPSED_KEY, v ? "1" : "0");
-    } catch {
-      // ignore
-    }
+    try { localStorage.setItem(COLLAPSED_KEY, v ? "1" : "0"); } catch { /* ignore */ }
   }
-
   function persistHidden(v: boolean) {
     setHidden(v);
-    try {
-      localStorage.setItem(HIDDEN_KEY, v ? "1" : "0");
-    } catch {
-      // ignore
-    }
-    // Let any open Settings panel reflect the new state immediately.
-    try {
-      window.dispatchEvent(new Event("fx:tour-visibility-changed"));
-    } catch {
-      // ignore
-    }
+    try { localStorage.setItem(HIDDEN_KEY, v ? "1" : "0"); } catch { /* ignore */ }
+    try { window.dispatchEvent(new Event("fx:tour-visibility-changed")); } catch { /* ignore */ }
   }
 
   function toggleStep(i: number) {
     persistDone(done.includes(i) ? done.filter((x) => x !== i) : [...done, i]);
   }
 
-  // Avoid hydration mismatch — render nothing until we've read localStorage.
   if (!mounted) return null;
-
-  // Fully dismissed — the tester can bring it back from Settings → Guided tour.
   if (hidden) return null;
 
   const completed = done.length;
   const nextIdx = STEPS.findIndex((_, i) => !done.includes(i));
+  const allDone = completed === STEPS.length;
+  const pct = Math.round((completed / STEPS.length) * 100);
 
   if (collapsed) {
     return (
@@ -145,15 +116,15 @@ export function GuidedTour() {
           onClick={() => persistCollapsed(false)}
           className="flex items-center gap-2 rounded-full py-2 pl-3.5 pr-1 text-xs font-medium text-gold-300 transition hover:text-gold-200"
         >
-          <span className="font-mono">◆ Guided tour</span>
+          <span className="font-mono">◆ Setup guide</span>
           <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] text-gold-300">
             {completed}/{STEPS.length}
           </span>
         </button>
         <button
           onClick={() => persistHidden(true)}
-          aria-label="Close the tour — bring it back from Settings → Guided tour"
-          title="Close the tour — bring it back from Settings → Guided tour"
+          aria-label="Close — bring it back from Settings → Setup guide"
+          title="Close — bring it back from Settings → Setup guide"
           className="flex h-6 w-6 items-center justify-center rounded-full text-fg-muted transition hover:bg-surface-2 hover:text-fg-primary"
         >
           ✕
@@ -167,10 +138,10 @@ export function GuidedTour() {
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
         <div className="flex items-center gap-2">
           <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
-            Guided tour
+            Setup guide
           </span>
           <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] text-gold-300">
-            {completed}/{STEPS.length}
+            {pct}%
           </span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -184,19 +155,27 @@ export function GuidedTour() {
           ) : null}
           <button
             onClick={() => persistHidden(true)}
-            title="Hide the tour — bring it back from Settings → Guided tour"
+            title="Hide — bring it back from Settings → Setup guide"
             className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
           >
             Hide
           </button>
           <button
             onClick={() => persistCollapsed(true)}
-            aria-label="Collapse tour"
+            aria-label="Collapse setup guide"
             className="rounded p-0.5 text-fg-muted transition hover:text-fg-primary"
           >
             ✕
           </button>
         </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-0.5 w-full bg-surface-2">
+        <div
+          className="h-full bg-gold-400 transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
       </div>
 
       <div className="max-h-[60vh] overflow-y-auto p-2">
@@ -206,14 +185,12 @@ export function GuidedTour() {
           return (
             <div
               key={step.title}
-              className={`rounded-lg p-2.5 transition ${
-                isNext ? "bg-surface-2" : ""
-              }`}
+              className={`rounded-lg p-2.5 transition ${isNext ? "bg-surface-2" : ""}`}
             >
               <div className="flex items-start gap-2.5">
                 <button
                   onClick={() => toggleStep(i)}
-                  aria-label={isDone ? "Mark step incomplete" : "Mark step complete"}
+                  aria-label={isDone ? "Mark incomplete" : "Mark complete"}
                   className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px] transition ${
                     isDone
                       ? "border-status-success bg-status-success/20 text-status-success"
@@ -223,11 +200,7 @@ export function GuidedTour() {
                   ✓
                 </button>
                 <div className="min-w-0 flex-1">
-                  <p
-                    className={`text-sm font-medium ${
-                      isDone ? "text-fg-muted line-through" : "text-fg-primary"
-                    }`}
-                  >
+                  <p className={`text-sm font-medium ${isDone ? "text-fg-muted line-through" : "text-fg-primary"}`}>
                     <span className="mr-1 font-mono text-[11px] text-gold-400">{i + 1}.</span>
                     {step.title}
                   </p>
@@ -248,9 +221,9 @@ export function GuidedTour() {
           );
         })}
 
-        {completed === STEPS.length ? (
+        {allDone ? (
           <p className="px-2.5 py-2 text-center text-xs text-status-success">
-            🎉 That&rsquo;s the full loop — you&rsquo;ve seen FundExecs OS end to end.
+            🎉 Foundation complete — Earn is fully briefed and ready to work.
           </p>
         ) : null}
       </div>

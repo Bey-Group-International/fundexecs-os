@@ -5,6 +5,7 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import {
   createSessionGroup,
   moveSessionToGroup,
@@ -24,14 +25,8 @@ import { MatchToast } from "@/components/inbox/MatchToast";
 import { AppSidebar } from "@/components/AppSidebar";
 import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 
-// The four hubs, in operating order, as shown in the side rail (per the
-// product mockups: Build · Source · Run · Execute).
 const HUB_ORDER: Hub[] = ["build", "source", "run", "execute"];
 
-// Authed shell. Side rail (see AppSidebar): Logo · Sessions · Workflows ·
-// Inbox · More, the four operational hubs (Build / Source / Run / Execute)
-// whose modules expand on click, then Recent sessions filed under group names,
-// and the account footer. Each hub has its own page with a top module switcher.
 export default async function AppLayout({
   children,
 }: {
@@ -43,8 +38,6 @@ export default async function AppLayout({
 
   const balance = await getWalletBalance(ctx.orgId);
 
-  // Account display + the rail's "Recent" conversation list (Claude Code
-  // style): sessions filed under group names with an Ungrouped bucket.
   const supabase = createServerClient();
   const [
     { data: principal },
@@ -71,9 +64,6 @@ export default async function AppLayout({
         .select("id, name")
         .eq("organization_id", ctx.orgId)
         .order("created_at", { ascending: true }),
-      // Unread messages — the mailbox icon + sidebar badge. Capital, partners,
-      // providers, and comms; everything EXCEPT shared deals (those go to the
-      // lightbulb).
       supabase
         .from("inbox_threads")
         .select("id", { count: "exact", head: true })
@@ -81,7 +71,6 @@ export default async function AppLayout({
         .eq("unread", true)
         .eq("status", "open")
         .neq("channel", "deal_share"),
-      // Unread shared-deal updates — the lightbulb icon (botmemo deal flow).
       supabase
         .from("inbox_threads")
         .select("id", { count: "exact", head: true })
@@ -89,9 +78,6 @@ export default async function AppLayout({
         .eq("unread", true)
         .eq("status", "open")
         .eq("channel", "deal_share"),
-      // The newest unread match alert — an ecosystem match or a shared deal that
-      // fits — surfaced as the quick toast by the bell. Read-later lives in the
-      // inbox / feed; this is just the pop-in.
       supabase
         .from("inbox_threads")
         .select("id, channel, subject, preview, ai_summary")
@@ -102,16 +88,11 @@ export default async function AppLayout({
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle(),
-      // Build-hub foundation progress for the rail's module status dots. Runs in
-      // the same parallel batch (no added wall-clock); degrades to no dots on
-      // failure so the sidebar never blocks on it.
       getBuildReadiness(ctx.orgId)
         .then((r) => r.statuses)
         .catch(() => null as Record<string, ModuleStatus> | null),
     ]);
 
-  // Shape the freshest match for the toast (null when there is none). A deal
-  // match opens the "deals that fit you" feed; an ecosystem match opens the inbox.
   const matchRow = matchAlertRow as
     | { id: string; channel: string; subject: string; preview: string | null; ai_summary: string | null }
     | null;
@@ -127,9 +108,6 @@ export default async function AppLayout({
   const planKey = wallet?.plan as PlanKey | null;
   const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
 
-  // Only surface sessions that actually hold work. A session is created lazily
-  // on the first prompt (which also creates its workflow), so empty rows never
-  // appear in the conversation list.
   const candidates = (recentSessions ?? []) as {
     id: string;
     name: string;
@@ -169,7 +147,6 @@ export default async function AppLayout({
       modules: hub.modules.map((mod) => ({
         href: `/${hub.key}/${mod.key}`,
         label: mod.label,
-        // Only the Build hub carries readiness; other hubs render without dots.
         status: hub.key === "build" ? buildStatuses?.[mod.key] : undefined,
       })),
     };
@@ -200,15 +177,11 @@ export default async function AppLayout({
       <ActiveSessionProvider>
         <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
           <div className="print:hidden">
-            {/* Mailbox = unread messages (capital/partners/providers + comms);
-                lightbulb = unread shared deals. Both shake/pop on a new arrival. */}
             <GlobalTopBar
               balance={balance}
               messagesUnread={messagesUnread ?? 0}
               dealsUnread={dealsUnread ?? 0}
             />
-            {/* The quick alert that pops in by the bell on a fresh ecosystem
-                match — click to open, or let it fade and read it later. */}
             <MatchToast alert={matchAlert} />
           </div>
           <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 print:overflow-visible print:p-0">
@@ -219,6 +192,7 @@ export default async function AppLayout({
 
       <div className="print:hidden">
         <GuidedTour />
+        <KeyboardShortcuts />
         <EarnCopilotDock name={name} />
       </div>
     </div>

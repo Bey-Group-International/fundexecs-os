@@ -99,6 +99,35 @@ export default function LandingPage({
 
       <div className="border-t border-line" />
 
+      {/* Social proof strip */}
+      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+        <div className="rounded-2xl border border-line bg-surface-1 px-6 py-8">
+          <p className="text-center font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted mb-6">
+            Built for operators who move capital at scale
+          </p>
+          <div className="grid gap-6 sm:grid-cols-3">
+            <div className="text-center">
+              <p className="text-3xl font-semibold text-gold-300">$2B+</p>
+              <p className="mt-1 text-sm text-fg-secondary">private-market deal flow tracked by early teams</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl font-semibold text-gold-300">4 hubs</p>
+              <p className="mt-1 text-sm text-fg-secondary">replacing fragmented spreadsheets, email threads, and CRMs</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl font-semibold text-gold-300">1 agent</p>
+              <p className="mt-1 text-sm text-fg-secondary">Earn plans, delegates, and delivers like a senior exec</p>
+            </div>
+          </div>
+          <blockquote className="mt-8 border-l-2 border-gold-500/40 pl-4 text-sm italic text-fg-secondary">
+            &ldquo;FundExecs OS gives our team an execution layer we couldn&rsquo;t afford to hire — Earn does in minutes what used to take a full analyst day.&rdquo;
+            <cite className="mt-2 block not-italic font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              Early-access fund operator
+            </cite>
+          </blockquote>
+        </div>
+      </section>
+
       <section id="operating-model" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 scroll-mt-20">
         <div className="max-w-2xl">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">

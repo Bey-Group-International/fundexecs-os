@@ -1,8 +1,6 @@
 import Link from "next/link";
 import type { BuildReadiness, ModuleReadiness } from "@/lib/build-readiness";
 
-// Ring gauge for the overall score. Pure SVG so it renders server-side with no
-// client JS.
 function Ring({ value }: { value: number }) {
   const r = 26;
   const c = 2 * Math.PI * r;
@@ -11,15 +9,8 @@ function Ring({ value }: { value: number }) {
     <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
       <circle cx="32" cy="32" r={r} fill="none" stroke="currentColor" strokeWidth="6" className="text-line" />
       <circle
-        cx="32"
-        cy="32"
-        r={r}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="6"
-        strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={offset}
+        cx="32" cy="32" r={r} fill="none" stroke="currentColor" strokeWidth="6"
+        strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset}
         className="text-gold-400 transition-[stroke-dashoffset]"
       />
     </svg>
@@ -46,13 +37,47 @@ function ModuleChip({ m }: { m: ModuleReadiness }) {
   );
 }
 
-// Build-hub momentum panel: overall readiness, the unlock track, per-module
-// progress, and the single next-best action. Rendered above the module
-// switcher so progress is always in view as the foundation is filled in.
+// Derive top-3 next actions from incomplete modules, sorted by most remaining
+// fields (highest impact first). Falls back gracefully when modules are sparse.
+function topNextActions(
+  modules: ModuleReadiness[],
+  primary: BuildReadiness["nextAction"],
+): Array<{ label: string; moduleLabel: string; href: string; impact: string }> {
+  const incomplete = modules
+    .filter((m) => m.status !== "complete")
+    .sort((a, b) => (b.total - b.doneCount) - (a.total - a.doneCount));
+
+  const actions: Array<{ label: string; moduleLabel: string; href: string; impact: string }> = [];
+
+  if (primary) {
+    actions.push({
+      label: primary.label,
+      moduleLabel: primary.moduleLabel,
+      href: primary.href,
+      impact: "highest impact",
+    });
+  }
+
+  const IMPACT = ["high impact", "quick win"];
+  for (const m of incomplete) {
+    if (actions.some((a) => a.href === m.href)) continue;
+    if (actions.length >= 3) break;
+    actions.push({
+      label: `Complete ${m.label} (${m.doneCount}/${m.total} fields)`,
+      moduleLabel: m.label,
+      href: m.href,
+      impact: IMPACT[actions.length - 1] ?? "quick win",
+    });
+  }
+
+  return actions.slice(0, 3);
+}
+
 export function ReadinessPanel({ readiness }: { readiness: BuildReadiness }) {
   const { overall, stage, stages, modules, nextAction } = readiness;
   const nextStage = stages.find((s) => !s.unlocked);
   const gap = nextStage ? nextStage.threshold - overall : 0;
+  const topActions = topNextActions(modules, nextAction);
 
   return (
     <div className="mb-6 rounded-2xl border border-line bg-surface-1 p-5">
@@ -118,22 +143,30 @@ export function ReadinessPanel({ readiness }: { readiness: BuildReadiness }) {
         ))}
       </div>
 
-      {/* Next best action */}
-      {nextAction ? (
-        <Link
-          href={nextAction.href}
-          className="mt-4 flex items-center gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3 transition hover:bg-gold-500/10"
-        >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-surface-0">
-            →
-          </span>
-          <span className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">
-              Next best step · {nextAction.moduleLabel}
-            </span>
-            <span className="block truncate text-sm text-fg-primary">{nextAction.label}</span>
-          </span>
-        </Link>
+      {/* Top-3 ranked next actions */}
+      {topActions.length > 0 ? (
+        <div className="mt-4 flex flex-col gap-2">
+          <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+            Top actions by impact
+          </p>
+          {topActions.map((action, idx) => (
+            <Link
+              key={action.href + idx}
+              href={action.href}
+              className="flex items-center gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3 transition hover:bg-gold-500/10"
+            >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-surface-0">
+                {idx + 1}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                  {action.impact} · {action.moduleLabel}
+                </span>
+                <span className="block truncate text-sm text-fg-primary">{action.label}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
       ) : (
         <div className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-3 text-sm text-emerald-300">
           ✓ Foundation complete — your firm is fundraising-ready.
