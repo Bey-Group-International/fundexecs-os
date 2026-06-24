@@ -18,6 +18,7 @@ import { buildRouting, deskOverride, engineForStage, executiveForStage, EXECUTIV
 import { shouldReuseRecord } from "@/lib/reference-binding";
 import { getRoutingCorrections, formatRoutingCorrections } from "@/lib/routing-feedback";
 import { recordOperatorFeedback } from "@/lib/team-tasks";
+import { classifyStepIntent, dispatchStepTool, formatDispatchOutput } from "@/lib/tool-dispatch";
 import { buildArtifactAttestation } from "@/lib/attestation-seal";
 import { grantReputation, REPUTATION_POINTS } from "@/lib/reputation";
 import { isPrincipalIdentityVerified } from "@/lib/identity";
@@ -685,14 +686,40 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
       step_order: step.step_order,
     });
 
-    const output = await executeStep({
-      workflowTitle: workflow.title,
-      agent: step.assigned_agent,
-      stepTitle: step.title,
-      stepDescription: step.description ?? "",
-      priorOutputs,
-      orgContext,
-    });
+    const stepIntent = classifyStepIntent(step.title, step.description ?? "");
+    let output: string;
+    if (stepIntent !== "text_generation" && stepIntent !== "draft_document") {
+      const dispatched = await dispatchStepTool({
+        intent: stepIntent,
+        stepTitle: step.title,
+        stepDescription: step.description ?? "",
+        workflowTitle: workflow.title,
+        agent: step.assigned_agent,
+        orgContext,
+        orgId: ctx.orgId,
+      });
+      if (dispatched) {
+        output = formatDispatchOutput(dispatched);
+      } else {
+        output = await executeStep({
+          workflowTitle: workflow.title,
+          agent: step.assigned_agent,
+          stepTitle: step.title,
+          stepDescription: step.description ?? "",
+          priorOutputs,
+          orgContext,
+        });
+      }
+    } else {
+      output = await executeStep({
+        workflowTitle: workflow.title,
+        agent: step.assigned_agent,
+        stepTitle: step.title,
+        stepDescription: step.description ?? "",
+        priorOutputs,
+        orgContext,
+      });
+    }
     // Attribute this step's work to a Brain: the engine ORCHESTRATES, Brains
     // EXECUTE. This logs a brain_runs row tagged with the workflow's session so
     // the step surfaces in the session "Brains at work" theater, and surfaces
