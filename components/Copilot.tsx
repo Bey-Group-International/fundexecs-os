@@ -7,7 +7,7 @@ import { AGENT_BY_KEY } from "@/lib/agents";
 import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import type { SealStatus } from "@/lib/attestation-seal";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
-import { routingFromTask, cursorResponse, routingHeadline, EXECUTIVE_LABEL, EXECUTIVES, type TargetEngine, type Executive } from "@/lib/intelligence";
+import { routingFromTask, cursorResponse, EXECUTIVE_LABEL, EXECUTIVES, type TargetEngine, type Executive } from "@/lib/intelligence";
 import { splitPositions, type SplitPosition } from "@/lib/split-grouping";
 import { buildOutcome } from "@/lib/routing-trace";
 import { RoutingTrace } from "@/components/RoutingTrace";
@@ -188,7 +188,6 @@ export default function Copilot({
   // actions.
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
   // Which workflow the work canvas shows.
-  const [focusedWorkflowId, setFocusedWorkflowId] = useState<string | null>(null);
   const splitRef = useRef<HTMLDivElement | null>(null);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -747,14 +746,7 @@ export default function Copilot({
   const turns = [...visibleBundles].reverse();
   const empty = bundles.length === 0 && chatTurns.length === 0 && !planning;
 
-  // The work canvas opens once there's a task in flight or on record.
-  const hasWork = turns.length > 0 || planning || pendingPlan !== null;
-  // The workflow shown in the canvas: the operator's selection, else the newest.
-  const focusedBundle =
-    turns.find((b) => b.workflow.id === focusedWorkflowId) ?? turns[turns.length - 1] ?? null;
-
-  // One time-ordered transcript of chat turns and compact workflow references —
-  // the left rail; the full workflow card lives in the canvas.
+  // One time-ordered transcript of chat turns and workflow turns, by time.
   type RailItem =
     | { kind: "chat"; ts: number; turn: ChatTurn }
     | { kind: "work"; ts: number; bundle: WorkflowBundle };
@@ -762,10 +754,6 @@ export default function Copilot({
     ...turns.map((b) => ({ kind: "work" as const, ts: Date.parse(b.workflow.created_at) || 0, bundle: b })),
     ...chatTurns.map((t) => ({ kind: "chat" as const, ts: t.ts, turn: t })),
   ].sort((a, b) => a.ts - b.ts);
-
-  function focusWork(id: string) {
-    setFocusedWorkflowId(id);
-  }
 
   // A chat turn in the conversation rail. Earn reads as an institutional answer,
   // not a widget: the response is primary; controls stay quiet and secondary.
@@ -895,20 +883,13 @@ export default function Copilot({
     );
   }
 
-  // A compact workflow reference in the rail — the prompt plus a card that opens
-  // the full plan/steps/artifacts in the work canvas.
+  // A workflow turn rendered inline in the conversation — the prompt bubble
+  // followed by the full WorkflowCard (plan, steps, artifacts, approval gate).
   function renderWorkRef(b: WorkflowBundle) {
     const active = b.workflow.status === "in_progress" || b.workflow.status === "awaiting_approval";
-    const isFocused = focusedBundle?.workflow.id === b.workflow.id;
-    const routing = routingFromTask({
-      prompt: b.workflow.description || b.workflow.title,
-      hub: b.workflow.hub,
-      agents: b.steps.map((s) => s.assigned_agent),
-      stage: b.workflow.lifecycle_stage,
-    });
     const split = splitOf.get(b.workflow.id) ?? null;
     return (
-      <div key={b.workflow.id} className="flex flex-col gap-2">
+      <div key={b.workflow.id} className="flex flex-col gap-3">
         <div className="flex justify-end gap-3">
           <div className="max-w-[84%]">
             <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -923,49 +904,22 @@ export default function Copilot({
           </span>
         </div>
         <div className="flex gap-3">
-          <EarnOrb size={32} pulse={active} className="mt-5" />
-          <button
-            type="button"
-            onClick={() => focusWork(b.workflow.id)}
-            className={`min-w-0 flex-1 rounded-2xl rounded-bl-md border bg-surface-1/82 px-4 py-3 text-left shadow-[0_1px_2px_rgb(0_0_0/0.2)] transition hover:border-gold-500/45 ${
-              isFocused ? "border-gold-500/50" : "border-line/80"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate font-display text-sm font-semibold text-fg-primary">{b.workflow.title}</span>
-              <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                {STATUS_LABEL[b.workflow.status] ?? b.workflow.status}
-              </span>
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <p className="min-w-0 truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
-                {routingHeadline(routing)}
-              </p>
-              {/* Low-confidence (hub-default) routes get a muted glance-worthy pill,
-                  mirroring the Execution Grid's low-confidence idiom. */}
-              {routing.confidence === "low" ? (
-                <span className="shrink-0 rounded-full border border-line/60 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                  Early Signal · Verify before acting
-                </span>
-              ) : null}
-            </div>
-            {split ? (
-              <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
-                Split · {split.index} of {split.total}
-              </p>
-            ) : null}
-            <div className="mt-2 flex items-center gap-2">
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-gold-500 to-gold-300"
-                  style={{ width: `${Math.round(b.workflow.progress * 100)}%` }}
-                />
-              </div>
-              <span className="font-mono text-[9px] text-fg-secondary">
-                {isFocused ? "In canvas" : "Open in canvas →"}
-              </span>
-            </div>
-          </button>
+          <EarnOrb size={32} pulse={active} className="mt-1.5" />
+          <div className="min-w-0 flex-1">
+            <WorkflowCard
+              bundle={b}
+              busy={busy}
+              decide={decide}
+              liveSteps={liveSteps}
+              split={split}
+              primary={b.approval?.decision === "pending"}
+              clarifying={clarifying}
+              clarify={clarify?.workflowId === b.workflow.id ? clarify : null}
+              onAsk={() => askQuestions(b.workflow.id)}
+              onAnswerChange={(v) => setClarify((c) => (c ? { ...c, answer: v } : c))}
+              onCancelClarify={() => setClarify(null)}
+            />
+          </div>
         </div>
       </div>
     );
@@ -1080,103 +1034,13 @@ export default function Copilot({
       hint: c.command,
       run: () => applySlashCommand(c.template),
     })),
-    ...turns.map((b) => ({
-      id: `wf-${b.workflow.id}`,
-      group: "Open",
-      label: b.workflow.title,
-      run: () => focusWork(b.workflow.id),
-    })),
     ...(chatAbortRef.current ? [{ id: "stop", group: "Action", label: "Stop generating", run: stopChat }] : []),
     { id: "integrations", group: "Go", label: "Manage integrations", run: () => router.push("/settings#integrations") },
     { id: "new", group: "Go", label: "New conversation", run: () => router.push("/workspace") },
   ];
 
-  // The work canvas: a switcher across the session's workflows, then the focused
-  // workflow's full plan / steps / artifacts / approval gate.
-  function renderCanvas() {
-    return (
-      <>
-        {turns.length > 1 ? (
-          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-line/70 px-3 py-2">
-            <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Work</span>
-            {turns.map((b) => (
-              <button
-                key={b.workflow.id}
-                type="button"
-                onClick={() => setFocusedWorkflowId(b.workflow.id)}
-                className={`shrink-0 max-w-[11rem] truncate rounded-full border px-2.5 py-1 text-[11px] transition ${
-                  focusedBundle?.workflow.id === b.workflow.id
-                    ? "border-gold-500/50 bg-gold-500/10 text-gold-200"
-                    : "border-line/70 bg-surface-1/60 text-fg-secondary hover:text-fg-primary"
-                }`}
-              >
-                {b.workflow.title}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
-          {focusedBundle ? (
-            <WorkflowCard
-              bundle={focusedBundle}
-              busy={busy}
-              decide={decide}
-              liveSteps={liveSteps}
-              split={splitOf.get(focusedBundle.workflow.id) ?? null}
-              primary={focusedBundle.approval?.decision === "pending"}
-              clarifying={clarifying}
-              clarify={clarify?.workflowId === focusedBundle.workflow.id ? clarify : null}
-              onAsk={() => askQuestions(focusedBundle.workflow.id)}
-              onAnswerChange={(v) => setClarify((c) => (c ? { ...c, answer: v } : c))}
-              onCancelClarify={() => setClarify(null)}
-            />
-          ) : pendingPlan ? (
-            // Live plan reveal — the steps appear as Earn drafts them, before the
-            // gated workflow lands.
-            <article className="rounded-2xl border border-gold-500/30 bg-surface-1/82 p-4 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)] sm:p-5">
-              <div className="flex items-center gap-2">
-                <EarnOrb size={26} pulse />
-                <h2 className="font-display text-lg font-semibold tracking-tight text-fg-primary">{pendingPlan.title}</h2>
-              </div>
-              <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                {pendingPlan.hub} · Drafting
-              </p>
-              {pendingPlan.summary ? <p className="mt-2 text-sm text-fg-secondary">{pendingPlan.summary}</p> : null}
-              <ol className="mt-3 flex flex-col gap-2">
-                {pendingPlan.steps.map((s, i) => (
-                  <li
-                    key={`${s.agent}-${i}`}
-                    className="flex gap-3 rounded-xl border border-line/60 bg-surface-0/45 px-3 py-2.5"
-                  >
-                    <span className="mt-0.5 h-5 w-5 shrink-0 animate-pulse rounded-full border-2 border-gold-500/50 motion-reduce:animate-none" />
-                    <div className="min-w-0">
-                      <span className="text-sm font-medium text-fg-primary">{s.title}</span>
-                      <p className="mt-0.5 text-xs text-fg-secondary">
-                        <span className="font-mono uppercase text-fg-muted">{AGENT_BY_KEY[s.agent]?.name ?? s.agent}</span>
-                        {" · "}
-                        {s.description}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-              <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-gold-300">Preparing the approval gate…</p>
-            </article>
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center px-6 text-center text-sm text-fg-secondary">
-              <EarnOrb size={40} pulse={planning} />
-              <p className="mt-3 max-w-xs leading-6">
-                {planning ? "Drafting the plan…" : "Run a task to see the plan, steps, and deliverables here."}
-              </p>
-            </div>
-          )}
-        </div>
-      </>
-    );
-  }
-
   return (
-    <div className={`fx-neural-ambient mx-auto flex h-[calc(100dvh-8rem)] flex-col ${hasWork ? "max-w-7xl" : "max-w-5xl"}`}>
+    <div className="fx-neural-ambient mx-auto flex h-[calc(100dvh-8rem)] max-w-5xl flex-col">
       <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-line/80 bg-surface-0/88 shadow-[0_24px_90px_-58px_rgb(var(--fx-accent-rgb)/0.9)]">
         <div
           aria-hidden
@@ -1224,7 +1088,39 @@ export default function Copilot({
                 item.kind === "chat" ? renderChatTurn(item.turn) : renderWorkRef(item.bundle),
               )}
 
-              {planning ? (
+              {pendingPlan ? (
+                <div className="flex gap-3">
+                  <EarnOrb size={32} pulse className="mt-1.5" />
+                  <article className="min-w-0 flex-1 rounded-2xl border border-gold-500/30 bg-surface-1/82 p-4 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)]">
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-display text-lg font-semibold tracking-tight text-fg-primary">{pendingPlan.title}</h2>
+                    </div>
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                      {pendingPlan.hub} · Drafting
+                    </p>
+                    {pendingPlan.summary ? <p className="mt-2 text-sm text-fg-secondary">{pendingPlan.summary}</p> : null}
+                    <ol className="mt-3 flex flex-col gap-2">
+                      {pendingPlan.steps.map((s, i) => (
+                        <li
+                          key={`${s.agent}-${i}`}
+                          className="flex gap-3 rounded-xl border border-line/60 bg-surface-0/45 px-3 py-2.5"
+                        >
+                          <span className="mt-0.5 h-5 w-5 shrink-0 animate-pulse rounded-full border-2 border-gold-500/50 motion-reduce:animate-none" />
+                          <div className="min-w-0">
+                            <span className="text-sm font-medium text-fg-primary">{s.title}</span>
+                            <p className="mt-0.5 text-xs text-fg-secondary">
+                              <span className="font-mono uppercase text-fg-muted">{AGENT_BY_KEY[s.agent]?.name ?? s.agent}</span>
+                              {" · "}
+                              {s.description}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                    <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-gold-300">Preparing the approval gate…</p>
+                  </article>
+                </div>
+              ) : planning ? (
                 <div className="flex gap-3">
                   <EarnOrb size={32} pulse className="mt-1" />
                   <div className="relative overflow-hidden rounded-2xl border border-gold-500/25 bg-surface-1/80 px-4 py-3 text-sm text-fg-secondary">
@@ -1242,16 +1138,6 @@ export default function Copilot({
           </div>
           </div>
 
-          {/* Work canvas — plan / steps / artifacts, stacked below conversation. */}
-          {hasWork ? (
-            <div
-              role="region"
-              aria-label="Work canvas"
-              className="relative flex min-h-0 flex-1 flex-col border-t border-line/70"
-            >
-              {renderCanvas()}
-            </div>
-          ) : null}
 
           {/* Composer — text-first by default; secondary actions live behind Tools. */}
           <form
