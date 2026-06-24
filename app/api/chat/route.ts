@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   }
   const { orgId, userId } = auth.ctx;
 
-  const { body, model, prior, session_id } = await request.json().catch(() => ({ body: "" }));
+  const { body, model: requestedModel, prior, session_id, prior_session_id } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
@@ -28,12 +28,126 @@ export async function POST(request: Request) {
     });
   }
 
-  const modelKey = (model as EarnModelKey) ?? undefined;
+  // --- Model routing: route simple queries to a faster/cheaper model ---
+  const wordCount = body.trim().split(/\s+/).length;
+  const isSimple = wordCount < 15 && !body.match(/draft|memo|analysis|report|summarize|compare/i);
+  const model = isSimple
+    ? "claude-haiku-4-5-20251001"
+    : (requestedModel ?? process.env.CLAUDE_MODEL ?? "claude-sonnet-4-6");
+
+  // --- Web search detection ---
+  const needsWebSearch =
+    /\b(news|recent|latest|current|market|rate|price|comps|comparable|filing|SEC|EDGAR)\b/i.test(body) ||
+    /\b[A-Z][a-z]+ (Capital|Partners|Group|Fund|REIT|Inc|LLC|Corp)\b/.test(body);
+
+  // --- Live DB context loading ---
+  let liveContext = "";
+  try {
+    const supabase = createServerClient();
+
+    // Active deals
+    const activeDealsLines: string[] = [];
+    try {
+      const { data: deals } = await supabase
+        .from("deals")
+        .select("name, stage, asset_class")
+        .eq("organization_id", orgId)
+        .not("stage", "in", '("closed","rejected")')
+        .order("updated_at", { ascending: false })
+        .limit(5);
+
+      if (deals && deals.length > 0) {
+        // Open diligence counts per deal
+        const { data: diligenceCounts } = await supabase
+          .from("diligence_items")
+          .select("deal_id, id")
+          .eq("organization_id", orgId)
+          .eq("status", "open");
+
+        const countMap: Record<string, number> = {};
+        if (diligenceCounts) {
+          for (const item of diligenceCounts) {
+            if (item.deal_id) countMap[item.deal_id] = (countMap[item.deal_id] ?? 0) + 1;
+          }
+        }
+
+        for (const deal of deals) {
+          const openItems = deal.name && countMap[deal.name] ? ` (${countMap[deal.name]} open items)` : "";
+          activeDealsLines.push(`${deal.name} (${deal.stage}${openItems})`);
+        }
+        liveContext += `Active deals: ${activeDealsLines.join(", ")}\n`;
+      }
+    } catch {
+      // skip — table may not exist or RLS blocks access
+    }
+
+    // Running tasks count
+    try {
+      const { count: runningTasks } = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .eq("status", "in_progress");
+
+      if (runningTasks !== null) {
+        liveContext += `Running workflows: ${runningTasks}\n`;
+      }
+    } catch {
+      // skip
+    }
+
+    // LP pipeline count
+    try {
+      const { count: lpCount } = await supabase
+        .from("contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId);
+
+      if (lpCount !== null) {
+        liveContext += `LP pipeline: ${lpCount} contacts\n`;
+      }
+    } catch {
+      // skip — contacts table may not exist
+    }
+
+    if (needsWebSearch) {
+      liveContext += "\n[Web search recommended for this query — live data not fetched]\n";
+    }
+  } catch {
+    // If any outer error occurs, proceed without live context
+  }
+
+  const modelKey = (requestedModel as EarnModelKey) ?? undefined;
   const modelLabel = EARN_MODELS.find((m) => m.key === modelKey)?.label ?? "Earn";
   const priorContext = Array.isArray(prior)
-    ? prior.filter((x): x is string => typeof x === "string").slice(-6)
+    ? prior.filter((x: unknown) => x && typeof x === "object").slice(-30)
     : [];
   const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
+
+  // Cross-session summary: if the client sent a prior_session_id, load its last
+  // messages and summarize them as context for this reply.
+  let sessionSummary: string | undefined;
+  const priorSessId = typeof prior_session_id === "string" && prior_session_id ? prior_session_id : null;
+  if (priorSessId) {
+    try {
+      const supabase = createServerClient();
+      const { data: prevMsgs } = await supabase
+        .from("session_messages")
+        .select("role, content")
+        .eq("session_id", priorSessId)
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (prevMsgs && prevMsgs.length > 0) {
+        const { summarizeSessionMessages } = await import("@/lib/claude");
+        sessionSummary = await summarizeSessionMessages(
+          prevMsgs.reverse().map((m) => ({ role: m.role as string, content: m.content as string }))
+        );
+      }
+    } catch {
+      // skip — best effort
+    }
+  }
 
   // Persist the turn pair when the chat happens inside a session, so it survives
   // a reload. Best-effort (RLS-gated insert); a failure never breaks the reply.
@@ -50,7 +164,7 @@ export async function POST(request: Request) {
   }
 
   const encoder = new TextEncoder();
-  const stream = earnChatStream({ body, modelLabel, priorContext });
+  const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, sessionSummary, model });
 
   // No API key — stream the deterministic fallback as a single chunk.
   if (!stream) {

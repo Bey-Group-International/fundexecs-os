@@ -156,6 +156,9 @@ export default function Copilot({
   // The id of the chat turn whose "Compare models" run is in flight, so its
   // button disables while the side-by-side fills in.
   const [comparingTurnId, setComparingTurnId] = useState<string | null>(null);
+  // The most recent OTHER session's id — passed to /api/chat so the server can
+  // load and summarise it as cross-session context.
+  const [priorSessionId, setPriorSessionId] = useState<string | null>(null);
   // The plan streamed into the canvas while a task is being drafted, before the
   // real (gated) workflow lands.
   const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(null);
@@ -200,6 +203,54 @@ export default function Copilot({
     const timers = toastTimers.current;
     return () => timers.forEach(clearTimeout);
   }, []);
+
+  // Load persisted chat turns for this session on mount so answers survive a
+  // reload even when initialChat is stale (e.g. edge-cached page).
+  useEffect(() => {
+    if (!sessionId) return;
+    const supabase = createClient();
+    supabase
+      .from("session_messages")
+      .select("role, content, created_at")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const loaded: ChatTurn[] = [];
+          data.forEach((m, i) => {
+            const ts = new Date(m.created_at as string).getTime() || Date.now() + i;
+            loaded.push({
+              id: `loaded-${i}`,
+              role: m.role === "assistant" ? "earn" : "you",
+              content: m.content as string,
+              ts,
+            });
+          });
+          // Only override if we got more turns than the SSR seed.
+          setChatTurns((prev) => (loaded.length > prev.length ? loaded : prev));
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  // Fetch the most recent OTHER session so the API route can load its messages
+  // as cross-session context.
+  useEffect(() => {
+    if (!orgId) return;
+    const supabase = createClient();
+    const query = supabase
+      .from("sessions")
+      .select("id")
+      .eq("organization_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    query.then(({ data }) => {
+      if (!data) return;
+      const other = data.find((s) => s.id !== sessionId);
+      if (other) setPriorSessionId(other.id as string);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, sessionId]);
 
   const activeModel = EARN_MODELS.find((m) => m.key === model) ?? EARN_MODELS[0];
   const activeMode = EARN_MODES.find((m) => m.key === mode) ?? EARN_MODES[0];
@@ -394,7 +445,12 @@ export default function Copilot({
     const now = Date.now();
     const youId = `you-${now}`;
     const earnId = `earn-${now}`;
-    const prior = chatTurns.filter((t) => t.role === "you").map((t) => t.content);
+    // Full session history threaded as role/content pairs (capped at 30 to stay
+    // within context limits). The API route appends this as conversation history.
+    const prior = chatTurns.slice(-30).map((t) => ({
+      role: t.role === "you" ? ("user" as const) : ("assistant" as const),
+      content: t.content,
+    }));
     setChatTurns((prev) => [
       ...prev,
       { id: youId, role: "you", content: body, ts: now },
@@ -413,7 +469,13 @@ export default function Copilot({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sessionId ? { body, model, prior, session_id: sessionId } : { body, model, prior }),
+        body: JSON.stringify({
+          body,
+          model,
+          prior,
+          ...(sessionId ? { session_id: sessionId } : {}),
+          ...(priorSessionId ? { prior_session_id: priorSessionId } : {}),
+        }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error("chat failed");
