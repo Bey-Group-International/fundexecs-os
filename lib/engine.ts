@@ -590,6 +590,56 @@ export async function handlePrompt(ctx: Ctx, body: string, sessionId?: string, d
   };
 }
 
+/** Load org + active deal context for grounding step prompts. Never throws. */
+async function loadOrgContext(ctx: Ctx, workflow: Task): Promise<string> {
+  try {
+    const { data: org } = await ctx.supabase
+      .from("organizations")
+      .select("name, entity_type, primary_strategy, thesis, geography, sector_focus")
+      .eq("id", ctx.orgId)
+      .single();
+
+    let deal: { name: string; asset_class: string | null; stage: string | null; geography: string | null; target_amount: number | null } | null = null;
+    if (workflow.session_id) {
+      const { data } = await ctx.supabase
+        .from("deals")
+        .select("name, asset_class, stage, geography, target_amount, notes")
+        .eq("organization_id", ctx.orgId)
+        .eq("session_id", workflow.session_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      deal = data ?? null;
+    }
+
+    if (!org) return "";
+
+    const lines: string[] = [];
+    const firmParts = [
+      org.name ? `Firm: ${org.name}` : null,
+      org.primary_strategy ? `Strategy: ${org.primary_strategy}` : null,
+      org.entity_type ? `Entity: ${org.entity_type}` : null,
+    ].filter(Boolean);
+    if (firmParts.length) lines.push(firmParts.join(" | "));
+    if (org.thesis) lines.push(`Investment thesis: ${org.thesis}`);
+    const focusParts = [
+      org.geography ? `Geography focus: ${org.geography}` : null,
+      org.sector_focus ? `Sector focus: ${org.sector_focus}` : null,
+    ].filter(Boolean);
+    if (focusParts.length) lines.push(focusParts.join(" | "));
+    if (deal) {
+      const dealDesc = `Active deal: ${deal.name}` +
+        (deal.asset_class || deal.stage ? ` (${[deal.asset_class, deal.stage].filter(Boolean).join(", ")})` : "") +
+        (deal.target_amount ? ` target $${deal.target_amount.toLocaleString()}` : "");
+      lines.push(dealDesc);
+    }
+
+    return lines.join("\n");
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Run every step of an approved workflow, each producing a deliverable.
  *
@@ -613,6 +663,8 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
   const list = (steps ?? []) as Task[];
   const priorOutputs: string[] = [];
   const artifactIds: string[] = [];
+
+  const orgContext = await loadOrgContext(ctx, workflow);
 
   for (let i = 0; i < list.length; i++) {
     const step = list[i];
@@ -639,6 +691,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
       stepTitle: step.title,
       stepDescription: step.description ?? "",
       priorOutputs,
+      orgContext,
     });
     // Attribute this step's work to a Brain: the engine ORCHESTRATES, Brains
     // EXECUTE. This logs a brain_runs row tagged with the workflow's session so
