@@ -87,7 +87,7 @@ export async function POST(request: Request) {
         .from("tasks")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", orgId)
-        .eq("status", "running");
+        .eq("status", "in_progress");
 
       if (runningTasks !== null) {
         liveContext += `Running workflows: ${runningTasks}\n`;
