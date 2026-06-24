@@ -48,6 +48,7 @@ export default async function AppLayout({
     { count: dealsUnread },
     { data: matchAlertRow },
     buildStatuses,
+    { count: approvalsCount },
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
       supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
@@ -91,6 +92,12 @@ export default async function AppLayout({
       getBuildReadiness(ctx.orgId)
         .then((r) => r.statuses)
         .catch(() => null as Record<string, ModuleStatus> | null),
+      supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", ctx.orgId)
+        .is("parent_task_id", null)
+        .eq("status", "awaiting_approval"),
     ]);
 
   const matchRow = matchAlertRow as
@@ -161,7 +168,7 @@ export default async function AppLayout({
         hubs={hubs}
         sessions={sessions}
         groups={groups}
-        inboxUnread={messagesUnread ?? 0}
+        inboxUnread={(messagesUnread ?? 0) + (approvalsCount ?? 0)}
         signOutAction={signOut}
         createGroupAction={createSessionGroup}
         moveSessionAction={moveSessionToGroup}
