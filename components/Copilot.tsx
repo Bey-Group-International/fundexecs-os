@@ -27,7 +27,7 @@ import type { ActiveIntegration } from "@/lib/integrations/active";
 import type { AgentPlan } from "@/lib/claude";
 import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
-import { ModelCompare, estimateTokens, type ModelComparison } from "@/components/ModelCompare";
+import { ModelCompare, type ModelComparison } from "@/components/ModelCompare";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
 import { RoutePanel } from "@/components/RoutePanel";
 
@@ -747,7 +747,8 @@ export default function Copilot({
     setFocusedWorkflowId(id);
   }
 
-  // A chat turn in the conversation rail (you bubble or Earn answer + controls).
+  // A chat turn in the conversation rail. Earn reads as an institutional answer,
+  // not a widget: the response is primary; controls stay quiet and secondary.
   function renderChatTurn(t: ChatTurn) {
     if (t.role === "you") {
       return (
@@ -766,17 +767,19 @@ export default function Copilot({
         </div>
       );
     }
+    const primaryFollowups = t.followups?.slice(0, 2) ?? [];
+
     return (
       <div key={t.id} className="flex gap-3">
-        <EarnOrb size={32} pulse={t.streaming} className="mt-5" />
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-            Earn
+        <EarnOrb size={24} pulse={t.streaming} className="mt-1.5" />
+        <div className="min-w-0 flex-1 border-l border-gold-500/25 pl-4">
+          <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+            <span className="text-gold-300">Earn</span>
             <span className="h-1 w-1 rounded-full bg-line" />
-            <span>{t.streaming ? "Answering" : "Answer"}</span>
+            <span>{t.streaming ? "Drafting response" : "Private-market response"}</span>
           </div>
           <div
-            className="rounded-2xl rounded-bl-md border border-line/80 bg-surface-1/82 px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)]"
+            className="max-w-none text-sm leading-6 text-fg-primary"
             aria-live="polite"
             aria-busy={t.streaming}
           >
@@ -786,13 +789,12 @@ export default function Copilot({
             ) : null}
           </div>
 
-          {/* Live controls: stop while streaming; copy/regenerate after. */}
-          <div className="mt-1.5 flex items-center gap-1.5">
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line/60 pt-2">
             {t.streaming ? (
               <button
                 type="button"
                 onClick={stopChat}
-                className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary transition hover:border-status-danger/50 hover:text-status-danger"
+                className="font-mono text-[10px] uppercase tracking-wider text-status-danger/80 transition hover:text-status-danger"
               >
                 Stop
               </button>
@@ -802,60 +804,58 @@ export default function Copilot({
                   type="button"
                   onClick={() => copyText(t.content)}
                   disabled={!t.content}
-                  className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+                  className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
                 >
                   Copy
                 </button>
                 {t.sourcePrompt ? (
-                  <button
-                    type="button"
-                    onClick={() => dispatchPrompt(t.sourcePrompt!)}
-                    disabled={busy}
-                    className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
-                  >
-                    Regenerate
-                  </button>
-                ) : null}
-                {t.sourcePrompt ? (
-                  <button
-                    type="button"
-                    onClick={() => compareModels(t.id, t.sourcePrompt!)}
-                    disabled={comparingTurnId !== null}
-                    title="Rerun this question across all models"
-                    className="rounded-md border border-line/70 bg-surface-1/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
-                  >
-                    {comparingTurnId === t.id ? "Comparing…" : "Compare models"}
-                  </button>
-                ) : null}
-                {/* Rough client-side length estimate — display only. */}
-                {t.content ? (
-                  <span className="font-mono text-[10px] text-fg-muted">
-                    ≈ {estimateTokens(t.content)} tokens
-                  </span>
+                  <details className="relative">
+                    <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary">
+                      More
+                    </summary>
+                    <div className="absolute left-0 top-full z-20 mt-1.5 w-40 rounded-xl border border-line/80 bg-surface-1/95 p-1 shadow-[0_20px_48px_-28px_rgb(0_0_0/0.8)] backdrop-blur-xl">
+                      <button
+                        type="button"
+                        onClick={() => dispatchPrompt(t.sourcePrompt!)}
+                        disabled={busy}
+                        className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:opacity-40"
+                      >
+                        Regenerate
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => compareModels(t.id, t.sourcePrompt!)}
+                        disabled={comparingTurnId !== null}
+                        className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:opacity-40"
+                      >
+                        {comparingTurnId === t.id ? "Comparing..." : "Compare models"}
+                      </button>
+                    </div>
+                  </details>
                 ) : null}
               </>
             )}
+            {primaryFollowups.length ? (
+              <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  Continue
+                </span>
+                {primaryFollowups.map((s, i) => (
+                  <button
+                    key={`${t.id}-f${i}`}
+                    type="button"
+                    onClick={() => dispatchPrompt(s)}
+                    disabled={busy}
+                    className="max-w-[16rem] truncate rounded-full border border-line/70 px-2.5 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary disabled:opacity-40"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
 
-          {/* Side-by-side runs of the same question across every model. */}
           {t.comparisons?.length ? <ModelCompare comparisons={t.comparisons} /> : null}
-
-          {/* Suggested follow-ups — one tap to send the next prompt. */}
-          {t.followups?.length ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {t.followups.map((s, i) => (
-                <button
-                  key={`${t.id}-f${i}`}
-                  type="button"
-                  onClick={() => dispatchPrompt(s)}
-                  disabled={busy}
-                  className="rounded-full border border-line/80 bg-surface-1/75 px-3 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary disabled:opacity-40"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          ) : null}
         </div>
       </div>
     );
