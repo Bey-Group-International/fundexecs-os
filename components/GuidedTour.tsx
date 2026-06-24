@@ -41,7 +41,7 @@ const STEPS: SetupStep[] = [
   },
   {
     title: "Give Earn your first command",
-    body: "Type a plain-language objective — "Source multifamily targets under $50M in Texas" — and watch Earn plan, delegate, and execute.",
+    body: 'Type a plain-language objective — "Source multifamily targets under $50M in Texas" — and watch Earn plan, delegate, and execute.',
     href: "/workspace",
     cta: "Open Earn",
   },
