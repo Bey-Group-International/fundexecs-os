@@ -158,7 +158,8 @@ export async function earnFollowups(args: { body: string; reply: string }): Prom
       .map((s) => s.trim())
       .filter(Boolean)
       .slice(0, 3);
-  } catch {
+  } catch (err) {
+    console.error("[earnFollowups] Claude API error:", err);
     return [];
   }
 }
@@ -274,7 +275,7 @@ function normalizePlan(raw: Partial<AgentPlan> | null, prompt: string): AgentPla
     ? raw.lifecycle_stage
     : deriveRouting({ prompt, hub, agents }).lifecycle_stage;
   return {
-    title: String(raw.title ?? fallback.title).slice(0, 90),
+    title: String(raw.title ?? fallback.title).replace(/^\[.*?\]\s*/, "").trim().slice(0, 90),
     hub,
     summary: String(raw.summary ?? fallback.summary).slice(0, 240),
     steps,
@@ -400,7 +401,8 @@ export async function generateClarifyingQuestions(prompt: string): Promise<strin
       .map((q) => q.trim())
       .filter(Boolean)
       .slice(0, 3);
-  } catch {
+  } catch (err) {
+    console.error("[generateClarifyingQuestions] Claude API error:", err);
     return [];
   }
 }
@@ -434,7 +436,8 @@ export async function executeStep(args: {
       ],
     });
     return textOf(message) || fallbackStepOutput(args);
-  } catch {
+  } catch (err) {
+    console.error("[executeStep] Claude API error:", err);
     return fallbackStepOutput(args);
   }
 }
@@ -526,7 +529,8 @@ export async function extractDealFields(args: {
       geography: cleanStr(raw.geography),
       target_amount: cleanNum(raw.target_amount) ?? fb.target_amount,
     };
-  } catch {
+  } catch (err) {
+    console.error("[extractDealFields] Claude API error:", err);
     return fallbackDealFields(args);
   }
 }
@@ -555,7 +559,8 @@ export async function extractAssetFields(args: {
       asset_type: ASSET_TYPES.includes(raw.asset_type as AssetType) ? (raw.asset_type as AssetType) : fb.asset_type,
       current_value: cleanNum(raw.current_value) ?? fb.current_value,
     };
-  } catch {
+  } catch (err) {
+    console.error("[extractAssetFields] Claude API error:", err);
     return fallbackAssetFields(args);
   }
 }
@@ -755,7 +760,8 @@ export async function extractOwnership(args: {
     if (!json) return fallbackOwnership(args.description);
     const parsed = JSON.parse(json) as { rows?: OwnershipDraftRow[] };
     return Array.isArray(parsed.rows) ? parsed.rows : fallbackOwnership(args.description);
-  } catch {
+  } catch (err) {
+    console.error("[extractOwnership] Claude API error:", err);
     return fallbackOwnership(args.description);
   }
 }
@@ -823,7 +829,8 @@ export async function conversationalDraft(args: {
       reply: parsed.reply?.trim() || "Updated the draft.",
       content: typeof parsed.content === "string" ? parsed.content : args.currentContent,
     };
-  } catch {
+  } catch (err) {
+    console.error("[conversationalDraft] Claude API error:", err);
     return { reply: "Something went wrong drafting that. Your draft is unchanged.", content: args.currentContent };
   }
 }

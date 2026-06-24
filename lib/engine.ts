@@ -383,7 +383,7 @@ async function createSession(
     .from("sessions")
     .insert({
       organization_id: ctx.orgId,
-      name: args.name.trim().slice(0, 120) || "Untitled session",
+      name: args.name.replace(/^\[.*?\]\s*/, "").trim().slice(0, 120) || "Untitled session",
       origin: args.origin,
       automation_id: args.automationId ?? null,
       created_by: ctx.actorId,
