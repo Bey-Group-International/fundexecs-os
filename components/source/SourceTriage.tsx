@@ -6,13 +6,10 @@ import {
   type TriageGroup,
 } from "@/app/(app)/[hub]/[module]/source-triage-actions";
 import { queueSourceAction } from "@/app/(app)/[hub]/[module]/source-ai-actions";
-import { AGENTS, AGENT_BY_KEY } from "@/lib/agents";
+import { AGENT_BY_KEY } from "@/lib/agents";
 import type { ActionKind } from "@/lib/gates";
 
 type Phase = "idle" | "running" | "done";
-
-// The Source team: Earn (coordinator) + the five Source-hub agents.
-const TEAM = [AGENT_BY_KEY.associate, ...AGENTS.filter((a) => a.hub === "source")];
 
 const EXAMPLES = [
   "Which LPs should I chase this week?",
@@ -142,34 +139,7 @@ export function SourceTriage({
             </span>
           ) : null}
         </div>
-        <p className="mt-1 text-sm text-fg-secondary">
-          Ask Earn to triage the rows already in your pipeline. Each Source specialist ranks its
-          module by mandate fit and recommends the next move — you queue it through your gate.
-        </p>
       </header>
-
-      {/* The team */}
-      <div className="mb-4 flex flex-wrap gap-1.5">
-        {TEAM.map((a) => {
-          const on = busy && a.key === "associate";
-          return (
-            <span
-              key={a.key}
-              title={a.role}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${
-                on ? "border-gold-500/50 bg-gold-500/10 text-fg-primary" : "border-line text-fg-muted"
-              }`}
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${on ? "animate-pulse" : ""}`}
-                style={{ backgroundColor: a.color }}
-                aria-hidden
-              />
-              {a.name}
-            </span>
-          );
-        })}
-      </div>
 
       {/* Prompt */}
       <form
@@ -283,10 +253,6 @@ export function SourceTriage({
                 </div>
               </div>
             ))}
-          <p className="text-[11px] text-fg-muted">
-            Every queued move runs through your approval gate — Tier 1 dispatches now, Tier 2/3 open
-            an approval.
-          </p>
         </div>
       ) : phase === "done" ? (
         <p className="mt-6 rounded-xl border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">

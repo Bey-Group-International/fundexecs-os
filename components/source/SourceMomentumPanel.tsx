@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type {
   SourceMomentum,
-  SourceModuleChip,
   CapitalCoverage,
   PipelineVelocity,
 } from "@/lib/source-readiness";
@@ -111,31 +110,8 @@ function VelocityCard({ velocity }: { velocity: PipelineVelocity }) {
   );
 }
 
-const CHIP_TONE: Record<SourceModuleChip["status"], string> = {
-  complete: "border-emerald-400/40 text-emerald-300",
-  started: "border-gold-500/40 text-gold-300",
-  empty: "border-line text-fg-muted",
-};
-
-function ModuleChip({ m }: { m: SourceModuleChip }) {
-  return (
-    <Link
-      href={m.href}
-      title={`${m.label}: ${m.count}`}
-      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition hover:bg-surface-2 ${CHIP_TONE[m.status]}`}
-    >
-      <span className="font-mono text-[10px]">{m.count}</span>
-      <span>{m.label}</span>
-    </Link>
-  );
-}
-
-// Source-hub momentum panel: overall score, the prospecting→closing track, the
-// two anchor metrics operators steer by (capital coverage + velocity), per-
-// module presence, and the single next-best move. Rendered above the module
-// switcher so the state of the raise is always in view.
 export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) {
-  const { overall, stage, stages, coverage, velocity, modules, nextAction } = momentum;
+  const { overall, stage, coverage, velocity, nextAction } = momentum;
 
   return (
     <div className="mb-6 rounded-2xl border border-line bg-surface-1 p-5">
@@ -155,73 +131,8 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
               {stage.label}
             </span>
-            <Link
-              href="/source/radar"
-              className="ml-auto rounded-md border border-gold-500/60 bg-gold-500/15 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-100 transition hover:bg-gold-500/25"
-            >
-              ✶ Radar
-            </Link>
-            <Link
-              href="/source/search"
-              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
-            >
-              ✶ AI Search
-            </Link>
-            <Link
-              href="/source/triage"
-              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
-            >
-              ✶ Triage
-            </Link>
-            <Link
-              href="/source/intel"
-              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
-            >
-              ✶ Intelligence
-            </Link>
-            <Link
-              href="/source/outreach"
-              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
-            >
-              ✶ Outreach
-            </Link>
-            <Link
-              href="/source/signals"
-              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
-            >
-              ✶ Signals
-            </Link>
-            <Link
-              href="/source/buyers"
-              className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
-            >
-              ✶ Buyers
-            </Link>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
-
-          {/* Unlock track */}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {stages.map((s, i) => (
-              <div key={s.key} className="flex items-center gap-1.5">
-                <span
-                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-                    s.current
-                      ? "bg-gold-400 text-surface-0"
-                      : s.unlocked
-                        ? "border border-emerald-400/40 text-emerald-300"
-                        : "border border-line text-fg-muted"
-                  }`}
-                >
-                  {s.unlocked ? "" : "🔒 "}
-                  {s.label}
-                </span>
-                {i < stages.length - 1 ? (
-                  <span className={s.unlocked ? "text-emerald-400/50" : "text-line"}>→</span>
-                ) : null}
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -229,13 +140,6 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <CoverageCard coverage={coverage} />
         <VelocityCard velocity={velocity} />
-      </div>
-
-      {/* Per-module presence */}
-      <div className="mt-4 flex flex-wrap gap-1.5">
-        {modules.map((m) => (
-          <ModuleChip key={m.key} m={m} />
-        ))}
       </div>
 
       {/* Next best action */}

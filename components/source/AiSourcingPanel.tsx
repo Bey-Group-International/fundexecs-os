@@ -162,12 +162,7 @@ export function AiSourcingPanel({
         </div>
       </div>
 
-      <p className="mt-2 text-xs text-fg-secondary">
-        Propose thesis-fit {entities} to add, or score the pipeline and queue the next move — every
-        outbound action runs through your approval gate.
-      </p>
-
-      {/* Conversational entry — hand a request to Earn + the Source team */}
+      {/* Conversational entry */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
