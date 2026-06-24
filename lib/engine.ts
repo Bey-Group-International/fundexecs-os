@@ -703,6 +703,13 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
         : null;
       if (dispatched) {
         output = formatDispatchOutput(dispatched);
+        // Persist the raw tool result to the step task row so it surfaces in the UI.
+        if (dispatched.tool_result) {
+          await ctx.supabase
+            .from("tasks")
+            .update({ result: dispatched.tool_result as Json })
+            .eq("id", step.id);
+        }
       } else {
         output = await executeStep({
           workflowTitle: workflow.title,
