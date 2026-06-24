@@ -1206,7 +1206,20 @@ export default function Copilot({
               <div ref={bottomRef} />
             </div>
           </div>
+          </div>
 
+          {/* Work canvas — plan / steps / artifacts, stacked below conversation. */}
+          {hasWork ? (
+            <div
+              role="region"
+              aria-label="Work canvas"
+              className="relative flex min-h-0 flex-1 flex-col border-t border-line/70"
+            >
+              {renderCanvas()}
+            </div>
+          ) : null}
+
+          {/* Composer — always pinned at the absolute bottom, below both chat and canvas. */}
           <form
             onSubmit={submit}
             className="border-t border-line/75 bg-surface-0/88 p-3 backdrop-blur-xl supports-[backdrop-filter]:bg-surface-0/72 sm:p-4"
@@ -1485,18 +1498,6 @@ export default function Copilot({
               </div>
             </div>
           </form>
-          </div>
-
-          {/* Work canvas — plan / steps / artifacts, stacked below conversation. */}
-          {hasWork ? (
-            <div
-              role="region"
-              aria-label="Work canvas"
-              className="relative flex min-h-0 flex-1 flex-col border-t border-line/70"
-            >
-              {renderCanvas()}
-            </div>
-          ) : null}
         </div>
       </section>
 
