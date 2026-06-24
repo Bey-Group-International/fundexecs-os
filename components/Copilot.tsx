@@ -1219,7 +1219,7 @@ export default function Copilot({
             </div>
           ) : null}
 
-          {/* Composer — always pinned at the absolute bottom, below both chat and canvas. */}
+          {/* Composer — text-first by default; secondary actions live behind Tools. */}
           <form
             onSubmit={submit}
             className="border-t border-line/75 bg-surface-0/88 p-3 backdrop-blur-xl supports-[backdrop-filter]:bg-surface-0/72 sm:p-4"
@@ -1242,27 +1242,31 @@ export default function Copilot({
                 </div>
               ) : null}
 
-              <textarea
-                ref={inputRef}
-                value={prompt}
-                rows={2}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
-                    e.preventDefault();
-                    e.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                placeholder={
-                  sessionId
-                    ? "Reply to Earn..."
-                    : "Ask Earn to build the LBO model, test debt capacity, or draft an LP update..."
-                }
-                className="max-h-44 min-h-[56px] w-full resize-none rounded-xl border-0 bg-transparent px-3 py-2.5 text-sm leading-6 text-fg-primary outline-none placeholder:text-fg-muted"
-              />
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={inputRef}
+                  value={prompt}
+                  rows={1}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
+                      e.preventDefault();
+                      e.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  placeholder={sessionId ? "Reply to Earn..." : "Ask Earn what to move forward..."}
+                  className="max-h-44 min-h-[46px] flex-1 resize-none rounded-xl border-0 bg-transparent px-3 py-3 text-sm leading-6 text-fg-primary outline-none placeholder:text-fg-muted"
+                />
+                <button
+                  disabled={busy || !prompt.trim()}
+                  className="mb-1 flex h-9 shrink-0 items-center rounded-lg bg-gold-400 px-3.5 text-xs font-semibold text-surface-0 shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.24)] transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {planning ? "Planning" : "Send"}
+                </button>
+              </div>
 
-              {/* Hidden picker the "+" menu drives — keeps file selection out of
-                  the toolbar while staying one tap away. */}
+              {/* Hidden picker the Tools menu drives — keeps file selection out of
+                  the default composer while staying one tap away. */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1272,15 +1276,11 @@ export default function Copilot({
                 onChange={(e) => {
                   addFiles(e.target.files);
                   e.currentTarget.value = "";
+                  setOpenMenu(null);
                 }}
               />
 
-              <div
-                ref={toolbarRef}
-                className="flex flex-wrap items-center gap-2 border-t border-line/70 px-1 pt-2"
-              >
-
-                {/* "+" menu — Add files or photos · /Slash command · Integrations. */}
+              <div ref={toolbarRef} className="mt-1 flex items-center justify-between gap-2 px-1">
                 <div className="relative">
                   <button
                     type="button"
@@ -1291,16 +1291,16 @@ export default function Copilot({
                     }
                     aria-haspopup="menu"
                     aria-expanded={openMenu === "plus" || openMenu === "slash" || openMenu === "integrations"}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface-0/80 text-base text-fg-secondary transition hover:border-gold-500/45 hover:text-fg-primary"
-                    title="Add files, slash commands, or integrations"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:bg-surface-2 hover:text-fg-primary"
+                    title="Open composer tools"
                   >
-                    <span aria-hidden className="font-mono">+</span>
-                    <span className="sr-only">Add</span>
+                    Tools
+                    <span aria-hidden>{openMenu ? "▾" : "▸"}</span>
                   </button>
                   {openMenu === "plus" ? (
                     <div
                       role="menu"
-                      className="absolute bottom-full left-0 z-20 mb-2 w-56 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
                     >
                       <button
                         type="button"
@@ -1312,7 +1312,25 @@ export default function Copilot({
                         className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
                       >
                         <span aria-hidden className="font-mono text-fg-muted">▣</span>
-                        Add files or photos
+                        Attach file or photo
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          startVoice();
+                        }}
+                        onPointerUp={stopVoice}
+                        onPointerLeave={stopVoice}
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition ${
+                          listening
+                            ? "bg-status-danger/10 text-status-danger"
+                            : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                        }`}
+                      >
+                        <span aria-hidden className="font-mono text-fg-muted">{listening ? "●" : "◉"}</span>
+                        {listening ? "Release to stop voice input" : "Hold for voice input"}
                       </button>
                       <button
                         type="button"
@@ -1322,7 +1340,7 @@ export default function Copilot({
                       >
                         <span className="flex items-center gap-2.5">
                           <span aria-hidden className="font-mono text-fg-muted">/</span>
-                          Slash command
+                          Prompt shortcuts
                         </span>
                         <span aria-hidden className="text-fg-muted">›</span>
                       </button>
@@ -1334,7 +1352,7 @@ export default function Copilot({
                       >
                         <span className="flex items-center gap-2.5">
                           <span aria-hidden className="font-mono text-fg-muted">⤬</span>
-                          Integrations
+                          Connected actions
                         </span>
                         <span className="flex items-center gap-1.5">
                           {integrations.length ? (
@@ -1464,37 +1482,9 @@ export default function Copilot({
                     </div>
                   ) : null}
                 </div>
-
-                {/* Microphone — hold to record. */}
-                <button
-                  type="button"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    startVoice();
-                  }}
-                  onPointerUp={stopVoice}
-                  onPointerLeave={stopVoice}
-                  className={`flex h-8 w-8 select-none items-center justify-center rounded-lg border text-base transition ${
-                    listening
-                      ? "border-status-danger/50 bg-status-danger/10 text-status-danger"
-                      : "border-line bg-surface-0/80 text-fg-secondary hover:border-gold-500/45 hover:text-fg-primary"
-                  }`}
-                  title="Hold to record"
-                  aria-label="Hold to record"
-                >
-                  <span aria-hidden>{listening ? "●" : "🎙"}</span>
-                </button>
-
-                <span className="ml-auto hidden font-mono text-[10px] text-fg-muted sm:inline">
-                  {listening ? "Recording — release to send" : "Enter to send · Shift+Enter for new line"}
+                <span className="hidden font-mono text-[10px] text-fg-muted sm:inline">
+                  Enter to send · Shift+Enter for newline
                 </span>
-                <button
-                  disabled={busy || !prompt.trim()}
-                  className="flex h-8 items-center gap-1.5 rounded-lg bg-gold-400 px-3 text-xs font-semibold text-surface-0 shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.24)] transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  {planning ? "Planning" : sessionId ? "Send" : "Run"}
-                  <span aria-hidden>↵</span>
-                </button>
               </div>
             </div>
           </form>
