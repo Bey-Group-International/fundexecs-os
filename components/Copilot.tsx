@@ -50,7 +50,6 @@ interface ChatTurn {
 }
 
 // localStorage key for the remembered split ratio.
-const PANE_KEY = "fx-copilot-pane";
 
 // Strip internal operator annotations that were prepended to prompts for routing
 // purposes. These must never surface in the investor-facing conversation view.
@@ -183,13 +182,9 @@ export default function Copilot({
   // Which integration row in the submenu is expanded to reveal its operational
   // actions.
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
-  // Split-pane (Cursor/Tasklet) state: which workflow the work canvas shows,
-  // the conversation pane's width %, and which pane is visible on mobile.
+  // Which workflow the work canvas shows.
   const [focusedWorkflowId, setFocusedWorkflowId] = useState<string | null>(null);
-  const [leftPct, setLeftPct] = useState(50);
-  const [mobileTab, setMobileTab] = useState<"chat" | "work">("chat");
   const splitRef = useRef<HTMLDivElement | null>(null);
-  const draggingRef = useRef(false);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -226,46 +221,6 @@ export default function Copilot({
     };
   }, [openMenu]);
 
-  const [isDesktop, setIsDesktop] = useState(false);
-
-  // Restore the remembered split ratio and track the desktop breakpoint (the
-  // split is side-by-side on desktop, tabbed on mobile).
-  useEffect(() => {
-    const saved = Number(window.localStorage.getItem(PANE_KEY));
-    if (Number.isFinite(saved) && saved >= 28 && saved <= 72) setLeftPct(saved);
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const sync = () => setIsDesktop(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  // Drag the divider to resize the conversation pane (desktop). Clamped so
-  // neither side collapses; the chosen ratio is remembered.
-  useEffect(() => {
-    function onMove(e: PointerEvent) {
-      if (!draggingRef.current || !splitRef.current) return;
-      const rect = splitRef.current.getBoundingClientRect();
-      const pct = ((e.clientX - rect.left) / rect.width) * 100;
-      const clamped = Math.min(72, Math.max(28, pct));
-      setLeftPct(clamped);
-    }
-    function onUp() {
-      if (!draggingRef.current) return;
-      draggingRef.current = false;
-      document.body.style.userSelect = "";
-      setLeftPct((p) => {
-        window.localStorage.setItem(PANE_KEY, String(Math.round(p)));
-        return p;
-      });
-    }
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, []);
 
   // Global shortcuts: ⌘K/Ctrl+K opens the command palette; Esc stops an
   // in-progress answer (when no menu/palette is capturing it).
@@ -381,7 +336,6 @@ export default function Copilot({
     setAttachments([]);
     setVoiceUsed(false);
     setPendingPlan(null);
-    setMobileTab("work");
 
     try {
       const res = await fetch("/api/prompt/stream", {
@@ -729,7 +683,6 @@ export default function Copilot({
 
   function focusWork(id: string) {
     setFocusedWorkflowId(id);
-    setMobileTab("work");
   }
 
   // A chat turn in the conversation rail (you bubble or Earn answer + controls).
@@ -1134,40 +1087,11 @@ export default function Copilot({
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgb(var(--fx-accent-rgb)/0.16),transparent_36%),linear-gradient(rgb(var(--fx-accent-rgb)/0.045)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--fx-accent-rgb)/0.045)_1px,transparent_1px)] bg-[length:auto,32px_32px,32px_32px]"
         />
 
-        {/* Mobile pane tabs — conversation vs work canvas (desktop shows both). */}
-        {hasWork && !isDesktop ? (
-          <div
-            role="tablist"
-            aria-label="Pane"
-            className="relative z-10 flex gap-1 border-b border-line/70 bg-surface-0/80 p-1.5"
-          >
-            {(["chat", "work"] as const).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                aria-selected={mobileTab === tab}
-                onClick={() => setMobileTab(tab)}
-                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                  mobileTab === tab ? "bg-surface-2 text-fg-primary" : "text-fg-secondary hover:text-fg-primary"
-                }`}
-              >
-                {tab === "chat" ? "Conversation" : "Work"}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        <div ref={splitRef} className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
+        <div ref={splitRef} className="relative flex min-h-0 flex-1 flex-col">
           <div
             role="region"
             aria-label="Conversation"
-            className={`relative flex min-h-0 flex-col ${
-              hasWork
-                ? `lg:flex-none lg:border-r lg:border-line/70 ${!isDesktop && mobileTab === "work" ? "hidden" : "flex-1"}`
-                : "flex-1"
-            }`}
-            style={hasWork && isDesktop ? { flexBasis: `${leftPct}%`, flexGrow: 0, flexShrink: 0 } : undefined}
+            className="relative flex min-h-0 flex-col flex-1"
           >
           <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
@@ -1501,28 +1425,12 @@ export default function Copilot({
           </form>
           </div>
 
-          {/* Drag divider (desktop) — resizes the conversation pane. */}
-          {hasWork && isDesktop ? (
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                draggingRef.current = true;
-                document.body.style.userSelect = "none";
-              }}
-              className="relative z-10 hidden w-1.5 cursor-col-resize items-stretch lg:flex"
-            >
-              <span className="m-auto h-10 w-1 rounded-full bg-line/80" />
-            </div>
-          ) : null}
-
-          {/* Work canvas — plan / steps / artifacts for the focused workflow. */}
+          {/* Work canvas — plan / steps / artifacts, stacked below conversation. */}
           {hasWork ? (
             <div
               role="region"
               aria-label="Work canvas"
-              className={`relative flex min-h-0 flex-1 flex-col ${!isDesktop && mobileTab === "chat" ? "hidden" : ""}`}
+              className="relative flex min-h-0 flex-1 flex-col border-t border-line/70"
             >
               {renderCanvas()}
             </div>
