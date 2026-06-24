@@ -182,6 +182,8 @@ export default function Copilot({
   // Which composer popover is open: the model picker, mode picker, "+" menu, or
   // one of its submenus (slash commands / active integrations).
   const [openMenu, setOpenMenu] = useState<"model" | "mode" | "route" | "plus" | "slash" | "integrations" | null>(null);
+  // The response actions menu currently open in the transcript.
+  const [responseMenuId, setResponseMenuId] = useState<string | null>(null);
   // Which integration row in the submenu is expanded to reveal its operational
   // actions.
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
@@ -271,6 +273,24 @@ export default function Copilot({
       document.removeEventListener("keydown", onKey);
     };
   }, [openMenu]);
+
+  // Response action menus behave like product menus: click away or Escape closes.
+  useEffect(() => {
+    if (!responseMenuId) return;
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest("[data-response-menu]")) setResponseMenuId(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setResponseMenuId(null);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [responseMenuId]);
 
 
   // Global shortcuts: ⌘K/Ctrl+K opens the command palette; Esc stops an
@@ -809,14 +829,24 @@ export default function Copilot({
                   Copy
                 </button>
                 {t.sourcePrompt ? (
-                  <details className="relative">
-                    <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary">
+                  <div className="relative" data-response-menu>
+                    <button
+                      type="button"
+                      onClick={() => setResponseMenuId((id) => (id === t.id ? null : t.id))}
+                      aria-haspopup="menu"
+                      aria-expanded={responseMenuId === t.id}
+                      className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+                    >
                       More
-                    </summary>
+                    </button>
+                    {responseMenuId === t.id ? (
                     <div className="absolute left-0 top-full z-20 mt-1.5 w-40 rounded-xl border border-line/80 bg-surface-1/95 p-1 shadow-[0_20px_48px_-28px_rgb(0_0_0/0.8)] backdrop-blur-xl">
                       <button
                         type="button"
-                        onClick={() => dispatchPrompt(t.sourcePrompt!)}
+                        onClick={() => {
+                          setResponseMenuId(null);
+                          dispatchPrompt(t.sourcePrompt!);
+                        }}
                         disabled={busy}
                         className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:opacity-40"
                       >
@@ -824,14 +854,18 @@ export default function Copilot({
                       </button>
                       <button
                         type="button"
-                        onClick={() => compareModels(t.id, t.sourcePrompt!)}
+                        onClick={() => {
+                          setResponseMenuId(null);
+                          compareModels(t.id, t.sourcePrompt!);
+                        }}
                         disabled={comparingTurnId !== null}
                         className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:opacity-40"
                       >
                         {comparingTurnId === t.id ? "Comparing..." : "Compare models"}
                       </button>
                     </div>
-                  </details>
+                    ) : null}
+                  </div>
                 ) : null}
               </>
             )}
