@@ -596,7 +596,7 @@ async function loadOrgContext(ctx: Ctx, workflow: Task): Promise<string> {
   try {
     const { data: org } = await ctx.supabase
       .from("organizations")
-      .select("name, entity_type, primary_strategy, thesis, geography, sector_focus")
+      .select("name, entity_type, primary_strategy, description, hq_location, operator_role, aum_range")
       .eq("id", ctx.orgId)
       .single();
 
@@ -604,7 +604,7 @@ async function loadOrgContext(ctx: Ctx, workflow: Task): Promise<string> {
     if (workflow.session_id) {
       const { data } = await ctx.supabase
         .from("deals")
-        .select("name, asset_class, stage, geography, target_amount, notes")
+        .select("name, asset_class, stage, geography, target_amount")
         .eq("organization_id", ctx.orgId)
         .eq("session_id", workflow.session_id)
         .order("created_at", { ascending: false })
@@ -620,14 +620,15 @@ async function loadOrgContext(ctx: Ctx, workflow: Task): Promise<string> {
       org.name ? `Firm: ${org.name}` : null,
       org.primary_strategy ? `Strategy: ${org.primary_strategy}` : null,
       org.entity_type ? `Entity: ${org.entity_type}` : null,
+      org.aum_range ? `AUM: ${org.aum_range}` : null,
     ].filter(Boolean);
     if (firmParts.length) lines.push(firmParts.join(" | "));
-    if (org.thesis) lines.push(`Investment thesis: ${org.thesis}`);
-    const focusParts = [
-      org.geography ? `Geography focus: ${org.geography}` : null,
-      org.sector_focus ? `Sector focus: ${org.sector_focus}` : null,
+    if (org.description) lines.push(`Description: ${org.description}`);
+    const locationParts = [
+      org.hq_location ? `HQ: ${org.hq_location}` : null,
+      org.operator_role ? `Role: ${org.operator_role}` : null,
     ].filter(Boolean);
-    if (focusParts.length) lines.push(focusParts.join(" | "));
+    if (locationParts.length) lines.push(locationParts.join(" | "));
     if (deal) {
       const dealDesc = `Active deal: ${deal.name}` +
         (deal.asset_class || deal.stage ? ` (${[deal.asset_class, deal.stage].filter(Boolean).join(", ")})` : "") +
