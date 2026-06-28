@@ -8,12 +8,9 @@ import { useRouter } from "next/navigation";
 import { advanceDealStageAction, createModuleRow } from "@/app/(app)/[hub]/[module]/actions";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 import type { FitAnalysis } from "@/lib/source-hub-types";
+import type { DealStage } from "@/lib/supabase/database.types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
-
-type DealStage =
-  | "sourced" | "screening" | "diligence" | "underwriting"
-  | "ic_review" | "closing" | "owned" | "exited" | "passed" | "dead";
 
 export interface DealEntry {
   id: string;
@@ -516,7 +513,10 @@ export function DealPipeline({ deals, enrichCap }: Props) {
   const [tableSuggestDoc, setTableSuggestDoc] = useState<{ docType: string; dealName: string } | undefined>();
 
   // Sync when server re-renders with fresh data
-  useEffect(() => { setLocalDeals(deals); }, [deals]);
+  useEffect(() => {
+    setLocalDeals(deals);
+    setSelectedDeal((prev) => prev ? (deals.find((d) => d.id === prev.id) ?? prev) : null);
+  }, [deals]);
 
   function handleStageAdvanced(dealId: string, newStage: DealStage, docType?: string) {
     setLocalDeals((prev) =>

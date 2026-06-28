@@ -10,6 +10,7 @@ import { logLPContact } from "@/lib/lp-relationships";
 import { LP_DOCUMENT_TYPES, renderDocumentTemplate } from "@/lib/document-templates";
 import { DOCUMENT_TYPE_LABELS, CONTRACT_STATUS_META, type DocumentType, type ContractStatus } from "@/lib/contracts";
 import { gmailAdapter } from "@/lib/integrations/adapters/gmail";
+import type { DealStage } from "@/lib/supabase/database.types";
 
 // Update the active organization's Build › Profile fields. RLS restricts this
 // to org admins/owners.
@@ -481,19 +482,7 @@ export async function createLpInviteAction(formData: FormData) {
 
 // --- Deal Pipeline: stage advancement --------------------------------------
 
-export type DealStage =
-  | "sourced"
-  | "screening"
-  | "diligence"
-  | "underwriting"
-  | "ic_review"
-  | "closing"
-  | "owned"
-  | "exited"
-  | "passed"
-  | "dead";
-
-export const DEAL_STAGE_VALUES: DealStage[] = [
+const DEAL_STAGE_VALUES: DealStage[] = [
   "sourced", "screening", "diligence", "underwriting",
   "ic_review", "closing", "owned", "exited", "passed", "dead",
 ];
