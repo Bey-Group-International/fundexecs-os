@@ -251,7 +251,7 @@ export default async function SettingsPage() {
             description="Get oriented, or reach a human when you need one."
           >
             <div className="flex flex-col gap-2">
-              <GuidedTourSetting />
+              <GuidedTourSetting orgId={ctx.orgId} />
               <a href="mailto:support@fundexecs.com" className="fx-card fx-card-hover group p-4">
                 <RowLink label="Contact support" hint="support@fundexecs.com" external />
               </a>

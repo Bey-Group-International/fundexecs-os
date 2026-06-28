@@ -47,11 +47,16 @@ const STEPS: SetupStep[] = [
   },
 ];
 
-const DONE_KEY = "fx_setup_done_v2";
-const COLLAPSED_KEY = "fx_setup_collapsed_v2";
-const HIDDEN_KEY = "fx_setup_hidden_v2";
+// Keys are suffixed with orgId so switching orgs doesn't bleed state.
+function storageKeys(orgId: string) {
+  return {
+    done: `fx_setup_done_v2:${orgId}`,
+    collapsed: `fx_setup_collapsed_v2:${orgId}`,
+    hidden: `fx_setup_hidden_v2:${orgId}`,
+  };
+}
 
-export function GuidedTour() {
+export function GuidedTour({ orgId }: { orgId: string }) {
   const [mounted, setMounted] = useState(false);
   const [done, setDone] = useState<number[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -59,11 +64,12 @@ export function GuidedTour() {
 
   useEffect(() => {
     setMounted(true);
+    const keys = storageKeys(orgId);
     try {
-      const d = JSON.parse(localStorage.getItem(DONE_KEY) ?? "[]");
+      const d = JSON.parse(localStorage.getItem(keys.done) ?? "[]");
       if (Array.isArray(d)) setDone(d);
-      setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
-      setHidden(localStorage.getItem(HIDDEN_KEY) === "1");
+      setCollapsed(localStorage.getItem(keys.collapsed) === "1");
+      setHidden(localStorage.getItem(keys.hidden) === "1");
     } catch {
       // ignore malformed storage
     }
@@ -85,15 +91,15 @@ export function GuidedTour() {
 
   function persistDone(next: number[]) {
     setDone(next);
-    try { localStorage.setItem(DONE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    try { localStorage.setItem(storageKeys(orgId).done, JSON.stringify(next)); } catch { /* ignore */ }
   }
   function persistCollapsed(v: boolean) {
     setCollapsed(v);
-    try { localStorage.setItem(COLLAPSED_KEY, v ? "1" : "0"); } catch { /* ignore */ }
+    try { localStorage.setItem(storageKeys(orgId).collapsed, v ? "1" : "0"); } catch { /* ignore */ }
   }
   function persistHidden(v: boolean) {
     setHidden(v);
-    try { localStorage.setItem(HIDDEN_KEY, v ? "1" : "0"); } catch { /* ignore */ }
+    try { localStorage.setItem(storageKeys(orgId).hidden, v ? "1" : "0"); } catch { /* ignore */ }
     try { window.dispatchEvent(new Event("fx:tour-visibility-changed")); } catch { /* ignore */ }
   }
 

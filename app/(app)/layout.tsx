@@ -198,7 +198,7 @@ export default async function AppLayout({
       </ActiveSessionProvider>
 
       <div className="print:hidden">
-        <GuidedTour />
+        <GuidedTour orgId={ctx.orgId} />
         <KeyboardShortcuts />
         <EarnCopilotDock name={name} />
       </div>

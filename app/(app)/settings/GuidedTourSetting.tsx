@@ -7,9 +7,8 @@ import { useEffect, useState } from "react";
 // and drive it through the same window events the account menu uses, so the
 // overlay reacts live without a reload.
 
-const HIDDEN_KEY = "fx_setup_hidden_v2";
-
-export function GuidedTourSetting() {
+export function GuidedTourSetting({ orgId }: { orgId: string }) {
+  const hiddenKey = `fx_setup_hidden_v2:${orgId}`;
   const [mounted, setMounted] = useState(false);
   const [hidden, setHidden] = useState(false);
 
@@ -17,7 +16,7 @@ export function GuidedTourSetting() {
     setMounted(true);
     function read() {
       try {
-        setHidden(localStorage.getItem(HIDDEN_KEY) === "1");
+        setHidden(localStorage.getItem(hiddenKey) === "1");
       } catch {
         // ignore malformed storage
       }

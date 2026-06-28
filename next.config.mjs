@@ -25,6 +25,9 @@ const nextConfig = {
       { source: "/source/debt-hybrid", destination: "/source/debt", permanent: true },
       // Legacy routing-review URL — correct path is /grid/review.
       { source: "/routing-review", destination: "/grid/review", permanent: true },
+      // /deal_pipeline without hub prefix — sourcing automation used to generate
+      // this URL; correct path is /source/deal_pipeline.
+      { source: "/deal_pipeline", destination: "/source/deal_pipeline", permanent: true },
       // LP Report — nav link points to /reports; redirect stale manual URLs.
       { source: "/lp-report", destination: "/reports", permanent: true },
       { source: "/lp_report", destination: "/reports", permanent: true },
