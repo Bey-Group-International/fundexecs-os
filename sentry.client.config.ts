@@ -7,7 +7,7 @@ Sentry.init({
   replaysOnErrorSampleRate: 0.5,
   replaysSessionSampleRate: 0.01,
   integrations: [
-    Sentry.replayIntegration({ maskAllText: true, blockAllMedia: false }),
+    Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
   ],
   ignoreErrors: [
     "ResizeObserver loop limit exceeded",
