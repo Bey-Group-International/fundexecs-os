@@ -6,6 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext, requireOrgContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
+import { logLPContact } from "@/lib/lp-relationships";
 
 // Update the active organization's Build › Profile fields. RLS restricts this
 // to org admins/owners.
@@ -283,4 +284,18 @@ export async function draftDealComms(formData: FormData): Promise<void> {
     build(deal.name as string),
   );
   redirect(result.session_id ? `/session/${result.session_id}` : "/workspace");
+}
+
+export async function logContactAction(investorId: string) {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    await logLPContact(supabase, auth.ctx.orgId, investorId);
+    revalidatePath("/source/lp_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[logContactAction] failed", e);
+    return { error: "Failed to log contact" };
+  }
 }

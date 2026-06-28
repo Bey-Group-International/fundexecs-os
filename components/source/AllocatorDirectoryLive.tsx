@@ -7,6 +7,7 @@ import { AllocatorDirectory } from "@/components/source/AllocatorDirectory";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
+import { getLPRelationshipSummaries } from "@/lib/lp-relationships";
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
 
 interface InvestorRow {
@@ -29,7 +30,6 @@ async function enrichInvestorRow(
   orgId: string,
   inv: InvestorRow
 ): Promise<{ website?: string; description?: string; confidence: number; verified: boolean; provider: string }> {
-  // Only enrich if we have a website domain to look up
   const domain = inv.website
     ? inv.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
     : null;
@@ -38,7 +38,6 @@ async function enrichInvestorRow(
     return { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: inv.source_provider ?? "manual" };
   }
 
-  // Check cache first
   const params = { domain: domain ?? undefined, name: inv.name };
   const cached = await getCached<{ name: string; domain?: string; description?: string; confidence: number } | null>(
     orgId,
@@ -57,7 +56,6 @@ async function enrichInvestorRow(
     };
   }
 
-  // Live Apollo enrich (best-effort, non-blocking failure)
   try {
     const result = await enrichOrganization(params);
     if (result.status !== "failed" && result.data) {
@@ -97,13 +95,14 @@ async function loadAllocatorEntries() {
 
     const rows = (investorRows ?? []) as unknown as InvestorRow[];
 
-    // Enrich up to 20 rows in parallel (rate-limit friendly)
-    const enriched = await Promise.all(
-      rows.slice(0, 20).map((inv) => enrichInvestorRow(auth.ctx.orgId, inv))
-    );
+    const [enriched, relationships] = await Promise.all([
+      Promise.all(rows.slice(0, 20).map((inv) => enrichInvestorRow(auth.ctx.orgId, inv))),
+      getLPRelationshipSummaries(supabase, auth.ctx.orgId, rows.map((r) => r.id)),
+    ]);
 
     return rows.map((inv, i) => {
       const enr = enriched[i] ?? { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: "manual" };
+      const rel = relationships.get(inv.id);
       return {
         id: inv.id,
         name: inv.name,
@@ -119,7 +118,10 @@ async function loadAllocatorEntries() {
         hqCity: undefined,
         hqCountry: inv.jurisdiction ?? undefined,
         fitScore: undefined,
-        lastContactDays: undefined,
+        pipelineStage: inv.pipeline_stage ?? "prospect",
+        lastContactDays: rel?.lastContactDays ?? null,
+        topActionTitle: rel?.topActionTitle ?? null,
+        topActionType: rel?.topActionType ?? null,
         // Verification metadata
         _verified: enr.verified,
         _confidence: enr.confidence,

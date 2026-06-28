@@ -1,9 +1,9 @@
 "use client";
 
 // components/source/AllocatorDirectory.tsx
-// Allocator Intelligence Directory — FinTrx clone.
-// Searchable, filterable list of LPs/allocators with fit scores and compliance badges.
-import { useState, useMemo } from "react";
+// Allocator Intelligence Directory — searchable, filterable LP list with
+// relationship tracking (last contact, next action, pipeline stage).
+import { useState, useMemo, useTransition } from "react";
 import {
   ALLOCATOR_TYPE_LABELS,
   ACCREDITATION_LABELS,
@@ -13,6 +13,7 @@ import {
   fitScoreColor,
 } from "@/lib/allocator-directory";
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
+import { logContactAction } from "@/app/(app)/[hub]/[module]/actions";
 
 interface AllocatorEntry {
   id: string;
@@ -28,10 +29,13 @@ interface AllocatorEntry {
   kycStatus: "not_started" | "in_progress" | "verified" | "expired";
   hqCity?: string;
   hqCountry?: string;
-  fitScore?: number; // 0-100 from thesis matching
+  fitScore?: number;
   temperature?: "cold" | "warm" | "active" | "committed";
+  pipelineStage?: string;
   lastContactDays?: number | null;
   commitmentAmount?: number | null;
+  topActionTitle?: string | null;
+  topActionType?: string | null;
 }
 
 const TEMP_COLORS: Record<string, string> = {
@@ -41,19 +45,74 @@ const TEMP_COLORS: Record<string, string> = {
   committed: "text-emerald-400 border-emerald-500/40",
 };
 
+const STAGE_LABELS: Record<string, string> = {
+  prospect: "Prospect",
+  contacted: "Contacted",
+  engaged: "Engaged",
+  diligence: "Diligence",
+  soft_circle: "Soft Circle",
+  committed: "Committed",
+  closed: "Closed",
+  passed: "Passed",
+};
+
+const STAGE_COLORS: Record<string, string> = {
+  prospect: "text-slate-400 border-slate-500/30",
+  contacted: "text-blue-400 border-blue-500/30",
+  engaged: "text-blue-300 border-blue-400/30",
+  diligence: "text-amber-400 border-amber-500/40",
+  soft_circle: "text-yellow-400 border-yellow-500/40",
+  committed: "text-emerald-400 border-emerald-500/40",
+  closed: "text-emerald-300 border-emerald-400/40",
+  passed: "text-slate-500 border-slate-600/30",
+};
+
+function LogContactButton({ investorId }: { investorId: string }) {
+  const [pending, startTransition] = useTransition();
+  const [done, setDone] = useState(false);
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    startTransition(async () => {
+      const result = await logContactAction(investorId);
+      if (!("error" in result)) {
+        setDone(true);
+        setTimeout(() => setDone(false), 3000);
+      }
+    });
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={pending}
+      className="rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-40"
+    >
+      {pending ? "Saving…" : done ? "Logged ✓" : "Log contact"}
+    </button>
+  );
+}
+
 function AllocatorRow({ entry }: { entry: AllocatorEntry }) {
   const fitColor = entry.fitScore !== undefined ? fitScoreColor(entry.fitScore) : "";
   const tempColor = entry.temperature ? TEMP_COLORS[entry.temperature] : "";
+  const stageLabel = entry.pipelineStage ? (STAGE_LABELS[entry.pipelineStage] ?? entry.pipelineStage) : null;
+  const stageColor = entry.pipelineStage ? (STAGE_COLORS[entry.pipelineStage] ?? "text-slate-400 border-slate-500/30") : "";
 
   return (
     <div className="group flex items-center gap-4 border-b border-line px-4 py-3 last:border-0 transition hover:bg-surface-2/40">
-      {/* Name + type */}
+      {/* Name + type + next action */}
       <div className="min-w-[200px] flex-1">
         <p className="text-sm font-medium text-fg-primary">{entry.name}</p>
         <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
           {ALLOCATOR_TYPE_LABELS[entry.allocatorType]}
           {entry.hqCity && ` · ${entry.hqCity}`}
         </p>
+        {entry.topActionTitle && (
+          <p className="mt-1 font-mono text-[9px] text-amber-400/80 truncate max-w-[220px]">
+            ↗ {entry.topActionTitle}
+          </p>
+        )}
       </div>
 
       {/* AUM */}
@@ -100,22 +159,32 @@ function AllocatorRow({ entry }: { entry: AllocatorEntry }) {
         </div>
       )}
 
-      {/* Temperature */}
-      {entry.temperature && (
-        <div className="hidden w-20 sm:block">
+      {/* Pipeline stage */}
+      {stageLabel && (
+        <div className="hidden w-24 sm:block">
+          <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase ${stageColor}`}>
+            {stageLabel}
+          </span>
+        </div>
+      )}
+
+      {/* Temperature (shown when no stage) */}
+      {!stageLabel && entry.temperature && (
+        <div className="hidden w-24 sm:block">
           <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase ${tempColor}`}>
             {entry.temperature}
           </span>
         </div>
       )}
 
-      {/* Last contact */}
-      <div className="hidden w-20 text-right lg:block">
-        <p className={`font-mono text-[10px] ${entry.lastContactDays && entry.lastContactDays > 60 ? "text-amber-400" : "text-fg-muted"}`}>
-          {entry.lastContactDays !== null && entry.lastContactDays !== undefined
-            ? `${entry.lastContactDays}d ago`
-            : "—"}
+      {/* Last contact + log button */}
+      <div className="hidden w-28 text-right lg:flex flex-col items-end gap-1">
+        <p className={`font-mono text-[10px] ${entry.lastContactDays != null && entry.lastContactDays > 60 ? "text-amber-400" : "text-fg-muted"}`}>
+          {entry.lastContactDays != null ? `${entry.lastContactDays}d ago` : "—"}
         </p>
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <LogContactButton investorId={entry.id} />
+        </span>
       </div>
     </div>
   );
@@ -128,7 +197,8 @@ interface Props {
 export function AllocatorDirectory({ entries }: Props) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"fit" | "aum" | "last_contact">("fit");
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"fit" | "aum" | "last_contact" | "stage">("last_contact");
 
   const filtered = useMemo(() => {
     let list = entries;
@@ -144,16 +214,24 @@ export function AllocatorDirectory({ entries }: Props) {
     if (typeFilter !== "all") {
       list = list.filter((e) => e.allocatorType === typeFilter);
     }
+    if (stageFilter !== "all") {
+      list = list.filter((e) => (e.pipelineStage ?? "prospect") === stageFilter);
+    }
     return [...list].sort((a, b) => {
       if (sortBy === "fit") return (b.fitScore ?? 0) - (a.fitScore ?? 0);
       if (sortBy === "aum") return (b.aumMax ?? 0) - (a.aumMax ?? 0);
       if (sortBy === "last_contact")
-        return (a.lastContactDays ?? 999) - (b.lastContactDays ?? 999);
+        return (b.lastContactDays ?? -1) - (a.lastContactDays ?? -1);
+      if (sortBy === "stage") {
+        const order = ["committed", "closed", "soft_circle", "diligence", "engaged", "contacted", "prospect", "passed"];
+        return order.indexOf(a.pipelineStage ?? "prospect") - order.indexOf(b.pipelineStage ?? "prospect");
+      }
       return 0;
     });
-  }, [entries, search, typeFilter, sortBy]);
+  }, [entries, search, typeFilter, stageFilter, sortBy]);
 
   const types = Array.from(new Set(entries.map((e) => e.allocatorType)));
+  const stages = Array.from(new Set(entries.map((e) => e.pipelineStage ?? "prospect")));
 
   return (
     <div className="flex flex-col gap-4">
@@ -177,13 +255,24 @@ export function AllocatorDirectory({ entries }: Props) {
           ))}
         </select>
         <select
+          value={stageFilter}
+          onChange={(e) => setStageFilter(e.target.value)}
+          className="rounded-lg border border-line bg-surface-1 px-3 py-2 text-sm text-fg-secondary focus:border-yellow-500/40 focus:outline-none"
+        >
+          <option value="all">All stages</option>
+          {stages.map((s) => (
+            <option key={s} value={s}>{STAGE_LABELS[s] ?? s}</option>
+          ))}
+        </select>
+        <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           className="rounded-lg border border-line bg-surface-1 px-3 py-2 text-sm text-fg-secondary focus:border-yellow-500/40 focus:outline-none"
         >
+          <option value="last_contact">Sort: Last contact</option>
+          <option value="stage">Sort: Stage</option>
           <option value="fit">Sort: Fit score</option>
           <option value="aum">Sort: AUM</option>
-          <option value="last_contact">Sort: Last contact</option>
         </select>
         <span className="ml-auto font-mono text-[10px] text-fg-muted">
           {filtered.length} of {entries.length} allocators
@@ -200,8 +289,8 @@ export function AllocatorDirectory({ entries }: Props) {
           <span className="hidden w-40 font-mono text-[10px] uppercase tracking-wider text-fg-muted xl:block">Strategies</span>
           <span className="hidden w-32 font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Accreditation</span>
           <span className="hidden w-16 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Fit</span>
-          <span className="hidden w-20 font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Status</span>
-          <span className="hidden w-20 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Contact</span>
+          <span className="hidden w-24 font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Stage</span>
+          <span className="hidden w-28 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Contact</span>
         </div>
         {filtered.length === 0 ? (
           <div className="px-4 py-8 text-center">

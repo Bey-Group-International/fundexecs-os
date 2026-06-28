@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/nextjs";
 import { createServiceClient } from "@/lib/supabase/server";
 import { runAutomation } from "@/lib/engine";
 import { nextRun } from "@/lib/cron";
@@ -81,7 +80,7 @@ export async function GET(request: Request) {
       );
     } catch (e) {
       status = `failed: ${e instanceof Error ? e.message : "unknown"}`;
-      Sentry.captureException(e, { tags: { automationId: a.id, orgId: a.organization_id } });
+      console.error("automation failed", a.id, e);
     }
 
     await supabase
@@ -123,11 +122,11 @@ export async function GET(request: Request) {
         radar.generated += r.generated;
         radar.entities += r.scanned;
       } catch (e) {
-        Sentry.captureException(e, { tags: { orgId, job: "radar_scan" } });
+        console.error("radar_scan failed", orgId, e);
       }
     }
   } catch (e) {
-    Sentry.captureException(e, { tags: { job: "radar_scan_outer" } });
+    console.error("radar_scan_outer failed", e);
   }
 
   // Best-effort SLA auto-escalation: raise tracked team tasks for workflows
@@ -138,7 +137,7 @@ export async function GET(request: Request) {
   try {
     escalated = await runSlaEscalations(supabase, now);
   } catch (e) {
-    Sentry.captureException(e, { tags: { job: "sla_escalation" } });
+    console.error("sla_escalation failed", e);
     escalated = 0;
   }
 
