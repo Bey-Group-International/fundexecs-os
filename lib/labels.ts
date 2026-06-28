@@ -12,6 +12,7 @@ export const STRATEGY_LABELS: Record<string, string> = {
   multi_strategy: "Multi-Strategy",
   fund_of_funds: "Fund of Funds",
   hedge_fund: "Hedge Fund",
+  other: "Other",
 };
 
 // Matches DB CHECK constraint: sub_25m | 25m_100m | 100m_500m | 500m_1b | over_1b
@@ -23,12 +24,17 @@ export const AUM_LABELS: Record<string, string> = {
   over_1b: "Over $1B",
 };
 
-// Matches DB CHECK constraint: gp | family_office | advisory | operator
 export const ROLE_LABELS: Record<string, string> = {
   gp: "GP",
   family_office: "Family Office",
   advisory: "Advisory",
   operator: "Operator",
+  lp: "LP",
+  sponsor: "Sponsor",
+  placement_agent: "Placement Agent",
+  fund_administrator: "Fund Administrator",
+  ria: "RIA",
+  other: "Other",
 };
 
 // entity_type is free-text, so we title-case unknown values rather than
