@@ -1,30 +1,15 @@
 // components/source/DealPipelineLive.tsx
-// Async server component — renders the active deal pipeline for this org,
-// enriched with live Apollo company data and verification badges.
+// Async server component — loads deal pipeline, enriches with Apollo and AI fit scoring,
+// then hands off to the DealPipeline client component for interactive rendering.
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { VerificationPill } from "@/components/source/VerificationBadge";
+import { DealPipeline } from "@/components/source/DealPipeline";
+import type { DealEntry } from "@/components/source/DealPipeline";
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import { enrichCompanyFit } from "@/lib/integrations/providers/ai-enrichment";
 import type { VerifiedCompany, FitAnalysis } from "@/lib/source-hub-types";
-
-const STAGE_STYLES: Record<string, string> = {
-  sourced: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
-  screening: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
-  diligence: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-  under_contract: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
-  closed: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-  passed: "bg-neutral-100 text-neutral-500 ring-1 ring-neutral-200",
-};
-
-function formatCurrency(n: number | null | undefined): string {
-  if (n == null) return "—";
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n.toLocaleString()}`;
-}
 
 interface DealRow {
   id: string;
@@ -36,14 +21,6 @@ interface DealRow {
   thesis_fit: number | null;
   expected_close: string | null;
   website: string | null;
-}
-
-interface EnrichedDeal extends DealRow {
-  _enriched?: VerifiedCompany;
-  _verified: boolean;
-  _confidence: number;
-  _provider: string;
-  _aiThesisFit?: FitAnalysis;
 }
 
 interface MandateCtx {
@@ -58,7 +35,6 @@ async function scoreDealFit(
   company: VerifiedCompany,
   mandate: MandateCtx
 ): Promise<FitAnalysis | undefined> {
-  // Require at least a strategy mandate — asset_class alone gives the AI nothing to score against
   if (!mandate.strategy) return undefined;
 
   const sector = mandate.sector ?? deal.asset_class ?? undefined;
@@ -91,7 +67,6 @@ async function scoreDealFit(
       sources: [],
       data: fit,
     };
-    // 12h TTL
     await setCached(orgId, "deal", "ai_fit", cacheParams, result, 43200);
     return fit;
   } catch {
@@ -159,13 +134,12 @@ const ENRICH_FALLBACK = { enriched: undefined, verified: false, confidence: 0.2,
 const DEAL_ENRICH_CAP = 40;
 const DEAL_BATCH_SIZE = 5;
 
-async function loadDeals(): Promise<EnrichedDeal[]> {
+async function loadDeals(): Promise<DealEntry[]> {
   const auth = await requireOrgContext();
   if (!auth.ok) return [];
 
   const supabase = createServerClient();
 
-  // Fetch org to build mandate context for AI fit scoring
   const { data: orgData } = await supabase
     .from("organizations")
     .select("primary_strategy, hq_location, description")
@@ -191,9 +165,6 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
 
   const rows = data as unknown as DealRow[];
 
-  // Enrich up to DEAL_ENRICH_CAP deals in batches. Lower concurrency than LP enrichment
-  // (15) because each deal call chains Apollo → AI scoring sequentially.
-  // 25s budget leaves headroom for DB queries within the serverless function limit.
   const DEAL_PIPELINE_BUDGET_MS = 25_000;
   const deadline = Date.now() + DEAL_PIPELINE_BUDGET_MS;
   const enrichments: Awaited<ReturnType<typeof enrichDealRow>>[] = [];
@@ -206,22 +177,32 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
     enrichments.push(...results);
   }
 
-  return rows.map((d, i) => {
+  return rows.map((d, i): DealEntry => {
     const enr = enrichments[i] ?? ENRICH_FALLBACK;
     return {
-      ...d,
-      _enriched: enr.enriched,
-      _verified: enr.verified,
-      _confidence: enr.confidence,
-      _provider: enr.provider,
-      _aiThesisFit: enr.aiThesisFit,
+      id: d.id,
+      name: d.name,
+      stage: d.stage ?? "sourced",
+      assetClass: d.asset_class,
+      geography: d.geography,
+      targetAmount: d.target_amount,
+      thesisFit: d.thesis_fit,
+      expectedClose: d.expected_close,
+      website: d.website,
+      industry: enr.enriched?.industry,
+      employeeRange: enr.enriched?.employee_range,
+      revenueRange: enr.enriched?.revenue_range,
+      aiThesisFit: enr.aiThesisFit,
+      verified: enr.verified,
+      confidence: enr.confidence,
+      provider: enr.provider,
     };
   });
 }
 
 export async function DealPipelineLive() {
   const deals = await loadDeals();
-  const verifiedCount = deals.filter((d) => d._verified).length;
+  const verifiedCount = deals.filter((d) => d.verified).length;
 
   return (
     <section>
@@ -231,123 +212,11 @@ export async function DealPipelineLive() {
         </p>
         <div className="flex items-center gap-3">
           {verifiedCount > 0 && (
-            <span className="text-xs text-fg-muted">
-              {verifiedCount}/{Math.min(deals.length, DEAL_ENRICH_CAP)} enriched via Apollo
-            </span>
+            <VerificationPill verified={true} confidence={verifiedCount / Math.min(deals.length, DEAL_ENRICH_CAP)} provider="apollo" />
           )}
-          <span className="font-mono text-[11px] text-fg-muted">
-            {deals.length} deal{deals.length !== 1 ? "s" : ""}
-          </span>
         </div>
       </div>
-
-      {deals.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-line px-6 py-10 text-center">
-          <p className="text-sm text-fg-muted">No deals yet.</p>
-          <p className="mt-1 text-xs text-fg-muted/60">
-            Use Earn to source deal targets or add them manually.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-line">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line bg-surface-subtle">
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Deal
-                </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Stage
-                </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Asset Class
-                </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Target
-                </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Fit
-                </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Source
-                </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Close
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {deals.map((d, i) => (
-                <tr
-                  key={d.id}
-                  className={i < deals.length - 1 ? "border-b border-line" : ""}
-                >
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-fg">{d.name}</p>
-                    {/* Show Apollo-enriched data if available */}
-                    {d._enriched?.industry ? (
-                      <p className="mt-0.5 text-xs text-fg-muted">{d._enriched.industry}</p>
-                    ) : d.geography ? (
-                      <p className="mt-0.5 text-xs text-fg-muted">{d.geography}</p>
-                    ) : null}
-                    {d._enriched?.employee_range && (
-                      <p className="mt-0.5 text-xs text-fg-muted/60">{d._enriched.employee_range} employees</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${
-                        STAGE_STYLES[d.stage ?? ""] ?? "bg-neutral-100 text-neutral-500"
-                      }`}
-                    >
-                      {(d.stage ?? "unknown").replace(/_/g, " ")}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-fg-muted">
-                    {d.asset_class ?? d._enriched?.industry ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-fg">
-                    {/* Prefer Apollo revenue range over stored target amount */}
-                    {d._enriched?.revenue_range ?? formatCurrency(d.target_amount)}
-                  </td>
-                  <td className="px-4 py-3">
-                    {d._aiThesisFit != null ? (
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold ${
-                          d._aiThesisFit.fitScore >= 70
-                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                            : d._aiThesisFit.fitScore >= 40
-                            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                            : "bg-red-50 text-red-700 ring-1 ring-red-200"
-                        }`}
-                        title={d._aiThesisFit.rationale}
-                      >
-                        {d._aiThesisFit.fitScore}
-                      </span>
-                    ) : d.thesis_fit != null ? (
-                      <span className="font-mono text-xs font-semibold text-accent">
-                        {Number(d.thesis_fit).toFixed(1)}
-                      </span>
-                    ) : (
-                      <span className="text-fg-muted">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <VerificationPill
-                      verified={d._verified}
-                      confidence={d._confidence}
-                      provider={d._provider}
-                    />
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-fg-muted">
-                    {d.expected_close ?? "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DealPipeline deals={deals} enrichCap={DEAL_ENRICH_CAP} />
     </section>
   );
 }

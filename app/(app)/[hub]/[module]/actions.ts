@@ -143,7 +143,13 @@ export async function createModuleRow(
             | "dead"
             | null) ?? "sourced",
         asset_class: text(formData, "asset_class"),
-      });
+        geography: text(formData, "geography"),
+        target_amount: num(formData, "target_amount"),
+        expected_close: text(formData, "expected_close"),
+        website: text(formData, "website"),
+        notes: text(formData, "notes"),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
       break;
     }
     case "execute/asset_management": {
@@ -226,6 +232,7 @@ export async function createModuleRow(
         contact_name: text(formData, "contact_name"),
         contact_email: text(formData, "contact_email"),
         status: text(formData, "status") ?? "active",
+        notes: text(formData, "notes"),
       });
       break;
     }
@@ -478,5 +485,118 @@ export async function createLpInviteAction(formData: FormData) {
   } catch (e) {
     console.error("[createLpInviteAction] failed", e);
     return { error: "Failed to send invite" };
+  }
+}
+
+// --- Deal Pipeline: stage advancement --------------------------------------
+
+type DealStage =
+  | "sourced"
+  | "screening"
+  | "diligence"
+  | "underwriting"
+  | "ic_review"
+  | "closing"
+  | "owned"
+  | "exited"
+  | "passed"
+  | "dead";
+
+const STAGE_DOC_SUGGESTIONS: Partial<Record<DealStage, string>> = {
+  screening: "screening_memo",
+  ic_review: "ic_memo",
+};
+
+export async function advanceDealStageAction(
+  dealId: string,
+  newStage: string,
+): Promise<{ ok?: boolean; error?: string; suggestDocType?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  const validStages: DealStage[] = [
+    "sourced", "screening", "diligence", "underwriting",
+    "ic_review", "closing", "owned", "exited", "passed", "dead",
+  ];
+  if (!validStages.includes(newStage as DealStage)) return { error: "Invalid stage" };
+
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("deals")
+      .update({ stage: newStage as DealStage })
+      .eq("id", dealId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+
+    revalidatePath("/source/deal_pipeline");
+    return {
+      ok: true,
+      suggestDocType: STAGE_DOC_SUGGESTIONS[newStage as DealStage],
+    };
+  } catch (e) {
+    console.error("[advanceDealStageAction] failed", e);
+    return { error: "Failed to update stage" };
+  }
+}
+
+// --- Service Provider: update & delete ------------------------------------
+
+export async function updateProviderAction(
+  providerId: string,
+  formData: FormData,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  const t = (name: string): string | null => {
+    const v = String(formData.get(name) ?? "").trim();
+    return v === "" ? null : v;
+  };
+
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("service_providers")
+      .update({
+        name: t("name") ?? undefined,
+        provider_type: t("provider_type") ?? undefined,
+        contact_name: t("contact_name"),
+        contact_email: t("contact_email"),
+        status: t("status") ?? undefined,
+        notes: t("notes"),
+      })
+      .eq("id", providerId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+
+    revalidatePath("/source/providers");
+    return { ok: true };
+  } catch (e) {
+    console.error("[updateProviderAction] failed", e);
+    return { error: "Failed to update provider" };
+  }
+}
+
+export async function deleteProviderAction(
+  providerId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("service_providers")
+      .delete()
+      .eq("id", providerId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+
+    revalidatePath("/source/providers");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteProviderAction] failed", e);
+    return { error: "Failed to delete provider" };
   }
 }
