@@ -245,8 +245,8 @@ function ThreadCard({ card }: { card: InboxCardData }) {
           type="button"
           disabled={pending}
           onClick={() => run("done", async () => {
-            await setThreadStatus(fd({ status: "done", unread: "false" }));
-            return { ok: true, message: "Marked done." };
+            const r = await setThreadStatus(fd({ status: "done", unread: "false" }));
+            return r.ok ? { ok: true, message: "Marked done." } : { ok: false, error: "Failed to mark as done. Try again." };
           })}
           className="ml-auto rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
         >
@@ -256,8 +256,8 @@ function ThreadCard({ card }: { card: InboxCardData }) {
           type="button"
           disabled={pending}
           onClick={() => run("snooze", async () => {
-            await setThreadStatus(fd({ status: "snoozed", unread: "false" }));
-            return { ok: true, message: "Snoozed." };
+            const r = await setThreadStatus(fd({ status: "snoozed", unread: "false" }));
+            return r.ok ? { ok: true, message: "Snoozed." } : { ok: false, error: "Failed to snooze. Try again." };
           })}
           className="rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
         >
