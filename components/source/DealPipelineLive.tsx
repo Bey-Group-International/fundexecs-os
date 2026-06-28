@@ -81,6 +81,8 @@ async function scoreDealFit(
       new Promise<never>((_, reject) => { _timer = setTimeout(() => reject(new Error("timeout")), 5000); }),
     ]);
 
+    if (!fit || typeof fit.fitScore !== "number" || fit.fitScore < 0) return undefined;
+
     const result = {
       status: "success" as const,
       verified: true,

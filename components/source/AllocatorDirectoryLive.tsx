@@ -229,7 +229,7 @@ export async function AllocatorDirectoryLive() {
           <div className="flex items-center gap-2">
             <VerificationPill
               verified={verifiedCount > 0}
-              confidence={verifiedCount / Math.max(entries.length, 1)}
+              confidence={verifiedCount / Math.min(entries.length, ENRICH_CAP)}
               provider="apollo"
             />
             <span className="text-xs text-fg-muted">
