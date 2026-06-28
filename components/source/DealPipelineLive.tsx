@@ -132,7 +132,7 @@ async function enrichDealRow(
   }
 
   try {
-    let _apolloTimer: ReturnType<typeof setTimeout>;
+    let _apolloTimer: ReturnType<typeof setTimeout> | undefined;
     const result = await Promise.race([
       enrichOrganization(params).finally(() => clearTimeout(_apolloTimer)),
       new Promise<never>((_, reject) => { _apolloTimer = setTimeout(() => reject(new Error("timeout")), 5000); }),
