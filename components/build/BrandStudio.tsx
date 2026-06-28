@@ -92,7 +92,7 @@ export function BrandStudio({
   firmName,
 }: BrandStudioProps) {
   const hasSavedColor = isValidHex(brandColor);
-  const initialColor = hasSavedColor ? normalizeHex(brandColor) : "#d4af6a";
+  const initialColor = hasSavedColor ? normalizeHex(brandColor) : "#888888";
   const [color, setColor] = useState(initialColor);
   const [hexText, setHexText] = useState(hasSavedColor ? normalizeHex(brandColor) : "");
   const [palette, setPalette] = useState<string[]>(

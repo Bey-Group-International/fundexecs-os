@@ -18,13 +18,13 @@ const nextConfig = {
         permanent: false,
       },
       // Hyphen variants of underscore-slug Source Hub routes.
-      { source: "/source/lp-pipeline", destination: "/source/lp_pipeline", permanent: false },
-      { source: "/source/deal-pipeline", destination: "/source/deal_pipeline", permanent: false },
+      { source: "/source/lp-pipeline", destination: "/source/lp_pipeline", permanent: true },
+      { source: "/source/deal-pipeline", destination: "/source/deal_pipeline", permanent: true },
       // Alternate slug names surfaced during QA.
-      { source: "/source/debt_hybrid", destination: "/source/debt", permanent: false },
-      { source: "/source/debt-hybrid", destination: "/source/debt", permanent: false },
+      { source: "/source/debt_hybrid", destination: "/source/debt", permanent: true },
+      { source: "/source/debt-hybrid", destination: "/source/debt", permanent: true },
       // Legacy routing-review URL — correct path is /grid/review.
-      { source: "/routing-review", destination: "/grid/review", permanent: false },
+      { source: "/routing-review", destination: "/grid/review", permanent: true },
     ];
   },
 };
