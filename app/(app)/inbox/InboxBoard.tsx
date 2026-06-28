@@ -59,10 +59,11 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
   const [clearError, setClearError] = useState<string | null>(null);
 
   function handleClear() {
-    if (!confirm(`Clear all ${cards.length} thread${cards.length === 1 ? "" : "s"} from your inbox? This cannot be undone.`)) return;
+    const n = visible.length;
+    if (!confirm(`Clear ${n} open thread${n === 1 ? "" : "s"}${filter !== "all" ? ` in ${filter}` : ""}? This cannot be undone.`)) return;
     setClearError(null);
     startClearTransition(async () => {
-      const r = await clearInbox();
+      const r = await clearInbox(filter !== "all" ? { category: filter } : undefined);
       if (r.ok) {
         router.refresh();
       } else {
