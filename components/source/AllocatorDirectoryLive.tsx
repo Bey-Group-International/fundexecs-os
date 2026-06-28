@@ -89,7 +89,10 @@ async function enrichInvestorRow(
   }
 
   try {
-    const result = await enrichOrganization(params);
+    const result = await Promise.race([
+      enrichOrganization(params),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+    ]);
     if (result.status !== "failed" && result.data) {
       await setCached(orgId, "investor", "apollo", params as Record<string, unknown>, result);
       const hqParts = result.data.headquarters?.split(", ") ?? [];

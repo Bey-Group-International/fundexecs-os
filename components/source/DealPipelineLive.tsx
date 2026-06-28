@@ -149,7 +149,7 @@ async function enrichDealRow(
 
 const ENRICH_FALLBACK = { enriched: undefined, verified: false, confidence: 0.2, provider: "manual" as const, aiThesisFit: undefined };
 const DEAL_ENRICH_CAP = 40;
-const DEAL_BATCH_SIZE = 5;;
+const DEAL_BATCH_SIZE = 5;
 
 async function loadDeals(): Promise<EnrichedDeal[]> {
   const auth = await requireOrgContext();
