@@ -6,7 +6,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
-import type { VerifiedCompany } from "@/lib/source-hub-types";
+import { enrichCompanyFit } from "@/lib/integrations/providers/ai-enrichment";
+import type { VerifiedCompany, FitAnalysis } from "@/lib/source-hub-types";
 
 const STAGE_STYLES: Record<string, string> = {
   sourced: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
@@ -42,12 +43,67 @@ interface EnrichedDeal extends DealRow {
   _verified: boolean;
   _confidence: number;
   _provider: string;
+  _aiThesisFit?: FitAnalysis;
+}
+
+interface MandateCtx {
+  strategy?: string;
+  geography?: string;
+  sector?: string;
+}
+
+async function scoreDealFit(
+  orgId: string,
+  deal: DealRow,
+  company: VerifiedCompany,
+  mandate: MandateCtx
+): Promise<FitAnalysis | undefined> {
+  // Require at least a strategy mandate — asset_class alone gives the AI nothing to score against
+  if (!mandate.strategy) return undefined;
+
+  const sector = mandate.sector ?? deal.asset_class ?? undefined;
+  const cacheParams: Record<string, unknown> = {
+    dealId: deal.id,
+    companyDomain: company.domain,
+    companyName: company.name,
+    mandateStrategy: mandate.strategy,
+    mandateGeography: mandate.geography,
+    sector,
+  };
+  const cached = await getCached<FitAnalysis>(orgId, "deal", "ai_fit", cacheParams);
+  if (cached?.data) return cached.data;
+
+  try {
+    let _timer: ReturnType<typeof setTimeout> | undefined;
+    const fit = await Promise.race([
+      enrichCompanyFit(company, { strategy: mandate.strategy, geography: mandate.geography, sector })
+        .finally(() => clearTimeout(_timer)),
+      new Promise<never>((_, reject) => { _timer = setTimeout(() => reject(new Error("timeout")), 5000); }),
+    ]);
+
+    if (!fit || typeof fit.fitScore !== "number" || fit.fitScore < 0) return undefined;
+
+    const result = {
+      status: "success" as const,
+      verified: true,
+      confidence: 0.8,
+      timestamp: new Date().toISOString(),
+      sources: [],
+      data: fit,
+    };
+    // 12h TTL
+    await setCached(orgId, "deal", "ai_fit", cacheParams, result, 43200);
+    return fit;
+  } catch {
+    return undefined;
+  }
 }
 
 async function enrichDealRow(
   orgId: string,
-  deal: DealRow
-): Promise<{ enriched?: VerifiedCompany; verified: boolean; confidence: number; provider: string }> {
+  deal: DealRow,
+  mandate: MandateCtx
+): Promise<{ enriched?: VerifiedCompany; verified: boolean; confidence: number; provider: string; aiThesisFit?: FitAnalysis }> {
   const domain = deal.website
     ? deal.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
     : null;
@@ -65,23 +121,31 @@ async function enrichDealRow(
   );
 
   if (cached?.data) {
+    const aiThesisFit = await scoreDealFit(orgId, deal, cached.data, mandate);
     return {
       enriched: cached.data,
       verified: cached.verified,
       confidence: cached.confidence,
       provider: "apollo",
+      aiThesisFit,
     };
   }
 
   try {
-    const result = await enrichOrganization(params);
+    let _apolloTimer: ReturnType<typeof setTimeout> | undefined;
+    const result = await Promise.race([
+      enrichOrganization(params).finally(() => clearTimeout(_apolloTimer)),
+      new Promise<never>((_, reject) => { _apolloTimer = setTimeout(() => reject(new Error("timeout")), 5000); }),
+    ]);
     if (result.status !== "failed" && result.data) {
       await setCached(orgId, "company", "apollo", params as Record<string, unknown>, result);
+      const aiThesisFit = await scoreDealFit(orgId, deal, result.data, mandate);
       return {
         enriched: result.data,
         verified: result.verified,
         confidence: result.confidence,
         provider: "apollo",
+        aiThesisFit,
       };
     }
   } catch {
@@ -91,13 +155,29 @@ async function enrichDealRow(
   return { verified: false, confidence: 0.2, provider: "manual" };
 }
 
-const ENRICH_FALLBACK = { enriched: undefined, verified: false, confidence: 0.2, provider: "manual" as const };
+const ENRICH_FALLBACK = { enriched: undefined, verified: false, confidence: 0.2, provider: "manual" as const, aiThesisFit: undefined };
+const DEAL_ENRICH_CAP = 40;
+const DEAL_BATCH_SIZE = 5;
 
 async function loadDeals(): Promise<EnrichedDeal[]> {
   const auth = await requireOrgContext();
   if (!auth.ok) return [];
 
   const supabase = createServerClient();
+
+  // Fetch org to build mandate context for AI fit scoring
+  const { data: orgData } = await supabase
+    .from("organizations")
+    .select("primary_strategy, hq_location, description")
+    .eq("id", auth.ctx.orgId)
+    .maybeSingle();
+
+  const mandate: MandateCtx = {
+    strategy: orgData?.primary_strategy ?? undefined,
+    // geography intentionally omitted: hq_location is the org's office address, not its investment
+    // mandate. Re-add once a dedicated target_geography / geography_mandate column exists.
+  };
+
   const { data, error } = await supabase
     .from("deals")
     .select(
@@ -111,13 +191,20 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
 
   const rows = data as unknown as DealRow[];
 
-  // Enrich up to 20 deals in parallel — per-deal failures fall back gracefully
-  // so a broken Apollo call can never wipe out the entire deal list.
-  const enrichments = await Promise.all(
-    rows.slice(0, 20).map((d) =>
-      enrichDealRow(auth.ctx.orgId, d).catch(() => ENRICH_FALLBACK)
-    )
-  );
+  // Enrich up to DEAL_ENRICH_CAP deals in batches. Lower concurrency than LP enrichment
+  // (15) because each deal call chains Apollo → AI scoring sequentially.
+  // 25s budget leaves headroom for DB queries within the serverless function limit.
+  const DEAL_PIPELINE_BUDGET_MS = 25_000;
+  const deadline = Date.now() + DEAL_PIPELINE_BUDGET_MS;
+  const enrichments: Awaited<ReturnType<typeof enrichDealRow>>[] = [];
+  for (let i = 0; i < Math.min(rows.length, DEAL_ENRICH_CAP); i += DEAL_BATCH_SIZE) {
+    if (Date.now() > deadline) break;
+    const chunk = rows.slice(i, i + DEAL_BATCH_SIZE);
+    const results = await Promise.all(
+      chunk.map((d) => enrichDealRow(auth.ctx.orgId, d, mandate).catch(() => ENRICH_FALLBACK))
+    );
+    enrichments.push(...results);
+  }
 
   return rows.map((d, i) => {
     const enr = enrichments[i] ?? ENRICH_FALLBACK;
@@ -127,6 +214,7 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
       _verified: enr.verified,
       _confidence: enr.confidence,
       _provider: enr.provider,
+      _aiThesisFit: enr.aiThesisFit,
     };
   });
 }
@@ -144,7 +232,7 @@ export async function DealPipelineLive() {
         <div className="flex items-center gap-3">
           {verifiedCount > 0 && (
             <span className="text-xs text-fg-muted">
-              {verifiedCount}/{Math.min(deals.length, 20)} enriched via Apollo
+              {verifiedCount}/{Math.min(deals.length, DEAL_ENRICH_CAP)} enriched via Apollo
             </span>
           )}
           <span className="font-mono text-[11px] text-fg-muted">
@@ -223,7 +311,20 @@ export async function DealPipelineLive() {
                     {d._enriched?.revenue_range ?? formatCurrency(d.target_amount)}
                   </td>
                   <td className="px-4 py-3">
-                    {d.thesis_fit != null ? (
+                    {d._aiThesisFit != null ? (
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold ${
+                          d._aiThesisFit.fitScore >= 70
+                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                            : d._aiThesisFit.fitScore >= 40
+                            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                            : "bg-red-50 text-red-700 ring-1 ring-red-200"
+                        }`}
+                        title={d._aiThesisFit.rationale}
+                      >
+                        {d._aiThesisFit.fitScore}
+                      </span>
+                    ) : d.thesis_fit != null ? (
                       <span className="font-mono text-xs font-semibold text-accent">
                         {Number(d.thesis_fit).toFixed(1)}
                       </span>

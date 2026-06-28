@@ -10,6 +10,27 @@ import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import { getLPRelationshipSummaries } from "@/lib/lp-relationships";
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
 
+const US_STATES = new Set([
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
+  "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
+  "VA","WA","WV","WI","WY","DC",
+]);
+const CA_PROVINCES = new Set([
+  "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT",
+]);
+
+function parseHqCountry(parts: string[]): string | undefined {
+  if (parts.length === 0) return undefined;
+  if (parts.length === 1) {
+    const tok = parts[0];
+    return tok.length >= 4 && !US_STATES.has(tok) && !CA_PROVINCES.has(tok) ? tok : undefined;
+  }
+  const last = parts[parts.length - 1];
+  if (US_STATES.has(last) || CA_PROVINCES.has(last)) return undefined;
+  return last.length >= 2 ? last : undefined;
+}
+
 interface InvestorRow {
   id: string;
   name: string;
@@ -26,20 +47,31 @@ interface InvestorRow {
   website: string | null;
 }
 
+interface EnrichedData {
+  website?: string;
+  description?: string;
+  confidence: number;
+  verified: boolean;
+  provider: string;
+  hqCity?: string;
+  hqCountry?: string;
+  primaryStrategies: string[];
+}
+
 async function enrichInvestorRow(
   orgId: string,
   inv: InvestorRow
-): Promise<{ website?: string; description?: string; confidence: number; verified: boolean; provider: string }> {
+): Promise<EnrichedData> {
   const domain = inv.website
     ? inv.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
     : null;
 
   if (!domain && !inv.name) {
-    return { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: inv.source_provider ?? "manual" };
+    return { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: inv.source_provider ?? "manual", primaryStrategies: [] };
   }
 
   const params = { domain: domain ?? undefined, name: inv.name };
-  const cached = await getCached<{ name: string; domain?: string; description?: string; confidence: number } | null>(
+  const cached = await getCached<{ name: string; domain?: string; description?: string; confidence: number; headquarters?: string; industry?: string; keywords?: string[] } | null>(
     orgId,
     "investor",
     "apollo",
@@ -47,25 +79,37 @@ async function enrichInvestorRow(
   );
 
   if (cached?.data) {
+    const hqParts = cached.data.headquarters?.split(", ") ?? [];
     return {
       website: domain ? `https://${domain}` : undefined,
       description: cached.data.description,
       confidence: cached.data.confidence,
       verified: cached.verified,
       provider: "apollo",
+      hqCity: hqParts[0],
+      hqCountry: parseHqCountry(hqParts),
+      primaryStrategies: cached.data.keywords?.length ? cached.data.keywords : cached.data.industry ? [cached.data.industry] : [],
     };
   }
 
   try {
-    const result = await enrichOrganization(params);
+    let _timer: ReturnType<typeof setTimeout> | undefined;
+    const result = await Promise.race([
+      enrichOrganization(params).finally(() => clearTimeout(_timer)),
+      new Promise<never>((_, reject) => { _timer = setTimeout(() => reject(new Error("timeout")), 5000); }),
+    ]);
     if (result.status !== "failed" && result.data) {
       await setCached(orgId, "investor", "apollo", params as Record<string, unknown>, result);
+      const hqParts = result.data.headquarters?.split(", ") ?? [];
       return {
         website: result.data.website,
         description: result.data.description,
         confidence: result.data.confidence,
         verified: result.verified,
         provider: "apollo",
+        hqCity: hqParts[0],
+        hqCountry: parseHqCountry(hqParts),
+        primaryStrategies: result.data.keywords?.length ? result.data.keywords : result.data.industry ? [result.data.industry] : [],
       };
     }
   } catch {
@@ -76,8 +120,11 @@ async function enrichInvestorRow(
     confidence: inv.confidence ?? 0.3,
     verified: inv.verified ?? false,
     provider: inv.source_provider ?? "manual",
+    primaryStrategies: [],
   };
 }
+
+const ENRICH_CAP = 75;
 
 async function loadAllocatorEntries() {
   try {
@@ -94,14 +141,29 @@ async function loadAllocatorEntries() {
       .limit(200);
 
     const rows = (investorRows ?? []) as unknown as InvestorRow[];
+    const { orgId } = auth.ctx;
 
+    // Enrich all rows with a concurrency cap to avoid rate-limiting Apollo on cold cache.
+    // Cache-first: 24h TTL means most calls are instant on warm loads.
+    async function batchEnrich(items: InvestorRow[], concurrency: number) {
+      const results: EnrichedData[] = [];
+      for (let i = 0; i < items.length; i += concurrency) {
+        const chunk = items.slice(i, i + concurrency);
+        const chunkResults = await Promise.all(chunk.map((inv) => enrichInvestorRow(orgId, inv)));
+        results.push(...chunkResults);
+      }
+      return results;
+    }
+
+    // Cap enrichment at 75 rows per render to stay well within serverless timeouts.
+    // Rows beyond the cap fall back to stored DB values.
     const [enriched, relationships] = await Promise.all([
-      Promise.all(rows.slice(0, 20).map((inv) => enrichInvestorRow(auth.ctx.orgId, inv))),
+      batchEnrich(rows.slice(0, ENRICH_CAP), 15),
       getLPRelationshipSummaries(supabase, auth.ctx.orgId, rows.map((r) => r.id)),
     ]);
 
     return rows.map((inv, i) => {
-      const enr = enriched[i] ?? { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: "manual" };
+      const enr = enriched[i] ?? { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: "manual", primaryStrategies: [] };
       const rel = relationships.get(inv.id);
       return {
         id: inv.id,
@@ -111,12 +173,14 @@ async function loadAllocatorEntries() {
         aumMax: inv.aum ?? null,
         ticketMin: inv.typical_check_min ?? null,
         ticketMax: inv.typical_check_max ?? null,
-        primaryStrategies: [] as string[],
+        primaryStrategies: enr.primaryStrategies,
         geographicFocus: inv.jurisdiction ? [inv.jurisdiction] : [],
+        // TODO: map from investors.accreditation_status once column exists
         accreditationStatus: "verified" as AccreditationStatus,
         kycStatus: "verified" as const,
-        hqCity: undefined,
-        hqCountry: inv.jurisdiction ?? undefined,
+        hqCity: enr.hqCity,
+        // jurisdiction is legal domicile (e.g. "Delaware"), not HQ country — omit as fallback
+        hqCountry: enr.hqCountry,
         fitScore: undefined,
         pipelineStage: inv.pipeline_stage ?? "prospect",
         lastContactDays: rel?.lastContactDays ?? null,
@@ -169,11 +233,11 @@ export async function AllocatorDirectoryLive() {
           <div className="flex items-center gap-2">
             <VerificationPill
               verified={verifiedCount > 0}
-              confidence={verifiedCount / Math.max(entries.length, 1)}
+              confidence={verifiedCount / Math.min(entries.length, ENRICH_CAP)}
               provider="apollo"
             />
             <span className="text-xs text-fg-muted">
-              {verifiedCount}/{entries.length} live
+              {verifiedCount}/{Math.min(entries.length, ENRICH_CAP)} live
             </span>
           </div>
         )}
