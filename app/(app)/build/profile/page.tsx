@@ -19,27 +19,21 @@ const STRATEGY_LABELS: Record<string, string> = {
   hedge_fund: "Hedge Fund",
 };
 
+// Matches the DB CHECK constraint in migration 0025_onboarding_fields.sql
 const AUM_LABELS: Record<string, string> = {
-  pre_fund: "Pre-fund",
-  sub_10m: "Under $10M",
-  "10m_50m": "$10M – $50M",
-  "50m_250m": "$50M – $250M",
+  sub_25m: "Under $25M",
+  "25m_100m": "$25M – $100M",
   "100m_500m": "$100M – $500M",
-  "250m_1b": "$250M – $1B",
   "500m_1b": "$500M – $1B",
-  "1b_5b": "$1B – $5B",
-  above_5b: "Above $5B",
+  over_1b: "Over $1B",
 };
 
+// Matches the DB CHECK constraint in migration 0025_onboarding_fields.sql
 const ROLE_LABELS: Record<string, string> = {
   gp: "GP",
-  lp: "LP",
-  sponsor: "Sponsor",
-  placement_agent: "Placement Agent",
-  fund_administrator: "Fund Administrator",
   family_office: "Family Office",
-  ria: "RIA",
-  other: "Other",
+  advisory: "Advisory",
+  operator: "Operator",
 };
 
 function displayLabel(raw: string, map: Record<string, string>): string {
