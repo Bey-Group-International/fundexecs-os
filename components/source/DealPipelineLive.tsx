@@ -10,6 +10,7 @@ import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import { enrichCompanyFit } from "@/lib/integrations/providers/ai-enrichment";
 import type { VerifiedCompany, FitAnalysis } from "@/lib/source-hub-types";
+import type { DealStage } from "@/lib/supabase/database.types";
 
 interface DealRow {
   id: string;
@@ -186,7 +187,7 @@ async function loadDeals(): Promise<DealEntry[]> {
     return {
       id: d.id,
       name: d.name,
-      stage: d.stage ?? "sourced",
+      stage: (d.stage ?? "sourced") as DealStage,
       assetClass: d.asset_class,
       geography: d.geography,
       targetAmount: d.target_amount,

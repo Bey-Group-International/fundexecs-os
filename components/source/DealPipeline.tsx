@@ -38,7 +38,7 @@ export interface DealEntry {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const DEAL_STAGES = [
+const DEAL_STAGES: { value: DealStage; label: string }[] = [
   { value: "sourced",      label: "Sourced" },
   { value: "screening",    label: "Screening" },
   { value: "diligence",    label: "Diligence" },
@@ -90,7 +90,7 @@ function StageDropdown({
   onAdvanced,
 }: {
   deal: DealEntry;
-  onAdvanced: (dealId: string, newStage: string, suggestDocType?: string) => void;
+  onAdvanced: (dealId: string, newStage: DealStage, suggestDocType?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -106,7 +106,7 @@ function StageDropdown({
     return () => document.removeEventListener("mousedown", handle);
   }, [open]);
 
-  function advance(newStage: string) {
+  function advance(newStage: DealStage) {
     setOpen(false);
     setAdvanceError(null);
     startTransition(async () => {
@@ -168,7 +168,7 @@ function DealSlideOver({
 }: {
   deal: DealEntry | null;
   onClose: () => void;
-  onStageAdvanced: (dealId: string, newStage: string, suggestDocType?: string) => void;
+  onStageAdvanced: (dealId: string, newStage: DealStage, suggestDocType?: string) => void;
 }) {
   const [suggestDoc, setSuggestDoc] = useState<string | undefined>();
 
@@ -195,7 +195,7 @@ function DealSlideOver({
       : "bg-red-50 text-red-700 ring-1 ring-red-200"
     : "";
 
-  function handleStageAdvanced(dealId: string, newStage: string, docType?: string) {
+  function handleStageAdvanced(dealId: string, newStage: DealStage, docType?: string) {
     onStageAdvanced(dealId, newStage, docType);
     setSuggestDoc(docType);
   }
@@ -518,7 +518,7 @@ export function DealPipeline({ deals, enrichCap }: Props) {
   // Sync when server re-renders with fresh data
   useEffect(() => { setLocalDeals(deals); }, [deals]);
 
-  function handleStageAdvanced(dealId: string, newStage: string, docType?: string) {
+  function handleStageAdvanced(dealId: string, newStage: DealStage, docType?: string) {
     setLocalDeals((prev) =>
       prev.map((d) => (d.id === dealId ? { ...d, stage: newStage } : d)),
     );

@@ -562,10 +562,10 @@ export async function updateProviderAction(
       .from("service_providers")
       .update({
         name,
-        provider_type: t("provider_type"),
+        provider_type: t("provider_type") ?? undefined,
         contact_name: t("contact_name"),
         contact_email: t("contact_email"),
-        status: t("status"),
+        status: t("status") ?? undefined,
         notes: t("notes"),
         website: t("website"),
       })
