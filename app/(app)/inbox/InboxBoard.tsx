@@ -59,7 +59,7 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
   const [clearError, setClearError] = useState<string | null>(null);
 
   function handleClear() {
-    const n = visible.length;
+    const n = visible.filter((c) => c.status === "open").length;
     if (!confirm(`Clear ${n} open thread${n === 1 ? "" : "s"}${filter !== "all" ? ` in ${filter}` : ""}? This cannot be undone.`)) return;
     setClearError(null);
     startClearTransition(async () => {
