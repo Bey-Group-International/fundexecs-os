@@ -3,42 +3,9 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { saveOrgProfile } from "./actions";
+import { STRATEGY_LABELS, AUM_LABELS, ROLE_LABELS, displayLabel, titleCase } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
-
-// Maps raw DB enum values → human-readable display labels. Applied only at the
-// display layer so the underlying stored value is never changed.
-const STRATEGY_LABELS: Record<string, string> = {
-  private_equity: "Private Equity",
-  venture_capital: "Venture Capital",
-  real_estate: "Real Estate",
-  credit_debt: "Credit / Debt",
-  infrastructure: "Infrastructure",
-  multi_strategy: "Multi-Strategy",
-  fund_of_funds: "Fund of Funds",
-  hedge_fund: "Hedge Fund",
-};
-
-// Matches the DB CHECK constraint in migration 0025_onboarding_fields.sql
-const AUM_LABELS: Record<string, string> = {
-  sub_25m: "Under $25M",
-  "25m_100m": "$25M – $100M",
-  "100m_500m": "$100M – $500M",
-  "500m_1b": "$500M – $1B",
-  over_1b: "Over $1B",
-};
-
-// Matches the DB CHECK constraint in migration 0025_onboarding_fields.sql
-const ROLE_LABELS: Record<string, string> = {
-  gp: "GP",
-  family_office: "Family Office",
-  advisory: "Advisory",
-  operator: "Operator",
-};
-
-function displayLabel(raw: string, map: Record<string, string>): string {
-  return map[raw] ?? map[raw.toLowerCase()] ?? raw;
-}
 
 // Investor-facing firm profile. Every field here propagates to counterparty
 // match cards, the Capital Map, and the Ecosystem Discoverability feed.
@@ -314,7 +281,9 @@ export default async function ProfilePage() {
                   (o as Record<string, unknown>).operator_role
                     ? displayLabel((o as Record<string, unknown>).operator_role as string, ROLE_LABELS)
                     : null,
-                  (o as Record<string, unknown>).entity_type,
+                  (o as Record<string, unknown>).entity_type
+                    ? titleCase((o as Record<string, unknown>).entity_type as string)
+                    : null,
                   (o as Record<string, unknown>).hq_location,
                 ]
                   .filter(Boolean)
