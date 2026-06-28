@@ -528,18 +528,17 @@ export async function deleteThreadAction(threadId: string): Promise<{ ok: boolea
   return { ok: true };
 }
 
-export async function clearInbox(opts?: { category?: string }): Promise<{ ok: boolean }> {
+export async function clearInbox(opts?: { category?: InboxCategory }): Promise<{ ok: boolean }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
   const supabase = createServerClient();
   // Only wipe open threads — snoozed/done are deliberately parked and must survive.
-  let query = supabase
+  const base = supabase
     .from("inbox_threads")
     .delete()
     .eq("organization_id", auth.ctx.orgId)
     .eq("status", "open");
-  if (opts?.category) query = (query as typeof query).eq("category", opts.category);
-  const { error } = await query;
+  const { error } = await (opts?.category ? base.eq("category", opts.category) : base);
   if (error) { console.error("[clearInbox]", error.message); return { ok: false }; }
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
