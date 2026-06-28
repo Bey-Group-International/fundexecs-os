@@ -109,8 +109,11 @@ export async function ServiceProviderDirectoryLive() {
 
     const rows = (data ?? []) as unknown as ProviderRow[];
 
+    const PROVIDER_BUDGET_MS = 22_000;
+    const deadline = Date.now() + PROVIDER_BUDGET_MS;
     const enrichments: EnrichedProviderData[] = [];
     for (let i = 0; i < Math.min(rows.length, ENRICH_CAP); i += BATCH_SIZE) {
+      if (Date.now() > deadline) break;
       const chunk = rows.slice(i, i + BATCH_SIZE);
       const results = await Promise.all(
         chunk.map((r) =>

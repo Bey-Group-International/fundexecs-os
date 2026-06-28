@@ -375,8 +375,12 @@ function AddDealModal({ onClose }: { onClose: () => void }) {
       return;
     }
     startTransition(async () => {
-      await createModuleRow("source", "deal_pipeline", fd);
-      onClose();
+      try {
+        await createModuleRow("source", "deal_pipeline", fd);
+        onClose();
+      } catch {
+        setError("Failed to save deal. Please try again.");
+      }
     });
   }
 

@@ -554,12 +554,15 @@ export async function updateProviderAction(
     return v === "" ? null : v;
   };
 
+  const name = t("name");
+  if (!name) return { error: "Provider name is required" };
+
   try {
     const supabase = createServerClient();
     const { error } = await supabase
       .from("service_providers")
       .update({
-        name: t("name") ?? undefined,
+        name,
         provider_type: t("provider_type") ?? undefined,
         contact_name: t("contact_name"),
         contact_email: t("contact_email"),
