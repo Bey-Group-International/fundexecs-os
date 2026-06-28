@@ -15,6 +15,9 @@ import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { ProfileForm } from "@/components/build/ProfileForm";
 import { MandateStrip } from "@/components/build/MandateStrip";
 import { RunRiskModule, RunStressTestModule, RunCommsModule } from "@/components/run/RunModules";
+import { DocumentsModuleLive } from "@/components/run/DocumentsModuleLive";
+import { AllocatorDirectoryLive } from "@/components/source/AllocatorDirectoryLive";
+import { ServiceProviderDirectoryLive } from "@/components/source/ServiceProviderDirectoryLive";
 import { RunStrategyModule } from "@/components/run/RunStrategyModule";
 import { RunDiligenceModule } from "@/components/run/RunDiligenceModule";
 import { RunUnderwritingModule } from "@/components/run/RunUnderwritingModule";
@@ -178,6 +181,7 @@ export async function ModuleView({
     if (mod.key === "comms") return <RunCommsModule orgId={ctx.orgId} />;
     if (mod.key === "diligence") return <RunDiligenceModule orgId={ctx.orgId} />;
     if (mod.key === "underwriting") return <RunUnderwritingModule orgId={ctx.orgId} />;
+    if (mod.key === "documents") return <DocumentsModuleLive />;
   }
 
   // --- Execute hub: bespoke operating modules ------------------------------
@@ -277,6 +281,59 @@ export async function ModuleView({
             operator_role: org?.operator_role ?? "",
           }}
         />
+      </div>
+    );
+  }
+
+  // --- Source hub: enriched directory views ---------------------------------
+  // LP pipeline and Providers render bespoke relationship-aware directories
+  // instead of the generic table, while retaining AI sourcing and add-row forms.
+  if (hub.key === "source" && mod.key === "lp_pipeline") {
+    const aiCfg = sessionId ? null : sourceConfigFor(key);
+    return (
+      <div>
+        {mandateStrip}
+        {aiCfg ? (
+          <AiSourcingPanel
+            hub={hub.key}
+            module={mod.key}
+            entities={aiCfg.entities}
+            agentName={AGENT_BY_KEY[aiCfg.agent]?.name ?? "Sourcing"}
+            live={sourcingLive()}
+            webEnrichment={sourcingEnrichmentEnabled()}
+          />
+        ) : null}
+        <AddRowForm
+          hub={hub.key}
+          module={mod.key}
+          fields={ADD_ROW_CONFIGS[key]?.fields ?? []}
+        />
+        <AllocatorDirectoryLive />
+      </div>
+    );
+  }
+
+  if (hub.key === "source" && mod.key === "providers") {
+    const aiCfg = sessionId ? null : sourceConfigFor(key);
+    return (
+      <div>
+        {mandateStrip}
+        {aiCfg ? (
+          <AiSourcingPanel
+            hub={hub.key}
+            module={mod.key}
+            entities={aiCfg.entities}
+            agentName={AGENT_BY_KEY[aiCfg.agent]?.name ?? "Sourcing"}
+            live={sourcingLive()}
+            webEnrichment={sourcingEnrichmentEnabled()}
+          />
+        ) : null}
+        <AddRowForm
+          hub={hub.key}
+          module={mod.key}
+          fields={ADD_ROW_CONFIGS[key]?.fields ?? []}
+        />
+        <ServiceProviderDirectoryLive />
       </div>
     );
   }

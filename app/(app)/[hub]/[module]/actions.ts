@@ -7,6 +7,8 @@ import { getSessionContext, requireOrgContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { logLPContact } from "@/lib/lp-relationships";
+import { renderDocumentTemplate } from "@/lib/document-templates";
+import { DOCUMENT_TYPE_LABELS, CONTRACT_STATUS_META, type DocumentType, type ContractStatus } from "@/lib/contracts";
 
 // Update the active organization's Build › Profile fields. RLS restricts this
 // to org admins/owners.
@@ -297,5 +299,104 @@ export async function logContactAction(investorId: string) {
   } catch (e) {
     console.error("[logContactAction] failed", e);
     return { error: "Failed to log contact" };
+  }
+}
+
+// --- Document generation ---------------------------------------------------
+
+export async function generateDocumentAction(formData: FormData) {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  const docType = String(formData.get("doc_type") ?? "") as DocumentType;
+  const fundId = String(formData.get("fund_id") ?? "").trim() || null;
+  const investorId = String(formData.get("investor_id") ?? "").trim() || null;
+
+  if (!docType || !(docType in DOCUMENT_TYPE_LABELS)) {
+    return { error: "Invalid document type" };
+  }
+
+  try {
+    const supabase = createServerClient();
+    const orgId = auth.ctx.orgId;
+
+    const [orgResult, fundResult, investorResult] = await Promise.all([
+      supabase.from("organizations").select("name, jurisdiction").eq("id", orgId).maybeSingle(),
+      fundId
+        ? supabase.from("funds").select("name").eq("id", fundId).eq("organization_id", orgId).maybeSingle()
+        : Promise.resolve({ data: null }),
+      investorId
+        ? supabase.from("investors").select("name, typical_check_min, typical_check_max, jurisdiction").eq("id", investorId).eq("organization_id", orgId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const org = orgResult.data as { name?: string; jurisdiction?: string } | null;
+    const fund = fundResult.data as { name?: string } | null;
+    const investor = investorResult.data as {
+      name?: string;
+      typical_check_min?: number | null;
+      typical_check_max?: number | null;
+      jurisdiction?: string | null;
+    } | null;
+
+    const checkAmt = investor?.typical_check_max ?? investor?.typical_check_min;
+    const vars = {
+      fundName: fund?.name ?? "Fund",
+      orgName: org?.name ?? "General Partner",
+      jurisdiction: investor?.jurisdiction ?? org?.jurisdiction ?? "Delaware",
+      effectiveDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      investorName: investor?.name,
+      commitmentAmount: checkAmt ? `$${Number(checkAmt).toLocaleString("en-US")}` : undefined,
+    };
+
+    const content = renderDocumentTemplate(docType, vars);
+    const title = `${DOCUMENT_TYPE_LABELS[docType]}${investor?.name ? ` — ${investor.name}` : ""}`;
+
+    await supabase.from("contracts").insert({
+      organization_id: orgId,
+      fund_id: fundId,
+      investor_id: investorId,
+      created_by: auth.ctx.userId,
+      title,
+      document_type: docType,
+      status: "draft",
+      notes: content,
+    });
+
+    revalidatePath("/run/documents");
+    return { ok: true };
+  } catch (e) {
+    console.error("[generateDocumentAction] failed", e);
+    return { error: "Failed to generate document" };
+  }
+}
+
+export async function advanceContractAction(contractId: string) {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { data: contract } = await supabase
+      .from("contracts")
+      .select("status, organization_id")
+      .eq("id", contractId)
+      .maybeSingle();
+
+    if (!contract || contract.organization_id !== auth.ctx.orgId) {
+      return { error: "Not found" };
+    }
+
+    const meta = CONTRACT_STATUS_META[contract.status as ContractStatus];
+    if (!meta.next) return { error: "No next status" };
+
+    await supabase
+      .from("contracts")
+      .update({ status: meta.next, ...(meta.next === "signed" ? { signed_at: new Date().toISOString() } : {}) })
+      .eq("id", contractId);
+
+    revalidatePath("/run/documents");
+    return { ok: true };
+  } catch (e) {
+    console.error("[advanceContractAction] failed", e);
+    return { error: "Failed to advance contract" };
   }
 }
