@@ -216,7 +216,7 @@ export async function createModuleRow(
     case "source/providers": {
       const name = text(formData, "name");
       if (!name) return;
-      await supabase.from("service_providers").insert({
+      const { error: provInsertError } = await supabase.from("service_providers").insert({
         organization_id: orgId,
         name,
         provider_type: text(formData, "provider_type") ?? "legal",
@@ -226,6 +226,7 @@ export async function createModuleRow(
         notes: text(formData, "notes"),
         website: text(formData, "website"),
       });
+      if (provInsertError) throw new Error(provInsertError.message);
       break;
     }
     case "source/debt": {
