@@ -119,7 +119,7 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
             </button>
           );
         })}
-        {cards.length > 0 && (
+        {visible.length > 0 && (
           <button
             type="button"
             disabled={clearing}
