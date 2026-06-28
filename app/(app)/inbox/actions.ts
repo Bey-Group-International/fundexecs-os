@@ -81,6 +81,7 @@ async function performThreadAction(
   const { data: thread } = await supabase
     .from("inbox_threads")
     .select("*")
+    .eq("organization_id", orgId)
     .eq("id", threadId)
     .maybeSingle();
   if (!thread) return { ok: false, error: "Thread not found." };
@@ -251,6 +252,7 @@ export async function shareCommandCenter(formData: FormData): Promise<ThreadActi
   const { data: thread } = await supabase
     .from("inbox_threads")
     .select("deal_id, investor_id, subject")
+    .eq("organization_id", auth.ctx.orgId)
     .eq("id", threadId)
     .maybeSingle();
 
@@ -312,7 +314,12 @@ export async function setThreadStatus(formData: FormData): Promise<{ ok: boolean
 
   const patch: Partial<InboxThread> = { status: status as InboxThread["status"] };
   if (unreadRaw != null) patch.unread = unreadRaw === "true";
-  await supabase.from("inbox_threads").update(patch).eq("id", threadId);
+  const { error } = await supabase
+    .from("inbox_threads")
+    .update(patch)
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", threadId);
+  if (error) return { ok: false };
 
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
