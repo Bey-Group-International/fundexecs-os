@@ -387,13 +387,14 @@ export async function advanceContractAction(contractId: string) {
   if (!auth.ok) return { error: "Unauthorized" };
   try {
     const supabase = createServerClient();
-    const { data: contract } = await supabase
+    const { data: contract, error: selectError } = await supabase
       .from("contracts")
       .select("status")
       .eq("id", contractId)
       .eq("organization_id", auth.ctx.orgId)
       .maybeSingle();
 
+    if (selectError) throw selectError;
     if (!contract) {
       return { error: "Not found" };
     }

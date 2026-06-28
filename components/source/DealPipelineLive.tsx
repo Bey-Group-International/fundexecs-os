@@ -58,15 +58,20 @@ async function scoreDealFit(
   company: VerifiedCompany,
   mandate: MandateCtx
 ): Promise<FitAnalysis | undefined> {
-  const cacheParams: Record<string, unknown> = { dealId: deal.id };
-  const cached = await getCached<FitAnalysis>(orgId, "deal", "ai_fit", cacheParams);
-  if (cached?.data) return cached.data;
+  // Require at least a strategy mandate — asset_class alone gives the AI nothing to score against
+  if (!mandate.strategy) return undefined;
 
   const sector = mandate.sector ?? deal.asset_class ?? undefined;
-  if (!mandate.strategy && !mandate.geography && !sector) {
-    // No mandate context — skip AI scoring to avoid misleading scores
-    return undefined;
-  }
+  const cacheParams: Record<string, unknown> = {
+    dealId: deal.id,
+    companyDomain: company.domain,
+    companyName: company.name,
+    mandateStrategy: mandate.strategy,
+    mandateGeography: mandate.geography,
+    sector,
+  };
+  const cached = await getCached<FitAnalysis>(orgId, "deal", "ai_fit", cacheParams);
+  if (cached?.data) return cached.data;
 
   try {
     const fit = await Promise.race([
@@ -143,6 +148,8 @@ async function enrichDealRow(
 }
 
 const ENRICH_FALLBACK = { enriched: undefined, verified: false, confidence: 0.2, provider: "manual" as const, aiThesisFit: undefined };
+const DEAL_ENRICH_CAP = 40;
+const DEAL_BATCH_SIZE = 5;;
 
 async function loadDeals(): Promise<EnrichedDeal[]> {
   const auth = await requireOrgContext();
@@ -176,10 +183,8 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
 
   const rows = data as unknown as DealRow[];
 
-  // Enrich up to 40 deals in batches of 5. Lower concurrency than LP enrichment
+  // Enrich up to DEAL_ENRICH_CAP deals in batches. Lower concurrency than LP enrichment
   // (15) because each deal call chains Apollo → AI scoring sequentially.
-  const DEAL_ENRICH_CAP = 40;
-  const DEAL_BATCH_SIZE = 5;
   const enrichments: Awaited<ReturnType<typeof enrichDealRow>>[] = [];
   for (let i = 0; i < Math.min(rows.length, DEAL_ENRICH_CAP); i += DEAL_BATCH_SIZE) {
     const chunk = rows.slice(i, i + DEAL_BATCH_SIZE);
@@ -215,7 +220,7 @@ export async function DealPipelineLive() {
         <div className="flex items-center gap-3">
           {verifiedCount > 0 && (
             <span className="text-xs text-fg-muted">
-              {verifiedCount}/{Math.min(deals.length, 20)} enriched via Apollo
+              {verifiedCount}/{Math.min(deals.length, DEAL_ENRICH_CAP)} enriched via Apollo
             </span>
           )}
           <span className="font-mono text-[11px] text-fg-muted">

@@ -84,7 +84,7 @@ async function enrichInvestorRow(
       provider: "apollo",
       hqCity: hqParts[0],
       hqCountry: parseHqCountry(hqParts),
-      primaryStrategies: cached.data.keywords ?? (cached.data.industry ? [cached.data.industry] : []),
+      primaryStrategies: cached.data.keywords?.length ? cached.data.keywords : cached.data.industry ? [cached.data.industry] : [],
     };
   }
 
@@ -101,7 +101,7 @@ async function enrichInvestorRow(
         provider: "apollo",
         hqCity: hqParts[0],
         hqCountry: parseHqCountry(hqParts),
-        primaryStrategies: result.data.keywords ?? (result.data.industry ? [result.data.industry] : []),
+        primaryStrategies: result.data.keywords?.length ? result.data.keywords : result.data.industry ? [result.data.industry] : [],
       };
     }
   } catch {
@@ -169,8 +169,8 @@ async function loadAllocatorEntries() {
         accreditationStatus: "verified" as AccreditationStatus,
         kycStatus: "verified" as const,
         hqCity: enr.hqCity,
-        // TODO: inv.jurisdiction may be a US state — consider a dedicated hq_country DB column
-        hqCountry: enr.hqCountry ?? inv.jurisdiction ?? undefined,
+        // jurisdiction is legal domicile (e.g. "Delaware"), not HQ country — omit as fallback
+        hqCountry: enr.hqCountry,
         fitScore: undefined,
         pipelineStage: inv.pipeline_stage ?? "prospect",
         lastContactDays: rel?.lastContactDays ?? null,
