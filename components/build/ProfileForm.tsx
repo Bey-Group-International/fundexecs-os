@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AutosaveForm } from "@/components/build/AutosaveForm";
 import { inputClass } from "@/components/build/DraftWithEarn";
+import { ROLE_LABELS } from "@/lib/labels";
 
 // Values mirrored from the `organizations` row this form edits.
 export type ProfileValues = {
@@ -37,18 +38,9 @@ const AUM_RANGE_OPTIONS: SelectOption[] = [
   { value: "500m_1b", label: "$500M \u2013 $1B" },
   { value: "over_1b", label: "Over $1B" },
 ];
-const OPERATOR_ROLE_OPTIONS: SelectOption[] = [
-  { value: "gp", label: "GP / Fund Manager" },
-  { value: "family_office", label: "Family Office" },
-  { value: "advisory", label: "Advisor" },
-  { value: "lp", label: "Allocator / LP" },
-  { value: "sponsor", label: "Sponsor" },
-  { value: "placement_agent", label: "Placement Agent" },
-  { value: "fund_administrator", label: "Fund Administrator" },
-  { value: "ria", label: "RIA" },
-  { value: "operator", label: "Operator" },
-  { value: "other", label: "Other" },
-];
+const OPERATOR_ROLE_OPTIONS: SelectOption[] = Object.entries(ROLE_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
 // Fields counted toward the completeness meter.
 const COMPLETENESS_KEYS: (keyof ProfileValues)[] = [

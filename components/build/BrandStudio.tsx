@@ -91,12 +91,12 @@ export function BrandStudio({
   brandPalette,
   firmName,
 }: BrandStudioProps) {
-  const hasSavedColor = isValidHex(brandColor);
+  const [hasSavedColor, setHasSavedColor] = useState(isValidHex(brandColor));
   // When no brand color is saved, default the picker to black so the UI state
   // is clearly "not set" rather than misleading the user with a grey swatch.
-  const initialColor = hasSavedColor ? normalizeHex(brandColor) : "#000000";
+  const initialColor = isValidHex(brandColor) ? normalizeHex(brandColor) : "#000000";
   const [color, setColor] = useState(initialColor);
-  const [hexText, setHexText] = useState(hasSavedColor ? normalizeHex(brandColor) : "");
+  const [hexText, setHexText] = useState(isValidHex(brandColor) ? normalizeHex(brandColor) : "");
   const [palette, setPalette] = useState<string[]>(
     brandPalette.map(normalizeHex).filter(isValidHex),
   );
@@ -114,11 +114,15 @@ export function BrandStudio({
     const v = normalizeHex(value);
     setColor(v);
     setHexText(v);
+    setHasSavedColor(true);
   }
 
   function onHexTextChange(value: string) {
     setHexText(value);
-    if (isValidHex(value)) setColor(normalizeHex(value));
+    if (isValidHex(value)) {
+      setColor(normalizeHex(value));
+      setHasSavedColor(true);
+    }
   }
 
   function addToPalette() {
