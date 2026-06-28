@@ -476,14 +476,6 @@ export function EarnCopilotDock({ name }: { name: string }) {
                     </div>
                   ),
                 )}
-                {pending ? (
-                  <div className="relative mr-6 inline-flex overflow-hidden rounded-lg border border-neural-400/25 bg-black/70 px-3 py-2 text-xs text-fg-muted">
-                    <span className="inline-flex items-center gap-2">
-                      <EarnOrb size={16} pulse /> Earn is routing your ask...
-                    </span>
-                    <span className="fx-data-stream" aria-hidden />
-                  </div>
-                ) : null}
                 <div ref={threadEndRef} />
               </div>
             </div>
