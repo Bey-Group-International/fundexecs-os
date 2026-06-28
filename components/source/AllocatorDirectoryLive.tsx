@@ -66,7 +66,7 @@ async function enrichInvestorRow(
       verified: cached.verified,
       provider: "apollo",
       hqCity: hqParts[0],
-      hqCountry: hqParts.length >= 3 && hqParts[hqParts.length - 1].length > 2 ? hqParts[hqParts.length - 1] : undefined,
+      hqCountry: hqParts.length >= 3 && hqParts[hqParts.length - 1].length >= 2 ? hqParts[hqParts.length - 1] : undefined,
       primaryStrategies: cached.data.keywords ?? (cached.data.industry ? [cached.data.industry] : []),
     };
   }
@@ -83,7 +83,7 @@ async function enrichInvestorRow(
         verified: result.verified,
         provider: "apollo",
         hqCity: hqParts[0],
-        hqCountry: hqParts.length >= 3 && hqParts[hqParts.length - 1].length > 2 ? hqParts[hqParts.length - 1] : undefined,
+        hqCountry: hqParts.length >= 3 && hqParts[hqParts.length - 1].length >= 2 ? hqParts[hqParts.length - 1] : undefined,
         primaryStrategies: result.data.keywords ?? (result.data.industry ? [result.data.industry] : []),
       };
     }
@@ -128,8 +128,11 @@ async function loadAllocatorEntries() {
       return results;
     }
 
+    // Cap enrichment at 75 rows per render to stay well within serverless timeouts.
+    // Rows beyond the cap fall back to stored DB values.
+    const ENRICH_CAP = 75;
     const [enriched, relationships] = await Promise.all([
-      batchEnrich(rows, 15),
+      batchEnrich(rows.slice(0, ENRICH_CAP), 15),
       getLPRelationshipSummaries(supabase, auth.ctx.orgId, rows.map((r) => r.id)),
     ]);
 
