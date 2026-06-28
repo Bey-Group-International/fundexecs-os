@@ -12,6 +12,7 @@ import { computePriority, fallbackSummary } from "@/lib/inbox/intelligence";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
 import type {
   AgentKey,
+  InboxCategory,
   InboxChannel,
   InboxThread,
   Json,
