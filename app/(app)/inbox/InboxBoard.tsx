@@ -171,17 +171,19 @@ function ThreadCard({ card }: { card: InboxCardData }) {
   const [pending, startTransition] = useTransition();
   const [active, setActive] = useState<string | null>(null);
   const [deleting, startDeleteTransition] = useTransition();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDelete = useCallback(() => {
+    setDeleteError(null);
     startDeleteTransition(async () => {
       const r = await deleteThreadAction(card.id);
       if (!r.ok) {
-        setResult({ ok: false, error: "Failed to delete thread. Try again." });
+        setDeleteError("Failed to delete thread. Try again.");
         return;
       }
       router.refresh();
     });
-  }, [card.id, router, setResult]);
+  }, [card.id, router]);
 
   function run(key: string, fn: () => Promise<ThreadActionResult>) {
     setResult(null);
@@ -319,6 +321,9 @@ function ThreadCard({ card }: { card: InboxCardData }) {
         <p className={`mt-2 text-xs ${result.ok ? "text-status-success" : "text-status-danger"}`}>
           {result.ok ? result.message : result.error}
         </p>
+      ) : null}
+      {deleteError ? (
+        <p className="mt-2 text-xs text-status-danger">{deleteError}</p>
       ) : null}
     </div>
   );

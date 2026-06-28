@@ -522,7 +522,7 @@ export async function deleteThreadAction(threadId: string): Promise<{ ok: boolea
     .delete()
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", threadId);
-  if (error) return { ok: false };
+  if (error) { console.error("[deleteThreadAction]", error.message); return { ok: false }; }
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true };
