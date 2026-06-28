@@ -191,8 +191,12 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
 
   // Enrich up to DEAL_ENRICH_CAP deals in batches. Lower concurrency than LP enrichment
   // (15) because each deal call chains Apollo → AI scoring sequentially.
+  // 25s budget leaves headroom for DB queries within the serverless function limit.
+  const DEAL_PIPELINE_BUDGET_MS = 25_000;
+  const deadline = Date.now() + DEAL_PIPELINE_BUDGET_MS;
   const enrichments: Awaited<ReturnType<typeof enrichDealRow>>[] = [];
   for (let i = 0; i < Math.min(rows.length, DEAL_ENRICH_CAP); i += DEAL_BATCH_SIZE) {
+    if (Date.now() > deadline) break;
     const chunk = rows.slice(i, i + DEAL_BATCH_SIZE);
     const results = await Promise.all(
       chunk.map((d) => enrichDealRow(auth.ctx.orgId, d, mandate).catch(() => ENRICH_FALLBACK))

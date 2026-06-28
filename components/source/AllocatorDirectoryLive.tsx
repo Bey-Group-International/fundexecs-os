@@ -16,14 +16,14 @@ const US_STATES = new Set([
   "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
   "VA","WA","WV","WI","WY","DC",
 ]);
+const CA_PROVINCES = new Set([
+  "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT",
+]);
 
 function parseHqCountry(parts: string[]): string | undefined {
   if (parts.length < 2) return undefined;
   const last = parts[parts.length - 1];
-  if (US_STATES.has(last)) {
-    // e.g. "Austin, TX" — last segment is a state, no country segment
-    return undefined;
-  }
+  if (US_STATES.has(last) || CA_PROVINCES.has(last)) return undefined;
   return last.length >= 2 ? last : undefined;
 }
 
