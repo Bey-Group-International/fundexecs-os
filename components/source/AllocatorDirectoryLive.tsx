@@ -120,6 +120,8 @@ async function enrichInvestorRow(
   };
 }
 
+const ENRICH_CAP = 75;
+
 async function loadAllocatorEntries() {
   try {
     const auth = await requireOrgContext();
@@ -151,7 +153,6 @@ async function loadAllocatorEntries() {
 
     // Cap enrichment at 75 rows per render to stay well within serverless timeouts.
     // Rows beyond the cap fall back to stored DB values.
-    const ENRICH_CAP = 75;
     const [enriched, relationships] = await Promise.all([
       batchEnrich(rows.slice(0, ENRICH_CAP), 15),
       getLPRelationshipSummaries(supabase, auth.ctx.orgId, rows.map((r) => r.id)),
@@ -170,6 +171,7 @@ async function loadAllocatorEntries() {
         ticketMax: inv.typical_check_max ?? null,
         primaryStrategies: enr.primaryStrategies,
         geographicFocus: inv.jurisdiction ? [inv.jurisdiction] : [],
+        // TODO: map from investors.accreditation_status once column exists
         accreditationStatus: "verified" as AccreditationStatus,
         kycStatus: "verified" as const,
         hqCity: enr.hqCity,
@@ -231,7 +233,7 @@ export async function AllocatorDirectoryLive() {
               provider="apollo"
             />
             <span className="text-xs text-fg-muted">
-              {verifiedCount}/{entries.length} live
+              {verifiedCount}/{Math.min(entries.length, ENRICH_CAP)} live
             </span>
           </div>
         )}
