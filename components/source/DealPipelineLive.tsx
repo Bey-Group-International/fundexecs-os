@@ -69,11 +69,10 @@ async function scoreDealFit(
   }
 
   try {
-    const fit = await enrichCompanyFit(company, {
-      strategy: mandate.strategy,
-      geography: mandate.geography,
-      sector,
-    });
+    const fit = await Promise.race([
+      enrichCompanyFit(company, { strategy: mandate.strategy, geography: mandate.geography, sector }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+    ]);
 
     const result = {
       status: "success" as const,
@@ -156,7 +155,7 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
     .from("organizations")
     .select("primary_strategy, hq_location, description")
     .eq("id", auth.ctx.orgId)
-    .single();
+    .maybeSingle();
 
   const mandate: MandateCtx = {
     strategy: orgData?.primary_strategy ?? undefined,

@@ -66,7 +66,7 @@ async function enrichInvestorRow(
       verified: cached.verified,
       provider: "apollo",
       hqCity: hqParts[0],
-      hqCountry: hqParts.length >= 3 && hqParts[hqParts.length - 1].length >= 2 ? hqParts[hqParts.length - 1] : undefined,
+      hqCountry: hqParts.length >= 2 && hqParts[hqParts.length - 1].length >= 2 ? hqParts[hqParts.length - 1] : undefined,
       primaryStrategies: cached.data.keywords ?? (cached.data.industry ? [cached.data.industry] : []),
     };
   }
@@ -83,7 +83,7 @@ async function enrichInvestorRow(
         verified: result.verified,
         provider: "apollo",
         hqCity: hqParts[0],
-        hqCountry: hqParts.length >= 3 && hqParts[hqParts.length - 1].length >= 2 ? hqParts[hqParts.length - 1] : undefined,
+        hqCountry: hqParts.length >= 2 && hqParts[hqParts.length - 1].length >= 2 ? hqParts[hqParts.length - 1] : undefined,
         primaryStrategies: result.data.keywords ?? (result.data.industry ? [result.data.industry] : []),
       };
     }
