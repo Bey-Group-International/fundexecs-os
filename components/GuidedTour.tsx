@@ -87,7 +87,7 @@ export function GuidedTour({ orgId }: { orgId: string }) {
       window.removeEventListener("fx:open-tour", openTour);
       window.removeEventListener("fx:hide-tour", hideTour);
     };
-  }, []);
+  }, [orgId]);
 
   function persistDone(next: number[]) {
     setDone(next);
