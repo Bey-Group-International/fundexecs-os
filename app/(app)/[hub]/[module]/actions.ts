@@ -10,6 +10,7 @@ import { logLPContact } from "@/lib/lp-relationships";
 import { LP_DOCUMENT_TYPES, renderDocumentTemplate } from "@/lib/document-templates";
 import { DOCUMENT_TYPE_LABELS, CONTRACT_STATUS_META, type DocumentType, type ContractStatus } from "@/lib/contracts";
 import { gmailAdapter } from "@/lib/integrations/adapters/gmail";
+import type { DealStage } from "@/lib/supabase/database.types";
 
 // Update the active organization's Build › Profile fields. RLS restricts this
 // to org admins/owners.
@@ -125,25 +126,21 @@ export async function createModuleRow(
     case "source/deal_pipeline": {
       const name = text(formData, "name");
       if (!name) return;
-      await supabase.from("deals").insert({
+      const dealRow = {
         organization_id: orgId,
         session_id,
         name,
-        stage:
-          (text(formData, "stage") as
-            | "sourced"
-            | "screening"
-            | "diligence"
-            | "underwriting"
-            | "ic_review"
-            | "closing"
-            | "owned"
-            | "exited"
-            | "passed"
-            | "dead"
-            | null) ?? "sourced",
+        stage: parseDealStage(text(formData, "stage")),
         asset_class: text(formData, "asset_class"),
-      });
+        geography: text(formData, "geography"),
+        target_amount: num(formData, "target_amount"),
+        expected_close: text(formData, "expected_close"),
+        website: text(formData, "website"),
+        notes: text(formData, "notes"),
+      };
+      // TODO: remove cast after running `supabase gen types typescript` with geography/target_amount/expected_close/website/notes columns
+      const { error: dealInsertError } = await (supabase.from("deals") as unknown as { insert: (v: unknown) => Promise<{ error: { message: string } | null }> }).insert(dealRow);
+      if (dealInsertError) throw new Error(dealInsertError.message);
       break;
     }
     case "execute/asset_management": {
@@ -219,14 +216,17 @@ export async function createModuleRow(
     case "source/providers": {
       const name = text(formData, "name");
       if (!name) return;
-      await supabase.from("service_providers").insert({
+      const { error: provInsertError } = await supabase.from("service_providers").insert({
         organization_id: orgId,
         name,
         provider_type: text(formData, "provider_type") ?? "legal",
         contact_name: text(formData, "contact_name"),
         contact_email: text(formData, "contact_email"),
         status: text(formData, "status") ?? "active",
+        notes: text(formData, "notes"),
+        website: text(formData, "website"),
       });
+      if (provInsertError) throw new Error(provInsertError.message);
       break;
     }
     case "source/debt": {
@@ -478,5 +478,122 @@ export async function createLpInviteAction(formData: FormData) {
   } catch (e) {
     console.error("[createLpInviteAction] failed", e);
     return { error: "Failed to send invite" };
+  }
+}
+
+// --- Deal Pipeline: stage advancement --------------------------------------
+
+const DEAL_STAGE_VALUES: DealStage[] = [
+  "sourced", "screening", "diligence", "underwriting",
+  "ic_review", "closing", "owned", "exited", "passed", "dead",
+];
+
+function parseDealStage(value: string | null): DealStage {
+  if (!value) return "sourced";
+  if ((DEAL_STAGE_VALUES as string[]).includes(value)) return value as DealStage;
+  throw new Error("Invalid deal stage");
+}
+
+const STAGE_DOC_SUGGESTIONS: Partial<Record<DealStage, string>> = {
+  screening: "screening_memo",
+  ic_review: "ic_memo",
+};
+
+export async function advanceDealStageAction(
+  dealId: string,
+  newStage: string,
+): Promise<{ ok?: boolean; error?: string; suggestDocType?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  if (!DEAL_STAGE_VALUES.includes(newStage as DealStage)) return { error: "Invalid stage" };
+
+  try {
+    const supabase = createServerClient();
+    const { count, error } = await supabase
+      .from("deals")
+      .update({ stage: newStage as DealStage }, { count: "exact" })
+      .eq("id", dealId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    if (!count) return { error: "Deal not found" };
+
+    revalidatePath("/source/deal_pipeline");
+    return {
+      ok: true,
+      suggestDocType: STAGE_DOC_SUGGESTIONS[newStage as DealStage],
+    };
+  } catch (e) {
+    console.error("[advanceDealStageAction] failed", e);
+    return { error: "Failed to update stage" };
+  }
+}
+
+// --- Service Provider: update & delete ------------------------------------
+
+export async function updateProviderAction(
+  providerId: string,
+  formData: FormData,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  const t = (name: string): string | null => {
+    const v = String(formData.get(name) ?? "").trim();
+    return v === "" ? null : v;
+  };
+
+  const name = t("name");
+  if (!name) return { error: "Provider name is required" };
+
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("service_providers")
+      .update({
+        name,
+        provider_type: t("provider_type") ?? undefined,
+        contact_name: t("contact_name"),
+        contact_email: t("contact_email"),
+        status: t("status") ?? undefined,
+        notes: t("notes"),
+        website: t("website"),
+      })
+      .eq("id", providerId)
+      .eq("organization_id", auth.ctx.orgId)
+      .select("id");
+    if (error) throw error;
+    if (!data?.length) return { error: "Provider not found" };
+
+    revalidatePath("/source/providers");
+    return { ok: true };
+  } catch (e) {
+    console.error("[updateProviderAction] failed", e);
+    return { error: "Failed to update provider" };
+  }
+}
+
+export async function deleteProviderAction(
+  providerId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("service_providers")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", providerId)
+      .eq("organization_id", auth.ctx.orgId)
+      .select("id");
+    if (error) throw error;
+    if (!data?.length) return { error: "Provider not found" };
+
+    revalidatePath("/source/providers");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteProviderAction] failed", e);
+    return { error: "Failed to delete provider" };
   }
 }

@@ -479,6 +479,7 @@ export type ServiceProvider = Timestamps & RecordMeta & {
   contact_email: string | null;
   status: string;
   notes: string | null;
+  website: string | null;
   created_by: string | null;
 };
 
