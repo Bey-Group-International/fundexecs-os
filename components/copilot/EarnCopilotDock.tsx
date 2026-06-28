@@ -82,6 +82,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const [thread, setThread] = useState<Turn[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastAsk, setLastAsk] = useState<string>("");
   const [briefing, setBriefing] = useState<CopilotBriefing | null>(null);
   const [mandate, setMandate] = useState<Mandate | null>(null);
   const [pending, start] = useTransition();
@@ -121,6 +122,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
     const t = text.trim();
     if (!t || pending) return;
     setError(null);
+    setLastAsk(t);
     setThread((prev) => [...prev, { role: "user", text: t }]);
     start(async () => {
       const r = await askEarn({ body: t, pathname, sessionId: sessionId ?? undefined });
@@ -487,9 +489,18 @@ export function EarnCopilotDock({ name }: { name: string }) {
             </div>
           ) : null}
           {error ? (
-            <p className="rounded-lg border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-xs text-status-danger">
-              {error}
-            </p>
+            <div className="rounded-lg border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-xs text-status-danger">
+              <p>{error}</p>
+              {lastAsk ? (
+                <button
+                  onClick={() => ask(lastAsk)}
+                  disabled={pending}
+                  className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-status-danger/70 underline hover:text-status-danger disabled:opacity-50"
+                >
+                  Try again →
+                </button>
+              ) : null}
+            </div>
           ) : null}
 
           {/* The team on point here */}

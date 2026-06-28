@@ -6,6 +6,46 @@ import { saveOrgProfile } from "./actions";
 
 export const dynamic = "force-dynamic";
 
+// Maps raw DB enum values → human-readable display labels. Applied only at the
+// display layer so the underlying stored value is never changed.
+const STRATEGY_LABELS: Record<string, string> = {
+  private_equity: "Private Equity",
+  venture_capital: "Venture Capital",
+  real_estate: "Real Estate",
+  credit_debt: "Credit / Debt",
+  infrastructure: "Infrastructure",
+  multi_strategy: "Multi-Strategy",
+  fund_of_funds: "Fund of Funds",
+  hedge_fund: "Hedge Fund",
+};
+
+const AUM_LABELS: Record<string, string> = {
+  pre_fund: "Pre-fund",
+  sub_10m: "Under $10M",
+  "10m_50m": "$10M – $50M",
+  "50m_250m": "$50M – $250M",
+  "100m_500m": "$100M – $500M",
+  "250m_1b": "$250M – $1B",
+  "500m_1b": "$500M – $1B",
+  "1b_5b": "$1B – $5B",
+  above_5b: "Above $5B",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  gp: "GP",
+  lp: "LP",
+  sponsor: "Sponsor",
+  placement_agent: "Placement Agent",
+  fund_administrator: "Fund Administrator",
+  family_office: "Family Office",
+  ria: "RIA",
+  other: "Other",
+};
+
+function displayLabel(raw: string, map: Record<string, string>): string {
+  return map[raw] ?? map[raw.toLowerCase()] ?? raw;
+}
+
 // Investor-facing firm profile. Every field here propagates to counterparty
 // match cards, the Capital Map, and the Ecosystem Discoverability feed.
 // The Earn Copilot reads this profile when drafting LP outreach, term sheets,
@@ -277,7 +317,9 @@ export default async function ProfilePage() {
               </div>
               <p className="mt-0.5 text-xs text-fg-secondary">
                 {[
-                  (o as Record<string, unknown>).operator_role,
+                  (o as Record<string, unknown>).operator_role
+                    ? displayLabel((o as Record<string, unknown>).operator_role as string, ROLE_LABELS)
+                    : null,
                   (o as Record<string, unknown>).entity_type,
                   (o as Record<string, unknown>).hq_location,
                 ]
@@ -312,10 +354,10 @@ export default async function ProfilePage() {
           {/* Stats row */}
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-4">
             {!!(o as Record<string, unknown>).primary_strategy && (
-              <Stat label="Strategy" value={(o as Record<string, unknown>).primary_strategy as string} />
+              <Stat label="Strategy" value={displayLabel((o as Record<string, unknown>).primary_strategy as string, STRATEGY_LABELS)} />
             )}
             {!!(o as Record<string, unknown>).aum_range && (
-              <Stat label="AUM" value={(o as Record<string, unknown>).aum_range as string} />
+              <Stat label="AUM" value={displayLabel((o as Record<string, unknown>).aum_range as string, AUM_LABELS)} />
             )}
             {(o as Record<string, unknown>).fund_count != null && (
               <Stat

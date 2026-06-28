@@ -196,7 +196,11 @@ export async function POST(request: Request) {
         });
         await stream.finalMessage();
       } catch {
-        controller.enqueue(encoder.encode("\n\n[Earn hit an error generating that reply.]"));
+        controller.enqueue(
+          encoder.encode(
+            "\n\n*Earn ran into an issue generating that reply — please try again in a moment. If the problem persists, check that your Investment Thesis and Org Profile are filled in, as Earn needs that context to respond.*",
+          ),
+        );
       } finally {
         controller.close();
         await persist(reply);

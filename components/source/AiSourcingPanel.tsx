@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   sourceTargets,
   addSourcedTargets,
@@ -45,7 +44,6 @@ export function AiSourcingPanel({
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [ask, setAsk] = useState("");
-  const router = useRouter();
   const [pending, start] = useTransition();
   const [candidates, setCandidates] = useState<SourceCandidate[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -166,8 +164,7 @@ export function AiSourcingPanel({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          const q = ask.trim();
-          router.push(`/source/search${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+          runGenerate();
         }}
         className="mt-3 flex items-center gap-2"
       >
