@@ -12,14 +12,14 @@ export const dynamic = "force-dynamic";
 // The Earn Copilot reads this profile when drafting LP outreach, term sheets,
 // and deal memos — a complete profile meaningfully improves output quality.
 
-const ENTITY_TYPES = [
-  "LLC",
-  "LP",
-  "Corporation",
-  "Trust",
-  "Ltd",
-  "GP",
-  "Other",
+const ENTITY_TYPES: { value: string; label: string }[] = [
+  { value: "LLC", label: "LLC" },
+  { value: "LP", label: "LP" },
+  { value: "Corporation", label: "Corporation" },
+  { value: "Trust", label: "Trust" },
+  { value: "Ltd", label: "Ltd" },
+  { value: "GP", label: "GP" },
+  { value: "Other", label: "Other" },
 ];
 
 // Options use DB enum keys as values so defaultValue matches what's stored.
