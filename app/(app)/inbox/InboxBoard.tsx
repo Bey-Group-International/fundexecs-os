@@ -59,6 +59,7 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
   const [clearError, setClearError] = useState<string | null>(null);
 
   function handleClear() {
+    if (!confirm(`Clear all ${visible.length} thread${visible.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
     setClearError(null);
     startClearTransition(async () => {
       const r = await clearInbox();
@@ -174,6 +175,7 @@ function ThreadCard({ card }: { card: InboxCardData }) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDelete = useCallback(() => {
+    if (!confirm("Delete this thread? This cannot be undone.")) return;
     setDeleteError(null);
     startDeleteTransition(async () => {
       const r = await deleteThreadAction(card.id);
