@@ -216,7 +216,7 @@ export async function DealPipelineLive() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-fg-muted">
-                    {d._enriched?.industry ?? d.asset_class ?? "—"}
+                    {d.asset_class ?? d._enriched?.industry ?? "—"}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-fg">
                     {/* Prefer Apollo revenue range over stored target amount */}
