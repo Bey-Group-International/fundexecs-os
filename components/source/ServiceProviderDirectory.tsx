@@ -4,6 +4,7 @@
 // Rich service provider directory with core bench coverage, filtering,
 // add/edit/delete, provider detail panel, and optional Apollo enrichment.
 import { useState, useMemo, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createModuleRow, updateProviderAction, deleteProviderAction } from "@/app/(app)/[hub]/[module]/actions";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 
@@ -106,6 +107,7 @@ function ProviderForm({
   onClose: () => void;
   onDelete?: () => void;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [deleting, startDelete] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +136,7 @@ function ProviderForm({
         await createModuleRow("source", "providers", fd);
       }
       onClose();
+      router.refresh();
     });
   }
 

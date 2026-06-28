@@ -4,6 +4,7 @@
 // Client component for the deal pipeline — filters, stage advancement, add-deal form,
 // and a slide-over detail panel. Data is fetched server-side by DealPipelineLive.
 import { useState, useMemo, useTransition, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { advanceDealStageAction, createModuleRow } from "@/app/(app)/[hub]/[module]/actions";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 import type { FitAnalysis } from "@/lib/source-hub-types";
@@ -355,6 +356,7 @@ function DealSlideOver({
 // ── Add deal modal ─────────────────────────────────────────────────────────
 
 function AddDealModal({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -378,6 +380,7 @@ function AddDealModal({ onClose }: { onClose: () => void }) {
       try {
         await createModuleRow("source", "deal_pipeline", fd);
         onClose();
+        router.refresh();
       } catch {
         setError("Failed to save deal. Please try again.");
       }
