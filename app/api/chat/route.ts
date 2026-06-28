@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const [dealsResult, diligenceResult, tasksResult, contactsResult] = await Promise.allSettled([
       supabase
         .from("deals")
-        .select("name, stage, asset_class, updated_at")
+        .select("id, name, stage, asset_class, updated_at")
         .eq("organization_id", orgId)
         .not("stage", "in", '("closed","rejected")')
         .order("updated_at", { ascending: false })
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
         }
       }
       const activeDealsLines = deals.map((deal) => {
-        const openItems = deal.name && countMap[deal.name] ? ` · ${countMap[deal.name]} open items` : "";
+        const openItems = deal.id && countMap[deal.id] ? ` · ${countMap[deal.id]} open items` : "";
         const daysAgo = deal.updated_at
           ? Math.round((Date.now() - new Date(deal.updated_at).getTime()) / 86400000)
           : null;
