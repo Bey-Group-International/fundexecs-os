@@ -480,15 +480,17 @@ export function DealPipeline({ deals, enrichCap }: Props) {
   const [selectedDeal, setSelectedDeal] = useState<DealEntry | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [localDeals, setLocalDeals] = useState<DealEntry[]>(deals);
+  const [tableSuggestDoc, setTableSuggestDoc] = useState<string | undefined>();
 
   // Sync when server re-renders with fresh data
   useEffect(() => { setLocalDeals(deals); }, [deals]);
 
-  function handleStageAdvanced(dealId: string, newStage: string) {
+  function handleStageAdvanced(dealId: string, newStage: string, docType?: string) {
     setLocalDeals((prev) =>
       prev.map((d) => (d.id === dealId ? { ...d, stage: newStage } : d)),
     );
     setSelectedDeal((prev) => (prev?.id === dealId ? { ...prev, stage: newStage } : prev));
+    if (docType) setTableSuggestDoc(docType);
   }
 
   const assetClasses = useMemo(
@@ -577,6 +579,30 @@ export function DealPipeline({ deals, enrichCap }: Props) {
           </button>
         </div>
       </div>
+
+      {/* Doc suggestion banner (triggered by table-row stage advancement) */}
+      {tableSuggestDoc && (
+        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3">
+          <p className="text-xs text-gold-300">
+            <span className="font-semibold">Suggested next step:</span>{" "}
+            Create a{" "}
+            <span className="font-semibold">
+              {tableSuggestDoc === "screening_memo" ? "Screening Memo" : "IC Memo"}
+            </span>{" "}
+            for this deal.
+          </p>
+          <button
+            type="button"
+            onClick={() => setTableSuggestDoc(undefined)}
+            className="shrink-0 text-fg-muted hover:text-fg-primary"
+            aria-label="Dismiss"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+              <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       {filtered.length === 0 ? (
