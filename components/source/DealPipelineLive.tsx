@@ -74,9 +74,11 @@ async function scoreDealFit(
   if (cached?.data) return cached.data;
 
   try {
+    let _timer: ReturnType<typeof setTimeout>;
     const fit = await Promise.race([
-      enrichCompanyFit(company, { strategy: mandate.strategy, geography: mandate.geography, sector }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+      enrichCompanyFit(company, { strategy: mandate.strategy, geography: mandate.geography, sector })
+        .finally(() => clearTimeout(_timer)),
+      new Promise<never>((_, reject) => { _timer = setTimeout(() => reject(new Error("timeout")), 5000); }),
     ]);
 
     const result = {
@@ -128,7 +130,11 @@ async function enrichDealRow(
   }
 
   try {
-    const result = await enrichOrganization(params);
+    let _apolloTimer: ReturnType<typeof setTimeout>;
+    const result = await Promise.race([
+      enrichOrganization(params).finally(() => clearTimeout(_apolloTimer)),
+      new Promise<never>((_, reject) => { _apolloTimer = setTimeout(() => reject(new Error("timeout")), 5000); }),
+    ]);
     if (result.status !== "failed" && result.data) {
       await setCached(orgId, "company", "apollo", params as Record<string, unknown>, result);
       const aiThesisFit = await scoreDealFit(orgId, deal, result.data, mandate);

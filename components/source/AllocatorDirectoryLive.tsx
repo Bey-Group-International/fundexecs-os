@@ -89,9 +89,10 @@ async function enrichInvestorRow(
   }
 
   try {
+    let _timer: ReturnType<typeof setTimeout>;
     const result = await Promise.race([
-      enrichOrganization(params),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+      enrichOrganization(params).finally(() => clearTimeout(_timer)),
+      new Promise<never>((_, reject) => { _timer = setTimeout(() => reject(new Error("timeout")), 5000); }),
     ]);
     if (result.status !== "failed" && result.data) {
       await setCached(orgId, "investor", "apollo", params as Record<string, unknown>, result);
