@@ -15,7 +15,7 @@ const nextConfig = {
         // the correct module key.
         source: "/source/lp",
         destination: "/source/lp_pipeline",
-        permanent: false,
+        permanent: true,
       },
       // Hyphen variants of underscore-slug Source Hub routes.
       { source: "/source/lp-pipeline", destination: "/source/lp_pipeline", permanent: true },
