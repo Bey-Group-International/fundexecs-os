@@ -218,7 +218,7 @@ function DealSlideOver({
           {suggestDoc && (
             <div className="rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3">
               <p className="text-xs text-gold-300">
-                Advancing to {stageLabel(deal.stage)} — generate a {DOC_LABEL[suggestDoc] ?? suggestDoc}?
+                Now in {stageLabel(deal.stage)} — consider creating a {DOC_LABEL[suggestDoc] ?? suggestDoc}.
               </p>
               <a
                 href="/run/documents"

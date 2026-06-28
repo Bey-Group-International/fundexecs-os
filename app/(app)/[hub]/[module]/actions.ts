@@ -591,7 +591,7 @@ export async function deleteProviderAction(
     const supabase = createServerClient();
     const { error } = await supabase
       .from("service_providers")
-      .delete()
+      .update({ archived_at: new Date().toISOString() })
       .eq("id", providerId)
       .eq("organization_id", auth.ctx.orgId);
     if (error) throw error;
