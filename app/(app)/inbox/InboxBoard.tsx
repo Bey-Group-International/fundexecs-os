@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ActionKind, GateTier } from "@/lib/gates";
 import type { InboxCategory, InboxChannel } from "@/lib/supabase/database.types";
 import { actOnThread, shareCommandCenter, setThreadStatus, type ThreadActionResult } from "./actions";
@@ -136,6 +137,7 @@ function relativeMeeting(iso: string): string {
 }
 
 function ThreadCard({ card }: { card: InboxCardData }) {
+  const router = useRouter();
   const [result, setResult] = useState<ThreadActionResult | null>(null);
   const [pending, startTransition] = useTransition();
   const [active, setActive] = useState<string | null>(null);
@@ -143,7 +145,11 @@ function ThreadCard({ card }: { card: InboxCardData }) {
   function run(key: string, fn: () => Promise<ThreadActionResult>) {
     startTransition(async () => {
       setActive(key);
-      setResult(await fn());
+      const r = await fn();
+      setResult(r);
+      // Refresh server components so the nav badge and thread list reflect the
+      // change immediately rather than waiting for the 30-second poll.
+      if (r.ok) router.refresh();
     });
   }
 

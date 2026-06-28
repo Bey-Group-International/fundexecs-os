@@ -12,8 +12,9 @@ import {
 } from "@/lib/inbox/intelligence";
 import { channelMeta } from "@/lib/inbox/channels";
 import { tierForAction, type GateTier } from "@/lib/gates";
-import { seedInboxDemo, clearInbox } from "./actions";
+import { seedInboxDemo, clearInbox, markOpenThreadsRead } from "./actions";
 import { InboxBoard, type InboxCardData } from "./InboxBoard";
+import { InboxReadMarker } from "./InboxReadMarker";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,8 @@ export default async function InboxPage() {
 
   return (
     <div className="fx-ambient mx-auto max-w-4xl">
+      {/* Mark all visible open threads as read when the operator opens the inbox. */}
+      <InboxReadMarker action={markOpenThreadsRead} />
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">

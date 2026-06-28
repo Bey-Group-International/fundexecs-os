@@ -319,6 +319,24 @@ export async function setThreadStatus(formData: FormData): Promise<{ ok: boolean
   return { ok: true };
 }
 
+/** Bulk-clear the unread flag for all open threads in the org — called when
+ *  the operator opens the inbox so already-visible threads don't keep showing
+ *  the unread dot or inflating the badge on the next poll. */
+export async function markOpenThreadsRead(): Promise<void> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return;
+  const supabase = createServerClient();
+  await supabase
+    .from("inbox_threads")
+    .update({ unread: false })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("unread", true)
+    .eq("status", "open")
+    .neq("channel", "deal_share");
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+}
+
 // ---------------------------------------------------------------------------
 // Demo data — a one-click realistic inbox so the triage, suggested actions, and
 // Command Center digest look alive without wiring live providers. Threads link

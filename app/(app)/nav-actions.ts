@@ -11,7 +11,9 @@ import { getSessionContext } from "@/lib/auth";
 
 export interface AlertCounts {
   // Unread messages — capital/LP, partners, providers + email/chat/booking/video
-  // (everything that is NOT a shared deal).
+  // (everything that is NOT a shared deal), plus any tasks awaiting operator
+  // approval. Approval tasks appear in the inbox "Needs you" lane, so they
+  // contribute to the same badge the sidebar already counts.
   messages: number;
   // Unread shared-deal updates (botmemo-style deal flow).
   deals: number;
@@ -32,12 +34,21 @@ export async function getAlertCounts(): Promise<AlertCounts> {
       .eq("unread", true)
       .eq("status", "open");
 
-  const [messagesRes, dealsRes] = await Promise.all([
+  const [messagesRes, dealsRes, approvalsRes] = await Promise.all([
     base().neq("channel", "deal_share"),
     base().eq("channel", "deal_share"),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .is("parent_task_id", null)
+      .eq("status", "awaiting_approval"),
   ]);
 
-  return { messages: messagesRes.count ?? 0, deals: dealsRes.count ?? 0 };
+  return {
+    messages: (messagesRes.count ?? 0) + (approvalsRes.count ?? 0),
+    deals: dealsRes.count ?? 0,
+  };
 }
 
 /** Mark every unread shared-deal alert read — clears the lightbulb badge once
