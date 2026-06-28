@@ -140,7 +140,7 @@ export function ServiceProviderDirectory({ providers }: Props) {
   const [statusFilter, setStatusFilter] = useState("active");
 
   const filtered = useMemo(() => {
-    let list = providers;
+    let list = [...providers];
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(

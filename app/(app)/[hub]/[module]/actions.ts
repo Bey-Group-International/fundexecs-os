@@ -7,7 +7,7 @@ import { getSessionContext, requireOrgContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { logLPContact } from "@/lib/lp-relationships";
-import { renderDocumentTemplate } from "@/lib/document-templates";
+import { LP_DOCUMENT_TYPES, renderDocumentTemplate } from "@/lib/document-templates";
 import { DOCUMENT_TYPE_LABELS, CONTRACT_STATUS_META, type DocumentType, type ContractStatus } from "@/lib/contracts";
 import { gmailAdapter } from "@/lib/integrations/adapters/gmail";
 
@@ -315,6 +315,9 @@ export async function generateDocumentAction(formData: FormData) {
   if (!docType || !(docType in DOCUMENT_TYPE_LABELS)) {
     return { error: "Invalid document type" };
   }
+  if (LP_DOCUMENT_TYPES.includes(docType) && !investorId) {
+    return { error: "Investor required for this document type" };
+  }
 
   try {
     const supabase = createServerClient();
@@ -324,11 +327,15 @@ export async function generateDocumentAction(formData: FormData) {
       supabase.from("organizations").select("name, jurisdiction").eq("id", orgId).maybeSingle(),
       fundId
         ? supabase.from("funds").select("name").eq("id", fundId).eq("organization_id", orgId).maybeSingle()
-        : Promise.resolve({ data: null }),
+        : Promise.resolve({ data: null, error: null }),
       investorId
         ? supabase.from("investors").select("name, typical_check_min, typical_check_max, jurisdiction").eq("id", investorId).eq("organization_id", orgId).maybeSingle()
-        : Promise.resolve({ data: null }),
+        : Promise.resolve({ data: null, error: null }),
     ]);
+
+    if (orgResult.error || fundResult.error || investorResult.error) {
+      throw orgResult.error ?? fundResult.error ?? investorResult.error;
+    }
 
     const org = orgResult.data as { name?: string; jurisdiction?: string } | null;
     const fund = fundResult.data as { name?: string } | null;
@@ -338,6 +345,9 @@ export async function generateDocumentAction(formData: FormData) {
       typical_check_max?: number | null;
       jurisdiction?: string | null;
     } | null;
+
+    if (fundId && !fund) return { error: "Invalid fund" };
+    if (investorId && !investor) return { error: "Invalid investor" };
 
     const checkAmt = investor?.typical_check_max ?? investor?.typical_check_min;
     const vars = {
@@ -352,7 +362,7 @@ export async function generateDocumentAction(formData: FormData) {
     const content = renderDocumentTemplate(docType, vars);
     const title = `${DOCUMENT_TYPE_LABELS[docType]}${investor?.name ? ` — ${investor.name}` : ""}`;
 
-    await supabase.from("contracts").insert({
+    const { error: insertError } = await supabase.from("contracts").insert({
       organization_id: orgId,
       fund_id: fundId,
       investor_id: investorId,
@@ -362,6 +372,7 @@ export async function generateDocumentAction(formData: FormData) {
       status: "draft",
       notes: content,
     });
+    if (insertError) throw insertError;
 
     revalidatePath("/run/documents");
     return { ok: true };
@@ -378,21 +389,25 @@ export async function advanceContractAction(contractId: string) {
     const supabase = createServerClient();
     const { data: contract } = await supabase
       .from("contracts")
-      .select("status, organization_id")
+      .select("status")
       .eq("id", contractId)
+      .eq("organization_id", auth.ctx.orgId)
       .maybeSingle();
 
-    if (!contract || contract.organization_id !== auth.ctx.orgId) {
+    if (!contract) {
       return { error: "Not found" };
     }
 
     const meta = CONTRACT_STATUS_META[contract.status as ContractStatus];
+    if (!meta) return { error: "Invalid status" };
     if (!meta.next) return { error: "No next status" };
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("contracts")
       .update({ status: meta.next, ...(meta.next === "signed" ? { signed_at: new Date().toISOString() } : {}) })
-      .eq("id", contractId);
+      .eq("id", contractId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (updateError) throw updateError;
 
     revalidatePath("/run/documents");
     return { ok: true };
