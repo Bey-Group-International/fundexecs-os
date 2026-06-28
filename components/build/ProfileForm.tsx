@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AutosaveForm } from "@/components/build/AutosaveForm";
 import { inputClass } from "@/components/build/DraftWithEarn";
+import { ROLE_LABELS } from "@/lib/labels";
 
 // Values mirrored from the `organizations` row this form edits.
 export type ProfileValues = {
@@ -20,15 +21,26 @@ export type ProfileValues = {
   operator_role: string;
 };
 
-const ENTITY_TYPE_OPTIONS = ["LLC", "LP", "LLP", "Inc.", "GP/LP", "Other"];
-const AUM_RANGE_OPTIONS = ["<$50M", "$50\u2013250M", "$250M\u20131B", "$1\u20135B", "$5B+"];
-const OPERATOR_ROLE_OPTIONS = [
-  "GP / Fund Manager",
-  "Family Office",
-  "Advisor",
-  "Allocator/LP",
-  "Other",
+type SelectOption = { value: string; label: string };
+
+const ENTITY_TYPE_OPTIONS: SelectOption[] = [
+  { value: "LLC", label: "LLC" },
+  { value: "LP", label: "LP" },
+  { value: "LLP", label: "LLP" },
+  { value: "Inc.", label: "Inc." },
+  { value: "GP/LP", label: "GP/LP" },
+  { value: "Other", label: "Other" },
 ];
+const AUM_RANGE_OPTIONS: SelectOption[] = [
+  { value: "sub_25m", label: "Under $25M" },
+  { value: "25m_100m", label: "$25M \u2013 $100M" },
+  { value: "100m_500m", label: "$100M \u2013 $500M" },
+  { value: "500m_1b", label: "$500M \u2013 $1B" },
+  { value: "over_1b", label: "Over $1B" },
+];
+const OPERATOR_ROLE_OPTIONS: SelectOption[] = Object.entries(ROLE_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
 // Fields counted toward the completeness meter.
 const COMPLETENESS_KEYS: (keyof ProfileValues)[] = [
@@ -89,10 +101,10 @@ function PresetSelect({
   name: string;
   value: string;
   onChange: (v: string) => void;
-  options: string[];
+  options: SelectOption[];
   placeholder: string;
 }) {
-  const hasCustom = value !== "" && !options.includes(value);
+  const hasCustom = value !== "" && !options.some((o) => o.value === value);
   return (
     <select
       name={name}
@@ -102,8 +114,8 @@ function PresetSelect({
     >
       <option value="">{placeholder}</option>
       {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt}
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
         </option>
       ))}
       {hasCustom ? <option value={value}>{value}</option> : null}
@@ -185,7 +197,7 @@ export function ProfileForm({
               value={form.tagline}
               onChange={(e) => set("tagline")(e.target.value)}
               maxLength={120}
-              placeholder="Institutional capital for tomorrow's infrastructure"
+              placeholder="e.g., Institutional capital for tomorrow's infrastructure"
               className={`${inputClass} bg-surface-1`}
             />
           </Field>
