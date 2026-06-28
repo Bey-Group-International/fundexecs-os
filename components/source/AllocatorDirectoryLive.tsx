@@ -21,7 +21,11 @@ const CA_PROVINCES = new Set([
 ]);
 
 function parseHqCountry(parts: string[]): string | undefined {
-  if (parts.length < 2) return undefined;
+  if (parts.length === 0) return undefined;
+  if (parts.length === 1) {
+    const tok = parts[0];
+    return tok.length >= 4 && !US_STATES.has(tok) && !CA_PROVINCES.has(tok) ? tok : undefined;
+  }
   const last = parts[parts.length - 1];
   if (US_STATES.has(last) || CA_PROVINCES.has(last)) return undefined;
   return last.length >= 2 ? last : undefined;
@@ -89,7 +93,7 @@ async function enrichInvestorRow(
   }
 
   try {
-    let _timer: ReturnType<typeof setTimeout>;
+    let _timer: ReturnType<typeof setTimeout> | undefined;
     const result = await Promise.race([
       enrichOrganization(params).finally(() => clearTimeout(_timer)),
       new Promise<never>((_, reject) => { _timer = setTimeout(() => reject(new Error("timeout")), 5000); }),

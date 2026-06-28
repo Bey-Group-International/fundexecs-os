@@ -74,7 +74,7 @@ async function scoreDealFit(
   if (cached?.data) return cached.data;
 
   try {
-    let _timer: ReturnType<typeof setTimeout>;
+    let _timer: ReturnType<typeof setTimeout> | undefined;
     const fit = await Promise.race([
       enrichCompanyFit(company, { strategy: mandate.strategy, geography: mandate.geography, sector })
         .finally(() => clearTimeout(_timer)),
