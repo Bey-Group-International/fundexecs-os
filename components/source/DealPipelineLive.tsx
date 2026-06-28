@@ -159,6 +159,8 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
 
   const mandate: MandateCtx = {
     strategy: orgData?.primary_strategy ?? undefined,
+    // TODO: hq_location is the org's own HQ, not the fund's target investment geography — prefer a
+    // dedicated geography_mandate / target_geography field on organizations when available.
     geography: orgData?.hq_location ?? undefined,
   };
 
@@ -175,13 +177,18 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
 
   const rows = data as unknown as DealRow[];
 
-  // Enrich up to 20 deals in parallel — per-deal failures fall back gracefully
-  // so a broken Apollo call can never wipe out the entire deal list.
-  const enrichments = await Promise.all(
-    rows.slice(0, 20).map((d) =>
-      enrichDealRow(auth.ctx.orgId, d, mandate).catch(() => ENRICH_FALLBACK)
-    )
-  );
+  // Enrich up to 40 deals in batches of 5. Lower concurrency than LP enrichment
+  // (15) because each deal call chains Apollo → AI scoring sequentially.
+  const DEAL_ENRICH_CAP = 40;
+  const DEAL_BATCH_SIZE = 5;
+  const enrichments: Awaited<ReturnType<typeof enrichDealRow>>[] = [];
+  for (let i = 0; i < Math.min(rows.length, DEAL_ENRICH_CAP); i += DEAL_BATCH_SIZE) {
+    const chunk = rows.slice(i, i + DEAL_BATCH_SIZE);
+    const results = await Promise.all(
+      chunk.map((d) => enrichDealRow(auth.ctx.orgId, d, mandate).catch(() => ENRICH_FALLBACK))
+    );
+    enrichments.push(...results);
+  }
 
   return rows.map((d, i) => {
     const enr = enrichments[i] ?? ENRICH_FALLBACK;

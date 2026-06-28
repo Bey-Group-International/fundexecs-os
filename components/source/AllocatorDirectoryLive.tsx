@@ -152,6 +152,7 @@ async function loadAllocatorEntries() {
         accreditationStatus: "verified" as AccreditationStatus,
         kycStatus: "verified" as const,
         hqCity: enr.hqCity,
+        // TODO: inv.jurisdiction may be a US state — consider a dedicated hq_country DB column
         hqCountry: enr.hqCountry ?? inv.jurisdiction ?? undefined,
         fitScore: undefined,
         pipelineStage: inv.pipeline_stage ?? "prospect",
