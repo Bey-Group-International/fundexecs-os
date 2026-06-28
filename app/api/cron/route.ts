@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { createServiceClient } from "@/lib/supabase/server";
 import { runAutomation } from "@/lib/engine";
 import { nextRun } from "@/lib/cron";
@@ -80,6 +81,7 @@ export async function GET(request: Request) {
       );
     } catch (e) {
       status = `failed: ${e instanceof Error ? e.message : "unknown"}`;
+      Sentry.captureException(e, { tags: { automationId: a.id, orgId: a.organization_id } });
     }
 
     await supabase
@@ -120,12 +122,12 @@ export async function GET(request: Request) {
         const r = await scanOrgRadarSignals(supabase, orgId);
         radar.generated += r.generated;
         radar.entities += r.scanned;
-      } catch {
-        // one bad org shouldn't stop the rest of the radar sweep
+      } catch (e) {
+        Sentry.captureException(e, { tags: { orgId, job: "radar_scan" } });
       }
     }
-  } catch {
-    // radar scan is additive — never fail the whole cron over it
+  } catch (e) {
+    Sentry.captureException(e, { tags: { job: "radar_scan_outer" } });
   }
 
   // Best-effort SLA auto-escalation: raise tracked team tasks for workflows
@@ -135,24 +137,29 @@ export async function GET(request: Request) {
   let escalated = 0;
   try {
     escalated = await runSlaEscalations(supabase, now);
-  } catch {
+  } catch (e) {
+    Sentry.captureException(e, { tags: { job: "sla_escalation" } });
     escalated = 0;
   }
 
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
-  await recordCronRun(supabase, {
-    job: "cron",
-    status: "ok",
-    detail: {
-      swept: due.length,
-      scannedOrgs: radar.scannedOrgs,
-      generated: radar.generated,
-      escalated,
-    },
-    startedAt: now,
-  });
+  try {
+    await recordCronRun(supabase, {
+      job: "cron",
+      status: "ok",
+      detail: {
+        swept: due.length,
+        scannedOrgs: radar.scannedOrgs,
+        generated: radar.generated,
+        escalated,
+      },
+      startedAt: now,
+    });
+  } catch {
+    // best-effort: never let health tracking break the cron response
+  }
 
   return NextResponse.json({ swept: due.length, results, radar, escalated });
 }
