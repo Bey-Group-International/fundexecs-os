@@ -107,7 +107,7 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
     .order("created_at", { ascending: false })
     .limit(200);
 
-  if (error || !data) return [];
+  if (error || !data) { if (error) console.error("[DealPipelineLive] fetch error:", error.message); return []; }
 
   const rows = data as unknown as DealRow[];
 
