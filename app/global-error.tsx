@@ -1,7 +1,6 @@
 "use client";
 
 import "@/app/globals.css";
-import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 export default function GlobalError({
@@ -12,7 +11,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    console.error(error);
   }, [error]);
 
   return (
@@ -22,7 +21,7 @@ export default function GlobalError({
           Critical error
         </p>
         <p className="max-w-sm text-sm text-fg-secondary">
-          Something went wrong at the application level. The team has been notified.
+          Something went wrong at the application level. Please try again.
         </p>
         <button
           onClick={reset}
