@@ -145,17 +145,21 @@ export async function GET(request: Request) {
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
-  await recordCronRun(supabase, {
-    job: "cron",
-    status: "ok",
-    detail: {
-      swept: due.length,
-      scannedOrgs: radar.scannedOrgs,
-      generated: radar.generated,
-      escalated,
-    },
-    startedAt: now,
-  });
+  try {
+    await recordCronRun(supabase, {
+      job: "cron",
+      status: "ok",
+      detail: {
+        swept: due.length,
+        scannedOrgs: radar.scannedOrgs,
+        generated: radar.generated,
+        escalated,
+      },
+      startedAt: now,
+    });
+  } catch {
+    // best-effort: never let health tracking break the cron response
+  }
 
   return NextResponse.json({ swept: due.length, results, radar, escalated });
 }
