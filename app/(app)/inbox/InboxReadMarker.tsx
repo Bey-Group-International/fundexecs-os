@@ -7,7 +7,7 @@ import { useEffect } from "react";
 // a server component while still clearing the unread flag on view.
 export function InboxReadMarker({ action }: { action: () => Promise<void> }) {
   useEffect(() => {
-    void action();
+    action().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
