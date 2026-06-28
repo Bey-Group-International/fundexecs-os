@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ActionKind, GateTier } from "@/lib/gates";
 import type { InboxCategory, InboxChannel } from "@/lib/supabase/database.types";
-import { actOnThread, shareCommandCenter, setThreadStatus, type ThreadActionResult } from "./actions";
+import { actOnThread, shareCommandCenter, setThreadStatus, deleteThreadAction, clearInbox, type ThreadActionResult } from "./actions";
 
 // Fully server-prepared card data — no intelligence/AI module reaches the client.
 export interface InboxCardData {
@@ -53,7 +53,16 @@ const FILTERS: { key: "all" | InboxCategory; label: string }[] = [
 ];
 
 export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
+  const router = useRouter();
   const [filter, setFilter] = useState<"all" | InboxCategory>("all");
+  const [clearing, startClearTransition] = useTransition();
+
+  function handleClear() {
+    startClearTransition(async () => {
+      await clearInbox();
+      router.refresh();
+    });
+  }
 
   const visible = useMemo(
     () => cards.filter((c) => c.status !== "done" && (filter === "all" || c.category === filter)),
@@ -83,8 +92,8 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Pillar filters */}
-      <div className="flex flex-wrap gap-1.5">
+      {/* Pillar filters + Clear */}
+      <div className="flex flex-wrap items-center gap-1.5">
         {FILTERS.map((f) => {
           const active = filter === f.key;
           const n = counts.get(f.key) ?? 0;
@@ -104,6 +113,16 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
             </button>
           );
         })}
+        {cards.length > 0 && (
+          <button
+            type="button"
+            disabled={clearing}
+            onClick={handleClear}
+            className="ml-auto rounded-md border border-line px-3 py-1 text-xs text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger disabled:opacity-50"
+          >
+            {clearing ? "Clearing…" : "Clear inbox"}
+          </button>
+        )}
       </div>
 
       {visible.length === 0 ? (
@@ -141,6 +160,14 @@ function ThreadCard({ card }: { card: InboxCardData }) {
   const [result, setResult] = useState<ThreadActionResult | null>(null);
   const [pending, startTransition] = useTransition();
   const [active, setActive] = useState<string | null>(null);
+  const [deleting, startDeleteTransition] = useTransition();
+
+  const handleDelete = useCallback(() => {
+    startDeleteTransition(async () => {
+      await deleteThreadAction(card.id);
+      router.refresh();
+    });
+  }, [card.id, router]);
 
   function run(key: string, fn: () => Promise<ThreadActionResult>) {
     setResult(null);
@@ -262,6 +289,15 @@ function ThreadCard({ card }: { card: InboxCardData }) {
           className="rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
         >
           Snooze
+        </button>
+        <button
+          type="button"
+          disabled={pending || deleting}
+          onClick={handleDelete}
+          className="rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-status-danger disabled:opacity-50"
+          aria-label="Delete thread"
+        >
+          {deleting ? "Deleting…" : "Delete"}
         </button>
       </div>
 
