@@ -16,6 +16,12 @@ Sentry.init({
     /^Network request failed/,
     /^Load failed/,
   ],
+  beforeSend(event) {
+    if (event.user?.email) delete event.user.email;
+    if (event.user?.ip_address) delete event.user.ip_address;
+    if (event.user?.username) delete event.user.username;
+    return event;
+  },
   // Only send in production; suppress noise in local dev
   enabled: process.env.NODE_ENV === "production",
 });
