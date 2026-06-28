@@ -528,11 +528,16 @@ export async function deleteThreadAction(threadId: string): Promise<{ ok: boolea
   return { ok: true };
 }
 
-export async function clearInbox(): Promise<void> {
+export async function clearInbox(): Promise<{ ok: boolean }> {
   const auth = await requireOrgContext();
-  if (!auth.ok) return;
+  if (!auth.ok) return { ok: false };
   const supabase = createServerClient();
-  await supabase.from("inbox_threads").delete().eq("organization_id", auth.ctx.orgId);
+  const { error } = await supabase
+    .from("inbox_threads")
+    .delete()
+    .eq("organization_id", auth.ctx.orgId);
+  if (error) return { ok: false };
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
+  return { ok: true };
 }

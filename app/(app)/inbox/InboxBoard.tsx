@@ -59,8 +59,8 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
 
   function handleClear() {
     startClearTransition(async () => {
-      await clearInbox();
-      router.refresh();
+      const r = await clearInbox();
+      if (r.ok) router.refresh();
     });
   }
 
@@ -164,10 +164,14 @@ function ThreadCard({ card }: { card: InboxCardData }) {
 
   const handleDelete = useCallback(() => {
     startDeleteTransition(async () => {
-      await deleteThreadAction(card.id);
+      const r = await deleteThreadAction(card.id);
+      if (!r.ok) {
+        setResult({ ok: false, error: "Failed to delete thread. Try again." });
+        return;
+      }
       router.refresh();
     });
-  }, [card.id, router]);
+  }, [card.id, router, setResult]);
 
   function run(key: string, fn: () => Promise<ThreadActionResult>) {
     setResult(null);
