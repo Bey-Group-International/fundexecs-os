@@ -59,6 +59,7 @@ export const HUBS: HubDefinition[] = [
       { key: "stress_test", label: "Stress Test" },
       { key: "comms", label: "Comms" },
       { key: "risk", label: "Risk" },
+      { key: "documents", label: "Documents" },
     ],
   },
   {
