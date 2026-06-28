@@ -4,7 +4,6 @@
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { ServiceProviderDirectory } from "@/components/source/ServiceProviderDirectory";
-import { VerificationPill } from "@/components/source/VerificationBadge";
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import type { ProviderEntry } from "@/components/source/ServiceProviderDirectory";
@@ -155,16 +154,9 @@ export async function ServiceProviderDirectoryLive() {
             Service Provider Directory
           </p>
           {providers.length > 0 && verifiedCount > 0 && (
-            <div className="flex items-center gap-2">
-              <VerificationPill
-                verified={true}
-                confidence={verifiedCount / Math.min(providers.length, ENRICH_CAP)}
-                provider="apollo"
-              />
-              <span className="text-xs text-fg-muted">
-                {verifiedCount}/{Math.min(providers.length, ENRICH_CAP)} live
-              </span>
-            </div>
+            <span className="text-xs text-fg-muted">
+              {verifiedCount}/{Math.min(providers.length, ENRICH_CAP)} enriched via Apollo
+            </span>
           )}
         </div>
         <ServiceProviderDirectory providers={providers} />

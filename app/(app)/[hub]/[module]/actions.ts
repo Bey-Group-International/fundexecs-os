@@ -524,6 +524,14 @@ export async function advanceDealStageAction(
 
   try {
     const supabase = createServerClient();
+    const { count, error: countError } = await supabase
+      .from("deals")
+      .select("id", { count: "exact", head: true })
+      .eq("id", dealId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (countError) throw countError;
+    if (!count) return { error: "Deal not found" };
+
     const { error } = await supabase
       .from("deals")
       .update({ stage: newStage as DealStage })
@@ -565,10 +573,10 @@ export async function updateProviderAction(
       .from("service_providers")
       .update({
         name,
-        provider_type: t("provider_type") ?? undefined,
+        provider_type: t("provider_type") ?? "legal",
         contact_name: t("contact_name"),
         contact_email: t("contact_email"),
-        status: t("status") ?? undefined,
+        status: t("status") ?? "active",
         notes: t("notes"),
       })
       .eq("id", providerId)
