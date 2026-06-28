@@ -8,7 +8,7 @@ import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import type { ProviderEntry } from "@/components/source/ServiceProviderDirectory";
 
-interface ProviderRow {
+type ProviderRow = {
   id: string;
   name: string;
   provider_type: string | null;
@@ -17,7 +17,7 @@ interface ProviderRow {
   status: string | null;
   notes: string | null;
   website: string | null;
-}
+};
 
 interface EnrichedProviderData {
   website?: string;
@@ -71,8 +71,11 @@ async function enrichProviderRow(
         _timer = setTimeout(() => reject(new Error("timeout")), 5000);
       }),
     ]);
-    if (result.status !== "failed" && result.data) {
+    if (result.status !== "failed") {
       await setCached(orgId, "provider", "apollo", params, result);
+      if (!result.data) {
+        return { confidence: result.confidence ?? 0.3, verified: false, provider: "manual" };
+      }
       return {
         website: result.data.website,
         description: result.data.description,
@@ -106,13 +109,13 @@ export async function ServiceProviderDirectoryLive() {
       .order("created_at", { ascending: false })
       .limit(200);
 
-    const rows = (data ?? []) as unknown as ProviderRow[];
+    const rows = (data ?? []) as ProviderRow[];
 
     const PROVIDER_BUDGET_MS = 22_000;
     const deadline = Date.now() + PROVIDER_BUDGET_MS;
     const enrichments: EnrichedProviderData[] = [];
     for (let i = 0; i < Math.min(rows.length, ENRICH_CAP); i += BATCH_SIZE) {
-      if (Date.now() > deadline) break;
+      if (Date.now() + 5000 > deadline) break;
       const chunk = rows.slice(i, i + BATCH_SIZE);
       const results = await Promise.all(
         chunk.map((r) =>

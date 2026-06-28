@@ -129,19 +129,7 @@ export async function createModuleRow(
         organization_id: orgId,
         session_id,
         name,
-        stage:
-          (text(formData, "stage") as
-            | "sourced"
-            | "screening"
-            | "diligence"
-            | "underwriting"
-            | "ic_review"
-            | "closing"
-            | "owned"
-            | "exited"
-            | "passed"
-            | "dead"
-            | null) ?? "sourced",
+        stage: parseDealStage(text(formData, "stage")),
         asset_class: text(formData, "asset_class"),
         geography: text(formData, "geography"),
         target_amount: num(formData, "target_amount"),
@@ -235,6 +223,7 @@ export async function createModuleRow(
         contact_email: text(formData, "contact_email"),
         status: text(formData, "status") ?? "active",
         notes: text(formData, "notes"),
+        website: text(formData, "website"),
       });
       break;
     }
@@ -492,7 +481,7 @@ export async function createLpInviteAction(formData: FormData) {
 
 // --- Deal Pipeline: stage advancement --------------------------------------
 
-type DealStage =
+export type DealStage =
   | "sourced"
   | "screening"
   | "diligence"
@@ -503,6 +492,17 @@ type DealStage =
   | "exited"
   | "passed"
   | "dead";
+
+export const DEAL_STAGE_VALUES: DealStage[] = [
+  "sourced", "screening", "diligence", "underwriting",
+  "ic_review", "closing", "owned", "exited", "passed", "dead",
+];
+
+function parseDealStage(value: string | null): DealStage {
+  if (!value) return "sourced";
+  if ((DEAL_STAGE_VALUES as string[]).includes(value)) return value as DealStage;
+  throw new Error("Invalid deal stage");
+}
 
 const STAGE_DOC_SUGGESTIONS: Partial<Record<DealStage, string>> = {
   screening: "screening_memo",
@@ -516,28 +516,17 @@ export async function advanceDealStageAction(
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
 
-  const validStages: DealStage[] = [
-    "sourced", "screening", "diligence", "underwriting",
-    "ic_review", "closing", "owned", "exited", "passed", "dead",
-  ];
-  if (!validStages.includes(newStage as DealStage)) return { error: "Invalid stage" };
+  if (!DEAL_STAGE_VALUES.includes(newStage as DealStage)) return { error: "Invalid stage" };
 
   try {
     const supabase = createServerClient();
-    const { count, error: countError } = await supabase
+    const { count, error } = await supabase
       .from("deals")
-      .select("id", { count: "exact", head: true })
-      .eq("id", dealId)
-      .eq("organization_id", auth.ctx.orgId);
-    if (countError) throw countError;
-    if (!count) return { error: "Deal not found" };
-
-    const { error } = await supabase
-      .from("deals")
-      .update({ stage: newStage as DealStage })
+      .update({ stage: newStage as DealStage }, { count: "exact" })
       .eq("id", dealId)
       .eq("organization_id", auth.ctx.orgId);
     if (error) throw error;
+    if (!count) return { error: "Deal not found" };
 
     revalidatePath("/source/deal_pipeline");
     return {
@@ -569,19 +558,22 @@ export async function updateProviderAction(
 
   try {
     const supabase = createServerClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("service_providers")
       .update({
         name,
-        provider_type: t("provider_type") ?? "legal",
+        provider_type: t("provider_type"),
         contact_name: t("contact_name"),
         contact_email: t("contact_email"),
-        status: t("status") ?? "active",
+        status: t("status"),
         notes: t("notes"),
+        website: t("website"),
       })
       .eq("id", providerId)
-      .eq("organization_id", auth.ctx.orgId);
+      .eq("organization_id", auth.ctx.orgId)
+      .select("id");
     if (error) throw error;
+    if (!data?.length) return { error: "Provider not found" };
 
     revalidatePath("/source/providers");
     return { ok: true };
@@ -599,12 +591,14 @@ export async function deleteProviderAction(
 
   try {
     const supabase = createServerClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("service_providers")
       .update({ archived_at: new Date().toISOString() })
       .eq("id", providerId)
-      .eq("organization_id", auth.ctx.orgId);
+      .eq("organization_id", auth.ctx.orgId)
+      .select("id");
     if (error) throw error;
+    if (!data?.length) return { error: "Provider not found" };
 
     revalidatePath("/source/providers");
     return { ok: true };

@@ -11,16 +11,21 @@ import type { FitAnalysis } from "@/lib/source-hub-types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+type DealStage =
+  | "sourced" | "screening" | "diligence" | "underwriting"
+  | "ic_review" | "closing" | "owned" | "exited" | "passed" | "dead";
+
 export interface DealEntry {
   id: string;
   name: string;
-  stage: string;
+  stage: DealStage;
   assetClass: string | null;
   geography: string | null;
   targetAmount: number | null;
   thesisFit: number | null;
   expectedClose: string | null;
   website: string | null;
+  notes?: string | null;
   // Apollo-enriched
   industry?: string;
   employeeRange?: string;
@@ -46,7 +51,7 @@ const DEAL_STAGES = [
   { value: "dead",         label: "Dead" },
 ];
 
-const STAGE_BADGE: Record<string, string> = {
+const STAGE_BADGE: Record<DealStage, string> = {
   sourced:      "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
   screening:    "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
   diligence:    "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
@@ -89,6 +94,7 @@ function StageDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [advanceError, setAdvanceError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -102,9 +108,18 @@ function StageDropdown({
 
   function advance(newStage: string) {
     setOpen(false);
+    setAdvanceError(null);
     startTransition(async () => {
-      const result = await advanceDealStageAction(deal.id, newStage);
-      if (result.ok) onAdvanced(deal.id, newStage, result.suggestDocType);
+      try {
+        const result = await advanceDealStageAction(deal.id, newStage);
+        if (result.error) {
+          setAdvanceError(result.error);
+        } else if (result.ok) {
+          onAdvanced(deal.id, newStage, result.suggestDocType);
+        }
+      } catch {
+        setAdvanceError("Failed to update stage. Please try again.");
+      }
     });
   }
 
@@ -112,6 +127,9 @@ function StageDropdown({
 
   return (
     <div className="relative" ref={ref}>
+      {advanceError && (
+        <p className="mb-1 text-[10px] text-red-400">{advanceError}</p>
+      )}
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
@@ -188,17 +206,18 @@ function DealSlideOver({
         className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-labelledby="deal-slide-title" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-fg-primary">{deal.name}</h2>
+            <h2 id="deal-slide-title" className="truncate text-base font-semibold text-fg-primary">{deal.name}</h2>
             {deal.industry && (
               <p className="mt-0.5 text-xs text-fg-muted">{deal.industry}</p>
             )}
           </div>
           <button
             type="button"
+            aria-label="Close deal details"
             onClick={onClose}
             className="mt-0.5 shrink-0 text-fg-muted hover:text-fg-primary"
           >
@@ -319,6 +338,14 @@ function DealSlideOver({
             </div>
           )}
 
+          {/* Notes */}
+          {deal.notes && (
+            <div>
+              <p className="mb-1 font-mono text-[9px] uppercase tracking-widest text-fg-muted">Notes</p>
+              <p className="text-xs leading-relaxed text-fg-secondary">{deal.notes}</p>
+            </div>
+          )}
+
           {/* Verification */}
           <div>
             <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Data Source</p>
@@ -395,12 +422,15 @@ function AddDealModal({ onClose }: { onClose: () => void }) {
     <>
       <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-deal-title"
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-line bg-surface-1 p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-fg-primary">Add Deal</h2>
-          <button type="button" onClick={onClose} className="text-fg-muted hover:text-fg-primary">
+          <h2 id="add-deal-title" className="text-base font-semibold text-fg-primary">Add Deal</h2>
+          <button type="button" aria-label="Close add deal" onClick={onClose} className="text-fg-muted hover:text-fg-primary">
             <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
               <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
@@ -638,8 +668,15 @@ export function DealPipeline({ deals, enrichCap }: Props) {
               {filtered.map((d, i) => (
                 <tr
                   key={d.id}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`View ${d.name} details`}
                   className={`cursor-pointer hover:bg-surface-2/40 ${i < filtered.length - 1 ? "border-b border-line" : ""}`}
                   onClick={() => setSelectedDeal(d)}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedDeal(d); }
+                  }}
                 >
                   <td className="px-4 py-3">
                     <p className="font-medium text-fg">{d.name}</p>

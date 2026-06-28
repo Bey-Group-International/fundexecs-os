@@ -21,6 +21,7 @@ interface DealRow {
   thesis_fit: number | null;
   expected_close: string | null;
   website: string | null;
+  notes: string | null;
 }
 
 interface MandateCtx {
@@ -155,7 +156,7 @@ async function loadDeals(): Promise<DealEntry[]> {
   const { data, error } = await supabase
     .from("deals")
     .select(
-      "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website",
+      "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website, notes",
     )
     .eq("organization_id", auth.ctx.orgId)
     .order("created_at", { ascending: false })
@@ -192,6 +193,7 @@ async function loadDeals(): Promise<DealEntry[]> {
       thesisFit: d.thesis_fit,
       expectedClose: d.expected_close,
       website: d.website,
+      notes: d.notes,
       industry: enr.enriched?.industry,
       employeeRange: enr.enriched?.employee_range,
       revenueRange: enr.enriched?.revenue_range,

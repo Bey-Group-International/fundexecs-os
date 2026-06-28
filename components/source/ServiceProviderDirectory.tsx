@@ -158,14 +158,17 @@ function ProviderForm({
     <>
       <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="provider-form-title"
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-line bg-surface-1 p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-fg-primary">
+          <h2 id="provider-form-title" className="text-base font-semibold text-fg-primary">
             {isEdit ? "Edit Provider" : "Add Provider"}
           </h2>
-          <button type="button" onClick={onClose} className="text-fg-muted hover:text-fg-primary">
+          <button type="button" aria-label="Close provider form" onClick={onClose} className="text-fg-muted hover:text-fg-primary">
             <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
               <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
@@ -200,6 +203,10 @@ function ProviderForm({
             <div>
               <label className={labelClass}>Contact Email</label>
               <input name="contact_email" type="email" defaultValue={initial?.contactEmail ?? ""} placeholder="jane@firm.com" className={inputClass} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className={labelClass}>Website</label>
+              <input name="website" type="text" defaultValue={initial?.website ?? ""} placeholder="kirkland.com" className={inputClass} />
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Notes</label>
@@ -276,7 +283,14 @@ function ProviderCard({
   return (
     <div
       className="flex cursor-pointer flex-col gap-3 rounded-xl border border-line bg-surface-1 p-4 transition hover:border-line/80 hover:shadow-sm"
+      role="button"
+      tabIndex={0}
+      aria-label={`View ${provider.name} details`}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.currentTarget !== e.target) return;
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
+      }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -485,10 +499,21 @@ export function ServiceProviderDirectory({ providers: initialProviders }: Props)
   const [editingProvider, setEditingProvider] = useState<ProviderEntry | undefined>();
   const [showAddForm, setShowAddForm] = useState(false);
 
-  useEffect(() => { setProviders(initialProviders); }, [initialProviders]);
+  const router = useRouter();
+
+  useEffect(() => {
+    setProviders(initialProviders);
+    setSelectedProvider((prev) =>
+      prev ? (initialProviders.find((p) => p.id === prev.id) ?? null) : null,
+    );
+    setEditingProvider((prev) =>
+      prev ? initialProviders.find((p) => p.id === prev.id) : undefined,
+    );
+  }, [initialProviders]);
 
   function handleDelete(deletedId: string) {
     setProviders((prev) => prev.filter((p) => p.id !== deletedId));
+    router.refresh();
   }
 
   const filtered = useMemo(() => {
