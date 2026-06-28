@@ -12,6 +12,7 @@ import { computePriority, fallbackSummary } from "@/lib/inbox/intelligence";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
 import type {
   AgentKey,
+  InboxCategory,
   InboxChannel,
   InboxThread,
   Json,
@@ -512,11 +513,35 @@ export async function seedInboxDemo(): Promise<void> {
   revalidatePath("/dashboard");
 }
 
-export async function clearInbox(): Promise<void> {
+export async function deleteThreadAction(threadId: string): Promise<{ ok: boolean }> {
+  if (!threadId) return { ok: false };
   const auth = await requireOrgContext();
-  if (!auth.ok) return;
+  if (!auth.ok) return { ok: false };
   const supabase = createServerClient();
-  await supabase.from("inbox_threads").delete().eq("organization_id", auth.ctx.orgId);
+  const { error } = await supabase
+    .from("inbox_threads")
+    .delete()
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", threadId);
+  if (error) { console.error("[deleteThreadAction]", error.message); return { ok: false }; }
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function clearInbox(opts?: { category?: InboxCategory }): Promise<{ ok: boolean }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false };
+  const supabase = createServerClient();
+  // Only wipe open threads — snoozed/done are deliberately parked and must survive.
+  const base = supabase
+    .from("inbox_threads")
+    .delete()
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("status", "open");
+  const { error } = await (opts?.category ? base.eq("category", opts.category) : base);
+  if (error) { console.error("[clearInbox]", error.message); return { ok: false }; }
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+  return { ok: true };
 }

@@ -5,7 +5,7 @@
 // add/edit/delete, provider detail panel, and optional Apollo enrichment.
 import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createModuleRow, updateProviderAction, deleteProviderAction } from "@/app/(app)/[hub]/[module]/actions";
+import { createProviderAction, updateProviderAction, deleteProviderAction } from "@/app/(app)/[hub]/[module]/actions";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 
 const PROVIDER_TYPE_LABELS: Record<string, string> = {
@@ -133,7 +133,8 @@ function ProviderForm({
         const result = await updateProviderAction(initial.id, fd);
         if (result.error) { setError(result.error); return; }
       } else {
-        await createModuleRow("source", "providers", fd);
+        const result = await createProviderAction(fd);
+        if (result.error) { setError(result.error); return; }
       }
       onClose();
       router.refresh();
@@ -373,12 +374,12 @@ function ProviderSlideOver({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-labelledby="provider-slide-title" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h2 className="truncate text-base font-semibold text-fg-primary">{provider.name}</h2>
+              <h2 id="provider-slide-title" className="truncate text-base font-semibold text-fg-primary">{provider.name}</h2>
               <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${typeColor}`}>
                 {typeLabel}
               </span>
@@ -389,6 +390,7 @@ function ProviderSlideOver({
           </div>
           <button
             type="button"
+            aria-label="Close provider details"
             onClick={onClose}
             className="mt-0.5 shrink-0 text-fg-muted hover:text-fg-primary"
           >

@@ -529,7 +529,38 @@ export async function advanceDealStageAction(
   }
 }
 
-// --- Service Provider: update & delete ------------------------------------
+// --- Service Provider: create, update & delete -----------------------------
+
+export async function createProviderAction(
+  formData: FormData,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  const name = text(formData, "name");
+  if (!name) return { error: "Provider name is required" };
+
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase.from("service_providers").insert({
+      organization_id: auth.ctx.orgId,
+      name,
+      provider_type: text(formData, "provider_type") ?? "legal",
+      contact_name: text(formData, "contact_name"),
+      contact_email: text(formData, "contact_email"),
+      status: text(formData, "status") ?? "active",
+      notes: text(formData, "notes"),
+      website: text(formData, "website"),
+    });
+    if (error) throw error;
+
+    revalidatePath("/source/providers");
+    return { ok: true };
+  } catch (e) {
+    console.error("[createProviderAction] failed", e);
+    return { error: "Failed to create provider" };
+  }
+}
 
 export async function updateProviderAction(
   providerId: string,

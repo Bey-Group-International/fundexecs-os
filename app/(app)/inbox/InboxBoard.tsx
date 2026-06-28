@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ActionKind, GateTier } from "@/lib/gates";
 import type { InboxCategory, InboxChannel } from "@/lib/supabase/database.types";
-import { actOnThread, shareCommandCenter, setThreadStatus, type ThreadActionResult } from "./actions";
+import { actOnThread, shareCommandCenter, setThreadStatus, deleteThreadAction, clearInbox, type ThreadActionResult } from "./actions";
 
 // Fully server-prepared card data — no intelligence/AI module reaches the client.
 export interface InboxCardData {
@@ -53,7 +53,24 @@ const FILTERS: { key: "all" | InboxCategory; label: string }[] = [
 ];
 
 export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
+  const router = useRouter();
   const [filter, setFilter] = useState<"all" | InboxCategory>("all");
+  const [clearing, startClearTransition] = useTransition();
+  const [clearError, setClearError] = useState<string | null>(null);
+
+  function handleClear() {
+    const n = visible.filter((c) => c.status === "open").length;
+    if (!confirm(`Clear ${n} open thread${n === 1 ? "" : "s"}${filter !== "all" ? ` in ${filter}` : ""}? This cannot be undone.`)) return;
+    setClearError(null);
+    startClearTransition(async () => {
+      const r = await clearInbox(filter !== "all" ? { category: filter as InboxCategory } : undefined);
+      if (r.ok) {
+        router.refresh();
+      } else {
+        setClearError("Failed to clear inbox. Try again.");
+      }
+    });
+  }
 
   const visible = useMemo(
     () => cards.filter((c) => c.status !== "done" && (filter === "all" || c.category === filter)),
@@ -83,8 +100,8 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Pillar filters */}
-      <div className="flex flex-wrap gap-1.5">
+      {/* Pillar filters + Clear */}
+      <div className="flex flex-wrap items-center gap-1.5">
         {FILTERS.map((f) => {
           const active = filter === f.key;
           const n = counts.get(f.key) ?? 0;
@@ -104,7 +121,21 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
             </button>
           );
         })}
+        {visible.length > 0 && (
+          <button
+            type="button"
+            disabled={clearing}
+            onClick={handleClear}
+            className="ml-auto rounded-md border border-line px-3 py-1 text-xs text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger disabled:opacity-50"
+          >
+            {clearing ? "Clearing…" : "Clear inbox"}
+          </button>
+        )}
       </div>
+
+      {clearError ? (
+        <p className="text-xs text-status-danger">{clearError}</p>
+      ) : null}
 
       {visible.length === 0 ? (
         <p className="px-1 py-6 text-sm text-fg-muted">Nothing here — inbox clear for this filter.</p>
@@ -141,6 +172,23 @@ function ThreadCard({ card }: { card: InboxCardData }) {
   const [result, setResult] = useState<ThreadActionResult | null>(null);
   const [pending, startTransition] = useTransition();
   const [active, setActive] = useState<string | null>(null);
+  const [deleting, startDeleteTransition] = useTransition();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = useCallback(() => {
+    if (!confirm("Delete this thread? This cannot be undone.")) return;
+    setDeleteError(null);
+    setResult(null);
+    setActive(null);
+    startDeleteTransition(async () => {
+      const r = await deleteThreadAction(card.id);
+      if (!r.ok) {
+        setDeleteError("Failed to delete thread. Try again.");
+        return;
+      }
+      router.refresh();
+    });
+  }, [card.id, router]);
 
   function run(key: string, fn: () => Promise<ThreadActionResult>) {
     setResult(null);
@@ -263,12 +311,24 @@ function ThreadCard({ card }: { card: InboxCardData }) {
         >
           Snooze
         </button>
+        <button
+          type="button"
+          disabled={pending || deleting}
+          onClick={handleDelete}
+          className="rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-status-danger disabled:opacity-50"
+          aria-label="Delete thread"
+        >
+          {deleting ? "Deleting…" : "Delete"}
+        </button>
       </div>
 
       {result && active ? (
         <p className={`mt-2 text-xs ${result.ok ? "text-status-success" : "text-status-danger"}`}>
           {result.ok ? result.message : result.error}
         </p>
+      ) : null}
+      {deleteError ? (
+        <p className="mt-2 text-xs text-status-danger">{deleteError}</p>
       ) : null}
     </div>
   );
