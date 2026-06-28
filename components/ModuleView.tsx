@@ -266,6 +266,7 @@ export async function ModuleView({
             name: org?.name ?? "",
             legal_name: org?.legal_name ?? "",
             entity_type: org?.entity_type ?? "",
+            tagline: org?.tagline ?? "",
             jurisdiction: org?.jurisdiction ?? "",
             website: org?.website ?? "",
             description: org?.description ?? "",

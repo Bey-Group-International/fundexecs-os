@@ -9,6 +9,7 @@ export type ProfileValues = {
   name: string;
   legal_name: string;
   entity_type: string;
+  tagline: string;
   jurisdiction: string;
   website: string;
   description: string;
@@ -178,6 +179,16 @@ export function ProfileForm({
               placeholder="Select entity type\u2026"
             />
           </Field>
+          <Field label="Tagline" hint="shown on profile card">
+            <input
+              name="tagline"
+              value={form.tagline}
+              onChange={(e) => set("tagline")(e.target.value)}
+              maxLength={120}
+              placeholder="Institutional capital for tomorrow's infrastructure"
+              className={`${inputClass} bg-surface-1`}
+            />
+          </Field>
           <Field label="Jurisdiction">
             <input
               name="jurisdiction"
@@ -283,7 +294,10 @@ export function ProfileForm({
             </div>
           </div>
 
-          <p className="mt-3 line-clamp-1 text-xs text-fg-muted">
+          {form.tagline.trim() ? (
+            <p className="mt-2 text-sm font-medium text-fg-primary">{form.tagline.trim()}</p>
+          ) : null}
+          <p className="mt-1.5 line-clamp-1 text-xs text-fg-muted">
             {firmMeta || "HQ \u00b7 AUM \u00b7 funds \u00b7 strategy"}
           </p>
 

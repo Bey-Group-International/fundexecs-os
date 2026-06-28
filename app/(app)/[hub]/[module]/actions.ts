@@ -43,6 +43,7 @@ export async function updateProfile(formData: FormData) {
       name: String(formData.get("name") ?? "").trim(),
       legal_name: t("legal_name"),
       entity_type: t("entity_type"),
+      tagline: t("tagline"),
       jurisdiction: t("jurisdiction"),
       website,
       description: t("description"),

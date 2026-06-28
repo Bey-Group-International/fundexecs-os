@@ -119,9 +119,22 @@ export default async function MarketplaceBrowsePage() {
       </nav>
 
       {listings.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line bg-surface-1 p-6 text-center text-sm text-fg-muted">
-          No public listings yet.
-        </p>
+        <div className="rounded-xl border border-dashed border-line bg-surface-1 p-8 text-center">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/10 text-lg text-gold-300">
+            ◈
+          </div>
+          <p className="text-sm font-medium text-fg-primary">Marketplace is launching soon</p>
+          <p className="mt-2 max-w-sm mx-auto text-sm text-fg-muted">
+            The FundExecs Marketplace connects fund managers with LPs, co-investors, and
+            secondary buyers. Public listings from verified funds will appear here.
+          </p>
+          <Link
+            href="/marketplace"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-4 py-2 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20"
+          >
+            Create your first listing →
+          </Link>
+        </div>
       ) : (
         <div className="flex flex-col gap-2">
           {listings.map((l, i) => {

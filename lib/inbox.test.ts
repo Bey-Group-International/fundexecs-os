@@ -112,8 +112,8 @@ describe("item shapers", () => {
     expect(item).toMatchObject({ id: "approval:t1", kind: "approval", tone: "approval", href: "/session/s1" });
     expect(item.title).toBe("Draft IC memo");
   });
-  it("workflowToApprovalItem falls back to /inbox without a session", () => {
-    expect(workflowToApprovalItem(task({ id: "t2", session_id: null })).href).toBe("/inbox");
+  it("workflowToApprovalItem falls back to /workspace without a session", () => {
+    expect(workflowToApprovalItem(task({ id: "t2", session_id: null })).href).toBe("/workspace");
   });
   it("diligenceToOverdueItem links to the deal and names it", () => {
     const item = diligenceToOverdueItem(

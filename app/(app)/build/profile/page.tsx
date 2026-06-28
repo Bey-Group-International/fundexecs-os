@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { saveOrgProfile } from "./actions";
+import { STRATEGY_LABELS, AUM_LABELS, ROLE_LABELS, displayLabel, titleCase } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -277,8 +278,12 @@ export default async function ProfilePage() {
               </div>
               <p className="mt-0.5 text-xs text-fg-secondary">
                 {[
-                  (o as Record<string, unknown>).operator_role,
-                  (o as Record<string, unknown>).entity_type,
+                  (o as Record<string, unknown>).operator_role
+                    ? displayLabel((o as Record<string, unknown>).operator_role as string, ROLE_LABELS)
+                    : null,
+                  (o as Record<string, unknown>).entity_type
+                    ? titleCase((o as Record<string, unknown>).entity_type as string)
+                    : null,
                   (o as Record<string, unknown>).hq_location,
                 ]
                   .filter(Boolean)
@@ -312,10 +317,10 @@ export default async function ProfilePage() {
           {/* Stats row */}
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-4">
             {!!(o as Record<string, unknown>).primary_strategy && (
-              <Stat label="Strategy" value={(o as Record<string, unknown>).primary_strategy as string} />
+              <Stat label="Strategy" value={displayLabel((o as Record<string, unknown>).primary_strategy as string, STRATEGY_LABELS)} />
             )}
             {!!(o as Record<string, unknown>).aum_range && (
-              <Stat label="AUM" value={(o as Record<string, unknown>).aum_range as string} />
+              <Stat label="AUM" value={displayLabel((o as Record<string, unknown>).aum_range as string, AUM_LABELS)} />
             )}
             {(o as Record<string, unknown>).fund_count != null && (
               <Stat
