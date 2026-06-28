@@ -143,6 +143,7 @@ function ThreadCard({ card }: { card: InboxCardData }) {
   const [active, setActive] = useState<string | null>(null);
 
   function run(key: string, fn: () => Promise<ThreadActionResult>) {
+    setResult(null);
     startTransition(async () => {
       setActive(key);
       const r = await fn();
@@ -255,7 +256,7 @@ function ThreadCard({ card }: { card: InboxCardData }) {
           type="button"
           disabled={pending}
           onClick={() => run("snooze", async () => {
-            await setThreadStatus(fd({ status: "snoozed" }));
+            await setThreadStatus(fd({ status: "snoozed", unread: "false" }));
             return { ok: true, message: "Snoozed." };
           })}
           className="rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
