@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 // and drive it through the same window events the account menu uses, so the
 // overlay reacts live without a reload.
 
-const HIDDEN_KEY = "fx_tour_hidden_v1";
+const HIDDEN_KEY = "fx_setup_hidden_v2";
 
 export function GuidedTourSetting() {
   const [mounted, setMounted] = useState(false);

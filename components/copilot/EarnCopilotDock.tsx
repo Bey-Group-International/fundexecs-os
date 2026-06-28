@@ -548,7 +548,8 @@ export function EarnCopilotDock({ name }: { name: string }) {
             <button
               onClick={submitAsk}
               disabled={pending || !body.trim()}
-              className="rounded-md bg-neural-400 px-3 py-1.5 text-sm font-medium text-black shadow-[0_0_18px_rgba(118,185,0,0.24)] transition hover:bg-neural-300 disabled:opacity-40"
+              title={!body.trim() && !pending ? "Type a message to ask Earn" : undefined}
+              className="rounded-md bg-neural-400 px-3 py-1.5 text-sm font-medium text-black shadow-[0_0_18px_rgba(118,185,0,0.24)] transition hover:bg-neural-300 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {pending ? "Routing…" : "Ask Earn"}
             </button>
