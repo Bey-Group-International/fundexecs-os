@@ -149,7 +149,8 @@ export async function createModuleRow(
         website: text(formData, "website"),
         notes: text(formData, "notes"),
       };
-      await (supabase.from("deals") as unknown as { insert: (v: unknown) => Promise<unknown> }).insert(dealRow);
+      const { error: dealInsertError } = await (supabase.from("deals") as unknown as { insert: (v: unknown) => Promise<{ error: { message: string } | null }> }).insert(dealRow);
+      if (dealInsertError) throw new Error(dealInsertError.message);
       break;
     }
     case "execute/asset_management": {
