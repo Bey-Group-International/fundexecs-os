@@ -25,7 +25,7 @@ export function GuidedTourSetting({ orgId }: { orgId: string }) {
     // Reflect changes made from the overlay itself (its Hide button).
     window.addEventListener("fx:tour-visibility-changed", read);
     return () => window.removeEventListener("fx:tour-visibility-changed", read);
-  }, []);
+  }, [hiddenKey]);
 
   function show() {
     setHidden(false);
