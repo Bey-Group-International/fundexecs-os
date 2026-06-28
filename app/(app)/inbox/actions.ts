@@ -536,7 +536,7 @@ export async function clearInbox(): Promise<{ ok: boolean }> {
     .from("inbox_threads")
     .delete()
     .eq("organization_id", auth.ctx.orgId);
-  if (error) return { ok: false };
+  if (error) { console.error("[clearInbox]", error.message); return { ok: false }; }
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true };

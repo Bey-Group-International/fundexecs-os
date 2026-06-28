@@ -56,11 +56,17 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | InboxCategory>("all");
   const [clearing, startClearTransition] = useTransition();
+  const [clearError, setClearError] = useState<string | null>(null);
 
   function handleClear() {
+    setClearError(null);
     startClearTransition(async () => {
       const r = await clearInbox();
-      if (r.ok) router.refresh();
+      if (r.ok) {
+        router.refresh();
+      } else {
+        setClearError("Failed to clear inbox. Try again.");
+      }
     });
   }
 
@@ -124,6 +130,10 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
           </button>
         )}
       </div>
+
+      {clearError ? (
+        <p className="text-xs text-status-danger">{clearError}</p>
+      ) : null}
 
       {visible.length === 0 ? (
         <p className="px-1 py-6 text-sm text-fg-muted">Nothing here — inbox clear for this filter.</p>
