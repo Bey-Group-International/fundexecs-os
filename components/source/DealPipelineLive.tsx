@@ -165,11 +165,14 @@ async function loadDeals(): Promise<DealEntry[]> {
 
   const rows = data as unknown as DealRow[];
 
-  const DEAL_PIPELINE_BUDGET_MS = 25_000;
+  const DEAL_PIPELINE_BUDGET_MS = 20_000;
   const deadline = Date.now() + DEAL_PIPELINE_BUDGET_MS;
   const enrichments: Awaited<ReturnType<typeof enrichDealRow>>[] = [];
   for (let i = 0; i < Math.min(rows.length, DEAL_ENRICH_CAP); i += DEAL_BATCH_SIZE) {
-    if (Date.now() > deadline) break;
+    if (Date.now() > deadline) {
+      console.warn("[DealPipelineLive] enrichment budget exceeded, truncating at batch", i / DEAL_BATCH_SIZE);
+      break;
+    }
     const chunk = rows.slice(i, i + DEAL_BATCH_SIZE);
     const results = await Promise.all(
       chunk.map((d) => enrichDealRow(auth.ctx.orgId, d, mandate).catch(() => ENRICH_FALLBACK))
