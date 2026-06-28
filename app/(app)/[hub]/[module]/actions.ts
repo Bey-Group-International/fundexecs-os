@@ -149,6 +149,7 @@ export async function createModuleRow(
         website: text(formData, "website"),
         notes: text(formData, "notes"),
       };
+      // TODO: remove cast after running `supabase gen types typescript` with geography/target_amount/expected_close/website/notes columns
       const { error: dealInsertError } = await (supabase.from("deals") as unknown as { insert: (v: unknown) => Promise<{ error: { message: string } | null }> }).insert(dealRow);
       if (dealInsertError) throw new Error(dealInsertError.message);
       break;
