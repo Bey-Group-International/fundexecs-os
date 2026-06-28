@@ -9,6 +9,7 @@ import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { logLPContact } from "@/lib/lp-relationships";
 import { renderDocumentTemplate } from "@/lib/document-templates";
 import { DOCUMENT_TYPE_LABELS, CONTRACT_STATUS_META, type DocumentType, type ContractStatus } from "@/lib/contracts";
+import { gmailAdapter } from "@/lib/integrations/adapters/gmail";
 
 // Update the active organization's Build › Profile fields. RLS restricts this
 // to org admins/owners.
@@ -398,5 +399,68 @@ export async function advanceContractAction(contractId: string) {
   } catch (e) {
     console.error("[advanceContractAction] failed", e);
     return { error: "Failed to advance contract" };
+  }
+}
+
+// --- LP Onboarding Invite ---------------------------------------------------
+
+export async function createLpInviteAction(formData: FormData) {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  const investorId = String(formData.get("investor_id") ?? "").trim() || null;
+  const fundId = String(formData.get("fund_id") ?? "").trim() || null;
+  const lpName = String(formData.get("lp_name") ?? "").trim();
+  const lpEmail = String(formData.get("lp_email") ?? "").trim();
+  const rawAmount = String(formData.get("commitment_amount") ?? "").trim();
+  const commitmentAmount = rawAmount ? Number(rawAmount) : null;
+
+  if (!lpName || !lpEmail) return { error: "Name and email are required" };
+
+  try {
+    const supabase = createServerClient();
+    const orgId = auth.ctx.orgId;
+
+    const { data: session, error } = await supabase
+      .from("lp_onboarding_sessions")
+      .insert({
+        organization_id: orgId,
+        investor_id: investorId,
+        fund_id: fundId,
+        lp_name: lpName,
+        lp_email: lpEmail,
+        commitment_amount: commitmentAmount,
+        status: "pending",
+      })
+      .select("token")
+      .single();
+
+    if (error || !session) {
+      console.error("[createLpInviteAction] insert failed", error);
+      return { error: "Failed to create invite" };
+    }
+
+    const token = session.token as string;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const portalUrl = `${appUrl}/lp/${token}`;
+
+    // Email the LP their invite link (mock-or-real via Gmail adapter).
+    await gmailAdapter.dispatch({
+      orgId,
+      actorId: auth.ctx.userId,
+      action: "send_outreach",
+      target: { email: lpEmail, name: lpName },
+      metadata: {
+        subject: `You're invited to join the fund`,
+        body: `Hi ${lpName},\n\nYou have been invited to complete your LP onboarding. Click the link below to get started:\n\n${portalUrl}\n\nThis link expires in 30 days.\n\nBest,\nThe Fund Manager`,
+      },
+    });
+
+    revalidatePath("/source/lp_pipeline");
+    revalidatePath("/execute/closing");
+    return { ok: true, token, portalUrl };
+  } catch (e) {
+    console.error("[createLpInviteAction] failed", e);
+    return { error: "Failed to send invite" };
   }
 }

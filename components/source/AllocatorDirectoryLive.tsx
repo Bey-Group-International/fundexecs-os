@@ -133,8 +133,30 @@ async function loadAllocatorEntries() {
   }
 }
 
+async function loadFunds(orgId: string) {
+  try {
+    const supabase = createServerClient();
+    const { data } = await supabase
+      .from("funds")
+      .select("id, name")
+      .eq("organization_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    return (data ?? []) as { id: string; name: string }[];
+  } catch {
+    return [];
+  }
+}
+
 export async function AllocatorDirectoryLive() {
-  const entries = await loadAllocatorEntries();
+  const auth = await requireOrgContext().catch(() => null);
+  const orgId = auth?.ok ? auth.ctx.orgId : null;
+
+  const [entries, funds] = await Promise.all([
+    loadAllocatorEntries(),
+    orgId ? loadFunds(orgId) : Promise.resolve([]),
+  ]);
+
   const verifiedCount = entries.filter((e) => (e as { _verified?: boolean })._verified).length;
 
   return (
@@ -156,7 +178,7 @@ export async function AllocatorDirectoryLive() {
           </div>
         )}
       </div>
-      <AllocatorDirectory entries={entries} />
+      <AllocatorDirectory entries={entries} funds={funds} />
     </section>
   );
 }

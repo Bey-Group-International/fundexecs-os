@@ -106,7 +106,7 @@ export default async function CapitalMapPage() {
               Searchable directory of your allocators with AUM, ticket size, mandate fit, and compliance status.
             </p>
           </header>
-          <AllocatorDirectory entries={allocatorEntries} />
+          <AllocatorDirectory entries={allocatorEntries} funds={[]} />
         </section>
       )}
     </div>
