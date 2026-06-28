@@ -215,7 +215,9 @@ export async function DealPipelineLive() {
         </p>
         <div className="flex items-center gap-3">
           {verifiedCount > 0 && (
-            <VerificationPill verified={true} confidence={verifiedCount / Math.min(deals.length, DEAL_ENRICH_CAP)} provider="apollo" />
+            <span className="text-xs text-fg-muted">
+              {verifiedCount}/{Math.min(deals.length, DEAL_ENRICH_CAP)} enriched via Apollo
+            </span>
           )}
         </div>
       </div>

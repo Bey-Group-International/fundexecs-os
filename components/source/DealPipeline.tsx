@@ -480,7 +480,7 @@ export function DealPipeline({ deals, enrichCap }: Props) {
   const [selectedDeal, setSelectedDeal] = useState<DealEntry | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [localDeals, setLocalDeals] = useState<DealEntry[]>(deals);
-  const [tableSuggestDoc, setTableSuggestDoc] = useState<string | undefined>();
+  const [tableSuggestDoc, setTableSuggestDoc] = useState<{ docType: string; dealName: string } | undefined>();
 
   // Sync when server re-renders with fresh data
   useEffect(() => { setLocalDeals(deals); }, [deals]);
@@ -490,7 +490,10 @@ export function DealPipeline({ deals, enrichCap }: Props) {
       prev.map((d) => (d.id === dealId ? { ...d, stage: newStage } : d)),
     );
     setSelectedDeal((prev) => (prev?.id === dealId ? { ...prev, stage: newStage } : prev));
-    if (docType) setTableSuggestDoc(docType);
+    if (docType) {
+      const dealName = localDeals.find((d) => d.id === dealId)?.name ?? "this deal";
+      setTableSuggestDoc({ docType, dealName });
+    }
   }
 
   const assetClasses = useMemo(
@@ -587,9 +590,9 @@ export function DealPipeline({ deals, enrichCap }: Props) {
             <span className="font-semibold">Suggested next step:</span>{" "}
             Create a{" "}
             <span className="font-semibold">
-              {tableSuggestDoc === "screening_memo" ? "Screening Memo" : "IC Memo"}
+              {tableSuggestDoc.docType === "screening_memo" ? "Screening Memo" : "IC Memo"}
             </span>{" "}
-            for this deal.
+            for {tableSuggestDoc.dealName}.
           </p>
           <button
             type="button"
