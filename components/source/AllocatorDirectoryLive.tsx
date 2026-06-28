@@ -10,6 +10,23 @@ import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import { getLPRelationshipSummaries } from "@/lib/lp-relationships";
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
 
+const US_STATES = new Set([
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
+  "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
+  "VA","WA","WV","WI","WY","DC",
+]);
+
+function parseHqCountry(parts: string[]): string | undefined {
+  if (parts.length < 2) return undefined;
+  const last = parts[parts.length - 1];
+  if (US_STATES.has(last)) {
+    // e.g. "Austin, TX" — last segment is a state, no country segment
+    return undefined;
+  }
+  return last.length >= 2 ? last : undefined;
+}
+
 interface InvestorRow {
   id: string;
   name: string;
@@ -66,7 +83,7 @@ async function enrichInvestorRow(
       verified: cached.verified,
       provider: "apollo",
       hqCity: hqParts[0],
-      hqCountry: hqParts.length >= 2 && hqParts[hqParts.length - 1].length >= 2 ? hqParts[hqParts.length - 1] : undefined,
+      hqCountry: parseHqCountry(hqParts),
       primaryStrategies: cached.data.keywords ?? (cached.data.industry ? [cached.data.industry] : []),
     };
   }
@@ -83,7 +100,7 @@ async function enrichInvestorRow(
         verified: result.verified,
         provider: "apollo",
         hqCity: hqParts[0],
-        hqCountry: hqParts.length >= 2 && hqParts[hqParts.length - 1].length >= 2 ? hqParts[hqParts.length - 1] : undefined,
+        hqCountry: parseHqCountry(hqParts),
         primaryStrategies: result.data.keywords ?? (result.data.industry ? [result.data.industry] : []),
       };
     }

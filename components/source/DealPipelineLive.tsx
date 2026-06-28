@@ -159,9 +159,8 @@ async function loadDeals(): Promise<EnrichedDeal[]> {
 
   const mandate: MandateCtx = {
     strategy: orgData?.primary_strategy ?? undefined,
-    // TODO: hq_location is the org's own HQ, not the fund's target investment geography — prefer a
-    // dedicated geography_mandate / target_geography field on organizations when available.
-    geography: orgData?.hq_location ?? undefined,
+    // geography intentionally omitted: hq_location is the org's office address, not its investment
+    // mandate. Re-add once a dedicated target_geography / geography_mandate column exists.
   };
 
   const { data, error } = await supabase
