@@ -26,20 +26,31 @@ interface InvestorRow {
   website: string | null;
 }
 
+interface EnrichedData {
+  website?: string;
+  description?: string;
+  confidence: number;
+  verified: boolean;
+  provider: string;
+  hqCity?: string;
+  hqCountry?: string;
+  primaryStrategies: string[];
+}
+
 async function enrichInvestorRow(
   orgId: string,
   inv: InvestorRow
-): Promise<{ website?: string; description?: string; confidence: number; verified: boolean; provider: string }> {
+): Promise<EnrichedData> {
   const domain = inv.website
     ? inv.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
     : null;
 
   if (!domain && !inv.name) {
-    return { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: inv.source_provider ?? "manual" };
+    return { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: inv.source_provider ?? "manual", primaryStrategies: [] };
   }
 
   const params = { domain: domain ?? undefined, name: inv.name };
-  const cached = await getCached<{ name: string; domain?: string; description?: string; confidence: number } | null>(
+  const cached = await getCached<{ name: string; domain?: string; description?: string; confidence: number; headquarters?: string; industry?: string; keywords?: string[] } | null>(
     orgId,
     "investor",
     "apollo",
@@ -47,12 +58,16 @@ async function enrichInvestorRow(
   );
 
   if (cached?.data) {
+    const hqParts = cached.data.headquarters?.split(", ") ?? [];
     return {
       website: domain ? `https://${domain}` : undefined,
       description: cached.data.description,
       confidence: cached.data.confidence,
       verified: cached.verified,
       provider: "apollo",
+      hqCity: hqParts[0],
+      hqCountry: hqParts[hqParts.length - 1] !== hqParts[0] ? hqParts[hqParts.length - 1] : undefined,
+      primaryStrategies: cached.data.keywords ?? (cached.data.industry ? [cached.data.industry] : []),
     };
   }
 
@@ -60,12 +75,16 @@ async function enrichInvestorRow(
     const result = await enrichOrganization(params);
     if (result.status !== "failed" && result.data) {
       await setCached(orgId, "investor", "apollo", params as Record<string, unknown>, result);
+      const hqParts = result.data.headquarters?.split(", ") ?? [];
       return {
         website: result.data.website,
         description: result.data.description,
         confidence: result.data.confidence,
         verified: result.verified,
         provider: "apollo",
+        hqCity: hqParts[0],
+        hqCountry: hqParts[hqParts.length - 1] !== hqParts[0] ? hqParts[hqParts.length - 1] : undefined,
+        primaryStrategies: result.data.keywords ?? (result.data.industry ? [result.data.industry] : []),
       };
     }
   } catch {
@@ -76,6 +95,7 @@ async function enrichInvestorRow(
     confidence: inv.confidence ?? 0.3,
     verified: inv.verified ?? false,
     provider: inv.source_provider ?? "manual",
+    primaryStrategies: [],
   };
 }
 
@@ -95,13 +115,14 @@ async function loadAllocatorEntries() {
 
     const rows = (investorRows ?? []) as unknown as InvestorRow[];
 
+    // Enrich all rows (cache-first; most calls return instantly from 24h TTL cache)
     const [enriched, relationships] = await Promise.all([
-      Promise.all(rows.slice(0, 20).map((inv) => enrichInvestorRow(auth.ctx.orgId, inv))),
+      Promise.all(rows.map((inv) => enrichInvestorRow(auth.ctx.orgId, inv))),
       getLPRelationshipSummaries(supabase, auth.ctx.orgId, rows.map((r) => r.id)),
     ]);
 
     return rows.map((inv, i) => {
-      const enr = enriched[i] ?? { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: "manual" };
+      const enr = enriched[i] ?? { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: "manual", primaryStrategies: [] };
       const rel = relationships.get(inv.id);
       return {
         id: inv.id,
@@ -111,12 +132,12 @@ async function loadAllocatorEntries() {
         aumMax: inv.aum ?? null,
         ticketMin: inv.typical_check_min ?? null,
         ticketMax: inv.typical_check_max ?? null,
-        primaryStrategies: [] as string[],
+        primaryStrategies: enr.primaryStrategies,
         geographicFocus: inv.jurisdiction ? [inv.jurisdiction] : [],
         accreditationStatus: "verified" as AccreditationStatus,
         kycStatus: "verified" as const,
-        hqCity: undefined,
-        hqCountry: inv.jurisdiction ?? undefined,
+        hqCity: enr.hqCity,
+        hqCountry: enr.hqCountry ?? inv.jurisdiction ?? undefined,
         fitScore: undefined,
         pipelineStage: inv.pipeline_stage ?? "prospect",
         lastContactDays: rel?.lastContactDays ?? null,
