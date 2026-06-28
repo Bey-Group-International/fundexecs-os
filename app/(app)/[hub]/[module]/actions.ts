@@ -289,8 +289,13 @@ export async function draftDealComms(formData: FormData): Promise<void> {
 export async function logContactAction(investorId: string) {
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
-  const supabase = createServerClient();
-  await logLPContact(supabase, auth.ctx.orgId, investorId);
-  revalidatePath("/source/lp_pipeline");
-  return { ok: true };
+  try {
+    const supabase = createServerClient();
+    await logLPContact(supabase, auth.ctx.orgId, investorId);
+    revalidatePath("/source/lp_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[logContactAction] failed", e);
+    return { error: "Failed to log contact" };
+  }
 }

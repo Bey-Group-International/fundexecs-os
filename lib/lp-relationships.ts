@@ -32,6 +32,13 @@ export async function getLPRelationshipSummaries(
       .order("priority", { ascending: false }),
   ]);
 
+  if (scoresResult.error) {
+    console.error("[lp-relationships] scores fetch failed:", scoresResult.error.message);
+  }
+  if (actionsResult.error) {
+    console.error("[lp-relationships] actions fetch failed:", actionsResult.error.message);
+  }
+
   // Index top action per investor (results are priority-descending, so first wins)
   const topActions = new Map<string, { title: string; action_type: string; due_at: string | null }>();
   for (const row of actionsResult.data ?? []) {
@@ -83,34 +90,22 @@ export async function logLPContact(
   investorId: string,
 ): Promise<void> {
   const now = new Date().toISOString();
-
-  const { data: existing } = await supabase
+  // Upsert on the unique (organization_id, investor_id) pair to avoid race
+  // conditions from double-clicks or concurrent requests. interaction_count
+  // is incremented by a DB trigger on UPDATE, so we don't touch it here.
+  await supabase
     .from("relationship_scores")
-    .select("id, interaction_count")
-    .eq("organization_id", orgId)
-    .eq("investor_id", investorId)
-    .maybeSingle();
-
-  if (existing) {
-    await supabase
-      .from("relationship_scores")
-      .update({
+    .upsert(
+      {
+        organization_id: orgId,
+        investor_id: investorId,
         last_contact_at: now,
         days_since_contact: 0,
-        interaction_count: (existing.interaction_count ?? 0) + 1,
+        score: 0,
+        temperature: "warm",
+        score_breakdown: {},
         updated_at: now,
-      })
-      .eq("id", existing.id);
-  } else {
-    await supabase.from("relationship_scores").insert({
-      organization_id: orgId,
-      investor_id: investorId,
-      last_contact_at: now,
-      days_since_contact: 0,
-      interaction_count: 1,
-      score: 0,
-      temperature: "warm",
-      score_breakdown: {},
-    });
-  }
+      },
+      { onConflict: "organization_id,investor_id" },
+    );
 }

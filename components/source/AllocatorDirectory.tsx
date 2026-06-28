@@ -74,9 +74,11 @@ function LogContactButton({ investorId }: { investorId: string }) {
   function handleClick(e: React.MouseEvent) {
     e.stopPropagation();
     startTransition(async () => {
-      await logContactAction(investorId);
-      setDone(true);
-      setTimeout(() => setDone(false), 3000);
+      const result = await logContactAction(investorId);
+      if (!("error" in result)) {
+        setDone(true);
+        setTimeout(() => setDone(false), 3000);
+      }
     });
   }
 
@@ -219,7 +221,7 @@ export function AllocatorDirectory({ entries }: Props) {
       if (sortBy === "fit") return (b.fitScore ?? 0) - (a.fitScore ?? 0);
       if (sortBy === "aum") return (b.aumMax ?? 0) - (a.aumMax ?? 0);
       if (sortBy === "last_contact")
-        return (a.lastContactDays ?? 999) - (b.lastContactDays ?? 999);
+        return (b.lastContactDays ?? -1) - (a.lastContactDays ?? -1);
       if (sortBy === "stage") {
         const order = ["committed", "closed", "soft_circle", "diligence", "engaged", "contacted", "prospect", "passed"];
         return order.indexOf(a.pipelineStage ?? "prospect") - order.indexOf(b.pipelineStage ?? "prospect");
