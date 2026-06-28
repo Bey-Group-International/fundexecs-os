@@ -25,6 +25,13 @@ const nextConfig = {
       { source: "/source/debt-hybrid", destination: "/source/debt", permanent: true },
       // Legacy routing-review URL — correct path is /grid/review.
       { source: "/routing-review", destination: "/grid/review", permanent: true },
+      // LP Report — nav link points to /reports; redirect stale manual URLs.
+      { source: "/lp-report", destination: "/reports", permanent: true },
+      { source: "/lp_report", destination: "/reports", permanent: true },
+      // Graphs — nav link points to /graph (singular); redirect plural variant.
+      { source: "/graphs", destination: "/graph", permanent: true },
+      // Legacy match-inbox URL — canonical destination is /inbox.
+      { source: "/match-inbox", destination: "/inbox", permanent: true },
     ];
   },
 };

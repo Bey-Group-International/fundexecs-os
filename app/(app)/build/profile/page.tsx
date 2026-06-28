@@ -22,37 +22,32 @@ const ENTITY_TYPES = [
   "Other",
 ];
 
-const STRATEGIES = [
-  "Real Estate",
-  "Private Equity",
-  "Venture Capital",
-  "Credit / Debt",
-  "Infrastructure",
-  "Multi-Strategy",
-  "Fund of Funds",
-  "Hedge Fund",
-  "Other",
+// Options use DB enum keys as values so defaultValue matches what's stored.
+// Labels come from the shared label maps in lib/labels.ts.
+const STRATEGIES: { value: string; label: string }[] = [
+  { value: "private_equity", label: "Private Equity" },
+  { value: "venture_capital", label: "Venture Capital" },
+  { value: "real_estate", label: "Real Estate" },
+  { value: "credit_debt", label: "Credit / Debt" },
+  { value: "infrastructure", label: "Infrastructure" },
+  { value: "multi_strategy", label: "Multi-Strategy" },
+  { value: "fund_of_funds", label: "Fund of Funds" },
+  { value: "hedge_fund", label: "Hedge Fund" },
 ];
 
-const OPERATOR_ROLES = [
-  "GP",
-  "LP",
-  "Sponsor",
-  "Placement Agent",
-  "Fund Administrator",
-  "Family Office",
-  "RIA",
-  "Other",
+const OPERATOR_ROLES: { value: string; label: string }[] = [
+  { value: "gp", label: "GP" },
+  { value: "family_office", label: "Family Office" },
+  { value: "advisory", label: "Advisory" },
+  { value: "operator", label: "Operator" },
 ];
 
-const AUM_RANGES = [
-  "Pre-fund",
-  "< $10M",
-  "$10M – $50M",
-  "$50M – $250M",
-  "$250M – $1B",
-  "$1B – $5B",
-  "> $5B",
+const AUM_RANGES: { value: string; label: string }[] = [
+  { value: "sub_25m", label: "Under $25M" },
+  { value: "25m_100m", label: "$25M – $100M" },
+  { value: "100m_500m", label: "$100M – $500M" },
+  { value: "500m_1b", label: "$500M – $1B" },
+  { value: "over_1b", label: "Over $1B" },
 ];
 
 export default async function ProfilePage() {
@@ -120,7 +115,7 @@ export default async function ProfilePage() {
               label="Legal entity name"
               name="legal_name"
               defaultValue={(o as Record<string, unknown>).legal_name as string ?? ""}
-              placeholder="Bey Group International, LLC"
+              placeholder="e.g., Acme Capital Partners, LLC"
             />
             <SelectField
               label="Entity type"
@@ -132,7 +127,7 @@ export default async function ProfilePage() {
               label="Tagline"
               name="tagline"
               defaultValue={(o as Record<string, unknown>).tagline as string ?? ""}
-              placeholder="Institutional capital for tomorrow's infrastructure"
+              placeholder="e.g., Growth equity for the next generation of founders"
             />
           </div>
         </Section>
@@ -425,7 +420,7 @@ function SelectField({
   label: string;
   name: string;
   defaultValue?: string;
-  options: string[];
+  options: { value: string; label: string }[];
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -439,8 +434,8 @@ function SelectField({
       >
         <option value="">Select…</option>
         {options.map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
           </option>
         ))}
       </select>

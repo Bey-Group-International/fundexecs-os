@@ -91,40 +91,44 @@ async function enrichDealRow(
   return { verified: false, confidence: 0.2, provider: "manual" };
 }
 
+const ENRICH_FALLBACK = { verified: false, confidence: 0.2, provider: "manual" as const };
+
 async function loadDeals(): Promise<EnrichedDeal[]> {
-  try {
-    const auth = await requireOrgContext();
-    if (!auth.ok) return [];
-    const supabase = createServerClient();
-    const { data } = await supabase
-      .from("deals")
-      .select(
-        "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website",
-      )
-      .eq("organization_id", auth.ctx.orgId)
-      .order("created_at", { ascending: false })
-      .limit(200);
+  const auth = await requireOrgContext();
+  if (!auth.ok) return [];
 
-    const rows = (data ?? []) as unknown as DealRow[];
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("deals")
+    .select(
+      "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website",
+    )
+    .eq("organization_id", auth.ctx.orgId)
+    .order("created_at", { ascending: false })
+    .limit(200);
 
-    // Enrich up to 20 deals in parallel
-    const enrichments = await Promise.all(
-      rows.slice(0, 20).map((d) => enrichDealRow(auth.ctx.orgId, d))
-    );
+  if (error || !data) return [];
 
-    return rows.map((d, i) => {
-      const enr = enrichments[i] ?? { verified: false, confidence: 0.2, provider: "manual" };
-      return {
-        ...d,
-        _enriched: enr.enriched,
-        _verified: enr.verified,
-        _confidence: enr.confidence,
-        _provider: enr.provider,
-      };
-    });
-  } catch {
-    return [];
-  }
+  const rows = data as unknown as DealRow[];
+
+  // Enrich up to 20 deals in parallel — per-deal failures fall back gracefully
+  // so a broken Apollo call can never wipe out the entire deal list.
+  const enrichments = await Promise.all(
+    rows.slice(0, 20).map((d) =>
+      enrichDealRow(auth.ctx.orgId, d).catch(() => ENRICH_FALLBACK)
+    )
+  );
+
+  return rows.map((d, i) => {
+    const enr = enrichments[i] ?? ENRICH_FALLBACK;
+    return {
+      ...d,
+      _enriched: enr.enriched,
+      _verified: enr.verified,
+      _confidence: enr.confidence,
+      _provider: enr.provider,
+    };
+  });
 }
 
 export async function DealPipelineLive() {

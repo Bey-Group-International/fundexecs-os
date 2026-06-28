@@ -92,7 +92,9 @@ export function BrandStudio({
   firmName,
 }: BrandStudioProps) {
   const hasSavedColor = isValidHex(brandColor);
-  const initialColor = hasSavedColor ? normalizeHex(brandColor) : "#888888";
+  // When no brand color is saved, default the picker to black so the UI state
+  // is clearly "not set" rather than misleading the user with a grey swatch.
+  const initialColor = hasSavedColor ? normalizeHex(brandColor) : "#000000";
   const [color, setColor] = useState(initialColor);
   const [hexText, setHexText] = useState(hasSavedColor ? normalizeHex(brandColor) : "");
   const [palette, setPalette] = useState<string[]>(
@@ -176,7 +178,9 @@ export function BrandStudio({
   return (
     <AutosaveForm action={updateBrand} className="grid max-w-2xl gap-6 pt-5">
       {/* Hidden fields submitted to updateBrand */}
-      <input type="hidden" name="brand_color" value={isValidHex(color) ? color : ""} />
+      {/* Only submit brand_color when a color has been explicitly saved or chosen
+          so the default picker state never overwrites a null DB value. */}
+      <input type="hidden" name="brand_color" value={hasSavedColor || hexText ? (isValidHex(color) ? color : "") : ""} />
       <input type="hidden" name="brand_palette" value={palette.join(",")} />
       <input type="hidden" name="logo_url" value={logo} />
       <input type="hidden" name="brand_voice" value={voice} />
