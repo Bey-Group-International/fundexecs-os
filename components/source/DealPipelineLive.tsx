@@ -62,11 +62,17 @@ async function scoreDealFit(
   const cached = await getCached<FitAnalysis>(orgId, "deal", "ai_fit", cacheParams);
   if (cached?.data) return cached.data;
 
+  const sector = mandate.sector ?? deal.asset_class ?? undefined;
+  if (!mandate.strategy && !mandate.geography && !sector) {
+    // No mandate context — skip AI scoring to avoid misleading scores
+    return undefined;
+  }
+
   try {
     const fit = await enrichCompanyFit(company, {
       strategy: mandate.strategy,
       geography: mandate.geography,
-      sector: mandate.sector ?? deal.asset_class ?? undefined,
+      sector,
     });
 
     const result = {

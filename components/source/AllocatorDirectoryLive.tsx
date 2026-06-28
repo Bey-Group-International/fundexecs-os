@@ -66,7 +66,7 @@ async function enrichInvestorRow(
       verified: cached.verified,
       provider: "apollo",
       hqCity: hqParts[0],
-      hqCountry: hqParts[hqParts.length - 1] !== hqParts[0] ? hqParts[hqParts.length - 1] : undefined,
+      hqCountry: hqParts.length >= 3 && hqParts[hqParts.length - 1].length > 2 ? hqParts[hqParts.length - 1] : undefined,
       primaryStrategies: cached.data.keywords ?? (cached.data.industry ? [cached.data.industry] : []),
     };
   }
@@ -83,7 +83,7 @@ async function enrichInvestorRow(
         verified: result.verified,
         provider: "apollo",
         hqCity: hqParts[0],
-        hqCountry: hqParts[hqParts.length - 1] !== hqParts[0] ? hqParts[hqParts.length - 1] : undefined,
+        hqCountry: hqParts.length >= 3 && hqParts[hqParts.length - 1].length > 2 ? hqParts[hqParts.length - 1] : undefined,
         primaryStrategies: result.data.keywords ?? (result.data.industry ? [result.data.industry] : []),
       };
     }
@@ -114,10 +114,22 @@ async function loadAllocatorEntries() {
       .limit(200);
 
     const rows = (investorRows ?? []) as unknown as InvestorRow[];
+    const { orgId } = auth.ctx;
 
-    // Enrich all rows (cache-first; most calls return instantly from 24h TTL cache)
+    // Enrich all rows with a concurrency cap to avoid rate-limiting Apollo on cold cache.
+    // Cache-first: 24h TTL means most calls are instant on warm loads.
+    async function batchEnrich(items: InvestorRow[], concurrency: number) {
+      const results: EnrichedData[] = [];
+      for (let i = 0; i < items.length; i += concurrency) {
+        const chunk = items.slice(i, i + concurrency);
+        const chunkResults = await Promise.all(chunk.map((inv) => enrichInvestorRow(orgId, inv)));
+        results.push(...chunkResults);
+      }
+      return results;
+    }
+
     const [enriched, relationships] = await Promise.all([
-      Promise.all(rows.map((inv) => enrichInvestorRow(auth.ctx.orgId, inv))),
+      batchEnrich(rows, 15),
       getLPRelationshipSummaries(supabase, auth.ctx.orgId, rows.map((r) => r.id)),
     ]);
 
