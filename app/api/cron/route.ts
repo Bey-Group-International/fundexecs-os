@@ -122,12 +122,12 @@ export async function GET(request: Request) {
         const r = await scanOrgRadarSignals(supabase, orgId);
         radar.generated += r.generated;
         radar.entities += r.scanned;
-      } catch {
-        // one bad org shouldn't stop the rest of the radar sweep
+      } catch (e) {
+        Sentry.captureException(e, { tags: { orgId, job: "radar_scan" } });
       }
     }
-  } catch {
-    // radar scan is additive — never fail the whole cron over it
+  } catch (e) {
+    Sentry.captureException(e, { tags: { job: "radar_scan_outer" } });
   }
 
   // Best-effort SLA auto-escalation: raise tracked team tasks for workflows
@@ -137,7 +137,8 @@ export async function GET(request: Request) {
   let escalated = 0;
   try {
     escalated = await runSlaEscalations(supabase, now);
-  } catch {
+  } catch (e) {
+    Sentry.captureException(e, { tags: { job: "sla_escalation" } });
     escalated = 0;
   }
 

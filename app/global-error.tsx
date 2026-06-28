@@ -15,7 +15,7 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html>
+    <html lang="en">
       <body className="flex min-h-screen flex-col items-center justify-center gap-4 bg-surface-0 text-center text-fg-primary">
         <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
           Critical error
