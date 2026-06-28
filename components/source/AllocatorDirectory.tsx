@@ -13,7 +13,12 @@ import {
   fitScoreColor,
 } from "@/lib/allocator-directory";
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
-import { logContactAction } from "@/app/(app)/[hub]/[module]/actions";
+import { logContactAction, createLpInviteAction } from "@/app/(app)/[hub]/[module]/actions";
+
+interface FundOption {
+  id: string;
+  name: string;
+}
 
 interface AllocatorEntry {
   id: string;
@@ -67,6 +72,131 @@ const STAGE_COLORS: Record<string, string> = {
   passed: "text-slate-500 border-slate-600/30",
 };
 
+function InviteLPModal({
+  entry,
+  funds,
+  onClose,
+}: {
+  entry: AllocatorEntry;
+  funds: FundOption[];
+  onClose: () => void;
+}) {
+  const [fundId, setFundId] = useState<string>(funds[0]?.id ?? "");
+  const [amount, setAmount] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [portalUrl, setPortalUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  function handleSend() {
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("lp_name", entry.name);
+      fd.set("lp_email", "");
+      fd.set("investor_id", entry.id);
+      if (fundId) fd.set("fund_id", fundId);
+      if (amount) fd.set("commitment_amount", amount);
+      const result = await createLpInviteAction(fd);
+      if ("error" in result) {
+        setError(result.error ?? "Failed to create invite");
+      } else if ("portalUrl" in result) {
+        setPortalUrl(result.portalUrl as string);
+      }
+    });
+  }
+
+  function handleCopy() {
+    if (!portalUrl) return;
+    navigator.clipboard.writeText(portalUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-line bg-surface-1 p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="font-mono text-sm font-semibold text-fg-primary">Invite LP to Onboard</h2>
+          <button
+            onClick={onClose}
+            className="rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+          >
+            Close
+          </button>
+        </div>
+
+        {portalUrl ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-fg-secondary">
+              Invite created for <strong className="text-fg-primary">{entry.name}</strong>. Share this link:
+            </p>
+            <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2">
+              <span className="flex-1 truncate font-mono text-[11px] text-fg-secondary">{portalUrl}</span>
+              <button
+                onClick={handleCopy}
+                className="shrink-0 rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+              >
+                {copied ? "Copied ✓" : "Copy"}
+              </button>
+            </div>
+            <p className="font-mono text-[10px] text-emerald-400">Invite email sent if email was provided.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">LP</p>
+              <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary">{entry.name}</p>
+            </div>
+
+            {funds.length > 0 && (
+              <div>
+                <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  Fund
+                </label>
+                <select
+                  value={fundId}
+                  onChange={(e) => setFundId(e.target.value)}
+                  className="w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary focus:border-gold-500/40 focus:outline-none"
+                >
+                  <option value="">No specific fund</option>
+                  {funds.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                Commitment Amount (optional)
+              </label>
+              <input
+                type="number"
+                placeholder="e.g. 500000"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/40 focus:outline-none"
+              />
+            </div>
+
+            {error && <p className="font-mono text-[10px] text-status-danger">{error}</p>}
+
+            <button
+              onClick={handleSend}
+              disabled={pending}
+              className="w-full rounded-lg border border-gold-500/40 bg-gold-500/10 py-2 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
+            >
+              {pending ? "Creating invite…" : "Create onboarding link →"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function LogContactButton({ investorId }: { investorId: string }) {
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState(false);
@@ -93,13 +223,18 @@ function LogContactButton({ investorId }: { investorId: string }) {
   );
 }
 
-function AllocatorRow({ entry }: { entry: AllocatorEntry }) {
+function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOption[] }) {
   const fitColor = entry.fitScore !== undefined ? fitScoreColor(entry.fitScore) : "";
   const tempColor = entry.temperature ? TEMP_COLORS[entry.temperature] : "";
   const stageLabel = entry.pipelineStage ? (STAGE_LABELS[entry.pipelineStage] ?? entry.pipelineStage) : null;
   const stageColor = entry.pipelineStage ? (STAGE_COLORS[entry.pipelineStage] ?? "text-slate-400 border-slate-500/30") : "";
+  const [showInvite, setShowInvite] = useState(false);
 
   return (
+    <>
+      {showInvite && (
+        <InviteLPModal entry={entry} funds={funds} onClose={() => setShowInvite(false)} />
+      )}
     <div className="group flex items-center gap-4 border-b border-line px-4 py-3 last:border-0 transition hover:bg-surface-2/40">
       {/* Name + type + next action */}
       <div className="min-w-[200px] flex-1">
@@ -177,24 +312,32 @@ function AllocatorRow({ entry }: { entry: AllocatorEntry }) {
         </div>
       )}
 
-      {/* Last contact + log button */}
-      <div className="hidden w-28 text-right lg:flex flex-col items-end gap-1">
+      {/* Last contact + actions */}
+      <div className="hidden w-36 text-right lg:flex flex-col items-end gap-1">
         <p className={`font-mono text-[10px] ${entry.lastContactDays != null && entry.lastContactDays > 60 ? "text-amber-400" : "text-fg-muted"}`}>
           {entry.lastContactDays != null ? `${entry.lastContactDays}d ago` : "—"}
         </p>
-        <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <LogContactButton investorId={entry.id} />
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowInvite(true); }}
+            className="rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+          >
+            Invite
+          </button>
         </span>
       </div>
     </div>
+    </>
   );
 }
 
 interface Props {
   entries: AllocatorEntry[];
+  funds: FundOption[];
 }
 
-export function AllocatorDirectory({ entries }: Props) {
+export function AllocatorDirectory({ entries, funds }: Props) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [stageFilter, setStageFilter] = useState<string>("all");
@@ -290,14 +433,14 @@ export function AllocatorDirectory({ entries }: Props) {
           <span className="hidden w-32 font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Accreditation</span>
           <span className="hidden w-16 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Fit</span>
           <span className="hidden w-24 font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Stage</span>
-          <span className="hidden w-28 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Contact</span>
+          <span className="hidden w-36 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Contact</span>
         </div>
         {filtered.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">No allocators match your filters</p>
           </div>
         ) : (
-          filtered.map((entry) => <AllocatorRow key={entry.id} entry={entry} />)
+          filtered.map((entry) => <AllocatorRow key={entry.id} entry={entry} funds={funds} />)
         )}
       </div>
     </div>
