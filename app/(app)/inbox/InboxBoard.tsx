@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ActionKind, GateTier } from "@/lib/gates";
 import type { InboxCategory, InboxChannel } from "@/lib/supabase/database.types";
 import { actOnThread, shareCommandCenter, setThreadStatus, type ThreadActionResult } from "./actions";
@@ -136,14 +137,20 @@ function relativeMeeting(iso: string): string {
 }
 
 function ThreadCard({ card }: { card: InboxCardData }) {
+  const router = useRouter();
   const [result, setResult] = useState<ThreadActionResult | null>(null);
   const [pending, startTransition] = useTransition();
   const [active, setActive] = useState<string | null>(null);
 
   function run(key: string, fn: () => Promise<ThreadActionResult>) {
+    setResult(null);
     startTransition(async () => {
       setActive(key);
-      setResult(await fn());
+      const r = await fn();
+      setResult(r);
+      // Refresh server components so the nav badge and thread list reflect the
+      // change immediately rather than waiting for the 30-second poll.
+      if (r.ok) router.refresh();
     });
   }
 
@@ -238,8 +245,8 @@ function ThreadCard({ card }: { card: InboxCardData }) {
           type="button"
           disabled={pending}
           onClick={() => run("done", async () => {
-            await setThreadStatus(fd({ status: "done", unread: "false" }));
-            return { ok: true, message: "Marked done." };
+            const r = await setThreadStatus(fd({ status: "done", unread: "false" }));
+            return r.ok ? { ok: true, message: "Marked done." } : { ok: false, error: "Failed to mark as done. Try again." };
           })}
           className="ml-auto rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
         >
@@ -249,8 +256,8 @@ function ThreadCard({ card }: { card: InboxCardData }) {
           type="button"
           disabled={pending}
           onClick={() => run("snooze", async () => {
-            await setThreadStatus(fd({ status: "snoozed" }));
-            return { ok: true, message: "Snoozed." };
+            const r = await setThreadStatus(fd({ status: "snoozed", unread: "false" }));
+            return r.ok ? { ok: true, message: "Snoozed." } : { ok: false, error: "Failed to snooze. Try again." };
           })}
           className="rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
         >
