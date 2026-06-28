@@ -91,7 +91,7 @@ async function enrichDealRow(
   return { verified: false, confidence: 0.2, provider: "manual" };
 }
 
-const ENRICH_FALLBACK = { verified: false, confidence: 0.2, provider: "manual" as const };
+const ENRICH_FALLBACK = { enriched: undefined, verified: false, confidence: 0.2, provider: "manual" as const };
 
 async function loadDeals(): Promise<EnrichedDeal[]> {
   const auth = await requireOrgContext();

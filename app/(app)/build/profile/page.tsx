@@ -33,6 +33,7 @@ const STRATEGIES: { value: string; label: string }[] = [
   { value: "multi_strategy", label: "Multi-Strategy" },
   { value: "fund_of_funds", label: "Fund of Funds" },
   { value: "hedge_fund", label: "Hedge Fund" },
+  { value: "other", label: "Other" },
 ];
 
 const OPERATOR_ROLES: { value: string; label: string }[] = [
@@ -40,6 +41,12 @@ const OPERATOR_ROLES: { value: string; label: string }[] = [
   { value: "family_office", label: "Family Office" },
   { value: "advisory", label: "Advisory" },
   { value: "operator", label: "Operator" },
+  { value: "lp", label: "LP" },
+  { value: "sponsor", label: "Sponsor" },
+  { value: "placement_agent", label: "Placement Agent" },
+  { value: "fund_administrator", label: "Fund Administrator" },
+  { value: "ria", label: "RIA" },
+  { value: "other", label: "Other" },
 ];
 
 const AUM_RANGES: { value: string; label: string }[] = [
