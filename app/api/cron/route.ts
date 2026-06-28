@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { createServiceClient } from "@/lib/supabase/server";
 import { runAutomation } from "@/lib/engine";
 import { nextRun } from "@/lib/cron";
@@ -80,6 +81,7 @@ export async function GET(request: Request) {
       );
     } catch (e) {
       status = `failed: ${e instanceof Error ? e.message : "unknown"}`;
+      Sentry.captureException(e, { tags: { automationId: a.id, orgId: a.organization_id } });
     }
 
     await supabase
