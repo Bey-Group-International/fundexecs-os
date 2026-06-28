@@ -90,8 +90,8 @@ export function workflowToApprovalItem(
     ? `Raised by ${agentName} · awaiting your approval`
     : "Workflow awaiting your approval";
   // Approvals are reviewed inside the war-room session that owns them; fall
-  // back to /workspace so sessionless approvals surface in the workflow view.
-  const href = task.session_id ? `/session/${task.session_id}` : "/workspace";
+  // back to /inbox so sessionless approvals surface in the approvals lane.
+  const href = task.session_id ? `/session/${task.session_id}` : "/inbox";
   return {
     id: `approval:${task.id}`,
     kind: "approval",
