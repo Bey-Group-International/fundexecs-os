@@ -91,9 +91,10 @@ export function BrandStudio({
   brandPalette,
   firmName,
 }: BrandStudioProps) {
-  const initialColor = isValidHex(brandColor) ? normalizeHex(brandColor) : "#d4af6a";
+  const hasSavedColor = isValidHex(brandColor);
+  const initialColor = hasSavedColor ? normalizeHex(brandColor) : "#888888";
   const [color, setColor] = useState(initialColor);
-  const [hexText, setHexText] = useState(isValidHex(brandColor) ? normalizeHex(brandColor) : brandColor || initialColor);
+  const [hexText, setHexText] = useState(hasSavedColor ? normalizeHex(brandColor) : "");
   const [palette, setPalette] = useState<string[]>(
     brandPalette.map(normalizeHex).filter(isValidHex),
   );
@@ -203,13 +204,20 @@ export function BrandStudio({
             onChange={(e) => pickColor(e.target.value)}
             className="h-10 w-12 cursor-pointer rounded-md border border-line bg-surface-0 p-1"
           />
-          <input
-            value={hexText}
-            onChange={(e) => onHexTextChange(e.target.value)}
-            placeholder="#d4af6a"
-            spellCheck={false}
-            className={`${inputClass} w-32 font-mono`}
-          />
+          <div className="flex flex-col gap-1">
+            <input
+              value={hexText}
+              onChange={(e) => onHexTextChange(e.target.value)}
+              placeholder="#d4af6a"
+              spellCheck={false}
+              className={`${inputClass} w-32 font-mono`}
+            />
+            {!hasSavedColor && (
+              <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                Default — not saved
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap gap-2">
             <ContrastBadge label="on dark" ratio={darkRatio} />
             <ContrastBadge label="on white" ratio={whiteRatio} />

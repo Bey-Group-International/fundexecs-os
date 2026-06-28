@@ -15,8 +15,16 @@ const nextConfig = {
         // the correct module key.
         source: "/source/lp",
         destination: "/source/lp_pipeline",
-        permanent: false,
+        permanent: true,
       },
+      // Hyphen variants of underscore-slug Source Hub routes.
+      { source: "/source/lp-pipeline", destination: "/source/lp_pipeline", permanent: true },
+      { source: "/source/deal-pipeline", destination: "/source/deal_pipeline", permanent: true },
+      // Alternate slug names surfaced during QA.
+      { source: "/source/debt_hybrid", destination: "/source/debt", permanent: true },
+      { source: "/source/debt-hybrid", destination: "/source/debt", permanent: true },
+      // Legacy routing-review URL — correct path is /grid/review.
+      { source: "/routing-review", destination: "/grid/review", permanent: true },
     ];
   },
 };
