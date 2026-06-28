@@ -125,7 +125,7 @@ export async function createModuleRow(
     case "source/deal_pipeline": {
       const name = text(formData, "name");
       if (!name) return;
-      await supabase.from("deals").insert({
+      const dealRow = {
         organization_id: orgId,
         session_id,
         name,
@@ -148,8 +148,8 @@ export async function createModuleRow(
         expected_close: text(formData, "expected_close"),
         website: text(formData, "website"),
         notes: text(formData, "notes"),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+      };
+      await (supabase.from("deals") as unknown as { insert: (v: unknown) => Promise<unknown> }).insert(dealRow);
       break;
     }
     case "execute/asset_management": {
