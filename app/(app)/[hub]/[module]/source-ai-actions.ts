@@ -96,6 +96,7 @@ export async function addSourcedTargets(
   meta?: {
     query?: string;
     rejected?: { name: string; category?: string; rationale?: string; fitScore?: number }[];
+    sessionId?: string | null;
   },
 ): Promise<AddSourcedResult> {
   const auth = await requireOrgContext();
@@ -155,6 +156,7 @@ export async function addSourcedTargets(
         asset_class: c.category || null,
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        session_id: meta?.sessionId ?? null,
       }));
       const { data: ins, error } = await supabase.from("deals").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
