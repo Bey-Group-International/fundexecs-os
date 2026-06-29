@@ -3,7 +3,7 @@
 // components/source/ServiceProviderDirectory.tsx
 // Rich service provider directory with core bench coverage, filtering,
 // add/edit/delete, provider detail panel, and optional Apollo enrichment.
-import { useState, useMemo, useTransition, useEffect } from "react";
+import { useState, useMemo, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createProviderAction, updateProviderAction, deleteProviderAction } from "@/app/(app)/[hub]/[module]/actions";
 import { VerificationPill } from "@/components/source/VerificationBadge";
@@ -113,11 +113,28 @@ function ProviderForm({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isEdit = !!initial;
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handler(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    const el = dialogRef.current;
+    if (!el) return;
+    const prev = document.activeElement as HTMLElement | null;
+    const focusable = el.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    focusable[0]?.focus();
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { onClose(); return; }
+      if (e.key !== "Tab" || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => { document.removeEventListener("keydown", handleKey); prev?.focus(); };
   }, [onClose]);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -159,6 +176,7 @@ function ProviderForm({
     <>
       <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="provider-form-title"
@@ -359,11 +377,29 @@ function ProviderSlideOver({
   onClose: () => void;
   onEdit: (p: ProviderEntry) => void;
 }) {
+  const slideRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!provider) return;
-    function handler(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    const el = slideRef.current;
+    if (!el) return;
+    const prev = document.activeElement as HTMLElement | null;
+    const focusable = el.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    focusable[0]?.focus();
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { onClose(); return; }
+      if (e.key !== "Tab" || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => { document.removeEventListener("keydown", handleKey); prev?.focus(); };
   }, [provider, onClose]);
 
   if (!provider) return null;
@@ -374,7 +410,7 @@ function ProviderSlideOver({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby="provider-slide-title" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl">
+      <div ref={slideRef} role="dialog" aria-modal="true" aria-labelledby="provider-slide-title" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0 flex-1">

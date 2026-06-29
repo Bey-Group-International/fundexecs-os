@@ -518,12 +518,14 @@ export async function deleteThreadAction(threadId: string): Promise<{ ok: boolea
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
   const supabase = createServerClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("inbox_threads")
     .delete()
     .eq("organization_id", auth.ctx.orgId)
-    .eq("id", threadId);
+    .eq("id", threadId)
+    .select("id");
   if (error) { console.error("[deleteThreadAction]", error.message); return { ok: false }; }
+  if (!data?.length) return { ok: false };
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true };

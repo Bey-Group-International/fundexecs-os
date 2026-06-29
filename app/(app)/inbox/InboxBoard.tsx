@@ -291,7 +291,7 @@ function ThreadCard({ card }: { card: InboxCardData }) {
 
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || deleting}
           onClick={() => run("done", async () => {
             const r = await setThreadStatus(fd({ status: "done", unread: "false" }));
             return r.ok ? { ok: true, message: "Marked done." } : { ok: false, error: "Failed to mark as done. Try again." };
@@ -302,7 +302,7 @@ function ThreadCard({ card }: { card: InboxCardData }) {
         </button>
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || deleting}
           onClick={() => run("snooze", async () => {
             const r = await setThreadStatus(fd({ status: "snoozed", unread: "false" }));
             return r.ok ? { ok: true, message: "Snoozed." } : { ok: false, error: "Failed to snooze. Try again." };
