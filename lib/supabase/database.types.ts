@@ -158,6 +158,7 @@ export type Organization = Timestamps & {
   // internal attestation now, external-KYC provider hook later.
   kyc_status: string;
   kyc_verified_at: string | null;
+  setup_hidden: boolean;
 }
 
 export type OrganizationMember = {
