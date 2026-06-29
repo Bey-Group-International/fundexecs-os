@@ -513,6 +513,10 @@ export async function seedInboxDemo(): Promise<void> {
   revalidatePath("/dashboard");
 }
 
+// Inbox-originated tasks are always created with hub="source" (see performThreadAction
+// above). The hub filter is intentional: it ensures a dismiss can never cancel a task
+// that arrived from a different hub (e.g. "execute", "build"), even if its UUID were
+// somehow surfaced in the inbox UI.
 export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean }> {
   if (!taskId) return { ok: false };
   const auth = await requireOrgContext();
@@ -555,7 +559,12 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
       .in("task_id", subtaskIds);
     if (subtaskApprovalErr) {
       console.error("[dismissApprovalTask] subtask approvals", subtaskApprovalErr.message);
-      // Roll back subtask cancellations to stay consistent
+      // Roll back subtask cancellations to stay consistent.
+      // Known edge case: the parent task and its approvals are already committed as
+      // cancelled/rejected at this point (no DB transaction). Subtasks revert to
+      // awaiting_approval but their parent is cancelled — they become orphaned inbox
+      // items until a future reconciliation sweep. Acceptable given the low probability;
+      // a proper fix requires an RPC/transaction or ON DELETE CASCADE on parent_task_id.
       await supabase.from("tasks").update({ status: "awaiting_approval" })
         .eq("organization_id", auth.ctx.orgId).in("id", subtaskIds);
     } else {
@@ -631,6 +640,9 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
       .in("task_id", subtaskIds);
     if (subtaskApprovalErr) {
       console.error("[dismissAllApprovalTasks] subtask approvals", subtaskApprovalErr.message);
+      // Same known orphan edge case as dismissApprovalTask: parent tasks are already
+      // committed as cancelled at this point — subtasks revert but their parents stay
+      // cancelled. Acceptable until a transaction-based RPC replaces these calls.
       await supabase.from("tasks").update({ status: "awaiting_approval" })
         .eq("organization_id", auth.ctx.orgId).in("id", subtaskIds);
     } else {
