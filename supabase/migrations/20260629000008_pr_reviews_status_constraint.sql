@@ -6,19 +6,24 @@ DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'pr_reviews'
-  ) AND NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'pr_reviews_review_status_check'
-      AND conrelid = 'public.pr_reviews'::regclass
   ) THEN
-    ALTER TABLE public.pr_reviews
-      ADD CONSTRAINT pr_reviews_review_status_check
-      CHECK (review_status IN (
-        'pending',
-        'reviewed',
-        'approved',
-        'changes_requested',
-        'dismissed'
-      ));
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint c
+      JOIN pg_class t ON c.conrelid = t.oid
+      JOIN pg_namespace n ON t.relnamespace = n.oid
+      WHERE c.conname = 'pr_reviews_review_status_check'
+        AND t.relname = 'pr_reviews'
+        AND n.nspname = 'public'
+    ) THEN
+      ALTER TABLE public.pr_reviews
+        ADD CONSTRAINT pr_reviews_review_status_check
+        CHECK (review_status IN (
+          'pending',
+          'reviewed',
+          'approved',
+          'changes_requested',
+          'dismissed'
+        ));
+    END IF;
   END IF;
 END $$;
