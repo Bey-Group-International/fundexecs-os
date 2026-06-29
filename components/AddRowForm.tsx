@@ -18,6 +18,7 @@ export default function AddRowForm({
   sessionId?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   if (!open) {
@@ -37,7 +38,12 @@ export default function AddRowForm({
     <form
       ref={formRef}
       action={async (formData: FormData) => {
-        await createModuleRow(hub, module, formData, sessionId);
+        setSaveError(null);
+        const result = await createModuleRow(hub, module, formData, sessionId);
+        if (!result.ok) {
+          setSaveError(result.error ?? "Failed to save. Please try again.");
+          return;
+        }
         formRef.current?.reset();
         setOpen(false);
       }}
@@ -82,6 +88,9 @@ export default function AddRowForm({
           </label>
         ))}
       </div>
+      {saveError ? (
+        <p className="text-xs text-status-danger">{saveError}</p>
+      ) : null}
       <div className="flex items-center gap-2">
         <button
           type="submit"

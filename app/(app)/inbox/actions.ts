@@ -202,9 +202,13 @@ async function performThreadAction(
     patch.meeting_url = result.reference;
     if (action === "confirm_booking" && !t.meeting_at) patch.meeting_at = now;
   }
-  await supabase.from("inbox_threads").update(patch).eq("id", threadId);
+  const { error: threadErr } = await supabase.from("inbox_threads").update(patch).eq("organization_id", orgId).eq("id", threadId);
+  if (threadErr) {
+    console.error("[performThreadAction] inbox_threads update failed", threadErr.message);
+    return { ok: false, gated: false, tier: decision.tier, message: result.detail, error: threadErr.message };
+  }
 
-  await supabase
+  const { error: taskErr } = await supabase
     .from("tasks")
     .update({
       status: result.ok ? "completed" : "failed",
@@ -212,7 +216,12 @@ async function performThreadAction(
       completed_at: now,
       result: { dispatch: result } as unknown as Json,
     })
+    .eq("organization_id", orgId)
     .eq("id", task.id);
+  if (taskErr) {
+    console.error("[performThreadAction] tasks update failed", taskErr.message);
+    return { ok: false, gated: false, tier: decision.tier, message: result.detail, error: taskErr.message };
+  }
 
   await supabase.from("task_events").insert({
     organization_id: orgId,

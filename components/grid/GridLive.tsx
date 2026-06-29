@@ -34,7 +34,9 @@ export function GridLive({ orgId }: { orgId: string }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [orgId, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // router.refresh is stable in App Router — excluded to prevent channel re-subscription on navigation
+  }, [orgId]);
 
   return (
     <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">

@@ -60,7 +60,8 @@ export async function setDiscoverable(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const next = String(formData.get("discoverable") ?? "") === "true";
   const supabase = createServerClient();
-  await supabase.from("organizations").update({ discoverable: next }).eq("id", ctx.orgId);
+  const { error } = await supabase.from("organizations").update({ discoverable: next }).eq("id", ctx.orgId);
+  if (error) { console.error("[setDiscoverable]", error.message); return; }
   revalidatePath("/settings");
 }
 
@@ -73,10 +74,11 @@ export async function deactivateMandate(formData: FormData): Promise<void> {
   if (!id) return;
 
   const supabase = createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("mandates")
     .update({ is_active: false })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) { console.error("[deactivateMandate]", error.message); return; }
   revalidatePath("/settings");
 }

@@ -356,7 +356,9 @@ export default function Copilot({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [orgId, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // router.refresh is stable in App Router — excluded to prevent channel re-subscription on navigation
+  }, [orgId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -396,7 +398,11 @@ export default function Copilot({
     setBusy(false);
     setPlanning(false);
     setPendingPlan(null);
-    if (!sessionId && res?.ok) {
+    if (!res?.ok) {
+      console.error("runTaskFallback: /api/prompt returned", res?.status ?? "network error");
+      return;
+    }
+    if (!sessionId) {
       const data = await res.json().catch(() => null);
       if (data?.session_id) {
         router.push(`/session/${data.session_id}`);
@@ -642,23 +648,28 @@ export default function Copilot({
     decision: "approved" | "rejected" | "regenerate" | "accepted",
     note?: string,
     desk?: Executive,
-  ) {
-    await fetch("/api/approve", {
+  ): Promise<boolean> {
+    const res = await fetch("/api/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ approval_id: approvalId, decision, note, ...(desk ? { delegate: desk } : {}) }),
-    }).catch(() => {});
+    }).catch(() => null);
     setClarify(null);
     setBusy(false);
     setLiveSteps({});
+    if (!res?.ok) {
+      console.error("decidePlain: /api/approve returned", res?.status ?? "network error");
+      return false;
+    }
     startTransition(() => router.refresh());
+    return true;
   }
 
   // Approve & automate, with live step progress streamed into the canvas. Reads
   // the ndjson from /api/approve/stream and lights up steps as they execute,
   // then refreshes on workflow_done. Degrades gracefully: any stream failure
   // falls back to the plain /api/approve call so the gate still resolves.
-  async function decideApproved(approvalId: string, note?: string) {
+  async function decideApproved(approvalId: string, note?: string): Promise<boolean> {
     setLiveSteps({});
     try {
       const res = await fetch("/api/approve/stream", {
@@ -699,10 +710,11 @@ export default function Copilot({
       setClarify(null);
       setBusy(false);
       startTransition(() => router.refresh());
+      return true;
     } catch {
       // The work already runs server-side through the gate; fall back so the
       // operator still gets the result even if live progress dropped.
-      await decidePlain(approvalId, "approved", note);
+      return await decidePlain(approvalId, "approved", note);
     }
   }
 
@@ -713,11 +725,13 @@ export default function Copilot({
     desk?: Executive,
   ) {
     setBusy(true);
+    let ok: boolean;
     if (decision === "approved") {
-      await decideApproved(approvalId, note);
+      ok = await decideApproved(approvalId, note);
     } else {
-      await decidePlain(approvalId, decision, note, desk);
+      ok = await decidePlain(approvalId, decision, note, desk);
     }
+    if (!ok) return;
     // Confirm the decision landed — the operator shouldn't have to guess.
     const receipt: Record<typeof decision, { msg: string; tone: "ok" | "warn" }> = {
       approved: { msg: "✓ Approved & automated", tone: "ok" },

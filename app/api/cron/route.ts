@@ -91,6 +91,7 @@ export async function GET(request: Request) {
         run_count: a.run_count + 1,
         next_run_at: a.schedule ? nextRun(a.schedule, now)?.toISOString() ?? null : null,
       })
+      .eq("organization_id", a.organization_id)
       .eq("id", a.id);
 
     results.push({ id: a.id, status });

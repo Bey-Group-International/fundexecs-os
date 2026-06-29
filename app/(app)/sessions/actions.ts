@@ -130,7 +130,8 @@ export async function deleteSession(formData: FormData): Promise<void> {
   if (!id) return;
   const noRedirect = String(formData.get("no_redirect") ?? "") === "true";
   const supabase = createServerClient();
-  await supabase.from("sessions").delete().eq("id", id).eq("organization_id", ctx.orgId);
+  const { error } = await supabase.from("sessions").delete().eq("id", id).eq("organization_id", ctx.orgId);
+  if (error) { console.error("[deleteSession]", error.message); return; }
   revalidatePath("/dashboard");
   if (!noRedirect) redirect("/workspace");
 }
@@ -143,11 +144,12 @@ export async function createSessionShare(formData: FormData): Promise<void> {
   const scope = String(formData.get("scope") ?? "org") === "public" ? "public" : "org";
   if (!id) return;
   const supabase = createServerClient();
-  await supabase.from("session_shares").insert({
+  const { error } = await supabase.from("session_shares").insert({
     organization_id: ctx.orgId,
     session_id: id,
     scope,
     created_by: ctx.userId,
   });
+  if (error) { console.error("[createSessionShare]", error.message); return; }
   revalidatePath(`/session/${id}`);
 }
