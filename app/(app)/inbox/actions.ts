@@ -536,7 +536,7 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     organization_id: auth.ctx.orgId,
     task_id: taskId,
     event_type: "task.cancelled",
-    agent: "operator",
+    agent: null,
     hub: "source",
     payload: { reason: "dismissed_from_inbox" } as Json,
   });
@@ -568,7 +568,7 @@ export async function dismissAllApprovalTasks(): Promise<{ ok: boolean }> {
       organization_id: auth.ctx.orgId,
       task_id,
       event_type: "task.cancelled",
-      agent: "operator",
+      agent: null,
       hub: "source",
       payload: { reason: "dismissed_from_inbox" } as Json,
     })),
