@@ -9,7 +9,6 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Inbox, InboxItem, InboxTone } from "@/lib/inbox";
-import { inboxTotal } from "@/lib/inbox";
 import { dismissApprovalTask, dismissAllApprovalTasks } from "@/app/(app)/inbox/actions";
 
 const ACCENT: Record<InboxTone, string> = {
@@ -154,7 +153,7 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
     });
   }
 
-  if (total === 0 && inboxTotal(inbox) === 0) {
+  if (total === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-line bg-surface-1 p-10 text-center">
         <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
@@ -164,18 +163,6 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
         <p className="mt-1 text-xs text-fg-secondary">
           No pending approvals, overdue diligence, IC-ready deals, or open critical risks right now.
         </p>
-      </div>
-    );
-  }
-
-  if (total === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-line bg-surface-1 p-10 text-center">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
-          ✓
-        </div>
-        <p className="mt-3 text-sm font-medium text-fg-primary">You&rsquo;re all caught up</p>
-        <p className="mt-1 text-xs text-fg-secondary">All approval requests dismissed.</p>
       </div>
     );
   }
