@@ -429,7 +429,7 @@ export async function MaterialsModule() {
 
         <footer className="mt-6 border-t border-line pt-3 print:border-neutral-300">
           <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-400">
-            {org?.legal_name ?? org?.name ?? ""}
+            {org?.legal_name ?? ""}
             {org?.description ? `  ·  ${org.description}` : ""}
           </p>
         </footer>

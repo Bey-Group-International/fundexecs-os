@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { setTourHidden } from "@/app/(app)/tour-actions";
 
 // First-run setup guide. Surfaces on every authed page until the operator
 // completes the 5-step foundation. Progress + collapsed state persist in
@@ -56,11 +57,11 @@ function storageKeys(orgId: string) {
   };
 }
 
-export function GuidedTour({ orgId }: { orgId: string }) {
+export function GuidedTour({ orgId, initialHidden = false }: { orgId: string; initialHidden?: boolean }) {
   const [mounted, setMounted] = useState(false);
   const [done, setDone] = useState<number[]>([]);
   const [collapsed, setCollapsed] = useState(false);
-  const [hidden, setHidden] = useState(false);
+  const [hidden, setHidden] = useState(initialHidden);
 
   useEffect(() => {
     setMounted(true);
@@ -69,7 +70,8 @@ export function GuidedTour({ orgId }: { orgId: string }) {
       const d = JSON.parse(localStorage.getItem(keys.done) ?? "[]");
       if (Array.isArray(d)) setDone(d);
       setCollapsed(localStorage.getItem(keys.collapsed) === "1");
-      setHidden(localStorage.getItem(keys.hidden) === "1");
+      // DB is the source of truth for hidden; only read localStorage if DB says not hidden.
+      if (!initialHidden) setHidden(localStorage.getItem(keys.hidden) === "1");
     } catch {
       // ignore malformed storage
     }
@@ -101,6 +103,7 @@ export function GuidedTour({ orgId }: { orgId: string }) {
     setHidden(v);
     try { localStorage.setItem(storageKeys(orgId).hidden, v ? "1" : "0"); } catch { /* ignore */ }
     try { window.dispatchEvent(new Event("fx:tour-visibility-changed")); } catch { /* ignore */ }
+    setTourHidden(v).catch(() => { /* best-effort DB sync */ });
   }
 
   function toggleStep(i: number) {

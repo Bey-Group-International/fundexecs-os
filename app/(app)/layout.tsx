@@ -49,6 +49,7 @@ export default async function AppLayout({
     { data: matchAlertRow },
     buildStatuses,
     { count: approvalsCount },
+    { data: orgRow },
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
       supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
@@ -98,6 +99,11 @@ export default async function AppLayout({
         .eq("organization_id", ctx.orgId)
         .is("parent_task_id", null)
         .eq("status", "awaiting_approval"),
+      supabase
+        .from("organizations")
+        .select("setup_hidden")
+        .eq("id", ctx.orgId)
+        .maybeSingle(),
     ]);
 
   const matchRow = matchAlertRow as
@@ -198,7 +204,7 @@ export default async function AppLayout({
       </ActiveSessionProvider>
 
       <div className="print:hidden">
-        <GuidedTour orgId={ctx.orgId} />
+        <GuidedTour orgId={ctx.orgId} initialHidden={orgRow?.setup_hidden ?? false} />
         <KeyboardShortcuts />
         <EarnCopilotDock name={name} />
       </div>
