@@ -669,7 +669,7 @@ export default function Copilot({
   // the ndjson from /api/approve/stream and lights up steps as they execute,
   // then refreshes on workflow_done. Degrades gracefully: any stream failure
   // falls back to the plain /api/approve call so the gate still resolves.
-  async function decideApproved(approvalId: string, note?: string) {
+  async function decideApproved(approvalId: string, note?: string): Promise<boolean> {
     setLiveSteps({});
     try {
       const res = await fetch("/api/approve/stream", {
@@ -710,10 +710,11 @@ export default function Copilot({
       setClarify(null);
       setBusy(false);
       startTransition(() => router.refresh());
+      return true;
     } catch {
       // The work already runs server-side through the gate; fall back so the
       // operator still gets the result even if live progress dropped.
-      await decidePlain(approvalId, "approved", note);
+      return await decidePlain(approvalId, "approved", note);
     }
   }
 
@@ -726,8 +727,7 @@ export default function Copilot({
     setBusy(true);
     let ok: boolean;
     if (decision === "approved") {
-      await decideApproved(approvalId, note);
-      ok = true;
+      ok = await decideApproved(approvalId, note);
     } else {
       ok = await decidePlain(approvalId, decision, note, desk);
     }

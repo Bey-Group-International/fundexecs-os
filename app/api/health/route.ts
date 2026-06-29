@@ -11,19 +11,21 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
-    return NextResponse.json({ status: "degraded", error: "CRON_SECRET not configured" }, { status: 503 });
+    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
   }
   const authHeader = request.headers.get("authorization") ?? "";
   const expected = `Bearer ${secret}`;
-  const matches =
-    authHeader.length === expected.length &&
-    timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+  // Compare byte lengths (not string code units) before timingSafeEqual to
+  // avoid a throw when the header contains multi-byte characters.
+  const aBytes = Buffer.from(authHeader);
+  const eBytes = Buffer.from(expected);
+  const matches = aBytes.length === eBytes.length && timingSafeEqual(aBytes, eBytes);
   if (!matches) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return NextResponse.json({ status: "degraded", error: "SUPABASE_SERVICE_ROLE_KEY not configured" }, { status: 503 });
+    return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" }, { status: 500 });
   }
 
   const ts = new Date().toISOString();
@@ -35,6 +37,6 @@ export async function GET(request: Request) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "unknown";
     console.error("[health] db probe failed", message);
-    return NextResponse.json({ status: "degraded", db: "error", error: message, ts }, { status: 503 });
+    return NextResponse.json({ status: "degraded", db: "error", error: message, ts }, { status: 500 });
   }
 }
