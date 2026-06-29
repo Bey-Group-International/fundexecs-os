@@ -70,7 +70,12 @@ CREATE INDEX IF NOT EXISTS idx_org_secrets_organization_id ON public.org_secrets
 CREATE INDEX IF NOT EXISTS idx_organizations_created_by ON public.organizations(created_by);
 CREATE INDEX IF NOT EXISTS idx_partners_created_by ON public.partners(created_by);
 CREATE INDEX IF NOT EXISTS idx_partners_verified_by ON public.partners(verified_by);
-CREATE INDEX IF NOT EXISTS idx_pr_reviews_organization_id ON public.pr_reviews(organization_id);
+-- pr_reviews may not exist in fresh preview branches
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'pr_reviews') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_pr_reviews_organization_id ON public.pr_reviews(organization_id)';
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_prompts_principal_id ON public.prompts(principal_id);
 CREATE INDEX IF NOT EXISTS idx_referral_codes_created_by ON public.referral_codes(created_by);
 CREATE INDEX IF NOT EXISTS idx_service_providers_created_by ON public.service_providers(created_by);
@@ -100,4 +105,9 @@ CREATE INDEX IF NOT EXISTS idx_underwritings_verified_by ON public.underwritings
 CREATE INDEX IF NOT EXISTS idx_valuation_marks_asset_id ON public.valuation_marks(asset_id);
 CREATE INDEX IF NOT EXISTS idx_valuation_marks_created_by ON public.valuation_marks(created_by);
 CREATE INDEX IF NOT EXISTS idx_valuation_marks_organization_id ON public.valuation_marks(organization_id);
-CREATE INDEX IF NOT EXISTS idx_webhook_logs_organization_id ON public.webhook_logs(organization_id);
+-- webhook_logs may not exist in fresh preview branches
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'webhook_logs') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_webhook_logs_organization_id ON public.webhook_logs(organization_id)';
+  END IF;
+END $$;
