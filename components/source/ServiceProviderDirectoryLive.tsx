@@ -7,6 +7,7 @@ import { ServiceProviderDirectory } from "@/components/source/ServiceProviderDir
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import type { ProviderEntry } from "@/components/source/ServiceProviderDirectory";
+import { ClearProvidersBtn } from "@/components/source/SourceDeleteControls";
 
 type ProviderRow = {
   id: string;
@@ -156,10 +157,15 @@ export async function ServiceProviderDirectoryLive() {
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
             Service Provider Directory
           </p>
-          {providers.length > 0 && verifiedCount > 0 && (
-            <span className="text-xs text-fg-muted">
-              {verifiedCount}/{Math.min(providers.length, ENRICH_CAP)} enriched via Apollo
-            </span>
+          {providers.length > 0 && (
+            <div className="flex items-center gap-2">
+              {verifiedCount > 0 && (
+                <span className="text-xs text-fg-muted">
+                  {verifiedCount}/{Math.min(providers.length, ENRICH_CAP)} enriched via Apollo
+                </span>
+              )}
+              <ClearProvidersBtn />
+            </div>
           )}
         </div>
         <ServiceProviderDirectory providers={providers} />

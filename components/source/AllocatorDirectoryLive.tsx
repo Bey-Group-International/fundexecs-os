@@ -5,6 +5,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { AllocatorDirectory } from "@/components/source/AllocatorDirectory";
 import { VerificationPill } from "@/components/source/VerificationBadge";
+import { ClearInvestorsBtn } from "@/components/source/SourceDeleteControls";
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import { getLPRelationshipSummaries } from "@/lib/lp-relationships";
@@ -239,6 +240,7 @@ export async function AllocatorDirectoryLive() {
             <span className="text-xs text-fg-muted">
               {verifiedCount}/{Math.min(entries.length, ENRICH_CAP)} live
             </span>
+            <ClearInvestorsBtn />
           </div>
         )}
       </div>

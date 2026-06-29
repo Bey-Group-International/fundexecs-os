@@ -5,6 +5,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 import { DealPipeline } from "@/components/source/DealPipeline";
+import { ClearDealsBtn } from "@/components/source/SourceDeleteControls";
 import type { DealEntry } from "@/components/source/DealPipeline";
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
@@ -222,6 +223,7 @@ export async function DealPipelineLive() {
               {verifiedCount}/{Math.min(deals.length, DEAL_ENRICH_CAP)} enriched via Apollo
             </span>
           )}
+          {deals.length > 0 && <ClearDealsBtn />}
         </div>
       </div>
       <DealPipeline deals={deals} enrichCap={DEAL_ENRICH_CAP} />
