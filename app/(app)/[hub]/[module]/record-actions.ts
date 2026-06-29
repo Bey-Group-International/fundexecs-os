@@ -28,6 +28,7 @@ async function patch(
   const { error } = await supabase
     .from(table as "investors")
     .update(values as never)
+    .eq("organization_id", auth.ctx.orgId)
     .eq("id", id);
   if (error) return { ok: false, error: error.message };
 
@@ -96,7 +97,7 @@ export async function deleteRecord(
   if (!id) return { ok: false, error: "Missing record id." };
 
   const supabase = createServerClient();
-  const { error } = await supabase.from(table as "investors").delete().eq("id", id);
+  const { error } = await supabase.from(table as "investors").delete().eq("organization_id", auth.ctx.orgId).eq("id", id);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(revalidationPath(hub, module));

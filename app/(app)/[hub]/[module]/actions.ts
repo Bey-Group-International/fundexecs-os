@@ -42,7 +42,7 @@ export async function updateProfile(formData: FormData) {
   }
 
   const supabase = createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("organizations")
     .update({
       name: String(formData.get("name") ?? "").trim(),
@@ -59,6 +59,7 @@ export async function updateProfile(formData: FormData) {
       operator_role: t("operator_role"),
     })
     .eq("id", auth.ctx.orgId);
+  if (error) { console.error("[updateProfile]", error.message); return; }
 
   revalidatePath("/build/profile");
 }
@@ -104,7 +105,7 @@ export async function createModuleRow(
     case "source/lp_pipeline": {
       const name = text(formData, "name");
       if (!name) return;
-      await supabase.from("investors").insert({
+      const { error: insertErr } = await supabase.from("investors").insert({
         organization_id: orgId,
         session_id,
         name,
@@ -121,6 +122,7 @@ export async function createModuleRow(
             | null) ?? "lp",
         pipeline_stage: text(formData, "pipeline_stage") ?? "prospect",
       });
+      if (insertErr) { console.error("[createModuleRow] investors", insertErr.message); return; }
       break;
     }
     case "source/deal_pipeline": {
@@ -146,7 +148,7 @@ export async function createModuleRow(
     case "execute/asset_management": {
       const name = text(formData, "name");
       if (!name) return;
-      await supabase.from("assets").insert({
+      const { error: insertErr } = await supabase.from("assets").insert({
         organization_id: orgId,
         session_id,
         name,
@@ -165,6 +167,7 @@ export async function createModuleRow(
         noi: num(formData, "noi"),
         cap_rate: num(formData, "cap_rate"),
       });
+      if (insertErr) { console.error("[createModuleRow] assets", insertErr.message); return; }
       break;
     }
     case "execute/capital_events": {
@@ -180,7 +183,7 @@ export async function createModuleRow(
         .limit(1)
         .maybeSingle();
       if (!fund) return;
-      await supabase.from("capital_events").insert({
+      const { error: insertErr } = await supabase.from("capital_events").insert({
         organization_id: orgId,
         fund_id: fund.id,
         event_type:
@@ -197,12 +200,13 @@ export async function createModuleRow(
         effective_date: text(formData, "effective_date") ?? new Date().toISOString().slice(0, 10),
         reference: text(formData, "reference"),
       });
+      if (insertErr) { console.error("[createModuleRow] capital_events", insertErr.message); return; }
       break;
     }
     case "source/partners": {
       const name = text(formData, "name");
       if (!name) return;
-      await supabase.from("partners").insert({
+      const { error: insertErr } = await supabase.from("partners").insert({
         organization_id: orgId,
         name,
         partner_type: text(formData, "partner_type") ?? "co_gp",
@@ -211,6 +215,7 @@ export async function createModuleRow(
         contact_email: text(formData, "contact_email"),
         status: text(formData, "status") ?? "active",
       });
+      if (insertErr) { console.error("[createModuleRow] partners", insertErr.message); return; }
       break;
     }
     case "source/providers": {
@@ -232,7 +237,7 @@ export async function createModuleRow(
     case "source/debt": {
       const name = text(formData, "name");
       if (!name) return;
-      await supabase.from("debt_facilities").insert({
+      const { error: insertErr } = await supabase.from("debt_facilities").insert({
         organization_id: orgId,
         name,
         facility_type: text(formData, "facility_type") ?? "term_loan",
@@ -242,6 +247,7 @@ export async function createModuleRow(
         currency: text(formData, "currency") ?? "USD",
         status: text(formData, "status") ?? "prospective",
       });
+      if (insertErr) { console.error("[createModuleRow] debt_facilities", insertErr.message); return; }
       break;
     }
     default:
@@ -271,7 +277,7 @@ export async function draftDealComms(formData: FormData): Promise<void> {
   const dealId = String(formData.get("deal_id") ?? "");
   const kind = String(formData.get("kind") ?? "");
   const build = COMMS_PROMPTS[kind];
-  if (!dealId || !build) redirect("/workspace");
+  if (!dealId || !build) { console.error("[draftDealComms] missing dealId or build type"); return; }
 
   const supabase = createServerClient();
   const { data: deal } = await supabase

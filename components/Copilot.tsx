@@ -356,7 +356,9 @@ export default function Copilot({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [orgId, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // router.refresh is stable in App Router — excluded to prevent channel re-subscription on navigation
+  }, [orgId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -396,7 +398,11 @@ export default function Copilot({
     setBusy(false);
     setPlanning(false);
     setPendingPlan(null);
-    if (!sessionId && res?.ok) {
+    if (!res?.ok) {
+      console.error("runTaskFallback: /api/prompt returned", res?.status ?? "network error");
+      return;
+    }
+    if (!sessionId) {
       const data = await res.json().catch(() => null);
       if (data?.session_id) {
         router.push(`/session/${data.session_id}`);
@@ -643,11 +649,15 @@ export default function Copilot({
     note?: string,
     desk?: Executive,
   ) {
-    await fetch("/api/approve", {
+    const res = await fetch("/api/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ approval_id: approvalId, decision, note, ...(desk ? { delegate: desk } : {}) }),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (!res?.ok) {
+      console.error("decidePlain: /api/approve returned", res?.status ?? "network error");
+      return;
+    }
     setClarify(null);
     setBusy(false);
     setLiveSteps({});

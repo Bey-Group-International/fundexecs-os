@@ -55,28 +55,32 @@ export async function createMandate(formData: FormData): Promise<{ error?: strin
 // profile can surface to this org and Earn delivers it match alerts; when off,
 // the org goes dark — no broadcast out, no match alerts in. Admin-gated by RLS
 // (organizations_update → is_org_admin), so a non-admin submit is a silent no-op.
-export async function setDiscoverable(formData: FormData): Promise<void> {
+export async function setDiscoverable(formData: FormData): Promise<{ error?: string }> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { error: "Not authenticated" };
   const next = String(formData.get("discoverable") ?? "") === "true";
   const supabase = createServerClient();
-  await supabase.from("organizations").update({ discoverable: next }).eq("id", ctx.orgId);
+  const { error } = await supabase.from("organizations").update({ discoverable: next }).eq("id", ctx.orgId);
+  if (error) { console.error("[setDiscoverable]", error.message); return { error: error.message }; }
   revalidatePath("/settings");
+  return {};
 }
 
 // Stand down the active mandate — every Tier-2 action falls back to operator
 // sign-off until a new mandate is activated.
-export async function deactivateMandate(formData: FormData): Promise<void> {
+export async function deactivateMandate(formData: FormData): Promise<{ error?: string }> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { error: "Not authenticated" };
   const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  if (!id) return { error: "Missing mandate id" };
 
   const supabase = createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("mandates")
     .update({ is_active: false })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) { console.error("[deactivateMandate]", error.message); return { error: error.message }; }
   revalidatePath("/settings");
+  return {};
 }

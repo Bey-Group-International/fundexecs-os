@@ -27,13 +27,15 @@ export async function GET(request: Request) {
     supabase
       .from("task_events")
       .select("*")
+      .eq("organization_id", auth.ctx.orgId)
       .eq("task_id", taskId)
       .order("created_at", { ascending: true }),
-    supabase.from("approvals").select("*").eq("task_id", taskId),
-    supabase.from("task_handoffs").select("*").eq("task_id", taskId),
+    supabase.from("approvals").select("*").eq("organization_id", auth.ctx.orgId).eq("task_id", taskId),
+    supabase.from("task_handoffs").select("*").eq("organization_id", auth.ctx.orgId).eq("task_id", taskId),
     supabase
       .from("artifacts")
       .select("*")
+      .eq("organization_id", auth.ctx.orgId)
       .eq("workflow_id", taskId)
       .order("created_at", { ascending: true }),
   ]);

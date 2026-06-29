@@ -202,7 +202,7 @@ async function performThreadAction(
     patch.meeting_url = result.reference;
     if (action === "confirm_booking" && !t.meeting_at) patch.meeting_at = now;
   }
-  await supabase.from("inbox_threads").update(patch).eq("id", threadId);
+  await supabase.from("inbox_threads").update(patch).eq("organization_id", orgId).eq("id", threadId);
 
   await supabase
     .from("tasks")
@@ -212,6 +212,7 @@ async function performThreadAction(
       completed_at: now,
       result: { dispatch: result } as unknown as Json,
     })
+    .eq("organization_id", orgId)
     .eq("id", task.id);
 
   await supabase.from("task_events").insert({
