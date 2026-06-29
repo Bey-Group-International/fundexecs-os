@@ -374,9 +374,6 @@ export async function generateTargets(
     const json = textOf(message);
     const raw = json ? (JSON.parse(json) as { candidates?: unknown[] }) : null;
     const out = normalizeCandidates(raw?.candidates ?? [], cfg, options, existingNames);
-    if (out.length && process.env.APOLLO_API_KEY) {
-      try { return await apolloEnrichCandidates(out); } catch { /* fall through */ }
-    }
     return out.length ? out : fallbackCandidates(cfg, mandate, existingNames, options, query);
   } catch {
     return fallbackCandidates(cfg, mandate, existingNames, options, query);
@@ -429,11 +426,7 @@ async function enrichedTargets(
     });
     const raw = parseJsonArray(textOf(message));
     if (!raw) return [];
-    const candidates = normalizeCandidates(raw, cfg, options, existingNames);
-    if (candidates.length && process.env.APOLLO_API_KEY) {
-      try { return await apolloEnrichCandidates(candidates); } catch { /* fall through */ }
-    }
-    return candidates;
+    return normalizeCandidates(raw, cfg, options, existingNames);
   } catch {
     return [];
   }
@@ -485,7 +478,7 @@ function normalizeCandidates(
 // After Claude generates candidates, look up real decision-maker contacts via
 // Apollo for any candidate that lacks an email. Runs in parallel batches of 3
 // with a 4s timeout; failures are non-fatal — the candidate keeps Claude data.
-async function apolloEnrichCandidates(candidates: SourceCandidate[]): Promise<SourceCandidate[]> {
+export async function apolloEnrichCandidates(candidates: SourceCandidate[]): Promise<SourceCandidate[]> {
   const { searchPeople } = await import("@/lib/integrations/providers/apollo");
   const BATCH = 3;
   const result = [...candidates];

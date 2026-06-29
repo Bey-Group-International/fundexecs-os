@@ -12,6 +12,7 @@ import {
   generateTargets,
   scorePipeline as scorePipelineEngine,
   sourceConfigFor,
+  apolloEnrichCandidates,
   type SourceCandidate,
   type PipelineScore,
   type SourcingMandate,
@@ -122,7 +123,15 @@ export async function addSourcedTargets(
 
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
-  const clean = candidates
+
+  // Enrich only the accepted picks with Apollo contact data at insert time so
+  // candidates render immediately from Claude without waiting for API calls.
+  let enriched = candidates as SourceCandidate[];
+  if (process.env.APOLLO_API_KEY) {
+    try { enriched = await apolloEnrichCandidates(enriched); } catch { /* non-fatal */ }
+  }
+
+  const clean = enriched
     .map((c) => ({
       name: String(c.name ?? "").trim(),
       category: String(c.category ?? "").trim(),
@@ -208,6 +217,11 @@ export async function addSourcedTargets(
         notes: note(c.rationale),
         verification_note: c.verification_note,
         url_source: c.sourceUrl,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
       }));
       const { data: ins, error } = await supabase.from("debt_facilities").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -225,6 +239,11 @@ export async function addSourcedTargets(
         notes: note(c.rationale),
         verification_note: c.verification_note,
         url_source: c.sourceUrl,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
       }));
       const { data: ins, error } = await supabase.from("partners").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -242,6 +261,11 @@ export async function addSourcedTargets(
         notes: note(c.rationale),
         verification_note: c.verification_note,
         url_source: c.sourceUrl,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
       }));
       const { data: ins, error } = await supabase.from("service_providers").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
