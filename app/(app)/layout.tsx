@@ -5,7 +5,6 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
-import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import {
   createSessionGroup,
   moveSessionToGroup,
@@ -205,7 +204,6 @@ export default async function AppLayout({
 
       <div className="print:hidden">
         <GuidedTour orgId={ctx.orgId} initialHidden={orgRow?.setup_hidden ?? false} />
-        <KeyboardShortcuts />
         <EarnCopilotDock name={name} />
       </div>
     </div>
