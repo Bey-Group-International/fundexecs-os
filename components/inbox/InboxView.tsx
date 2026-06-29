@@ -40,41 +40,49 @@ function Row({
   onDismiss?: (id: string) => void;
 }) {
   const [dismissing, startDismiss] = useTransition();
+  const [dismissError, setDismissError] = useState(false);
   const isApproval = item.tone === "approval";
 
   return (
-    <div className={`group relative flex items-stretch rounded-xl border border-line border-l-2 ${ACCENT[item.tone]} bg-surface-1 transition hover:border-gold-500/40 hover:bg-surface-2`}>
-      <Link
-        href={item.href}
-        className="flex min-w-0 flex-1 items-start gap-3 p-4"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-medium text-fg-primary">{item.title}</span>
-            <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${PILL[item.tone]}`}>
-              {PILL_LABEL[item.tone]}
-            </span>
-          </div>
-          <p className="mt-1 line-clamp-2 text-xs leading-snug text-fg-secondary">{item.subtitle}</p>
-        </div>
-        <span className="mt-0.5 shrink-0 font-mono text-[11px] text-fg-muted transition group-hover:text-gold-300" aria-hidden>→</span>
-      </Link>
-      {isApproval && onDismiss ? (
-        <button
-          type="button"
-          disabled={dismissing}
-          onClick={() => {
-            if (!confirm("Dismiss this approval request? The associated task will be cancelled.")) return;
-            startDismiss(async () => {
-              const r = await dismissApprovalTask(item.id);
-              if (r.ok) onDismiss(item.id);
-            });
-          }}
-          className="shrink-0 self-stretch border-l border-line px-3 text-xs text-fg-muted transition hover:text-status-danger disabled:opacity-50"
-          aria-label={`Dismiss ${item.title}`}
+    <div className={`group relative flex flex-col rounded-xl border border-line border-l-2 ${ACCENT[item.tone]} bg-surface-1 transition hover:border-gold-500/40 hover:bg-surface-2`}>
+      <div className="flex items-stretch">
+        <Link
+          href={item.href}
+          className="flex min-w-0 flex-1 items-start gap-3 p-4"
         >
-          {dismissing ? "…" : "Dismiss"}
-        </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-sm font-medium text-fg-primary">{item.title}</span>
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${PILL[item.tone]}`}>
+                {PILL_LABEL[item.tone]}
+              </span>
+            </div>
+            <p className="mt-1 line-clamp-2 text-xs leading-snug text-fg-secondary">{item.subtitle}</p>
+          </div>
+          <span className="mt-0.5 shrink-0 font-mono text-[11px] text-fg-muted transition group-hover:text-gold-300" aria-hidden>→</span>
+        </Link>
+        {isApproval && onDismiss ? (
+          <button
+            type="button"
+            disabled={dismissing}
+            onClick={() => {
+              setDismissError(false);
+              if (!confirm("Dismiss this approval request? The associated task will be cancelled.")) return;
+              startDismiss(async () => {
+                const r = await dismissApprovalTask(item.id);
+                if (r.ok) onDismiss(item.id);
+                else setDismissError(true);
+              });
+            }}
+            className="shrink-0 self-stretch border-l border-line px-3 text-xs text-fg-muted transition hover:text-status-danger disabled:opacity-50"
+            aria-label={`Dismiss ${item.title}`}
+          >
+            {dismissing ? "…" : "Dismiss"}
+          </button>
+        ) : null}
+      </div>
+      {dismissError ? (
+        <p className="px-4 pb-2 text-xs text-status-danger">Failed to dismiss. Try again.</p>
       ) : null}
     </div>
   );
@@ -145,7 +153,7 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
   function handleDismissAll() {
     if (!confirm(`Dismiss all ${needsApproval.length} approval request${needsApproval.length === 1 ? "" : "s"}? The associated tasks will be cancelled.`)) return;
     startDismissAll(async () => {
-      const r = await dismissAllApprovalTasks();
+      const r = await dismissAllApprovalTasks(needsApproval.map((i) => i.id));
       if (r.ok) {
         setDismissed((prev) => new Set([...prev, ...needsApproval.map((i) => i.id)]));
         router.refresh();

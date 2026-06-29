@@ -532,6 +532,20 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
     .eq("task_id", taskId);
+  // Also cancel any subtasks so their approvals don't dangle
+  const { data: subtasks } = await supabase
+    .from("tasks")
+    .update({ status: "cancelled" })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("parent_task_id", taskId)
+    .eq("status", "awaiting_approval")
+    .select("id");
+  if (subtasks?.length) {
+    await supabase.from("approvals")
+      .update({ decision: "rejected" })
+      .eq("organization_id", auth.ctx.orgId)
+      .in("task_id", subtasks.map((r) => r.id));
+  }
   await supabase.from("task_events").insert({
     organization_id: auth.ctx.orgId,
     task_id: taskId,
@@ -545,7 +559,10 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
   return { ok: true };
 }
 
-export async function dismissAllApprovalTasks(): Promise<{ ok: boolean }> {
+// taskIds must be the exact IDs currently rendered in the UI — caller-supplied
+// so we never cancel tasks outside the visible inbox set.
+export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: boolean }> {
+  if (!taskIds.length) return { ok: false };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
   const supabase = createServerClient();
@@ -555,16 +572,17 @@ export async function dismissAllApprovalTasks(): Promise<{ ok: boolean }> {
     .eq("organization_id", auth.ctx.orgId)
     .eq("hub", "source")
     .eq("status", "awaiting_approval")
+    .in("id", taskIds)
     .select("id");
   if (error) { console.error("[dismissAllApprovalTasks]", error.message); return { ok: false }; }
   if (!data?.length) return { ok: false };
-  const taskIds = data.map((r) => r.id);
+  const cancelledIds = data.map((r) => r.id);
   await supabase.from("approvals")
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
-    .in("task_id", taskIds);
+    .in("task_id", cancelledIds);
   await supabase.from("task_events").insert(
-    taskIds.map((task_id) => ({
+    cancelledIds.map((task_id) => ({
       organization_id: auth.ctx.orgId,
       task_id,
       event_type: "task.cancelled",
