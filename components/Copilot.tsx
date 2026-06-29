@@ -654,13 +654,13 @@ export default function Copilot({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ approval_id: approvalId, decision, note, ...(desk ? { delegate: desk } : {}) }),
     }).catch(() => null);
+    setClarify(null);
+    setBusy(false);
+    setLiveSteps({});
     if (!res?.ok) {
       console.error("decidePlain: /api/approve returned", res?.status ?? "network error");
       return;
     }
-    setClarify(null);
-    setBusy(false);
-    setLiveSteps({});
     startTransition(() => router.refresh());
   }
 

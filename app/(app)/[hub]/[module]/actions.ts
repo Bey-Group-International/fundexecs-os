@@ -277,7 +277,7 @@ export async function draftDealComms(formData: FormData): Promise<void> {
   const dealId = String(formData.get("deal_id") ?? "");
   const kind = String(formData.get("kind") ?? "");
   const build = COMMS_PROMPTS[kind];
-  if (!dealId || !build) { console.error("[draftDealComms] missing dealId or build type"); return; }
+  if (!dealId || !build) { redirect("/workspace"); }
 
   const supabase = createServerClient();
   const { data: deal } = await supabase
