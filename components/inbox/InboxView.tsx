@@ -11,6 +11,11 @@ import { useRouter } from "next/navigation";
 import type { Inbox, InboxItem, InboxTone } from "@/lib/inbox";
 import { dismissApprovalTask, dismissAllApprovalTasks } from "@/app/(app)/inbox/actions";
 
+// InboxItem.id is prefixed ("approval:<uuid>") — extract the raw task UUID.
+function taskIdFromItemId(itemId: string): string {
+  return itemId.includes(":") ? itemId.split(":")[1] : itemId;
+}
+
 const ACCENT: Record<InboxTone, string> = {
   approval: "border-l-gold-500/70",
   overdue: "border-l-red-500/70",
@@ -69,7 +74,7 @@ function Row({
               setDismissError(false);
               if (!confirm("Dismiss this approval request? The associated task will be cancelled.")) return;
               startDismiss(async () => {
-                const r = await dismissApprovalTask(item.id);
+                const r = await dismissApprovalTask(taskIdFromItemId(item.id));
                 if (r.ok) onDismiss(item.id);
                 else setDismissError(true);
               });
@@ -134,6 +139,7 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
   const router = useRouter();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [dismissingAll, startDismissAll] = useTransition();
+  const [dismissAllError, setDismissAllError] = useState(false);
 
   const needsApproval = inbox.needsApproval.filter((i) => !dismissed.has(i.id));
 
@@ -152,11 +158,14 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
 
   function handleDismissAll() {
     if (!confirm(`Dismiss all ${needsApproval.length} approval request${needsApproval.length === 1 ? "" : "s"}? The associated tasks will be cancelled.`)) return;
+    setDismissAllError(false);
     startDismissAll(async () => {
-      const r = await dismissAllApprovalTasks(needsApproval.map((i) => i.id));
+      const r = await dismissAllApprovalTasks(needsApproval.map((i) => taskIdFromItemId(i.id)));
       if (r.ok) {
         setDismissed((prev) => new Set([...prev, ...needsApproval.map((i) => i.id)]));
         router.refresh();
+      } else {
+        setDismissAllError(true);
       }
     });
   }
@@ -184,6 +193,9 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
         onDismissAll={handleDismissAll}
         dismissingAll={dismissingAll}
       />
+      {dismissAllError ? (
+        <p className="-mt-6 text-xs text-status-danger">Failed to dismiss all. Try again.</p>
+      ) : null}
       <Section title="Overdue diligence" items={visible.overdueDiligence} />
       <Section title="IC-ready" items={visible.icReady} />
       <Section title="Open risks" items={visible.openRisks} />
