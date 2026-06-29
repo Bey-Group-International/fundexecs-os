@@ -58,6 +58,7 @@ export function SourceSearch({
   const [adding, setAdding] = useState<Set<string>>(new Set());
   const [personalized, setPersonalized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const ranInitial = useRef(false);
 
   const busy = phase === "planning" || phase === "running";
@@ -82,6 +83,7 @@ export function SourceSearch({
         setActiveAgent(null);
         return;
       }
+      setSessionId(res.sessionId ?? null);
       setPersonalized(Boolean(res.personalized));
       setSummary(res.summary ?? "");
       setSteps(res.steps.map((s) => ({ ...s, status: "queued" as StepStatus })));
@@ -159,7 +161,7 @@ export function SourceSearch({
     const moduleKey = step.module.replace(/^source\//, "");
     setAdding((prev) => new Set(prev).add(step.id));
     try {
-      const res = await addSourcedTargets("source", moduleKey, picks, { query: step.query, rejected });
+      const res = await addSourcedTargets("source", moduleKey, picks, { query: step.query, rejected, sessionId });
       if (res.ok) setAdded((prev) => ({ ...prev, [step.id]: res.added ?? picks.length }));
       else setError(res.error ?? "Could not add to pipeline.");
     } catch {
