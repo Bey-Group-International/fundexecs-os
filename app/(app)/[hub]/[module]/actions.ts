@@ -87,12 +87,12 @@ export async function createModuleRow(
   module: string,
   formData: FormData,
   sessionId?: string,
-) {
+): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOrgContext();
-  if (!auth.ok) return;
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
 
   const key = `${hub}/${module}`;
-  if (!(key in ADD_ROW_CONFIGS)) return;
+  if (!(key in ADD_ROW_CONFIGS)) return { ok: false, error: "Unknown module." };
 
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
@@ -104,7 +104,7 @@ export async function createModuleRow(
   switch (key) {
     case "source/lp_pipeline": {
       const name = text(formData, "name");
-      if (!name) return;
+      if (!name) return { ok: false, error: "Name is required." };
       const { error: insertErr } = await supabase.from("investors").insert({
         organization_id: orgId,
         session_id,
@@ -122,12 +122,12 @@ export async function createModuleRow(
             | null) ?? "lp",
         pipeline_stage: text(formData, "pipeline_stage") ?? "prospect",
       });
-      if (insertErr) { console.error("[createModuleRow] investors", insertErr.message); return; }
+      if (insertErr) { console.error("[createModuleRow] investors", insertErr.message); return { ok: false, error: insertErr.message }; }
       break;
     }
     case "source/deal_pipeline": {
       const name = text(formData, "name");
-      if (!name) return;
+      if (!name) return { ok: false, error: "Name is required." };
       const dealRow = {
         organization_id: orgId,
         session_id,
@@ -142,12 +142,12 @@ export async function createModuleRow(
       };
       // TODO: remove cast after running `supabase gen types typescript` with geography/target_amount/expected_close/website/notes columns
       const { error: dealInsertError } = await (supabase.from("deals") as unknown as { insert: (v: unknown) => Promise<{ error: { message: string } | null }> }).insert(dealRow);
-      if (dealInsertError) { console.error("[createModuleRow] deals insert failed", dealInsertError.message); return; }
+      if (dealInsertError) { console.error("[createModuleRow] deals insert failed", dealInsertError.message); return { ok: false, error: dealInsertError.message }; }
       break;
     }
     case "execute/asset_management": {
       const name = text(formData, "name");
-      if (!name) return;
+      if (!name) return { ok: false, error: "Name is required." };
       const { error: insertErr } = await supabase.from("assets").insert({
         organization_id: orgId,
         session_id,
@@ -167,12 +167,12 @@ export async function createModuleRow(
         noi: num(formData, "noi"),
         cap_rate: num(formData, "cap_rate"),
       });
-      if (insertErr) { console.error("[createModuleRow] assets", insertErr.message); return; }
+      if (insertErr) { console.error("[createModuleRow] assets", insertErr.message); return { ok: false, error: insertErr.message }; }
       break;
     }
     case "execute/capital_events": {
       const amount = num(formData, "amount");
-      if (amount == null) return;
+      if (amount == null) return { ok: false, error: "Amount is required." };
       // Capital events belong to a fund (NOT NULL FK). Attach to the org's
       // first fund; without one there's nothing to book the flow against.
       const { data: fund } = await supabase
@@ -182,7 +182,7 @@ export async function createModuleRow(
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
-      if (!fund) return;
+      if (!fund) return { ok: false, error: "No fund found for this organization." };
       const { error: insertErr } = await supabase.from("capital_events").insert({
         organization_id: orgId,
         fund_id: fund.id,
@@ -200,12 +200,12 @@ export async function createModuleRow(
         effective_date: text(formData, "effective_date") ?? new Date().toISOString().slice(0, 10),
         reference: text(formData, "reference"),
       });
-      if (insertErr) { console.error("[createModuleRow] capital_events", insertErr.message); return; }
+      if (insertErr) { console.error("[createModuleRow] capital_events", insertErr.message); return { ok: false, error: insertErr.message }; }
       break;
     }
     case "source/partners": {
       const name = text(formData, "name");
-      if (!name) return;
+      if (!name) return { ok: false, error: "Name is required." };
       const { error: insertErr } = await supabase.from("partners").insert({
         organization_id: orgId,
         name,
@@ -215,12 +215,12 @@ export async function createModuleRow(
         contact_email: text(formData, "contact_email"),
         status: text(formData, "status") ?? "active",
       });
-      if (insertErr) { console.error("[createModuleRow] partners", insertErr.message); return; }
+      if (insertErr) { console.error("[createModuleRow] partners", insertErr.message); return { ok: false, error: insertErr.message }; }
       break;
     }
     case "source/providers": {
       const name = text(formData, "name");
-      if (!name) return;
+      if (!name) return { ok: false, error: "Name is required." };
       const { error: provInsertError } = await supabase.from("service_providers").insert({
         organization_id: orgId,
         name,
@@ -231,12 +231,12 @@ export async function createModuleRow(
         notes: text(formData, "notes"),
         website: text(formData, "website"),
       });
-      if (provInsertError) throw new Error(provInsertError.message);
+      if (provInsertError) { console.error("[createModuleRow] service_providers", provInsertError.message); return { ok: false, error: provInsertError.message }; }
       break;
     }
     case "source/debt": {
       const name = text(formData, "name");
-      if (!name) return;
+      if (!name) return { ok: false, error: "Name is required." };
       const { error: insertErr } = await supabase.from("debt_facilities").insert({
         organization_id: orgId,
         name,
@@ -247,15 +247,16 @@ export async function createModuleRow(
         currency: text(formData, "currency") ?? "USD",
         status: text(formData, "status") ?? "prospective",
       });
-      if (insertErr) { console.error("[createModuleRow] debt_facilities", insertErr.message); return; }
+      if (insertErr) { console.error("[createModuleRow] debt_facilities", insertErr.message); return { ok: false, error: insertErr.message }; }
       break;
     }
     default:
-      return;
+      return { ok: false, error: "Unknown module." };
   }
 
   revalidatePath(`/${hub}/${module}`);
   if (sessionId) revalidatePath(`/session/${sessionId}/${hub}/${module}`);
+  return { ok: true };
 }
 
 // --- Run › Comms: deal-aware Earn launcher --------------------------------
