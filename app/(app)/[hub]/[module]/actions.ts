@@ -150,8 +150,7 @@ export async function createModuleRow(
         contact_phone: text(formData, "contact_phone"),
         url_source: text(formData, "url_source"),
       };
-      // TODO: remove cast after running `supabase gen types typescript` with geography/target_amount/expected_close/website/notes columns
-      const { error: dealInsertError } = await (supabase.from("deals") as unknown as { insert: (v: unknown) => Promise<{ error: { message: string } | null }> }).insert(dealRow);
+      const { error: dealInsertError } = await supabase.from("deals").insert(dealRow as never);
       if (dealInsertError) { console.error("[createModuleRow] deals insert failed", dealInsertError.message); return { ok: false, error: dealInsertError.message }; }
       break;
     }
@@ -695,9 +694,10 @@ export async function deleteInvestorAction(
     const supabase = createServerClient();
     const { error } = await supabase
       .from("investors")
-      .delete()
+      .update({ archived_at: new Date().toISOString() })
       .eq("id", investorId)
-      .eq("organization_id", auth.ctx.orgId);
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
     if (error) throw error;
     revalidatePath("/source/lp_pipeline");
     return { ok: true };
@@ -714,8 +714,9 @@ export async function clearInvestorsAction(): Promise<{ ok?: boolean; error?: st
     const supabase = createServerClient();
     const { error } = await supabase
       .from("investors")
-      .delete()
-      .eq("organization_id", auth.ctx.orgId);
+      .update({ archived_at: new Date().toISOString() })
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
     if (error) throw error;
     revalidatePath("/source/lp_pipeline");
     return { ok: true };
@@ -736,9 +737,10 @@ export async function deleteDealAction(
     const supabase = createServerClient();
     const { error } = await supabase
       .from("deals")
-      .delete()
+      .update({ archived_at: new Date().toISOString() })
       .eq("id", dealId)
-      .eq("organization_id", auth.ctx.orgId);
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
     if (error) throw error;
     revalidatePath("/source/deal_pipeline");
     return { ok: true };
@@ -755,8 +757,9 @@ export async function clearDealsAction(): Promise<{ ok?: boolean; error?: string
     const supabase = createServerClient();
     const { error } = await supabase
       .from("deals")
-      .delete()
-      .eq("organization_id", auth.ctx.orgId);
+      .update({ archived_at: new Date().toISOString() })
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
     if (error) throw error;
     revalidatePath("/source/deal_pipeline");
     return { ok: true };
@@ -853,14 +856,22 @@ export async function updateContactFieldsAction(
     debt_facilities:   "/source/debt",
   };
 
+  if (clean.contact_email !== undefined && clean.contact_email !== null) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean.contact_email)) {
+      return { error: "Invalid email address" };
+    }
+  }
+
   try {
     const supabase = createServerClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from(table as "investors")
       .update(clean as never)
       .eq("id", id)
-      .eq("organization_id", auth.ctx.orgId);
+      .eq("organization_id", auth.ctx.orgId)
+      .select("id");
     if (error) throw error;
+    if (!data || data.length === 0) return { error: "Record not found" };
     revalidatePath(pathMap[table]);
     return { ok: true };
   } catch (e) {

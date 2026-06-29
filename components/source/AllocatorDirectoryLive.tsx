@@ -143,6 +143,7 @@ async function loadAllocatorEntries() {
         "id, name, investor_type, aum, typical_check_min, typical_check_max, jurisdiction, pipeline_stage, verified, confidence, source_provider, last_verified_at, website, contact_name, contact_email, contact_phone, role, url_source",
       )
       .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(200);
 

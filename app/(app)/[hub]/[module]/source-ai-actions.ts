@@ -89,7 +89,22 @@ export interface AddSourcedResult {
 export async function addSourcedTargets(
   hub: string,
   module: string,
-  candidates: { name: string; category: string; rationale: string; fitScore?: number; sourceUrl?: string }[],
+  candidates: {
+    name: string;
+    category: string;
+    rationale: string;
+    fitScore?: number;
+    sourceUrl?: string;
+    website?: string;
+    contactName?: string;
+    contactRole?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    aumRange?: string;
+    ticketRange?: string;
+    strategies?: string[];
+    geography?: string;
+  }[],
   // Optional learning context: the originating request and the candidates that
   // were surfaced but NOT picked. Recording both accepts and rejects is what lets
   // the engine learn this operator's taste (see lib/source-intelligence.ts).
@@ -120,6 +135,11 @@ export async function addSourcedTargets(
         typeof c.sourceUrl === "string" && /^https?:\/\/\S+$/i.test(c.sourceUrl.trim())
           ? c.sourceUrl.trim().slice(0, 500)
           : null,
+      website: typeof c.website === "string" && c.website.trim() ? c.website.trim() : null,
+      contactName: typeof c.contactName === "string" && c.contactName.trim() ? c.contactName.trim() : null,
+      contactRole: typeof c.contactRole === "string" && c.contactRole.trim() ? c.contactRole.trim() : null,
+      contactEmail: typeof c.contactEmail === "string" && c.contactEmail.trim() ? c.contactEmail.trim() : null,
+      contactPhone: typeof c.contactPhone === "string" && c.contactPhone.trim() ? c.contactPhone.trim() : null,
     }))
     .filter((c) => c.name);
   if (clean.length === 0) return { ok: false, error: "Nothing to add." };
@@ -141,7 +161,12 @@ export async function addSourcedTargets(
         pipeline_stage: "prospect",
         notes: note(c.rationale),
         verification_note: c.verification_note,
-        url_source: typeof c.sourceUrl === "string" && c.sourceUrl ? c.sourceUrl.trim() : null,
+        url_source: c.sourceUrl ?? null,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
       }));
       const { data: ins, error } = await supabase.from("investors").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -158,7 +183,12 @@ export async function addSourcedTargets(
         asset_class: c.category || null,
         notes: note(c.rationale),
         verification_note: c.verification_note,
-        url_source: c.sourceUrl,
+        url_source: c.sourceUrl ?? null,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
         session_id: meta?.sessionId ?? null,
       }));
       const { data: ins, error } = await supabase.from("deals").insert(rows).select("id");

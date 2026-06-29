@@ -165,6 +165,7 @@ async function loadDeals(): Promise<DealEntry[]> {
       "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website, notes, contact_name, contact_email, contact_phone, url_source",
     )
     .eq("organization_id", auth.ctx.orgId)
+    .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(200);
 
