@@ -263,7 +263,13 @@ export async function createModuleRow(
         interest_rate: num(formData, "interest_rate"),
         currency: text(formData, "currency") ?? "USD",
         status: text(formData, "status") ?? "prospective",
-      });
+        contact_name: text(formData, "contact_name"),
+        contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        role: text(formData, "role"),
+        website: text(formData, "website"),
+        url_source: text(formData, "url_source"),
+      } as never);
       if (insertErr) { console.error("[createModuleRow] debt_facilities", insertErr.message); return { ok: false, error: insertErr.message }; }
       break;
     }
@@ -799,5 +805,49 @@ export async function clearPartnersAction(): Promise<{ ok?: boolean; error?: str
   } catch (e) {
     console.error("[clearPartnersAction] failed", e);
     return { error: "Failed to clear partners" };
+  }
+}
+
+// ── Inline contact field updates ─────────────────────────────────────────────
+
+type ContactTable = "investors" | "deals" | "partners" | "service_providers" | "debt_facilities";
+
+export interface ContactFields {
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
+  website?: string | null;
+  url_source?: string | null;
+}
+
+export async function updateContactFieldsAction(
+  table: ContactTable,
+  id: string,
+  fields: ContactFields,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  const allowed: ContactTable[] = ["investors", "deals", "partners", "service_providers", "debt_facilities"];
+  if (!allowed.includes(table)) return { error: "Invalid table" };
+
+  const clean: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(fields)) {
+    clean[k] = typeof v === "string" ? (v.trim() || null) : null;
+  }
+
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from(table as "investors")
+      .update(clean as never)
+      .eq("id", id)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    return { ok: true };
+  } catch (e) {
+    console.error("[updateContactFieldsAction] failed", e);
+    return { error: "Failed to update contact" };
   }
 }

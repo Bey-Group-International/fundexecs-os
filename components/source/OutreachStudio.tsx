@@ -76,6 +76,8 @@ export function OutreachStudio({ live }: { live: boolean }) {
   const [enrollments, setEnrollments] = useState<EnrollmentWithProgress[]>([]);
   const [enrollName, setEnrollName] = useState("");
   const [enrollEmail, setEnrollEmail] = useState("");
+  const [enrollPhone, setEnrollPhone] = useState("");
+  const [enrollRole, setEnrollRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -148,10 +150,14 @@ export function OutreachStudio({ live }: { live: boolean }) {
         sequenceId: activeId,
         subjectName: enrollName.trim(),
         subjectEmail: enrollEmail.trim() || null,
+        subjectPhone: enrollPhone.trim() || null,
+        subjectRole: enrollRole.trim() || null,
       });
       if (res.ok) {
         setEnrollName("");
         setEnrollEmail("");
+        setEnrollPhone("");
+        setEnrollRole("");
         await loadEnrollments(activeId);
       } else setError(res.error ?? "Could not enroll target.");
     } catch {
@@ -360,19 +366,33 @@ export function OutreachStudio({ live }: { live: boolean }) {
             <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
               Enroll a target
             </span>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2">
               <input
                 value={enrollName}
                 onChange={(e) => setEnrollName(e.target.value)}
                 placeholder="Target name"
-                className="min-w-[10rem] flex-1 rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
+                className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
+              />
+              <input
+                value={enrollRole}
+                onChange={(e) => setEnrollRole(e.target.value)}
+                placeholder="Role (optional)"
+                className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
               />
               <input
                 value={enrollEmail}
                 onChange={(e) => setEnrollEmail(e.target.value)}
-                placeholder="email (optional)"
-                className="min-w-[10rem] flex-1 rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
+                placeholder="Email (optional)"
+                className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
               />
+              <input
+                value={enrollPhone}
+                onChange={(e) => setEnrollPhone(e.target.value)}
+                placeholder="Phone (optional)"
+                className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
+              />
+            </div>
+            <div className="mt-2 flex justify-end">
               <button
                 type="button"
                 onClick={enrollTarget}
@@ -399,10 +419,25 @@ export function OutreachStudio({ live }: { live: boolean }) {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-sm text-fg-primary">{enrollment.subject_name}</span>
+                        {(enrollment as { subject_role?: string | null }).subject_role && (
+                          <span className="font-mono text-[10px] text-fg-muted">
+                            {(enrollment as { subject_role?: string | null }).subject_role}
+                          </span>
+                        )}
                         <span className={`font-mono text-[10px] uppercase tracking-wider ${statusTone(enrollment.status)}`}>
                           {progress.label}
                         </span>
                       </div>
+                      {((enrollment as { subject_email?: string | null }).subject_email || (enrollment as { subject_phone?: string | null }).subject_phone) && (
+                        <div className="flex gap-3 mt-0.5">
+                          {(enrollment as { subject_email?: string | null }).subject_email && (
+                            <span className="font-mono text-[10px] text-fg-muted">{(enrollment as { subject_email?: string | null }).subject_email}</span>
+                          )}
+                          {(enrollment as { subject_phone?: string | null }).subject_phone && (
+                            <span className="font-mono text-[10px] text-fg-muted">{(enrollment as { subject_phone?: string | null }).subject_phone}</span>
+                          )}
+                        </div>
+                      )}
                       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-3">
                         <div
                           className="h-full rounded-full bg-gold-400 transition-[width]"

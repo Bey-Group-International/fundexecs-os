@@ -100,6 +100,8 @@ export async function enrollOutreachTarget(input: {
   sequenceId: string;
   subjectName: string;
   subjectEmail?: string | null;
+  subjectPhone?: string | null;
+  subjectRole?: string | null;
   entityId?: string | null;
 }): Promise<EnrollActionResult> {
   const auth = await requireOrgContext();
@@ -111,6 +113,8 @@ export async function enrollOutreachTarget(input: {
     sequenceId: input.sequenceId,
     subjectName: input.subjectName,
     subjectEmail: input.subjectEmail ?? null,
+    subjectPhone: input.subjectPhone ?? null,
+    subjectRole: input.subjectRole ?? null,
     entityId: input.entityId ?? null,
   });
   if (!res.ok) return { ok: false, error: res.error };

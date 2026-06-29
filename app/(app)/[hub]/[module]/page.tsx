@@ -48,7 +48,7 @@ const AllocatorDirectoryLive = nextDynamic(() =>
   import("@/components/source/AllocatorDirectoryLive").then((m) => m.AllocatorDirectoryLive),
 );
 const PartnersLive = nextDynamic(() =>
-  import("@/components/source/PartnersLive").then((m) => m.PartnersLive),
+  import("@/components/source/PartnersLiveServer").then((m) => m.PartnersLive),
 );
 const DealPipelineLive = nextDynamic(() =>
   import("@/components/source/DealPipelineLive").then((m) => m.DealPipelineLive),
