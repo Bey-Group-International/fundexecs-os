@@ -529,7 +529,7 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
   if (error) { console.error("[dismissApprovalTask]", error.message); return { ok: false }; }
   if (!data?.length) return { ok: false };
   await supabase.from("approvals")
-    .update({ status: "dismissed" })
+    .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
     .eq("task_id", taskId);
   await supabase.from("task_events").insert({
@@ -560,7 +560,7 @@ export async function dismissAllApprovalTasks(): Promise<{ ok: boolean }> {
   if (!data?.length) return { ok: false };
   const taskIds = data.map((r) => r.id);
   await supabase.from("approvals")
-    .update({ status: "dismissed" })
+    .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
     .in("task_id", taskIds);
   await supabase.from("task_events").insert(
