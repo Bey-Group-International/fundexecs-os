@@ -30,26 +30,36 @@ CREATE POLICY "organizations_insert" ON public.organizations
     AND created_by = (SELECT auth.uid())
   );
 
--- pr_reviews
-DROP POLICY IF EXISTS "org members can read pr_reviews" ON public.pr_reviews;
+-- pr_reviews (table may not exist in fresh preview branches)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'pr_reviews') THEN
+    DROP POLICY IF EXISTS "org members can read pr_reviews" ON public.pr_reviews;
+    EXECUTE $p$
+      CREATE POLICY "org members can read pr_reviews" ON public.pr_reviews
+        FOR SELECT USING (
+          organization_id IN (
+            SELECT organization_members.organization_id
+            FROM organization_members
+            WHERE organization_members.principal_id = (SELECT auth.uid())
+          )
+        )
+    $p$;
+  END IF;
+END $$;
 
-CREATE POLICY "org members can read pr_reviews" ON public.pr_reviews
-  FOR SELECT USING (
-    organization_id IN (
-      SELECT organization_members.organization_id
-      FROM organization_members
-      WHERE organization_members.principal_id = (SELECT auth.uid())
-    )
-  );
-
--- webhook_logs
-DROP POLICY IF EXISTS "org members can read webhook_logs" ON public.webhook_logs;
-
-CREATE POLICY "org members can read webhook_logs" ON public.webhook_logs
-  FOR SELECT USING (
-    organization_id IN (
-      SELECT organization_members.organization_id
-      FROM organization_members
-      WHERE organization_members.principal_id = (SELECT auth.uid())
-    )
-  );
+-- webhook_logs (table may not exist in fresh preview branches)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'webhook_logs') THEN
+    DROP POLICY IF EXISTS "org members can read webhook_logs" ON public.webhook_logs;
+    EXECUTE $p$
+      CREATE POLICY "org members can read webhook_logs" ON public.webhook_logs
+        FOR SELECT USING (
+          organization_id IN (
+            SELECT organization_members.organization_id
+            FROM organization_members
+            WHERE organization_members.principal_id = (SELECT auth.uid())
+          )
+        )
+    $p$;
+  END IF;
+END $$;
