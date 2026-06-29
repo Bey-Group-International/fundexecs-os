@@ -37,6 +37,6 @@ export async function GET(request: Request) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "unknown";
     console.error("[health] db probe failed", message);
-    return NextResponse.json({ status: "degraded", db: "error", error: message, ts }, { status: 500 });
+    return NextResponse.json({ status: "degraded", db: "error", error: message, ts }, { status: 503 });
   }
 }
