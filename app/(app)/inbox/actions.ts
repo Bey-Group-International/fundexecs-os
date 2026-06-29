@@ -532,7 +532,7 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
     .eq("task_id", taskId);
-  if (approvalErr) console.error("[dismissApprovalTask] approvals", approvalErr.message);
+  if (approvalErr) { console.error("[dismissApprovalTask] approvals", approvalErr.message); return { ok: false }; }
   // Also cancel any subtasks so their approvals don't dangle
   const { data: subtasks } = await supabase
     .from("tasks")
@@ -582,7 +582,7 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
     .in("task_id", cancelledIds);
-  if (approvalErr) console.error("[dismissAllApprovalTasks] approvals", approvalErr.message);
+  if (approvalErr) { console.error("[dismissAllApprovalTasks] approvals", approvalErr.message); return { ok: false }; }
   // Cascade to subtasks
   const { data: subtasks } = await supabase
     .from("tasks")
