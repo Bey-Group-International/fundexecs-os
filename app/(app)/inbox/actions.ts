@@ -513,6 +513,169 @@ export async function seedInboxDemo(): Promise<void> {
   revalidatePath("/dashboard");
 }
 
+// Inbox-originated tasks are always created with hub="source" (see performThreadAction
+// above). The hub filter is intentional: it ensures a dismiss can never cancel a task
+// that arrived from a different hub (e.g. "execute", "build"), even if its UUID were
+// somehow surfaced in the inbox UI.
+export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean }> {
+  if (!taskId) return { ok: false };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false };
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("tasks")
+    .update({ status: "cancelled" })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", taskId)
+    .eq("hub", "source")
+    .eq("status", "awaiting_approval")
+    .select("id");
+  if (error) { console.error("[dismissApprovalTask]", error.message); return { ok: false }; }
+  if (!data?.length) return { ok: false };
+  const { error: approvalErr } = await supabase.from("approvals")
+    .update({ decision: "rejected" })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("task_id", taskId);
+  if (approvalErr) {
+    console.error("[dismissApprovalTask] approvals", approvalErr.message);
+    // Roll back the task cancellation so DB stays consistent
+    await supabase.from("tasks").update({ status: "awaiting_approval" })
+      .eq("organization_id", auth.ctx.orgId).eq("id", taskId);
+    return { ok: false };
+  }
+  // Also cancel any subtasks so their approvals don't dangle
+  const { data: subtasks } = await supabase
+    .from("tasks")
+    .update({ status: "cancelled" })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("parent_task_id", taskId)
+    .eq("status", "awaiting_approval")
+    .select("id");
+  if (subtasks?.length) {
+    const subtaskIds = subtasks.map((r) => r.id);
+    const { error: subtaskApprovalErr } = await supabase.from("approvals")
+      .update({ decision: "rejected" })
+      .eq("organization_id", auth.ctx.orgId)
+      .in("task_id", subtaskIds);
+    if (subtaskApprovalErr) {
+      console.error("[dismissApprovalTask] subtask approvals", subtaskApprovalErr.message);
+      // Roll back subtask cancellations to stay consistent.
+      // Known edge case: the parent task and its approvals are already committed as
+      // cancelled/rejected at this point (no DB transaction). Subtasks revert to
+      // awaiting_approval but their parent is cancelled — they become orphaned inbox
+      // items until a future reconciliation sweep. Acceptable given the low probability;
+      // a proper fix requires an RPC/transaction or ON DELETE CASCADE on parent_task_id.
+      await supabase.from("tasks").update({ status: "awaiting_approval" })
+        .eq("organization_id", auth.ctx.orgId).in("id", subtaskIds);
+    } else {
+      const { error: subtaskEventErr } = await supabase.from("task_events").insert(
+        subtaskIds.map((task_id) => ({
+          organization_id: auth.ctx.orgId,
+          task_id,
+          event_type: "task.cancelled",
+          agent: null,
+          hub: "source",
+          payload: { reason: "dismissed_from_inbox", parent_task_id: taskId } as Json,
+        })),
+      );
+      if (subtaskEventErr) console.error("[dismissApprovalTask] subtask task_events", subtaskEventErr.message);
+    }
+  }
+  const { error: eventErr } = await supabase.from("task_events").insert({
+    organization_id: auth.ctx.orgId,
+    task_id: taskId,
+    event_type: "task.cancelled",
+    agent: null,
+    hub: "source",
+    payload: { reason: "dismissed_from_inbox" } as Json,
+  });
+  if (eventErr) console.error("[dismissApprovalTask] task_events", eventErr.message);
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// taskIds must be the exact IDs currently rendered in the UI — caller-supplied
+// so we never cancel tasks outside the visible inbox set.
+export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: boolean }> {
+  if (!taskIds.length) return { ok: false };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false };
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("tasks")
+    .update({ status: "cancelled" })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("hub", "source")
+    .eq("status", "awaiting_approval")
+    .in("id", taskIds)
+    .select("id");
+  if (error) { console.error("[dismissAllApprovalTasks]", error.message); return { ok: false }; }
+  if (!data?.length) return { ok: false };
+  const cancelledIds = data.map((r) => r.id);
+  const { error: approvalErr } = await supabase.from("approvals")
+    .update({ decision: "rejected" })
+    .eq("organization_id", auth.ctx.orgId)
+    .in("task_id", cancelledIds);
+  if (approvalErr) {
+    console.error("[dismissAllApprovalTasks] approvals", approvalErr.message);
+    // Roll back task cancellations so DB stays consistent
+    await supabase.from("tasks").update({ status: "awaiting_approval" })
+      .eq("organization_id", auth.ctx.orgId).in("id", cancelledIds);
+    return { ok: false };
+  }
+  // Cascade to subtasks
+  const { data: subtasks } = await supabase
+    .from("tasks")
+    .update({ status: "cancelled" })
+    .eq("organization_id", auth.ctx.orgId)
+    .in("parent_task_id", cancelledIds)
+    .eq("status", "awaiting_approval")
+    .select("id, parent_task_id");
+  if (subtasks?.length) {
+    const subtaskIds = subtasks.map((r) => r.id);
+    const { error: subtaskApprovalErr } = await supabase.from("approvals")
+      .update({ decision: "rejected" })
+      .eq("organization_id", auth.ctx.orgId)
+      .in("task_id", subtaskIds);
+    if (subtaskApprovalErr) {
+      console.error("[dismissAllApprovalTasks] subtask approvals", subtaskApprovalErr.message);
+      // Same known orphan edge case as dismissApprovalTask: parent tasks are already
+      // committed as cancelled at this point — subtasks revert but their parents stay
+      // cancelled. Acceptable until a transaction-based RPC replaces these calls.
+      await supabase.from("tasks").update({ status: "awaiting_approval" })
+        .eq("organization_id", auth.ctx.orgId).in("id", subtaskIds);
+    } else {
+      const parentById = new Map(subtasks.map((r) => [r.id, r.parent_task_id ?? null]));
+      const { error: subtaskEventErr } = await supabase.from("task_events").insert(
+        subtaskIds.map((task_id) => ({
+          organization_id: auth.ctx.orgId,
+          task_id,
+          event_type: "task.cancelled",
+          agent: null,
+          hub: "source",
+          payload: { reason: "dismissed_from_inbox", parent_task_id: parentById.get(task_id) } as Json,
+        })),
+      );
+      if (subtaskEventErr) console.error("[dismissAllApprovalTasks] subtask task_events", subtaskEventErr.message);
+    }
+  }
+  const { error: eventErr } = await supabase.from("task_events").insert(
+    cancelledIds.map((task_id) => ({
+      organization_id: auth.ctx.orgId,
+      task_id,
+      event_type: "task.cancelled",
+      agent: null,
+      hub: "source",
+      payload: { reason: "dismissed_from_inbox" } as Json,
+    })),
+  );
+  if (eventErr) console.error("[dismissAllApprovalTasks] task_events", eventErr.message);
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function deleteThreadAction(threadId: string): Promise<{ ok: boolean }> {
   if (!threadId) return { ok: false };
   const auth = await requireOrgContext();

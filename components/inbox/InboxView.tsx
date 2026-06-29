@@ -1,17 +1,21 @@
+"use client";
+
 // components/inbox/InboxView.tsx — the notifications inbox.
 //
 // Renders the operator's actionable items in four sections (Needs approval /
-// Overdue diligence / IC-ready / Open risks). Each item is a row that deep-links
-// to where the work gets done — the war-room session for an approval, the deal
-// war-room for diligence, IC-readiness, and risks. Empty sections are hidden; a
-// fully empty inbox shows a clean "all caught up" state. Dark/gold theme.
+// Overdue diligence / IC-ready / Open risks). Approval items can be dismissed
+// (cancelled) individually or in bulk. Other item types are deep-link only.
+import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Inbox, InboxItem, InboxTone } from "@/lib/inbox";
-import { inboxTotal } from "@/lib/inbox";
+import { dismissApprovalTask, dismissAllApprovalTasks } from "@/app/(app)/inbox/actions";
 
-// Tone → left-accent + pill classes. Approvals are gold (the operator's
-// decision), overdue is red (past due), IC-ready is emerald (a win to act on),
-// open risks are amber.
+// InboxItem.id is prefixed ("approval:<uuid>") — extract the raw task UUID.
+function taskIdFromItemId(itemId: string): string {
+  return itemId.includes(":") ? itemId.split(":")[1] : itemId;
+}
+
 const ACCENT: Record<InboxTone, string> = {
   approval: "border-l-gold-500/70",
   overdue: "border-l-red-500/70",
@@ -33,35 +37,109 @@ const PILL_LABEL: Record<InboxTone, string> = {
   risk: "Risk",
 };
 
-function Row({ item }: { item: InboxItem }) {
+function Row({
+  item,
+  onDismiss,
+}: {
+  item: InboxItem;
+  onDismiss?: (id: string) => void;
+}) {
+  const [dismissing, startDismiss] = useTransition();
+  const [dismissError, setDismissError] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const isApproval = item.tone === "approval";
+
+  function handleDismissClick() {
+    setDismissError(false);
+    setConfirming(true);
+  }
+
+  function handleConfirm() {
+    setConfirming(false);
+    startDismiss(async () => {
+      const r = await dismissApprovalTask(taskIdFromItemId(item.id));
+      if (r.ok) onDismiss?.(item.id);
+      else setDismissError(true);
+    });
+  }
+
   return (
-    <Link
-      href={item.href}
-      className={`group flex items-start gap-3 rounded-xl border border-line border-l-2 ${ACCENT[item.tone]} bg-surface-1 p-4 transition hover:border-gold-500/40 hover:bg-surface-2`}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-sm font-medium text-fg-primary">{item.title}</span>
-          <span
-            className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${PILL[item.tone]}`}
-          >
-            {PILL_LABEL[item.tone]}
-          </span>
-        </div>
-        <p className="mt-1 line-clamp-2 text-xs leading-snug text-fg-secondary">{item.subtitle}</p>
+    <div className={`group relative flex flex-col rounded-xl border border-line border-l-2 ${ACCENT[item.tone]} bg-surface-1 transition hover:border-gold-500/40 hover:bg-surface-2`}>
+      <div className="flex items-stretch">
+        <Link
+          href={item.href}
+          className="flex min-w-0 flex-1 items-start gap-3 p-4"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-sm font-medium text-fg-primary">{item.title}</span>
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${PILL[item.tone]}`}>
+                {PILL_LABEL[item.tone]}
+              </span>
+            </div>
+            <p className="mt-1 line-clamp-2 text-xs leading-snug text-fg-secondary">{item.subtitle}</p>
+          </div>
+          <span className="mt-0.5 shrink-0 font-mono text-[11px] text-fg-muted transition group-hover:text-gold-300" aria-hidden>→</span>
+        </Link>
+        {isApproval && onDismiss ? (
+          confirming ? (
+            <div className="flex shrink-0 items-center gap-1 border-l border-line px-3">
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className="rounded px-2 py-1 text-xs text-status-danger transition hover:bg-status-danger/10"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                className="rounded px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={dismissing}
+              onClick={handleDismissClick}
+              className="shrink-0 self-stretch border-l border-line px-3 text-xs text-fg-muted transition hover:text-status-danger disabled:opacity-50"
+              aria-label={`Dismiss ${item.title}`}
+            >
+              {dismissing ? "…" : "Dismiss"}
+            </button>
+          )
+        ) : null}
       </div>
-      <span
-        className="mt-0.5 shrink-0 font-mono text-[11px] text-fg-muted transition group-hover:text-gold-300"
-        aria-hidden
-      >
-        →
-      </span>
-    </Link>
+      {dismissError ? (
+        <p className="px-4 pb-2 text-xs text-status-danger">Failed to dismiss. Try again.</p>
+      ) : null}
+    </div>
   );
 }
 
-function Section({ title, items }: { title: string; items: InboxItem[] }) {
+function Section({
+  title,
+  items,
+  onDismiss,
+  onDismissAll,
+  dismissingAll,
+  dismissAllError,
+  confirmingAll,
+  onConfirmingAllChange,
+}: {
+  title: string;
+  items: InboxItem[];
+  onDismiss?: (id: string) => void;
+  onDismissAll?: () => void;
+  dismissingAll?: boolean;
+  dismissAllError?: boolean;
+  confirmingAll?: boolean;
+  onConfirmingAllChange?: (v: boolean) => void;
+}) {
   if (items.length === 0) return null;
+  const isApproval = items[0]?.tone === "approval";
   return (
     <section>
       <h2 className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
@@ -69,10 +147,43 @@ function Section({ title, items }: { title: string; items: InboxItem[] }) {
         <span className="rounded-full border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] tracking-normal text-fg-secondary">
           {items.length}
         </span>
+        {isApproval && onDismissAll && items.length > 1 ? (
+          confirmingAll ? (
+            <div className="ml-auto flex items-center gap-1">
+              <span className="text-[10px] normal-case tracking-normal text-fg-secondary">Cancel all tasks?</span>
+              <button
+                type="button"
+                onClick={onDismissAll}
+                className="rounded-md border border-status-danger/40 px-2 py-0.5 text-[10px] normal-case tracking-normal text-status-danger transition hover:bg-status-danger/10"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                onClick={() => onConfirmingAllChange?.(false)}
+                className="rounded-md border border-line px-2 py-0.5 text-[10px] normal-case tracking-normal text-fg-muted transition hover:text-fg-primary"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={dismissingAll}
+              onClick={() => onConfirmingAllChange?.(true)}
+              className="ml-auto rounded-md border border-line px-2 py-0.5 text-[10px] normal-case tracking-normal text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger disabled:opacity-50"
+            >
+              {dismissingAll ? "Dismissing…" : "Dismiss all"}
+            </button>
+          )
+        ) : null}
       </h2>
+      {dismissAllError ? (
+        <p className="mb-2 text-xs text-status-danger">Failed to dismiss all. Try again.</p>
+      ) : null}
       <div className="flex flex-col gap-2">
         {items.map((item) => (
-          <Row key={item.id} item={item} />
+          <Row key={item.id} item={item} onDismiss={onDismiss} />
         ))}
       </div>
     </section>
@@ -80,7 +191,42 @@ function Section({ title, items }: { title: string; items: InboxItem[] }) {
 }
 
 export function InboxView({ inbox }: { inbox: Inbox }) {
-  if (inboxTotal(inbox) === 0) {
+  const router = useRouter();
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [dismissingAll, startDismissAll] = useTransition();
+  const [dismissAllError, setDismissAllError] = useState(false);
+  const [confirmingAll, setConfirmingAll] = useState(false);
+
+  const needsApproval = inbox.needsApproval.filter((i) => !dismissed.has(i.id));
+
+  const visible = {
+    needsApproval,
+    overdueDiligence: inbox.overdueDiligence,
+    icReady: inbox.icReady,
+    openRisks: inbox.openRisks,
+  };
+  const total = needsApproval.length + inbox.overdueDiligence.length + inbox.icReady.length + inbox.openRisks.length;
+
+  function handleDismiss(id: string) {
+    setDismissed((prev) => new Set([...prev, id]));
+    router.refresh();
+  }
+
+  function handleDismissAll() {
+    setConfirmingAll(false);
+    setDismissAllError(false);
+    startDismissAll(async () => {
+      const r = await dismissAllApprovalTasks(needsApproval.map((i) => taskIdFromItemId(i.id)));
+      if (r.ok) {
+        setDismissed((prev) => new Set([...prev, ...needsApproval.map((i) => i.id)]));
+        router.refresh();
+      } else {
+        setDismissAllError(true);
+      }
+    });
+  }
+
+  if (total === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-line bg-surface-1 p-10 text-center">
         <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
@@ -96,10 +242,19 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <Section title="Needs approval" items={inbox.needsApproval} />
-      <Section title="Overdue diligence" items={inbox.overdueDiligence} />
-      <Section title="IC-ready" items={inbox.icReady} />
-      <Section title="Open risks" items={inbox.openRisks} />
+      <Section
+        title="Needs approval"
+        items={visible.needsApproval}
+        onDismiss={handleDismiss}
+        onDismissAll={handleDismissAll}
+        dismissingAll={dismissingAll}
+        dismissAllError={dismissAllError}
+        confirmingAll={confirmingAll}
+        onConfirmingAllChange={setConfirmingAll}
+      />
+      <Section title="Overdue diligence" items={visible.overdueDiligence} />
+      <Section title="IC-ready" items={visible.icReady} />
+      <Section title="Open risks" items={visible.openRisks} />
     </div>
   );
 }
