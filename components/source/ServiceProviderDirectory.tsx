@@ -47,6 +47,9 @@ export interface ProviderEntry {
   providerType: string;
   contactName: string | null;
   contactEmail: string | null;
+  contactPhone?: string | null;
+  role?: string | null;
+  urlSource?: string | null;
   status: string;
   notes: string | null;
   // Apollo-enriched
@@ -223,9 +226,21 @@ function ProviderForm({
               <label className={labelClass}>Contact Email</label>
               <input name="contact_email" type="email" defaultValue={initial?.contactEmail ?? ""} placeholder="jane@firm.com" className={inputClass} />
             </div>
+            <div>
+              <label className={labelClass}>Contact Phone</label>
+              <input name="contact_phone" type="text" defaultValue={initial?.contactPhone ?? ""} placeholder="+1 212 555 0100" className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Contact Role</label>
+              <input name="role" type="text" defaultValue={initial?.role ?? ""} placeholder="Partner, Associate…" className={inputClass} />
+            </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Website</label>
               <input name="website" type="text" defaultValue={initial?.website ?? ""} placeholder="kirkland.com" className={inputClass} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className={labelClass}>Source URL</label>
+              <input name="url_source" type="text" defaultValue={initial?.urlSource ?? ""} placeholder="https://…" className={inputClass} />
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Notes</label>
@@ -323,10 +338,13 @@ function ProviderCard({
         </span>
       </div>
 
-      {(provider.contactName || provider.contactEmail) && (
-        <div>
+      {(provider.contactName || provider.contactEmail || provider.contactPhone) && (
+        <div className="flex flex-col gap-0.5">
           {provider.contactName && (
-            <p className="font-mono text-[10px] text-fg-secondary">{provider.contactName}</p>
+            <p className="font-mono text-[10px] text-fg-secondary">
+              {provider.contactName}
+              {provider.role && <span className="ml-1 text-fg-muted">· {provider.role}</span>}
+            </p>
           )}
           {provider.contactEmail && (
             <a
@@ -336,6 +354,9 @@ function ProviderCard({
             >
               {provider.contactEmail}
             </a>
+          )}
+          {provider.contactPhone && (
+            <p className="font-mono text-[10px] text-fg-muted">{provider.contactPhone}</p>
           )}
         </div>
       )}

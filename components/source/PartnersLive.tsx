@@ -19,7 +19,7 @@ async function loadPartners() {
     const { data } = await supabase
       .from("partners")
       .select(
-        "id, name, partner_type, contact_name, contact_email, status, notes",
+        "id, name, partner_type, contact_name, contact_email, contact_phone, role, website, url_source, status, notes",
       )
       .eq("organization_id", auth.ctx.orgId)
       .is("archived_at", null)
@@ -74,6 +74,9 @@ export async function PartnersLive() {
                   Status
                 </th>
                 <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                  Website
+                </th>
+                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
                   Notes
                 </th>
                 <th className="px-4 py-3" />
@@ -93,17 +96,25 @@ export async function PartnersLive() {
                   </td>
                   <td className="px-4 py-3">
                     {p.contact_name ? (
-                      <span className="text-fg">
-                        {p.contact_name}
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-fg text-xs font-medium">
+                          {p.contact_name}
+                          {(p as { role?: string | null }).role && (
+                            <span className="ml-1 text-fg-muted font-normal">· {(p as { role?: string | null }).role}</span>
+                          )}
+                        </span>
                         {p.contact_email && (
                           <a
                             href={`mailto:${p.contact_email}`}
-                            className="ml-2 text-xs text-accent underline-offset-2 hover:underline"
+                            className="font-mono text-[10px] text-accent underline-offset-2 hover:underline"
                           >
                             {p.contact_email}
                           </a>
                         )}
-                      </span>
+                        {(p as { contact_phone?: string | null }).contact_phone && (
+                          <span className="font-mono text-[10px] text-fg-muted">{(p as { contact_phone?: string | null }).contact_phone}</span>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-fg-muted">—</span>
                     )}
@@ -117,6 +128,18 @@ export async function PartnersLive() {
                     >
                       {p.status ?? "unknown"}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-fg-muted">
+                    {(p as { website?: string | null }).website ? (
+                      <a
+                        href={((p as { website?: string | null }).website ?? "").startsWith("http") ? (p as { website?: string | null }).website! : `https://${(p as { website?: string | null }).website}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-[10px] text-fg-muted hover:text-gold-300 hover:underline"
+                      >
+                        {((p as { website?: string | null }).website ?? "").replace(/^https?:\/\//, "")}
+                      </a>
+                    ) : "—"}
                   </td>
                   <td className="max-w-[260px] truncate px-4 py-3 text-xs text-fg-muted">
                     {p.notes ?? "—"}

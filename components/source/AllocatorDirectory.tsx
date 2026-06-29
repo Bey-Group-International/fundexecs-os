@@ -42,6 +42,11 @@ interface AllocatorEntry {
   commitmentAmount?: number | null;
   topActionTitle?: string | null;
   topActionType?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  role?: string | null;
+  urlSource?: string | null;
 }
 
 const TEMP_COLORS: Record<string, string> = {
@@ -244,6 +249,19 @@ function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOpti
           {ALLOCATOR_TYPE_LABELS[entry.allocatorType]}
           {entry.hqCity && ` · ${entry.hqCity}`}
         </p>
+        {entry.contactName && (
+          <p className="mt-0.5 font-mono text-[10px] text-fg-muted truncate max-w-[220px]">
+            {entry.contactName}
+            {entry.role && <span className="opacity-60"> · {entry.role}</span>}
+          </p>
+        )}
+        {(entry.contactEmail || entry.contactPhone) && (
+          <p className="mt-0.5 font-mono text-[9px] text-fg-muted/70 truncate max-w-[220px]">
+            {entry.contactEmail && <a href={`mailto:${entry.contactEmail}`} onClick={(e) => e.stopPropagation()} className="hover:text-gold-300">{entry.contactEmail}</a>}
+            {entry.contactEmail && entry.contactPhone && " · "}
+            {entry.contactPhone}
+          </p>
+        )}
         {entry.topActionTitle && (
           <p className="mt-1 font-mono text-[9px] text-amber-400/80 truncate max-w-[220px]">
             ↗ {entry.topActionTitle}
