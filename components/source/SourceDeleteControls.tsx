@@ -34,6 +34,10 @@ function DangerBtn({
   );
 }
 
+function alertError(err: string | undefined) {
+  if (err) alert(err);
+}
+
 // ── LP Pipeline ──────────────────────────────────────────────────────────────
 
 export function DeleteInvestorBtn({ id }: { id: string }) {
@@ -42,7 +46,8 @@ export function DeleteInvestorBtn({ id }: { id: string }) {
   function handle() {
     if (!confirm("Remove this allocator from the directory?")) return;
     start(async () => {
-      await deleteInvestorAction(id);
+      const result = await deleteInvestorAction(id);
+      if (result?.error) { alertError(result.error); return; }
       router.refresh();
     });
   }
@@ -55,7 +60,8 @@ export function ClearInvestorsBtn() {
   function handle() {
     if (!confirm("Clear all allocators from the directory? This cannot be undone.")) return;
     start(async () => {
-      await clearInvestorsAction();
+      const result = await clearInvestorsAction();
+      if (result?.error) { alertError(result.error); return; }
       router.refresh();
     });
   }
@@ -70,7 +76,8 @@ export function DeleteDealBtn({ id, onDeleted }: { id: string; onDeleted?: (id: 
   function handle() {
     if (!confirm("Remove this deal from the pipeline?")) return;
     start(async () => {
-      await deleteDealAction(id);
+      const result = await deleteDealAction(id);
+      if (result?.error) { alertError(result.error); return; }
       onDeleted?.(id);
       router.refresh();
     });
@@ -84,7 +91,8 @@ export function ClearDealsBtn() {
   function handle() {
     if (!confirm("Clear the entire deal pipeline? This cannot be undone.")) return;
     start(async () => {
-      await clearDealsAction();
+      const result = await clearDealsAction();
+      if (result?.error) { alertError(result.error); return; }
       router.refresh();
     });
   }
@@ -99,7 +107,8 @@ export function DeletePartnerBtn({ id }: { id: string }) {
   function handle() {
     if (!confirm("Remove this partner?")) return;
     start(async () => {
-      await deletePartnerAction(id);
+      const result = await deletePartnerAction(id);
+      if (result?.error) { alertError(result.error); return; }
       router.refresh();
     });
   }
@@ -112,7 +121,8 @@ export function ClearPartnersBtn() {
   function handle() {
     if (!confirm("Clear all partners? This cannot be undone.")) return;
     start(async () => {
-      await clearPartnersAction();
+      const result = await clearPartnersAction();
+      if (result?.error) { alertError(result.error); return; }
       router.refresh();
     });
   }
@@ -127,7 +137,8 @@ export function DeleteProviderBtn({ id }: { id: string }) {
   function handle() {
     if (!confirm("Remove this provider?")) return;
     start(async () => {
-      await deleteProviderAction(id);
+      const result = await deleteProviderAction(id);
+      if (result?.error) { alertError(result.error); return; }
       router.refresh();
     });
   }
@@ -140,7 +151,8 @@ export function ClearProvidersBtn() {
   function handle() {
     if (!confirm("Clear all service providers? This cannot be undone.")) return;
     start(async () => {
-      await clearProvidersAction();
+      const result = await clearProvidersAction();
+      if (result?.error) { alertError(result.error); return; }
       router.refresh();
     });
   }
