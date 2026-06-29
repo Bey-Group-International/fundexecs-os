@@ -523,10 +523,23 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     .update({ status: "cancelled" })
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", taskId)
+    .eq("hub", "source")
     .eq("status", "awaiting_approval")
     .select("id");
   if (error) { console.error("[dismissApprovalTask]", error.message); return { ok: false }; }
   if (!data?.length) return { ok: false };
+  await supabase.from("approvals")
+    .update({ status: "dismissed" })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("task_id", taskId);
+  await supabase.from("task_events").insert({
+    organization_id: auth.ctx.orgId,
+    task_id: taskId,
+    event_type: "task.cancelled",
+    agent: "operator",
+    hub: "source",
+    payload: { reason: "dismissed_from_inbox" } as Json,
+  });
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true };
@@ -540,10 +553,26 @@ export async function dismissAllApprovalTasks(): Promise<{ ok: boolean }> {
     .from("tasks")
     .update({ status: "cancelled" })
     .eq("organization_id", auth.ctx.orgId)
+    .eq("hub", "source")
     .eq("status", "awaiting_approval")
     .select("id");
   if (error) { console.error("[dismissAllApprovalTasks]", error.message); return { ok: false }; }
   if (!data?.length) return { ok: false };
+  const taskIds = data.map((r) => r.id);
+  await supabase.from("approvals")
+    .update({ status: "dismissed" })
+    .eq("organization_id", auth.ctx.orgId)
+    .in("task_id", taskIds);
+  await supabase.from("task_events").insert(
+    taskIds.map((task_id) => ({
+      organization_id: auth.ctx.orgId,
+      task_id,
+      event_type: "task.cancelled",
+      agent: "operator",
+      hub: "source",
+      payload: { reason: "dismissed_from_inbox" } as Json,
+    })),
+  );
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true };
