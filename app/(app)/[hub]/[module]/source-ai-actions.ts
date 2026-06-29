@@ -12,6 +12,7 @@ import {
   generateTargets,
   scorePipeline as scorePipelineEngine,
   sourceConfigFor,
+  apolloEnrichCandidates,
   type SourceCandidate,
   type PipelineScore,
   type SourcingMandate,
@@ -122,7 +123,15 @@ export async function addSourcedTargets(
 
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
-  const clean = candidates
+
+  // Enrich only the accepted picks with Apollo contact data at insert time so
+  // candidates render immediately from Claude without waiting for API calls.
+  let enriched = candidates as SourceCandidate[];
+  if (process.env.APOLLO_API_KEY) {
+    try { enriched = await apolloEnrichCandidates(enriched); } catch { /* non-fatal */ }
+  }
+
+  const clean = enriched
     .map((c) => ({
       name: String(c.name ?? "").trim(),
       category: String(c.category ?? "").trim(),
