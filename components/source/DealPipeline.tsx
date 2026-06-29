@@ -6,6 +6,7 @@
 import { useState, useMemo, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { advanceDealStageAction, createModuleRow } from "@/app/(app)/[hub]/[module]/actions";
+import { DeleteDealBtn } from "@/components/source/SourceDeleteControls";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 import type { FitAnalysis } from "@/lib/source-hub-types";
 import type { DealStage } from "@/lib/supabase/database.types";
@@ -657,7 +658,7 @@ export function DealPipeline({ deals, enrichCap }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-subtle">
-                {["Deal", "Stage", "Asset Class", "Target", "Fit", "Source", "Close"].map((h) => (
+                {["Deal", "Stage", "Asset Class", "Target", "Fit", "Source", "Close", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
                     {h}
                   </th>
@@ -725,6 +726,9 @@ export function DealPipeline({ deals, enrichCap }: Props) {
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-fg-muted">
                     {d.expectedClose ?? "—"}
+                  </td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <DeleteDealBtn id={d.id} onDeleted={(id) => setLocalDeals((prev) => prev.filter((x) => x.id !== id))} />
                   </td>
                 </tr>
               ))}

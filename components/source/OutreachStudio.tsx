@@ -7,6 +7,8 @@ import {
   enrollOutreachTarget,
   listOutreachEnrollments,
   advanceOutreachEnrollment,
+  deleteOutreachSequenceAction,
+  clearOutreachSequencesAction,
 } from "@/app/(app)/[hub]/[module]/outreach-actions";
 // Engine code is imported as TYPES ONLY so this client bundle never pulls the
 // server-side persistence layer (lib/outreach is DB-aware).
@@ -76,6 +78,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
   const [enrollEmail, setEnrollEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const loadedOnce = useRef(false);
 
   async function loadSequences() {
@@ -182,6 +185,42 @@ export function OutreachStudio({ live }: { live: boolean }) {
     }
   }
 
+  async function deleteSequence(sequenceId: string) {
+    if (deleting) return;
+    if (!confirm("Delete this sequence and all its enrollments?")) return;
+    setDeleting(true);
+    try {
+      const res = await deleteOutreachSequenceAction(sequenceId);
+      if (!res.ok) { setError(res.error ?? "Could not delete sequence."); return; }
+      setSequences((prev) => prev.filter((s) => s.id !== sequenceId));
+      if (activeId === sequenceId) {
+        const next = sequences.find((s) => s.id !== sequenceId);
+        setActiveId(next?.id ?? null);
+      }
+    } catch {
+      setError("Could not delete sequence.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function clearSequences() {
+    if (deleting) return;
+    if (!confirm("Delete all sequences? This cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      const res = await clearOutreachSequencesAction();
+      if (!res.ok) { setError(res.error ?? "Could not clear sequences."); return; }
+      setSequences([]);
+      setActiveId(null);
+      setEnrollments([]);
+    } catch {
+      setError("Could not clear sequences.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const active = sequences.find((s) => s.id === activeId) ?? null;
 
   return (
@@ -238,22 +277,42 @@ export function OutreachStudio({ live }: { live: boolean }) {
       {loading ? (
         <p className="mt-5 text-sm text-fg-muted">Loading sequences…</p>
       ) : sequences.length ? (
-        <div className="mt-5 flex flex-wrap gap-1.5">
-          {sequences.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setActiveId(s.id)}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${
-                s.id === activeId
-                  ? "border-gold-500/50 bg-gold-500/10 text-fg-primary"
-                  : "border-line text-fg-muted hover:bg-surface-2"
-              }`}
-            >
-              <span>{s.name}</span>
-              <span className="font-mono text-[10px] text-fg-muted">{s.steps.length} steps</span>
-            </button>
-          ))}
+        <div className="mt-5">
+          <div className="flex flex-wrap gap-1.5">
+            {sequences.map((s) => (
+              <div key={s.id} className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveId(s.id)}
+                  className={`flex items-center gap-1.5 rounded-l-full border px-2.5 py-1 text-xs transition ${
+                    s.id === activeId
+                      ? "border-gold-500/50 bg-gold-500/10 text-fg-primary"
+                      : "border-line text-fg-muted hover:bg-surface-2"
+                  }`}
+                >
+                  <span>{s.name}</span>
+                  <span className="font-mono text-[10px] text-fg-muted">{s.steps.length} steps</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => deleteSequence(s.id)}
+                  aria-label={`Delete ${s.name}`}
+                  className="rounded-r-full border border-l-0 border-line px-2 py-1 text-[10px] text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={clearSequences}
+            className="mt-2 rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
+          >
+            Clear all
+          </button>
         </div>
       ) : (
         <p className="mt-5 rounded-xl border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">

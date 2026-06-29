@@ -635,3 +635,146 @@ export async function deleteProviderAction(
     return { error: "Failed to delete provider" };
   }
 }
+
+export async function clearProvidersAction(): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("service_providers")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
+    if (error) throw error;
+    revalidatePath("/source/providers");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearProvidersAction] failed", e);
+    return { error: "Failed to clear providers" };
+  }
+}
+
+// --- LP Pipeline (investors): delete & clear --------------------------------
+
+export async function deleteInvestorAction(
+  investorId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("investors")
+      .delete()
+      .eq("id", investorId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/lp_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteInvestorAction] failed", e);
+    return { error: "Failed to delete investor" };
+  }
+}
+
+export async function clearInvestorsAction(): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("investors")
+      .delete()
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/lp_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearInvestorsAction] failed", e);
+    return { error: "Failed to clear investors" };
+  }
+}
+
+// --- Deal Pipeline: delete & clear ------------------------------------------
+
+export async function deleteDealAction(
+  dealId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("deals")
+      .delete()
+      .eq("id", dealId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/deal_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteDealAction] failed", e);
+    return { error: "Failed to delete deal" };
+  }
+}
+
+export async function clearDealsAction(): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("deals")
+      .delete()
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/deal_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearDealsAction] failed", e);
+    return { error: "Failed to clear deals" };
+  }
+}
+
+// --- Partners: delete & clear ------------------------------------------------
+
+export async function deletePartnerAction(
+  partnerId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("partners")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", partnerId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/partners");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deletePartnerAction] failed", e);
+    return { error: "Failed to delete partner" };
+  }
+}
+
+export async function clearPartnersAction(): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("partners")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
+    if (error) throw error;
+    revalidatePath("/source/partners");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearPartnersAction] failed", e);
+    return { error: "Failed to clear partners" };
+  }
+}

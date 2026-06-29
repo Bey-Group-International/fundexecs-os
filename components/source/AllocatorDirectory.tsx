@@ -14,6 +14,7 @@ import {
 } from "@/lib/allocator-directory";
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
 import { logContactAction, createLpInviteAction } from "@/app/(app)/[hub]/[module]/actions";
+import { DeleteInvestorBtn } from "@/components/source/SourceDeleteControls";
 
 interface FundOption {
   id: string;
@@ -325,6 +326,9 @@ function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOpti
           >
             Invite
           </button>
+          <span onClick={(e) => e.stopPropagation()}>
+            <DeleteInvestorBtn id={entry.id} />
+          </span>
         </span>
       </div>
     </div>

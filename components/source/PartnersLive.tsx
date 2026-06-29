@@ -3,6 +3,7 @@
 // Best-effort: any auth/DB failure degrades to an empty state, never a crash.
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { DeletePartnerBtn, ClearPartnersBtn } from "@/components/source/SourceDeleteControls";
 
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
@@ -39,9 +40,12 @@ export async function PartnersLive() {
         <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
           Partner Pipeline
         </p>
-        <span className="font-mono text-[11px] text-fg-muted">
-          {partners.length} partner{partners.length !== 1 ? "s" : ""}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[11px] text-fg-muted">
+            {partners.length} partner{partners.length !== 1 ? "s" : ""}
+          </span>
+          {partners.length > 0 && <ClearPartnersBtn />}
+        </div>
       </div>
 
       {partners.length === 0 ? (
@@ -72,6 +76,7 @@ export async function PartnersLive() {
                 <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
                   Notes
                 </th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -115,6 +120,9 @@ export async function PartnersLive() {
                   </td>
                   <td className="max-w-[260px] truncate px-4 py-3 text-xs text-fg-muted">
                     {p.notes ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <DeletePartnerBtn id={p.id} />
                   </td>
                 </tr>
               ))}

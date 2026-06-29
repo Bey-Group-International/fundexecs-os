@@ -243,3 +243,44 @@ export async function advanceOutreachEnrollment(enrollmentId: string): Promise<A
     message: res.outcome.message,
   };
 }
+
+// --- Delete & clear ---------------------------------------------------------
+
+export async function deleteOutreachSequenceAction(
+  sequenceId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("outreach_sequences")
+      .delete()
+      .eq("id", sequenceId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/outreach");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteOutreachSequenceAction] failed", e);
+    return { ok: false, error: "Failed to delete sequence" };
+  }
+}
+
+export async function clearOutreachSequencesAction(): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("outreach_sequences")
+      .delete()
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/outreach");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearOutreachSequencesAction] failed", e);
+    return { ok: false, error: "Failed to clear sequences" };
+  }
+}
