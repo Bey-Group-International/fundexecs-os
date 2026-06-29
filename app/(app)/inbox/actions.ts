@@ -513,6 +513,39 @@ export async function seedInboxDemo(): Promise<void> {
   revalidatePath("/dashboard");
 }
 
+export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean }> {
+  if (!taskId) return { ok: false };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false };
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ status: "cancelled" })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", taskId)
+    .eq("status", "awaiting_approval");
+  if (error) { console.error("[dismissApprovalTask]", error.message); return { ok: false }; }
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function dismissAllApprovalTasks(): Promise<{ ok: boolean }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false };
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ status: "cancelled" })
+    .eq("organization_id", auth.ctx.orgId)
+    .is("parent_task_id", null)
+    .eq("status", "awaiting_approval");
+  if (error) { console.error("[dismissAllApprovalTasks]", error.message); return { ok: false }; }
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function deleteThreadAction(threadId: string): Promise<{ ok: boolean }> {
   if (!threadId) return { ok: false };
   const auth = await requireOrgContext();
