@@ -77,7 +77,10 @@ export function InlineContactEdit({ table, id, initial, onClose, onSaved }: Prop
         </div>
       </div>
       {saveError && (
-        <p className="font-mono text-[10px] text-red-400">{saveError}</p>
+        <div className="flex items-center justify-between gap-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1">
+          <p className="font-mono text-[10px] text-red-400">{saveError}</p>
+          <button type="button" onClick={() => setSaveError(null)} className="font-mono text-[10px] text-red-400/60 hover:text-red-400">×</button>
+        </div>
       )}
       <div className="flex items-center justify-end gap-2 pt-1">
         <button type="button" onClick={onClose} className="font-mono text-[9px] uppercase tracking-widest text-fg-muted hover:text-fg-primary">
