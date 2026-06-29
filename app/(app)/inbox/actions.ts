@@ -532,7 +532,13 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
     .eq("task_id", taskId);
-  if (approvalErr) { console.error("[dismissApprovalTask] approvals", approvalErr.message); return { ok: false }; }
+  if (approvalErr) {
+    console.error("[dismissApprovalTask] approvals", approvalErr.message);
+    // Roll back the task cancellation so DB stays consistent
+    await supabase.from("tasks").update({ status: "awaiting_approval" })
+      .eq("organization_id", auth.ctx.orgId).eq("id", taskId);
+    return { ok: false };
+  }
   // Also cancel any subtasks so their approvals don't dangle
   const { data: subtasks } = await supabase
     .from("tasks")
@@ -542,12 +548,13 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     .eq("status", "awaiting_approval")
     .select("id");
   if (subtasks?.length) {
-    await supabase.from("approvals")
+    const { error: subtaskApprovalErr } = await supabase.from("approvals")
       .update({ decision: "rejected" })
       .eq("organization_id", auth.ctx.orgId)
       .in("task_id", subtasks.map((r) => r.id));
+    if (subtaskApprovalErr) console.error("[dismissApprovalTask] subtask approvals", subtaskApprovalErr.message);
   }
-  await supabase.from("task_events").insert({
+  const { error: eventErr } = await supabase.from("task_events").insert({
     organization_id: auth.ctx.orgId,
     task_id: taskId,
     event_type: "task.cancelled",
@@ -555,6 +562,7 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     hub: "source",
     payload: { reason: "dismissed_from_inbox" } as Json,
   });
+  if (eventErr) console.error("[dismissApprovalTask] task_events", eventErr.message);
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true };
@@ -582,7 +590,13 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
     .in("task_id", cancelledIds);
-  if (approvalErr) { console.error("[dismissAllApprovalTasks] approvals", approvalErr.message); return { ok: false }; }
+  if (approvalErr) {
+    console.error("[dismissAllApprovalTasks] approvals", approvalErr.message);
+    // Roll back task cancellations so DB stays consistent
+    await supabase.from("tasks").update({ status: "awaiting_approval" })
+      .eq("organization_id", auth.ctx.orgId).in("id", cancelledIds);
+    return { ok: false };
+  }
   // Cascade to subtasks
   const { data: subtasks } = await supabase
     .from("tasks")
@@ -592,12 +606,13 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
     .eq("status", "awaiting_approval")
     .select("id");
   if (subtasks?.length) {
-    await supabase.from("approvals")
+    const { error: subtaskApprovalErr } = await supabase.from("approvals")
       .update({ decision: "rejected" })
       .eq("organization_id", auth.ctx.orgId)
       .in("task_id", subtasks.map((r) => r.id));
+    if (subtaskApprovalErr) console.error("[dismissAllApprovalTasks] subtask approvals", subtaskApprovalErr.message);
   }
-  await supabase.from("task_events").insert(
+  const { error: eventErr } = await supabase.from("task_events").insert(
     cancelledIds.map((task_id) => ({
       organization_id: auth.ctx.orgId,
       task_id,
@@ -607,6 +622,7 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
       payload: { reason: "dismissed_from_inbox" } as Json,
     })),
   );
+  if (eventErr) console.error("[dismissAllApprovalTasks] task_events", eventErr.message);
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true };

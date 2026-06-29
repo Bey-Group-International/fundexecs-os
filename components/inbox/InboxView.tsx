@@ -99,12 +99,14 @@ function Section({
   onDismiss,
   onDismissAll,
   dismissingAll,
+  dismissAllError,
 }: {
   title: string;
   items: InboxItem[];
   onDismiss?: (id: string) => void;
   onDismissAll?: () => void;
   dismissingAll?: boolean;
+  dismissAllError?: boolean;
 }) {
   if (items.length === 0) return null;
   const isApproval = items[0]?.tone === "approval";
@@ -126,6 +128,9 @@ function Section({
           </button>
         ) : null}
       </h2>
+      {dismissAllError ? (
+        <p className="mb-2 text-xs text-status-danger">Failed to dismiss all. Try again.</p>
+      ) : null}
       <div className="flex flex-col gap-2">
         {items.map((item) => (
           <Row key={item.id} item={item} onDismiss={onDismiss} />
@@ -192,10 +197,8 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
         onDismiss={handleDismiss}
         onDismissAll={handleDismissAll}
         dismissingAll={dismissingAll}
+        dismissAllError={dismissAllError}
       />
-      {dismissAllError ? (
-        <p className="-mt-6 text-xs text-status-danger">Failed to dismiss all. Try again.</p>
-      ) : null}
       <Section title="Overdue diligence" items={visible.overdueDiligence} />
       <Section title="IC-ready" items={visible.icReady} />
       <Section title="Open risks" items={visible.openRisks} />
