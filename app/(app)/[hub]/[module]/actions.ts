@@ -121,6 +121,12 @@ export async function createModuleRow(
             | "other"
             | null) ?? "lp",
         pipeline_stage: text(formData, "pipeline_stage") ?? "prospect",
+        contact_name: text(formData, "contact_name"),
+        contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        role: text(formData, "role"),
+        website: text(formData, "website"),
+        url_source: text(formData, "url_source"),
       });
       if (insertErr) { console.error("[createModuleRow] investors", insertErr.message); return { ok: false, error: insertErr.message }; }
       break;
@@ -139,6 +145,10 @@ export async function createModuleRow(
         expected_close: text(formData, "expected_close"),
         website: text(formData, "website"),
         notes: text(formData, "notes"),
+        contact_name: text(formData, "contact_name"),
+        contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        url_source: text(formData, "url_source"),
       };
       // TODO: remove cast after running `supabase gen types typescript` with geography/target_amount/expected_close/website/notes columns
       const { error: dealInsertError } = await (supabase.from("deals") as unknown as { insert: (v: unknown) => Promise<{ error: { message: string } | null }> }).insert(dealRow);
@@ -213,6 +223,10 @@ export async function createModuleRow(
         relationship: text(formData, "relationship"),
         contact_name: text(formData, "contact_name"),
         contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        role: text(formData, "role"),
+        website: text(formData, "website"),
+        url_source: text(formData, "url_source"),
         status: text(formData, "status") ?? "active",
       });
       if (insertErr) { console.error("[createModuleRow] partners", insertErr.message); return { ok: false, error: insertErr.message }; }
@@ -227,6 +241,9 @@ export async function createModuleRow(
         provider_type: text(formData, "provider_type") ?? "legal",
         contact_name: text(formData, "contact_name"),
         contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        role: text(formData, "role"),
+        url_source: text(formData, "url_source"),
         status: text(formData, "status") ?? "active",
         notes: text(formData, "notes"),
         website: text(formData, "website"),
@@ -555,9 +572,12 @@ export async function createProviderAction(
       provider_type: text(formData, "provider_type") ?? "legal",
       contact_name: text(formData, "contact_name"),
       contact_email: text(formData, "contact_email"),
+      contact_phone: text(formData, "contact_phone"),
+      role: text(formData, "role"),
       status: text(formData, "status") ?? "active",
       notes: text(formData, "notes"),
       website: text(formData, "website"),
+      url_source: text(formData, "url_source"),
     });
     if (error) throw error;
 
@@ -593,9 +613,12 @@ export async function updateProviderAction(
         provider_type: t("provider_type") ?? undefined,
         contact_name: t("contact_name"),
         contact_email: t("contact_email"),
+        contact_phone: t("contact_phone"),
+        role: t("role"),
         status: t("status") ?? undefined,
         notes: t("notes"),
         website: t("website"),
+        url_source: t("url_source"),
       })
       .eq("id", providerId)
       .eq("organization_id", auth.ctx.orgId)

@@ -190,6 +190,8 @@ export type Investor = Timestamps & RecordMeta & {
   investor_type: InvestorType;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
   jurisdiction: string | null;
   aum: number | null;
   typical_check_min: number | null;
@@ -197,6 +199,8 @@ export type Investor = Timestamps & RecordMeta & {
   notes: string | null;
   pipeline_stage: string;
   session_id: string | null;
+  website?: string | null;
+  url_source?: string | null;
 }
 
 export type Fund = Timestamps & {
@@ -252,6 +256,11 @@ export type Deal = Timestamps & RecordMeta & {
   expected_close: string | null;
   notes: string | null;
   session_id: string | null;
+  website?: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  url_source?: string | null;
 }
 
 export type Asset = Timestamps & RecordMeta & {
@@ -466,6 +475,10 @@ export type Partner = Timestamps & RecordMeta & {
   relationship: string | null;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
+  website?: string | null;
+  url_source?: string | null;
   status: string;
   notes: string | null;
   created_by: string | null;
@@ -478,6 +491,9 @@ export type ServiceProvider = Timestamps & RecordMeta & {
   provider_type: string;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
+  url_source?: string | null;
   status: string;
   notes: string | null;
   website: string | null;

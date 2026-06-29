@@ -24,6 +24,10 @@ export interface DealEntry {
   expectedClose: string | null;
   website: string | null;
   notes?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  urlSource?: string | null;
   // Apollo-enriched
   industry?: string;
   employeeRange?: string;
@@ -332,6 +336,35 @@ function DealSlideOver({
                 className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline"
               >
                 {deal.website.replace(/^https?:\/\//, "")}
+              </a>
+            </div>
+          )}
+
+          {/* Point of Contact */}
+          {(deal.contactName || deal.contactEmail || deal.contactPhone) && (
+            <div>
+              <p className="mb-1 font-mono text-[9px] uppercase tracking-widest text-fg-muted">Point of Contact</p>
+              {deal.contactName && <p className="text-xs text-fg-secondary">{deal.contactName}</p>}
+              {deal.contactEmail && (
+                <a href={`mailto:${deal.contactEmail}`} className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline block">
+                  {deal.contactEmail}
+                </a>
+              )}
+              {deal.contactPhone && <p className="font-mono text-[11px] text-fg-muted">{deal.contactPhone}</p>}
+            </div>
+          )}
+
+          {/* Source URL */}
+          {deal.urlSource && (
+            <div>
+              <p className="mb-1 font-mono text-[9px] uppercase tracking-widest text-fg-muted">Source URL</p>
+              <a
+                href={deal.urlSource.startsWith("http") ? deal.urlSource : `https://${deal.urlSource}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline"
+              >
+                {deal.urlSource.replace(/^https?:\/\//, "")}
               </a>
             </div>
           )}

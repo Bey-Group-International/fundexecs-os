@@ -72,16 +72,27 @@ const FACILITY_STATUSES = ["prospective", "term_sheet", "committed", "drawn", "r
 export const ADD_ROW_CONFIGS: Record<string, AddRowConfig> = {
   "source/lp_pipeline": {
     fields: [
-      { name: "name", label: "Investor name", type: "text", required: true },
+      { name: "name", label: "Company / Investor name", type: "text", required: true },
       { name: "investor_type", label: "Investor type", type: "select", options: INVESTOR_TYPES, defaultValue: "lp" },
       { name: "pipeline_stage", label: "Pipeline stage", type: "text", defaultValue: "prospect" },
+      { name: "contact_name", label: "Contact name", type: "text" },
+      { name: "contact_email", label: "Contact email", type: "text" },
+      { name: "contact_phone", label: "Contact phone", type: "text" },
+      { name: "role", label: "Contact role", type: "text" },
+      { name: "website", label: "Website", type: "text" },
+      { name: "url_source", label: "Source URL", type: "text" },
     ],
   },
   "source/deal_pipeline": {
     fields: [
-      { name: "name", label: "Deal name", type: "text", required: true },
+      { name: "name", label: "Deal / Company name", type: "text", required: true },
       { name: "stage", label: "Stage", type: "select", options: DEAL_STAGES, defaultValue: "sourced" },
       { name: "asset_class", label: "Asset class", type: "text" },
+      { name: "contact_name", label: "Contact name", type: "text" },
+      { name: "contact_email", label: "Contact email", type: "text" },
+      { name: "contact_phone", label: "Contact phone", type: "text" },
+      { name: "website", label: "Website", type: "text" },
+      { name: "url_source", label: "Source URL", type: "text" },
     ],
   },
   "execute/asset_management": {
@@ -107,11 +118,15 @@ export const ADD_ROW_CONFIGS: Record<string, AddRowConfig> = {
   },
   "source/partners": {
     fields: [
-      { name: "name", label: "Partner name", type: "text", required: true },
+      { name: "name", label: "Partner / Company name", type: "text", required: true },
       { name: "partner_type", label: "Partner type", type: "select", options: PARTNER_TYPES, defaultValue: "co_gp" },
-      { name: "relationship", label: "Relationship", type: "text" },
       { name: "contact_name", label: "Contact name", type: "text" },
       { name: "contact_email", label: "Contact email", type: "text" },
+      { name: "contact_phone", label: "Contact phone", type: "text" },
+      { name: "role", label: "Contact role", type: "text" },
+      { name: "website", label: "Website", type: "text" },
+      { name: "url_source", label: "Source URL", type: "text" },
+      { name: "relationship", label: "Relationship notes", type: "text" },
       { name: "status", label: "Status", type: "select", options: PARTNER_STATUSES, defaultValue: "active" },
     ],
   },
@@ -121,6 +136,10 @@ export const ADD_ROW_CONFIGS: Record<string, AddRowConfig> = {
       { name: "provider_type", label: "Provider type", type: "select", options: PROVIDER_TYPES, defaultValue: "legal" },
       { name: "contact_name", label: "Contact name", type: "text" },
       { name: "contact_email", label: "Contact email", type: "text" },
+      { name: "contact_phone", label: "Contact phone", type: "text" },
+      { name: "role", label: "Contact role", type: "text" },
+      { name: "website", label: "Website", type: "text" },
+      { name: "url_source", label: "Source URL", type: "text" },
       { name: "status", label: "Status", type: "select", options: PROVIDER_STATUSES, defaultValue: "active" },
     ],
   },
