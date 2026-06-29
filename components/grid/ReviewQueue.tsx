@@ -1,7 +1,12 @@
+"use client";
+
 import Link from "next/link";
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { engineOfWorkflow, type GridWorkflow } from "@/lib/execution-grid";
 import { RerouteControl } from "@/components/grid/RerouteControl";
 import type { ReviewItem, ReviewReason } from "@/lib/routing-review";
+import { deleteWorkflow, clearWorkflows } from "@/app/(app)/dashboard/actions";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
@@ -34,6 +39,49 @@ function StatusDot({ status }: { status: string }) {
   return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${color}`} />;
 }
 
+function DeleteReviewItemBtn({ id }: { id: string }) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => {
+        if (!confirm("Delete this workflow permanently?")) return;
+        start(async () => {
+          await deleteWorkflow(id);
+          router.refresh();
+        });
+      }}
+      className="shrink-0 rounded-md border border-status-danger/40 px-1.5 py-0.5 font-mono text-[10px] text-status-danger transition hover:bg-status-danger/10 disabled:opacity-40"
+    >
+      {pending ? "…" : "Delete"}
+    </button>
+  );
+}
+
+function ClearReviewQueueBtn({ count }: { count: number }) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  if (count === 0) return null;
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => {
+        if (!confirm("Clear all workflows from the review queue? This cannot be undone.")) return;
+        start(async () => {
+          await clearWorkflows();
+          router.refresh();
+        });
+      }}
+      className="rounded-md border border-status-danger/40 px-2 py-0.5 font-mono text-[10px] text-status-danger transition hover:bg-status-danger/10 disabled:opacity-40"
+    >
+      {pending ? "…" : "Clear all"}
+    </button>
+  );
+}
+
 // The Routing Review queue: workflows whose route a human should confirm or
 // fix — low-confidence (hub-default) routes and escalated workflows — each with
 // an inline re-route control. Presentational; the page computes the items.
@@ -42,7 +90,10 @@ export function ReviewQueue({ items }: { items: ReviewItem<GridWorkflow>[] }) {
     <div className="mx-auto max-w-3xl">
       <header className="mb-5">
         <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">FundExecs OS</p>
-        <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">Routing Review</h1>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-fg-primary">Routing Review</h1>
+          <ClearReviewQueueBtn count={items.length} />
+        </div>
         <p className="mt-1 text-sm text-fg-secondary">
           Workflows that need a human to confirm or fix their route — low-confidence routes and escalated work.
           {" "}
@@ -97,6 +148,7 @@ export function ReviewQueue({ items }: { items: ReviewItem<GridWorkflow>[] }) {
                     </div>
                   )}
                   <RerouteControl workflowId={wf.id} currentEngine={engine} />
+                  <DeleteReviewItemBtn id={wf.id} />
                 </div>
               </section>
             );

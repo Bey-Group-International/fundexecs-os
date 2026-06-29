@@ -17,6 +17,14 @@ import { buildDigest, priorityBucket, type DigestThread } from "@/lib/inbox/inte
 import { channelMeta } from "@/lib/inbox/channels";
 import { dashboardWorkspaces } from "@/lib/dashboard/config";
 import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
+import {
+  DeleteWorkflowBtn,
+  ClearWorkflowsBtn,
+  DeleteDealBtn,
+  ClearDealsBtn,
+  DeleteArtifactBtn,
+  ClearArtifactsBtn,
+} from "./DashboardDeleteControls";
 
 export const dynamic = "force-dynamic";
 
@@ -383,7 +391,7 @@ export default async function DashboardPage() {
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
         <div>
-          <SectionHeading>Recent workflows</SectionHeading>
+          <SectionHeading action={workflows.length > 0 ? <ClearWorkflowsBtn /> : undefined}>Recent workflows</SectionHeading>
           <div className="flex flex-col gap-2">
             {workflows.length === 0 ? (
               <p className="text-sm text-fg-muted">
@@ -403,13 +411,14 @@ export default async function DashboardPage() {
                 <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                   {w.hub} · {w.status}
                 </span>
+                <DeleteWorkflowBtn id={w.id} />
               </div>
             ))}
           </div>
         </div>
 
         <div>
-          <SectionHeading>Deal pipeline</SectionHeading>
+          <SectionHeading action={deals.length > 0 ? <ClearDealsBtn /> : undefined}>Deal pipeline</SectionHeading>
           <div className="grid grid-cols-5 gap-1.5">
             {DEAL_STAGES.map((stage) => (
               <div key={stage} className="fx-card p-2 text-center">
@@ -433,14 +442,15 @@ export default async function DashboardPage() {
                   .filter(Boolean)
                   .join(" · ");
                 return (
-                  <div key={d.id} className="flex items-baseline gap-2 text-sm">
-                    <div className="min-w-0">
+                  <div key={d.id} className="flex items-center gap-2 text-sm">
+                    <div className="min-w-0 flex-1">
                       <span className="block truncate text-fg-primary">{d.name}</span>
                       {detail ? (
                         <span className="block truncate text-[11px] text-fg-muted">{detail}</span>
                       ) : null}
                     </div>
-                    <span className="ml-auto shrink-0 font-mono text-[10px] text-fg-muted">{d.stage}</span>
+                    <span className="shrink-0 font-mono text-[10px] text-fg-muted">{d.stage}</span>
+                    <DeleteDealBtn id={d.id} />
                   </div>
                 );
               })}
@@ -450,7 +460,7 @@ export default async function DashboardPage() {
       </section>
 
       <section className="mt-8">
-        <SectionHeading>Latest deliverables</SectionHeading>
+        <SectionHeading action={artifacts.length > 0 ? <ClearArtifactsBtn /> : undefined}>Latest deliverables</SectionHeading>
         {artifacts.length === 0 ? (
           <p className="text-sm text-fg-muted">
             Every workflow step now produces a first-class artifact — IC memos,
@@ -459,16 +469,20 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
             {artifacts.map((a) => (
-              <ArtifactCard
-                key={a.id}
-                id={a.id}
-                title={a.title}
-                content={a.content}
-                artifact_type={a.artifact_type}
-                agent={a.agent ?? undefined}
-                created_at={a.created_at ?? undefined}
-                compact
-              />
+              <div key={a.id} className="relative">
+                <ArtifactCard
+                  id={a.id}
+                  title={a.title}
+                  content={a.content}
+                  artifact_type={a.artifact_type}
+                  agent={a.agent ?? undefined}
+                  created_at={a.created_at ?? undefined}
+                  compact
+                />
+                <div className="absolute right-2 top-2">
+                  <DeleteArtifactBtn id={a.id} />
+                </div>
+              </div>
             ))}
           </div>
         )}

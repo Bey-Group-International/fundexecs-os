@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
-import { getSessionContext } from "@/lib/auth";
+import { getSessionContext, requireOrgContext } from "@/lib/auth";
 import { nextRun } from "@/lib/cron";
 import type { AgentKey, DealStage, AssetType, ArtifactType, Hub, Json } from "@/lib/supabase/database.types";
 
@@ -112,6 +112,95 @@ export async function clearDemoData(): Promise<void> {
   revalidatePath("/dashboard");
   revalidatePath("/automations");
 }
+
+// --- Delete / Clear actions -------------------------------------------------
+
+export async function deleteWorkflow(id: string): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("tasks")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", auth.ctx.orgId)
+    .is("parent_task_id", null);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/dashboard");
+  revalidatePath("/grid/review");
+  return { ok: true };
+}
+
+export async function clearWorkflows(): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("tasks")
+    .delete()
+    .eq("organization_id", auth.ctx.orgId)
+    .is("parent_task_id", null);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/dashboard");
+  revalidatePath("/grid/review");
+  return { ok: true };
+}
+
+export async function deleteDeal(id: string): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("deals")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", auth.ctx.orgId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function clearDeals(): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("deals")
+    .delete()
+    .eq("organization_id", auth.ctx.orgId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function deleteArtifact(id: string): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("artifacts")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", auth.ctx.orgId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function clearArtifacts(): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("artifacts")
+    .delete()
+    .eq("organization_id", auth.ctx.orgId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 
 export async function seedDemoData(): Promise<void> {
   const ctx = await getSessionContext();
