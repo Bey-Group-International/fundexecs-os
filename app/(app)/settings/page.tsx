@@ -250,7 +250,7 @@ export default async function SettingsPage() {
             id="shortcuts"
             eyebrow="Preferences"
             title="Shortcuts & customization"
-            description="Keyboard shortcuts for navigating FundExecs OS, and appearance settings for this device. This is the only place to view them."
+            description="Keyboard shortcuts for navigating FundExecs OS, and appearance settings for this device. This is the only place to access keyboard shortcuts."
           >
             <ShortcutsAndCustomization />
           </Section>

@@ -7,5 +7,4 @@ export const APP_SHORTCUTS = [
   { keys: ["⌘", "Shift", "S"], label: "Source Hub" },
   { keys: ["⌘", "Shift", "R"], label: "Run Hub" },
   { keys: ["⌘", "Shift", "E"], label: "Execute / Portfolio" },
-  { keys: ["?"], label: "Open shortcuts in Settings" },
 ] as const;
