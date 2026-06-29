@@ -12,6 +12,8 @@ export function InboxReadMarker({ action }: { action: () => Promise<void> }) {
     let alive = true;
     action().then(() => { if (alive) router.refresh(); }).catch(console.error);
     return () => { alive = false; };
+    // action is a stable server-action ref — intentionally excluded so this
+    // fires on every mount, not just when the prop reference changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;

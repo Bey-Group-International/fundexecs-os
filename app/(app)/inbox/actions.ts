@@ -536,12 +536,10 @@ export async function dismissAllApprovalTasks(): Promise<{ ok: boolean }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
   const supabase = createServerClient();
-  // parent_task_id IS NULL: only top-level approval tasks, not subtasks
   const { data, error } = await supabase
     .from("tasks")
     .update({ status: "cancelled" })
     .eq("organization_id", auth.ctx.orgId)
-    .is("parent_task_id", null)
     .eq("status", "awaiting_approval")
     .select("id");
   if (error) { console.error("[dismissAllApprovalTasks]", error.message); return { ok: false }; }
