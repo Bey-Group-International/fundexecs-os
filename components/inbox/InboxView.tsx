@@ -46,7 +46,22 @@ function Row({
 }) {
   const [dismissing, startDismiss] = useTransition();
   const [dismissError, setDismissError] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const isApproval = item.tone === "approval";
+
+  function handleDismissClick() {
+    setDismissError(false);
+    setConfirming(true);
+  }
+
+  function handleConfirm() {
+    setConfirming(false);
+    startDismiss(async () => {
+      const r = await dismissApprovalTask(taskIdFromItemId(item.id));
+      if (r.ok) onDismiss?.(item.id);
+      else setDismissError(true);
+    });
+  }
 
   return (
     <div className={`group relative flex flex-col rounded-xl border border-line border-l-2 ${ACCENT[item.tone]} bg-surface-1 transition hover:border-gold-500/40 hover:bg-surface-2`}>
@@ -67,23 +82,34 @@ function Row({
           <span className="mt-0.5 shrink-0 font-mono text-[11px] text-fg-muted transition group-hover:text-gold-300" aria-hidden>→</span>
         </Link>
         {isApproval && onDismiss ? (
-          <button
-            type="button"
-            disabled={dismissing}
-            onClick={() => {
-              setDismissError(false);
-              if (!confirm("Dismiss this approval request? The associated task will be cancelled.")) return;
-              startDismiss(async () => {
-                const r = await dismissApprovalTask(taskIdFromItemId(item.id));
-                if (r.ok) onDismiss(item.id);
-                else setDismissError(true);
-              });
-            }}
-            className="shrink-0 self-stretch border-l border-line px-3 text-xs text-fg-muted transition hover:text-status-danger disabled:opacity-50"
-            aria-label={`Dismiss ${item.title}`}
-          >
-            {dismissing ? "…" : "Dismiss"}
-          </button>
+          confirming ? (
+            <div className="flex shrink-0 items-center gap-1 border-l border-line px-3">
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className="rounded px-2 py-1 text-xs text-status-danger transition hover:bg-status-danger/10"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                className="rounded px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={dismissing}
+              onClick={handleDismissClick}
+              className="shrink-0 self-stretch border-l border-line px-3 text-xs text-fg-muted transition hover:text-status-danger disabled:opacity-50"
+              aria-label={`Dismiss ${item.title}`}
+            >
+              {dismissing ? "…" : "Dismiss"}
+            </button>
+          )
         ) : null}
       </div>
       {dismissError ? (
@@ -100,6 +126,8 @@ function Section({
   onDismissAll,
   dismissingAll,
   dismissAllError,
+  confirmingAll,
+  onConfirmingAllChange,
 }: {
   title: string;
   items: InboxItem[];
@@ -107,6 +135,8 @@ function Section({
   onDismissAll?: () => void;
   dismissingAll?: boolean;
   dismissAllError?: boolean;
+  confirmingAll?: boolean;
+  onConfirmingAllChange?: (v: boolean) => void;
 }) {
   if (items.length === 0) return null;
   const isApproval = items[0]?.tone === "approval";
@@ -118,14 +148,34 @@ function Section({
           {items.length}
         </span>
         {isApproval && onDismissAll && items.length > 1 ? (
-          <button
-            type="button"
-            disabled={dismissingAll}
-            onClick={onDismissAll}
-            className="ml-auto rounded-md border border-line px-2 py-0.5 text-[10px] normal-case tracking-normal text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger disabled:opacity-50"
-          >
-            {dismissingAll ? "Dismissing…" : "Dismiss all"}
-          </button>
+          confirmingAll ? (
+            <div className="ml-auto flex items-center gap-1">
+              <span className="text-[10px] normal-case tracking-normal text-fg-secondary">Cancel all tasks?</span>
+              <button
+                type="button"
+                onClick={onDismissAll}
+                className="rounded-md border border-status-danger/40 px-2 py-0.5 text-[10px] normal-case tracking-normal text-status-danger transition hover:bg-status-danger/10"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                onClick={() => onConfirmingAllChange?.(false)}
+                className="rounded-md border border-line px-2 py-0.5 text-[10px] normal-case tracking-normal text-fg-muted transition hover:text-fg-primary"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={dismissingAll}
+              onClick={() => onConfirmingAllChange?.(true)}
+              className="ml-auto rounded-md border border-line px-2 py-0.5 text-[10px] normal-case tracking-normal text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger disabled:opacity-50"
+            >
+              {dismissingAll ? "Dismissing…" : "Dismiss all"}
+            </button>
+          )
         ) : null}
       </h2>
       {dismissAllError ? (
@@ -145,6 +195,7 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [dismissingAll, startDismissAll] = useTransition();
   const [dismissAllError, setDismissAllError] = useState(false);
+  const [confirmingAll, setConfirmingAll] = useState(false);
 
   const needsApproval = inbox.needsApproval.filter((i) => !dismissed.has(i.id));
 
@@ -162,7 +213,7 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
   }
 
   function handleDismissAll() {
-    if (!confirm(`Dismiss all ${needsApproval.length} approval request${needsApproval.length === 1 ? "" : "s"}? The associated tasks will be cancelled.`)) return;
+    setConfirmingAll(false);
     setDismissAllError(false);
     startDismissAll(async () => {
       const r = await dismissAllApprovalTasks(needsApproval.map((i) => taskIdFromItemId(i.id)));
@@ -198,6 +249,8 @@ export function InboxView({ inbox }: { inbox: Inbox }) {
         onDismissAll={handleDismissAll}
         dismissingAll={dismissingAll}
         dismissAllError={dismissAllError}
+        confirmingAll={confirmingAll}
+        onConfirmingAllChange={setConfirmingAll}
       />
       <Section title="Overdue diligence" items={visible.overdueDiligence} />
       <Section title="IC-ready" items={visible.icReady} />
