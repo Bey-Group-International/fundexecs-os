@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 
 type SaveStatus = "idle" | "saving" | "saved";
 
@@ -20,6 +21,7 @@ export function AutosaveForm({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   function scheduleSave() {
     setStatus("saving");
@@ -34,6 +36,7 @@ export function AutosaveForm({
     startTransition(async () => {
       await action(formData);
       setStatus("saved");
+      router.refresh();
     });
   }
 
