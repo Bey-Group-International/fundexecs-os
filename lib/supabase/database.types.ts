@@ -257,6 +257,7 @@ export type Deal = Timestamps & RecordMeta & {
   notes: string | null;
   session_id: string | null;
   website?: string | null;
+  role?: string | null;
   contact_name?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;

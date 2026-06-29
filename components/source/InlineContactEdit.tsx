@@ -26,6 +26,7 @@ export function InlineContactEdit({ table, id, initial, onClose, onSaved }: Prop
   const router = useRouter();
   const [pending, start] = useTransition();
   const [fields, setFields] = useState<ContactFields>(initial);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,9 +38,10 @@ export function InlineContactEdit({ table, id, initial, onClose, onSaved }: Prop
   }
 
   function handleSave() {
+    setSaveError(null);
     start(async () => {
       const result = await updateContactFieldsAction(table, id, fields);
-      if (result.error) { alert(result.error); return; }
+      if (result.error) { setSaveError(result.error); return; }
       onSaved?.(fields);
       router.refresh();
       onClose();
@@ -74,6 +76,9 @@ export function InlineContactEdit({ table, id, initial, onClose, onSaved }: Prop
           <input className={inputCls} value={fields.url_source ?? ""} onChange={(e) => set("url_source", e.target.value)} placeholder="https://…" />
         </div>
       </div>
+      {saveError && (
+        <p className="font-mono text-[10px] text-red-400">{saveError}</p>
+      )}
       <div className="flex items-center justify-end gap-2 pt-1">
         <button type="button" onClick={onClose} className="font-mono text-[9px] uppercase tracking-widest text-fg-muted hover:text-fg-primary">
           Cancel
