@@ -528,10 +528,11 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     .select("id");
   if (error) { console.error("[dismissApprovalTask]", error.message); return { ok: false }; }
   if (!data?.length) return { ok: false };
-  await supabase.from("approvals")
+  const { error: approvalErr } = await supabase.from("approvals")
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
     .eq("task_id", taskId);
+  if (approvalErr) console.error("[dismissApprovalTask] approvals", approvalErr.message);
   // Also cancel any subtasks so their approvals don't dangle
   const { data: subtasks } = await supabase
     .from("tasks")
@@ -577,10 +578,25 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
   if (error) { console.error("[dismissAllApprovalTasks]", error.message); return { ok: false }; }
   if (!data?.length) return { ok: false };
   const cancelledIds = data.map((r) => r.id);
-  await supabase.from("approvals")
+  const { error: approvalErr } = await supabase.from("approvals")
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
     .in("task_id", cancelledIds);
+  if (approvalErr) console.error("[dismissAllApprovalTasks] approvals", approvalErr.message);
+  // Cascade to subtasks
+  const { data: subtasks } = await supabase
+    .from("tasks")
+    .update({ status: "cancelled" })
+    .eq("organization_id", auth.ctx.orgId)
+    .in("parent_task_id", cancelledIds)
+    .eq("status", "awaiting_approval")
+    .select("id");
+  if (subtasks?.length) {
+    await supabase.from("approvals")
+      .update({ decision: "rejected" })
+      .eq("organization_id", auth.ctx.orgId)
+      .in("task_id", subtasks.map((r) => r.id));
+  }
   await supabase.from("task_events").insert(
     cancelledIds.map((task_id) => ({
       organization_id: auth.ctx.orgId,
