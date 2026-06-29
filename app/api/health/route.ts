@@ -1,23 +1,34 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { timingSafeEqual } from "crypto";
 
 export const dynamic = "force-dynamic";
 
 // GET /api/health — infrastructure liveness probe.
 // Protected with CRON_SECRET Bearer token so it is not open to the public
-// (same pattern as /api/cron). Probes the DB and returns structured status.
+// (same pattern as /api/cron). Uses service-role client so the DB probe
+// returns a real result even when there are no session cookies.
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
     return NextResponse.json({ status: "degraded", error: "CRON_SECRET not configured" }, { status: 503 });
   }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  const authHeader = request.headers.get("authorization") ?? "";
+  const expected = `Bearer ${secret}`;
+  const matches =
+    authHeader.length === expected.length &&
+    timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+  if (!matches) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ status: "degraded", error: "SUPABASE_SERVICE_ROLE_KEY not configured" }, { status: 503 });
   }
 
   const ts = new Date().toISOString();
   try {
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
     const { error } = await supabase.from("organizations").select("id").limit(1);
     if (error) throw error;
     return NextResponse.json({ status: "ok", db: "ok", ts });

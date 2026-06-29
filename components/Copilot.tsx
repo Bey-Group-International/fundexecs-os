@@ -648,7 +648,7 @@ export default function Copilot({
     decision: "approved" | "rejected" | "regenerate" | "accepted",
     note?: string,
     desk?: Executive,
-  ) {
+  ): Promise<boolean> {
     const res = await fetch("/api/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -659,9 +659,10 @@ export default function Copilot({
     setLiveSteps({});
     if (!res?.ok) {
       console.error("decidePlain: /api/approve returned", res?.status ?? "network error");
-      return;
+      return false;
     }
     startTransition(() => router.refresh());
+    return true;
   }
 
   // Approve & automate, with live step progress streamed into the canvas. Reads
@@ -723,11 +724,14 @@ export default function Copilot({
     desk?: Executive,
   ) {
     setBusy(true);
+    let ok: boolean;
     if (decision === "approved") {
       await decideApproved(approvalId, note);
+      ok = true;
     } else {
-      await decidePlain(approvalId, decision, note, desk);
+      ok = await decidePlain(approvalId, decision, note, desk);
     }
+    if (!ok) return;
     // Confirm the decision landed — the operator shouldn't have to guess.
     const receipt: Record<typeof decision, { msg: string; tone: "ok" | "warn" }> = {
       approved: { msg: "✓ Approved & automated", tone: "ok" },

@@ -21,7 +21,9 @@ export default function AppError({
         </div>
         <h2 className="text-sm font-semibold text-fg-primary">Something went wrong</h2>
         <p className="mt-2 text-xs text-fg-secondary">
-          {error.message || "An unexpected error occurred. Please try again."}
+          {process.env.NODE_ENV === "development" && error.message
+            ? error.message
+            : "An unexpected error occurred. Please try again."}
         </p>
         {error.digest ? (
           <p className="mt-1 font-mono text-[10px] text-fg-muted">ref: {error.digest}</p>
