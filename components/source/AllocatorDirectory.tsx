@@ -231,7 +231,14 @@ function LogContactButton({ investorId }: { investorId: string }) {
   );
 }
 
-function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOption[] }) {
+interface ColumnFlags {
+  showAum: boolean;
+  showTicket: boolean;
+  showStrategies: boolean;
+  showFit: boolean;
+}
+
+function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: FundOption[]; cols: ColumnFlags }) {
   const fitColor = entry.fitScore !== undefined ? fitScoreColor(entry.fitScore) : "";
   const tempColor = entry.temperature ? TEMP_COLORS[entry.temperature] : "";
   const stageLabel = entry.pipelineStage ? (STAGE_LABELS[entry.pipelineStage] ?? entry.pipelineStage) : null;
@@ -247,6 +254,11 @@ function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOpti
     url_source: entry.urlSource ?? null,
   });
 
+  const displayName = contactFields.contact_name ?? entry.contactName;
+  const displayEmail = contactFields.contact_email ?? entry.contactEmail;
+  const displayPhone = contactFields.contact_phone ?? entry.contactPhone;
+  const displayRole = contactFields.role ?? entry.role;
+
   return (
     <>
       {showInvite && (
@@ -260,19 +272,6 @@ function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOpti
           {ALLOCATOR_TYPE_LABELS[entry.allocatorType]}
           {entry.hqCity && ` · ${entry.hqCity}`}
         </p>
-        {(contactFields.contact_name || entry.contactName) && (
-          <p className="mt-0.5 font-mono text-[10px] text-fg-muted truncate max-w-[220px]">
-            {contactFields.contact_name ?? entry.contactName}
-            {(contactFields.role ?? entry.role) && <span className="opacity-60"> · {contactFields.role ?? entry.role}</span>}
-          </p>
-        )}
-        {(contactFields.contact_email || contactFields.contact_phone || entry.contactEmail || entry.contactPhone) && (
-          <p className="mt-0.5 font-mono text-[9px] text-fg-muted/70 truncate max-w-[220px]">
-            {(contactFields.contact_email ?? entry.contactEmail) && <a href={`mailto:${contactFields.contact_email ?? entry.contactEmail}`} onClick={(e) => e.stopPropagation()} className="hover:text-gold-300">{contactFields.contact_email ?? entry.contactEmail}</a>}
-            {(contactFields.contact_email ?? entry.contactEmail) && (contactFields.contact_phone ?? entry.contactPhone) && " · "}
-            {contactFields.contact_phone ?? entry.contactPhone}
-          </p>
-        )}
         {entry.topActionTitle && (
           <p className="mt-1 font-mono text-[9px] text-amber-400/80 truncate max-w-[220px]">
             ↗ {entry.topActionTitle}
@@ -280,74 +279,92 @@ function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOpti
         )}
       </div>
 
-      {/* AUM */}
-      <div className="hidden w-28 sm:block">
-        <p className="font-mono text-xs text-fg-secondary">
-          {formatAUM(entry.aumMax ?? entry.aumMin)}
-        </p>
-        <p className="font-mono text-[10px] text-fg-muted">AUM</p>
-      </div>
+      {/* AUM — only if any row has data */}
+      {cols.showAum && (
+        <div className="hidden w-28 sm:block">
+          <p className="font-mono text-xs text-fg-secondary">
+            {formatAUM(entry.aumMax ?? entry.aumMin)}
+          </p>
+          <p className="font-mono text-[10px] text-fg-muted">AUM</p>
+        </div>
+      )}
 
-      {/* Ticket */}
-      <div className="hidden w-36 lg:block">
-        <p className="font-mono text-xs text-fg-secondary">
-          {formatTicketRange(entry.ticketMin ?? null, entry.ticketMax ?? null)}
-        </p>
-        <p className="font-mono text-[10px] text-fg-muted">Ticket</p>
-      </div>
+      {/* Ticket — only if any row has data */}
+      {cols.showTicket && (
+        <div className="hidden w-36 lg:block">
+          <p className="font-mono text-xs text-fg-secondary">
+            {formatTicketRange(entry.ticketMin ?? null, entry.ticketMax ?? null)}
+          </p>
+          <p className="font-mono text-[10px] text-fg-muted">Ticket</p>
+        </div>
+      )}
 
-      {/* Strategies */}
-      <div className="hidden w-40 xl:flex flex-wrap gap-1">
-        {entry.primaryStrategies.slice(0, 2).map((s) => (
-          <span key={s} className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[9px] text-fg-muted">
-            {s.replace(/_/g, " ")}
-          </span>
-        ))}
-        {entry.primaryStrategies.length > 2 && (
-          <span className="font-mono text-[9px] text-fg-muted">+{entry.primaryStrategies.length - 2}</span>
-        )}
-      </div>
+      {/* Strategies — only if any row has data */}
+      {cols.showStrategies && (
+        <div className="hidden w-40 xl:flex flex-wrap gap-1">
+          {entry.primaryStrategies.slice(0, 2).map((s) => (
+            <span key={s} className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[9px] text-fg-muted">
+              {s.replace(/_/g, " ")}
+            </span>
+          ))}
+          {entry.primaryStrategies.length > 2 && (
+            <span className="font-mono text-[9px] text-fg-muted">+{entry.primaryStrategies.length - 2}</span>
+          )}
+        </div>
+      )}
 
-      {/* Accreditation */}
-      <div className="hidden w-32 lg:block">
-        <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${ACCREDITATION_COLORS[entry.accreditationStatus]}`}>
-          {ACCREDITATION_LABELS[entry.accreditationStatus]}
-        </span>
-      </div>
-
-      {/* Fit score */}
-      {entry.fitScore !== undefined && (
+      {/* Fit score — only if any row has data */}
+      {cols.showFit && entry.fitScore !== undefined && (
         <div className="hidden w-16 text-right sm:block">
           <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold ${fitColor}`}>
             {entry.fitScore}%
           </span>
         </div>
       )}
+      {cols.showFit && entry.fitScore === undefined && (
+        <div className="hidden w-16 sm:block" />
+      )}
 
       {/* Pipeline stage */}
-      {stageLabel && (
-        <div className="hidden w-24 sm:block">
+      <div className="hidden w-24 sm:block">
+        {stageLabel ? (
           <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase ${stageColor}`}>
             {stageLabel}
           </span>
-        </div>
-      )}
-
-      {/* Temperature (shown when no stage) */}
-      {!stageLabel && entry.temperature && (
-        <div className="hidden w-24 sm:block">
+        ) : entry.temperature ? (
           <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase ${tempColor}`}>
             {entry.temperature}
           </span>
-        </div>
-      )}
+        ) : null}
+      </div>
 
-      {/* Last contact + actions */}
-      <div className="hidden w-36 text-right lg:flex flex-col items-end gap-1">
-        <p className={`font-mono text-[10px] ${entry.lastContactDays != null && entry.lastContactDays > 60 ? "text-amber-400" : "text-fg-muted"}`}>
-          {entry.lastContactDays != null ? `${entry.lastContactDays}d ago` : "—"}
-        </p>
-        <span className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Contact info + hover actions */}
+      <div className="hidden w-44 lg:flex flex-col items-end gap-0.5">
+        {/* Contact details — always visible when populated */}
+        {displayName && (
+          <p className="font-mono text-[10px] text-fg-secondary truncate max-w-[176px] text-right">
+            {displayName}{displayRole && <span className="opacity-60"> · {displayRole}</span>}
+          </p>
+        )}
+        {displayEmail && (
+          <a
+            href={`mailto:${displayEmail}`}
+            onClick={(e) => e.stopPropagation()}
+            className="font-mono text-[9px] text-fg-muted/70 truncate max-w-[176px] hover:text-gold-300"
+          >
+            {displayEmail}
+          </a>
+        )}
+        {displayPhone && !displayEmail && (
+          <p className="font-mono text-[9px] text-fg-muted/70">{displayPhone}</p>
+        )}
+        {!displayName && !displayEmail && (
+          <p className={`font-mono text-[10px] ${entry.lastContactDays != null && entry.lastContactDays > 60 ? "text-amber-400" : "text-fg-muted"}`}>
+            {entry.lastContactDays != null ? `${entry.lastContactDays}d ago` : "—"}
+          </p>
+        )}
+        {/* Actions — hover only */}
+        <span className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5">
           <LogContactButton investorId={entry.id} />
           <EditContactBtn onClick={() => setEditingContact((v) => !v)} />
           <button
@@ -387,6 +404,15 @@ export function AllocatorDirectory({ entries, funds }: Props) {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"fit" | "aum" | "last_contact" | "stage">("last_contact");
+
+  // Only show a data column if at least one entry has a real value — avoids
+  // a table of dashes when enrichment hasn't run yet.
+  const cols: ColumnFlags = useMemo(() => ({
+    showAum: entries.some((e) => e.aumMax != null || e.aumMin != null),
+    showTicket: entries.some((e) => e.ticketMin != null || e.ticketMax != null),
+    showStrategies: entries.some((e) => e.primaryStrategies.length > 0),
+    showFit: entries.some((e) => e.fitScore !== undefined),
+  }), [entries]);
 
   const filtered = useMemo(() => {
     let list = entries;
@@ -472,20 +498,19 @@ export function AllocatorDirectory({ entries, funds }: Props) {
         {/* Header */}
         <div className="flex items-center gap-4 border-b border-line bg-surface-2/30 px-4 py-2.5">
           <span className="min-w-[200px] flex-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Allocator</span>
-          <span className="hidden w-28 font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">AUM</span>
-          <span className="hidden w-36 font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Ticket</span>
-          <span className="hidden w-40 font-mono text-[10px] uppercase tracking-wider text-fg-muted xl:block">Strategies</span>
-          <span className="hidden w-32 font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Accreditation</span>
-          <span className="hidden w-16 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Fit</span>
+          {cols.showAum && <span className="hidden w-28 font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">AUM</span>}
+          {cols.showTicket && <span className="hidden w-36 font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Ticket</span>}
+          {cols.showStrategies && <span className="hidden w-40 font-mono text-[10px] uppercase tracking-wider text-fg-muted xl:block">Strategies</span>}
+          {cols.showFit && <span className="hidden w-16 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Fit</span>}
           <span className="hidden w-24 font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Stage</span>
-          <span className="hidden w-36 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Contact</span>
+          <span className="hidden w-44 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Contact</span>
         </div>
         {filtered.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">No allocators match your filters</p>
           </div>
         ) : (
-          filtered.map((entry) => <AllocatorRow key={entry.id} entry={entry} funds={funds} />)
+          filtered.map((entry) => <AllocatorRow key={entry.id} entry={entry} funds={funds} cols={cols} />)
         )}
       </div>
     </div>
