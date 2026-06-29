@@ -93,6 +93,16 @@ export interface SourceCandidate {
   firstMove: string;
   /** Supporting source URL when found via web-search enrichment. */
   sourceUrl?: string;
+  // Pre-review intel — populated by Claude + Apollo before the user reviews candidates.
+  website?: string;
+  contactName?: string;
+  contactRole?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  aumRange?: string;
+  ticketRange?: string;
+  strategies?: string[];
+  geography?: string;
 }
 
 export interface PipelineScore {
@@ -295,11 +305,18 @@ const CANDIDATES_SCHEMA = {
         type: "object",
         additionalProperties: false,
         properties: {
-          name: { type: "string", description: "Specific, plausible target name" },
+          name: { type: "string", description: "Specific, real-world target name" },
           category: { type: "string", description: "One category label for this target" },
           fitScore: { type: "number", description: "0–100 fit against the mandate" },
           rationale: { type: "string", description: "One sentence: why this fits the mandate" },
           firstMove: { type: "string", description: "Short imperative first move" },
+          website: { type: "string", description: "Company or fund website URL" },
+          contactName: { type: "string", description: "Key decision maker full name" },
+          contactRole: { type: "string", description: "Their title or role" },
+          aumRange: { type: "string", description: "AUM or fund size range, e.g. '$500M–$2B'" },
+          ticketRange: { type: "string", description: "Typical check or ticket size, e.g. '$1M–$5M'" },
+          strategies: { type: "array", items: { type: "string" }, description: "Primary investment strategies or focus areas" },
+          geography: { type: "string", description: "HQ city/country or geographic focus" },
         },
         required: ["name", "category", "fitScore", "rationale", "firstMove"],
       },
@@ -337,7 +354,7 @@ export async function generateTargets(
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1500,
-      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Propose specific, plausible targets that fit the firm's mandate and the operator's request — the kind a sharp ${agentName.toLowerCase()} would put on a call sheet. These are AI suggestions the operator will verify, so be concrete but never fabricate confidential facts. ${catLine}`,
+      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Propose specific, real-world targets that fit the firm's mandate and the operator's request — the kind a sharp ${agentName.toLowerCase()} would put on a call sheet. For each target include wherever you have reliable knowledge: the company website, a key decision maker's name and title, estimated AUM or fund size range, typical check or ticket size, primary strategies or focus areas, and headquarters location. Leave a field empty rather than guessing. ${catLine}`,
       output_config: { effort: "low", format: { type: "json_schema", schema: CANDIDATES_SCHEMA } },
       messages: [
         {
@@ -357,6 +374,9 @@ export async function generateTargets(
     const json = textOf(message);
     const raw = json ? (JSON.parse(json) as { candidates?: unknown[] }) : null;
     const out = normalizeCandidates(raw?.candidates ?? [], cfg, options, existingNames);
+    if (out.length && process.env.APOLLO_API_KEY) {
+      try { return await apolloEnrichCandidates(out); } catch { /* fall through */ }
+    }
     return out.length ? out : fallbackCandidates(cfg, mandate, existingNames, options, query);
   } catch {
     return fallbackCandidates(cfg, mandate, existingNames, options, query);
@@ -390,7 +410,7 @@ async function enrichedTargets(
       model: MODEL,
       max_tokens: 3000,
       output_config: { effort: "low" },
-      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Use web search to find REAL, currently-operating ${cfg.entities} that fit the firm's mandate and the operator's request. For each, include "sourceUrl" — a link to a page that supports it. Return ONLY a JSON array (no prose, no markdown) of objects with keys: name, category, fitScore (0-100), rationale, firstMove, sourceUrl. ${catLine}`,
+      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Use web search to find REAL, currently-operating ${cfg.entities} that fit the firm's mandate and the operator's request. For each include: sourceUrl (a supporting page), website, a key decision maker name and title, AUM or fund size range, typical check or ticket size, primary strategies, and geography. Return ONLY a JSON array (no prose, no markdown) of objects with keys: name, category, fitScore (0-100), rationale, firstMove, sourceUrl, website, contactName, contactRole, aumRange, ticketRange, strategies (array of strings), geography. ${catLine}`,
       tools: WEB_SEARCH_TOOLS,
       messages: [
         {
@@ -408,7 +428,12 @@ async function enrichedTargets(
       ],
     });
     const raw = parseJsonArray(textOf(message));
-    return raw ? normalizeCandidates(raw, cfg, options, existingNames) : [];
+    if (!raw) return [];
+    const candidates = normalizeCandidates(raw, cfg, options, existingNames);
+    if (candidates.length && process.env.APOLLO_API_KEY) {
+      try { return await apolloEnrichCandidates(candidates); } catch { /* fall through */ }
+    }
+    return candidates;
   } catch {
     return [];
   }
@@ -433,6 +458,10 @@ function normalizeCandidates(
       const match = options.find((opt) => opt.toLowerCase() === category.toLowerCase());
       category = match ?? options[0] ?? "other";
     }
+    const rawStrategies = o.strategies;
+    const strategies = Array.isArray(rawStrategies)
+      ? (rawStrategies as unknown[]).filter((s): s is string => typeof s === "string").map((s) => s.trim()).filter(Boolean).slice(0, 5)
+      : undefined;
     out.push({
       name,
       category: category || (cfg.freeCategory ? "" : options[0] ?? "other"),
@@ -440,10 +469,57 @@ function normalizeCandidates(
       rationale: cleanStr(o.rationale, 240) || "Fits the mandate.",
       firstMove: cleanStr(o.firstMove, 120) || "Research and qualify.",
       sourceUrl: cleanUrl(o.sourceUrl),
+      website: cleanUrl(o.website),
+      contactName: cleanStr(o.contactName, 120) || undefined,
+      contactRole: cleanStr(o.contactRole, 120) || undefined,
+      aumRange: cleanStr(o.aumRange, 60) || undefined,
+      ticketRange: cleanStr(o.ticketRange, 60) || undefined,
+      strategies: strategies?.length ? strategies : undefined,
+      geography: cleanStr(o.geography, 120) || undefined,
     });
     if (out.length >= 6) break;
   }
   return out.sort((a, b) => b.fitScore - a.fitScore);
+}
+
+// After Claude generates candidates, look up real decision-maker contacts via
+// Apollo for any candidate that lacks an email. Runs in parallel batches of 3
+// with a 4s timeout; failures are non-fatal — the candidate keeps Claude data.
+async function apolloEnrichCandidates(candidates: SourceCandidate[]): Promise<SourceCandidate[]> {
+  const { searchPeople } = await import("@/lib/integrations/providers/apollo");
+  const BATCH = 3;
+  const result = [...candidates];
+  for (let i = 0; i < result.length; i += BATCH) {
+    const chunk = result.slice(i, i + BATCH);
+    const settled = await Promise.allSettled(
+      chunk.map(async (c) => {
+        if (c.contactEmail) return c;
+        try {
+          let _t: ReturnType<typeof setTimeout> | undefined;
+          const res = await Promise.race([
+            searchPeople({ company: c.name, person_seniority: ["c_suite", "vp", "director"], per_page: 1 })
+              .finally(() => clearTimeout(_t)),
+            new Promise<never>((_, rej) => { _t = setTimeout(() => rej(new Error("timeout")), 4000); }),
+          ]);
+          if (res.status === "success" && res.data?.[0]) {
+            const p = res.data[0];
+            return {
+              ...c,
+              contactName: c.contactName || p.name || c.contactName,
+              contactRole: c.contactRole || p.title || c.contactRole,
+              contactEmail: c.contactEmail || p.email || c.contactEmail,
+              contactPhone: c.contactPhone || p.phone || c.contactPhone,
+            };
+          }
+        } catch { /* non-fatal */ }
+        return c;
+      })
+    );
+    settled.forEach((r, j) => {
+      if (r.status === "fulfilled") result[i + j] = r.value;
+    });
+  }
+  return result;
 }
 
 // Deterministic archetypes from the mandate — honest "go find one of these"
