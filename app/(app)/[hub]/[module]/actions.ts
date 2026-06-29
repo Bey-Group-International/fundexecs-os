@@ -833,7 +833,7 @@ export async function updateContactFieldsAction(
     investors:         ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
     deals:             ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
     partners:          ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
-    service_providers: ["contact_name", "contact_email", "contact_phone", "role", "url_source"],
+    service_providers: ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
     debt_facilities:   ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
   };
   if (!(table in tableAllowedFields)) return { error: "Invalid table" };
