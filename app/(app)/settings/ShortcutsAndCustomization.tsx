@@ -21,11 +21,11 @@ export function ShortcutsAndCustomization() {
 
       {/* Keyboard shortcuts */}
       <div className="fx-card p-4">
-        <p className="mb-3 text-sm font-medium text-fg-primary">Keyboard shortcuts</p>
-        <ul role="list" className="space-y-1">
+        <h3 className="mb-3 text-sm font-medium text-fg-primary">Keyboard shortcuts</h3>
+        <ul role="list" aria-label="Keyboard shortcuts" className="space-y-1">
           {APP_SHORTCUTS.map((s) => (
             <li
-              key={s.label}
+              key={`${s.keys.join("+")}+${s.label}`}
               className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 transition hover:bg-surface-2"
             >
               <span className="text-xs text-fg-secondary">{s.label}</span>
