@@ -257,6 +257,7 @@ export type Deal = Timestamps & RecordMeta & {
   notes: string | null;
   session_id: string | null;
   website?: string | null;
+  role?: string | null;
   contact_name?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;
@@ -513,6 +514,12 @@ export type DebtFacility = Timestamps & RecordMeta & {
   maturity_date: string | null;
   notes: string | null;
   created_by: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
+  website?: string | null;
+  url_source?: string | null;
 };
 
 export type Wallet = Timestamps & {
@@ -968,6 +975,8 @@ export type OutreachEnrollment = Timestamps & {
   sequence_id: string;
   subject_name: string;
   subject_email: string | null;
+  subject_phone?: string | null;
+  subject_role?: string | null;
   entity_id: string | null;
   current_step: number;
   status: string; // 'active' | 'completed' | 'replied' | 'stopped'

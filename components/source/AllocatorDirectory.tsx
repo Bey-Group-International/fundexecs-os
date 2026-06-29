@@ -15,6 +15,8 @@ import {
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
 import { logContactAction, createLpInviteAction } from "@/app/(app)/[hub]/[module]/actions";
 import { DeleteInvestorBtn } from "@/components/source/SourceDeleteControls";
+import { InlineContactEdit, EditContactBtn } from "@/components/source/InlineContactEdit";
+import type { ContactFields } from "@/app/(app)/[hub]/[module]/actions";
 
 interface FundOption {
   id: string;
@@ -235,6 +237,15 @@ function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOpti
   const stageLabel = entry.pipelineStage ? (STAGE_LABELS[entry.pipelineStage] ?? entry.pipelineStage) : null;
   const stageColor = entry.pipelineStage ? (STAGE_COLORS[entry.pipelineStage] ?? "text-slate-400 border-slate-500/30") : "";
   const [showInvite, setShowInvite] = useState(false);
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactFields, setContactFields] = useState<ContactFields>({
+    contact_name: entry.contactName ?? null,
+    contact_email: entry.contactEmail ?? null,
+    contact_phone: entry.contactPhone ?? null,
+    role: entry.role ?? null,
+    website: null,
+    url_source: entry.urlSource ?? null,
+  });
 
   return (
     <>
@@ -249,17 +260,17 @@ function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOpti
           {ALLOCATOR_TYPE_LABELS[entry.allocatorType]}
           {entry.hqCity && ` · ${entry.hqCity}`}
         </p>
-        {entry.contactName && (
+        {(contactFields.contact_name || entry.contactName) && (
           <p className="mt-0.5 font-mono text-[10px] text-fg-muted truncate max-w-[220px]">
-            {entry.contactName}
-            {entry.role && <span className="opacity-60"> · {entry.role}</span>}
+            {contactFields.contact_name ?? entry.contactName}
+            {(contactFields.role ?? entry.role) && <span className="opacity-60"> · {contactFields.role ?? entry.role}</span>}
           </p>
         )}
-        {(entry.contactEmail || entry.contactPhone) && (
+        {(contactFields.contact_email || contactFields.contact_phone || entry.contactEmail || entry.contactPhone) && (
           <p className="mt-0.5 font-mono text-[9px] text-fg-muted/70 truncate max-w-[220px]">
-            {entry.contactEmail && <a href={`mailto:${entry.contactEmail}`} onClick={(e) => e.stopPropagation()} className="hover:text-gold-300">{entry.contactEmail}</a>}
-            {entry.contactEmail && entry.contactPhone && " · "}
-            {entry.contactPhone}
+            {(contactFields.contact_email ?? entry.contactEmail) && <a href={`mailto:${contactFields.contact_email ?? entry.contactEmail}`} onClick={(e) => e.stopPropagation()} className="hover:text-gold-300">{contactFields.contact_email ?? entry.contactEmail}</a>}
+            {(contactFields.contact_email ?? entry.contactEmail) && (contactFields.contact_phone ?? entry.contactPhone) && " · "}
+            {contactFields.contact_phone ?? entry.contactPhone}
           </p>
         )}
         {entry.topActionTitle && (
@@ -338,6 +349,7 @@ function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOpti
         </p>
         <span className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <LogContactButton investorId={entry.id} />
+          <EditContactBtn onClick={() => setEditingContact((v) => !v)} />
           <button
             onClick={(e) => { e.stopPropagation(); setShowInvite(true); }}
             className="rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
@@ -350,6 +362,17 @@ function AllocatorRow({ entry, funds }: { entry: AllocatorEntry; funds: FundOpti
         </span>
       </div>
     </div>
+    {editingContact && (
+      <div className="px-4 pb-3" onClick={(e) => e.stopPropagation()}>
+        <InlineContactEdit
+          table="investors"
+          id={entry.id}
+          initial={contactFields}
+          onClose={() => setEditingContact(false)}
+          onSaved={(f) => { setContactFields(f); setEditingContact(false); }}
+        />
+      </div>
+    )}
     </>
   );
 }

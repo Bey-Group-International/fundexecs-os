@@ -152,6 +152,12 @@ export const ADD_ROW_CONFIGS: Record<string, AddRowConfig> = {
       { name: "interest_rate", label: "Interest rate (%)", type: "number" },
       { name: "currency", label: "Currency", type: "text", defaultValue: "USD" },
       { name: "status", label: "Status", type: "select", options: FACILITY_STATUSES, defaultValue: "prospective" },
+      { name: "contact_name", label: "Contact name", type: "text" },
+      { name: "contact_email", label: "Contact email", type: "text" },
+      { name: "contact_phone", label: "Contact phone", type: "text" },
+      { name: "role", label: "Role", type: "text" },
+      { name: "website", label: "Website", type: "text" },
+      { name: "url_source", label: "Source URL", type: "text" },
     ],
   },
 };

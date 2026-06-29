@@ -113,6 +113,7 @@ export async function addSourcedTargets(
       category: String(c.category ?? "").trim(),
       rationale: String(c.rationale ?? "").trim(),
       fitScore: typeof c.fitScore === "number" ? c.fitScore : null,
+      sourceUrl: typeof c.sourceUrl === "string" && c.sourceUrl.trim() ? c.sourceUrl.trim() : null,
       // A web-sourced citation becomes the verification evidence, pre-filled so
       // the operator can confirm the (still unverified) record in one click.
       verification_note:
@@ -140,6 +141,7 @@ export async function addSourcedTargets(
         pipeline_stage: "prospect",
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: typeof c.sourceUrl === "string" && c.sourceUrl ? c.sourceUrl.trim() : null,
       }));
       const { data: ins, error } = await supabase.from("investors").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -156,6 +158,7 @@ export async function addSourcedTargets(
         asset_class: c.category || null,
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: c.sourceUrl,
         session_id: meta?.sessionId ?? null,
       }));
       const { data: ins, error } = await supabase.from("deals").insert(rows).select("id");
@@ -174,6 +177,7 @@ export async function addSourcedTargets(
         currency: "USD",
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: c.sourceUrl,
       }));
       const { data: ins, error } = await supabase.from("debt_facilities").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -190,6 +194,7 @@ export async function addSourcedTargets(
         status: "prospective",
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: c.sourceUrl,
       }));
       const { data: ins, error } = await supabase.from("partners").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -206,6 +211,7 @@ export async function addSourcedTargets(
         status: "prospective",
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: c.sourceUrl,
       }));
       const { data: ins, error } = await supabase.from("service_providers").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };

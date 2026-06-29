@@ -7,6 +7,8 @@ import { useState, useMemo, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { advanceDealStageAction, createModuleRow } from "@/app/(app)/[hub]/[module]/actions";
 import { DeleteDealBtn } from "@/components/source/SourceDeleteControls";
+import { InlineContactEdit } from "@/components/source/InlineContactEdit";
+import type { ContactFields } from "@/app/(app)/[hub]/[module]/actions";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 import type { FitAnalysis } from "@/lib/source-hub-types";
 import type { DealStage } from "@/lib/supabase/database.types";
@@ -173,6 +175,14 @@ function DealSlideOver({
   onStageAdvanced: (dealId: string, newStage: DealStage, suggestDocType?: string) => void;
 }) {
   const [suggestDoc, setSuggestDoc] = useState<string | undefined>();
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactFields, setContactFields] = useState<ContactFields>({
+    contact_name: deal?.contactName ?? null,
+    contact_email: deal?.contactEmail ?? null,
+    contact_phone: deal?.contactPhone ?? null,
+    role: null,
+    url_source: deal?.urlSource ?? null,
+  });
 
   useEffect(() => {
     if (!deal) setSuggestDoc(undefined);
@@ -341,33 +351,51 @@ function DealSlideOver({
           )}
 
           {/* Point of Contact */}
-          {(deal.contactName || deal.contactEmail || deal.contactPhone) && (
-            <div>
-              <p className="mb-1 font-mono text-[9px] uppercase tracking-widest text-fg-muted">Point of Contact</p>
-              {deal.contactName && <p className="text-xs text-fg-secondary">{deal.contactName}</p>}
-              {deal.contactEmail && (
-                <a href={`mailto:${deal.contactEmail}`} className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline block">
-                  {deal.contactEmail}
-                </a>
-              )}
-              {deal.contactPhone && <p className="font-mono text-[11px] text-fg-muted">{deal.contactPhone}</p>}
-            </div>
-          )}
-
-          {/* Source URL */}
-          {deal.urlSource && (
-            <div>
-              <p className="mb-1 font-mono text-[9px] uppercase tracking-widest text-fg-muted">Source URL</p>
-              <a
-                href={deal.urlSource.startsWith("http") ? deal.urlSource : `https://${deal.urlSource}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline"
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">Point of Contact</p>
+              <button
+                type="button"
+                onClick={() => setEditingContact((v) => !v)}
+                className="font-mono text-[9px] text-fg-muted hover:text-gold-300"
               >
-                {deal.urlSource.replace(/^https?:\/\//, "")}
-              </a>
+                {editingContact ? "Cancel" : "Edit"}
+              </button>
             </div>
-          )}
+            {editingContact ? (
+              <InlineContactEdit
+                table="deals"
+                id={deal.id}
+                initial={contactFields}
+                onClose={() => setEditingContact(false)}
+                onSaved={(f) => { setContactFields(f); setEditingContact(false); }}
+              />
+            ) : (contactFields.contact_name || contactFields.contact_email || contactFields.contact_phone || deal.contactName || deal.contactEmail || deal.contactPhone) ? (
+              <div className="space-y-0.5">
+                {(contactFields.contact_name ?? deal.contactName) && <p className="text-xs text-fg-secondary">{contactFields.contact_name ?? deal.contactName}</p>}
+                {(contactFields.contact_email ?? deal.contactEmail) && (
+                  <a href={`mailto:${contactFields.contact_email ?? deal.contactEmail}`} className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline block">
+                    {contactFields.contact_email ?? deal.contactEmail}
+                  </a>
+                )}
+                {(contactFields.contact_phone ?? deal.contactPhone) && <p className="font-mono text-[11px] text-fg-muted">{contactFields.contact_phone ?? deal.contactPhone}</p>}
+                {(contactFields.url_source ?? deal.urlSource) && (
+                  <a
+                    href={(contactFields.url_source ?? deal.urlSource ?? "").startsWith("http") ? (contactFields.url_source ?? deal.urlSource)! : `https://${contactFields.url_source ?? deal.urlSource}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline block"
+                  >
+                    {(contactFields.url_source ?? deal.urlSource ?? "").replace(/^https?:\/\//, "")}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <button type="button" onClick={() => setEditingContact(true)} className="font-mono text-[10px] text-fg-muted/50 hover:text-gold-300">
+                + Add contact
+              </button>
+            )}
+          </div>
 
           {/* Notes */}
           {deal.notes && (
