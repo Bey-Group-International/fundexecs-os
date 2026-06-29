@@ -11,6 +11,7 @@ import { DigestPreferences } from "./DigestPreferences";
 import { loadDigestPrefs } from "./digest-actions";
 import { ApiKeys, type ApiKeyView } from "./ApiKeys";
 import { GuidedTourSetting } from "./GuidedTourSetting";
+import { ShortcutsAndCustomization } from "./ShortcutsAndCustomization";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { TIER_2_ACTIONS } from "./tier2-actions";
 import { deactivateMandate, setDiscoverable } from "./actions";
@@ -28,6 +29,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "integrations", label: "Integrations" },
   { id: "digest", label: "Digest" },
   { id: "api", label: "API keys" },
+  { id: "shortcuts", label: "Shortcuts" },
   { id: "help", label: "Help" },
   { id: "about", label: "About" },
 ];
@@ -241,6 +243,16 @@ export default async function SettingsPage() {
             description="Issue FundExecs-native credentials to call the FundExecs OS API. Each key is a publishable/secret pair: the publishable key is safe to embed, the secret authenticates server-to-server (send it as an Authorization: Bearer header). The secret is shown once at creation — store it safely, and rotate or revoke any time."
           >
             <ApiKeys keys={apiKeys} />
+          </Section>
+
+          {/* Shortcuts & Customization */}
+          <Section
+            id="shortcuts"
+            eyebrow="Preferences"
+            title="Shortcuts & customization"
+            description="Keyboard shortcuts for navigating FundExecs OS, and appearance settings for this device."
+          >
+            <ShortcutsAndCustomization />
           </Section>
 
           {/* Help */}
