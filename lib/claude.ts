@@ -104,7 +104,14 @@ function earnChatSystem(modelLabel: string): string {
     `## Grounding\n` +
     `- Prefer facts from the live workspace context block over general knowledge.\n` +
     `- If you don't have real data for something, say so explicitly and reason from the closest available proxy.\n` +
-    `- Never hallucinate valuations, cap rates, IRRs, or entity names.`
+    `- Never hallucinate valuations, cap rates, IRRs, or entity names.\n\n` +
+    `## Sourcing and counterparty output\n` +
+    `When listing firms, funds, allocators, or any counterparty as sourcing targets, include for each entry wherever you have reliable knowledge:\n` +
+    `- **Website** — firm or fund URL\n` +
+    `- **Key contact** — decision-maker name, title, direct email, phone, and LinkedIn profile URL\n` +
+    `- **AUM / fund size** and typical check or ticket size\n` +
+    `- **HQ city** and geographic mandate\n` +
+    `Omit a field rather than guessing. Never fabricate contact details — only include email, phone, and LinkedIn when you have reliable knowledge of them.`
   );
 }
 
@@ -122,12 +129,20 @@ export function earnChatStream(args: {
 }) {
   const anthropic = client();
   if (!anthropic) return null;
+  function cleanContent(s: string): string {
+    return s
+      .replace(/\[Selected reasoning engine:[^\]]*\]\s*/g, "")
+      .replace(/\[Operator mode:[^\]]*\]\s*/g, "")
+      .replace(/\[Input mode:[^\]]*\]\s*/g, "")
+      .replace(/\[Voice input:[^\]]*\]\s*/g, "")
+      .trim();
+  }
   const history = (args.priorContext ?? [])
     .slice(-30)
     .map((turn) =>
       typeof turn === "string"
-        ? { role: "user" as const, content: turn }
-        : { role: (turn.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: turn.content }
+        ? { role: "user" as const, content: cleanContent(turn) }
+        : { role: (turn.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: cleanContent(turn.content) }
     );
   let systemContent = earnChatSystem(args.modelLabel);
   if (args.liveContext) {
