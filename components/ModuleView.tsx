@@ -18,6 +18,8 @@ import { RunRiskModule, RunStressTestModule, RunCommsModule } from "@/components
 import { DocumentsModuleLive } from "@/components/run/DocumentsModuleLive";
 import { AllocatorDirectoryLive } from "@/components/source/AllocatorDirectoryLive";
 import { ServiceProviderDirectoryLive } from "@/components/source/ServiceProviderDirectoryLive";
+import { PartnersLive } from "@/components/source/PartnersLiveServer";
+import { DealPipelineLive } from "@/components/source/DealPipelineLive";
 import { RunStrategyModule } from "@/components/run/RunStrategyModule";
 import { RunDiligenceModule } from "@/components/run/RunDiligenceModule";
 import { RunUnderwritingModule } from "@/components/run/RunUnderwritingModule";
@@ -334,6 +336,56 @@ export async function ModuleView({
           fields={ADD_ROW_CONFIGS[key]?.fields ?? []}
         />
         <ServiceProviderDirectoryLive />
+      </div>
+    );
+  }
+
+  if (hub.key === "source" && mod.key === "partners") {
+    const aiCfg = sessionId ? null : sourceConfigFor(key);
+    return (
+      <div>
+        {mandateStrip}
+        {aiCfg ? (
+          <AiSourcingPanel
+            hub={hub.key}
+            module={mod.key}
+            entities={aiCfg.entities}
+            agentName={AGENT_BY_KEY[aiCfg.agent]?.name ?? "Sourcing"}
+            live={sourcingLive()}
+            webEnrichment={sourcingEnrichmentEnabled()}
+          />
+        ) : null}
+        <AddRowForm
+          hub={hub.key}
+          module={mod.key}
+          fields={ADD_ROW_CONFIGS[key]?.fields ?? []}
+        />
+        <PartnersLive />
+      </div>
+    );
+  }
+
+  if (hub.key === "source" && mod.key === "deal_pipeline") {
+    const aiCfg = sessionId ? null : sourceConfigFor(key);
+    return (
+      <div>
+        {mandateStrip}
+        {aiCfg ? (
+          <AiSourcingPanel
+            hub={hub.key}
+            module={mod.key}
+            entities={aiCfg.entities}
+            agentName={AGENT_BY_KEY[aiCfg.agent]?.name ?? "Sourcing"}
+            live={sourcingLive()}
+            webEnrichment={sourcingEnrichmentEnabled()}
+          />
+        ) : null}
+        <AddRowForm
+          hub={hub.key}
+          module={mod.key}
+          fields={ADD_ROW_CONFIGS[key]?.fields ?? []}
+        />
+        <DealPipelineLive />
       </div>
     );
   }
