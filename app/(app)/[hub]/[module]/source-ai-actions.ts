@@ -124,34 +124,35 @@ export async function addSourcedTargets(
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
 
-  // Enrich only the accepted picks with Apollo contact data at insert time so
-  // candidates render immediately from Claude without waiting for API calls.
-  let enriched = candidates as SourceCandidate[];
+  // Filter to named candidates first so Apollo credits aren't spent on entries
+  // that the clean step would drop anyway.
+  let validCandidates = (candidates as SourceCandidate[]).filter(
+    (c) => String(c.name ?? "").trim(),
+  );
   if (process.env.APOLLO_API_KEY) {
-    try { enriched = await apolloEnrichCandidates(enriched); } catch { /* non-fatal */ }
+    try { validCandidates = await apolloEnrichCandidates(validCandidates); } catch { /* non-fatal */ }
   }
 
-  const clean = enriched
-    .map((c) => ({
-      name: String(c.name ?? "").trim(),
-      category: String(c.category ?? "").trim(),
-      rationale: String(c.rationale ?? "").trim(),
-      fitScore: typeof c.fitScore === "number" ? c.fitScore : null,
-      sourceUrl: typeof c.sourceUrl === "string" && c.sourceUrl.trim() ? c.sourceUrl.trim() : null,
-      // A web-sourced citation becomes the verification evidence, pre-filled so
-      // the operator can confirm the (still unverified) record in one click.
-      verification_note:
-        typeof c.sourceUrl === "string" && /^https?:\/\/\S+$/i.test(c.sourceUrl.trim())
-          ? c.sourceUrl.trim().slice(0, 500)
-          : null,
-      website: typeof c.website === "string" && c.website.trim() ? c.website.trim() : null,
-      contactName: typeof c.contactName === "string" && c.contactName.trim() ? c.contactName.trim() : null,
-      contactRole: typeof c.contactRole === "string" && c.contactRole.trim() ? c.contactRole.trim() : null,
-      contactEmail: typeof c.contactEmail === "string" && c.contactEmail.trim() ? c.contactEmail.trim() : null,
-      contactPhone: typeof c.contactPhone === "string" && c.contactPhone.trim() ? c.contactPhone.trim() : null,
-    }))
-    .filter((c) => c.name);
-  if (clean.length === 0) return { ok: false, error: "Nothing to add." };
+  const normalize = (s: unknown) =>
+    typeof s === "string" && s.trim() ? s.trim() : null;
+  const clean = validCandidates.map((c) => ({
+    name: String(c.name ?? "").trim(),
+    category: String(c.category ?? "").trim(),
+    rationale: String(c.rationale ?? "").trim(),
+    fitScore: typeof c.fitScore === "number" ? c.fitScore : null,
+    sourceUrl: normalize(c.sourceUrl),
+    // A web-sourced citation becomes the verification evidence, pre-filled so
+    // the operator can confirm the (still unverified) record in one click.
+    verification_note:
+      typeof c.sourceUrl === "string" && /^https?:\/\/\S+$/i.test(c.sourceUrl.trim())
+        ? c.sourceUrl.trim().slice(0, 500)
+        : null,
+    website: normalize(c.website),
+    contactName: normalize(c.contactName),
+    contactRole: normalize(c.contactRole),
+    contactEmail: normalize(c.contactEmail),
+    contactPhone: normalize(c.contactPhone),
+  }));
 
   // AI-sourced rows carry their fit rationale into `notes` so the operator keeps
   // the "why" when triaging the pipeline.
@@ -307,7 +308,7 @@ export async function addSourcedTargets(
       fitScore: typeof r.fitScore === "number" ? r.fitScore : null,
     });
   }
-  await recordSourceFeedback(supabase, feedback);
+  try { await recordSourceFeedback(supabase, feedback); } catch { /* best-effort */ }
 
   // Agent-native intelligence: accepted candidates also grow the Sourcing
   // Intelligence catalog (migration 0042) so they're semantically discoverable
@@ -320,9 +321,9 @@ export async function addSourcedTargets(
     categories: c.category ? [c.category] : [],
     metadata: { fitScore: c.fitScore, query: meta?.query ?? null },
     provenance: c.verification_note ? "web" : "ai",
-    sourceUrl: c.verification_note,
+    sourceUrl: c.sourceUrl ?? undefined,
   }));
-  await ingestEntities(supabase, orgId, auth.ctx.userId, catalog);
+  try { await ingestEntities(supabase, orgId, auth.ctx.userId, catalog); } catch { /* best-effort */ }
 
   revalidatePath(`/${hub}/${module}`);
   return { ok: true, added };
