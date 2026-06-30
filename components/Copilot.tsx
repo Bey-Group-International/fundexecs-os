@@ -827,7 +827,7 @@ export default function Copilot({
             aria-live="polite"
             aria-busy={t.streaming}
           >
-            {t.content ? <Markdown>{t.content}</Markdown> : null}
+            {t.content ? <Markdown>{stripSystemAnnotations(t.content)}</Markdown> : null}
             {t.streaming ? (
               <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom motion-reduce:animate-none" aria-hidden />
             ) : null}

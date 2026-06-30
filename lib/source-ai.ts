@@ -99,6 +99,7 @@ export interface SourceCandidate {
   contactRole?: string;
   contactEmail?: string;
   contactPhone?: string;
+  contactLinkedIn?: string;
   aumRange?: string;
   ticketRange?: string;
   strategies?: string[];
@@ -313,6 +314,9 @@ const CANDIDATES_SCHEMA = {
           website: { type: "string", description: "Company or fund website URL" },
           contactName: { type: "string", description: "Key decision maker full name" },
           contactRole: { type: "string", description: "Their title or role" },
+          contactEmail: { type: "string", description: "Direct email address — omit rather than guess" },
+          contactPhone: { type: "string", description: "Direct phone number — omit rather than guess" },
+          contactLinkedIn: { type: "string", description: "LinkedIn profile URL — omit rather than guess" },
           aumRange: { type: "string", description: "AUM or fund size range, e.g. '$500M–$2B'" },
           ticketRange: { type: "string", description: "Typical check or ticket size, e.g. '$1M–$5M'" },
           strategies: { type: "array", items: { type: "string" }, description: "Primary investment strategies or focus areas" },
@@ -354,7 +358,7 @@ export async function generateTargets(
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1500,
-      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Propose specific, real-world targets that fit the firm's mandate and the operator's request — the kind a sharp ${agentName.toLowerCase()} would put on a call sheet. For each target include wherever you have reliable knowledge: the company website, a key decision maker's name and title, estimated AUM or fund size range, typical check or ticket size, primary strategies or focus areas, and headquarters location. Leave a field empty rather than guessing. ${catLine}`,
+      system: `You are the ${agentName} agent inside FundExecs OS, sourcing ${cfg.entities} for a private-market operator. Propose specific, real-world targets that fit the firm's mandate and the operator's request — the kind a sharp ${agentName.toLowerCase()} would put on a call sheet. For each target include wherever you have reliable knowledge: the company website, a key decision maker's name and title, their direct email, phone number, and LinkedIn profile URL, estimated AUM or fund size range, typical check or ticket size, primary strategies or focus areas, and headquarters location. Leave a field empty rather than guessing — never fabricate contact details. ${catLine}`,
       output_config: { effort: "low", format: { type: "json_schema", schema: CANDIDATES_SCHEMA } },
       messages: [
         {
@@ -465,6 +469,9 @@ function normalizeCandidates(
       website: cleanUrl(o.website),
       contactName: cleanStr(o.contactName, 120) || undefined,
       contactRole: cleanStr(o.contactRole, 120) || undefined,
+      contactEmail: cleanStr(o.contactEmail, 200) || undefined,
+      contactPhone: cleanStr(o.contactPhone, 40) || undefined,
+      contactLinkedIn: cleanUrl(o.contactLinkedIn) || undefined,
       aumRange: cleanStr(o.aumRange, 60) || undefined,
       ticketRange: cleanStr(o.ticketRange, 60) || undefined,
       strategies: strategies?.length ? strategies : undefined,
@@ -502,6 +509,7 @@ export async function apolloEnrichCandidates(candidates: SourceCandidate[]): Pro
               contactRole: c.contactRole || p.title,
               contactEmail: c.contactEmail || p.email,
               contactPhone: c.contactPhone || p.phone,
+              contactLinkedIn: c.contactLinkedIn || p.linkedin_url,
             };
           }
         } catch { /* non-fatal */ }
