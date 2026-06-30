@@ -44,15 +44,6 @@ const ExecuteSearch = nextDynamic(() =>
 );
 
 // Hub-specific feature components (lazy-loaded for code splitting).
-const AllocatorDirectoryLive = nextDynamic(() =>
-  import("@/components/source/AllocatorDirectoryLive").then((m) => m.AllocatorDirectoryLive),
-);
-const PartnersLive = nextDynamic(() =>
-  import("@/components/source/PartnersLiveServer").then((m) => m.PartnersLive),
-);
-const DealPipelineLive = nextDynamic(() =>
-  import("@/components/source/DealPipelineLive").then((m) => m.DealPipelineLive),
-);
 const ClosingLive = nextDynamic(() =>
   import("@/components/execute/ClosingLive").then((m) => m.ClosingLive),
 );
@@ -121,42 +112,6 @@ export default function ModulePage({
   }
   if (params.hub === "execute" && params.module === "search") {
     return <ExecuteSearch live={copilotLive()} initialPrompt={initialPrompt} />;
-  }
-
-  // Source › LP Pipeline — Allocator Intelligence Directory.
-  if (params.hub === "source" && params.module === "lp_pipeline") {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <AllocatorDirectoryLive />
-        <div className="mt-8 border-t border-line pt-8">
-          <ModuleView hub={params.hub} module={params.module} />
-        </div>
-      </div>
-    );
-  }
-
-  // Source › Partners — active partner pipeline.
-  if (params.hub === "source" && params.module === "partners") {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-6 flex flex-col gap-8">
-        <PartnersLive />
-        <div className="border-t border-line pt-8">
-          <ModuleView hub={params.hub} module={params.module} />
-        </div>
-      </div>
-    );
-  }
-
-  // Source › Deal Pipeline — active deal pipeline.
-  if (params.hub === "source" && params.module === "deal_pipeline") {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-6 flex flex-col gap-8">
-        <DealPipelineLive />
-        <div className="border-t border-line pt-8">
-          <ModuleView hub={params.hub} module={params.module} />
-        </div>
-      </div>
-    );
   }
 
   // Execute › Closing — LP Onboarding + Contract Status Board.
