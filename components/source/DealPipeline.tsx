@@ -30,6 +30,7 @@ export interface DealEntry {
   contactEmail?: string | null;
   contactPhone?: string | null;
   urlSource?: string | null;
+  provenance?: string | null;
   // Apollo-enriched
   industry?: string;
   employeeRange?: string;
@@ -741,7 +742,14 @@ export function DealPipeline({ deals, enrichCap }: Props) {
                   }}
                 >
                   <td className="px-4 py-3">
-                    <p className="font-medium text-fg">{d.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-medium text-fg">{d.name}</p>
+                      {d.provenance === "ai" ? (
+                        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+                      ) : (
+                        <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+                      )}
+                    </div>
                     {d.industry ? (
                       <p className="mt-0.5 text-xs text-fg-muted">{d.industry}</p>
                     ) : d.geography ? (

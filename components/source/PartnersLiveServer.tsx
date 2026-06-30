@@ -11,7 +11,7 @@ async function loadPartners() {
     const { data } = await supabase
       .from("partners")
       .select(
-        "id, name, partner_type, contact_name, contact_email, contact_phone, role, website, url_source, status, notes",
+        "id, name, partner_type, contact_name, contact_email, contact_phone, role, website, url_source, provenance, status, notes",
       )
       .eq("organization_id", auth.ctx.orgId)
       .is("archived_at", null)

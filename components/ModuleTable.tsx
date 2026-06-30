@@ -63,9 +63,13 @@ function VerifyBadge({ row }: { row: Row }) {
     <div className="flex items-center justify-end gap-1.5">
       {ai ? (
         <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
-          AI
+          AI Sourced
         </span>
-      ) : null}
+      ) : (
+        <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          Manual
+        </span>
+      )}
       {verified ? (
         <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-status-success">
           ✓ Verified

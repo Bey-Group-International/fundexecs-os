@@ -49,6 +49,7 @@ interface AllocatorEntry {
   contactPhone?: string | null;
   role?: string | null;
   urlSource?: string | null;
+  provenance?: string | null;
 }
 
 const TEMP_COLORS: Record<string, string> = {
@@ -267,7 +268,14 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
     <div className="group flex items-center gap-4 border-b border-line px-4 py-3 last:border-0 transition hover:bg-surface-2/40">
       {/* Name + type + next action */}
       <div className="min-w-[200px] flex-1">
-        <p className="text-sm font-medium text-fg-primary">{entry.name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium text-fg-primary">{entry.name}</p>
+          {entry.provenance === "ai" ? (
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+          ) : (
+            <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+          )}
+        </div>
         <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
           {ALLOCATOR_TYPE_LABELS[entry.allocatorType]}
           {entry.hqCity && ` · ${entry.hqCity}`}

@@ -18,6 +18,7 @@ type ProviderRow = {
   contact_phone: string | null;
   role: string | null;
   url_source: string | null;
+  provenance: string | null;
   status: string | null;
   notes: string | null;
   website: string | null;
@@ -107,7 +108,7 @@ export async function ServiceProviderDirectoryLive() {
 
     const { data } = await supabase
       .from("service_providers")
-      .select("id, name, provider_type, contact_name, contact_email, contact_phone, role, url_source, status, notes, website")
+      .select("id, name, provider_type, contact_name, contact_email, contact_phone, role, url_source, provenance, status, notes, website")
       .eq("organization_id", auth.ctx.orgId)
       .is("archived_at", null)
       .order("created_at", { ascending: false })
@@ -144,6 +145,7 @@ export async function ServiceProviderDirectoryLive() {
         contactPhone: r.contact_phone,
         role: r.role,
         urlSource: r.url_source,
+        provenance: r.provenance,
         status: r.status ?? "active",
         notes: r.notes,
         website: enr.website ?? (r.website ?? undefined),

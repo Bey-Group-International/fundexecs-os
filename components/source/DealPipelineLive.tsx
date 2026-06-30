@@ -28,6 +28,7 @@ interface DealRow {
   contact_email: string | null;
   contact_phone: string | null;
   url_source: string | null;
+  provenance: string | null;
 }
 
 interface MandateCtx {
@@ -162,7 +163,7 @@ async function loadDeals(): Promise<DealEntry[]> {
   const { data, error } = await supabase
     .from("deals")
     .select(
-      "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website, notes, contact_name, contact_email, contact_phone, url_source",
+      "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website, notes, contact_name, contact_email, contact_phone, url_source, provenance",
     )
     .eq("organization_id", auth.ctx.orgId)
     .is("archived_at", null)
@@ -205,6 +206,7 @@ async function loadDeals(): Promise<DealEntry[]> {
       contactEmail: d.contact_email,
       contactPhone: d.contact_phone,
       urlSource: d.url_source,
+      provenance: d.provenance,
       industry: enr.enriched?.industry,
       employeeRange: enr.enriched?.employee_range,
       revenueRange: enr.enriched?.revenue_range,
