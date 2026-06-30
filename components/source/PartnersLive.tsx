@@ -23,6 +23,7 @@ interface PartnerRow {
   role?: string | null;
   website?: string | null;
   url_source?: string | null;
+  provenance?: string | null;
   status: string | null;
   notes: string | null;
 }
@@ -41,7 +42,16 @@ function PartnerRowItem({ p, isLast }: { p: PartnerRow; isLast: boolean }) {
   return (
     <>
       <tr className={isLast ? "" : "border-b border-line"}>
-        <td className="px-4 py-3 font-medium text-fg">{p.name}</td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-fg">{p.name}</span>
+            {p.provenance === "ai" ? (
+              <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+            ) : (
+              <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+            )}
+          </div>
+        </td>
         <td className="px-4 py-3 text-fg-muted">{p.partner_type ?? "—"}</td>
         <td className="px-4 py-3">
           {fields.contact_name ? (

@@ -50,6 +50,7 @@ export interface ProviderEntry {
   contactPhone?: string | null;
   role?: string | null;
   urlSource?: string | null;
+  provenance?: string | null;
   status: string;
   notes: string | null;
   // Apollo-enriched
@@ -328,7 +329,14 @@ function ProviderCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-fg-primary">{provider.name}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="truncate text-sm font-medium text-fg-primary">{provider.name}</p>
+            {provider.provenance === "ai" ? (
+              <span className="shrink-0 rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+            ) : (
+              <span className="shrink-0 rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+            )}
+          </div>
           {provider.description && (
             <p className="mt-0.5 line-clamp-1 text-[11px] text-fg-muted">{provider.description}</p>
           )}

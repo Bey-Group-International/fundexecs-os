@@ -51,6 +51,7 @@ interface InvestorRow {
   contact_phone: string | null;
   role: string | null;
   url_source: string | null;
+  provenance: string | null;
 }
 
 interface EnrichedData {
@@ -140,7 +141,7 @@ async function loadAllocatorEntries() {
     const { data: investorRows } = await supabase
       .from("investors")
       .select(
-        "id, name, investor_type, aum, typical_check_min, typical_check_max, jurisdiction, pipeline_stage, verified, confidence, source_provider, last_verified_at, website, contact_name, contact_email, contact_phone, role, url_source",
+        "id, name, investor_type, aum, typical_check_min, typical_check_max, jurisdiction, pipeline_stage, verified, confidence, source_provider, last_verified_at, website, contact_name, contact_email, contact_phone, role, url_source, provenance",
       )
       .eq("organization_id", auth.ctx.orgId)
       .is("archived_at", null)
@@ -203,6 +204,7 @@ async function loadAllocatorEntries() {
         contactPhone: inv.contact_phone,
         role: inv.role,
         urlSource: inv.url_source,
+        provenance: inv.provenance,
       };
     });
   } catch {
