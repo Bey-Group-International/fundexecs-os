@@ -498,10 +498,10 @@ export async function apolloEnrichCandidates(candidates: SourceCandidate[]): Pro
             const p = res.data[0];
             return {
               ...c,
-              contactName: c.contactName || p.name || c.contactName,
-              contactRole: c.contactRole || p.title || c.contactRole,
-              contactEmail: c.contactEmail || p.email || c.contactEmail,
-              contactPhone: c.contactPhone || p.phone || c.contactPhone,
+              contactName: c.contactName || p.name,
+              contactRole: c.contactRole || p.title,
+              contactEmail: c.contactEmail || p.email,
+              contactPhone: c.contactPhone || p.phone,
             };
           }
         } catch { /* non-fatal */ }
