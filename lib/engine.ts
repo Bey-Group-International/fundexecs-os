@@ -22,6 +22,9 @@ import { classifyStepIntent, dispatchStepTool, formatDispatchOutput } from "@/li
 import { buildArtifactAttestation } from "@/lib/attestation-seal";
 import { grantReputation, REPUTATION_POINTS } from "@/lib/reputation";
 import { isPrincipalIdentityVerified } from "@/lib/identity";
+import { compoundingProfile } from "@/lib/compounding";
+import { spendCredits } from "@/lib/credits";
+import { effectiveStepCost } from "@/lib/agent-costs";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -667,6 +670,10 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
   const artifactIds: string[] = [];
 
   const orgContext = await loadOrgContext(ctx, workflow);
+  // Resolve the org's compounding profile once for the whole workflow so all
+  // steps share the same discount. Fetched after orgContext to avoid an extra
+  // round-trip on the hot path; profile is safe to compute unconditionally.
+  const orgProfile = await compoundingProfile(ctx.orgId);
 
   for (let i = 0; i < list.length; i++) {
     const step = list[i];
@@ -690,6 +697,17 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     const stepIntent = classifyStepIntent(step.title, step.description ?? "");
     let output: string;
     try {
+      // Debit credits before execution. Throws if insufficient, which the catch
+      // block below handles as a step failure — the workflow continues to remaining
+      // steps so the operator can top up and re-run rather than losing all work.
+      const cost = effectiveStepCost(step.assigned_agent, orgProfile);
+      const spent = await spendCredits(ctx.orgId, cost, step.assigned_agent);
+      if (!spent.ok) {
+        throw new Error(
+          `Insufficient credits: ${spent.balance ?? 0} available, ${cost} required. Top up on the Wallet page to continue.`,
+        );
+      }
+
       const dispatched = (stepIntent !== "text_generation" && stepIntent !== "draft_document")
         ? await dispatchStepTool({
             intent: stepIntent,
