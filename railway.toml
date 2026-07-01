@@ -1,7 +1,7 @@
 [build]
 # Build the server image from the repo root so npm workspaces resolve
 dockerfilePath = "server/Dockerfile"
-watchPatterns = ["server/**", "shared/**"]
+watchPatterns = ["server/**", "shared/**", "package.json", "package-lock.json"]
 
 [deploy]
 startCommand = "node server/dist/index.js"
