@@ -46,6 +46,10 @@ export class VirtualOfficeSocket {
     this._send({ type: "ping", clientTime: Date.now() });
   }
 
+  sendRtc(msg: import("./messages").RtcOfferClientMessage | import("./messages").RtcAnswerClientMessage | import("./messages").RtcIceClientMessage | import("./messages").RtcLeaveClientMessage): void {
+    this._send(msg);
+  }
+
   onMessage(handler: MessageHandler): void {
     this.messageHandlers.push(handler);
   }

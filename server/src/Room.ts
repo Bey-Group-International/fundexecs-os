@@ -146,6 +146,11 @@ export class Room {
     }
   }
 
+  /** Relay a targeted signalling message (RTC) without modification */
+  relayTo(targetId: string, message: ServerMessage): void {
+    this.sendTo(targetId, message);
+  }
+
   hasPlayer(playerId: string): boolean {
     return this.players.has(playerId);
   }

@@ -112,6 +112,10 @@ class Room {
             // socket may be closing
         }
     }
+    /** Relay a targeted signalling message (RTC) without modification */
+    relayTo(targetId, message) {
+        this.sendTo(targetId, message);
+    }
     hasPlayer(playerId) {
         return this.players.has(playerId);
     }

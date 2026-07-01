@@ -109,6 +109,16 @@ function createGateway(roomManager, authService) {
                     serverTime: Date.now(),
                 });
             }
+            else if (msg.type === "rtc.offer") {
+                room.relayTo(msg.to, { type: "rtc.offer", from: playerId, sdp: msg.sdp });
+            }
+            else if (msg.type === "rtc.answer") {
+                room.relayTo(msg.to, { type: "rtc.answer", from: playerId, sdp: msg.sdp });
+            }
+            else if (msg.type === "rtc.ice") {
+                room.relayTo(msg.to, { type: "rtc.ice", from: playerId, candidate: msg.candidate });
+            }
+            // rtc.leave is client-only; no server action needed
         },
         close: async (ws, _code, _message) => {
             const { playerId, roomId } = ws.getUserData();

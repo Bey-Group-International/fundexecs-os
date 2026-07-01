@@ -26,7 +26,35 @@ export type PingMessage = {
   clientTime: number;
 };
 
-export type ClientMessage = PlayerMoveMessage | PingMessage;
+export type RtcOfferClientMessage = {
+  type: "rtc.offer";
+  to: string;
+  sdp: string;
+};
+
+export type RtcAnswerClientMessage = {
+  type: "rtc.answer";
+  to: string;
+  sdp: string;
+};
+
+export type RtcIceClientMessage = {
+  type: "rtc.ice";
+  to: string;
+  candidate: RTCIceCandidateInit;
+};
+
+export type RtcLeaveClientMessage = {
+  type: "rtc.leave";
+};
+
+export type ClientMessage =
+  | PlayerMoveMessage
+  | PingMessage
+  | RtcOfferClientMessage
+  | RtcAnswerClientMessage
+  | RtcIceClientMessage
+  | RtcLeaveClientMessage;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 
@@ -83,6 +111,24 @@ export type BubbleUpdateMessage = {
   members: string[];
 };
 
+export type RtcOfferServerMessage = {
+  type: "rtc.offer";
+  from: string;
+  sdp: string;
+};
+
+export type RtcAnswerServerMessage = {
+  type: "rtc.answer";
+  from: string;
+  sdp: string;
+};
+
+export type RtcIceServerMessage = {
+  type: "rtc.ice";
+  from: string;
+  candidate: RTCIceCandidateInit;
+};
+
 export type ServerMessage =
   | WelcomeMessage
   | PlayerJoinedMessage
@@ -91,4 +137,7 @@ export type ServerMessage =
   | PongMessage
   | BubbleJoinMessage
   | BubbleLeaveMessage
-  | BubbleUpdateMessage;
+  | BubbleUpdateMessage
+  | RtcOfferServerMessage
+  | RtcAnswerServerMessage
+  | RtcIceServerMessage;
