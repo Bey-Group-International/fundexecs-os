@@ -1,0 +1,14 @@
+[build]
+# Build the server image from the repo root so npm workspaces resolve
+dockerfilePath = "server/Dockerfile"
+watchPatterns = ["server/**", "shared/**"]
+
+[deploy]
+startCommand = "node server/dist/index.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "virtual-office-server"
