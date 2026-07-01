@@ -88,7 +88,16 @@ async function createEnvelope(params: IssuanceParams): Promise<string> {
   return data.envelopeId as string;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertEnvelopeId(envelopeId: string): void {
+  if (!UUID_RE.test(envelopeId)) {
+    throw new Error(`Invalid envelope ID: must be a UUID`);
+  }
+}
+
 async function sendEnvelope(envelopeId: string): Promise<void> {
+  assertEnvelopeId(envelopeId);
   const res = await fetch(
     `${BASE_URL}/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}`,
     {
@@ -107,6 +116,7 @@ async function sendEnvelope(envelopeId: string): Promise<void> {
 }
 
 async function getEnvelopeStatus(envelopeId: string): Promise<string> {
+  assertEnvelopeId(envelopeId);
   const res = await fetch(
     `${BASE_URL}/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}`,
     {
