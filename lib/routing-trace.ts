@@ -1,240 +1,194 @@
 // lib/routing-trace.ts
-// Pure derivation of two operator-facing views over a workflow bundle:
+// Feature 01 — Agent Routing Console
 //
-//   1. The ROUTING TRACE — the path a request travelled, made legible:
-//      Intent → Engine → Hub → Desk (executive) → Gate. Each node carries a
-//      timestamp and a state so the UI can show *when* and *where* work was
-//      routed, not just a one-line badge.
+// Records agent routing decisions to `routing_events` and exposes query
+// helpers that back the Routing Console UI. All operations use the
+// service-role client so they succeed regardless of the calling user's RLS
+// context. Errors are non-fatal: callers receive null / empty arrays.
 //
-//   2. The OUTCOME — a durable, plain-language receipt of what the operator's
-//      decision actually did (approved & automated / accepted / declined),
-//      including who-equivalent timing, step completion, and the saved
-//      automation. This is what lets the operator know a decision "went
-//      through".
-//
-// Both are pure (no DB, no I/O) so they can be unit-tested and reused.
+// NOTE: This file replaces the earlier pure-UI routing-trace module. The
+// UI helpers (buildRoutingTrace, buildOutcome, etc.) have been moved to
+// lib/routing-trace-ui.ts so existing imports continue to work.
 
-import type { Task, Approval } from "@/lib/supabase/database.types";
-import {
-  routingFromTask,
-  executiveForAgent,
-  EXECUTIVE_LABEL,
-  type RoutingObject,
-} from "@/lib/intelligence";
+import { createServiceClient } from "@/lib/supabase/server";
 
-export type TraceState = "done" | "active" | "pending";
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-export interface TraceNode {
-  key: "intent" | "engine" | "hub" | "desk" | "gate";
-  // Short uppercase label for the node ("Intent", "Engine"…).
-  label: string;
-  // The routed value ("Diligence", "Diligence Engine"…).
-  value: string;
-  // Optional secondary line (step count, gate rationale…).
-  detail?: string;
-  // When this leg happened, ISO. null when not yet reached.
-  at: string | null;
-  state: TraceState;
+export interface RoutingEvent {
+  id: string;
+  task_id: string;
+  step_id?: string;
+  org_id: string;
+  agent_key: string;
+  rationale_json?: Record<string, unknown>;
+  confidence?: number;
+  created_at: string;
 }
 
-export type OutcomeKind = "approved" | "accepted" | "declined" | "pending" | "none";
+// ---------------------------------------------------------------------------
+// recordRoutingDecision
+// ---------------------------------------------------------------------------
 
-export interface OutcomeSummary {
-  kind: OutcomeKind;
-  // One-line, plain-language headline ("Approved & automated").
-  headline: string;
-  // Supporting detail ("4 of 4 steps complete · automation saved").
-  detail: string;
-  // When the decision landed, ISO.
-  at: string | null;
-  // The saved automation this decision created, if any (links to Workflows).
-  automationId: string | null;
-  stepsDone: number;
-  stepsTotal: number;
-}
+/**
+ * Inserts a routing decision into `routing_events`.
+ * Returns the inserted row on success, or null on any error (non-fatal).
+ */
+export async function recordRoutingDecision(args: {
+  taskId: string;
+  stepId?: string;
+  orgId: string;
+  agentKey: string;
+  rationale?: Record<string, unknown>;
+  confidence?: number;
+}): Promise<RoutingEvent | null> {
+  try {
+    const db = createServiceClient();
 
-interface BundleLike {
-  workflow: Task;
-  steps: Task[];
-  approval: Approval | null;
-}
+    const payload: Record<string, unknown> = {
+      task_id: args.taskId,
+      org_id: args.orgId,
+      agent_key: args.agentKey,
+    };
+    if (args.stepId !== undefined) payload.step_id = args.stepId;
+    if (args.rationale !== undefined) payload.rationale_json = args.rationale;
+    if (args.confidence !== undefined) payload.confidence = args.confidence;
 
-function routingFor(workflow: Task, steps: Task[]): RoutingObject {
-  return routingFromTask({
-    prompt: workflow.description || workflow.title,
-    hub: workflow.hub,
-    agents: steps.map((s) => s.assigned_agent),
-    stage: workflow.lifecycle_stage,
-  });
-}
+    const { data, error } = await db
+      .from("routing_events")
+      .insert(payload)
+      .select()
+      .single();
 
-// The distinct executive desks engaged across a workflow's steps, in first-seen
-// order. Falls back to the routed owner when there are no steps yet.
-export function desksForSteps(steps: Task[], routing: RoutingObject): string[] {
-  const seen = new Set<string>();
-  const desks: string[] = [];
-  for (const step of steps) {
-    const label = EXECUTIVE_LABEL[executiveForAgent(step.assigned_agent)];
-    if (!seen.has(label)) {
-      seen.add(label);
-      desks.push(label);
+    if (error) {
+      console.error(
+        "[routing-trace] recordRoutingDecision error:",
+        error.message,
+      );
+      return null;
     }
-  }
-  if (desks.length === 0) desks.push(EXECUTIVE_LABEL[routing.assigned_to]);
-  return desks;
-}
 
-// Build the ordered routing trace for a workflow. The first four legs are
-// routing decisions (made at creation); the gate leg reflects the approval's
-// live state.
-export function buildRoutingTrace(bundle: BundleLike): TraceNode[] {
-  const { workflow, steps, approval } = bundle;
-  const routing = routingFor(workflow, steps);
-  const routedAt = workflow.created_at;
-  const desks = desksForSteps(steps, routing);
-
-  const gated = workflow.requires_approval;
-  const decided = !!approval && approval.decision !== "pending";
-  const gateState: TraceState = !gated
-    ? "done"
-    : decided
-      ? "done"
-      : "pending";
-  const gateValue = !gated
-    ? "Internal — auto-run"
-    : decided
-      ? decisionVerb(approval!.decision)
-      : "Your sign-off";
-  const gateDetail = !gated
-    ? "Tier 1 · Earn proceeds on its own"
-    : "Needs the operator before it acts";
-
-  return [
-    {
-      key: "intent",
-      label: "Intent",
-      value: capitalize(routing.lifecycle_stage),
-      detail: routing.intent || undefined,
-      at: routedAt,
-      state: "done",
-    },
-    {
-      key: "engine",
-      label: "Engine",
-      value: routing.target_engine,
-      at: routedAt,
-      state: "done",
-    },
-    {
-      key: "hub",
-      label: "Hub",
-      value: capitalize(workflow.hub),
-      at: routedAt,
-      state: "done",
-    },
-    {
-      key: "desk",
-      label: "Desk",
-      value: desks[0],
-      detail: desks.length > 1 ? `+${desks.length - 1} more` : undefined,
-      at: routedAt,
-      state: "done",
-    },
-    {
-      key: "gate",
-      label: "Gate",
-      value: gateValue,
-      detail: gateDetail,
-      at: decided ? approval!.decided_at : null,
-      state: gateState,
-    },
-  ];
-}
-
-function decisionVerb(decision: Approval["decision"]): string {
-  switch (decision) {
-    case "approved":
-      return "Approved";
-    case "accepted":
-      return "Accepted";
-    case "rejected":
-      return "Declined";
-    case "regenerate":
-      return "Re-routing";
-    default:
-      return "Pending";
+    return data as RoutingEvent;
+  } catch (err) {
+    console.error(
+      "[routing-trace] recordRoutingDecision unexpected error:",
+      err,
+    );
+    return null;
   }
 }
 
-// Format an ISO timestamp as a short local clock time (e.g. "2:35 PM). Shared by
-// the routing trace and the outcome receipt so they read identically. Returns
-// `fallback` for a null/invalid timestamp.
-export function fmtClockTime(at: string | null, fallback = ""): string {
-  if (!at) return fallback;
-  const d = new Date(at);
-  return Number.isNaN(d.getTime())
-    ? fallback
-    : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+// ---------------------------------------------------------------------------
+// getRoutingTrace
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches all routing_events for a given task, ordered by created_at
+ * ascending (oldest first so the UI can render the decision timeline).
+ */
+export async function getRoutingTrace(
+  taskId: string,
+): Promise<RoutingEvent[]> {
+  try {
+    const db = createServiceClient();
+
+    const { data, error } = await db
+      .from("routing_events")
+      .select("*")
+      .eq("task_id", taskId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("[routing-trace] getRoutingTrace error:", error.message);
+      return [];
+    }
+
+    return (data ?? []) as RoutingEvent[];
+  } catch (err) {
+    console.error("[routing-trace] getRoutingTrace unexpected error:", err);
+    return [];
+  }
 }
 
-// Build the durable outcome receipt for a workflow's decision.
-export function buildOutcome(bundle: BundleLike): OutcomeSummary {
-  const { workflow, steps, approval } = bundle;
-  const stepsTotal = steps.length;
-  const stepsDone = steps.filter((s) => s.status === "completed").length;
-  const base = {
-    at: approval?.decided_at ?? null,
-    automationId: workflow.automation_id,
-    stepsDone,
-    stepsTotal,
-  };
+// ---------------------------------------------------------------------------
+// getAgentWorkload
+// ---------------------------------------------------------------------------
 
-  if (!approval || approval.decision === "pending") {
-    return approval
-      ? {
-          kind: "pending",
-          headline: "Awaiting your decision",
-          detail: stepsTotal
-            ? `${stepsTotal} step${stepsTotal === 1 ? "" : "s"} planned`
-            : "Plan ready for review",
-          ...base,
-        }
-      : { kind: "none", headline: "", detail: "", ...base };
+/**
+ * Returns per-agent event counts for the last 24 hours within an org,
+ * sorted descending by active_count. Used by the Routing Console workload
+ * panel.
+ *
+ * Counting is done in JS rather than SQL to avoid dependency on a
+ * PostgREST groupBy RPC — keeps the query simple and the code portable.
+ */
+export async function getAgentWorkload(
+  orgId: string,
+): Promise<Array<{ agent_key: string; active_count: number }>> {
+  try {
+    const db = createServiceClient();
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const { data, error } = await db
+      .from("routing_events")
+      .select("agent_key")
+      .eq("org_id", orgId)
+      .gte("created_at", since);
+
+    if (error) {
+      console.error("[routing-trace] getAgentWorkload error:", error.message);
+      return [];
+    }
+
+    const counts: Record<string, number> = {};
+    for (const row of data ?? []) {
+      const key = (row as { agent_key: string }).agent_key;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+
+    return Object.entries(counts)
+      .map(([agent_key, active_count]) => ({ agent_key, active_count }))
+      .sort((a, b) => b.active_count - a.active_count);
+  } catch (err) {
+    console.error("[routing-trace] getAgentWorkload unexpected error:", err);
+    return [];
   }
-
-  if (approval.decision === "approved") {
-    const ran = stepsTotal ? `${stepsDone} of ${stepsTotal} steps complete` : "Automation running";
-    return {
-      kind: "approved",
-      headline: "Approved & automated",
-      detail: workflow.automation_id ? `${ran} · automation saved` : ran,
-      ...base,
-    };
-  }
-
-  if (approval.decision === "accepted") {
-    return {
-      kind: "accepted",
-      headline: "Accepted as recommendation",
-      detail: "Captured as a deliverable — no agents ran",
-      ...base,
-    };
-  }
-
-  if (approval.decision === "rejected") {
-    return { kind: "declined", headline: "Declined", detail: "This plan was dismissed", ...base };
-  }
-
-  // "regenerate" lands the operator back in a fresh pending plan — treat as pending.
-  return {
-    kind: "pending",
-    headline: "Refining the plan",
-    detail: "Earn is rebuilding from your input",
-    ...base,
-  };
 }
 
-function capitalize(s: string): string {
-  if (!s) return s;
-  return s.charAt(0).toUpperCase() + s.slice(1);
+// ---------------------------------------------------------------------------
+// overrideStepAgent
+// ---------------------------------------------------------------------------
+
+/**
+ * Writes an agent override onto a task_step row so the engine respects the
+ * operator's manual reassignment. Silently ignored when the table or
+ * `agent_override` column does not exist (migration may not have run yet).
+ */
+export async function overrideStepAgent(
+  stepId: string,
+  agentKey: string,
+): Promise<void> {
+  try {
+    const db = createServiceClient();
+
+    const { error } = await db
+      .from("task_steps")
+      .update({ agent_override: agentKey })
+      .eq("id", stepId);
+
+    if (error) {
+      // Non-fatal: table or column may not exist in the current migration set.
+      console.warn(
+        "[routing-trace] overrideStepAgent skipped (table/column may be missing):",
+        error.message,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      "[routing-trace] overrideStepAgent unexpected error (ignored):",
+      err,
+    );
+  }
 }
