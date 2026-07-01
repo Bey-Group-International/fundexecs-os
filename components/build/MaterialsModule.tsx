@@ -194,6 +194,7 @@ export async function MaterialsModule() {
       id: d.id,
       name: d.name,
       storage_key: d.storage_key ?? null,
+      status: d.status ?? "ready",
     })),
     suggestion: item.suggestion,
     weight: item.weight,

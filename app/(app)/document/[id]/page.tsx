@@ -42,7 +42,7 @@ export default async function DocumentBuilderPage({ params }: { params: { id: st
         </p>
       </header>
       <DocumentBuilder
-        doc={{ id: doc.id, name: doc.name, doc_type: doc.doc_type, content: doc.content, storage_key: doc.storage_key }}
+        doc={{ id: doc.id, name: doc.name, doc_type: doc.doc_type, content: doc.content, storage_key: doc.storage_key, status: doc.status ?? "ready" }}
       />
     </div>
   );
