@@ -50,14 +50,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Task is not completed" }, { status: 400 });
   }
 
-  // Check whether credits were already awarded for this task (idempotency guard)
-  // We store the task id in the ledger note — any matching row means already processed.
+  // Fast-path idempotency check against the task_credit_awards table.
+  // The DB-level PK (org, task_id) is the authoritative guard; this is just
+  // an early-exit so we skip the RPC on obvious duplicates.
   const { count } = await supabase
-    .from("credit_ledger")
-    .select("id", { count: "exact", head: true })
+    .from("task_credit_awards" as any)
+    .select("task_id", { count: "exact", head: true })
     .eq("organization_id", auth.ctx.orgId)
-    .eq("reason", "task_complete")
-    .ilike("note", `%${body.taskId}%`);
+    .eq("task_id", body.taskId);
 
   if ((count ?? 0) > 0) {
     return NextResponse.json({ alreadyAwarded: true });
