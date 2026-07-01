@@ -21,13 +21,13 @@ const config: Config = {
           3: "rgb(var(--fx-surface-3) / <alpha-value>)",
         },
         line: "rgb(var(--fx-line) / <alpha-value>)",
-        // Kept as `gold` to avoid churn across existing components; the token
-        // now resolves to the requested blue accent family.
+        // Warm investment-bank gold — financial numbers, CTAs, accent highlights.
         gold: {
-          300: "rgb(var(--fx-accent-300) / <alpha-value>)",
-          400: "rgb(var(--fx-accent-400) / <alpha-value>)",
-          500: "rgb(var(--fx-accent-500) / <alpha-value>)",
+          300: "rgb(var(--fx-gold-300) / <alpha-value>)",
+          400: "rgb(var(--fx-gold-400) / <alpha-value>)",
+          500: "rgb(var(--fx-gold-500) / <alpha-value>)",
         },
+        // Neural / data-terminal blue — grid lines, tech surfaces, AI indicators.
         neural: {
           300: "rgb(var(--fx-accent-300) / <alpha-value>)",
           400: "rgb(var(--fx-accent-400) / <alpha-value>)",
