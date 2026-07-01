@@ -21,6 +21,7 @@ import { PlanSelector, type PlanView } from "./PlanSelector";
 import { CreditPacks } from "./CreditPacks";
 import { CheckoutBanner } from "./CheckoutBanner";
 import { CreditHistory } from "./CreditHistory";
+import { GamificationPanel } from "./GamificationPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -260,6 +261,11 @@ export default async function WalletPage({
         </div>
         <span className="font-mono text-fg-muted transition group-hover:text-neural-300">→</span>
       </Link>
+
+      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-neural-300">
+        Execution rewards
+      </h2>
+      <GamificationPanel />
 
       <CreditHistory />
 
