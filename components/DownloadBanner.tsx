@@ -1,14 +1,14 @@
 "use client";
 
 // components/DownloadBanner.tsx
-// Post-login prompt to download FundExecs OS. Shows on first login and
-// resurfaces every 30 days. Dismissed state is stored in localStorage.
+// Post-login prompt to download FundExecs OS. Resurfaces every 30 days.
 import { useEffect, useState } from "react";
 import { DOWNLOAD_URLS, PLATFORM_META, type Platform } from "@/lib/download-urls";
+import { PlatformIcon } from "@/components/PlatformIcon";
 
 const STORAGE_KEY = "fx:download-banner-dismissed-at";
-const RESURFACE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-const EXIT_MS = 200;
+const RESURFACE_MS = 30 * 24 * 60 * 60 * 1000;
+const EXIT_MS = 250;
 const PLATFORMS = Object.keys(DOWNLOAD_URLS) as Platform[];
 
 export function DownloadBanner() {
@@ -47,47 +47,80 @@ export function DownloadBanner() {
       <div
         role="complementary"
         aria-label="Download FundExecs OS"
-        className={`pointer-events-auto relative w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-gold-500/30 bg-surface-1 shadow-xl shadow-black/30 transition-all duration-200 ${
-          shown ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
+        className={`pointer-events-auto relative w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gold-500/25 bg-surface-1/90 shadow-2xl shadow-black/40 backdrop-blur-xl transition-all duration-250 ${
+          shown ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
         }`}
       >
-        <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-gold-500/70" />
-        <div className="px-4 py-3 pr-8">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
-            Get the OS
-          </p>
-          <p className="mt-1 text-sm font-medium text-fg-primary">
-            Download your local / remote system
-          </p>
-          <p className="mt-0.5 text-xs leading-snug text-fg-secondary">
-            Install FundExecs OS on any device for offline-capable access to your full workspace.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
+        {/* Top-edge glow line */}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/50 to-transparent"
+        />
+        {/* Left accent rail */}
+        <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-gradient-to-b from-gold-400/80 via-gold-500/40 to-transparent" />
+
+        {/* Header */}
+        <div className="relative overflow-hidden px-5 pt-4 pb-3">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_80%_at_10%_50%,rgb(var(--fx-accent-rgb)/0.12),transparent_70%)]"
+          />
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-gold-400">
+                FundExecs OS · Native App
+              </p>
+              <p className="mt-1 text-sm font-semibold text-fg-primary">
+                Get the OS
+              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-fg-secondary">
+                Download your local / remote system — offline‑capable, always current.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={dismiss}
+              aria-label="Dismiss"
+              className="mt-0.5 shrink-0 flex h-5 w-5 items-center justify-center rounded text-fg-muted transition hover:bg-surface-2 hover:text-fg-primary"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* Platform strip */}
+        <div className="border-t border-line/50 px-5 py-3">
+          <div className="grid grid-cols-5 gap-1">
             {PLATFORMS.map((platform) => {
-              const { label, icon } = PLATFORM_META[platform];
+              const { label } = PLATFORM_META[platform];
               return (
                 <a
                   key={platform}
                   href={DOWNLOAD_URLS[platform]}
                   download={platform === "ios" ? undefined : true}
                   onClick={dismiss}
-                  className="flex items-center gap-1 rounded border border-line bg-surface-0 px-2 py-1 font-mono text-[10px] text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300"
+                  title={label}
+                  className="group flex flex-col items-center gap-1.5 rounded-lg border border-line/60 bg-surface-0/60 px-2 py-2.5 transition duration-200 hover:border-gold-500/40 hover:bg-gold-500/[0.06]"
                 >
-                  <span>{icon}</span>
-                  <span>{label}</span>
+                  <PlatformIcon
+                    platform={platform}
+                    className="h-4 w-4 text-fg-muted transition duration-200 group-hover:text-gold-400"
+                  />
+                  <span className="font-mono text-[8px] uppercase tracking-wider text-fg-muted transition duration-200 group-hover:text-gold-400/80">
+                    {label}
+                  </span>
                 </a>
               );
             })}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="Dismiss"
-          className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded text-fg-muted transition hover:bg-surface-2 hover:text-fg-primary"
-        >
-          ×
-        </button>
+
+        {/* Footer */}
+        <div className="border-t border-line/40 px-5 py-2">
+          <p className="font-mono text-[8px] uppercase tracking-widest text-fg-muted">
+            Self-hosted · no app store required
+          </p>
+        </div>
       </div>
     </div>
   );
