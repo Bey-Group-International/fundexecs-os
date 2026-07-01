@@ -1,10 +1,12 @@
 "use server";
 
 import { randomUUID } from "crypto";
+import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { sanitizeMandateActions } from "@/lib/mandate-options";
 import { matchNewOrgAndNotify } from "@/lib/ecosystem-match.server";
+import { claimReferralCode } from "@/lib/gift-earn";
 
 // Updates the authenticated principal's personal profile fields collected in the
 // first onboarding step. Returns a result object so the wizard can stay on the
@@ -111,6 +113,20 @@ export async function createOrganization(
     await matchNewOrgAndNotify(orgId);
   } catch {
     // ignore — onboarding succeeds regardless of matchmaking
+  }
+
+  // Auto-claim any referral code that was stored when the user landed via a
+  // /join?ref=CODE link. Best-effort: a bad code or a DB hiccup must never
+  // block the newly created org from entering the app.
+  try {
+    const jar = await cookies();
+    const refCode = jar.get("referral_code")?.value ?? "";
+    if (refCode) {
+      await claimReferralCode(refCode, orgId);
+      jar.delete("referral_code");
+    }
+  } catch {
+    // ignore
   }
 
   return {};
