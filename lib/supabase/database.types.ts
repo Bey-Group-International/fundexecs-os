@@ -768,8 +768,14 @@ export type MandateRow = Timestamps & {
   organization_id: string;
   name: string;
   goal: string | null;
+  /** Covers which hubs, counterparty classes, deal sizes this mandate applies to. */
+  scope: string | null;
   auto_approve: string[];
   autonomy_ceiling: number;
+  /** Ordered list of {rule: string} constraints Earn must respect during execution. */
+  guardrails: Array<{ rule: string }>;
+  /** Hard limits on automated footprint: max outreach/day, dollar thresholds, etc. */
+  blast_radius_rules: Record<string, unknown>[];
   is_active: boolean;
   created_by: string | null;
 };
