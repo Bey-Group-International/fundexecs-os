@@ -99,6 +99,7 @@ export type LedgerReason =
   | "stake_lock"
   | "stake_release"
   | "spend"
+  | "loyalty"
   // Execution-driven gamification rewards
   | "task_complete"
   | "streak_bonus"

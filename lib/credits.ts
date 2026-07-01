@@ -58,6 +58,39 @@ export async function recentSpend(orgId: string, days = 30): Promise<number> {
   return Math.abs(raw);
 }
 
+// Debit `amount` credits from an org for an AI agent step. Honors the
+// CREDITS_SPEND_ENABLED env gate: when unset the call is a no-op that logs what
+// would have been spent (safe for preview/free-trial). When enabled and the org
+// has insufficient credits, returns { ok: false, insufficient: true } — the
+// caller should surface this as a step failure so the workflow stops cleanly.
+export async function spendCredits(
+  orgId: string,
+  amount: number,
+  agentKey?: string | null,
+): Promise<{ ok: boolean; balance?: number; insufficient?: boolean }> {
+  if (process.env.CREDITS_SPEND_ENABLED !== "true") {
+    console.log(
+      `[credits:spend] gate off — would debit ${amount} cr (org:${orgId} agent:${agentKey ?? "—"})`,
+    );
+    return { ok: true };
+  }
+  const supabase = createServerClient();
+  const { data } = await supabase
+    .from("wallets")
+    .select("credits")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  const balance = data?.credits ?? 0;
+  if (balance < amount) {
+    return { ok: false, insufficient: true, balance };
+  }
+  const service = createServiceClient();
+  const newBalance = await grantCredits(service, orgId, -amount, "spend", {
+    note: agentKey ? `agent:${agentKey}` : undefined,
+  });
+  return { ok: true, balance: newBalance };
+}
+
 // The most recent ledger entries for an org, newest first.
 export async function getLedger(orgId: string, limit = 25): Promise<CreditLedgerEntry[]> {
   const supabase = createServerClient();

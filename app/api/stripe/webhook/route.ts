@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getStripe, fulfillCheckout } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { grantCredits } from "@/lib/credits";
-import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
+import { PLAN_BY_KEY, loyaltyBonus, tenureMonths, type PlanKey } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +55,20 @@ export async function POST(req: NextRequest) {
             await grantCredits(service, orgId, plan.creditsPerMonth, "plan_grant", {
               note: `${plan.name} plan — renewal`,
             });
+            // Also grant the loyalty bonus accrued since plan_started_at so the
+            // dashboard's loyalty display and the actual credit grant stay in sync.
+            const { data: walletRow } = await service
+              .from("wallets")
+              .select("plan_started_at")
+              .eq("organization_id", orgId)
+              .maybeSingle();
+            const tenure = tenureMonths(walletRow?.plan_started_at);
+            const bonus = loyaltyBonus(tenure);
+            if (bonus > 0) {
+              await grantCredits(service, orgId, bonus, "loyalty", {
+                note: `${plan.name} plan — loyalty bonus (month ${tenure})`,
+              });
+            }
           }
         } catch (err) {
           console.error("[stripe] renewal grant failed:", err);
