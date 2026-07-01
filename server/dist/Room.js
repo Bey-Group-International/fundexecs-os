@@ -4,6 +4,7 @@ exports.Room = void 0;
 const virtual_office_shared_1 = require("@fundexecs/virtual-office-shared");
 const BubbleManager_1 = require("./BubbleManager");
 const SfuRoom_1 = require("./SfuRoom");
+const NpcManager_1 = require("./NpcManager");
 const MAX_SPEED_PER_TICK = 8;
 class Room {
     constructor(roomId, pubsub, worker) {
@@ -14,6 +15,18 @@ class Room {
         this.roomId = roomId;
         this.pubsub = pubsub;
         this.worker = worker;
+        this.npcManager = new NpcManager_1.NpcManager();
+        this.npcManager.start((msg) => this.broadcastAll(msg));
+    }
+    getNpcSnapshot() {
+        return this.npcManager.getSnapshot();
+    }
+    close() {
+        this.npcManager.stop();
+        for (const sfuRoom of this.sfuRooms.values())
+            sfuRoom.close();
+        this.sfuRooms.clear();
+        this.sfuBubbles.clear();
     }
     addPlayer(ws, userId, displayName, spriteKey = "player_default") {
         const player = {

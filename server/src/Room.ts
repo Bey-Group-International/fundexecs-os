@@ -5,6 +5,8 @@ import { WORLD_W, WORLD_H, SPAWN_X, SPAWN_Y } from "@fundexecs/virtual-office-sh
 import type { PubSub } from "./PubSub";
 import { BubbleManager, MESH_MAX } from "./BubbleManager";
 import { SfuRoom } from "./SfuRoom";
+import { NpcManager } from "./NpcManager";
+import type { NpcData } from "./NpcManager";
 
 const MAX_SPEED_PER_TICK = 8;
 
@@ -29,11 +31,25 @@ export class Room {
 
   private sfuRooms = new Map<string, SfuRoom>();
   private sfuBubbles = new Set<string>();
+  private readonly npcManager: NpcManager;
 
   constructor(roomId: string, pubsub: PubSub, worker: mediasoup.types.Worker) {
     this.roomId = roomId;
     this.pubsub = pubsub;
     this.worker = worker;
+    this.npcManager = new NpcManager();
+    this.npcManager.start((msg) => this.broadcastAll(msg));
+  }
+
+  getNpcSnapshot(): NpcData[] {
+    return this.npcManager.getSnapshot();
+  }
+
+  close(): void {
+    this.npcManager.stop();
+    for (const sfuRoom of this.sfuRooms.values()) sfuRoom.close();
+    this.sfuRooms.clear();
+    this.sfuBubbles.clear();
   }
 
   addPlayer(

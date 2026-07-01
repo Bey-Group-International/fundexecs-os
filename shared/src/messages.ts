@@ -232,6 +232,27 @@ export const BubbleSfuSwitchSchema = z.object({
   members: z.array(z.string()),
 });
 
+// ─── NPC messages — Server → Client ──────────────────────────────────────────
+
+export const NpcDataSchema = z.object({
+  npcId: z.string(),
+  x: z.number(),
+  y: z.number(),
+  facing: FacingSchema,
+  spriteKey: z.string(),
+  name: z.string(),
+});
+export type NpcData = z.infer<typeof NpcDataSchema>;
+
+export const NpcStateSchema = NpcDataSchema.extend({ type: z.literal("npc.state") });
+export type NpcState = z.infer<typeof NpcStateSchema>;
+
+export const NpcSnapshotSchema = z.object({
+  type: z.literal("npc.snapshot"),
+  npcs: z.array(NpcDataSchema),
+});
+export type NpcSnapshot = z.infer<typeof NpcSnapshotSchema>;
+
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   PlayerMoveSchema,
   PingSchema,
@@ -271,5 +292,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   SfuNewProducerSchema,
   SfuProducerClosedSchema,
   BubbleSfuSwitchSchema,
+  NpcStateSchema,
+  NpcSnapshotSchema,
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;

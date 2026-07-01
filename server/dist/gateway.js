@@ -55,6 +55,7 @@ function createGateway(roomManager, authService) {
                 playerId,
                 worldSnapshot: { type: "world.snapshot", players: room.getSnapshot() },
             });
+            room.sendTo(playerId, { type: "npc.snapshot", npcs: room.getNpcSnapshot() });
             room.broadcast({ type: "player.joined", player }, playerId);
         },
         message: (ws, message, isBinary) => {

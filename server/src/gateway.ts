@@ -73,6 +73,8 @@ export function createGateway(
         worldSnapshot: { type: "world.snapshot", players: room.getSnapshot() },
       });
 
+      room.sendTo(playerId, { type: "npc.snapshot", npcs: room.getNpcSnapshot() });
+
       room.broadcast({ type: "player.joined", player }, playerId);
     },
 

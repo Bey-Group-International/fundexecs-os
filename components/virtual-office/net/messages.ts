@@ -192,6 +192,21 @@ export type SfuNewProducerMessage = { type: "sfu.new-producer"; peerId: string; 
 export type SfuProducerClosedMessage = { type: "sfu.producer-closed"; producerId: string; peerId: string };
 export type BubbleSfuSwitchMessage = { type: "bubble.sfu-switch"; bubbleId: string; members: string[] };
 
+export type NpcStateMessage = {
+  type: "npc.state";
+  npcId: string;
+  x: number;
+  y: number;
+  facing: Facing;
+  spriteKey: string;
+  name: string;
+};
+
+export type NpcSnapshotMessage = {
+  type: "npc.snapshot";
+  npcs: Array<{ npcId: string; x: number; y: number; facing: Facing; spriteKey: string; name: string }>;
+};
+
 export type ServerMessage =
   | WelcomeMessage
   | PlayerJoinedMessage
@@ -211,4 +226,6 @@ export type ServerMessage =
   | SfuConsumedMessage
   | SfuNewProducerMessage
   | SfuProducerClosedMessage
-  | BubbleSfuSwitchMessage;
+  | BubbleSfuSwitchMessage
+  | NpcStateMessage
+  | NpcSnapshotMessage;
