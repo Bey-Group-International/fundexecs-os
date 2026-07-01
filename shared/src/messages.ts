@@ -151,6 +151,87 @@ export const RtcIceServerSchema = z.object({
 });
 export type RtcIceServer = z.infer<typeof RtcIceServerSchema>;
 
+// ─── SFU signalling — Client → Server ────────────────────────────────────────
+
+export const SfuGetCapsSchema = z.object({ type: z.literal("sfu.get-caps") });
+export const SfuCreateTransportSchema = z.object({
+  type: z.literal("sfu.create-transport"),
+  direction: z.enum(["send", "recv"]),
+});
+export const SfuConnectTransportSchema = z.object({
+  type: z.literal("sfu.connect-transport"),
+  transportId: z.string(),
+  direction: z.enum(["send", "recv"]),
+  dtlsParameters: z.unknown(),
+});
+export const SfuProduceSchema = z.object({
+  type: z.literal("sfu.produce"),
+  transportId: z.string(),
+  kind: z.enum(["audio", "video"]),
+  rtpParameters: z.unknown(),
+});
+export const SfuGetProducersSchema = z.object({ type: z.literal("sfu.get-producers") });
+export const SfuConsumeSchema = z.object({
+  type: z.literal("sfu.consume"),
+  transportId: z.string(),
+  producerId: z.string(),
+  rtpCapabilities: z.unknown(),
+});
+export const SfuResumeConsumerSchema = z.object({
+  type: z.literal("sfu.resume-consumer"),
+  consumerId: z.string(),
+});
+export const SfuLeaveSchema = z.object({ type: z.literal("sfu.leave") });
+
+// ─── SFU signalling — Server → Client ────────────────────────────────────────
+
+export const SfuRouterCapsSchema = z.object({
+  type: z.literal("sfu.router-caps"),
+  rtpCapabilities: z.unknown(),
+});
+export const SfuTransportCreatedSchema = z.object({
+  type: z.literal("sfu.transport-created"),
+  direction: z.enum(["send", "recv"]),
+  id: z.string(),
+  iceParameters: z.unknown(),
+  iceCandidates: z.unknown(),
+  dtlsParameters: z.unknown(),
+});
+export const SfuProducedSchema = z.object({
+  type: z.literal("sfu.produced"),
+  producerId: z.string(),
+  kind: z.enum(["audio", "video"]),
+});
+export const SfuProducersListSchema = z.object({
+  type: z.literal("sfu.producers-list"),
+  producers: z.array(z.object({ producerId: z.string(), peerId: z.string(), kind: z.string() })),
+});
+export const SfuConsumedSchema = z.object({
+  type: z.literal("sfu.consumed"),
+  consumerId: z.string(),
+  producerId: z.string(),
+  kind: z.string(),
+  rtpParameters: z.unknown(),
+  paused: z.boolean(),
+  peerId: z.string(),
+});
+export const SfuNewProducerSchema = z.object({
+  type: z.literal("sfu.new-producer"),
+  peerId: z.string(),
+  producerId: z.string(),
+  kind: z.string(),
+});
+export const SfuProducerClosedSchema = z.object({
+  type: z.literal("sfu.producer-closed"),
+  producerId: z.string(),
+  peerId: z.string(),
+});
+export const BubbleSfuSwitchSchema = z.object({
+  type: z.literal("bubble.sfu-switch"),
+  bubbleId: z.string(),
+  members: z.array(z.string()),
+});
+
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   PlayerMoveSchema,
   PingSchema,
@@ -158,6 +239,14 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   RtcAnswerClientSchema,
   RtcIceClientSchema,
   RtcLeaveClientSchema,
+  SfuGetCapsSchema,
+  SfuCreateTransportSchema,
+  SfuConnectTransportSchema,
+  SfuProduceSchema,
+  SfuGetProducersSchema,
+  SfuConsumeSchema,
+  SfuResumeConsumerSchema,
+  SfuLeaveSchema,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
@@ -174,5 +263,13 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   RtcOfferServerSchema,
   RtcAnswerServerSchema,
   RtcIceServerSchema,
+  SfuRouterCapsSchema,
+  SfuTransportCreatedSchema,
+  SfuProducedSchema,
+  SfuProducersListSchema,
+  SfuConsumedSchema,
+  SfuNewProducerSchema,
+  SfuProducerClosedSchema,
+  BubbleSfuSwitchSchema,
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;

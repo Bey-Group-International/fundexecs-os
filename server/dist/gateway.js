@@ -10,11 +10,14 @@ function getQueryParam(query, key) {
     const params = new URLSearchParams(query);
     return params.get(key) ?? undefined;
 }
+function handleAsync(fn) {
+    fn().catch((err) => console.error("[SFU]", err));
+}
 function createGateway(roomManager, authService) {
     const app = uWebSockets_js_1.default.App();
     app.ws("/ws", {
         idleTimeout: 60,
-        maxPayloadLength: 16 * 1024,
+        maxPayloadLength: 64 * 1024,
         upgrade: async (res, req, context) => {
             const query = req.getQuery();
             const roomId = getQueryParam(query, "roomId");
@@ -34,11 +37,8 @@ function createGateway(roomManager, authService) {
                 res.writeStatus("401").end("Unauthorized");
                 return;
             }
-            // Abort handling (client disconnected before upgrade completes)
             let aborted = false;
-            res.onAborted(() => {
-                aborted = true;
-            });
+            res.onAborted(() => { aborted = true; });
             if (aborted)
                 return;
             res.upgrade({ playerId: userId, roomId }, req.getHeader("sec-websocket-key"), req.getHeader("sec-websocket-protocol"), req.getHeader("sec-websocket-extensions"), context);
@@ -46,21 +46,14 @@ function createGateway(roomManager, authService) {
         open: async (ws) => {
             const { playerId, roomId } = ws.getUserData();
             const room = await roomManager.getOrCreateRoom(roomId);
-            // If player is already in room (reconnect), remove old entry
-            if (room.hasPlayer(playerId)) {
+            if (room.hasPlayer(playerId))
                 room.removePlayer(playerId);
-            }
             const player = room.addPlayer(ws, playerId, playerId);
-            // Send welcome to this player
             room.sendTo(playerId, {
                 type: "welcome",
                 playerId,
-                worldSnapshot: {
-                    type: "world.snapshot",
-                    players: room.getSnapshot(),
-                },
+                worldSnapshot: { type: "world.snapshot", players: room.getSnapshot() },
             });
-            // Broadcast player joined to others
             room.broadcast({ type: "player.joined", player }, playerId);
         },
         message: (ws, message, isBinary) => {
@@ -91,7 +84,6 @@ function createGateway(roomManager, authService) {
             if (msg.type === "player.move") {
                 const updatedPlayer = room.applyMove(playerId, msg.dx, msg.dy, msg.seq);
                 if (updatedPlayer) {
-                    // Broadcast authoritative state to ALL players (including sender for reconciliation)
                     room.broadcastAll({
                         type: "player.state",
                         playerId,
@@ -103,11 +95,7 @@ function createGateway(roomManager, authService) {
                 }
             }
             else if (msg.type === "ping") {
-                room.sendTo(playerId, {
-                    type: "pong",
-                    clientTime: msg.clientTime,
-                    serverTime: Date.now(),
-                });
+                room.sendTo(playerId, { type: "pong", clientTime: msg.clientTime, serverTime: Date.now() });
             }
             else if (msg.type === "rtc.offer") {
                 room.relayTo(msg.to, { type: "rtc.offer", from: playerId, sdp: msg.sdp });
@@ -117,8 +105,103 @@ function createGateway(roomManager, authService) {
             }
             else if (msg.type === "rtc.ice") {
                 room.relayTo(msg.to, { type: "rtc.ice", from: playerId, candidate: msg.candidate });
+                // ── SFU signalling ──────────────────────────────────────────────────────
             }
-            // rtc.leave is client-only; no server action needed
+            else if (msg.type === "sfu.get-caps") {
+                handleAsync(async () => {
+                    const sfuRoom = room.getSfuRoomForPlayer(playerId);
+                    if (!sfuRoom)
+                        return;
+                    const rtpCapabilities = await sfuRoom.getRouterCapabilities();
+                    room.sendTo(playerId, { type: "sfu.router-caps", rtpCapabilities });
+                });
+            }
+            else if (msg.type === "sfu.create-transport") {
+                handleAsync(async () => {
+                    const sfuRoom = room.getSfuRoomForPlayer(playerId);
+                    if (!sfuRoom)
+                        return;
+                    const info = await sfuRoom.createTransport(playerId, msg.direction);
+                    room.sendTo(playerId, {
+                        type: "sfu.transport-created",
+                        direction: info.direction,
+                        id: info.id,
+                        iceParameters: info.iceParameters,
+                        iceCandidates: info.iceCandidates,
+                        dtlsParameters: info.dtlsParameters,
+                    });
+                });
+            }
+            else if (msg.type === "sfu.connect-transport") {
+                handleAsync(async () => {
+                    const sfuRoom = room.getSfuRoomForPlayer(playerId);
+                    if (!sfuRoom)
+                        return;
+                    await sfuRoom.connectTransport(msg.transportId, msg.dtlsParameters);
+                });
+            }
+            else if (msg.type === "sfu.produce") {
+                handleAsync(async () => {
+                    const sfuRoom = room.getSfuRoomForPlayer(playerId);
+                    if (!sfuRoom)
+                        return;
+                    const { producerId } = await sfuRoom.produce(playerId, msg.transportId, msg.kind, msg.rtpParameters);
+                    room.sendTo(playerId, { type: "sfu.produced", producerId, kind: msg.kind });
+                    room.broadcastToSfuBubble(playerId, {
+                        type: "sfu.new-producer",
+                        peerId: playerId,
+                        producerId,
+                        kind: msg.kind,
+                    }, playerId);
+                });
+            }
+            else if (msg.type === "sfu.get-producers") {
+                const sfuRoom = room.getSfuRoomForPlayer(playerId);
+                if (!sfuRoom)
+                    return;
+                const producers = sfuRoom.getAllProducers().filter((p) => p.peerId !== playerId);
+                room.sendTo(playerId, { type: "sfu.producers-list", producers });
+            }
+            else if (msg.type === "sfu.consume") {
+                handleAsync(async () => {
+                    const sfuRoom = room.getSfuRoomForPlayer(playerId);
+                    if (!sfuRoom)
+                        return;
+                    const info = await sfuRoom.consume(playerId, msg.transportId, msg.producerId, msg.rtpCapabilities);
+                    if (!info)
+                        return;
+                    room.sendTo(playerId, {
+                        type: "sfu.consumed",
+                        consumerId: info.consumerId,
+                        producerId: info.producerId,
+                        kind: info.kind,
+                        rtpParameters: info.rtpParameters,
+                        paused: info.paused,
+                        peerId: info.peerId,
+                    });
+                });
+            }
+            else if (msg.type === "sfu.resume-consumer") {
+                handleAsync(async () => {
+                    const sfuRoom = room.getSfuRoomForPlayer(playerId);
+                    if (!sfuRoom)
+                        return;
+                    await sfuRoom.resumeConsumer(msg.consumerId);
+                });
+            }
+            else if (msg.type === "sfu.leave") {
+                const sfuRoom = room.getSfuRoomForPlayer(playerId);
+                if (!sfuRoom)
+                    return;
+                const closedIds = sfuRoom.removePeer(playerId);
+                for (const producerId of closedIds) {
+                    room.broadcastToSfuBubble(playerId, {
+                        type: "sfu.producer-closed",
+                        producerId,
+                        peerId: playerId,
+                    }, playerId);
+                }
+            }
         },
         close: async (ws, _code, _message) => {
             const { playerId, roomId } = ws.getUserData();

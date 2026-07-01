@@ -1,10 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BubbleManager = exports.MAX_BUBBLE_SIZE = exports.EXIT_RADIUS = exports.BUBBLE_RADIUS = void 0;
+exports.BubbleManager = exports.BUBBLE_HARD_CAP = exports.MESH_MAX = exports.EXIT_RADIUS = exports.BUBBLE_RADIUS = void 0;
 const uuid_1 = require("uuid");
 exports.BUBBLE_RADIUS = 160;
 exports.EXIT_RADIUS = 200; // BUBBLE_RADIUS + HYSTERESIS
-exports.MAX_BUBBLE_SIZE = 4;
+exports.MESH_MAX = 4; // P2P mesh up to this size
+exports.BUBBLE_HARD_CAP = 20; // absolute maximum per bubble
 const CELL_SIZE = exports.BUBBLE_RADIUS; // coarse grid cell
 class BubbleManager {
     constructor() {
@@ -121,13 +122,13 @@ class BubbleManager {
             }
             else if (myBid && !theirBid) {
                 const bubble = this.bubbles.get(myBid);
-                if (bubble.members.size < exports.MAX_BUBBLE_SIZE) {
+                if (bubble.members.size < exports.BUBBLE_HARD_CAP) {
                     events.push(...this.addToBubble(myBid, cid));
                 }
             }
             else if (!myBid && theirBid) {
                 const bubble = this.bubbles.get(theirBid);
-                if (bubble.members.size < exports.MAX_BUBBLE_SIZE) {
+                if (bubble.members.size < exports.BUBBLE_HARD_CAP) {
                     events.push(...this.addToBubble(theirBid, id));
                 }
             }
@@ -170,7 +171,7 @@ class BubbleManager {
     tryMerge(bidA, bidB) {
         const a = this.bubbles.get(bidA);
         const b = this.bubbles.get(bidB);
-        if (a.members.size + b.members.size > exports.MAX_BUBBLE_SIZE)
+        if (a.members.size + b.members.size > exports.BUBBLE_HARD_CAP)
             return [];
         // Merge b into a
         const events = [];

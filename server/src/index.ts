@@ -1,3 +1,4 @@
+import * as mediasoup from "mediasoup";
 import { createGateway } from "./gateway";
 import { RoomManager } from "./RoomManager";
 import { AuthService } from "./AuthService";
@@ -9,8 +10,18 @@ const SUPABASE_URL = process.env["SUPABASE_URL"] ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
 
 async function main() {
+  const worker = await mediasoup.createWorker({
+    logLevel: "warn",
+    rtcMinPort: parseInt(process.env["RTC_MIN_PORT"] ?? "40000", 10),
+    rtcMaxPort: parseInt(process.env["RTC_MAX_PORT"] ?? "49999", 10),
+  });
+  worker.on("died", () => {
+    console.error("mediasoup Worker died, exiting...");
+    process.exit(1);
+  });
+
   const pubsub = new PubSub(REDIS_URL);
-  const roomManager = new RoomManager(pubsub);
+  const roomManager = new RoomManager(pubsub, worker);
   const authService = new AuthService(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   const app = createGateway(roomManager, authService);

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ServerMessageSchema = exports.ClientMessageSchema = exports.RtcIceServerSchema = exports.RtcAnswerServerSchema = exports.RtcOfferServerSchema = exports.RtcLeaveClientSchema = exports.RtcIceClientSchema = exports.RtcAnswerClientSchema = exports.RtcOfferClientSchema = exports.BubbleUpdateSchema = exports.BubbleLeaveSchema = exports.BubbleJoinSchema = exports.PongSchema = exports.PlayerStateSchema = exports.PlayerLeftSchema = exports.PlayerJoinedSchema = exports.WelcomeSchema = exports.WorldSnapshotSchema = exports.PingSchema = exports.PlayerMoveSchema = exports.SPAWN_Y = exports.SPAWN_X = exports.WORLD_H = exports.WORLD_W = exports.RemotePlayerSchema = exports.FacingSchema = void 0;
+exports.ServerMessageSchema = exports.ClientMessageSchema = exports.BubbleSfuSwitchSchema = exports.SfuProducerClosedSchema = exports.SfuNewProducerSchema = exports.SfuConsumedSchema = exports.SfuProducersListSchema = exports.SfuProducedSchema = exports.SfuTransportCreatedSchema = exports.SfuRouterCapsSchema = exports.SfuLeaveSchema = exports.SfuResumeConsumerSchema = exports.SfuConsumeSchema = exports.SfuGetProducersSchema = exports.SfuProduceSchema = exports.SfuConnectTransportSchema = exports.SfuCreateTransportSchema = exports.SfuGetCapsSchema = exports.RtcIceServerSchema = exports.RtcAnswerServerSchema = exports.RtcOfferServerSchema = exports.RtcLeaveClientSchema = exports.RtcIceClientSchema = exports.RtcAnswerClientSchema = exports.RtcOfferClientSchema = exports.BubbleUpdateSchema = exports.BubbleLeaveSchema = exports.BubbleJoinSchema = exports.PongSchema = exports.PlayerStateSchema = exports.PlayerLeftSchema = exports.PlayerJoinedSchema = exports.WelcomeSchema = exports.WorldSnapshotSchema = exports.PingSchema = exports.PlayerMoveSchema = exports.SPAWN_Y = exports.SPAWN_X = exports.WORLD_H = exports.WORLD_W = exports.RemotePlayerSchema = exports.FacingSchema = void 0;
 const zod_1 = require("zod");
 // Supporting types
 exports.FacingSchema = zod_1.z.enum(["down", "up", "left", "right", "idle"]);
@@ -109,6 +109,83 @@ exports.RtcIceServerSchema = zod_1.z.object({
     from: zod_1.z.string(),
     candidate: zod_1.z.unknown(),
 });
+// ─── SFU signalling — Client → Server ────────────────────────────────────────
+exports.SfuGetCapsSchema = zod_1.z.object({ type: zod_1.z.literal("sfu.get-caps") });
+exports.SfuCreateTransportSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.create-transport"),
+    direction: zod_1.z.enum(["send", "recv"]),
+});
+exports.SfuConnectTransportSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.connect-transport"),
+    transportId: zod_1.z.string(),
+    direction: zod_1.z.enum(["send", "recv"]),
+    dtlsParameters: zod_1.z.unknown(),
+});
+exports.SfuProduceSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.produce"),
+    transportId: zod_1.z.string(),
+    kind: zod_1.z.enum(["audio", "video"]),
+    rtpParameters: zod_1.z.unknown(),
+});
+exports.SfuGetProducersSchema = zod_1.z.object({ type: zod_1.z.literal("sfu.get-producers") });
+exports.SfuConsumeSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.consume"),
+    transportId: zod_1.z.string(),
+    producerId: zod_1.z.string(),
+    rtpCapabilities: zod_1.z.unknown(),
+});
+exports.SfuResumeConsumerSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.resume-consumer"),
+    consumerId: zod_1.z.string(),
+});
+exports.SfuLeaveSchema = zod_1.z.object({ type: zod_1.z.literal("sfu.leave") });
+// ─── SFU signalling — Server → Client ────────────────────────────────────────
+exports.SfuRouterCapsSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.router-caps"),
+    rtpCapabilities: zod_1.z.unknown(),
+});
+exports.SfuTransportCreatedSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.transport-created"),
+    direction: zod_1.z.enum(["send", "recv"]),
+    id: zod_1.z.string(),
+    iceParameters: zod_1.z.unknown(),
+    iceCandidates: zod_1.z.unknown(),
+    dtlsParameters: zod_1.z.unknown(),
+});
+exports.SfuProducedSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.produced"),
+    producerId: zod_1.z.string(),
+    kind: zod_1.z.enum(["audio", "video"]),
+});
+exports.SfuProducersListSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.producers-list"),
+    producers: zod_1.z.array(zod_1.z.object({ producerId: zod_1.z.string(), peerId: zod_1.z.string(), kind: zod_1.z.string() })),
+});
+exports.SfuConsumedSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.consumed"),
+    consumerId: zod_1.z.string(),
+    producerId: zod_1.z.string(),
+    kind: zod_1.z.string(),
+    rtpParameters: zod_1.z.unknown(),
+    paused: zod_1.z.boolean(),
+    peerId: zod_1.z.string(),
+});
+exports.SfuNewProducerSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.new-producer"),
+    peerId: zod_1.z.string(),
+    producerId: zod_1.z.string(),
+    kind: zod_1.z.string(),
+});
+exports.SfuProducerClosedSchema = zod_1.z.object({
+    type: zod_1.z.literal("sfu.producer-closed"),
+    producerId: zod_1.z.string(),
+    peerId: zod_1.z.string(),
+});
+exports.BubbleSfuSwitchSchema = zod_1.z.object({
+    type: zod_1.z.literal("bubble.sfu-switch"),
+    bubbleId: zod_1.z.string(),
+    members: zod_1.z.array(zod_1.z.string()),
+});
 exports.ClientMessageSchema = zod_1.z.discriminatedUnion("type", [
     exports.PlayerMoveSchema,
     exports.PingSchema,
@@ -116,6 +193,14 @@ exports.ClientMessageSchema = zod_1.z.discriminatedUnion("type", [
     exports.RtcAnswerClientSchema,
     exports.RtcIceClientSchema,
     exports.RtcLeaveClientSchema,
+    exports.SfuGetCapsSchema,
+    exports.SfuCreateTransportSchema,
+    exports.SfuConnectTransportSchema,
+    exports.SfuProduceSchema,
+    exports.SfuGetProducersSchema,
+    exports.SfuConsumeSchema,
+    exports.SfuResumeConsumerSchema,
+    exports.SfuLeaveSchema,
 ]);
 exports.ServerMessageSchema = zod_1.z.discriminatedUnion("type", [
     exports.WelcomeSchema,
@@ -130,5 +215,13 @@ exports.ServerMessageSchema = zod_1.z.discriminatedUnion("type", [
     exports.RtcOfferServerSchema,
     exports.RtcAnswerServerSchema,
     exports.RtcIceServerSchema,
+    exports.SfuRouterCapsSchema,
+    exports.SfuTransportCreatedSchema,
+    exports.SfuProducedSchema,
+    exports.SfuProducersListSchema,
+    exports.SfuConsumedSchema,
+    exports.SfuNewProducerSchema,
+    exports.SfuProducerClosedSchema,
+    exports.BubbleSfuSwitchSchema,
 ]);
 //# sourceMappingURL=messages.js.map
