@@ -67,12 +67,12 @@ export function UserProfileForm({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       {/* Personal info */}
       <div className="fx-card p-4 flex flex-col gap-4">
-        <p className={labelCls}>Personal info</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">Personal info</p>
         <Field label="Email">
-          <p className="rounded-lg border border-line bg-surface-1 px-3 py-2 text-sm text-fg-secondary opacity-70 select-all">
+          <p className="rounded-lg border border-line bg-surface-1 px-3 py-2 text-sm text-fg-secondary opacity-70">
             {email}
           </p>
         </Field>
@@ -136,7 +136,7 @@ export function UserProfileForm({
 
       {/* Password change */}
       <div className="fx-card p-4 flex flex-col gap-4">
-        <p className={labelCls}>Change password</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">Change password</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="New password">
             <input

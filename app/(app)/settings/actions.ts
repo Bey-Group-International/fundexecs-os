@@ -83,10 +83,7 @@ export async function deactivateMandate(formData: FormData): Promise<void> {
   revalidatePath("/settings");
 }
 
-// Persist edits to the authenticated principal's personal profile.
-export async function saveUserProfile(
-  formData: FormData,
-): Promise<{ error?: string }> {
+export async function saveUserProfile(formData: FormData): Promise<{ error?: string }> {
   const ctx = await getSessionContext();
   if (!ctx) return { error: "Not authenticated" };
 
@@ -109,10 +106,8 @@ export async function saveUserProfile(
   return {};
 }
 
-// Change the authenticated user's password via Supabase Auth.
-export async function changePassword(
-  formData: FormData,
-): Promise<{ error?: string }> {
+export async function changePassword(formData: FormData): Promise<{ error?: string }> {
+  const supabase = createServerClient();
   const password = String(formData.get("password") ?? "").trim();
   const confirm = String(formData.get("confirm") ?? "").trim();
 
@@ -120,7 +115,6 @@ export async function changePassword(
   if (password.length < 8) return { error: "Password must be at least 8 characters" };
   if (password !== confirm) return { error: "Passwords do not match" };
 
-  const supabase = createServerClient();
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: error.message };
   return {};
