@@ -14,7 +14,7 @@ import {
 } from "@/lib/allocator-directory";
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
 import { logContactAction, createLpInviteAction } from "@/app/(app)/[hub]/[module]/actions";
-import { DeleteInvestorBtn } from "@/components/source/SourceDeleteControls";
+import { DeleteInvestorBtn, ClearInvestorsBtn } from "@/components/source/SourceDeleteControls";
 import { InlineContactEdit, EditContactBtn } from "@/components/source/InlineContactEdit";
 import type { ContactFields } from "@/app/(app)/[hub]/[module]/actions";
 
@@ -507,6 +507,7 @@ export function AllocatorDirectory({ entries, funds }: Props) {
         <span className="ml-auto font-mono text-[10px] text-fg-muted">
           {filtered.length} of {entries.length} allocators
         </span>
+        {entries.length > 0 && <ClearInvestorsBtn />}
       </div>
 
       {/* Table */}
