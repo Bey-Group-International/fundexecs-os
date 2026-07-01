@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFn = (...args: any[]) => any;
 import type { Device } from "mediasoup-client";
 import type {
@@ -37,7 +36,6 @@ interface PeerStreams {
   videoEl: HTMLVideoElement | null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyObj = any;
 
 export class SfuManager {
@@ -131,8 +129,7 @@ export class SfuManager {
 
     // 2. Get router RTP capabilities
     const caps = await this._requestCaps();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await this.device.load({ routerRtpCapabilities: caps as any });
+    await this.device.load({ routerRtpCapabilities: caps as never });
 
     // 3. Create send transport and produce
     await this._setupSendTransport();
