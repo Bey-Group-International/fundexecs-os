@@ -692,6 +692,27 @@ export async function deleteInvestorAction(
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
+    const supabase = createServiceClient();
+    const { error } = await supabase
+      .from("investors")
+      .delete()
+      .eq("id", investorId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/lp_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteInvestorAction] failed", e);
+    return { error: "Failed to delete investor" };
+  }
+}
+
+export async function archiveInvestorAction(
+  investorId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
     const supabase = createServerClient();
     const { error } = await supabase
       .from("investors")
@@ -703,8 +724,8 @@ export async function deleteInvestorAction(
     revalidatePath("/source/lp_pipeline");
     return { ok: true };
   } catch (e) {
-    console.error("[deleteInvestorAction] failed", e);
-    return { error: "Failed to delete investor" };
+    console.error("[archiveInvestorAction] failed", e);
+    return { error: "Failed to archive investor" };
   }
 }
 
@@ -715,9 +736,8 @@ export async function clearInvestorsAction(): Promise<{ ok?: boolean; error?: st
     const supabase = createServiceClient();
     const { error } = await supabase
       .from("investors")
-      .update({ archived_at: new Date().toISOString() })
-      .eq("organization_id", auth.ctx.orgId)
-      .is("archived_at", null);
+      .delete()
+      .eq("organization_id", auth.ctx.orgId);
     if (error) throw error;
     revalidatePath("/source/lp_pipeline");
     return { ok: true };
