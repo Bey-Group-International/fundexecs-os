@@ -72,7 +72,7 @@ export default async function WalletPage({
   const currentPlan = wallet?.plan ?? null;
   const recommendedKey = recommendPlan(spend30d);
 
-  const months = currentPlan ? tenureMonths(wallet?.updated_at) : 0;
+  const months = currentPlan ? tenureMonths(wallet?.plan_started_at) : 0;
   const loyalty = loyaltyBonus(months);
   const planName = currentPlan ? PLAN_BY_KEY[currentPlan as keyof typeof PLAN_BY_KEY]?.name : null;
   const recommendedPlan = PLAN_BY_KEY[recommendedKey as keyof typeof PLAN_BY_KEY];

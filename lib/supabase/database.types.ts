@@ -528,6 +528,7 @@ export type Wallet = Timestamps & {
   credits: number;
   plan: string | null;
   plan_interval: string | null;
+  plan_started_at: string | null;
 };
 
 // Tokenization layers (migration 0048). Earned standing, credit stakes, and
