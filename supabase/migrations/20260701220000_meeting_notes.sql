@@ -30,7 +30,7 @@ CREATE POLICY "org_members_all" ON meeting_notes
   USING (
     organization_id IN (
       SELECT organization_id FROM organization_members
-      WHERE user_id = auth.uid()
+      WHERE principal_id = auth.uid()
     )
   );
 
