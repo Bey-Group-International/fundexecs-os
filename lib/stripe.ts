@@ -277,10 +277,18 @@ export async function fulfillCheckout(
     const plan = PLAN_BY_KEY[planKey];
     const interval: PlanInterval = meta.interval === "annual" ? "annual" : "monthly";
     if (plan) {
+      // Only set plan_started_at on the first activation; preserve it across
+      // renewals so tenure accumulates from the original subscription date.
+      const { data: existing } = await service
+        .from("wallets")
+        .select("plan_started_at")
+        .eq("organization_id", orgId)
+        .maybeSingle();
+      const planStartedAt = existing?.plan_started_at ?? new Date().toISOString();
       await service
         .from("wallets")
         .upsert(
-          { organization_id: orgId, plan: plan.key, plan_interval: interval },
+          { organization_id: orgId, plan: plan.key, plan_interval: interval, plan_started_at: planStartedAt },
           { onConflict: "organization_id" },
         );
       await grantCredits(service, orgId, planGrantCredits(plan, interval), "plan_grant", {

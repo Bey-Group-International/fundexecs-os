@@ -162,11 +162,11 @@ export async function compoundingProfile(orgId: string): Promise<CompoundingProf
 
   const [stored, wallet] = await Promise.all([
     supabase.from("reputation_scores").select("score").eq("organization_id", orgId).maybeSingle(),
-    supabase.from("wallets").select("updated_at, plan").eq("organization_id", orgId).maybeSingle(),
+    supabase.from("wallets").select("plan_started_at, plan").eq("organization_id", orgId).maybeSingle(),
   ]);
 
-  // Tenure only accrues while on a plan; mirror the Wallet page's logic.
-  const since = wallet.data?.plan ? wallet.data?.updated_at : null;
+  // Tenure accrues from the original plan-start date, not the last credit top-up.
+  const since = wallet.data?.plan ? wallet.data?.plan_started_at : null;
   const tenure = monthsSince(since);
 
   // Authoritative stored score wins; else compute the proxy.

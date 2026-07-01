@@ -528,6 +528,7 @@ export type Wallet = Timestamps & {
   credits: number;
   plan: string | null;
   plan_interval: string | null;
+  plan_started_at: string | null;
 };
 
 // Tokenization layers (migration 0048). Earned standing, credit stakes, and
@@ -1562,6 +1563,19 @@ export type Database = {
           content: string;
           similarity: number;
         }[];
+      };
+      // Atomically credit an org's wallet AND append a ledger row in one
+      // transaction (migration 20260701). Returns the new balance.
+      grant_org_credits: {
+        Args: {
+          p_org: string;
+          p_delta: number;
+          p_reason: string;
+          p_source_org?: string | null;
+          p_level?: number | null;
+          p_note?: string | null;
+        };
+        Returns: number;
       };
       // Atomically credit an org's wallet (creating it if absent), clamped at 0
       // (migration 0039). Returns the new balance.
