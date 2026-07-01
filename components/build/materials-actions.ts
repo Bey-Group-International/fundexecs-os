@@ -153,7 +153,7 @@ export async function updateDocumentStatus(formData: FormData): Promise<void> {
   const supabase = createServerClient();
   await supabase
     .from("documents")
-    .update({ status: s })
+    .update({ status: s as import("@/lib/supabase/database.types").DocumentStatus })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
   revalidatePath(ROOM);
