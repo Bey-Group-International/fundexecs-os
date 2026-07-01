@@ -223,6 +223,94 @@ export async function redeemReferralCode(
   return { ok: true, welcome: REFERRAL_WELCOME_BONUS };
 }
 
+// Auto-claim a referral code at org-creation time (called from onboarding).
+// Records the edge as 'pending' and grants the welcome bonus, but does NOT yet
+// pay the referrer chain — that fires at first paid-plan activation via
+// awardReferralOnSubscription(). This is intentionally best-effort: errors are
+// returned as a string so the caller can decide whether to surface or swallow.
+export async function claimReferralCode(
+  code: string,
+  joiningOrgId: string,
+): Promise<string | null> {
+  const clean = code.trim().toUpperCase();
+  if (!clean) return null;
+
+  const service = createServiceClient();
+
+  const { data: codeRow } = await service
+    .from("referral_codes")
+    .select("organization_id")
+    .eq("code", clean)
+    .maybeSingle();
+  if (!codeRow) return "Referral code not found.";
+
+  const referrerOrgId = codeRow.organization_id;
+  if (referrerOrgId === joiningOrgId) return null; // silent self-referral skip
+
+  const { data: already } = await service
+    .from("referrals")
+    .select("id")
+    .eq("referred_organization_id", joiningOrgId)
+    .maybeSingle();
+  if (already) return null; // already referred — no action, no error
+
+  // Cycle guard
+  let cursor: string | null = referrerOrgId;
+  for (let i = 0; i < 50 && cursor; i++) {
+    if (cursor === joiningOrgId) return null; // would form a loop — skip silently
+    const upRes = await service
+      .from("referrals")
+      .select("referrer_organization_id")
+      .eq("referred_organization_id", cursor)
+      .maybeSingle();
+    cursor = (upRes.data?.referrer_organization_id as string | undefined) ?? null;
+  }
+
+  const { error: insErr } = await service.from("referrals").insert({
+    referrer_organization_id: referrerOrgId,
+    referred_organization_id: joiningOrgId,
+    code: clean,
+    status: "pending",
+  });
+  if (insErr) return insErr.message;
+
+  // Grant welcome bonus immediately; referrer chain waits for subscription.
+  await grantCredits(service, joiningOrgId, REFERRAL_WELCOME_BONUS, "referral_welcome", {
+    sourceOrgId: referrerOrgId,
+    note: "Welcome bonus",
+  });
+
+  return null; // success
+}
+
+// Pay the referral chain for an org that has just activated a paid plan.
+// Finds the 'pending' referral edge (created at signup via claimReferralCode),
+// flips it to 'subscribed', then calls awardReferralChain — ensuring the reward
+// fires exactly once per referral regardless of plan changes or renewals.
+export async function awardReferralOnSubscription(
+  orgId: string,
+  service: ServiceClient,
+): Promise<void> {
+  const { data: referral, error } = await service
+    .from("referrals")
+    .select("id, referrer_organization_id")
+    .eq("referred_organization_id", orgId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (error || !referral) return;
+
+  const { error: updErr } = await service
+    .from("referrals")
+    .update({ status: "subscribed" })
+    .eq("id", referral.id);
+  if (updErr) {
+    console.error("[referral] failed to mark subscribed:", updErr.message);
+    return;
+  }
+
+  await awardReferralChain(service, orgId);
+}
+
 // Pay the upline of a newly-joined org: the direct referrer earns an escalating
 // tier reward (+ any milestone bonus), and ancestors deeper up earn decaying
 // overrides — the compounding downline.

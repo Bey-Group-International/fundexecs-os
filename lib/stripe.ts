@@ -16,7 +16,7 @@ import Stripe from "stripe";
 import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
 import { grantCredits } from "@/lib/credits";
-import { purchaseGift } from "@/lib/gift-earn";
+import { purchaseGift, awardReferralOnSubscription } from "@/lib/gift-earn";
 import {
   PLAN_BY_KEY,
   CREDIT_PACKS,
@@ -294,6 +294,12 @@ export async function fulfillCheckout(
       await grantCredits(service, orgId, planGrantCredits(plan, interval), "plan_grant", {
         note: `${plan.name} plan (${interval}) — Stripe`,
       });
+      // Pay any pending referral chain now that this org has a paid plan.
+      try {
+        await awardReferralOnSubscription(orgId, service);
+      } catch (err) {
+        console.error("[referral] awardReferralOnSubscription failed:", err);
+      }
     }
   } else if (kind === "pack") {
     const pack = CREDIT_PACKS.find((p) => p.key === meta.pack_key);
