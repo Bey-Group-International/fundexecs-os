@@ -99,8 +99,8 @@ export default async function WalletPage({
             routed, and ready for institutional workflows.
           </p>
         </div>
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-neural-400/35 bg-neural-400/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-neural-300">
-          <span className="h-1.5 w-1.5 rounded-full bg-neural-400 shadow-[0_0_14px_rgba(118,185,0,0.9)]" />
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-gold-400/35 bg-gold-400/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-gold-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-gold-400 shadow-[0_0_14px_rgb(var(--fx-gold-rgb)/0.9)]" />
           Compute credit ledger online
         </div>
       </header>
@@ -116,7 +116,7 @@ export default async function WalletPage({
                   Available balance
                 </p>
                 <p className="mt-2 font-display text-5xl font-semibold tracking-tight text-fg-primary">
-                  <span className="text-neural-400 drop-shadow-[0_0_18px_rgba(118,185,0,0.45)]">
+                  <span className="text-gold-400 drop-shadow-[0_0_20px_rgb(var(--fx-gold-rgb)/0.55)]">
                     ◇
                   </span>{" "}
                   {formatCredits(balance)}
@@ -125,11 +125,11 @@ export default async function WalletPage({
                   live compute credits
                 </p>
               </div>
-              <div className="rounded-xl border border-neural-400/25 bg-neural-400/[0.07] px-3 py-2 text-right">
-                <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-neural-300">
+              <div className="rounded-xl border border-gold-400/25 bg-gold-400/[0.07] px-3 py-2 text-right">
+                <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-gold-300/80">
                   Active tier
                 </p>
-                <p className="mt-1 font-display text-lg font-semibold text-fg-primary">
+                <p className="mt-1 font-display text-lg font-semibold text-gold-300">
                   {planName ?? "Unassigned"}
                 </p>
               </div>
@@ -160,7 +160,7 @@ export default async function WalletPage({
                 <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
                   Suggested
                 </p>
-                <p className="mt-1 font-display text-xl font-semibold text-neural-300">
+                <p className="mt-1 font-display text-xl font-semibold text-gold-300">
                   {recommendedPlan?.name}
                 </p>
               </div>
@@ -177,11 +177,11 @@ export default async function WalletPage({
           </div>
 
           <div className="grid gap-3">
-            <div className="rounded-2xl border border-neural-400/20 bg-black/45 p-5">
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
+            <div className="rounded-2xl border border-gold-400/20 bg-black/45 p-5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-300/80">
                 Loyalty accelerator
               </p>
-              <p className="mt-2 font-display text-3xl font-semibold text-fg-primary">
+              <p className="mt-2 font-display text-3xl font-semibold text-gold-300">
                 +{formatCredits(loyalty)}
                 <span className="ml-1 text-sm font-normal text-fg-muted">/mo</span>
               </p>
@@ -221,14 +221,14 @@ export default async function WalletPage({
         </span>
         <span className="text-fg-primary">{TIER_META[profile.tier].label}</span>
         {profile.discountPct > 0 && (
-          <span className="rounded-full border border-neural-400/40 bg-neural-400/10 px-2 py-0.5 font-mono text-[11px] text-neural-300">
+          <span className="rounded-full border border-gold-400/40 bg-gold-400/10 px-2 py-0.5 font-mono text-[11px] text-gold-300">
             −{profile.discountPct}% on every action
           </span>
         )}
         <span className="text-fg-secondary">{TIER_META[profile.tier].blurb}</span>
       </div>
 
-      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-neural-300">
+      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
         Plan compute tiers
       </h2>
       <PlanSelector
@@ -239,7 +239,7 @@ export default async function WalletPage({
         publishableKey={publishableKey}
       />
 
-      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-neural-300">
+      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
         One-off credit packs
       </h2>
       <CreditPacks live={live} publishableKey={publishableKey} />
@@ -262,7 +262,7 @@ export default async function WalletPage({
         <span className="font-mono text-fg-muted transition group-hover:text-neural-300">→</span>
       </Link>
 
-      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-neural-300">
+      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
         Execution rewards
       </h2>
       <GamificationPanel />

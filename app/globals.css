@@ -12,11 +12,17 @@
   --fx-fg-primary: 241 247 255;
   --fx-fg-secondary: 175 190 211;
   --fx-fg-muted: 113 132 158;
+  /* Neural/data-terminal accent — sky blue for grid lines and tech surfaces */
   --fx-accent-300: 125 211 252;
   --fx-accent-400: 56 189 248;
   --fx-accent-500: 37 99 235;
   --fx-accent-rgb: 56 189 248;
   --fx-accent-strong-rgb: 37 99 235;
+  /* Gold — investment-bank warm gold for financial numbers and CTAs */
+  --fx-gold-300: 245 215 115;
+  --fx-gold-400: 212 168 42;
+  --fx-gold-500: 158 120 15;
+  --fx-gold-rgb: 212 168 42;
   --background: rgb(var(--fx-surface-0));
   --foreground: rgb(var(--fx-fg-primary));
 }
@@ -36,6 +42,10 @@ html.theme-day {
   --fx-accent-500: 29 78 216;
   --fx-accent-rgb: 37 99 235;
   --fx-accent-strong-rgb: 29 78 216;
+  --fx-gold-300: 160 120 10;
+  --fx-gold-400: 130 96 5;
+  --fx-gold-500: 100 72 2;
+  --fx-gold-rgb: 130 96 5;
   --background: rgb(var(--fx-surface-0));
   --foreground: rgb(var(--fx-fg-primary));
 }

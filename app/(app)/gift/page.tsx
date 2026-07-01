@@ -71,16 +71,23 @@ export default async function GiftEarnPage({
 
       <CheckoutBanner status={searchParams.checkout} />
 
-      {/* Stat strip */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {/* KPI stat strip — institutional tile row */}
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line/70 bg-line/70 sm:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="fx-card p-4">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+          <div
+            key={s.label}
+            className={`flex flex-col gap-1 bg-surface-1 px-5 py-4 ${
+              s.accent ? "border-t-2 border-t-gold-400/70" : "border-t-2 border-t-transparent"
+            }`}
+          >
+            <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-fg-muted">
               {s.label}
             </p>
             <p
-              className={`mt-1 font-display text-2xl font-semibold ${
-                s.accent ? "text-gold-400" : "text-fg-primary"
+              className={`font-display text-3xl font-semibold tracking-tight ${
+                s.accent
+                  ? "text-gold-300 drop-shadow-[0_0_16px_rgb(var(--fx-gold-rgb)/0.35)]"
+                  : "text-fg-primary"
               }`}
             >
               {s.value}
@@ -90,23 +97,23 @@ export default async function GiftEarnPage({
       </div>
 
       {/* Rank + progress */}
-      <div className="fx-glass mt-2 flex flex-wrap items-center gap-x-6 gap-y-3 p-5">
+      <div className="mt-2 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-2xl border border-gold-400/20 bg-gold-400/[0.04] px-5 py-4">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">Rank</p>
-          <p className="mt-0.5 font-display text-xl font-semibold text-gold-300">{rank}</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-fg-muted">Current rank</p>
+          <p className="mt-0.5 font-display text-2xl font-semibold tracking-tight text-gold-300">{rank}</p>
         </div>
         <div className="min-w-[200px] flex-1">
-          <div className="mb-1 flex items-center justify-between text-[11px] text-fg-muted">
+          <div className="mb-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-fg-muted">
             <span>{next ? `Next: ${next.rank}` : "Top rank reached"}</span>
             {next ? (
               <span>
-                {summary.directCount}/{next.count} referrals · +{formatCredits(next.bonus)} bonus
+                {summary.directCount}/{next.count} firms · +{formatCredits(next.bonus)} bonus
               </span>
             ) : null}
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-3">
             <div
-              className="h-full rounded-full bg-gold-400 transition-all"
+              className="h-full rounded-full bg-gold-400 shadow-[0_0_8px_rgb(var(--fx-gold-rgb)/0.6)] transition-all duration-500"
               style={{ width: `${Math.round(progress * 100)}%` }}
             />
           </div>
@@ -199,8 +206,8 @@ export default async function GiftEarnPage({
                   <span
                     className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
                       row.level === 1
-                        ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
-                        : "border-line bg-surface-0 text-fg-muted"
+                        ? "border-gold-400/50 bg-gold-400/10 text-gold-300 shadow-[0_0_8px_rgb(var(--fx-gold-rgb)/0.2)]"
+                        : "border-line/60 bg-surface-2/40 text-fg-muted"
                     }`}
                   >
                     {LEVEL_LABEL[row.level] ?? `L${row.level}`}
