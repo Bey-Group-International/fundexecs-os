@@ -52,6 +52,17 @@ function prettyType(t: string): string {
     .join(" ");
 }
 
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const d = Math.floor(diff / 86400000);
+  if (d === 0) return "Today";
+  if (d === 1) return "Yesterday";
+  if (d < 30) return `${d}d ago`;
+  const m = Math.floor(d / 30);
+  if (m < 12) return `${m}mo ago`;
+  return `${Math.floor(m / 12)}y ago`;
+}
+
 export default async function MarketplacePage() {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
@@ -134,16 +145,43 @@ export default async function MarketplacePage() {
 
       {/* Your standing — earned reputation (closed deals, verified records) lifts
           your listings in discovery and lowers the stake you lock to post. */}
-      <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-neural-400/20 bg-black/45 px-4 py-3 text-sm animate-fade-up">
-        <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
-          Your standing
-        </span>
-        <TierBadge tier={profile.tier} />
-        <span className="text-fg-secondary">
-          {profile.tier === "unranked"
-            ? "Close deals and verify records to earn standing — higher tiers surface your listings first and lower the stake you post."
-            : `${tierLabel(profile.tier)} — your listings surface higher and you post a lower stake at higher tiers.`}
-        </span>
+      <div className="mb-6 rounded-2xl border border-neural-400/20 bg-black/45 px-4 py-3 animate-fade-up">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
+            Your standing
+          </span>
+          <TierBadge tier={profile.tier} />
+          <span className="text-sm text-fg-secondary">
+            {profile.tier === "unranked"
+              ? "Close deals and verify records to earn standing — higher tiers surface your listings first and lower the stake you post."
+              : `${tierLabel(profile.tier)} — your listings surface higher and you post a lower stake.`}
+          </span>
+        </div>
+        {profile.tier === "unranked" ? (
+          <div className="mt-2.5 flex flex-wrap gap-3">
+            {[
+              { label: "Close a deal", href: "/deals" },
+              { label: "Verify records", href: "/portfolio" },
+              { label: "Submit LP report", href: "/lp-report" },
+            ].map((a) => (
+              <Link
+                key={a.href}
+                href={a.href}
+                className="rounded-md border border-neural-400/30 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-neural-300 transition hover:border-neural-400/60 hover:text-fg-secondary"
+              >
+                {a.label} →
+              </Link>
+            ))}
+          </div>
+        ) : profile.tier === "verified" ? (
+          <p className="mt-1.5 text-[11px] text-fg-muted">
+            Next: <span className="text-fg-secondary">Established</span> — close 3+ more deals or raise external capital to advance.
+          </p>
+        ) : profile.tier === "established" ? (
+          <p className="mt-1.5 text-[11px] text-fg-muted">
+            Next: <span className="text-fg-secondary">Principal</span> — sustain track record and network depth to advance.
+          </p>
+        ) : null}
       </div>
 
       {listings.length > 0 ? (
@@ -235,6 +273,8 @@ export default async function MarketplacePage() {
                             <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                               {prettyType(l.listing_type)}
                               {amount ? ` · ${amount}` : ""}
+                              {" · "}
+                              {timeAgo(l.created_at)}
                             </p>
                           </div>
 
@@ -261,6 +301,13 @@ export default async function MarketplacePage() {
                             </form>
                           </div>
                         </div>
+
+                        {/* Nudge to complete draft listings missing a summary */}
+                        {l.status === "draft" && !l.summary ? (
+                          <p className="mt-2 text-[11px] text-fg-muted">
+                            <span className="text-gold-400">Tip:</span> Add a summary so buyers know what this is before you list it.
+                          </p>
+                        ) : null}
 
                         {/* Best-fit investors for this listing — take it straight
                             to them through a gated outreach. */}
