@@ -13,11 +13,6 @@ const LISTING_TYPES = [
   { value: "service", label: "Service" },
 ];
 
-// The create-listing form. Client-side so validation surfaces inline and the
-// form resets on success without a full reload. Linking a deal lets the matching
-// engine score listings on geography too, not just amount + type.
-// `requiredStake` and `tier` are resolved server-side by the parent (page.tsx)
-// and passed in — this client component never fetches.
 export function NewListingForm({
   deals = [],
   requiredStake,
@@ -28,20 +23,38 @@ export function NewListingForm({
   tier?: ReputationTier;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [titleError, setTitleError] = useState(false);
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  function handleSubmit(formData: FormData) {
+    const title = String(formData.get("title") ?? "").trim();
+    if (!title) {
+      setTitleError(true);
+      titleRef.current?.focus();
+      return;
+    }
+    setTitleError(false);
+    startTransition(async () => {
+      setError(null);
+      setSuccess(false);
+      const res = await createListing(formData);
+      if (res?.error) {
+        setError(res.error);
+      } else {
+        formRef.current?.reset();
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3500);
+      }
+    });
+  }
 
   return (
     <form
       ref={formRef}
-      action={(formData) =>
-        startTransition(async () => {
-          setError(null);
-          const res = await createListing(formData);
-          if (res?.error) setError(res.error);
-          else formRef.current?.reset();
-        })
-      }
+      action={handleSubmit}
       className="fx-card animate-fade-up p-4"
     >
       <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
@@ -49,11 +62,24 @@ export function NewListingForm({
       </p>
 
       <div className="flex flex-col gap-3">
-        <input
-          name="title"
-          placeholder="Title — e.g. Series B secondary, $4M allocation"
-          className="rounded-md border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
-        />
+        <div className="flex flex-col gap-1">
+          <input
+            ref={titleRef}
+            name="title"
+            required
+            placeholder="Title — e.g. Series B secondary, $4M allocation"
+            onChange={() => titleError && setTitleError(false)}
+            className={`rounded-md border bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:outline-none ${
+              titleError
+                ? "border-red-500/60 focus:border-red-500"
+                : "border-line focus:border-gold-500/60"
+            }`}
+          />
+          {titleError ? (
+            <p className="text-[11px] text-red-400">Title is required.</p>
+          ) : null}
+        </div>
+
         <textarea
           name="summary"
           rows={2}
@@ -117,9 +143,12 @@ export function NewListingForm({
             </label>
           ) : null}
 
-          <label className="flex items-center gap-2 text-xs text-fg-secondary">
+          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-line px-2.5 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/40 hover:bg-gold-500/5 hover:text-fg-primary">
             <input type="checkbox" name="is_public" className="h-3.5 w-3.5 accent-gold-500" />
-            Public
+            <span>
+              Public{" "}
+              <span className="text-fg-muted">— visible on Browse</span>
+            </span>
           </label>
 
           <button
@@ -130,6 +159,12 @@ export function NewListingForm({
             {pending ? "Saving…" : "Create listing"}
           </button>
         </div>
+
+        {success ? (
+          <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">
+            Listing created — it&rsquo;s in draft. Mark it <strong>Listed</strong> and <strong>Public</strong> when you&rsquo;re ready for buyers.
+          </p>
+        ) : null}
 
         {error ? <p className="text-xs text-red-400">{error}</p> : null}
 
