@@ -300,6 +300,45 @@ export declare const PongSchema: z.ZodObject<{
     serverTime: number;
 }>;
 export type Pong = z.infer<typeof PongSchema>;
+export declare const BubbleJoinSchema: z.ZodObject<{
+    type: z.ZodLiteral<"bubble.join">;
+    bubbleId: z.ZodString;
+    members: z.ZodArray<z.ZodString, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "bubble.join";
+    bubbleId: string;
+    members: string[];
+}, {
+    type: "bubble.join";
+    bubbleId: string;
+    members: string[];
+}>;
+export type BubbleJoin = z.infer<typeof BubbleJoinSchema>;
+export declare const BubbleLeaveSchema: z.ZodObject<{
+    type: z.ZodLiteral<"bubble.leave">;
+    bubbleId: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "bubble.leave";
+    bubbleId: string;
+}, {
+    type: "bubble.leave";
+    bubbleId: string;
+}>;
+export type BubbleLeave = z.infer<typeof BubbleLeaveSchema>;
+export declare const BubbleUpdateSchema: z.ZodObject<{
+    type: z.ZodLiteral<"bubble.update">;
+    bubbleId: z.ZodString;
+    members: z.ZodArray<z.ZodString, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "bubble.update";
+    bubbleId: string;
+    members: string[];
+}, {
+    type: "bubble.update";
+    bubbleId: string;
+    members: string[];
+}>;
+export type BubbleUpdate = z.infer<typeof BubbleUpdateSchema>;
 export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
     type: z.ZodLiteral<"welcome">;
     playerId: z.ZodString;
@@ -506,6 +545,39 @@ export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
     type: "pong";
     clientTime: number;
     serverTime: number;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"bubble.join">;
+    bubbleId: z.ZodString;
+    members: z.ZodArray<z.ZodString, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "bubble.join";
+    bubbleId: string;
+    members: string[];
+}, {
+    type: "bubble.join";
+    bubbleId: string;
+    members: string[];
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"bubble.leave">;
+    bubbleId: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "bubble.leave";
+    bubbleId: string;
+}, {
+    type: "bubble.leave";
+    bubbleId: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"bubble.update">;
+    bubbleId: z.ZodString;
+    members: z.ZodArray<z.ZodString, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "bubble.update";
+    bubbleId: string;
+    members: string[];
+}, {
+    type: "bubble.update";
+    bubbleId: string;
+    members: string[];
 }>]>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 //# sourceMappingURL=messages.d.ts.map

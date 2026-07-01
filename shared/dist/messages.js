@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ServerMessageSchema = exports.PongSchema = exports.PlayerStateSchema = exports.PlayerLeftSchema = exports.PlayerJoinedSchema = exports.WelcomeSchema = exports.WorldSnapshotSchema = exports.ClientMessageSchema = exports.PingSchema = exports.PlayerMoveSchema = exports.SPAWN_Y = exports.SPAWN_X = exports.WORLD_H = exports.WORLD_W = exports.RemotePlayerSchema = exports.FacingSchema = void 0;
+exports.ServerMessageSchema = exports.BubbleUpdateSchema = exports.BubbleLeaveSchema = exports.BubbleJoinSchema = exports.PongSchema = exports.PlayerStateSchema = exports.PlayerLeftSchema = exports.PlayerJoinedSchema = exports.WelcomeSchema = exports.WorldSnapshotSchema = exports.ClientMessageSchema = exports.PingSchema = exports.PlayerMoveSchema = exports.SPAWN_Y = exports.SPAWN_X = exports.WORLD_H = exports.WORLD_W = exports.RemotePlayerSchema = exports.FacingSchema = void 0;
 const zod_1 = require("zod");
 // Supporting types
 exports.FacingSchema = zod_1.z.enum(["down", "up", "left", "right", "idle"]);
@@ -63,6 +63,20 @@ exports.PongSchema = zod_1.z.object({
     clientTime: zod_1.z.number(),
     serverTime: zod_1.z.number(),
 });
+exports.BubbleJoinSchema = zod_1.z.object({
+    type: zod_1.z.literal("bubble.join"),
+    bubbleId: zod_1.z.string(),
+    members: zod_1.z.array(zod_1.z.string()),
+});
+exports.BubbleLeaveSchema = zod_1.z.object({
+    type: zod_1.z.literal("bubble.leave"),
+    bubbleId: zod_1.z.string(),
+});
+exports.BubbleUpdateSchema = zod_1.z.object({
+    type: zod_1.z.literal("bubble.update"),
+    bubbleId: zod_1.z.string(),
+    members: zod_1.z.array(zod_1.z.string()),
+});
 exports.ServerMessageSchema = zod_1.z.discriminatedUnion("type", [
     exports.WelcomeSchema,
     exports.PlayerJoinedSchema,
@@ -70,5 +84,8 @@ exports.ServerMessageSchema = zod_1.z.discriminatedUnion("type", [
     exports.PlayerStateSchema,
     exports.WorldSnapshotSchema,
     exports.PongSchema,
+    exports.BubbleJoinSchema,
+    exports.BubbleLeaveSchema,
+    exports.BubbleUpdateSchema,
 ]);
 //# sourceMappingURL=messages.js.map
