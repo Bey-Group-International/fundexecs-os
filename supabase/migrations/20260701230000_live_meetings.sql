@@ -49,13 +49,20 @@ ALTER TABLE live_meeting_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE live_meeting_transcripts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE live_meeting_reports ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "live_meetings_org" ON live_meetings
+CREATE POLICY "live_meetings_select" ON live_meetings FOR SELECT
   USING (
     organization_id IS NULL
     OR organization_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
   );
+
+CREATE POLICY "live_meetings_insert" ON live_meetings FOR INSERT
+  WITH CHECK (host_id = auth.uid());
+
+CREATE POLICY "live_meetings_update" ON live_meetings FOR UPDATE
+  USING (host_id = auth.uid())
+  WITH CHECK (host_id = auth.uid());
 
 CREATE POLICY "live_meeting_participants_self" ON live_meeting_participants
   FOR ALL USING (user_id = auth.uid());
