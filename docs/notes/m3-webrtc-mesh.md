@@ -1,6 +1,7 @@
 # M3 — WebRTC Mesh A/V + Spatial Audio
 
 ## Goal
+
 When a proximity bubble forms (M2), the members automatically start a P2P
 WebRTC mesh call — video + audio — with no third-party service.  Spatial audio
 attenuation is applied client-side based on the distance between avatars.
@@ -32,6 +33,7 @@ processing.
 ## New wire messages
 
 ### Client → Server
+
 ```typescript
 { type: "rtc.offer",   to: string, sdp: string }
 { type: "rtc.answer",  to: string, sdp: string }
@@ -40,6 +42,7 @@ processing.
 ```
 
 ### Server → Client (relayed)
+
 ```typescript
 { type: "rtc.offer",   from: string, sdp: string }
 { type: "rtc.answer",  from: string, sdp: string }
@@ -57,9 +60,11 @@ processing.
 - `leaveBubble()` — closes all peers, removes audio elements
 - `updateSpatialGain(peerId, distancePx)` — sets `GainNode` value on the
   peer's audio track using the formula:
+
   ```
   gain = clamp(1 - (dist - BUBBLE_RADIUS) / HYSTERESIS, 0, 1)
   ```
+
   At dist ≤ 160 → gain 1.0; at dist ≥ 200 → gain 0.0 (matches hysteresis band)
 
 ## Audio pipeline per peer
@@ -78,7 +83,7 @@ policy).
 
 `MediaPermissionBanner` — a thin React component rendered above the canvas:
 - Shows "Allow mic/camera to join the call" with a button when the user is in
-  a bubble but hasn't granted permission yet
+a bubble but hasn't granted permission yet
 - Disappears once stream is acquired or if the user dismisses it
 
 ## Video tiles
@@ -96,6 +101,7 @@ player and call `meshManager.updateSpatialGain(id, dist)`.
 ## Server changes
 
 `gateway.ts` — new message handling for `rtc.*` client messages:
+
 ```typescript
 if (msg.type === "rtc.offer" || msg.type === "rtc.answer" || msg.type === "rtc.ice") {
   room.relayTo(msg.to, { ...msg, type: msg.type, from: playerId });
@@ -109,16 +115,20 @@ confusion with bubble events).
 ## ICE configuration
 
 STUN only for M3 (works for most home/office NATs):
+
 ```typescript
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
 ];
 ```
+
 TURN (for symmetric NAT) deferred to M4.
 
 ## Not in M3
+
 - Screen share — M5
 - mediasoup SFU upgrade — M4
 - Chat — M5
 - TURN server — M4
+
