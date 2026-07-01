@@ -12,12 +12,51 @@ import {
   DOOR_GAP,
   ANIM_ROWS,
 } from "../types";
+import { VirtualOfficeSocket, type ConnectionStatus } from "../net/VirtualOfficeSocket";
+import type { Facing, RemotePlayer, ServerMessage } from "../net/messages";
 
 // ─── Room label overlay ────────────────────────────────────────────────────────
 
 type RoomZone = { zone: Phaser.GameObjects.Zone; key: string; label: string };
 
+type RemoteAvatarState = {
+  sprite: Phaser.Physics.Arcade.Sprite;
+  label: Phaser.GameObjects.Text;
+  targetX: number;
+  targetY: number;
+  facing: Facing;
+};
+
+/** Data passed from VirtualOfficeGame into the scene via scene.init() */
+export type OfficeSceneInitData = {
+  token?: string;
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Deterministic hue (0–360) from a player id string */
+function playerIdToHue(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = (h * 31 + id.charCodeAt(i)) & 0xffff;
+  }
+  return (h % 360);
+}
+
+function facingToAnimKey(facing: Facing): string {
+  switch (facing) {
+    case "down":  return "earnest-walkDown";
+    case "up":    return "earnest-walkUp";
+    case "left":  return "earnest-walkLeft";
+    case "right": return "earnest-walkRight";
+    default:      return "earnest-idle";
+  }
+}
+
+// ─── Scene ────────────────────────────────────────────────────────────────────
+
 export class OfficeScene extends Phaser.Scene {
+  // M0 properties
   private player!: Phaser.Physics.Arcade.Sprite;
   private walls!: Phaser.Physics.Arcade.StaticGroup;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -31,8 +70,32 @@ export class OfficeScene extends Phaser.Scene {
   private roomZones: RoomZone[] = [];
   private currentRoom = "";
 
+  // M1 — networking
+  private socket: VirtualOfficeSocket | null = null;
+  private myPlayerId: string | null = null;
+  private remotePlayers = new Map<string, RemoteAvatarState>();
+  private moveSeq = 0;
+  /** seq number of the last server-acknowledged move for local reconciliation */
+  private lastAckedSeq = 0;
+  /** velocity at the time each seq was sent, used for reconciliation */
+  private pendingMoves = new Map<number, { vx: number; vy: number }>();
+
+  // M1 — HUD
+  private netDot!: Phaser.GameObjects.Arc;
+
   constructor() {
     super({ key: "OfficeScene" });
+  }
+
+  // ── init ────────────────────────────────────────────────────────────────────
+
+  init(data: OfficeSceneInitData) {
+    if (data?.token) {
+      this.socket = new VirtualOfficeSocket();
+      this.socket.onMessage((msg: ServerMessage) => this._handleServerMessage(msg));
+      this.socket.onStatusChange((s: ConnectionStatus) => this._updateNetDot(s));
+      this.socket.connect(data.token);
+    }
   }
 
   // ── preload ─────────────────────────────────────────────────────────────────
@@ -61,6 +124,7 @@ export class OfficeScene extends Phaser.Scene {
     this._createAnimations();
     this._createRoomZones();
     this._createRoomLabel();
+    this._createNetDot();
     this._setupCamera();
     this._setupInput();
   }
@@ -70,6 +134,14 @@ export class OfficeScene extends Phaser.Scene {
   update() {
     this._handleMovement();
     this._updateRoomLabel();
+    this._updateRemoteAvatars();
+  }
+
+  // ── shutdown ─────────────────────────────────────────────────────────────────
+
+  shutdown() {
+    this.socket?.disconnect();
+    this.socket = null;
   }
 
   // ── private helpers ─────────────────────────────────────────────────────────
@@ -216,6 +288,27 @@ export class OfficeScene extends Phaser.Scene {
       .setVisible(false);
   }
 
+  private _createNetDot() {
+    const cam = this.cameras.main;
+    // Placed bottom-right; scroll-locked to viewport
+    this.netDot = this.add.arc(cam.width - 14, cam.height - 14, 6, 0, 360, false, 0x888888)
+      .setScrollFactor(0)
+      .setDepth(30);
+    // Initially hidden; becomes visible once a socket is created
+    this.netDot.setVisible(this.socket !== null);
+  }
+
+  private _updateNetDot(status: ConnectionStatus) {
+    if (!this.netDot) return;
+    this.netDot.setVisible(true);
+    switch (status) {
+      case "connected":    this.netDot.setFillStyle(0x22c55e); break; // green
+      case "reconnecting": this.netDot.setFillStyle(0xf59e0b); break; // amber
+      case "failed":       this.netDot.setFillStyle(0xef4444); break; // red
+      case "disconnected": this.netDot.setFillStyle(0x888888); break; // grey
+    }
+  }
+
   private _setupCamera() {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_W, WORLD_H);
@@ -261,6 +354,17 @@ export class OfficeScene extends Phaser.Scene {
     else if (vy < 0) this.player.anims.play("earnest-walkUp",    true);
     else if (vy > 0) this.player.anims.play("earnest-walkDown",  true);
     else             this.player.anims.play("earnest-idle",      true);
+
+    // Send movement to server (client-side prediction — we already applied locally)
+    if (this.socket && (vx !== 0 || vy !== 0)) {
+      const seq = ++this.moveSeq;
+      // Normalise to unit direction for the wire message
+      const len = Math.sqrt(vx * vx + vy * vy);
+      const dx = vx / len;
+      const dy = vy / len;
+      this.pendingMoves.set(seq, { vx, vy });
+      this.socket.sendMove(dx, dy, seq);
+    }
   }
 
   private _updateRoomLabel() {
@@ -292,6 +396,117 @@ export class OfficeScene extends Phaser.Scene {
         this.roomLabel.setVisible(true);
       } else {
         this.roomLabel.setVisible(false);
+      }
+    }
+  }
+
+  // ── Multiplayer: remote avatar rendering ────────────────────────────────────
+
+  private _updateRemoteAvatars() {
+    for (const [, state] of this.remotePlayers) {
+      // Lerp toward server-authoritative position
+      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.15);
+      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.15);
+
+      // Keep the name label above the avatar
+      state.label.setPosition(state.sprite.x, state.sprite.y - 28);
+    }
+  }
+
+  private _spawnRemotePlayer(remote: RemotePlayer) {
+    if (remote.id === this.myPlayerId) return;
+    if (this.remotePlayers.has(remote.id)) return;
+
+    const sprite = this.physics.add.sprite(remote.x, remote.y, "earnest");
+    sprite.setScale(2);
+    sprite.setDepth(9); // one below local player
+    sprite.setBodySize(20, 20);
+    sprite.setOffset(6, 12);
+    // Tint with a unique hue per player
+    const hue = playerIdToHue(remote.id);
+    const color = Phaser.Display.Color.HSVColorWheel()[Math.round(hue / 360 * 359)];
+    sprite.setTint(color.color);
+
+    // Add collider against walls (for future proximity detection)
+    this.physics.add.collider(sprite, this.walls);
+
+    const label = this.add.text(remote.x, remote.y - 28, remote.name, {
+      fontFamily: "monospace",
+      fontSize: "8px",
+      color: "#e2e8f0",
+      stroke: "#0f172a",
+      strokeThickness: 2,
+    })
+      .setOrigin(0.5, 1)
+      .setDepth(11);
+
+    sprite.anims.play(facingToAnimKey(remote.facing), true);
+
+    this.remotePlayers.set(remote.id, {
+      sprite,
+      label,
+      targetX: remote.x,
+      targetY: remote.y,
+      facing: remote.facing,
+    });
+  }
+
+  private _removeRemotePlayer(playerId: string) {
+    const state = this.remotePlayers.get(playerId);
+    if (!state) return;
+    state.sprite.destroy();
+    state.label.destroy();
+    this.remotePlayers.delete(playerId);
+  }
+
+  private _handleServerMessage(msg: ServerMessage) {
+    switch (msg.type) {
+      case "welcome": {
+        this.myPlayerId = msg.playerId;
+        for (const p of msg.worldSnapshot.players) {
+          this._spawnRemotePlayer(p);
+        }
+        break;
+      }
+      case "player.joined": {
+        this._spawnRemotePlayer(msg.player);
+        break;
+      }
+      case "player.left": {
+        this._removeRemotePlayer(msg.playerId);
+        break;
+      }
+      case "player.state": {
+        if (msg.playerId === this.myPlayerId) {
+          // Reconcile local player position
+          const dx = this.player.x - msg.x;
+          const dy = this.player.y - msg.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 8) {
+            // Snap on large divergence
+            this.player.setPosition(msg.x, msg.y);
+          }
+          // Prune acknowledged pending moves
+          for (const seq of this.pendingMoves.keys()) {
+            if (seq <= msg.seq) this.pendingMoves.delete(seq);
+          }
+          this.lastAckedSeq = msg.seq;
+        } else {
+          const state = this.remotePlayers.get(msg.playerId);
+          if (state) {
+            state.targetX = msg.x;
+            state.targetY = msg.y;
+            if (state.facing !== msg.facing) {
+              state.facing = msg.facing;
+              state.sprite.anims.play(facingToAnimKey(msg.facing), true);
+            }
+          }
+        }
+        break;
+      }
+      case "pong": {
+        // Heartbeat acknowledged; socket manager handles stale detection
+        break;
       }
     }
   }

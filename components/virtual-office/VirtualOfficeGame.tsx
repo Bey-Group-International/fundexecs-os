@@ -2,13 +2,18 @@
 
 import { useEffect, useRef } from "react";
 import type Phaser from "phaser";
-import { WORLD_W, WORLD_H } from "./types";
+import type { OfficeSceneInitData } from "./scenes/OfficeScene";
 
 // Canvas fills its container; game uses the container dimensions
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
 
-export function VirtualOfficeGame() {
+type VirtualOfficeGameProps = {
+  /** Supabase JWT — when provided, enables multiplayer mode. */
+  token?: string;
+};
+
+export function VirtualOfficeGame({ token }: VirtualOfficeGameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
 
@@ -44,6 +49,17 @@ export function VirtualOfficeGame() {
           banner: false,
         });
 
+        // When a token is provided, restart the scene with init data so that
+        // OfficeScene.init() receives the token and opens the WebSocket.
+        // We wait for the scene's 'create' event to ensure it's fully booted
+        // before restarting with the data payload.
+        if (token) {
+          const initData: OfficeSceneInitData = { token };
+          game.events.once("ready", () => {
+            game?.scene.getScene("OfficeScene")?.scene.restart(initData);
+          });
+        }
+
         gameRef.current = game;
       });
     });
@@ -52,6 +68,7 @@ export function VirtualOfficeGame() {
       game?.destroy(true);
       gameRef.current = null;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -59,6 +76,9 @@ export function VirtualOfficeGame() {
       {/* Controls hint */}
       <div className="absolute top-3 right-3 z-10 flex gap-2 text-[10px] text-slate-500 bg-slate-900/80 rounded px-2 py-1 pointer-events-none">
         <span>WASD / ↑↓←→ to move</span>
+        {token && (
+          <span className="text-emerald-500/60">• multiplayer</span>
+        )}
       </div>
 
       {/* Phaser canvas mount point */}
