@@ -6,6 +6,30 @@ import { getSessionContext } from "@/lib/auth";
 import { sanitizeMandateActions } from "@/lib/mandate-options";
 import { matchNewOrgAndNotify } from "@/lib/ecosystem-match.server";
 
+// Updates the authenticated principal's personal profile fields collected in the
+// first onboarding step. Returns a result object so the wizard can stay on the
+// client and show inline errors.
+export async function updateUserProfile(
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx) return { error: "Not authenticated" };
+
+  const supabase = createServerClient();
+  const full_name = String(formData.get("full_name") ?? "").trim() || null;
+  const title = String(formData.get("title") ?? "").trim() || null;
+  const phone = String(formData.get("phone") ?? "").trim() || null;
+  const avatar_url = String(formData.get("avatar_url") ?? "").trim() || null;
+
+  const { error } = await supabase
+    .from("principals")
+    .update({ full_name, title, phone, avatar_url, updated_at: new Date().toISOString() })
+    .eq("id", ctx.userId);
+
+  if (error) return { error: error.message };
+  return {};
+}
+
 // The standing mandate's display name, matching the settings editor so onboarding
 // and the editor tune the same single, always-present delegation.
 const STANDING_MANDATE_NAME = "Standing mandate";

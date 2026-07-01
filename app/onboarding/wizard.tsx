@@ -4,9 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ActionKind } from "@/lib/gates";
 import { MANDATE_ACTION_OPTIONS } from "@/lib/mandate-options";
-import { createOrganization } from "./actions";
+import { createOrganization, updateUserProfile } from "./actions";
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 // Autonomy presets for the optional final step. Each maps to a mandate shape:
 // an autonomy ceiling (1 = draft only, 2 = act within mandate) and the Tier-2
@@ -72,7 +72,7 @@ const HUB_OPTIONS = [
   { value: "execute", label: "Execute", desc: "Closing, asset management, reporting — start here if you have assets under management" },
 ];
 
-interface FormData {
+interface OrgFormData {
   org_name: string;
   entity_type: string;
   hq_location: string;
@@ -83,12 +83,33 @@ interface FormData {
   first_hub: string;
 }
 
-export default function OnboardingWizard({ error }: { error?: string }) {
+interface UserFormData {
+  full_name: string;
+  title: string;
+  phone: string;
+  avatar_url: string;
+}
+
+export default function OnboardingWizard({
+  error,
+  initialFullName,
+  userEmail,
+}: {
+  error?: string;
+  initialFullName?: string;
+  userEmail?: string;
+}) {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState(error ?? "");
-  const [data, setData] = useState<FormData>({
+  const [userData, setUserData] = useState<UserFormData>({
+    full_name: initialFullName ?? "",
+    title: "",
+    phone: "",
+    avatar_url: "",
+  });
+  const [data, setData] = useState<OrgFormData>({
     org_name: "",
     entity_type: "",
     hq_location: "",
@@ -98,6 +119,9 @@ export default function OnboardingWizard({ error }: { error?: string }) {
     strategy: "",
     first_hub: "",
   });
+
+  const setUser = (key: keyof UserFormData, value: string) =>
+    setUserData((d) => ({ ...d, [key]: value }));
 
   // Mandate step state. Defaults to the conservative "draft only" posture, so
   // the step is always satisfiable and skippable.
@@ -127,11 +151,12 @@ export default function OnboardingWizard({ error }: { error?: string }) {
   };
 
   const canNext = () => {
-    if (step === 1) return data.org_name.trim().length > 0;
-    if (step === 2) return data.role !== "";
-    if (step === 3) return data.strategy !== "";
-    if (step === 4) return data.first_hub !== "";
-    if (step === 5) return true; // Optional — a posture is always preselected.
+    if (step === 1) return userData.full_name.trim().length > 0;
+    if (step === 2) return data.org_name.trim().length > 0;
+    if (step === 3) return data.role !== "";
+    if (step === 4) return data.strategy !== "";
+    if (step === 5) return data.first_hub !== "";
+    if (step === 6) return true; // Optional — a posture is always preselected.
     return false;
   };
 
@@ -140,6 +165,21 @@ export default function OnboardingWizard({ error }: { error?: string }) {
   const handleSubmit = async (presetOverride?: MandatePreset) => {
     setPending(true);
     setFormError("");
+
+    // Persist user profile first (non-blocking failure is surfaced but doesn't
+    // block org creation — the org is the gate to the workspace).
+    const ufd = new FormData();
+    ufd.append("full_name", userData.full_name);
+    ufd.append("title", userData.title);
+    ufd.append("phone", userData.phone);
+    ufd.append("avatar_url", userData.avatar_url);
+    const userResult = await updateUserProfile(ufd);
+    if (userResult?.error) {
+      setFormError(userResult.error);
+      setPending(false);
+      return;
+    }
+
     const fd = new FormData();
     fd.append("name", data.org_name);
     fd.append("entity_type", data.entity_type);
@@ -202,8 +242,76 @@ export default function OnboardingWizard({ error }: { error?: string }) {
         </p>
       )}
 
-      {/* Step 1 — Org identity */}
+      {/* Step 1 — User profile */}
       {step === 1 && (
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+            Your profile
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
+            Tell us about yourself
+          </h2>
+          <p className="mt-1.5 text-sm text-fg-secondary">
+            Your personal profile — separate from your firm. This is how
+            counterparties and teammates will see you.
+          </p>
+          <div className="mt-6 flex flex-col gap-3">
+            {userEmail && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-fg-secondary">Email</label>
+                <input
+                  className={`${inputCls} opacity-60`}
+                  value={userEmail}
+                  readOnly
+                  tabIndex={-1}
+                />
+              </div>
+            )}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-fg-secondary">Full name *</label>
+              <input
+                className={inputCls}
+                placeholder="Jordan Smith"
+                value={userData.full_name}
+                onChange={(e) => setUser("full_name", e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-fg-secondary">Title</label>
+              <input
+                className={inputCls}
+                placeholder="Managing Partner — optional"
+                value={userData.title}
+                onChange={(e) => setUser("title", e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-fg-secondary">Phone</label>
+              <input
+                className={inputCls}
+                type="tel"
+                placeholder="+1 (555) 000-0000 — optional"
+                value={userData.phone}
+                onChange={(e) => setUser("phone", e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-fg-secondary">Profile photo URL</label>
+              <input
+                className={inputCls}
+                type="url"
+                placeholder="https://… — optional"
+                value={userData.avatar_url}
+                onChange={(e) => setUser("avatar_url", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 2 — Org identity */}
+      {step === 2 && (
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
             Build · Identity
@@ -248,8 +356,8 @@ export default function OnboardingWizard({ error }: { error?: string }) {
         </div>
       )}
 
-      {/* Step 2 — Operator role */}
-      {step === 2 && (
+      {/* Step 3 — Operator role */}
+      {step === 3 && (
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
             Build · Role
@@ -302,8 +410,8 @@ export default function OnboardingWizard({ error }: { error?: string }) {
         </div>
       )}
 
-      {/* Step 3 — Strategy */}
-      {step === 3 && (
+      {/* Step 4 — Strategy */}
+      {step === 4 && (
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
             Build · Strategy
@@ -331,8 +439,8 @@ export default function OnboardingWizard({ error }: { error?: string }) {
         </div>
       )}
 
-      {/* Step 4 — First hub */}
-      {step === 4 && (
+      {/* Step 5 — First hub */}
+      {step === 5 && (
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
             Activation
@@ -360,8 +468,8 @@ export default function OnboardingWizard({ error }: { error?: string }) {
         </div>
       )}
 
-      {/* Step 5 — Mandate (optional) */}
-      {step === 5 && (
+      {/* Step 6 — Mandate (optional) */}
+      {step === 6 && (
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
             Activation · Mandate

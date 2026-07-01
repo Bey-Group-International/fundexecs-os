@@ -122,6 +122,7 @@ export type Principal = {
   email: string;
   full_name: string | null;
   title: string | null;
+  phone: string | null;
   avatar_url: string | null;
   // Internal identity verification (migration 20260623140000). Set by an
   // owner/admin internal attestation now; an external KYC provider would set the
