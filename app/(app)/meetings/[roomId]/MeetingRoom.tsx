@@ -537,11 +537,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => {
     if (!ready) return;
 
-    const SR = (
-      typeof window !== "undefined"
-        ? (window.SpeechRecognition ?? window.webkitSpeechRecognition)
-        : undefined
-    ) as (new () => any) | undefined;
+    // eslint-disable-next-line
+    const w = window as any;
+    const SR = (typeof window !== "undefined"
+      ? (w.SpeechRecognition ?? w.webkitSpeechRecognition)
+      : undefined) as (new () => any) | undefined;
 
     if (!SR) return;
 
@@ -550,7 +550,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
-    recognition.onresult = (ev) => {
+    recognition.onresult = (ev: any) => {
       let interim = "";
       let finalText = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -585,7 +585,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
     };
 
-    recognition.onerror = (ev) => {
+    recognition.onerror = (ev: any) => {
       if (ev.error !== "no-speech") console.warn("[SR]", ev.error);
     };
 
