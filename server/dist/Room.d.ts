@@ -3,6 +3,7 @@ import type { WebSocket } from "uWebSockets.js";
 import type { RemotePlayer, ServerMessage } from "@fundexecs/virtual-office-shared";
 import type { PubSub } from "./PubSub";
 import { SfuRoom } from "./SfuRoom";
+import type { NpcData } from "./NpcManager";
 export interface SocketData {
     playerId: string;
     roomId: string;
@@ -17,7 +18,14 @@ export declare class Room {
     private readonly worker;
     private sfuRooms;
     private sfuBubbles;
+    private readonly npcManager;
+    private readonly playerRooms;
+    private occupancyCounts;
     constructor(roomId: string, pubsub: PubSub, worker: mediasoup.types.Worker);
+    getNpcSnapshot(): NpcData[];
+    getOccupancy(): Record<string, number>;
+    private _updateOccupancy;
+    close(): void;
     addPlayer(ws: WebSocket<SocketData>, userId: string, displayName: string, spriteKey?: string): RemotePlayer;
     removePlayer(playerId: string): void;
     getSnapshot(): RemotePlayer[];

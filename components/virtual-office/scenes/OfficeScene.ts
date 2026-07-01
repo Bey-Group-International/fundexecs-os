@@ -32,6 +32,15 @@ type RemoteAvatarState = {
   spriteKey: string;
 };
 
+type NpcAvatarState = {
+  sprite: Phaser.GameObjects.Sprite;
+  label: Phaser.GameObjects.Text;
+  targetX: number;
+  targetY: number;
+  facing: Facing;
+  spriteKey: string;
+};
+
 /** Data passed from VirtualOfficeGame into the scene via scene.init() */
 export type OfficeSceneInitData = {
   token?: string;
@@ -51,7 +60,7 @@ function playerIdToHue(id: string): number {
 
 function spritePrefix(spriteKey: string): string {
   if (spriteKey === "earnest-fundmaker") return "earnest";
-  if (executiveCharacters.some((c) => c.id === spriteKey && c.spriteSheet)) return "exec";
+  if (executiveCharacters.some((c) => c.id === spriteKey && c.spriteSheet)) return spriteKey;
   return "earnest";
 }
 
@@ -99,6 +108,7 @@ export class OfficeScene extends Phaser.Scene {
   // M5 — character identity
   private myCharacterId = "player_default";
   private remotePlayers = new Map<string, RemoteAvatarState>();
+  private npcAvatars = new Map<string, NpcAvatarState>();
   private moveSeq = 0;
   /** seq number of the last server-acknowledged move for local reconciliation */
   private lastAckedSeq = 0;
@@ -183,6 +193,15 @@ export class OfficeScene extends Phaser.Scene {
       this.mesh?.setLocalStream(stream);
       this.sfu?.setLocalStream(stream);
     });
+
+    // M5c: teleport to a room by key
+    this.game.events.on("office:teleport", (roomKey: string) => {
+      const room = ROOMS.find((r) => r.key === roomKey);
+      if (!room) return;
+      const tx = room.col * ROOM_W + ROOM_W / 2;
+      const ty = room.row * ROOM_H + ROOM_H / 2;
+      this.player.setPosition(tx, ty);
+    });
   }
 
   // ── update ──────────────────────────────────────────────────────────────────
@@ -191,12 +210,14 @@ export class OfficeScene extends Phaser.Scene {
     this._handleMovement();
     this._updateRoomLabel();
     this._updateRemoteAvatars();
+    this._updateNpcAvatars();
     this._updateSpatialAudio();
   }
 
   // ── shutdown ─────────────────────────────────────────────────────────────────
 
   shutdown() {
+    this.game.events.off("office:teleport");
     if (this.sfuMode) {
       this.sfu?.leave();
     } else {
@@ -350,7 +371,7 @@ export class OfficeScene extends Phaser.Scene {
         const tex = this.textures.get(ch.id);
         const src = tex.getSourceImage() as HTMLImageElement;
         const framesPerRow = Math.floor(src.width / spriteFrameMaps.executive.frameWidth);
-        makeAnims(ch.id, "exec", framesPerRow);
+        makeAnims(ch.id, ch.id, framesPerRow);
       }
     }
   }
@@ -497,12 +518,48 @@ export class OfficeScene extends Phaser.Scene {
 
   private _updateRemoteAvatars() {
     for (const [, state] of this.remotePlayers) {
-      // Lerp toward server-authoritative position
       state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.15);
       state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.15);
-
-      // Keep the name label above the avatar
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
+    }
+  }
+
+  private _updateNpcAvatars() {
+    for (const [, state] of this.npcAvatars) {
+      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.12);
+      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.12);
+      state.label.setPosition(state.sprite.x, state.sprite.y - 28);
+    }
+  }
+
+  private _spawnNpc(npcId: string, x: number, y: number, facing: Facing, spriteKey: string, name: string) {
+    if (this.npcAvatars.has(npcId)) return;
+    const textureKey = this._textureKeyForCharacter(spriteKey);
+    const frameMap = spriteFrameMaps[this._frameMapKindForCharacter(spriteKey)];
+    const sprite = this.add.sprite(x, y, textureKey);
+    sprite.setScale(frameMap.scale);
+    sprite.setDepth(8);
+    sprite.anims.play(facingToAnimKey(facing, spriteKey), true);
+
+    const label = this.add.text(x, y - 28, name, {
+      fontFamily: "monospace",
+      fontSize: "8px",
+      color: "#fbbf24",
+      stroke: "#0f172a",
+      strokeThickness: 2,
+    }).setOrigin(0.5, 1).setDepth(9);
+
+    this.npcAvatars.set(npcId, { sprite, label, targetX: x, targetY: y, facing, spriteKey });
+  }
+
+  private _updateNpcState(npcId: string, x: number, y: number, facing: Facing, spriteKey: string) {
+    const state = this.npcAvatars.get(npcId);
+    if (!state) return;
+    state.targetX = x;
+    state.targetY = y;
+    if (state.facing !== facing) {
+      state.facing = facing;
+      state.sprite.anims.play(facingToAnimKey(facing, spriteKey), true);
     }
   }
 
@@ -716,6 +773,24 @@ export class OfficeScene extends Phaser.Scene {
       }
       case "sfu.producer-closed": {
         this.sfu?.handleProducerClosed(msg);
+        break;
+      }
+      case "npc.snapshot": {
+        for (const npc of msg.npcs) {
+          this._spawnNpc(npc.npcId, npc.x, npc.y, npc.facing, npc.spriteKey, npc.name);
+        }
+        break;
+      }
+      case "npc.state": {
+        if (!this.npcAvatars.has(msg.npcId)) {
+          this._spawnNpc(msg.npcId, msg.x, msg.y, msg.facing, msg.spriteKey, msg.name);
+        } else {
+          this._updateNpcState(msg.npcId, msg.x, msg.y, msg.facing, msg.spriteKey);
+        }
+        break;
+      }
+      case "room.occupancy": {
+        this.game.events.emit("office:occupancy", msg.counts);
         break;
       }
     }

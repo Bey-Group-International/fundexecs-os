@@ -636,6 +636,113 @@ export declare const BubbleSfuSwitchSchema: z.ZodObject<{
     bubbleId: string;
     members: string[];
 }>;
+export declare const NpcDataSchema: z.ZodObject<{
+    npcId: z.ZodString;
+    x: z.ZodNumber;
+    y: z.ZodNumber;
+    facing: z.ZodEnum<["down", "up", "left", "right", "idle"]>;
+    spriteKey: z.ZodString;
+    name: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    x: number;
+    y: number;
+    facing: "down" | "up" | "left" | "right" | "idle";
+    name: string;
+    spriteKey: string;
+    npcId: string;
+}, {
+    x: number;
+    y: number;
+    facing: "down" | "up" | "left" | "right" | "idle";
+    name: string;
+    spriteKey: string;
+    npcId: string;
+}>;
+export type NpcData = z.infer<typeof NpcDataSchema>;
+export declare const NpcStateSchema: z.ZodObject<{
+    npcId: z.ZodString;
+    x: z.ZodNumber;
+    y: z.ZodNumber;
+    facing: z.ZodEnum<["down", "up", "left", "right", "idle"]>;
+    spriteKey: z.ZodString;
+    name: z.ZodString;
+} & {
+    type: z.ZodLiteral<"npc.state">;
+}, "strip", z.ZodTypeAny, {
+    type: "npc.state";
+    x: number;
+    y: number;
+    facing: "down" | "up" | "left" | "right" | "idle";
+    name: string;
+    spriteKey: string;
+    npcId: string;
+}, {
+    type: "npc.state";
+    x: number;
+    y: number;
+    facing: "down" | "up" | "left" | "right" | "idle";
+    name: string;
+    spriteKey: string;
+    npcId: string;
+}>;
+export type NpcState = z.infer<typeof NpcStateSchema>;
+export declare const NpcSnapshotSchema: z.ZodObject<{
+    type: z.ZodLiteral<"npc.snapshot">;
+    npcs: z.ZodArray<z.ZodObject<{
+        npcId: z.ZodString;
+        x: z.ZodNumber;
+        y: z.ZodNumber;
+        facing: z.ZodEnum<["down", "up", "left", "right", "idle"]>;
+        spriteKey: z.ZodString;
+        name: z.ZodString;
+    }, "strip", z.ZodTypeAny, {
+        x: number;
+        y: number;
+        facing: "down" | "up" | "left" | "right" | "idle";
+        name: string;
+        spriteKey: string;
+        npcId: string;
+    }, {
+        x: number;
+        y: number;
+        facing: "down" | "up" | "left" | "right" | "idle";
+        name: string;
+        spriteKey: string;
+        npcId: string;
+    }>, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "npc.snapshot";
+    npcs: {
+        x: number;
+        y: number;
+        facing: "down" | "up" | "left" | "right" | "idle";
+        name: string;
+        spriteKey: string;
+        npcId: string;
+    }[];
+}, {
+    type: "npc.snapshot";
+    npcs: {
+        x: number;
+        y: number;
+        facing: "down" | "up" | "left" | "right" | "idle";
+        name: string;
+        spriteKey: string;
+        npcId: string;
+    }[];
+}>;
+export type NpcSnapshot = z.infer<typeof NpcSnapshotSchema>;
+export declare const RoomOccupancySchema: z.ZodObject<{
+    type: z.ZodLiteral<"room.occupancy">;
+    counts: z.ZodRecord<z.ZodString, z.ZodNumber>;
+}, "strip", z.ZodTypeAny, {
+    type: "room.occupancy";
+    counts: Record<string, number>;
+}, {
+    type: "room.occupancy";
+    counts: Record<string, number>;
+}>;
+export type RoomOccupancy = z.infer<typeof RoomOccupancySchema>;
 export declare const ClientMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
     type: z.ZodLiteral<"player.move">;
     dx: z.ZodNumber;
@@ -1194,6 +1301,84 @@ export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
     type: "bubble.sfu-switch";
     bubbleId: string;
     members: string[];
+}>, z.ZodObject<{
+    npcId: z.ZodString;
+    x: z.ZodNumber;
+    y: z.ZodNumber;
+    facing: z.ZodEnum<["down", "up", "left", "right", "idle"]>;
+    spriteKey: z.ZodString;
+    name: z.ZodString;
+} & {
+    type: z.ZodLiteral<"npc.state">;
+}, "strip", z.ZodTypeAny, {
+    type: "npc.state";
+    x: number;
+    y: number;
+    facing: "down" | "up" | "left" | "right" | "idle";
+    name: string;
+    spriteKey: string;
+    npcId: string;
+}, {
+    type: "npc.state";
+    x: number;
+    y: number;
+    facing: "down" | "up" | "left" | "right" | "idle";
+    name: string;
+    spriteKey: string;
+    npcId: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"npc.snapshot">;
+    npcs: z.ZodArray<z.ZodObject<{
+        npcId: z.ZodString;
+        x: z.ZodNumber;
+        y: z.ZodNumber;
+        facing: z.ZodEnum<["down", "up", "left", "right", "idle"]>;
+        spriteKey: z.ZodString;
+        name: z.ZodString;
+    }, "strip", z.ZodTypeAny, {
+        x: number;
+        y: number;
+        facing: "down" | "up" | "left" | "right" | "idle";
+        name: string;
+        spriteKey: string;
+        npcId: string;
+    }, {
+        x: number;
+        y: number;
+        facing: "down" | "up" | "left" | "right" | "idle";
+        name: string;
+        spriteKey: string;
+        npcId: string;
+    }>, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "npc.snapshot";
+    npcs: {
+        x: number;
+        y: number;
+        facing: "down" | "up" | "left" | "right" | "idle";
+        name: string;
+        spriteKey: string;
+        npcId: string;
+    }[];
+}, {
+    type: "npc.snapshot";
+    npcs: {
+        x: number;
+        y: number;
+        facing: "down" | "up" | "left" | "right" | "idle";
+        name: string;
+        spriteKey: string;
+        npcId: string;
+    }[];
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"room.occupancy">;
+    counts: z.ZodRecord<z.ZodString, z.ZodNumber>;
+}, "strip", z.ZodTypeAny, {
+    type: "room.occupancy";
+    counts: Record<string, number>;
+}, {
+    type: "room.occupancy";
+    counts: Record<string, number>;
 }>]>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 //# sourceMappingURL=messages.d.ts.map

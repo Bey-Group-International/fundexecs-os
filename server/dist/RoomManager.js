@@ -23,6 +23,7 @@ class RoomManager {
     async removeEmptyRoom(roomId) {
         const room = this.rooms.get(roomId);
         if (room && room.playerCount === 0) {
+            room.close();
             this.rooms.delete(roomId);
             await this.pubsub.unsubscribeRoom(roomId);
         }

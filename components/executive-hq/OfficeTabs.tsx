@@ -13,10 +13,15 @@ const VirtualOfficeGame = dynamic(
 
 type Tab = "hq" | "virtual";
 
+// HQ room ids that differ from virtual office room keys
+const HQ_TO_VIRTUAL: Record<string, string> = { investor: "office" };
+
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("hq");
   const [token, setToken] = useState<string | undefined>(undefined);
   const [characterId, setCharacterId] = useState<string | undefined>(undefined);
+  const [teleportTarget, setTeleportTarget] = useState<string | null>(null);
+  const [occupancy, setOccupancy] = useState<Record<string, number>>({});
 
   // Fetch Supabase access token and character identity once on mount
   useEffect(() => {
@@ -28,6 +33,14 @@ export function OfficeTabs() {
       if (meta?.character_id) setCharacterId(meta.character_id as string);
     });
   }, []);
+
+  const handleNavigateRoom = (hqRoomId: string) => {
+    const virtualKey = HQ_TO_VIRTUAL[hqRoomId] ?? hqRoomId;
+    setTeleportTarget(virtualKey);
+    setTab("virtual");
+    // Clear target after one frame so repeated clicks on same room re-trigger
+    setTimeout(() => setTeleportTarget(null), 100);
+  };
 
   return (
     <div>
@@ -46,10 +59,15 @@ export function OfficeTabs() {
 
       {/* Panels — keep both mounted so Phaser doesn't reinitialise on tab switch */}
       <div className={tab === "hq" ? "block" : "hidden"}>
-        <ExecutiveHQ />
+        <ExecutiveHQ onNavigateRoom={handleNavigateRoom} roomOccupancy={occupancy} />
       </div>
       <div className={tab === "virtual" ? "block p-4" : "hidden"}>
-        <VirtualOfficeGame token={token} characterId={characterId} />
+        <VirtualOfficeGame
+          token={token}
+          characterId={characterId}
+          teleportTarget={teleportTarget}
+          onOccupancyChange={setOccupancy}
+        />
       </div>
     </div>
   );

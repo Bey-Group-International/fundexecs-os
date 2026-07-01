@@ -23,9 +23,13 @@ type VirtualOfficeGameProps = {
   displayName?: string;
   /** Executive character id from characterConfig (e.g. "earnest-fundmaker"). */
   characterId?: string;
+  /** If set, teleports the player to this virtual room key on mount / change. */
+  teleportTarget?: string | null;
+  /** Called whenever room occupancy counts update. */
+  onOccupancyChange?: (counts: Record<string, number>) => void;
 };
 
-export function VirtualOfficeGame({ token, displayName = "You", characterId }: VirtualOfficeGameProps) {
+export function VirtualOfficeGame({ token, displayName = "You", characterId, teleportTarget, onOccupancyChange }: VirtualOfficeGameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -88,6 +92,11 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId }: V
           }
         });
 
+        // M5d: room occupancy bridge
+        game.events.on("office:occupancy", (counts: Record<string, number>) => {
+          onOccupancyChange?.(counts);
+        });
+
         // Video tile bridge
         game.events.on("rtc:video", (peerId: string, el: HTMLVideoElement | null) => {
           setVideoTiles((prev) => {
@@ -128,6 +137,13 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId }: V
       gameRef.current.events.emit("rtc:localStream", localStream);
     }
   }, [localStream]);
+
+  // M5c: teleport when target changes
+  useEffect(() => {
+    if (teleportTarget && gameRef.current) {
+      gameRef.current.events.emit("office:teleport", teleportTarget);
+    }
+  }, [teleportTarget]);
 
   return (
     <div className="flex flex-col bg-slate-950 rounded-xl overflow-hidden border border-slate-800">
