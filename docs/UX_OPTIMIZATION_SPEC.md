@@ -30,11 +30,11 @@ The 5-minute time-to-value constraint is a forcing function: if a new user canno
 
 On first login, after collecting role (Fund Manager / Operator / Analyst) during the existing onboarding flow, the system enters a guided "First Mission" sequence — not a feature tour, but a real task that produces a real artifact.
 
-| Role | First Mission | Artifact Produced | Target Time |
-|------|-------------|------------------|-------------|
-| Fund Manager | "Review your first deal" | AI-generated deal summary + conviction score | 3 min |
-| Operator | "Set up your first automation" | Saved workflow with one trigger + one action | 4 min |
-| Analyst | "Run diligence on a company" | Populated diligence checklist with AI-filled fields | 5 min |
+|     Role     |         First Mission          |                  Artifact Produced                  | Target Time |
+|--------------|--------------------------------|-----------------------------------------------------|-------------|
+| Fund Manager | "Review your first deal"       | AI-generated deal summary + conviction score        | 3 min       |
+| Operator     | "Set up your first automation" | Saved workflow with one trigger + one action        | 4 min       |
+| Analyst      | "Run diligence on a company"   | Populated diligence checklist with AI-filled fields | 5 min       |
 
 **UX Interaction Pattern:**
 
@@ -66,12 +66,12 @@ Each hub's empty state renders:
 2. One primary action button that creates a starter record with sensible defaults.
 3. An "Ask the Copilot" secondary action that opens a pre-filled prompt in the session panel.
 
-| Surface | Primary Action | Pre-filled Copilot Prompt |
-|---------|---------------|--------------------------|
-| Deal Pipeline | "Add your first deal" | "Help me add a deal I'm evaluating" |
-| Automations | "Build an automation" | "Set up a weekly LP update reminder" |
-| Brains / KB | "Add knowledge" | "What should I add to the brain first?" |
-| Portfolio | "Add an asset" | "Help me add a portfolio company" |
+|    Surface    |    Primary Action     |        Pre-filled Copilot Prompt        |
+|---------------|-----------------------|-----------------------------------------|
+| Deal Pipeline | "Add your first deal" | "Help me add a deal I'm evaluating"     |
+| Automations   | "Build an automation" | "Set up a weekly LP update reminder"    |
+| Brains / KB   | "Add knowledge"       | "What should I add to the brain first?" |
+| Portfolio     | "Add an asset"        | "Help me add a portfolio company"       |
 
 **Technical Implementation:**
 
@@ -170,11 +170,11 @@ When an agent outputs "Conviction score: 72 — recommend increasing to 80 after
 
 Three tiers, rendered as a subtle color indicator on the card border and a tooltip:
 
-| Tier | Threshold | Visual | Meaning |
-|------|-----------|--------|---------|
-| High | ≥ 0.85 | Green left border | Agent has strong grounding from brain KB + data |
-| Medium | 0.65–0.84 | Amber left border | Partial grounding; verify key claims |
-| Low | < 0.65 | Red left border + warning chip | Limited grounding; treat as a starting point |
+|  Tier  | Threshold |             Visual             |                     Meaning                     |
+|--------|-----------|--------------------------------|-------------------------------------------------|
+| High   | ≥ 0.85    | Green left border              | Agent has strong grounding from brain KB + data |
+| Medium | 0.65–0.84 | Amber left border              | Partial grounding; verify key claims            |
+| Low    | < 0.65    | Red left border + warning chip | Limited grounding; treat as a starting point    |
 
 Low-confidence outputs auto-surface a "Verify this" action that opens a pre-filled session to research the specific claim.
 
@@ -228,13 +228,13 @@ The clarification is inline — no modal, no navigation. Answer and continue in 
 
 **Command categories (in order of display):**
 
-| Category | Examples |
-|----------|---------|
-| Recent | Last 5 visited records (deals, assets, sessions) |
-| Actions | "New deal", "Run diligence", "Build automation", "Generate LP report" |
-| Navigation | "Go to Source Hub", "Open Command Center", "View Portfolio" |
-| AI Tasks | "Ask Copilot: [typed query]" — opens session with prefilled prompt |
-| Settings | "Invite team member", "Connect Slack", "Manage brains" |
+|  Category  |                               Examples                                |
+|------------|-----------------------------------------------------------------------|
+| Recent     | Last 5 visited records (deals, assets, sessions)                      |
+| Actions    | "New deal", "Run diligence", "Build automation", "Generate LP report" |
+| Navigation | "Go to Source Hub", "Open Command Center", "View Portfolio"           |
+| AI Tasks   | "Ask Copilot: [typed query]" — opens session with prefilled prompt    |
+| Settings   | "Invite team member", "Connect Slack", "Manage brains"                |
 
 **Keyboard behavior (Linear-standard):**
 - `↑↓` to navigate, `Enter` to execute, `Esc` to dismiss.
@@ -353,10 +353,10 @@ AI-filled fields are tagged in the DB with `ai_suggested: true` so downstream an
 
 **Field Tiers:**
 
-| Tier | Visibility | Examples |
-|------|-----------|---------|
-| Core | Always visible | Deal name, stage, amount, company |
-| Standard | Expand on "+More" click | Sector, geography, source, lead investor |
+|   Tier   |         Visibility         |                 Examples                 |
+|----------|----------------------------|------------------------------------------|
+| Core     | Always visible             | Deal name, stage, amount, company        |
+| Standard | Expand on "+More" click    | Sector, geography, source, lead investor |
 | Advanced | Expand on "Advanced" click | Custom fields, metadata, integration IDs |
 
 The system remembers which users regularly use Standard/Advanced fields and auto-expands them for those users on subsequent visits (stored in `user_preferences` table).
@@ -380,11 +380,11 @@ The system remembers which users regularly use Standard/Advanced fields and auto
 
 Error messages explain *why* the field matters and *what* a correct value looks like:
 
-| Generic (current) | Context-aware (target) |
-|------------------|----------------------|
-| "Required" | "Deal name is required so agents can reference this deal across sessions." |
-| "Invalid format" | "Enter a number (e.g. 5000000 for $5M). No dollar signs or commas." |
-| "Too long" | "Limit to 120 characters — this appears in the deal card preview." |
+| Generic (current) |                           Context-aware (target)                           |
+|-------------------|----------------------------------------------------------------------------|
+| "Required"        | "Deal name is required so agents can reference this deal across sessions." |
+| "Invalid format"  | "Enter a number (e.g. 5000000 for $5M). No dollar signs or commas."        |
+| "Too long"        | "Limit to 120 characters — this appears in the deal card preview."         |
 
 For fields with a fixed set of valid values (sector, stage, geography), show an autocomplete dropdown instead of a free-text error.
 
@@ -426,14 +426,14 @@ For fields with a fixed set of valid values (sector, stage, geography), show an 
 
 ### Speed Standards (Linear-inspired)
 
-| Interaction | Target Latency |
-|-------------|---------------|
-| Page navigation | < 100ms (prefetch on hover) |
-| Command Palette open | < 50ms |
-| Form field focus | Instant (no async) |
-| AI field suggestion | < 2s (with skeleton loader) |
-| Agent step start feedback | < 500ms (optimistic UI) |
-| Copilot Card render | < 200ms after step completes |
+|        Interaction        |        Target Latency        |
+|---------------------------|------------------------------|
+| Page navigation           | < 100ms (prefetch on hover)  |
+| Command Palette open      | < 50ms                       |
+| Form field focus          | Instant (no async)           |
+| AI field suggestion       | < 2s (with skeleton loader)  |
+| Agent step start feedback | < 500ms (optimistic UI)      |
+| Copilot Card render       | < 200ms after step completes |
 
 **Implementation:** Next.js `prefetch` on all internal links. Optimistic UI for all record mutations (update local state before Supabase confirms). Skeleton loaders replace spinners everywhere.
 
@@ -443,12 +443,12 @@ For fields with a fixed set of valid values (sector, stage, geography), show an 
 
 The system teaches features at the moment they become relevant — not in a separate tour.
 
-| Trigger | Coaching Moment |
-|---------|----------------|
-| User types their 5th prompt | "Tip: Press ⌘K to access any action without typing" |
-| User navigates to Automations for first time | "Tip: Describe a workflow in plain English and I'll build it" |
-| User spends > 30s on an empty form field | "Tip: Click the wand icon to let AI fill this from your documents" |
-| User completes their first task | "Tip: Pin this deal with ⌘⇧P to find it instantly later" |
+|                   Trigger                    |                          Coaching Moment                           |
+|----------------------------------------------|--------------------------------------------------------------------|
+| User types their 5th prompt                  | "Tip: Press ⌘K to access any action without typing"                |
+| User navigates to Automations for first time | "Tip: Describe a workflow in plain English and I'll build it"      |
+| User spends > 30s on an empty form field     | "Tip: Click the wand icon to let AI fill this from your documents" |
+| User completes their first task              | "Tip: Pin this deal with ⌘⇧P to find it instantly later"           |
 
 Coaching moments:
 - Appear as a subtle toast (bottom-left, 4s duration, dismissable).
@@ -469,49 +469,50 @@ Coaching moments:
 
 All UX patterns above must degrade gracefully on mobile (operators reviewing deals on-the-go):
 
-| Desktop Pattern | Mobile Adaptation |
-|-----------------|------------------|
-| Side-panel (UX-09) | Full-screen sheet with swipe-to-dismiss |
-| Command Palette (UX-08) | Tap the search bar in the top nav |
-| Recents Strip (UX-10) | Horizontal scroll strip |
-| Copilot Card (UX-04) | Full-width card, actions stack vertically |
-| Context Bar (UX-11) | Collapsed to entity name + ⋯ menu |
+|     Desktop Pattern     |             Mobile Adaptation             |
+|-------------------------|-------------------------------------------|
+| Side-panel (UX-09)      | Full-screen sheet with swipe-to-dismiss   |
+| Command Palette (UX-08) | Tap the search bar in the top nav         |
+| Recents Strip (UX-10)   | Horizontal scroll strip                   |
+| Copilot Card (UX-04)    | Full-width card, actions stack vertically |
+| Context Bar (UX-11)     | Collapsed to entity name + ⋯ menu         |
 
 ---
 
 ## Implementation Sequence
 
 ### Sprint 1 — Immediate Impact (Week 1–2)
+
 These changes require minimal new infrastructure and have the highest UX return:
 
-| Task | Feature | Est. Effort |
-|------|---------|------------|
-| `CopilotCard` structured output component | UX-04 | M |
-| Contextual empty states across all hubs | UX-02 | S |
-| Inline validation + context messages | UX-14 | S |
-| Command Palette global keyboard shortcut | UX-08 | S |
-| Confidence indicators on Copilot outputs | UX-06 | S |
+|                   Task                    | Feature | Est. Effort |
+|-------------------------------------------|---------|-------------|
+| `CopilotCard` structured output component | UX-04   | M           |
+| Contextual empty states across all hubs   | UX-02   | S           |
+| Inline validation + context messages      | UX-14   | S           |
+| Command Palette global keyboard shortcut  | UX-08   | S           |
+| Confidence indicators on Copilot outputs  | UX-06   | S           |
 
 ### Sprint 2 — Onboarding & Discovery (Week 3–5)
 
-| Task | Feature | Est. Effort |
-|------|---------|------------|
-| First Mission onboarding flow (3 role variants) | UX-01 | L |
-| Slide-over side panel + entity registry | UX-09 | L |
-| Recents strip + user pins | UX-10 | M |
-| Progressive form disclosure | UX-13 | M |
-| Coaching toast system | Cross-cutting | M |
+|                      Task                       |    Feature    | Est. Effort |
+|-------------------------------------------------|---------------|-------------|
+| First Mission onboarding flow (3 role variants) | UX-01         | L           |
+| Slide-over side panel + entity registry         | UX-09         | L           |
+| Recents strip + user pins                       | UX-10         | M           |
+| Progressive form disclosure                     | UX-13         | M           |
+| Coaching toast system                           | Cross-cutting | M           |
 
 ### Sprint 3 — Power Features (Week 6–8)
 
-| Task | Feature | Est. Effort |
-|------|---------|------------|
-| AI-assisted field completion (wand) | UX-12 | L |
-| Mid-run clarification prompts | UX-07 | M |
-| One-click inline edits from Copilot | UX-05 | M |
-| Hub context bar + breadcrumbs | UX-11 | M |
-| CSV bulk import with AI mapping | UX-15 | L |
-| Session resume banner | UX-03 | S |
+|                Task                 | Feature | Est. Effort |
+|-------------------------------------|---------|-------------|
+| AI-assisted field completion (wand) | UX-12   | L           |
+| Mid-run clarification prompts       | UX-07   | M           |
+| One-click inline edits from Copilot | UX-05   | M           |
+| Hub context bar + breadcrumbs       | UX-11   | M           |
+| CSV bulk import with AI mapping     | UX-15   | L           |
+| Session resume banner               | UX-03   | S           |
 
 **Effort scale:** S = 1–2 days · M = 3–5 days · L = 1–2 weeks
 
@@ -519,14 +520,14 @@ These changes require minimal new infrastructure and have the highest UX return:
 
 ## Success Metrics
 
-| Metric | Current Baseline | Target (90 days) |
-|--------|-----------------|-----------------|
-| Time to first artifact (new user) | Unknown | ≤ 5 minutes |
-| Onboarding completion rate | Unknown | ≥ 70% |
-| Command Palette usage (% of sessions) | Unknown | ≥ 40% |
-| AI field fill acceptance rate | N/A | ≥ 60% |
-| Copilot output action rate (clicks on card actions) | Unknown | ≥ 50% |
-| Form completion rate (no abandonment) | Unknown | ≥ 80% |
+|                       Metric                        | Current Baseline | Target (90 days) |
+|-----------------------------------------------------|------------------|------------------|
+| Time to first artifact (new user)                   | Unknown          | ≤ 5 minutes      |
+| Onboarding completion rate                          | Unknown          | ≥ 70%            |
+| Command Palette usage (% of sessions)               | Unknown          | ≥ 40%            |
+| AI field fill acceptance rate                       | N/A              | ≥ 60%            |
+| Copilot output action rate (clicks on card actions) | Unknown          | ≥ 50%            |
+| Form completion rate (no abandonment)               | Unknown          | ≥ 80%            |
 
 All metrics tracked via the existing `activity` + `gamification` infrastructure. Add a `ux_events` table for granular interaction tracking (palette opens, card action clicks, wand uses, coaching dismissals).
 
