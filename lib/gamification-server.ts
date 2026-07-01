@@ -17,8 +17,7 @@ import type { TeamTaskPriority } from "@/lib/supabase/database.types";
 // The new tables and RPCs added by 20260701120000_gamification.sql are not yet
 // in the generated database.types.ts. Using `any` casts here until the types
 // are regenerated after the migration lands in the main branch.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyClient = ReturnType<typeof createServiceClient> & { [k: string]: any };
+type AnyClient = ReturnType<typeof createServiceClient> & Record<string, any>; // new RPCs/tables not yet in generated types
 
 export async function awardTaskCompletion(args: {
   orgId: string;
