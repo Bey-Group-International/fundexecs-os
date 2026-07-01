@@ -7,17 +7,16 @@ import { createServiceClient } from "@/lib/supabase/server";
 import {
   baseCredits,
   achievementsUnlockedAt,
-  type Hub,
   type TaskRewardPayload,
   type GamificationSummary,
   type StreakState,
 } from "@/lib/gamification";
-import type { TeamTaskPriority } from "@/lib/supabase/database.types";
+import type { Hub, TeamTaskPriority } from "@/lib/supabase/database.types";
 
 // The new tables and RPCs added by 20260701120000_gamification.sql are not yet
-// in the generated database.types.ts. Using `any` casts here until the types
-// are regenerated after the migration lands in the main branch.
-type AnyClient = ReturnType<typeof createServiceClient> & Record<string, any>; // new RPCs/tables not yet in generated types
+// in the generated database.types.ts. Cast to any at RPC call sites until
+// types are regenerated after the migration lands in the main branch.
+type AnyClient = ReturnType<typeof createServiceClient>;
 
 export async function awardTaskCompletion(args: {
   orgId: string;
@@ -29,7 +28,7 @@ export async function awardTaskCompletion(args: {
   const base = baseCredits(args.hub, args.priority);
 
   try {
-    const { data, error } = await service.rpc("award_task_credits", {
+    const { data, error } = await (service as any).rpc("award_task_credits", {
       p_org:          args.orgId,
       p_task_id:      args.taskId,
       p_hub:          args.hub,
@@ -39,7 +38,7 @@ export async function awardTaskCompletion(args: {
 
     if (error || !data) return null;
 
-    const d = data as {
+    const d = (data as unknown) as {
       base: number;
       streak_bonus: number;
       streak: number;
@@ -51,7 +50,7 @@ export async function awardTaskCompletion(args: {
       hub: string;
     };
 
-    const achievementsEarned = await checkHubAchievements(service, args.orgId, args.hub, args.taskId);
+    const achievementsEarned = await checkHubAchievements(service, args.orgId, args.hub);
 
     return {
       base:               d.base,
@@ -74,7 +73,6 @@ async function checkHubAchievements(
   service: AnyClient,
   orgId: string,
   hub: Hub,
-  _taskId: string,
 ): Promise<{ key: string; label: string; bonus: number }[]> {
   const { count } = await service
     .from("team_tasks")
@@ -90,7 +88,7 @@ async function checkHubAchievements(
   const earned: { key: string; label: string; bonus: number }[] = [];
 
   for (const ach of toUnlock) {
-    const { data } = await service.rpc("record_hub_achievement", {
+    const { data } = await (service as any).rpc("record_hub_achievement", {
       p_org:           orgId,
       p_key:           ach.key,
       p_hub:           hub,
