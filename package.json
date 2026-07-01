@@ -1,14 +1,11 @@
 {
-  "workspaces": [
-    "shared",
-    "server"
-  ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.0",
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.0",
+    "mediasoup-client": "^3.21.0",
     "next": "14.2.35",
     "phaser": "^4.2.0",
     "react": "^18.3.1",
@@ -47,5 +44,6 @@
     "test": "jest",
     "typecheck": "tsc --noEmit"
   },
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "workspaces": [ "shared", "server" ]
 }

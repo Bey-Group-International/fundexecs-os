@@ -14,6 +14,8 @@ import {
 } from "../types";
 import { VirtualOfficeSocket, type ConnectionStatus } from "../net/VirtualOfficeSocket";
 import type { Facing, RemotePlayer, ServerMessage } from "../net/messages";
+import { MeshManager } from "../rtc/MeshManager";
+import { SfuManager } from "../rtc/SfuManager";
 
 // ─── Room label overlay ────────────────────────────────────────────────────────
 
@@ -73,6 +75,16 @@ export class OfficeScene extends Phaser.Scene {
   // M1 — networking
   private socket: VirtualOfficeSocket | null = null;
   private myPlayerId: string | null = null;
+
+  // M2 — bubble state
+  private myBubbleId: string | null = null;
+  private bubbleMemberNames: string[] = [];
+
+  // M3 — WebRTC mesh
+  private mesh: MeshManager | null = null;
+  // M4 — SFU
+  private sfu: SfuManager | null = null;
+  private sfuMode = false;
   private remotePlayers = new Map<string, RemoteAvatarState>();
   private moveSeq = 0;
   /** seq number of the last server-acknowledged move for local reconciliation */
@@ -95,6 +107,18 @@ export class OfficeScene extends Phaser.Scene {
       this.socket.onMessage((msg: ServerMessage) => this._handleServerMessage(msg));
       this.socket.onStatusChange((s: ConnectionStatus) => this._updateNetDot(s));
       this.socket.connect(data.token);
+
+      // M3: MeshManager sends RTC signalling through the socket
+      const sock = this.socket;
+      this.mesh = new MeshManager(
+        (msg) => sock!.sendRtc(msg),
+        (peerId, el) => this.game.events.emit("rtc:video", peerId, el)
+      );
+      // M4: SfuManager for bubbles >4
+      this.sfu = new SfuManager(
+        (msg) => sock!.sendSfu(msg),
+        (peerId, el) => this.game.events.emit("rtc:video", peerId, el)
+      );
     }
   }
 
@@ -127,6 +151,12 @@ export class OfficeScene extends Phaser.Scene {
     this._createNetDot();
     this._setupCamera();
     this._setupInput();
+
+    // M3/M4: receive local media stream from React wrapper
+    this.game.events.on("rtc:localStream", (stream: MediaStream) => {
+      this.mesh?.setLocalStream(stream);
+      this.sfu?.setLocalStream(stream);
+    });
   }
 
   // ── update ──────────────────────────────────────────────────────────────────
@@ -135,11 +165,21 @@ export class OfficeScene extends Phaser.Scene {
     this._handleMovement();
     this._updateRoomLabel();
     this._updateRemoteAvatars();
+    this._updateSpatialAudio();
   }
 
   // ── shutdown ─────────────────────────────────────────────────────────────────
 
   shutdown() {
+    if (this.sfuMode) {
+      this.sfu?.leave();
+    } else {
+      this.mesh?.leaveBubble();
+    }
+    this.mesh?.stopLocalStream();
+    this.mesh = null;
+    this.sfu = null;
+    this.sfuMode = false;
     this.socket?.disconnect();
     this.socket = null;
   }
@@ -413,6 +453,20 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  private _updateSpatialAudio() {
+    for (const [id, state] of this.remotePlayers) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        state.sprite.x, state.sprite.y
+      );
+      if (this.sfuMode) {
+        this.sfu?.updateSpatialGain(id, dist);
+      } else {
+        this.mesh?.updateSpatialGain(id, dist);
+      }
+    }
+  }
+
   private _spawnRemotePlayer(remote: RemotePlayer) {
     if (remote.id === this.myPlayerId) return;
     if (this.remotePlayers.has(remote.id)) return;
@@ -506,6 +560,101 @@ export class OfficeScene extends Phaser.Scene {
       }
       case "pong": {
         // Heartbeat acknowledged; socket manager handles stale detection
+        break;
+      }
+      case "bubble.join": {
+        this.myBubbleId = msg.bubbleId;
+        this.bubbleMemberNames = msg.members
+          .filter((id) => id !== this.myPlayerId)
+          .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
+        this.game.events.emit("bubble:update", this.bubbleMemberNames);
+        // M3: initiate WebRTC mesh (only if not already in SFU mode)
+        if (!this.sfuMode && this.mesh && this.myPlayerId) {
+          void this.mesh.joinBubble(this.myPlayerId, msg.members);
+        }
+        break;
+      }
+      case "bubble.update": {
+        if (msg.bubbleId !== this.myBubbleId) break;
+        this.bubbleMemberNames = msg.members
+          .filter((id) => id !== this.myPlayerId)
+          .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
+        this.game.events.emit("bubble:update", this.bubbleMemberNames);
+        // M3: add newly joined peers (mesh mode only)
+        if (!this.sfuMode && this.mesh && this.myPlayerId) {
+          for (const id of msg.members) {
+            if (id !== this.myPlayerId) void this.mesh.addPeer(id);
+          }
+        }
+        break;
+      }
+      case "bubble.leave": {
+        if (msg.bubbleId !== this.myBubbleId) break;
+        this.myBubbleId = null;
+        this.bubbleMemberNames = [];
+        this.game.events.emit("bubble:update", []);
+        if (this.sfuMode) {
+          this.sfu?.leave();
+          this.sfuMode = false;
+        } else {
+          this.mesh?.leaveBubble();
+        }
+        break;
+      }
+      // ── M3: P2P RTC relay ───────────────────────────────────────────────────
+      case "rtc.offer": {
+        void this.mesh?.handleOffer(msg.from, msg.sdp);
+        break;
+      }
+      case "rtc.answer": {
+        void this.mesh?.handleAnswer(msg.from, msg.sdp);
+        break;
+      }
+      case "rtc.ice": {
+        void this.mesh?.handleIce(msg.from, msg.candidate as RTCIceCandidateInit);
+        break;
+      }
+      // ── M4: SFU switch & signalling ─────────────────────────────────────────
+      case "bubble.sfu-switch": {
+        this.myBubbleId = msg.bubbleId;
+        this.sfuMode = true;
+        // Tear down mesh connections
+        this.mesh?.leaveBubble();
+        // Update member list
+        this.bubbleMemberNames = msg.members
+          .filter((id) => id !== this.myPlayerId)
+          .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
+        this.game.events.emit("bubble:update", this.bubbleMemberNames);
+        // Join SFU
+        if (this.sfu) void this.sfu.join();
+        break;
+      }
+      case "sfu.router-caps": {
+        this.sfu?.handleRouterCaps(msg);
+        break;
+      }
+      case "sfu.transport-created": {
+        this.sfu?.handleTransportCreated(msg);
+        break;
+      }
+      case "sfu.produced": {
+        this.sfu?.handleProduced(msg);
+        break;
+      }
+      case "sfu.producers-list": {
+        this.sfu?.handleProducersList(msg);
+        break;
+      }
+      case "sfu.consumed": {
+        this.sfu?.handleConsumed(msg);
+        break;
+      }
+      case "sfu.new-producer": {
+        void this.sfu?.handleNewProducer(msg);
+        break;
+      }
+      case "sfu.producer-closed": {
+        this.sfu?.handleProducerClosed(msg);
         break;
       }
     }

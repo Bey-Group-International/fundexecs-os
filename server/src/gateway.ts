@@ -1,5 +1,4 @@
 import uWS from "uWebSockets.js";
-import { v4 as uuidv4 } from "uuid";
 import { ClientMessageSchema } from "@fundexecs/virtual-office-shared";
 import type { RoomManager } from "./RoomManager";
 import type { AuthService } from "./AuthService";
@@ -10,6 +9,10 @@ function getQueryParam(query: string, key: string): string | undefined {
   return params.get(key) ?? undefined;
 }
 
+function handleAsync(fn: () => Promise<void>): void {
+  fn().catch((err) => console.error("[SFU]", err));
+}
+
 export function createGateway(
   roomManager: RoomManager,
   authService: AuthService
@@ -18,7 +21,7 @@ export function createGateway(
 
   app.ws<SocketData>("/ws", {
     idleTimeout: 60,
-    maxPayloadLength: 16 * 1024,
+    maxPayloadLength: 64 * 1024,
 
     upgrade: async (res, req, context) => {
       const query = req.getQuery();
@@ -42,12 +45,8 @@ export function createGateway(
         return;
       }
 
-      // Abort handling (client disconnected before upgrade completes)
       let aborted = false;
-      res.onAborted(() => {
-        aborted = true;
-      });
-
+      res.onAborted(() => { aborted = true; });
       if (aborted) return;
 
       res.upgrade<SocketData>(
@@ -61,27 +60,18 @@ export function createGateway(
 
     open: async (ws) => {
       const { playerId, roomId } = ws.getUserData();
-
       const room = await roomManager.getOrCreateRoom(roomId);
 
-      // If player is already in room (reconnect), remove old entry
-      if (room.hasPlayer(playerId)) {
-        room.removePlayer(playerId);
-      }
+      if (room.hasPlayer(playerId)) room.removePlayer(playerId);
 
       const player = room.addPlayer(ws, playerId, playerId);
 
-      // Send welcome to this player
       room.sendTo(playerId, {
         type: "welcome",
         playerId,
-        worldSnapshot: {
-          type: "world.snapshot",
-          players: room.getSnapshot(),
-        },
+        worldSnapshot: { type: "world.snapshot", players: room.getSnapshot() },
       });
 
-      // Broadcast player joined to others
       room.broadcast({ type: "player.joined", player }, playerId);
     },
 
@@ -93,18 +83,10 @@ export function createGateway(
       if (!room) return;
 
       let text: string;
-      try {
-        text = Buffer.from(message).toString("utf-8");
-      } catch {
-        return;
-      }
+      try { text = Buffer.from(message).toString("utf-8"); } catch { return; }
 
       let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        return;
-      }
+      try { parsed = JSON.parse(text); } catch { return; }
 
       const result = ClientMessageSchema.safeParse(parsed);
       if (!result.success) return;
@@ -114,7 +96,6 @@ export function createGateway(
       if (msg.type === "player.move") {
         const updatedPlayer = room.applyMove(playerId, msg.dx, msg.dy, msg.seq);
         if (updatedPlayer) {
-          // Broadcast authoritative state to ALL players (including sender for reconciliation)
           room.broadcastAll({
             type: "player.state",
             playerId,
@@ -124,12 +105,107 @@ export function createGateway(
             seq: msg.seq,
           });
         }
+
       } else if (msg.type === "ping") {
-        room.sendTo(playerId, {
-          type: "pong",
-          clientTime: msg.clientTime,
-          serverTime: Date.now(),
+        room.sendTo(playerId, { type: "pong", clientTime: msg.clientTime, serverTime: Date.now() });
+
+      } else if (msg.type === "rtc.offer") {
+        room.relayTo(msg.to, { type: "rtc.offer", from: playerId, sdp: msg.sdp });
+      } else if (msg.type === "rtc.answer") {
+        room.relayTo(msg.to, { type: "rtc.answer", from: playerId, sdp: msg.sdp });
+      } else if (msg.type === "rtc.ice") {
+        room.relayTo(msg.to, { type: "rtc.ice", from: playerId, candidate: msg.candidate });
+
+      // ── SFU signalling ──────────────────────────────────────────────────────
+      } else if (msg.type === "sfu.get-caps") {
+        handleAsync(async () => {
+          const sfuRoom = room.getSfuRoomForPlayer(playerId);
+          if (!sfuRoom) return;
+          const rtpCapabilities = await sfuRoom.getRouterCapabilities();
+          room.sendTo(playerId, { type: "sfu.router-caps", rtpCapabilities });
         });
+
+      } else if (msg.type === "sfu.create-transport") {
+        handleAsync(async () => {
+          const sfuRoom = room.getSfuRoomForPlayer(playerId);
+          if (!sfuRoom) return;
+          const info = await sfuRoom.createTransport(playerId, msg.direction);
+          room.sendTo(playerId, {
+            type: "sfu.transport-created",
+            direction: info.direction,
+            id: info.id,
+            iceParameters: info.iceParameters,
+            iceCandidates: info.iceCandidates,
+            dtlsParameters: info.dtlsParameters,
+          });
+        });
+
+      } else if (msg.type === "sfu.connect-transport") {
+        handleAsync(async () => {
+          const sfuRoom = room.getSfuRoomForPlayer(playerId);
+          if (!sfuRoom) return;
+          await sfuRoom.connectTransport(msg.transportId, msg.dtlsParameters);
+        });
+
+      } else if (msg.type === "sfu.produce") {
+        handleAsync(async () => {
+          const sfuRoom = room.getSfuRoomForPlayer(playerId);
+          if (!sfuRoom) return;
+          const { producerId } = await sfuRoom.produce(
+            playerId, msg.transportId, msg.kind, msg.rtpParameters
+          );
+          room.sendTo(playerId, { type: "sfu.produced", producerId, kind: msg.kind });
+          room.broadcastToSfuBubble(playerId, {
+            type: "sfu.new-producer",
+            peerId: playerId,
+            producerId,
+            kind: msg.kind,
+          }, playerId);
+        });
+
+      } else if (msg.type === "sfu.get-producers") {
+        const sfuRoom = room.getSfuRoomForPlayer(playerId);
+        if (!sfuRoom) return;
+        const producers = sfuRoom.getAllProducers().filter((p) => p.peerId !== playerId);
+        room.sendTo(playerId, { type: "sfu.producers-list", producers });
+
+      } else if (msg.type === "sfu.consume") {
+        handleAsync(async () => {
+          const sfuRoom = room.getSfuRoomForPlayer(playerId);
+          if (!sfuRoom) return;
+          const info = await sfuRoom.consume(
+            playerId, msg.transportId, msg.producerId, msg.rtpCapabilities
+          );
+          if (!info) return;
+          room.sendTo(playerId, {
+            type: "sfu.consumed",
+            consumerId: info.consumerId,
+            producerId: info.producerId,
+            kind: info.kind,
+            rtpParameters: info.rtpParameters,
+            paused: info.paused,
+            peerId: info.peerId,
+          });
+        });
+
+      } else if (msg.type === "sfu.resume-consumer") {
+        handleAsync(async () => {
+          const sfuRoom = room.getSfuRoomForPlayer(playerId);
+          if (!sfuRoom) return;
+          await sfuRoom.resumeConsumer(msg.consumerId);
+        });
+
+      } else if (msg.type === "sfu.leave") {
+        const sfuRoom = room.getSfuRoomForPlayer(playerId);
+        if (!sfuRoom) return;
+        const closedIds = sfuRoom.removePeer(playerId);
+        for (const producerId of closedIds) {
+          room.broadcastToSfuBubble(playerId, {
+            type: "sfu.producer-closed",
+            producerId,
+            peerId: playerId,
+          }, playerId);
+        }
       }
     },
 
