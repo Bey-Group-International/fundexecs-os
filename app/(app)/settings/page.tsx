@@ -12,6 +12,7 @@ import { loadDigestPrefs } from "./digest-actions";
 import { ApiKeys, type ApiKeyView } from "./ApiKeys";
 import { GuidedTourSetting } from "./GuidedTourSetting";
 import { ShortcutsAndCustomization } from "./ShortcutsAndCustomization";
+import { DownloadOSCard } from "@/components/DownloadOS";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { TIER_2_ACTIONS } from "./tier2-actions";
 import { deactivateMandate, setDiscoverable } from "./actions";
@@ -25,6 +26,7 @@ export const dynamic = "force-dynamic";
 
 const SECTIONS: SettingsSection[] = [
   { id: "account", label: "Account" },
+  { id: "get-the-os", label: "Get the OS" },
   { id: "mandates", label: "AI Permissions" },
   { id: "integrations", label: "Integrations" },
   { id: "digest", label: "Digest" },
@@ -149,6 +151,16 @@ export default async function SettingsPage() {
                 <RowLink label="Wallet & credits" hint="Balance, plan, and billing" />
               </Link>
             </div>
+          </Section>
+
+          {/* Get the OS */}
+          <Section
+            id="get-the-os"
+            eyebrow="Native App"
+            title="Get the OS"
+            description="Download FundExecs OS directly to any device — no app store required. iOS, Android, Mac, Windows, and Linux builds are all self-hosted and always up to date."
+          >
+            <DownloadOSCard />
           </Section>
 
           {/* Mandates */}

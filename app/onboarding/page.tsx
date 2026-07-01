@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import OnboardingWizard from "./wizard";
+import { DownloadOSFloat } from "@/components/DownloadOSFloat";
 
 export default async function OnboardingPage({
   searchParams,
@@ -44,6 +45,8 @@ export default async function OnboardingPage({
       <div className="flex flex-1 items-center justify-center px-4 py-20 sm:px-6">
         <OnboardingWizard error={searchParams.error} />
       </div>
+
+      <DownloadOSFloat />
     </div>
   );
 }
