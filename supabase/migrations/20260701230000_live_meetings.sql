@@ -65,7 +65,7 @@ CREATE POLICY "live_meeting_transcripts_meeting" ON live_meeting_transcripts
     meeting_id IN (
       SELECT id FROM live_meetings WHERE host_id = auth.uid()
       UNION
-      SELECT meeting_id FROM live_meeting_participants WHERE principal_id = auth.uid()
+      SELECT meeting_id FROM live_meeting_participants WHERE user_id = auth.uid()
     )
   );
 
@@ -74,7 +74,7 @@ CREATE POLICY "live_meeting_reports_meeting" ON live_meeting_reports
     meeting_id IN (
       SELECT id FROM live_meetings WHERE host_id = auth.uid()
       UNION
-      SELECT meeting_id FROM live_meeting_participants WHERE principal_id = auth.uid()
+      SELECT meeting_id FROM live_meeting_participants WHERE user_id = auth.uid()
     )
   );
 
