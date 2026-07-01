@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { saveOrgProfile } from "./actions";
 import { STRATEGY_LABELS, AUM_LABELS, ROLE_LABELS, displayLabel, titleCase } from "@/lib/labels";
+import { LogoUpload } from "@/components/build/LogoUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -136,14 +137,15 @@ export default async function ProfilePage() {
               defaultValue={(o as Record<string, unknown>).tagline as string ?? ""}
               placeholder="e.g., Growth equity for the next generation of founders"
             />
-            <Field
-              label="Logo URL"
-              name="logo_url"
-              type="url"
-              defaultValue={(o as Record<string, unknown>).logo_url as string ?? ""}
-              placeholder="https://cdn.example.com/logo.png"
-              className="sm:col-span-2"
-            />
+            <div className="sm:col-span-2 flex flex-col gap-1">
+              <label className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                Logo
+              </label>
+              <LogoUpload
+                name="logo_url"
+                defaultValue={(o as Record<string, unknown>).logo_url as string ?? ""}
+              />
+            </div>
           </div>
         </Section>
 
