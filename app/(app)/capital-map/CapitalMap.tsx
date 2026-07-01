@@ -104,6 +104,7 @@ export function CapitalMap({
         toggleTemp={toggleTemp}
         sort={sort}
         setSort={setSort}
+        onClearAll={() => { setQuery(""); setTemps(new Set()); setSort("warmth"); }}
         showing={visible.length}
         total={entries.length}
       />
@@ -201,6 +202,7 @@ function ControlsBar({
   toggleTemp,
   sort,
   setSort,
+  onClearAll,
   showing,
   total,
 }: {
@@ -210,9 +212,11 @@ function ControlsBar({
   toggleTemp: (t: Temperature) => void;
   sort: SortKey;
   setSort: (s: SortKey) => void;
+  onClearAll: () => void;
   showing: number;
   total: number;
 }) {
+  const isDirty = query !== "" || temps.size > 0 || sort !== "warmth";
   return (
     <div className="flex flex-wrap items-center gap-2">
       <input
@@ -238,6 +242,14 @@ function ControlsBar({
           );
         })}
       </div>
+      {isDirty && (
+        <button
+          onClick={onClearAll}
+          className="rounded-md border border-line px-2.5 py-1 text-xs text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary"
+        >
+          Clear all
+        </button>
+      )}
       <label className="ml-auto flex items-center gap-1.5 text-xs text-fg-muted">
         <span className="font-mono uppercase tracking-wider">Sort</span>
         <select

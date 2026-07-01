@@ -496,6 +496,14 @@ export function AllocatorDirectory({ entries, funds }: Props) {
           <option value="fit">Sort: Fit score</option>
           <option value="aum">Sort: AUM</option>
         </select>
+        {(search !== "" || typeFilter !== "all" || stageFilter !== "all" || sortBy !== "last_contact") && (
+          <button
+            onClick={() => { setSearch(""); setTypeFilter("all"); setStageFilter("all"); setSortBy("last_contact"); }}
+            className="rounded-md border border-line px-2.5 py-1.5 text-xs text-fg-muted transition hover:border-yellow-500/40 hover:text-fg-primary"
+          >
+            Clear all
+          </button>
+        )}
         <span className="ml-auto font-mono text-[10px] text-fg-muted">
           {filtered.length} of {entries.length} allocators
         </span>
