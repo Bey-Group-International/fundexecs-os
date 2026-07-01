@@ -2,7 +2,12 @@ import type { ClientMessage, ServerMessage } from "./messages";
 
 type MessageHandler = (msg: ServerMessage) => void;
 
-const WS_URL_BASE = "ws://localhost:4000/ws";
+// In production set NEXT_PUBLIC_WS_URL=wss://your-server.up.railway.app
+// Falls back to local dev server
+const WS_URL_BASE =
+  (typeof process !== "undefined" && process.env["NEXT_PUBLIC_WS_URL"])
+    ? `${process.env["NEXT_PUBLIC_WS_URL"]}/ws`
+    : "ws://localhost:4000/ws";
 const PING_INTERVAL_MS = 5_000;
 const PONG_TIMEOUT_MS = 10_000;
 const MAX_RETRIES = 5;
