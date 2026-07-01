@@ -652,6 +652,8 @@ export type TrackRecord = Timestamps & {
   notes: string | null;
 };
 
+export type DocumentStatus = "draft" | "review" | "ready";
+
 export type Document = {
   id: string;
   organization_id: string;
@@ -665,6 +667,7 @@ export type Document = {
   uploaded_by: string | null;
   content: string | null;
   sort_order: number;
+  status: DocumentStatus;
   created_at: string;
 };
 

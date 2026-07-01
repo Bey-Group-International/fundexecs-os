@@ -2,13 +2,15 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { openSection } from "./materials-actions";
+import { openSection, updateDocumentStatus } from "./materials-actions";
 import { DeleteDocumentButton } from "./DeleteDocumentButton";
+import type { DocumentStatus } from "@/lib/supabase/database.types";
 
 export interface AccordionDoc {
   id: string;
   name: string;
   storage_key: string | null;
+  status: DocumentStatus;
 }
 
 export interface AccordionSection {
@@ -42,6 +44,42 @@ function StatusPill({ ready, viaBuild, docCount }: { ready: boolean; viaBuild: b
       <span className="h-1.5 w-1.5 rounded-full bg-fg-muted/40" />
       Not added
     </span>
+  );
+}
+
+const STATUS_CYCLE: DocumentStatus[] = ["draft", "review", "ready"];
+const STATUS_LABELS: Record<DocumentStatus, string> = { draft: "Draft", review: "Review", ready: "Ready" };
+const STATUS_CLASSES: Record<DocumentStatus, string> = {
+  draft: "bg-surface-0 border border-line text-fg-muted",
+  review: "bg-amber-500/10 border border-amber-500/30 text-amber-400",
+  ready: "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400",
+};
+
+function StatusCycler({ doc }: { doc: AccordionDoc }) {
+  const [status, setStatus] = useState<DocumentStatus>(doc.status);
+  const [pending, startTransition] = useTransition();
+
+  function cycle() {
+    const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(status) + 1) % STATUS_CYCLE.length];
+    setStatus(next);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", doc.id);
+      fd.set("status", next);
+      await updateDocumentStatus(fd);
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={cycle}
+      disabled={pending}
+      title={`Status: ${STATUS_LABELS[status]} — click to advance`}
+      className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition hover:opacity-80 disabled:opacity-50 ${STATUS_CLASSES[status]}`}
+    >
+      {STATUS_LABELS[status]}
+    </button>
   );
 }
 
@@ -115,6 +153,7 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
                 >
                   {d.name}
                 </Link>
+                <StatusCycler doc={d} />
                 <DeleteDocumentButton id={d.id} name={d.name} />
               </div>
             ))}
