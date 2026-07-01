@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AutosaveForm } from "@/components/build/AutosaveForm";
 import { inputClass } from "@/components/build/DraftWithEarn";
 import { ROLE_LABELS } from "@/lib/labels";
+import { LogoUpload } from "@/components/build/LogoUpload";
 
 // Values mirrored from the `organizations` row this form edits.
 export type ProfileValues = {
@@ -203,15 +204,8 @@ export function ProfileForm({
               className={`${inputClass} bg-surface-1`}
             />
           </Field>
-          <Field label="Logo URL">
-            <input
-              name="logo_url"
-              type="url"
-              value={form.logo_url}
-              onChange={(e) => set("logo_url")(e.target.value)}
-              placeholder="https://cdn.example.com/logo.png"
-              className={`${inputClass} bg-surface-1`}
-            />
+          <Field label="Logo">
+            <LogoUpload name="logo_url" defaultValue={form.logo_url} />
           </Field>
           <Field label="Jurisdiction">
             <input
