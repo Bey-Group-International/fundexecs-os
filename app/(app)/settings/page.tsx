@@ -15,6 +15,7 @@ import { ShortcutsAndCustomization } from "./ShortcutsAndCustomization";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { TIER_2_ACTIONS } from "./tier2-actions";
 import { deactivateMandate, setDiscoverable } from "./actions";
+import { UserProfileForm } from "./UserProfileForm";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,13 @@ export default async function SettingsPage() {
     created_at: k.created_at,
   }));
 
+  // Personal profile fields for the Account section.
+  const { data: principalRow } = await supabase
+    .from("principals")
+    .select("full_name, title, phone, avatar_url")
+    .eq("id", ctx.userId)
+    .maybeSingle();
+
   // Ecosystem discoverability — drives the toggle below. Defaults to on for a
   // freshly onboarded org (the column default), so treat a null as discoverable.
   const { data: orgRow } = await supabase
@@ -111,43 +119,45 @@ export default async function SettingsPage() {
         <div className="flex min-w-0 flex-col gap-12">
           {/* Account */}
           <Section id="account" eyebrow="You" title="Account">
-            <div className="flex flex-col gap-2">
-              <div className="fx-card p-4">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
-                  Signed in as
-                </p>
-                <p className="mt-1 text-sm text-fg-primary">{ctx.email}</p>
-              </div>
-              <Link href="/build/profile" className="fx-card fx-card-hover group p-4">
-                <RowLink label="Organization profile" hint="Name, focus, and public details" />
-              </Link>
-              <div className="fx-card p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-fg-primary">Ecosystem discoverability</p>
-                    <p className="mt-1 text-xs leading-snug text-fg-secondary">
-                      {discoverable
-                        ? "On — Earn matches your profile across the ecosystem and alerts matching LPs, capital, partners, providers, and deals."
-                        : "Off — your firm is dark. No match alerts go out about you, and you receive none."}
-                    </p>
+            <div className="flex flex-col gap-4">
+              <UserProfileForm
+                email={ctx.email}
+                initialValues={{
+                  full_name: principalRow?.full_name ?? "",
+                  title: principalRow?.title ?? "",
+                  phone: (principalRow as { phone?: string | null } | null)?.phone ?? "",
+                  avatar_url: principalRow?.avatar_url ?? "",
+                }}
+              />
+              <div className="flex flex-col gap-2">
+                <div className="fx-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-fg-primary">Ecosystem discoverability</p>
+                      <p className="mt-1 text-xs leading-snug text-fg-secondary">
+                        {discoverable
+                          ? "On — Earn matches your profile across the ecosystem and alerts matching LPs, capital, partners, providers, and deals."
+                          : "Off — your firm is dark. No match alerts go out about you, and you receive none."}
+                      </p>
+                    </div>
+                    <form action={setDiscoverable} className="shrink-0">
+                      <input type="hidden" name="discoverable" value={discoverable ? "false" : "true"} />
+                      <button
+                        className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
+                          discoverable
+                            ? "border-line text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                            : "border-gold-500/40 bg-gold-500/10 text-gold-300 hover:bg-gold-500/20"
+                        }`}
+                      >
+                        {discoverable ? "Go dark" : "Make discoverable"}
+                      </button>
+                    </form>
                   </div>
-                  <form action={setDiscoverable} className="shrink-0">
-                    <input type="hidden" name="discoverable" value={discoverable ? "false" : "true"} />
-                    <button
-                      className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
-                        discoverable
-                          ? "border-line text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
-                          : "border-gold-500/40 bg-gold-500/10 text-gold-300 hover:bg-gold-500/20"
-                      }`}
-                    >
-                      {discoverable ? "Go dark" : "Make discoverable"}
-                    </button>
-                  </form>
                 </div>
+                <Link href="/wallet" className="fx-card fx-card-hover group p-4">
+                  <RowLink label="Wallet & credits" hint="Balance, plan, and billing" />
+                </Link>
               </div>
-              <Link href="/wallet" className="fx-card fx-card-hover group p-4">
-                <RowLink label="Wallet & credits" hint="Balance, plan, and billing" />
-              </Link>
             </div>
           </Section>
 

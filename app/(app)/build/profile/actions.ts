@@ -24,6 +24,7 @@ export async function saveOrgProfile(
     legal_name: str("legal_name"),
     entity_type: str("entity_type"),
     tagline: str("tagline"),
+    logo_url: str("logo_url"),
     primary_strategy: str("primary_strategy"),
     operator_role: str("operator_role"),
     aum_range: str("aum_range"),

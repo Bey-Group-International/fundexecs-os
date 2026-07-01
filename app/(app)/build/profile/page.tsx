@@ -66,7 +66,7 @@ export default async function ProfilePage() {
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "name, legal_name, entity_type, tagline, primary_strategy, operator_role, aum_range, fund_count, hq_location, jurisdiction, website, description, brand_voice, discoverable, slug",
+      "name, legal_name, entity_type, tagline, logo_url, primary_strategy, operator_role, aum_range, fund_count, hq_location, jurisdiction, website, description, brand_voice, discoverable, slug",
     )
     .eq("id", ctx.orgId)
     .maybeSingle();
@@ -135,6 +135,14 @@ export default async function ProfilePage() {
               name="tagline"
               defaultValue={(o as Record<string, unknown>).tagline as string ?? ""}
               placeholder="e.g., Growth equity for the next generation of founders"
+            />
+            <Field
+              label="Logo URL"
+              name="logo_url"
+              type="url"
+              defaultValue={(o as Record<string, unknown>).logo_url as string ?? ""}
+              placeholder="https://cdn.example.com/logo.png"
+              className="sm:col-span-2"
             />
           </div>
         </Section>
