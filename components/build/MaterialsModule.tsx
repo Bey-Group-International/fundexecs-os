@@ -19,10 +19,8 @@ import { DATA_ROOM_SECTIONS, summarizeDataRoom } from "@/lib/data-room";
 import { SectionHighlighter } from "@/components/build/SectionHighlighter";
 import { PrintButton } from "./PrintButton";
 import { ShareControls } from "./ShareControls";
-import { DeleteDocumentButton } from "./DeleteDocumentButton";
-import { openSection } from "./materials-actions";
+import { CoverageAccordion } from "./CoverageAccordion";
 
-// Render a stored document link only when it is a real http(s) URL.
 function safeHref(url: string | null): string | null {
   if (!url) return null;
   try {
@@ -46,40 +44,67 @@ function compactUsd(n: number | null): string | null {
 
 function Metric({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-lg border border-line bg-surface-0 px-3 py-2.5 text-center print:border-neutral-300 print:bg-white">
-      <p className="font-display text-xl font-semibold leading-none text-fg-primary print:text-black">
+    <div className="rounded-xl border border-line bg-surface-0 px-4 py-3 text-center print:border-neutral-300 print:bg-white" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}>
+      <p className="font-display text-2xl font-semibold leading-none text-fg-primary print:text-black">
         {value}
       </p>
-      <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+      <p className="mt-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
         {label}
       </p>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, accent, children }: { title: string; accent?: string | null; children: React.ReactNode }) {
   return (
-    <section className="mt-5">
-      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-gold-500 print:text-neutral-600">
-        {title}
-      </h3>
+    <section className="mt-6">
+      <div className="mb-3 flex items-center gap-2">
+        <span
+          className="h-4 w-0.5 rounded-full"
+          style={{ backgroundColor: accent ?? "#D4AF6A" }}
+        />
+        <h3 className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted print:text-neutral-500">
+          {title}
+        </h3>
+      </div>
       {children}
     </section>
   );
 }
 
+// Coverage arc SVG — shows weighted % as a thin arc on a circle
+function CoverageArc({ percent }: { percent: number }) {
+  const r = 22;
+  const circ = 2 * Math.PI * r;
+  const dash = (percent / 100) * circ;
+  return (
+    <svg width={60} height={60} viewBox="0 0 60 60" className="shrink-0" aria-hidden>
+      <circle cx={30} cy={30} r={r} fill="none" stroke="currentColor" strokeWidth={4} className="text-line" />
+      <circle
+        cx={30} cy={30} r={r}
+        fill="none"
+        stroke="#D4AF6A"
+        strokeWidth={4}
+        strokeDasharray={`${dash} ${circ}`}
+        strokeLinecap="round"
+        transform="rotate(-90 30 30)"
+        className="transition-all duration-700"
+      />
+      <text x={30} y={35} textAnchor="middle" className="fill-fg-primary font-display text-[13px] font-semibold">
+        {percent}%
+      </text>
+    </svg>
+  );
+}
+
 // Materials & Data Room: the firm's whole Build foundation — identity, thesis,
 // pooled track record, structure, team — assembled into a single branded,
-// print-ready set of materials LPs can review. The foundation entered once
-// compounds into the materials a prospective investor actually reads.
+// print-ready set of materials LPs can review.
 export async function MaterialsModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
   const supabase = createServerClient();
 
-  // Single pass over the foundation tables — reused for both the rendered
-  // materials and the readiness scoring (computeBuildReadiness), so the module
-  // no longer double-fetches via getBuildReadiness.
   const [orgRes, thesesRes, recordsRes, entitiesRes, membersRes, docsRes, sharesRes, viewsRes] =
     await Promise.all([
       supabase.from("organizations").select("*").eq("id", ctx.orgId).maybeSingle(),
@@ -156,21 +181,40 @@ export async function MaterialsModule() {
   const blended = blendTrackRecord(records);
   const accent = org?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color) ? org.brand_color : null;
 
-  const checkSize = [compactUsd(thesis?.check_size_min ?? null), compactUsd(thesis?.check_size_max ?? null)].filter(
-    Boolean,
-  );
+  const checkSize = [compactUsd(thesis?.check_size_min ?? null), compactUsd(thesis?.check_size_max ?? null)].filter(Boolean);
+
+  // Build accordion sections with inline doc data
+  const accordionSections = summary.items.map((item) => ({
+    key: item.key,
+    label: item.label,
+    ready: item.ready,
+    docCount: item.docCount,
+    viaBuild: item.viaBuild,
+    docs: (docsBySection.get(item.key) ?? []).map((d) => ({
+      id: d.id,
+      name: d.name,
+      storage_key: d.storage_key ?? null,
+    })),
+    suggestion: item.suggestion,
+    weight: item.weight,
+  }));
+
+  const nextSuggestion = summary.suggestions[0]
+    ? { key: summary.suggestions[0].key, label: summary.suggestions[0].label, suggestion: summary.suggestions[0].suggestion }
+    : null;
+
+  const activeShareCount = shares.filter((s) => !s.revoked_at).length;
 
   return (
     <div>
-      {/* Toolbar — hidden in print */}
-      <div className="mb-5 flex items-center justify-between gap-4 print:hidden">
+      {/* Toolbar */}
+      <div className="mb-6 flex items-start justify-between gap-4 print:hidden">
         <div>
-          <h2 className="font-display text-xl font-semibold tracking-tight text-fg-primary">
+          <h2 className="font-display text-2xl font-semibold tracking-tight text-fg-primary">
             Materials &amp; Data Room
           </h2>
-          <p className="mt-0.5 text-sm text-fg-secondary">
-            Your foundation, assembled into investor-ready materials you can send.{" "}
-            <span className="text-fg-muted">{readiness.overall}% complete.</span>
+          <p className="mt-1 text-sm text-fg-secondary">
+            Your foundation, assembled into investor-ready materials.
           </p>
         </div>
         <PrintButton />
@@ -179,7 +223,7 @@ export async function MaterialsModule() {
       {readiness.nextAction ? (
         <Link
           href={readiness.nextAction.href}
-          className="mb-5 flex items-center gap-2 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2 text-xs text-fg-secondary transition hover:bg-gold-500/10 print:hidden"
+          className="mb-5 flex items-center gap-2 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-2.5 text-xs text-fg-secondary transition hover:bg-gold-500/10 print:hidden"
         >
           <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
             Make it stronger
@@ -189,287 +233,235 @@ export async function MaterialsModule() {
         </Link>
       ) : null}
 
-      {/* Data-room coverage checklist (operator aid; hidden in print) */}
+      {/* Coverage panel */}
       <SectionHighlighter />
-      <div className="mb-6 rounded-2xl border border-line bg-surface-1 p-5 print:hidden">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
-              Institutional coverage
-            </span>
+      <div className="mb-8 overflow-hidden rounded-2xl border border-line bg-surface-1 print:hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>
+        {/* Panel header */}
+        <div className="flex items-center gap-4 border-b border-line px-5 py-4">
+          <div className="flex-1">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+              Institutional Coverage
+            </p>
             <p className="mt-0.5 text-sm text-fg-secondary">
-              The sections an allocator&apos;s diligence team expects in an institutional fund data room.
+              {summary.readyCount} of {summary.total} sections complete — click any row to expand.
             </p>
           </div>
-          <div className="text-right">
-            <span className="font-display text-2xl font-semibold text-fg-primary">{summary.weightedPercent}%</span>
-            <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">weighted</p>
-          </div>
+          <CoverageArc percent={summary.weightedPercent} />
         </div>
-        <p className="mb-3 text-xs text-fg-muted">
-          Click a section to open its builder — write it manually, compose from your data, or draft with Earn.
-        </p>
-        <div className="flex flex-col gap-2">
-          {summary.items.map((item) => {
-            const docs = docsBySection.get(item.key) ?? [];
-            return (
-              <div
-                key={item.key}
-                id={`section-${item.key}`}
-                className="scroll-mt-24 overflow-hidden rounded-lg border border-line bg-surface-0 transition-shadow duration-700"
-              >
-                <form action={openSection} className="flex w-full items-center gap-2 px-3 py-2">
-                  <input type="hidden" name="section" value={item.key} />
-                  <span className={`font-mono text-xs ${item.ready ? "text-emerald-400" : "text-fg-muted"}`}>
-                    {item.ready ? "✓" : "○"}
-                  </span>
-                  <span className={`text-sm ${item.ready ? "text-fg-primary" : "text-fg-secondary"}`}>
-                    {item.label}
-                  </span>
-                  <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                    {item.docCount > 0
-                      ? `${item.docCount} doc${item.docCount > 1 ? "s" : ""}`
-                      : item.viaBuild
-                        ? "from Build"
-                        : "not yet added"}
-                  </span>
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-md border border-gold-500/40 bg-gold-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
-                  >
-                    {docs.length ? "Open →" : "+ Build"}
-                  </button>
-                </form>
-                {docs.length > 0 ? (
-                  <div className="flex flex-col gap-1 border-t border-line/60 px-3 py-1.5">
-                    {docs.map((d) => (
-                      <div key={d.id} className="flex items-center gap-2">
-                        <Link
-                          href={`/document/${d.id}`}
-                          className="flex min-w-0 flex-1 items-center gap-2 truncate text-sm text-fg-secondary transition hover:text-gold-300"
-                        >
-                          <span aria-hidden className="font-mono text-[11px] text-fg-muted">
-                            {d.storage_key ? "🔗" : "📄"}
-                          </span>
-                          <span className="truncate">{d.name}</span>
-                        </Link>
-                        <DeleteDocumentButton id={d.id} name={d.name} />
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
+
+        {/* Accordion sections */}
+        <div className="flex flex-col gap-2 p-4">
+          <CoverageAccordion sections={accordionSections} nextSuggestion={nextSuggestion} />
         </div>
-        {summary.suggestions.length > 0 ? (
-          <form action={openSection} className="mt-3 flex items-center gap-2 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2">
-            <input type="hidden" name="section" value={summary.suggestions[0].key} />
-            <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Next best to add</span>
-            <span className="truncate text-sm text-fg-primary">{summary.suggestions[0].suggestion}</span>
-            <button type="submit" className="ml-auto shrink-0 font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
-              Build →
-            </button>
-          </form>
-        ) : null}
       </div>
 
-      {/* The sheet */}
-      <article className="mx-auto max-w-2xl rounded-2xl border border-line bg-surface-1 p-8 print:max-w-none print:rounded-none print:border-0 print:bg-white print:p-0 print:text-black">
-        {/* Identity header */}
-        <header
-          className="flex items-start gap-4 border-b pb-5"
-          style={{ borderColor: accent ? `${accent}55` : undefined }}
-        >
-          {org?.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={org.logo_url}
-              alt=""
-              className="h-12 w-12 shrink-0 rounded-lg object-contain"
-            />
-          ) : (
-            <span
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg font-display text-xl font-semibold text-surface-0"
-              style={{ backgroundColor: accent ?? "#D4AF6A" }}
-            >
-              {(org?.name ?? "F").charAt(0).toUpperCase()}
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-fg-primary print:text-black">
-              {org?.name ?? "Your Firm"}
-            </h1>
-            {org?.tagline ? (
-              <p className="mt-0.5 text-sm text-fg-secondary print:text-neutral-700">{org.tagline}</p>
-            ) : null}
-            <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
-              {[org?.entity_type, org?.jurisdiction, org?.website].filter(Boolean).join("  ·  ") || "—"}
-            </p>
-          </div>
-        </header>
+      {/* The branded sheet */}
+      <article
+        className="mx-auto max-w-2xl overflow-hidden rounded-2xl border border-line bg-surface-1 print:max-w-none print:rounded-none print:border-0 print:bg-white print:text-black"
+        style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.18)" }}
+      >
+        {/* Accent stripe */}
+        <div className="h-1 w-full" style={{ backgroundColor: accent ?? "#D4AF6A" }} />
 
-        {/* Pooled track record */}
-        <Section title="Track Record">
-          {blended.dealCount > 0 ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Metric
-                value={blended.weightedGrossIrr != null ? `${blended.weightedGrossIrr.toFixed(0)}%` : "—"}
-                label="Gross IRR"
+        <div className="p-8 print:p-0">
+          {/* Identity header */}
+          <header className="flex items-start gap-5 border-b pb-6" style={{ borderColor: accent ? `${accent}44` : "rgba(255,255,255,0.08)" }}>
+            {org?.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={org.logo_url}
+                alt=""
+                className="h-14 w-14 shrink-0 rounded-xl object-contain"
               />
-              <Metric
-                value={blended.pooledMoic != null ? `${blended.pooledMoic.toFixed(1)}x` : "—"}
-                label="MOIC"
-              />
-              <Metric value={blended.dpi != null ? `${blended.dpi.toFixed(2)}x` : "—"} label="DPI" />
-              <Metric value={compactUsd(blended.totalInvested) ?? "—"} label="Invested" />
+            ) : (
+              <span
+                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl font-display text-2xl font-semibold text-surface-0"
+                style={{ backgroundColor: accent ?? "#D4AF6A" }}
+              >
+                {(org?.name ?? "F").charAt(0).toUpperCase()}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <h1 className="font-display text-2xl font-semibold tracking-tight text-fg-primary print:text-black">
+                {org?.name ?? "Your Firm"}
+              </h1>
+              {org?.tagline ? (
+                <p className="mt-1 text-sm text-fg-secondary print:text-neutral-700">{org.tagline}</p>
+              ) : null}
+              <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+                {[org?.entity_type, org?.jurisdiction, org?.website].filter(Boolean).join("  ·  ") || "—"}
+              </p>
             </div>
-          ) : (
-            <p className="text-sm text-fg-muted print:text-neutral-500">
-              No track record captured yet.
-            </p>
-          )}
-          {blended.dealCount > 0 ? (
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
-              {blended.dealCount} deals · {blended.realizedCount} realized
-              {blended.vintageRange
-                ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}`
-                : ""}
-            </p>
-          ) : null}
-        </Section>
+          </header>
 
-        {/* Thesis */}
-        {thesis ? (
-          <Section title="Investment Thesis">
-            <p className="text-sm font-medium text-fg-primary print:text-black">{thesis.title}</p>
-            {thesis.summary ? (
-              <p className="mt-1 text-sm leading-snug text-fg-secondary print:text-neutral-700">
-                {thesis.summary}
+          {/* Track record */}
+          <Section title="Track Record" accent={accent}>
+            {blended.dealCount > 0 ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Metric
+                  value={blended.weightedGrossIrr != null ? `${blended.weightedGrossIrr.toFixed(0)}%` : "—"}
+                  label="Gross IRR"
+                />
+                <Metric
+                  value={blended.pooledMoic != null ? `${blended.pooledMoic.toFixed(1)}x` : "—"}
+                  label="MOIC"
+                />
+                <Metric value={blended.dpi != null ? `${blended.dpi.toFixed(2)}x` : "—"} label="DPI" />
+                <Metric value={compactUsd(blended.totalInvested) ?? "—"} label="Invested" />
+              </div>
+            ) : (
+              <p className="text-sm text-fg-muted print:text-neutral-500">No track record captured yet.</p>
+            )}
+            {blended.dealCount > 0 ? (
+              <p className="mt-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+                {blended.dealCount} deals · {blended.realizedCount} realized
+                {blended.vintageRange ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}` : ""}
               </p>
             ) : null}
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
-              {[
-                thesis.asset_classes?.join(", "),
-                thesis.geographies?.join(", "),
-                checkSize.length ? checkSize.join("–") : null,
-                thesis.target_irr != null ? `${thesis.target_irr}% target IRR` : null,
-                thesis.target_moic != null ? `${thesis.target_moic}x target MOIC` : null,
-              ]
-                .filter(Boolean)
-                .join("  ·  ") || "—"}
+          </Section>
+
+          {/* Thesis */}
+          {thesis ? (
+            <Section title="Investment Thesis" accent={accent}>
+              <p className="text-sm font-semibold text-fg-primary print:text-black">{thesis.title}</p>
+              {thesis.summary ? (
+                <p className="mt-1.5 text-sm leading-relaxed text-fg-secondary print:text-neutral-700">
+                  {thesis.summary}
+                </p>
+              ) : null}
+              <p className="mt-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+                {[
+                  thesis.asset_classes?.join(", "),
+                  thesis.geographies?.join(", "),
+                  checkSize.length ? checkSize.join("–") : null,
+                  thesis.target_irr != null ? `${thesis.target_irr}% target IRR` : null,
+                  thesis.target_moic != null ? `${thesis.target_moic}x target MOIC` : null,
+                ]
+                  .filter(Boolean)
+                  .join("  ·  ") || "—"}
+              </p>
+            </Section>
+          ) : null}
+
+          {/* Team */}
+          {members.length > 0 ? (
+            <Section title="Team" accent={accent}>
+              <div className="flex flex-wrap gap-2">
+                {members.map((m) => {
+                  const p = byId.get(m.principal_id);
+                  const name = p?.full_name || p?.email || "Member";
+                  return (
+                    <span
+                      key={m.id}
+                      className="rounded-full border border-line bg-surface-0 px-3 py-1.5 text-xs text-fg-secondary print:border-neutral-300 print:bg-white print:text-neutral-700"
+                    >
+                      <span className="font-medium text-fg-primary print:text-black">{name}</span>
+                      {p?.title ? <span className="text-fg-muted print:text-neutral-500"> · {p.title}</span> : null}
+                    </span>
+                  );
+                })}
+              </div>
+            </Section>
+          ) : null}
+
+          {/* Structure */}
+          {entities.length > 0 ? (
+            <Section title="Structure" accent={accent}>
+              <p className="text-sm text-fg-secondary print:text-neutral-700">
+                {entities.map((e) => e.name).join("  ·  ")}
+              </p>
+            </Section>
+          ) : null}
+
+          {/* Materials index */}
+          {documents.length > 0 ? (
+            <Section title="Materials Index" accent={accent}>
+              <div className="flex flex-col gap-3">
+                {DATA_ROOM_SECTIONS.map((s) => {
+                  const docs = docsBySection.get(s.key);
+                  if (!docs?.length) return null;
+                  return (
+                    <div key={s.key}>
+                      <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+                        {s.label}
+                      </p>
+                      <ul className="flex flex-col gap-1">
+                        {docs.map((d) => {
+                          const href = safeHref(d.storage_key);
+                          return (
+                            <li key={d.id} className="text-sm text-fg-secondary print:text-neutral-700">
+                              {href ? (
+                                <a href={href} className="text-fg-primary underline-offset-2 hover:underline print:text-black">
+                                  {d.name}
+                                </a>
+                              ) : (
+                                <span className="text-fg-primary print:text-black">{d.name}</span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          ) : null}
+
+          <footer className="mt-8 border-t border-line pt-4 print:border-neutral-300">
+            <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-400">
+              {org?.legal_name ?? ""}
+              {org?.description ? `  ·  ${org.description}` : ""}
             </p>
-          </Section>
-        ) : null}
-
-        {/* Team */}
-        {members.length > 0 ? (
-          <Section title="Team">
-            <div className="flex flex-wrap gap-2">
-              {members.map((m) => {
-                const p = byId.get(m.principal_id);
-                const name = p?.full_name || p?.email || "Member";
-                return (
-                  <span
-                    key={m.id}
-                    className="rounded-full border border-line bg-surface-0 px-2.5 py-1 text-xs text-fg-secondary print:border-neutral-300 print:bg-white print:text-neutral-700"
-                  >
-                    <span className="text-fg-primary print:text-black">{name}</span>
-                    {p?.title ? <span className="text-fg-muted print:text-neutral-500"> · {p.title}</span> : null}
-                  </span>
-                );
-              })}
-            </div>
-          </Section>
-        ) : null}
-
-        {/* Structure */}
-        {entities.length > 0 ? (
-          <Section title="Structure">
-            <p className="text-sm text-fg-secondary print:text-neutral-700">
-              {entities.map((e) => e.name).join("  ·  ")}
-            </p>
-          </Section>
-        ) : null}
-
-        {/* Materials index — printable list of attached documents by section */}
-        {documents.length > 0 ? (
-          <Section title="Materials Index">
-            <div className="flex flex-col gap-2">
-              {DATA_ROOM_SECTIONS.map((s) => {
-                const docs = docsBySection.get(s.key);
-                if (!docs?.length) return null;
-                return (
-                  <div key={s.key}>
-                    <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
-                      {s.label}
-                    </p>
-                    <ul className="mt-0.5 flex flex-col gap-0.5">
-                      {docs.map((d) => {
-                        const href = safeHref(d.storage_key);
-                        return (
-                          <li key={d.id} className="text-sm text-fg-secondary print:text-neutral-700">
-                            {href ? (
-                              <a href={href} className="text-fg-primary underline-offset-2 hover:underline print:text-black">
-                                {d.name}
-                              </a>
-                            ) : (
-                              <span className="text-fg-primary print:text-black">{d.name}</span>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-          </Section>
-        ) : null}
-
-        <footer className="mt-6 border-t border-line pt-3 print:border-neutral-300">
-          <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-400">
-            {org?.legal_name ?? ""}
-            {org?.description ? `  ·  ${org.description}` : ""}
-          </p>
-        </footer>
+          </footer>
+        </div>
       </article>
 
-      {/* Shareable read-only links */}
-      <ShareControls
-        shares={shares.map((s) => ({
-          id: s.id,
-          token: s.token,
-          label: s.label,
-          expires_at: s.expires_at,
-          revoked_at: s.revoked_at,
-          created_at: s.created_at,
-        }))}
-      />
+      {/* Share + Access */}
+      <div className="mx-auto mt-8 max-w-2xl space-y-8 print:hidden">
+        {/* Share controls */}
+        <ShareControls
+          shares={shares.map((s) => ({
+            id: s.id,
+            token: s.token,
+            label: s.label,
+            expires_at: s.expires_at,
+            revoked_at: s.revoked_at,
+            created_at: s.created_at,
+          }))}
+          activeCount={activeShareCount}
+        />
 
-      {/* Access log */}
-      <div className="mx-auto mt-8 max-w-2xl print:hidden">
-        <h3 className="mb-3 font-display text-lg font-semibold tracking-tight text-fg-primary">Access</h3>
-        {views.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-line bg-surface-1 px-4 py-6 text-center text-sm text-fg-muted">
-            No views yet. Shared links record when the room and its documents are opened.
-          </p>
-        ) : (
-          <div className="flex items-center gap-6 rounded-xl border border-line bg-surface-1 px-4 py-3">
-            <div>
-              <p className="font-display text-xl font-semibold text-fg-primary">{roomOpens}</p>
-              <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Room opens</p>
-            </div>
-            <div>
-              <p className="font-display text-xl font-semibold text-fg-primary">{docOpens}</p>
-              <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Document opens</p>
-            </div>
-            <div className="ml-auto text-right">
-              <p className="text-sm text-fg-primary">{lastViewed}</p>
-              <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Last viewed</p>
-            </div>
+        {/* Access log */}
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">Access</h3>
+            {views.length > 0 ? (
+              <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Last {views.length} events</span>
+            ) : null}
           </div>
-        )}
+          {views.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-line bg-surface-1 px-4 py-8 text-center">
+              <p className="text-sm text-fg-muted">No views yet.</p>
+              <p className="mt-1 text-xs text-fg-muted/70">Shared links record when the room and its documents are opened.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3 rounded-xl border border-line bg-surface-1 p-4">
+              <div className="text-center">
+                <p className="font-display text-2xl font-semibold text-fg-primary">{roomOpens}</p>
+                <p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Room opens</p>
+              </div>
+              <div className="text-center">
+                <p className="font-display text-2xl font-semibold text-fg-primary">{docOpens}</p>
+                <p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Doc opens</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-fg-primary">{lastViewed}</p>
+                <p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Last viewed</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
