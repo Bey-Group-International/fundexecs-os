@@ -30,9 +30,12 @@ export class VirtualOfficeSocket {
   private intentionallyClosed = false;
   private status: ConnectionStatus = "disconnected";
 
-  connect(token: string, roomId = "office-main"): void {
+  private characterId: string = "player_default";
+
+  connect(token: string, roomId = "office-main", characterId = "player_default"): void {
     this.token = token;
     this.roomId = roomId;
+    this.characterId = characterId;
     this.intentionallyClosed = false;
     this.retryCount = 0;
     this._openSocket();
@@ -79,7 +82,7 @@ export class VirtualOfficeSocket {
   // ─── Private ────────────────────────────────────────────────────────────────
 
   private _openSocket(): void {
-    const url = `${WS_URL_BASE}?roomId=${encodeURIComponent(this.roomId)}&token=${encodeURIComponent(this.token)}`;
+    const url = `${WS_URL_BASE}?roomId=${encodeURIComponent(this.roomId)}&token=${encodeURIComponent(this.token)}&characterId=${encodeURIComponent(this.characterId)}`;
 
     try {
       this.ws = new WebSocket(url);

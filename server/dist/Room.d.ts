@@ -6,6 +6,8 @@ import { SfuRoom } from "./SfuRoom";
 export interface SocketData {
     playerId: string;
     roomId: string;
+    displayName: string;
+    characterId: string;
 }
 export declare class Room {
     readonly roomId: string;

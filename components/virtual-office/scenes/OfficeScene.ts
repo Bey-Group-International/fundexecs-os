@@ -16,6 +16,8 @@ import { VirtualOfficeSocket, type ConnectionStatus } from "../net/VirtualOffice
 import type { Facing, RemotePlayer, ServerMessage } from "../net/messages";
 import { MeshManager } from "../rtc/MeshManager";
 import { SfuManager } from "../rtc/SfuManager";
+import { executiveCharacters } from "../../characters/characterConfig";
+import { spriteFrameMaps } from "../../characters/spriteFrameMap";
 
 // ─── Room label overlay ────────────────────────────────────────────────────────
 
@@ -27,11 +29,13 @@ type RemoteAvatarState = {
   targetX: number;
   targetY: number;
   facing: Facing;
+  spriteKey: string;
 };
 
 /** Data passed from VirtualOfficeGame into the scene via scene.init() */
 export type OfficeSceneInitData = {
   token?: string;
+  characterId?: string;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -45,13 +49,20 @@ function playerIdToHue(id: string): number {
   return (h % 360);
 }
 
-function facingToAnimKey(facing: Facing): string {
+function spritePrefix(spriteKey: string): string {
+  if (spriteKey === "earnest-fundmaker") return "earnest";
+  if (executiveCharacters.some((c) => c.id === spriteKey && c.spriteSheet)) return "exec";
+  return "earnest";
+}
+
+function facingToAnimKey(facing: Facing, spriteKey = "earnest-fundmaker"): string {
+  const p = spritePrefix(spriteKey);
   switch (facing) {
-    case "down":  return "earnest-walkDown";
-    case "up":    return "earnest-walkUp";
-    case "left":  return "earnest-walkLeft";
-    case "right": return "earnest-walkRight";
-    default:      return "earnest-idle";
+    case "down":  return `${p}-walkDown`;
+    case "up":    return `${p}-walkUp`;
+    case "left":  return `${p}-walkLeft`;
+    case "right": return `${p}-walkRight`;
+    default:      return `${p}-idle`;
   }
 }
 
@@ -85,6 +96,8 @@ export class OfficeScene extends Phaser.Scene {
   // M4 — SFU
   private sfu: SfuManager | null = null;
   private sfuMode = false;
+  // M5 — character identity
+  private myCharacterId = "player_default";
   private remotePlayers = new Map<string, RemoteAvatarState>();
   private moveSeq = 0;
   /** seq number of the last server-acknowledged move for local reconciliation */
@@ -102,11 +115,12 @@ export class OfficeScene extends Phaser.Scene {
   // ── init ────────────────────────────────────────────────────────────────────
 
   init(data: OfficeSceneInitData) {
+    if (data?.characterId) this.myCharacterId = data.characterId;
     if (data?.token) {
       this.socket = new VirtualOfficeSocket();
       this.socket.onMessage((msg: ServerMessage) => this._handleServerMessage(msg));
       this.socket.onStatusChange((s: ConnectionStatus) => this._updateNetDot(s));
-      this.socket.connect(data.token);
+      this.socket.connect(data.token, "office-main", this.myCharacterId);
 
       // M3: MeshManager sends RTC signalling through the socket
       const sock = this.socket;
@@ -130,11 +144,23 @@ export class OfficeScene extends Phaser.Scene {
       this.load.image(room.key, room.imagePath);
     }
 
-    // Player sprite sheet (Earnest Fundmaker: 32×32 frames, 8 rows × 4–6 frames)
-    this.load.spritesheet("earnest", "/assets/fundexecs/characters/earnest-fundmaker/sprite.png", {
-      frameWidth: 32,
-      frameHeight: 32,
+    // Earnest Fundmaker sprite sheet (32×32 frames)
+    const earnestMap = spriteFrameMaps.earnest;
+    this.load.spritesheet("earnest", "/assets/fundexecs/characters/earnest-fundmaker/earnest-fundmaker.png", {
+      frameWidth: earnestMap.frameWidth,
+      frameHeight: earnestMap.frameHeight,
     });
+
+    // Executive sprite sheets (16×32 frames) — only those with a spriteSheet path
+    const execMap = spriteFrameMaps.executive;
+    for (const ch of executiveCharacters) {
+      if (ch.spriteSheet && ch.frameMapKind === "executive") {
+        this.load.spritesheet(ch.id, ch.spriteSheet, {
+          frameWidth: execMap.frameWidth,
+          frameHeight: execMap.frameHeight,
+        });
+      }
+    }
   }
 
   // ── create ──────────────────────────────────────────────────────────────────
@@ -261,43 +287,70 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private _createPlayer() {
-    // Spawn in CEO room center
     const spawnX = ROOM_W / 2;
     const spawnY = ROOM_H / 2;
-    this.player = this.physics.add.sprite(spawnX, spawnY, "earnest");
-    this.player.setScale(2);
+    const textureKey = this._textureKeyForCharacter(this.myCharacterId);
+    const frameMap = spriteFrameMaps[this._frameMapKindForCharacter(this.myCharacterId)];
+    this.player = this.physics.add.sprite(spawnX, spawnY, textureKey);
+    this.player.setScale(frameMap.scale);
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
-    // Physics body slightly smaller than the visual frame
     this.player.setBodySize(20, 20);
     this.player.setOffset(6, 12);
 
     this.physics.add.collider(this.player, this.walls);
   }
 
+  private _textureKeyForCharacter(characterId: string): string {
+    if (characterId === "earnest-fundmaker") return "earnest";
+    const ch = executiveCharacters.find((c) => c.id === characterId);
+    if (ch?.spriteSheet && this.textures.exists(characterId)) return characterId;
+    return "earnest";
+  }
+
+  private _frameMapKindForCharacter(characterId: string): "earnest" | "executive" {
+    if (characterId === "earnest-fundmaker") return "earnest";
+    const ch = executiveCharacters.find((c) => c.id === characterId);
+    return ch?.frameMapKind ?? "earnest";
+  }
+
   private _createAnimations() {
     const fps = 8;
-    // Sprite sheet is 512×512 at 32px/frame = 16 frames per row
-    const FRAMES_PER_ROW = 16;
-    const frames = (row: number, count: number) =>
-      Array.from({ length: count }, (_, i) => ({ key: "earnest", frame: row * FRAMES_PER_ROW + i }));
 
-    const defs: Array<{ key: string; row: number; frames: number }> = [
-      { key: "earnest-idle",      row: ANIM_ROWS.idle,      frames: 4 },
-      { key: "earnest-walkDown",  row: ANIM_ROWS.walkDown,  frames: 4 },
-      { key: "earnest-walkUp",    row: ANIM_ROWS.walkUp,    frames: 4 },
-      { key: "earnest-walkLeft",  row: ANIM_ROWS.walkLeft,  frames: 4 },
-      { key: "earnest-walkRight", row: ANIM_ROWS.walkRight, frames: 4 },
-    ];
+    const makeAnims = (textureKey: string, prefix: string, framesPerRow: number) => {
+      const defs = [
+        { suffix: "idle",      row: ANIM_ROWS.idle },
+        { suffix: "walkDown",  row: ANIM_ROWS.walkDown },
+        { suffix: "walkUp",    row: ANIM_ROWS.walkUp },
+        { suffix: "walkLeft",  row: ANIM_ROWS.walkLeft },
+        { suffix: "walkRight", row: ANIM_ROWS.walkRight },
+      ];
+      for (const def of defs) {
+        const key = `${prefix}-${def.suffix}`;
+        if (!this.anims.exists(key)) {
+          this.anims.create({
+            key,
+            frames: Array.from({ length: 4 }, (_, i) => ({
+              key: textureKey,
+              frame: def.row * framesPerRow + i,
+            })),
+            frameRate: fps,
+            repeat: -1,
+          });
+        }
+      }
+    };
 
-    for (const def of defs) {
-      if (!this.anims.exists(def.key)) {
-        this.anims.create({
-          key: def.key,
-          frames: frames(def.row, def.frames),
-          frameRate: fps,
-          repeat: -1,
-        });
+    // Earnest: 32×32 frames → 512px sheet → 16 frames/row
+    makeAnims("earnest", "earnest", 512 / spriteFrameMaps.earnest.frameWidth);
+
+    // Executive: 16×32 frames — determine frames/row from actual texture width
+    for (const ch of executiveCharacters) {
+      if (ch.spriteSheet && ch.frameMapKind === "executive" && this.textures.exists(ch.id)) {
+        const tex = this.textures.get(ch.id);
+        const src = tex.getSourceImage() as HTMLImageElement;
+        const framesPerRow = Math.floor(src.width / spriteFrameMaps.executive.frameWidth);
+        makeAnims(ch.id, "exec", framesPerRow);
       }
     }
   }
@@ -389,11 +442,11 @@ export class OfficeScene extends Phaser.Scene {
     this.player.setVelocity(vx, vy);
 
     // Animation
-    if (vx < 0)      this.player.anims.play("earnest-walkLeft",  true);
-    else if (vx > 0) this.player.anims.play("earnest-walkRight", true);
-    else if (vy < 0) this.player.anims.play("earnest-walkUp",    true);
-    else if (vy > 0) this.player.anims.play("earnest-walkDown",  true);
-    else             this.player.anims.play("earnest-idle",      true);
+    if (vx < 0)      this.player.anims.play(facingToAnimKey("left",  this.myCharacterId), true);
+    else if (vx > 0) this.player.anims.play(facingToAnimKey("right", this.myCharacterId), true);
+    else if (vy < 0) this.player.anims.play(facingToAnimKey("up",    this.myCharacterId), true);
+    else if (vy > 0) this.player.anims.play(facingToAnimKey("down",  this.myCharacterId), true);
+    else             this.player.anims.play(facingToAnimKey("idle",  this.myCharacterId), true);
 
     // Send movement to server (client-side prediction — we already applied locally)
     if (this.socket && (vx !== 0 || vy !== 0)) {
@@ -471,17 +524,24 @@ export class OfficeScene extends Phaser.Scene {
     if (remote.id === this.myPlayerId) return;
     if (this.remotePlayers.has(remote.id)) return;
 
-    const sprite = this.physics.add.sprite(remote.x, remote.y, "earnest");
-    sprite.setScale(2);
-    sprite.setDepth(9); // one below local player
+    const spriteKey = remote.spriteKey ?? "player_default";
+    const textureKey = this._textureKeyForCharacter(spriteKey);
+    const frameMap = spriteFrameMaps[this._frameMapKindForCharacter(spriteKey)];
+
+    const sprite = this.physics.add.sprite(remote.x, remote.y, textureKey);
+    sprite.setScale(frameMap.scale);
+    sprite.setDepth(9);
     sprite.setBodySize(20, 20);
     sprite.setOffset(6, 12);
-    // Tint with a unique hue per player
-    const hue = playerIdToHue(remote.id);
-    const color = Phaser.Display.Color.HSVColorWheel()[Math.round(hue / 360 * 359)];
-    sprite.setTint(color.color);
 
-    // Add collider against walls (for future proximity detection)
+    // Only tint unknown players; identified executives render with their own colours
+    const isIdentified = executiveCharacters.some((c) => c.id === spriteKey && c.spriteSheet);
+    if (!isIdentified) {
+      const hue = playerIdToHue(remote.id);
+      const color = Phaser.Display.Color.HSVColorWheel()[Math.round(hue / 360 * 359)];
+      sprite.setTint(color.color);
+    }
+
     this.physics.add.collider(sprite, this.walls);
 
     const label = this.add.text(remote.x, remote.y - 28, remote.name, {
@@ -494,7 +554,7 @@ export class OfficeScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(11);
 
-    sprite.anims.play(facingToAnimKey(remote.facing), true);
+    sprite.anims.play(facingToAnimKey(remote.facing, spriteKey), true);
 
     this.remotePlayers.set(remote.id, {
       sprite,
@@ -502,6 +562,7 @@ export class OfficeScene extends Phaser.Scene {
       targetX: remote.x,
       targetY: remote.y,
       facing: remote.facing,
+      spriteKey,
     });
   }
 
@@ -552,7 +613,7 @@ export class OfficeScene extends Phaser.Scene {
             state.targetY = msg.y;
             if (state.facing !== msg.facing) {
               state.facing = msg.facing;
-              state.sprite.anims.play(facingToAnimKey(msg.facing), true);
+              state.sprite.anims.play(facingToAnimKey(msg.facing, state.spriteKey), true);
             }
           }
         }

@@ -21,9 +21,11 @@ type VirtualOfficeGameProps = {
   token?: string;
   /** Display name of the local user, shown on the self video tile. */
   displayName?: string;
+  /** Executive character id from characterConfig (e.g. "earnest-fundmaker"). */
+  characterId?: string;
 };
 
-export function VirtualOfficeGame({ token, displayName = "You" }: VirtualOfficeGameProps) {
+export function VirtualOfficeGame({ token, displayName = "You", characterId }: VirtualOfficeGameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -97,7 +99,7 @@ export function VirtualOfficeGame({ token, displayName = "You" }: VirtualOfficeG
         });
 
         if (token) {
-          const initData: OfficeSceneInitData = { token };
+          const initData: OfficeSceneInitData = { token, characterId };
           game.events.once("ready", () => {
             game?.scene.getScene("OfficeScene")?.scene.restart(initData);
           });
