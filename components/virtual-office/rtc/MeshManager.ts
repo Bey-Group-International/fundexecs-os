@@ -1,9 +1,20 @@
 import type { RtcOfferClientMessage, RtcAnswerClientMessage, RtcIceClientMessage, RtcLeaveClientMessage } from "../net/messages";
 
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-];
+function buildIceServers(): RTCIceServer[] {
+  const servers: RTCIceServer[] = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ];
+  const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
+  if (turnUrl) {
+    servers.push({
+      urls: turnUrl,
+      username: process.env.NEXT_PUBLIC_TURN_USERNAME ?? "",
+      credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL ?? "",
+    });
+  }
+  return servers;
+}
 
 // Spatial audio: full volume inside bubble radius, fade to silence at exit radius
 const BUBBLE_RADIUS_PX = 160;
@@ -137,7 +148,7 @@ export class MeshManager {
   }
 
   private _createPeer(peerId: string): void {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers: buildIceServers() });
     const state: PeerState = { pc, gainNode: null, audioEl: null, videoEl: null };
     this.peers.set(peerId, state);
 

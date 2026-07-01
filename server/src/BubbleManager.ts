@@ -2,7 +2,8 @@ import { v4 as uuidv4 } from "uuid";
 
 export const BUBBLE_RADIUS = 160;
 export const EXIT_RADIUS = 200; // BUBBLE_RADIUS + HYSTERESIS
-export const MAX_BUBBLE_SIZE = 4;
+export const MESH_MAX = 4;       // P2P mesh up to this size
+export const BUBBLE_HARD_CAP = 20; // absolute maximum per bubble
 const CELL_SIZE = BUBBLE_RADIUS; // coarse grid cell
 
 interface PlayerPos {
@@ -139,12 +140,12 @@ export class BubbleManager {
         events.push(...this.createBubble(id, cid));
       } else if (myBid && !theirBid) {
         const bubble = this.bubbles.get(myBid)!;
-        if (bubble.members.size < MAX_BUBBLE_SIZE) {
+        if (bubble.members.size < BUBBLE_HARD_CAP) {
           events.push(...this.addToBubble(myBid, cid));
         }
       } else if (!myBid && theirBid) {
         const bubble = this.bubbles.get(theirBid)!;
-        if (bubble.members.size < MAX_BUBBLE_SIZE) {
+        if (bubble.members.size < BUBBLE_HARD_CAP) {
           events.push(...this.addToBubble(theirBid, id));
         }
       } else if (myBid && theirBid) {
@@ -188,7 +189,7 @@ export class BubbleManager {
   private tryMerge(bidA: string, bidB: string): BubbleEvent[] {
     const a = this.bubbles.get(bidA)!;
     const b = this.bubbles.get(bidB)!;
-    if (a.members.size + b.members.size > MAX_BUBBLE_SIZE) return [];
+    if (a.members.size + b.members.size > BUBBLE_HARD_CAP) return [];
 
     // Merge b into a
     const events: BubbleEvent[] = [];

@@ -9,6 +9,7 @@
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.0",
+    "mediasoup-client": "^3.21.0",
     "next": "14.2.35",
     "phaser": "^4.2.0",
     "react": "^18.3.1",

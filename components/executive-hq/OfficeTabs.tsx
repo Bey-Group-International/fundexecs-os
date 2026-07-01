@@ -36,7 +36,7 @@ export function OfficeTabs() {
         <TabButton active={tab === "virtual"} onClick={() => setTab("virtual")}>
           Virtual Office
           <span className="ml-2 text-[9px] bg-amber-400/20 text-amber-400 border border-amber-400/30 rounded px-1 py-0.5 font-mono uppercase tracking-wide">
-            M3
+            M4
           </span>
         </TabButton>
       </div>

@@ -1,6 +1,7 @@
 export declare const BUBBLE_RADIUS = 160;
 export declare const EXIT_RADIUS = 200;
-export declare const MAX_BUBBLE_SIZE = 4;
+export declare const MESH_MAX = 4;
+export declare const BUBBLE_HARD_CAP = 20;
 export interface BubbleEvent {
     type: "join" | "leave" | "update";
     bubbleId: string;

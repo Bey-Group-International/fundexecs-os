@@ -50,6 +50,10 @@ export class VirtualOfficeSocket {
     this._send(msg);
   }
 
+  sendSfu(msg: import("./messages").SfuGetCapsMessage | import("./messages").SfuCreateTransportMessage | import("./messages").SfuConnectTransportMessage | import("./messages").SfuProduceMessage | import("./messages").SfuGetProducersMessage | import("./messages").SfuConsumeMessage | import("./messages").SfuResumeConsumerMessage | import("./messages").SfuLeaveMessage): void {
+    this._send(msg);
+  }
+
   onMessage(handler: MessageHandler): void {
     this.messageHandlers.push(handler);
   }

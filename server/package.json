@@ -11,8 +11,9 @@
     "@fundexecs/virtual-office-shared": "*",
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.2",
-    "uWebSockets.js": "uNetworking/uWebSockets.js#v20.49.0",
+    "mediasoup": "^3.20.10",
     "uuid": "^11.1.0",
+    "uWebSockets.js": "uNetworking/uWebSockets.js#v20.49.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

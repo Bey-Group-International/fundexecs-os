@@ -405,6 +405,237 @@ export declare const RtcIceServerSchema: z.ZodObject<{
     candidate?: unknown;
 }>;
 export type RtcIceServer = z.infer<typeof RtcIceServerSchema>;
+export declare const SfuGetCapsSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.get-caps">;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.get-caps";
+}, {
+    type: "sfu.get-caps";
+}>;
+export declare const SfuCreateTransportSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.create-transport">;
+    direction: z.ZodEnum<["send", "recv"]>;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.create-transport";
+    direction: "send" | "recv";
+}, {
+    type: "sfu.create-transport";
+    direction: "send" | "recv";
+}>;
+export declare const SfuConnectTransportSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.connect-transport">;
+    transportId: z.ZodString;
+    direction: z.ZodEnum<["send", "recv"]>;
+    dtlsParameters: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.connect-transport";
+    direction: "send" | "recv";
+    transportId: string;
+    dtlsParameters?: unknown;
+}, {
+    type: "sfu.connect-transport";
+    direction: "send" | "recv";
+    transportId: string;
+    dtlsParameters?: unknown;
+}>;
+export declare const SfuProduceSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.produce">;
+    transportId: z.ZodString;
+    kind: z.ZodEnum<["audio", "video"]>;
+    rtpParameters: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.produce";
+    transportId: string;
+    kind: "audio" | "video";
+    rtpParameters?: unknown;
+}, {
+    type: "sfu.produce";
+    transportId: string;
+    kind: "audio" | "video";
+    rtpParameters?: unknown;
+}>;
+export declare const SfuGetProducersSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.get-producers">;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.get-producers";
+}, {
+    type: "sfu.get-producers";
+}>;
+export declare const SfuConsumeSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.consume">;
+    transportId: z.ZodString;
+    producerId: z.ZodString;
+    rtpCapabilities: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.consume";
+    transportId: string;
+    producerId: string;
+    rtpCapabilities?: unknown;
+}, {
+    type: "sfu.consume";
+    transportId: string;
+    producerId: string;
+    rtpCapabilities?: unknown;
+}>;
+export declare const SfuResumeConsumerSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.resume-consumer">;
+    consumerId: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.resume-consumer";
+    consumerId: string;
+}, {
+    type: "sfu.resume-consumer";
+    consumerId: string;
+}>;
+export declare const SfuLeaveSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.leave">;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.leave";
+}, {
+    type: "sfu.leave";
+}>;
+export declare const SfuRouterCapsSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.router-caps">;
+    rtpCapabilities: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.router-caps";
+    rtpCapabilities?: unknown;
+}, {
+    type: "sfu.router-caps";
+    rtpCapabilities?: unknown;
+}>;
+export declare const SfuTransportCreatedSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.transport-created">;
+    direction: z.ZodEnum<["send", "recv"]>;
+    id: z.ZodString;
+    iceParameters: z.ZodUnknown;
+    iceCandidates: z.ZodUnknown;
+    dtlsParameters: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.transport-created";
+    id: string;
+    direction: "send" | "recv";
+    dtlsParameters?: unknown;
+    iceParameters?: unknown;
+    iceCandidates?: unknown;
+}, {
+    type: "sfu.transport-created";
+    id: string;
+    direction: "send" | "recv";
+    dtlsParameters?: unknown;
+    iceParameters?: unknown;
+    iceCandidates?: unknown;
+}>;
+export declare const SfuProducedSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.produced">;
+    producerId: z.ZodString;
+    kind: z.ZodEnum<["audio", "video"]>;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.produced";
+    kind: "audio" | "video";
+    producerId: string;
+}, {
+    type: "sfu.produced";
+    kind: "audio" | "video";
+    producerId: string;
+}>;
+export declare const SfuProducersListSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.producers-list">;
+    producers: z.ZodArray<z.ZodObject<{
+        producerId: z.ZodString;
+        peerId: z.ZodString;
+        kind: z.ZodString;
+    }, "strip", z.ZodTypeAny, {
+        kind: string;
+        producerId: string;
+        peerId: string;
+    }, {
+        kind: string;
+        producerId: string;
+        peerId: string;
+    }>, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.producers-list";
+    producers: {
+        kind: string;
+        producerId: string;
+        peerId: string;
+    }[];
+}, {
+    type: "sfu.producers-list";
+    producers: {
+        kind: string;
+        producerId: string;
+        peerId: string;
+    }[];
+}>;
+export declare const SfuConsumedSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.consumed">;
+    consumerId: z.ZodString;
+    producerId: z.ZodString;
+    kind: z.ZodString;
+    rtpParameters: z.ZodUnknown;
+    paused: z.ZodBoolean;
+    peerId: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.consumed";
+    kind: string;
+    producerId: string;
+    consumerId: string;
+    peerId: string;
+    paused: boolean;
+    rtpParameters?: unknown;
+}, {
+    type: "sfu.consumed";
+    kind: string;
+    producerId: string;
+    consumerId: string;
+    peerId: string;
+    paused: boolean;
+    rtpParameters?: unknown;
+}>;
+export declare const SfuNewProducerSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.new-producer">;
+    peerId: z.ZodString;
+    producerId: z.ZodString;
+    kind: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.new-producer";
+    kind: string;
+    producerId: string;
+    peerId: string;
+}, {
+    type: "sfu.new-producer";
+    kind: string;
+    producerId: string;
+    peerId: string;
+}>;
+export declare const SfuProducerClosedSchema: z.ZodObject<{
+    type: z.ZodLiteral<"sfu.producer-closed">;
+    producerId: z.ZodString;
+    peerId: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.producer-closed";
+    producerId: string;
+    peerId: string;
+}, {
+    type: "sfu.producer-closed";
+    producerId: string;
+    peerId: string;
+}>;
+export declare const BubbleSfuSwitchSchema: z.ZodObject<{
+    type: z.ZodLiteral<"bubble.sfu-switch">;
+    bubbleId: z.ZodString;
+    members: z.ZodArray<z.ZodString, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "bubble.sfu-switch";
+    bubbleId: string;
+    members: string[];
+}, {
+    type: "bubble.sfu-switch";
+    bubbleId: string;
+    members: string[];
+}>;
 export declare const ClientMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
     type: z.ZodLiteral<"player.move">;
     dx: z.ZodNumber;
@@ -471,6 +702,87 @@ export declare const ClientMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
     type: "rtc.leave";
 }, {
     type: "rtc.leave";
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.get-caps">;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.get-caps";
+}, {
+    type: "sfu.get-caps";
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.create-transport">;
+    direction: z.ZodEnum<["send", "recv"]>;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.create-transport";
+    direction: "send" | "recv";
+}, {
+    type: "sfu.create-transport";
+    direction: "send" | "recv";
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.connect-transport">;
+    transportId: z.ZodString;
+    direction: z.ZodEnum<["send", "recv"]>;
+    dtlsParameters: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.connect-transport";
+    direction: "send" | "recv";
+    transportId: string;
+    dtlsParameters?: unknown;
+}, {
+    type: "sfu.connect-transport";
+    direction: "send" | "recv";
+    transportId: string;
+    dtlsParameters?: unknown;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.produce">;
+    transportId: z.ZodString;
+    kind: z.ZodEnum<["audio", "video"]>;
+    rtpParameters: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.produce";
+    transportId: string;
+    kind: "audio" | "video";
+    rtpParameters?: unknown;
+}, {
+    type: "sfu.produce";
+    transportId: string;
+    kind: "audio" | "video";
+    rtpParameters?: unknown;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.get-producers">;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.get-producers";
+}, {
+    type: "sfu.get-producers";
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.consume">;
+    transportId: z.ZodString;
+    producerId: z.ZodString;
+    rtpCapabilities: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.consume";
+    transportId: string;
+    producerId: string;
+    rtpCapabilities?: unknown;
+}, {
+    type: "sfu.consume";
+    transportId: string;
+    producerId: string;
+    rtpCapabilities?: unknown;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.resume-consumer">;
+    consumerId: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.resume-consumer";
+    consumerId: string;
+}, {
+    type: "sfu.resume-consumer";
+    consumerId: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.leave">;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.leave";
+}, {
+    type: "sfu.leave";
 }>]>;
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
@@ -748,6 +1060,140 @@ export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
     type: "rtc.ice";
     from: string;
     candidate?: unknown;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.router-caps">;
+    rtpCapabilities: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.router-caps";
+    rtpCapabilities?: unknown;
+}, {
+    type: "sfu.router-caps";
+    rtpCapabilities?: unknown;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.transport-created">;
+    direction: z.ZodEnum<["send", "recv"]>;
+    id: z.ZodString;
+    iceParameters: z.ZodUnknown;
+    iceCandidates: z.ZodUnknown;
+    dtlsParameters: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.transport-created";
+    id: string;
+    direction: "send" | "recv";
+    dtlsParameters?: unknown;
+    iceParameters?: unknown;
+    iceCandidates?: unknown;
+}, {
+    type: "sfu.transport-created";
+    id: string;
+    direction: "send" | "recv";
+    dtlsParameters?: unknown;
+    iceParameters?: unknown;
+    iceCandidates?: unknown;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.produced">;
+    producerId: z.ZodString;
+    kind: z.ZodEnum<["audio", "video"]>;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.produced";
+    kind: "audio" | "video";
+    producerId: string;
+}, {
+    type: "sfu.produced";
+    kind: "audio" | "video";
+    producerId: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.producers-list">;
+    producers: z.ZodArray<z.ZodObject<{
+        producerId: z.ZodString;
+        peerId: z.ZodString;
+        kind: z.ZodString;
+    }, "strip", z.ZodTypeAny, {
+        kind: string;
+        producerId: string;
+        peerId: string;
+    }, {
+        kind: string;
+        producerId: string;
+        peerId: string;
+    }>, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.producers-list";
+    producers: {
+        kind: string;
+        producerId: string;
+        peerId: string;
+    }[];
+}, {
+    type: "sfu.producers-list";
+    producers: {
+        kind: string;
+        producerId: string;
+        peerId: string;
+    }[];
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.consumed">;
+    consumerId: z.ZodString;
+    producerId: z.ZodString;
+    kind: z.ZodString;
+    rtpParameters: z.ZodUnknown;
+    paused: z.ZodBoolean;
+    peerId: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.consumed";
+    kind: string;
+    producerId: string;
+    consumerId: string;
+    peerId: string;
+    paused: boolean;
+    rtpParameters?: unknown;
+}, {
+    type: "sfu.consumed";
+    kind: string;
+    producerId: string;
+    consumerId: string;
+    peerId: string;
+    paused: boolean;
+    rtpParameters?: unknown;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.new-producer">;
+    peerId: z.ZodString;
+    producerId: z.ZodString;
+    kind: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.new-producer";
+    kind: string;
+    producerId: string;
+    peerId: string;
+}, {
+    type: "sfu.new-producer";
+    kind: string;
+    producerId: string;
+    peerId: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"sfu.producer-closed">;
+    producerId: z.ZodString;
+    peerId: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "sfu.producer-closed";
+    producerId: string;
+    peerId: string;
+}, {
+    type: "sfu.producer-closed";
+    producerId: string;
+    peerId: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"bubble.sfu-switch">;
+    bubbleId: z.ZodString;
+    members: z.ZodArray<z.ZodString, "many">;
+}, "strip", z.ZodTypeAny, {
+    type: "bubble.sfu-switch";
+    bubbleId: string;
+    members: string[];
+}, {
+    type: "bubble.sfu-switch";
+    bubbleId: string;
+    members: string[];
 }>]>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 //# sourceMappingURL=messages.d.ts.map
