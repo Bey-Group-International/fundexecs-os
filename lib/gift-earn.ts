@@ -254,14 +254,16 @@ export async function claimReferralCode(
     .maybeSingle();
   if (already) return null; // already referred — no action, no error
 
-  // Cycle guard
+  // Cycle guard (mirror the typed-node pattern in redeemReferralCode to avoid
+  // implicit-any on the Supabase query builder's return type).
   let cursor: string | null = referrerOrgId;
   for (let i = 0; i < 50 && cursor; i++) {
-    if (cursor === joiningOrgId) return null; // would form a loop — skip silently
+    const node: string = cursor;
+    if (node === joiningOrgId) return null; // would form a loop — skip silently
     const upRes = await service
       .from("referrals")
       .select("referrer_organization_id")
-      .eq("referred_organization_id", cursor)
+      .eq("referred_organization_id", node)
       .maybeSingle();
     cursor = (upRes.data?.referrer_organization_id as string | undefined) ?? null;
   }
