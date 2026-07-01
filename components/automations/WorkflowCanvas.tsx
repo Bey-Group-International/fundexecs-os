@@ -576,7 +576,7 @@ export default function WorkflowCanvas({
               lineHeight: 1.5,
             }}
           >
-            Drag a type onto the canvas to add a node. Click a node's right
+            Drag a type onto the canvas to add a node. Click a node&apos;s right
             handle to connect it.
           </p>
         </div>

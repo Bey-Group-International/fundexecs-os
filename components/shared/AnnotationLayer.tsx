@@ -11,14 +11,9 @@ interface Props {
   children: React.ReactNode;
 }
 
-interface Popover {
-  kind: "new";
-  x_pct: number;
-  y_pct: number;
-} | {
-  kind: "thread";
-  annotationId: string;
-};
+type Popover =
+  | { kind: "new"; x_pct: number; y_pct: number }
+  | { kind: "thread"; annotationId: string };
 
 function pin(a: Annotation) {
   const colors: Record<string, string> = {

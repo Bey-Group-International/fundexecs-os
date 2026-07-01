@@ -192,3 +192,18 @@ export async function overrideStepAgent(
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Re-export pure UI helpers from routing-trace-ui.ts so existing imports
+// from "@/lib/routing-trace" continue to work without pulling next/headers
+// into client bundles. Consumers that import from this file in a server
+// context are fine; the build error arose because Copilot.tsx (client)
+// imported from here transitively.
+// ---------------------------------------------------------------------------
+export {
+  desksForSteps,
+  buildRoutingTrace,
+  buildOutcome,
+  fmtClockTime,
+} from "@/lib/routing-trace-ui";
+export type { TraceState, TraceNode, OutcomeKind, OutcomeSummary } from "@/lib/routing-trace-ui";

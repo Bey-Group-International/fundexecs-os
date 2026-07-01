@@ -42,7 +42,6 @@ export default async function EnvelopeDetailPage({
   // best-effort — if the table hasn't migrated yet we fall through to notFound.
   const [envRes, recipRes, eventsRes] = await Promise.all([
     (supabase as ReturnType<typeof createServerClient> & {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       from(t: string): any;
     })
       .from("signing_envelopes")
@@ -51,7 +50,6 @@ export default async function EnvelopeDetailPage({
       .eq("organization_id", ctx.orgId)
       .maybeSingle(),
     (supabase as ReturnType<typeof createServerClient> & {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       from(t: string): any;
     })
       .from("signing_recipients")
@@ -59,7 +57,6 @@ export default async function EnvelopeDetailPage({
       .eq("envelope_id", params.id)
       .order("routing_order", { ascending: true }),
     (supabase as ReturnType<typeof createServerClient> & {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       from(t: string): any;
     })
       .from("signing_events")

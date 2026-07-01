@@ -153,7 +153,6 @@ export default async function EnvelopesPage() {
   let envelopes: Envelope[] = [];
   try {
     const { data, error } = await (supabase as ReturnType<typeof createServerClient> & {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       from(table: string): any;
     })
       .from("envelopes")
