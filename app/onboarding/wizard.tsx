@@ -128,7 +128,7 @@ export default function OnboardingWizard({
   const [preset, setPreset] = useState<MandatePreset>("draft");
   const [customActions, setCustomActions] = useState<Set<ActionKind>>(new Set());
 
-  const set = (key: keyof FormData, value: string) =>
+  const set = (key: keyof OrgFormData, value: string) =>
     setData((d) => ({ ...d, [key]: value }));
 
   const toggleCustomAction = (kind: ActionKind) =>
