@@ -56,32 +56,6 @@ export declare const PingSchema: z.ZodObject<{
     clientTime: number;
 }>;
 export type Ping = z.infer<typeof PingSchema>;
-export declare const ClientMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
-    type: z.ZodLiteral<"player.move">;
-    dx: z.ZodNumber;
-    dy: z.ZodNumber;
-    seq: z.ZodNumber;
-}, "strip", z.ZodTypeAny, {
-    type: "player.move";
-    dx: number;
-    dy: number;
-    seq: number;
-}, {
-    type: "player.move";
-    dx: number;
-    dy: number;
-    seq: number;
-}>, z.ZodObject<{
-    type: z.ZodLiteral<"ping">;
-    clientTime: z.ZodNumber;
-}, "strip", z.ZodTypeAny, {
-    type: "ping";
-    clientTime: number;
-}, {
-    type: "ping";
-    clientTime: number;
-}>]>;
-export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export declare const WorldSnapshotSchema: z.ZodObject<{
     type: z.ZodLiteral<"world.snapshot">;
     players: z.ZodArray<z.ZodObject<{
@@ -339,6 +313,166 @@ export declare const BubbleUpdateSchema: z.ZodObject<{
     members: string[];
 }>;
 export type BubbleUpdate = z.infer<typeof BubbleUpdateSchema>;
+export declare const RtcOfferClientSchema: z.ZodObject<{
+    type: z.ZodLiteral<"rtc.offer">;
+    to: z.ZodString;
+    sdp: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.offer";
+    to: string;
+    sdp: string;
+}, {
+    type: "rtc.offer";
+    to: string;
+    sdp: string;
+}>;
+export type RtcOfferClient = z.infer<typeof RtcOfferClientSchema>;
+export declare const RtcAnswerClientSchema: z.ZodObject<{
+    type: z.ZodLiteral<"rtc.answer">;
+    to: z.ZodString;
+    sdp: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.answer";
+    to: string;
+    sdp: string;
+}, {
+    type: "rtc.answer";
+    to: string;
+    sdp: string;
+}>;
+export type RtcAnswerClient = z.infer<typeof RtcAnswerClientSchema>;
+export declare const RtcIceClientSchema: z.ZodObject<{
+    type: z.ZodLiteral<"rtc.ice">;
+    to: z.ZodString;
+    candidate: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.ice";
+    to: string;
+    candidate?: unknown;
+}, {
+    type: "rtc.ice";
+    to: string;
+    candidate?: unknown;
+}>;
+export type RtcIceClient = z.infer<typeof RtcIceClientSchema>;
+export declare const RtcLeaveClientSchema: z.ZodObject<{
+    type: z.ZodLiteral<"rtc.leave">;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.leave";
+}, {
+    type: "rtc.leave";
+}>;
+export type RtcLeaveClient = z.infer<typeof RtcLeaveClientSchema>;
+export declare const RtcOfferServerSchema: z.ZodObject<{
+    type: z.ZodLiteral<"rtc.offer">;
+    from: z.ZodString;
+    sdp: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.offer";
+    sdp: string;
+    from: string;
+}, {
+    type: "rtc.offer";
+    sdp: string;
+    from: string;
+}>;
+export type RtcOfferServer = z.infer<typeof RtcOfferServerSchema>;
+export declare const RtcAnswerServerSchema: z.ZodObject<{
+    type: z.ZodLiteral<"rtc.answer">;
+    from: z.ZodString;
+    sdp: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.answer";
+    sdp: string;
+    from: string;
+}, {
+    type: "rtc.answer";
+    sdp: string;
+    from: string;
+}>;
+export type RtcAnswerServer = z.infer<typeof RtcAnswerServerSchema>;
+export declare const RtcIceServerSchema: z.ZodObject<{
+    type: z.ZodLiteral<"rtc.ice">;
+    from: z.ZodString;
+    candidate: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.ice";
+    from: string;
+    candidate?: unknown;
+}, {
+    type: "rtc.ice";
+    from: string;
+    candidate?: unknown;
+}>;
+export type RtcIceServer = z.infer<typeof RtcIceServerSchema>;
+export declare const ClientMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
+    type: z.ZodLiteral<"player.move">;
+    dx: z.ZodNumber;
+    dy: z.ZodNumber;
+    seq: z.ZodNumber;
+}, "strip", z.ZodTypeAny, {
+    type: "player.move";
+    dx: number;
+    dy: number;
+    seq: number;
+}, {
+    type: "player.move";
+    dx: number;
+    dy: number;
+    seq: number;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"ping">;
+    clientTime: z.ZodNumber;
+}, "strip", z.ZodTypeAny, {
+    type: "ping";
+    clientTime: number;
+}, {
+    type: "ping";
+    clientTime: number;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"rtc.offer">;
+    to: z.ZodString;
+    sdp: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.offer";
+    to: string;
+    sdp: string;
+}, {
+    type: "rtc.offer";
+    to: string;
+    sdp: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"rtc.answer">;
+    to: z.ZodString;
+    sdp: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.answer";
+    to: string;
+    sdp: string;
+}, {
+    type: "rtc.answer";
+    to: string;
+    sdp: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"rtc.ice">;
+    to: z.ZodString;
+    candidate: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.ice";
+    to: string;
+    candidate?: unknown;
+}, {
+    type: "rtc.ice";
+    to: string;
+    candidate?: unknown;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"rtc.leave">;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.leave";
+}, {
+    type: "rtc.leave";
+}>]>;
+export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
     type: z.ZodLiteral<"welcome">;
     playerId: z.ZodString;
@@ -578,6 +712,42 @@ export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
     type: "bubble.update";
     bubbleId: string;
     members: string[];
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"rtc.offer">;
+    from: z.ZodString;
+    sdp: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.offer";
+    sdp: string;
+    from: string;
+}, {
+    type: "rtc.offer";
+    sdp: string;
+    from: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"rtc.answer">;
+    from: z.ZodString;
+    sdp: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.answer";
+    sdp: string;
+    from: string;
+}, {
+    type: "rtc.answer";
+    sdp: string;
+    from: string;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"rtc.ice">;
+    from: z.ZodString;
+    candidate: z.ZodUnknown;
+}, "strip", z.ZodTypeAny, {
+    type: "rtc.ice";
+    from: string;
+    candidate?: unknown;
+}, {
+    type: "rtc.ice";
+    from: string;
+    candidate?: unknown;
 }>]>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 //# sourceMappingURL=messages.d.ts.map

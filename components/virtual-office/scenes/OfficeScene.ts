@@ -14,6 +14,7 @@ import {
 } from "../types";
 import { VirtualOfficeSocket, type ConnectionStatus } from "../net/VirtualOfficeSocket";
 import type { Facing, RemotePlayer, ServerMessage } from "../net/messages";
+import { MeshManager } from "../rtc/MeshManager";
 
 // ─── Room label overlay ────────────────────────────────────────────────────────
 
@@ -77,6 +78,9 @@ export class OfficeScene extends Phaser.Scene {
   // M2 — bubble state
   private myBubbleId: string | null = null;
   private bubbleMemberNames: string[] = [];
+
+  // M3 — WebRTC mesh
+  private mesh: MeshManager | null = null;
   private remotePlayers = new Map<string, RemoteAvatarState>();
   private moveSeq = 0;
   /** seq number of the last server-acknowledged move for local reconciliation */
@@ -99,6 +103,13 @@ export class OfficeScene extends Phaser.Scene {
       this.socket.onMessage((msg: ServerMessage) => this._handleServerMessage(msg));
       this.socket.onStatusChange((s: ConnectionStatus) => this._updateNetDot(s));
       this.socket.connect(data.token);
+
+      // M3: MeshManager sends RTC signalling through the socket
+      const sock = this.socket;
+      this.mesh = new MeshManager(
+        (msg) => sock!.sendRtc(msg),
+        (peerId, el) => this.game.events.emit("rtc:video", peerId, el)
+      );
     }
   }
 
@@ -131,6 +142,11 @@ export class OfficeScene extends Phaser.Scene {
     this._createNetDot();
     this._setupCamera();
     this._setupInput();
+
+    // M3: receive local media stream from React wrapper
+    this.game.events.on("rtc:localStream", (stream: MediaStream) => {
+      this.mesh?.setLocalStream(stream);
+    });
   }
 
   // ── update ──────────────────────────────────────────────────────────────────
@@ -139,11 +155,15 @@ export class OfficeScene extends Phaser.Scene {
     this._handleMovement();
     this._updateRoomLabel();
     this._updateRemoteAvatars();
+    this._updateSpatialAudio();
   }
 
   // ── shutdown ─────────────────────────────────────────────────────────────────
 
   shutdown() {
+    this.mesh?.leaveBubble();
+    this.mesh?.stopLocalStream();
+    this.mesh = null;
     this.socket?.disconnect();
     this.socket = null;
   }
@@ -417,6 +437,17 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  private _updateSpatialAudio() {
+    if (!this.mesh) return;
+    for (const [id, state] of this.remotePlayers) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        state.sprite.x, state.sprite.y
+      );
+      this.mesh.updateSpatialGain(id, dist);
+    }
+  }
+
   private _spawnRemotePlayer(remote: RemotePlayer) {
     if (remote.id === this.myPlayerId) return;
     if (this.remotePlayers.has(remote.id)) return;
@@ -514,11 +545,14 @@ export class OfficeScene extends Phaser.Scene {
       }
       case "bubble.join": {
         this.myBubbleId = msg.bubbleId;
-        // Resolve member ids to display names (fall back to id if unknown)
         this.bubbleMemberNames = msg.members
           .filter((id) => id !== this.myPlayerId)
           .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
         this.game.events.emit("bubble:update", this.bubbleMemberNames);
+        // M3: initiate WebRTC mesh
+        if (this.mesh && this.myPlayerId) {
+          void this.mesh.joinBubble(this.myPlayerId, msg.members);
+        }
         break;
       }
       case "bubble.update": {
@@ -527,6 +561,12 @@ export class OfficeScene extends Phaser.Scene {
           .filter((id) => id !== this.myPlayerId)
           .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
         this.game.events.emit("bubble:update", this.bubbleMemberNames);
+        // M3: add any newly joined peers
+        if (this.mesh && this.myPlayerId) {
+          for (const id of msg.members) {
+            if (id !== this.myPlayerId) void this.mesh.addPeer(id);
+          }
+        }
         break;
       }
       case "bubble.leave": {
@@ -534,6 +574,19 @@ export class OfficeScene extends Phaser.Scene {
         this.myBubbleId = null;
         this.bubbleMemberNames = [];
         this.game.events.emit("bubble:update", []);
+        this.mesh?.leaveBubble();
+        break;
+      }
+      case "rtc.offer": {
+        void this.mesh?.handleOffer(msg.from, msg.sdp);
+        break;
+      }
+      case "rtc.answer": {
+        void this.mesh?.handleAnswer(msg.from, msg.sdp);
+        break;
+      }
+      case "rtc.ice": {
+        void this.mesh?.handleIce(msg.from, msg.candidate as RTCIceCandidateInit);
         break;
       }
     }

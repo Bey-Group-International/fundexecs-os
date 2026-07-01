@@ -35,11 +35,7 @@ export const PingSchema = z.object({
 });
 export type Ping = z.infer<typeof PingSchema>;
 
-export const ClientMessageSchema = z.discriminatedUnion("type", [
-  PlayerMoveSchema,
-  PingSchema,
-]);
-export type ClientMessage = z.infer<typeof ClientMessageSchema>;
+// Extended below with RTC variants after those schemas are defined
 
 // Server → Client messages
 export const WorldSnapshotSchema = z.object({
@@ -104,6 +100,67 @@ export const BubbleUpdateSchema = z.object({
 });
 export type BubbleUpdate = z.infer<typeof BubbleUpdateSchema>;
 
+// ─── WebRTC signalling — Client → Server (targeted relay) ────────────────────
+
+export const RtcOfferClientSchema = z.object({
+  type: z.literal("rtc.offer"),
+  to: z.string(),
+  sdp: z.string(),
+});
+export type RtcOfferClient = z.infer<typeof RtcOfferClientSchema>;
+
+export const RtcAnswerClientSchema = z.object({
+  type: z.literal("rtc.answer"),
+  to: z.string(),
+  sdp: z.string(),
+});
+export type RtcAnswerClient = z.infer<typeof RtcAnswerClientSchema>;
+
+export const RtcIceClientSchema = z.object({
+  type: z.literal("rtc.ice"),
+  to: z.string(),
+  candidate: z.unknown(),
+});
+export type RtcIceClient = z.infer<typeof RtcIceClientSchema>;
+
+export const RtcLeaveClientSchema = z.object({
+  type: z.literal("rtc.leave"),
+});
+export type RtcLeaveClient = z.infer<typeof RtcLeaveClientSchema>;
+
+// ─── WebRTC signalling — Server → Client (relayed with `from`) ───────────────
+
+export const RtcOfferServerSchema = z.object({
+  type: z.literal("rtc.offer"),
+  from: z.string(),
+  sdp: z.string(),
+});
+export type RtcOfferServer = z.infer<typeof RtcOfferServerSchema>;
+
+export const RtcAnswerServerSchema = z.object({
+  type: z.literal("rtc.answer"),
+  from: z.string(),
+  sdp: z.string(),
+});
+export type RtcAnswerServer = z.infer<typeof RtcAnswerServerSchema>;
+
+export const RtcIceServerSchema = z.object({
+  type: z.literal("rtc.ice"),
+  from: z.string(),
+  candidate: z.unknown(),
+});
+export type RtcIceServer = z.infer<typeof RtcIceServerSchema>;
+
+export const ClientMessageSchema = z.discriminatedUnion("type", [
+  PlayerMoveSchema,
+  PingSchema,
+  RtcOfferClientSchema,
+  RtcAnswerClientSchema,
+  RtcIceClientSchema,
+  RtcLeaveClientSchema,
+]);
+export type ClientMessage = z.infer<typeof ClientMessageSchema>;
+
 export const ServerMessageSchema = z.discriminatedUnion("type", [
   WelcomeSchema,
   PlayerJoinedSchema,
@@ -114,5 +171,8 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   BubbleJoinSchema,
   BubbleLeaveSchema,
   BubbleUpdateSchema,
+  RtcOfferServerSchema,
+  RtcAnswerServerSchema,
+  RtcIceServerSchema,
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
