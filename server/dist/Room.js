@@ -2,6 +2,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Room = void 0;
 const virtual_office_shared_1 = require("@fundexecs/virtual-office-shared");
+const ROOM_W = 384;
+const ROOM_H = 288;
+const ROOM_COLS = 4;
+const ROOM_GRID = [
+    "ceo", "boardroom", "trading", "research",
+    "legal", "ops", "ops", "marketing",
+    "investor", "reception", "reception", "",
+];
+function getRoomKey(x, y) {
+    const col = Math.min(Math.floor(x / ROOM_W), ROOM_COLS - 1);
+    const row = Math.min(Math.floor(y / ROOM_H), 2);
+    return ROOM_GRID[row * ROOM_COLS + col] ?? "";
+}
 const BubbleManager_1 = require("./BubbleManager");
 const SfuRoom_1 = require("./SfuRoom");
 const NpcManager_1 = require("./NpcManager");
@@ -12,6 +25,8 @@ class Room {
         this.bubbles = new BubbleManager_1.BubbleManager();
         this.sfuRooms = new Map();
         this.sfuBubbles = new Set();
+        this.playerRooms = new Map();
+        this.occupancyCounts = {};
         this.roomId = roomId;
         this.pubsub = pubsub;
         this.worker = worker;
@@ -20,6 +35,25 @@ class Room {
     }
     getNpcSnapshot() {
         return this.npcManager.getSnapshot();
+    }
+    getOccupancy() {
+        return { ...this.occupancyCounts };
+    }
+    _updateOccupancy(playerId, newRoomKey) {
+        const oldRoomKey = this.playerRooms.get(playerId) ?? "";
+        if (oldRoomKey === newRoomKey)
+            return;
+        const counts = { ...this.occupancyCounts };
+        if (oldRoomKey)
+            counts[oldRoomKey] = Math.max(0, (counts[oldRoomKey] ?? 0) - 1);
+        if (newRoomKey)
+            counts[newRoomKey] = (counts[newRoomKey] ?? 0) + 1;
+        this.occupancyCounts = counts;
+        if (newRoomKey)
+            this.playerRooms.set(playerId, newRoomKey);
+        else
+            this.playerRooms.delete(playerId);
+        this.broadcastAll({ type: "room.occupancy", counts });
     }
     close() {
         this.npcManager.stop();
@@ -39,6 +73,7 @@ class Room {
         };
         this.players.set(userId, { player, ws });
         this.bubbles.addPlayer(userId, virtual_office_shared_1.SPAWN_X, virtual_office_shared_1.SPAWN_Y);
+        this._updateOccupancy(userId, getRoomKey(virtual_office_shared_1.SPAWN_X, virtual_office_shared_1.SPAWN_Y));
         return player;
     }
     removePlayer(playerId) {
@@ -58,6 +93,7 @@ class Room {
                 this.sfuBubbles.delete(bubbleId);
             }
         }
+        this._updateOccupancy(playerId, "");
         this.players.delete(playerId);
         const events = this.bubbles.removePlayer(playerId);
         this._dispatchBubbleEvents(events);
@@ -89,6 +125,7 @@ class Room {
         entry.player.facing = facing;
         const bubbleEvents = this.bubbles.updatePosition(playerId, newX, newY);
         this._dispatchBubbleEvents(bubbleEvents);
+        this._updateOccupancy(playerId, getRoomKey(newX, newY));
         return { ...entry.player };
     }
     // ─── SFU accessors ────────────────────────────────────────────────────────────

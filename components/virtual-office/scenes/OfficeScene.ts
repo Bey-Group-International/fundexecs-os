@@ -60,7 +60,7 @@ function playerIdToHue(id: string): number {
 
 function spritePrefix(spriteKey: string): string {
   if (spriteKey === "earnest-fundmaker") return "earnest";
-  if (executiveCharacters.some((c) => c.id === spriteKey && c.spriteSheet)) return "exec";
+  if (executiveCharacters.some((c) => c.id === spriteKey && c.spriteSheet)) return spriteKey;
   return "earnest";
 }
 
@@ -193,6 +193,15 @@ export class OfficeScene extends Phaser.Scene {
       this.mesh?.setLocalStream(stream);
       this.sfu?.setLocalStream(stream);
     });
+
+    // M5c: teleport to a room by key
+    this.game.events.on("office:teleport", (roomKey: string) => {
+      const room = ROOMS.find((r) => r.key === roomKey);
+      if (!room) return;
+      const tx = room.col * ROOM_W + ROOM_W / 2;
+      const ty = room.row * ROOM_H + ROOM_H / 2;
+      this.player.setPosition(tx, ty);
+    });
   }
 
   // ── update ──────────────────────────────────────────────────────────────────
@@ -208,6 +217,7 @@ export class OfficeScene extends Phaser.Scene {
   // ── shutdown ─────────────────────────────────────────────────────────────────
 
   shutdown() {
+    this.game.events.off("office:teleport");
     if (this.sfuMode) {
       this.sfu?.leave();
     } else {
@@ -361,7 +371,7 @@ export class OfficeScene extends Phaser.Scene {
         const tex = this.textures.get(ch.id);
         const src = tex.getSourceImage() as HTMLImageElement;
         const framesPerRow = Math.floor(src.width / spriteFrameMaps.executive.frameWidth);
-        makeAnims(ch.id, "exec", framesPerRow);
+        makeAnims(ch.id, ch.id, framesPerRow);
       }
     }
   }
@@ -777,6 +787,10 @@ export class OfficeScene extends Phaser.Scene {
         } else {
           this._updateNpcState(msg.npcId, msg.x, msg.y, msg.facing, msg.spriteKey);
         }
+        break;
+      }
+      case "room.occupancy": {
+        this.game.events.emit("office:occupancy", msg.counts);
         break;
       }
     }

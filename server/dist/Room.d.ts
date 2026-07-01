@@ -19,8 +19,12 @@ export declare class Room {
     private sfuRooms;
     private sfuBubbles;
     private readonly npcManager;
+    private readonly playerRooms;
+    private occupancyCounts;
     constructor(roomId: string, pubsub: PubSub, worker: mediasoup.types.Worker);
     getNpcSnapshot(): NpcData[];
+    getOccupancy(): Record<string, number>;
+    private _updateOccupancy;
     close(): void;
     addPlayer(ws: WebSocket<SocketData>, userId: string, displayName: string, spriteKey?: string): RemotePlayer;
     removePlayer(playerId: string): void;

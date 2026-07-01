@@ -2,6 +2,22 @@ import type * as mediasoup from "mediasoup";
 import type { WebSocket } from "uWebSockets.js";
 import type { RemotePlayer, ServerMessage, Facing } from "@fundexecs/virtual-office-shared";
 import { WORLD_W, WORLD_H, SPAWN_X, SPAWN_Y } from "@fundexecs/virtual-office-shared";
+
+const ROOM_W = 384;
+const ROOM_H = 288;
+const ROOM_COLS = 4;
+
+const ROOM_GRID: string[] = [
+  "ceo", "boardroom", "trading", "research",
+  "legal", "ops", "ops", "marketing",
+  "investor", "reception", "reception", "",
+];
+
+function getRoomKey(x: number, y: number): string {
+  const col = Math.min(Math.floor(x / ROOM_W), ROOM_COLS - 1);
+  const row = Math.min(Math.floor(y / ROOM_H), 2);
+  return ROOM_GRID[row * ROOM_COLS + col] ?? "";
+}
 import type { PubSub } from "./PubSub";
 import { BubbleManager, MESH_MAX } from "./BubbleManager";
 import { SfuRoom } from "./SfuRoom";
@@ -32,6 +48,8 @@ export class Room {
   private sfuRooms = new Map<string, SfuRoom>();
   private sfuBubbles = new Set<string>();
   private readonly npcManager: NpcManager;
+  private readonly playerRooms = new Map<string, string>();
+  private occupancyCounts: Record<string, number> = {};
 
   constructor(roomId: string, pubsub: PubSub, worker: mediasoup.types.Worker) {
     this.roomId = roomId;
@@ -43,6 +61,25 @@ export class Room {
 
   getNpcSnapshot(): NpcData[] {
     return this.npcManager.getSnapshot();
+  }
+
+  getOccupancy(): Record<string, number> {
+    return { ...this.occupancyCounts };
+  }
+
+  private _updateOccupancy(playerId: string, newRoomKey: string): void {
+    const oldRoomKey = this.playerRooms.get(playerId) ?? "";
+    if (oldRoomKey === newRoomKey) return;
+
+    const counts = { ...this.occupancyCounts };
+    if (oldRoomKey) counts[oldRoomKey] = Math.max(0, (counts[oldRoomKey] ?? 0) - 1);
+    if (newRoomKey) counts[newRoomKey] = (counts[newRoomKey] ?? 0) + 1;
+
+    this.occupancyCounts = counts;
+    if (newRoomKey) this.playerRooms.set(playerId, newRoomKey);
+    else this.playerRooms.delete(playerId);
+
+    this.broadcastAll({ type: "room.occupancy", counts });
   }
 
   close(): void {
@@ -68,6 +105,7 @@ export class Room {
     };
     this.players.set(userId, { player, ws });
     this.bubbles.addPlayer(userId, SPAWN_X, SPAWN_Y);
+    this._updateOccupancy(userId, getRoomKey(SPAWN_X, SPAWN_Y));
     return player;
   }
 
@@ -89,6 +127,7 @@ export class Room {
       }
     }
 
+    this._updateOccupancy(playerId, "");
     this.players.delete(playerId);
     const events = this.bubbles.removePlayer(playerId);
     this._dispatchBubbleEvents(events);
@@ -121,6 +160,7 @@ export class Room {
 
     const bubbleEvents = this.bubbles.updatePosition(playerId, newX, newY);
     this._dispatchBubbleEvents(bubbleEvents);
+    this._updateOccupancy(playerId, getRoomKey(newX, newY));
 
     return { ...entry.player };
   }

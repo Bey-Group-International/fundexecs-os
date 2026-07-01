@@ -253,6 +253,12 @@ export const NpcSnapshotSchema = z.object({
 });
 export type NpcSnapshot = z.infer<typeof NpcSnapshotSchema>;
 
+export const RoomOccupancySchema = z.object({
+  type: z.literal("room.occupancy"),
+  counts: z.record(z.string(), z.number()),
+});
+export type RoomOccupancy = z.infer<typeof RoomOccupancySchema>;
+
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   PlayerMoveSchema,
   PingSchema,
@@ -294,5 +300,6 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   BubbleSfuSwitchSchema,
   NpcStateSchema,
   NpcSnapshotSchema,
+  RoomOccupancySchema,
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;

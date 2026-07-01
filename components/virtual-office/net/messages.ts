@@ -207,6 +207,11 @@ export type NpcSnapshotMessage = {
   npcs: Array<{ npcId: string; x: number; y: number; facing: Facing; spriteKey: string; name: string }>;
 };
 
+export type RoomOccupancyMessage = {
+  type: "room.occupancy";
+  counts: Record<string, number>;
+};
+
 export type ServerMessage =
   | WelcomeMessage
   | PlayerJoinedMessage
@@ -228,4 +233,5 @@ export type ServerMessage =
   | SfuProducerClosedMessage
   | BubbleSfuSwitchMessage
   | NpcStateMessage
-  | NpcSnapshotMessage;
+  | NpcSnapshotMessage
+  | RoomOccupancyMessage;
