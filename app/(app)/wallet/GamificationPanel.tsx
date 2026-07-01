@@ -3,8 +3,8 @@
 // wallet page: streak status, milestone progress, earned credits from execution,
 // and the full hub achievement badge grid.
 import { getSessionContext } from "@/lib/auth";
+import { getGamificationSummary } from "@/lib/gamification-server";
 import {
-  getGamificationSummary,
   currentRank,
   nextMilestone,
   milestoneProgress,

@@ -8,11 +8,7 @@
 // + loss-aversion (streaks you don't want to break) + identity formation
 // (achievement badges that signal "I'm a serious operator").
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createServiceClient } from "@/lib/supabase/server";
-import type { Database, Hub, TeamTaskPriority } from "@/lib/supabase/database.types";
-
-type Client = SupabaseClient<Database>;
+import type { Hub, TeamTaskPriority } from "@/lib/supabase/database.types";
 
 // ─── Base reward table ────────────────────────────────────────────────────────
 // Credits are nominal but psychologically meaningful. Higher-value hubs (Run,
@@ -157,6 +153,8 @@ export function achievementsUnlockedAt(hub: Hub, taskCount: number, priorCount: 
 }
 
 // ─── Reward payload (returned to client for CreditPopup) ──────────────────────
+// Exported here (pure shape, no server imports) so client components can type
+// against it without pulling in next/headers.
 
 export interface TaskRewardPayload {
   base: number;
@@ -171,107 +169,14 @@ export interface TaskRewardPayload {
   hub: Hub;
 }
 
-// ─── Server-side award helper ─────────────────────────────────────────────────
-// Called from the API route after a team_task status transitions to "completed".
-// Uses the service client (bypasses RLS) so it can write streak + milestone rows
-// and call grant_org_credits regardless of the calling user's permissions.
-
-export async function awardTaskCompletion(args: {
-  orgId: string;
-  taskId: string;
-  hub: Hub;
-  priority: TeamTaskPriority;
-}): Promise<TaskRewardPayload | null> {
-  const service = createServiceClient();
-  const base = baseCredits(args.hub, args.priority);
-
-  try {
-    // award_task_credits handles streak + milestone in one DB round-trip.
-    const { data, error } = await service.rpc("award_task_credits", {
-      p_org:          args.orgId,
-      p_task_id:      args.taskId,
-      p_hub:          args.hub,
-      p_priority:     args.priority,
-      p_base_credits: base,
-    });
-
-    if (error || !data) return null;
-
-    const d = data as {
-      base: number;
-      streak_bonus: number;
-      streak: number;
-      streak_mult: number;
-      milestone_hit: number | null;
-      milestone_bonus: number;
-      total_earned: number;
-      new_balance: number;
-      hub: string;
-    };
-
-    // Check hub-level achievement unlocks (compare prior hub task count)
-    const achievementsEarned = await checkHubAchievements(service, args.orgId, args.hub, args.taskId);
-
-    return {
-      base:               d.base,
-      streakBonus:        d.streak_bonus,
-      streak:             d.streak,
-      streakMult:         d.streak_mult,
-      milestoneHit:       d.milestone_hit,
-      milestoneBonus:     d.milestone_bonus,
-      achievementsEarned,
-      totalEarned:        d.total_earned + achievementsEarned.reduce((s, a) => s + a.bonus, 0),
-      newBalance:         d.new_balance,
-      hub:                args.hub as Hub,
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function checkHubAchievements(
-  service: ReturnType<typeof createServiceClient>,
-  orgId: string,
-  hub: Hub,
-  taskId: string,
-): Promise<{ key: string; label: string; bonus: number }[]> {
-  // Count completed team tasks in this hub for this org
-  const { count } = await service
-    .from("team_tasks")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", orgId)
-    .eq("hub", hub)
-    .eq("status", "completed");
-
-  const hubCount = count ?? 0;
-  const priorCount = hubCount - 1; // this task just completed
-
-  const toUnlock = achievementsUnlockedAt(hub, hubCount, priorCount);
-  const earned: { key: string; label: string; bonus: number }[] = [];
-
-  for (const ach of toUnlock) {
-    const { data } = await service.rpc("record_hub_achievement", {
-      p_org:           orgId,
-      p_key:           ach.key,
-      p_hub:           hub,
-      p_label:         ach.label,
-      p_bonus_credits: ach.bonus,
-    });
-    if (data) {
-      earned.push({ key: ach.key, label: ach.label, bonus: ach.bonus });
-    }
-  }
-
-  return earned;
-}
-
-// ─── Wallet-side read helpers ─────────────────────────────────────────────────
+// ─── Wallet-side summary shape ────────────────────────────────────────────────
+// Pure interface — the actual DB fetch lives in lib/gamification-server.ts.
 
 export interface GamificationSummary {
   streak: StreakState;
   totalTasks: number;
   lastMilestone: number;
-  earnedFromExecution: number;     // lifetime credits from task_complete + streak_bonus + milestone_bonus + hub_achievement
+  earnedFromExecution: number;
   achievements: {
     id: string;
     key: string;
@@ -282,63 +187,7 @@ export interface GamificationSummary {
   }[];
 }
 
-export async function getGamificationSummary(orgId: string): Promise<GamificationSummary> {
-  const supabase = createServiceClient();
-
-  const [streakRes, milestoneRes, ledgerRes, achievementsRes] = await Promise.all([
-    supabase
-      .from("execution_streaks")
-      .select("current_streak, longest_streak, last_activity_at, freeze_used_at")
-      .eq("organization_id", orgId)
-      .maybeSingle(),
-
-    supabase
-      .from("execution_milestones")
-      .select("total_tasks, last_milestone")
-      .eq("organization_id", orgId)
-      .maybeSingle(),
-
-    supabase
-      .from("credit_ledger")
-      .select("amount")
-      .eq("organization_id", orgId)
-      .in("reason", ["task_complete", "streak_bonus", "milestone_bonus", "hub_achievement", "quest_complete"])
-      .gt("amount", 0),
-
-    supabase
-      .from("hub_achievements")
-      .select("id, key, hub, label, bonus_credits, earned_at")
-      .eq("organization_id", orgId)
-      .order("earned_at", { ascending: false }),
-  ]);
-
-  const streakData = streakRes.data;
-  const milestoneData = milestoneRes.data;
-  const ledgerRows = ledgerRes.data ?? [];
-  const achievementRows = achievementsRes.data ?? [];
-
-  return {
-    streak: {
-      current:        streakData?.current_streak    ?? 0,
-      longest:        streakData?.longest_streak    ?? 0,
-      lastActivityAt: streakData?.last_activity_at  ?? null,
-      freezeUsedAt:   streakData?.freeze_used_at    ?? null,
-    },
-    totalTasks:          milestoneData?.total_tasks    ?? 0,
-    lastMilestone:       milestoneData?.last_milestone ?? 0,
-    earnedFromExecution: ledgerRows.reduce((s: number, r: { amount: number | null }) => s + (r.amount ?? 0), 0),
-    achievements: achievementRows.map((a: { id: string; key: string; hub: string; label: string; bonus_credits: number; earned_at: string }) => ({
-      id:       a.id,
-      key:      a.key,
-      hub:      a.hub,
-      label:    a.label,
-      bonus:    a.bonus_credits,
-      earnedAt: a.earned_at,
-    })),
-  };
-}
-
-// Whether this week's streak freeze is still available
+// Whether this week's streak freeze is still available (pure, safe anywhere)
 export function freezeAvailable(freezeUsedAt: string | null): boolean {
   if (!freezeUsedAt) return true;
   const used = new Date(freezeUsedAt).getTime();

@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
-import { awardTaskCompletion, baseCredits } from "@/lib/gamification";
+import { awardTaskCompletion } from "@/lib/gamification-server";
 import type { Hub, TeamTaskPriority } from "@/lib/supabase/database.types";
 
 interface AwardBody {
