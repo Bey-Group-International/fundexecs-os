@@ -5,6 +5,7 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
+import { CoachingToastProvider } from "@/components/shared/CoachingToast";
 import {
   createSessionGroup,
   moveSessionToGroup,
@@ -186,6 +187,7 @@ export default async function AppLayout({
       />
       </div>
 
+      <CoachingToastProvider>
       <ActiveSessionProvider>
         <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
           <div className="print:hidden">
@@ -201,6 +203,7 @@ export default async function AppLayout({
           </main>
         </div>
       </ActiveSessionProvider>
+      </CoachingToastProvider>
 
       <div className="print:hidden">
         <GuidedTour orgId={ctx.orgId} initialHidden={orgRow?.setup_hidden ?? false} />

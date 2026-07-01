@@ -130,6 +130,16 @@ const config: Config = {
           "0%":   { backgroundPosition: "200% center" },
           "100%": { backgroundPosition: "-200% center" },
         },
+        // SlidePanel entrance — panel slides in from the right edge.
+        fxSlideInRight: {
+          "0%":   { transform: "translateX(100%)", opacity: "0" },
+          "100%": { transform: "translateX(0)",    opacity: "1" },
+        },
+        // CoachingToast entrance — nudge up from the bottom-left.
+        fxCoachSlideUp: {
+          "0%":   { transform: "translateY(12px)", opacity: "0" },
+          "100%": { transform: "translateY(0)",    opacity: "1" },
+        },
       },
       animation: {
         pulse: "fxPulse 1.6s ease-in-out infinite",
@@ -144,6 +154,8 @@ const config: Config = {
         "milestone-burst": "fxMilestoneBurst 0.55s cubic-bezier(0.22, 1, 0.36, 1) both",
         "badge-reveal": "fxBadgeReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both",
         "mult-shimmer": "fxMultShimmer 2.2s linear infinite",
+        "slide-in-right": "fxSlideInRight 0.3s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "coach-slide-up": "fxCoachSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both",
       },
     },
   },
