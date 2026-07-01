@@ -338,7 +338,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Transcript
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   const transcriptRef = useRef<TranscriptLine[]>([]);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
   const interimIdRef = useRef<string>(crypto.randomUUID());
 
   // Copilot notes
@@ -540,7 +541,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       typeof window !== "undefined"
         ? (window.SpeechRecognition ?? window.webkitSpeechRecognition)
         : undefined
-    ) as typeof SpeechRecognition | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ) as (new () => any) | undefined;
 
     if (!SR) return;
 
