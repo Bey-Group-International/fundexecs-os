@@ -1,12 +1,14 @@
 # M2 — Proximity Grouping Design
 
 ## Goal
+
 When two or more avatars move within `BUBBLE_RADIUS` pixels of each other they
 form a **bubble**.  Bubbles dissolve when all members drift beyond
 `BUBBLE_RADIUS + HYSTERESIS` (a dead-band that prevents flickering on the
 boundary).  No media yet — M2 proves the grouping is correct and stable first.
 
 ## Constants
+
 ```
 BUBBLE_RADIUS   = 160 px   (~5 tiles)  enter threshold
 HYSTERESIS      =  40 px   exit threshold = BUBBLE_RADIUS + HYSTERESIS = 200 px
@@ -14,6 +16,7 @@ MAX_BUBBLE_SIZE =   4       mesh limit (mediasoup kicks in at M4)
 ```
 
 ## Server spatial index
+
 We use a coarse **cell grid** (`CELL_SIZE = BUBBLE_RADIUS`) over the world
 (1152 × 864).  Each player maps to a cell; neighbours are the 3×3 block of
 cells around the player's cell.  This keeps the per-move check O(1) amortised
@@ -26,9 +29,11 @@ On each `player.move` the server:
 4. Runs the **bubble reconciler** (see below).
 
 ## Bubble state machine
+
 Each bubble has a stable UUID and a `Set<playerId>`.
 
 **Reconciler per player (called after every move):**
+
 ```
 closeSet  = {players within BUBBLE_RADIUS of me}
 farSet    = {players I'm currently grouped with but now > EXIT_RADIUS}
@@ -60,12 +65,14 @@ Added to `shared/src/messages.ts`:
 No client→server messages; grouping is fully server-authoritative.
 
 ## Client overlay
+
 A thin React component `BubbleOverlay` renders a pill at the top-right of the
 game canvas listing the display names of everyone in your current bubble.
 State is managed in `VirtualOfficeGame.tsx` via a `bubbleMembers` useState and
 forwarded to the scene via `game.events.emit("bubble:update", members)`.
 
 ## Hysteresis proof
+
 A player ping-ponging on the boundary at radius `R`:
 - enters at `< 160` → join event
 - exits at `> 200` → leave event
@@ -73,7 +80,9 @@ A player ping-ponging on the boundary at radius `R`:
 This produces at most one join/leave pair per crossing, not continuous churn.
 
 ## Not in M2
+
 - Audio / video — M3
 - Spatial audio attenuation — M3
 - mediasoup upgrade — M4
 - Chat — M5
+
