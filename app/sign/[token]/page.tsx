@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 import SigningExperience from "./SigningExperience";
 
 export const dynamic = "force-dynamic";
@@ -17,22 +17,40 @@ export interface SigningData {
 }
 
 async function fetchSigningData(token: string): Promise<SigningData | null> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000");
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) return null;
 
-  try {
-    const res = await fetch(`${baseUrl}/api/sign/${token}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json as SigningData;
-  } catch {
-    return null;
-  }
+  const supabase = createClient(supabaseUrl, serviceKey);
+
+  const { data: recipient, error } = await supabase
+    .from("envelope_recipients")
+    .select(`id, name, email, status, signed_at, envelope_id,
+      envelopes (id, title, document_content, message, status)`)
+    .eq("signing_token", token)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !recipient) return null;
+
+  const env = recipient.envelopes as unknown as {
+    id: string; title: string; document_content: string;
+    message: string | null; status: string;
+  } | null;
+  if (!env || env.status === "voided") return null;
+
+  return {
+    recipientId: recipient.id as string,
+    recipientName: recipient.name as string,
+    recipientEmail: recipient.email as string,
+    documentId: env.id,
+    documentTitle: env.title,
+    documentContent: env.document_content,
+    envelopeId: env.id,
+    signingToken: token,
+    status: recipient.status as string,
+    signedAt: (recipient.signed_at as string | null) ?? null,
+  };
 }
 
 export default async function SignPage({

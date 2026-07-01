@@ -117,15 +117,28 @@ export async function getAnnotationThread(
 ): Promise<Annotation[]> {
   const supabase = createServerClient();
 
-  const { data, error } = await supabase
-    .from("annotations")
-    .select("*")
-    .or(`id.eq.${parentId},parent_id.eq.${parentId}`)
-    .order("created_at", { ascending: true });
+  // Use two parameterized queries instead of raw .or() string interpolation
+  // to avoid PostgREST filter injection via a crafted parentId value.
+  const [rootRes, repliesRes] = await Promise.all([
+    supabase.from("annotations").select("*").eq("id", parentId),
+    supabase.from("annotations").select("*").eq("parent_id", parentId),
+  ]);
 
-  if (error) {
-    throw new Error(`Failed to get annotation thread: ${error.message}`);
+  if (rootRes.error) {
+    throw new Error(`Failed to get annotation root: ${rootRes.error.message}`);
+  }
+  if (repliesRes.error) {
+    throw new Error(`Failed to get annotation replies: ${repliesRes.error.message}`);
   }
 
-  return (data ?? []) as Annotation[];
+  const seen = new Set<string>();
+  const rows: Annotation[] = [];
+  for (const row of [...(rootRes.data ?? []), ...(repliesRes.data ?? [])]) {
+    if (!seen.has(row.id)) {
+      seen.add(row.id);
+      rows.push(row as Annotation);
+    }
+  }
+  rows.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return rows;
 }
