@@ -1,4 +1,8 @@
 {
+  "workspaces": [
+    "shared",
+    "server"
+  ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.0",
     "@stripe/react-stripe-js": "^6.6.0",

@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { ExecutiveHQ } from "./ExecutiveHQ";
 
 // Load Phaser only in the browser
@@ -14,6 +15,16 @@ type Tab = "hq" | "virtual";
 
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("hq");
+  const [token, setToken] = useState<string | undefined>(undefined);
+
+  // Fetch Supabase access token once on mount — enables multiplayer when WS server is up
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => {
+      const t = data.session?.access_token;
+      if (t) setToken(t);
+    });
+  }, []);
 
   return (
     <div>
@@ -25,7 +36,7 @@ export function OfficeTabs() {
         <TabButton active={tab === "virtual"} onClick={() => setTab("virtual")}>
           Virtual Office
           <span className="ml-2 text-[9px] bg-amber-400/20 text-amber-400 border border-amber-400/30 rounded px-1 py-0.5 font-mono uppercase tracking-wide">
-            M0
+            M1
           </span>
         </TabButton>
       </div>
@@ -35,7 +46,7 @@ export function OfficeTabs() {
         <ExecutiveHQ />
       </div>
       <div className={tab === "virtual" ? "block p-4" : "hidden"}>
-        <VirtualOfficeGame />
+        <VirtualOfficeGame token={token} />
       </div>
     </div>
   );
