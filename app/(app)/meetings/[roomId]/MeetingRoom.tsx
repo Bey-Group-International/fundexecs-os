@@ -466,14 +466,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // Get or create meeting
     let mId: string | null = null;
     try {
-      const { data: existing } = await supabase
+      const { data: existingRaw } = await supabase
         .from("live_meetings")
         .select("id, status")
         .eq("room_code", roomCode)
         .single();
 
+      const existing = existingRaw as { id: string; status: string } | null;
       if (existing) {
-        mId = existing.id as string;
+        mId = existing.id;
         if (existing.status === "ended") {
           router.push(`/meetings/${roomCode}/report`);
           return;
