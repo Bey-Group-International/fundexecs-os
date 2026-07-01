@@ -11,6 +11,7 @@ export type ProfileValues = {
   legal_name: string;
   entity_type: string;
   tagline: string;
+  logo_url: string;
   jurisdiction: string;
   website: string;
   description: string;
@@ -199,6 +200,16 @@ export function ProfileForm({
               onChange={(e) => set("tagline")(e.target.value)}
               maxLength={120}
               placeholder="e.g., Institutional capital for tomorrow's infrastructure"
+              className={`${inputClass} bg-surface-1`}
+            />
+          </Field>
+          <Field label="Logo URL">
+            <input
+              name="logo_url"
+              type="url"
+              value={form.logo_url}
+              onChange={(e) => set("logo_url")(e.target.value)}
+              placeholder="https://cdn.example.com/logo.png"
               className={`${inputClass} bg-surface-1`}
             />
           </Field>
