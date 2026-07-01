@@ -1,0 +1,40 @@
+import { createGateway } from "./gateway";
+import { RoomManager } from "./RoomManager";
+import { AuthService } from "./AuthService";
+import { PubSub } from "./PubSub";
+
+const PORT = parseInt(process.env["PORT"] ?? "4000", 10);
+const REDIS_URL = process.env["REDIS_URL"] ?? "redis://localhost:6379";
+const SUPABASE_URL = process.env["SUPABASE_URL"] ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+
+async function main() {
+  const pubsub = new PubSub(REDIS_URL);
+  const roomManager = new RoomManager(pubsub);
+  const authService = new AuthService(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  const app = createGateway(roomManager, authService);
+
+  // HTTP health check
+  app.get("/health", (res) => {
+    res.writeStatus("200").writeHeader("Content-Type", "application/json").end(
+      JSON.stringify({ status: "ok", ts: Date.now() })
+    );
+  });
+
+  app.listen(PORT, (token) => {
+    if (token) {
+      console.log(`Virtual Office WS server listening on port ${PORT}`);
+      console.log(`WebSocket: ws://0.0.0.0:${PORT}/ws?roomId=<id>&token=<jwt>`);
+      console.log(`Health: http://0.0.0.0:${PORT}/health`);
+    } else {
+      console.error(`Failed to listen on port ${PORT}`);
+      process.exit(1);
+    }
+  });
+}
+
+main().catch((err) => {
+  console.error("Fatal error:", err);
+  process.exit(1);
+});
