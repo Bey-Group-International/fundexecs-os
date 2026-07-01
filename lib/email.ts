@@ -97,12 +97,28 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
   return { ok: false, channel: "in-app", detail: "no email provider configured" };
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function buildSigningInvitationHtml(args: {
   recipientName: string;
   documentTitle: string;
   message?: string | null;
   signingLink: string;
 }): string {
+  const name = escapeHtml(args.recipientName);
+  const title = escapeHtml(args.documentTitle);
+  const msg = args.message ? escapeHtml(args.message) : null;
+  // signingLink must be a valid https URL; reject anything else to prevent javascript: injection.
+  const safeLink = /^https:\/\//i.test(args.signingLink) ? args.signingLink : "#";
+  const linkEscaped = escapeHtml(safeLink);
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -112,17 +128,17 @@ export function buildSigningInvitationHtml(args: {
 <body style="font-family: sans-serif; background: #f9fafb; margin: 0; padding: 40px 20px;">
   <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 8px; padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     <h1 style="font-size: 20px; color: #111827; margin: 0 0 16px;">You have a document to sign</h1>
-    <p style="color: #374151; font-size: 15px; margin: 0 0 8px;">Hi ${args.recipientName},</p>
+    <p style="color: #374151; font-size: 15px; margin: 0 0 8px;">Hi ${name},</p>
     <p style="color: #374151; font-size: 15px; margin: 0 0 24px;">
-      You have been asked to review and sign: <strong>${args.documentTitle}</strong>.
+      You have been asked to review and sign: <strong>${title}</strong>.
     </p>
-    ${args.message ? `<p style="color: #6b7280; font-size: 14px; background: #f3f4f6; border-left: 3px solid #d1d5db; padding: 12px 16px; margin: 0 0 24px; border-radius: 4px;">${args.message}</p>` : ""}
-    <a href="${args.signingLink}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 15px; font-weight: 600;">
+    ${msg ? `<p style="color: #6b7280; font-size: 14px; background: #f3f4f6; border-left: 3px solid #d1d5db; padding: 12px 16px; margin: 0 0 24px; border-radius: 4px;">${msg}</p>` : ""}
+    <a href="${linkEscaped}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 15px; font-weight: 600;">
       Review &amp; Sign Document
     </a>
     <p style="color: #9ca3af; font-size: 12px; margin: 32px 0 0;">
       If the button doesn't work, copy and paste this link into your browser:<br />
-      <a href="${args.signingLink}" style="color: #2563eb;">${args.signingLink}</a>
+      <a href="${linkEscaped}" style="color: #2563eb;">${linkEscaped}</a>
     </p>
   </div>
 </body>

@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { getIssuanceProvider } from "@/lib/providers";
 import type { IssuanceParams } from "@/lib/providers";
+import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const supabase = createServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json() as Partial<IssuanceParams>;
     if (!body.dealId || !body.securityName || typeof body.offeringAmountUsd !== "number") {

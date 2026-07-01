@@ -18,6 +18,15 @@ CREATE TABLE IF NOT EXISTS outreach_sequences (
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
+-- If this table was created by an older migration (e.g. 0060 on main), the new
+-- columns may not exist yet. ADD COLUMN IF NOT EXISTS makes this idempotent.
+ALTER TABLE outreach_sequences
+  ADD COLUMN IF NOT EXISTS org_id        uuid        REFERENCES organizations(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS steps         jsonb       NOT NULL DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS stop_on_reply boolean     NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS active        boolean     NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS created_by    uuid        REFERENCES auth.users(id) ON DELETE SET NULL;
+
 COMMENT ON TABLE outreach_sequences IS 'Multi-step outreach templates (email, slack, envelope) scoped to an org.';
 COMMENT ON COLUMN outreach_sequences.steps IS 'Ordered array of step objects: {step_index, channel, delay_days, subject, body_template, stop_if_replied}.';
 COMMENT ON COLUMN outreach_sequences.stop_on_reply IS 'When true, a reply from the target halts further steps.';

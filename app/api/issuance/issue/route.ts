@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { getIssuanceProvider } from "@/lib/providers";
+import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-// Tier 3 — operator approval must be verified upstream before calling this.
 export async function POST(req: Request) {
+  const supabase = createServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json() as { securityId?: string; requestedBy?: string };
     if (!body.securityId) {

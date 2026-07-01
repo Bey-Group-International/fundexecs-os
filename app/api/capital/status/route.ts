@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { getCapitalRailProvider } from "@/lib/providers";
+import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
+  const supabase = createServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const transferId = searchParams.get("transferId");

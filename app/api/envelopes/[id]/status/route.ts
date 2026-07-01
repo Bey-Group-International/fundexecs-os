@@ -10,6 +10,11 @@ export async function GET(
   const envelopeId = params.id;
   const supabase = createServerClient();
 
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   // Fetch envelope (RLS enforced; no explicit org check here)
   const { data: envelope, error: envErr } = await supabase
     .from("envelopes")
