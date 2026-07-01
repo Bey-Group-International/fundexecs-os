@@ -16,6 +16,8 @@ interface PlayerEntry {
 export interface SocketData {
   playerId: string;
   roomId: string;
+  displayName: string;
+  characterId: string;
 }
 
 export class Room {

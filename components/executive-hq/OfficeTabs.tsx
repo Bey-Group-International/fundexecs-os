@@ -16,13 +16,16 @@ type Tab = "hq" | "virtual";
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("hq");
   const [token, setToken] = useState<string | undefined>(undefined);
+  const [characterId, setCharacterId] = useState<string | undefined>(undefined);
 
-  // Fetch Supabase access token once on mount — enables multiplayer when WS server is up
+  // Fetch Supabase access token and character identity once on mount
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data }) => {
       const t = data.session?.access_token;
       if (t) setToken(t);
+      const meta = data.session?.user?.user_metadata;
+      if (meta?.character_id) setCharacterId(meta.character_id as string);
     });
   }, []);
 
@@ -46,7 +49,7 @@ export function OfficeTabs() {
         <ExecutiveHQ />
       </div>
       <div className={tab === "virtual" ? "block p-4" : "hidden"}>
-        <VirtualOfficeGame token={token} />
+        <VirtualOfficeGame token={token} characterId={characterId} />
       </div>
     </div>
   );

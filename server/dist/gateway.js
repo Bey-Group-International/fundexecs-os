@@ -22,6 +22,7 @@ function createGateway(roomManager, authService) {
             const query = req.getQuery();
             const roomId = getQueryParam(query, "roomId");
             const token = getQueryParam(query, "token");
+            const characterId = getQueryParam(query, "characterId") ?? "player_default";
             if (!roomId || !token) {
                 res.writeStatus("400").end("Missing roomId or token");
                 return;
@@ -41,14 +42,14 @@ function createGateway(roomManager, authService) {
             res.onAborted(() => { aborted = true; });
             if (aborted)
                 return;
-            res.upgrade({ playerId: userId, roomId }, req.getHeader("sec-websocket-key"), req.getHeader("sec-websocket-protocol"), req.getHeader("sec-websocket-extensions"), context);
+            res.upgrade({ playerId: userId, roomId, displayName, characterId }, req.getHeader("sec-websocket-key"), req.getHeader("sec-websocket-protocol"), req.getHeader("sec-websocket-extensions"), context);
         },
         open: async (ws) => {
-            const { playerId, roomId } = ws.getUserData();
+            const { playerId, roomId, displayName, characterId } = ws.getUserData();
             const room = await roomManager.getOrCreateRoom(roomId);
             if (room.hasPlayer(playerId))
                 room.removePlayer(playerId);
-            const player = room.addPlayer(ws, playerId, playerId);
+            const player = room.addPlayer(ws, playerId, displayName, characterId);
             room.sendTo(playerId, {
                 type: "welcome",
                 playerId,
