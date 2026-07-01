@@ -99,6 +99,37 @@ const config: Config = {
           "0%, 100%": { transform: "scale(1)" },
           "45%": { transform: "scale(1.28)" },
         },
+        // Credit award pop: floats up and fades after task completion.
+        fxCreditPop: {
+          "0%":   { opacity: "0", transform: "translateY(0) scale(0.7)" },
+          "15%":  { opacity: "1", transform: "translateY(-6px) scale(1.08)" },
+          "60%":  { opacity: "1", transform: "translateY(-18px) scale(1)" },
+          "100%": { opacity: "0", transform: "translateY(-34px) scale(0.9)" },
+        },
+        // Streak flame oscillation for the sidebar streak counter.
+        fxStreakFlame: {
+          "0%, 100%": { transform: "scaleY(1) rotate(-2deg)", opacity: "0.9" },
+          "35%":      { transform: "scaleY(1.18) rotate(2deg)", opacity: "1" },
+          "70%":      { transform: "scaleY(0.92) rotate(-1deg)", opacity: "0.85" },
+        },
+        // Milestone burst: scale-in with an outward ring.
+        fxMilestoneBurst: {
+          "0%":   { transform: "scale(0.5)", opacity: "0" },
+          "55%":  { transform: "scale(1.12)", opacity: "1" },
+          "80%":  { transform: "scale(0.97)", opacity: "1" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        // Badge flip-in for achievement unlocks.
+        fxBadgeReveal: {
+          "0%":   { transform: "rotateY(-90deg)", opacity: "0" },
+          "60%":  { transform: "rotateY(8deg)",   opacity: "1" },
+          "100%": { transform: "rotateY(0deg)",   opacity: "1" },
+        },
+        // Multiplier shimmer on the streak pill.
+        fxMultShimmer: {
+          "0%":   { backgroundPosition: "200% center" },
+          "100%": { backgroundPosition: "-200% center" },
+        },
       },
       animation: {
         pulse: "fxPulse 1.6s ease-in-out infinite",
@@ -108,6 +139,11 @@ const config: Config = {
         boot: "fxBoot 2.8s ease-in-out infinite",
         shake: "fxShake 0.6s ease-in-out",
         nudge: "fxNudge 0.5s ease-in-out",
+        "credit-pop": "fxCreditPop 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards",
+        "streak-flame": "fxStreakFlame 1.4s ease-in-out infinite",
+        "milestone-burst": "fxMilestoneBurst 0.55s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "badge-reveal": "fxBadgeReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "mult-shimmer": "fxMultShimmer 2.2s linear infinite",
       },
     },
   },

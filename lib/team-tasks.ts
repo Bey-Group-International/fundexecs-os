@@ -192,6 +192,12 @@ export async function getTeamTaskForAssignee(
   }
 }
 
+export interface TaskStatusUpdate {
+  ok: boolean;
+  /** Present when status transitioned to "completed" — signals the client to call /api/gamification/award */
+  rewardSignal?: { taskId: string; hub: string | null; priority: string };
+}
+
 export async function updateTeamTaskStatus(
   supabase: Client,
   args: {
@@ -200,7 +206,7 @@ export async function updateTeamTaskStatus(
     status: TaskStatus;
     sessionId?: string | null;
   },
-): Promise<boolean> {
+): Promise<TaskStatusUpdate> {
   try {
     const completedAt = args.status === "completed" ? new Date().toISOString() : null;
     const patch: Partial<TeamTask> = {
@@ -208,14 +214,25 @@ export async function updateTeamTaskStatus(
       completed_at: completedAt,
     };
     if (args.sessionId !== undefined) patch.session_id = args.sessionId;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("team_tasks")
       .update(patch)
       .eq("organization_id", args.organizationId)
-      .eq("id", args.taskId);
-    return !error;
+      .eq("id", args.taskId)
+      .select("hub, priority")
+      .maybeSingle();
+    if (error) return { ok: false };
+    const result: TaskStatusUpdate = { ok: true };
+    if (args.status === "completed" && data) {
+      result.rewardSignal = {
+        taskId:   args.taskId,
+        hub:      data.hub ?? null,
+        priority: data.priority ?? "normal",
+      };
+    }
+    return result;
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 
