@@ -7,6 +7,7 @@ import type {
 } from "@fundexecs/virtual-office-shared";
 import { WORLD_W, WORLD_H, SPAWN_X, SPAWN_Y } from "@fundexecs/virtual-office-shared";
 import type { PubSub } from "./PubSub";
+import { BubbleManager } from "./BubbleManager";
 
 const MAX_SPEED_PER_TICK = 8; // pixels per message
 
@@ -24,6 +25,7 @@ export class Room {
   readonly roomId: string;
   private readonly players = new Map<string, PlayerEntry>();
   private readonly pubsub: PubSub;
+  private readonly bubbles = new BubbleManager();
 
   constructor(roomId: string, pubsub: PubSub) {
     this.roomId = roomId;
@@ -46,11 +48,14 @@ export class Room {
     };
 
     this.players.set(userId, { player, ws });
+    this.bubbles.addPlayer(userId, SPAWN_X, SPAWN_Y);
     return player;
   }
 
   removePlayer(playerId: string): void {
     this.players.delete(playerId);
+    const events = this.bubbles.removePlayer(playerId);
+    this._dispatchBubbleEvents(events);
   }
 
   getSnapshot(): RemotePlayer[] {
@@ -85,7 +90,34 @@ export class Room {
     entry.player.y = newY;
     entry.player.facing = facing;
 
+    // Update bubble spatial index
+    const bubbleEvents = this.bubbles.updatePosition(playerId, newX, newY);
+    this._dispatchBubbleEvents(bubbleEvents);
+
     return { ...entry.player };
+  }
+
+  private _dispatchBubbleEvents(events: import("./BubbleManager").BubbleEvent[]): void {
+    for (const ev of events) {
+      if (ev.type === "join") {
+        this.sendTo(ev.memberId, {
+          type: "bubble.join",
+          bubbleId: ev.bubbleId,
+          members: ev.allMembers,
+        });
+      } else if (ev.type === "leave") {
+        this.sendTo(ev.memberId, {
+          type: "bubble.leave",
+          bubbleId: ev.bubbleId,
+        });
+      } else if (ev.type === "update") {
+        this.sendTo(ev.memberId, {
+          type: "bubble.update",
+          bubbleId: ev.bubbleId,
+          members: ev.allMembers,
+        });
+      }
+    }
   }
 
   broadcast(message: ServerMessage, excludePlayerId?: string): void {

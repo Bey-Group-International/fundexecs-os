@@ -73,6 +73,10 @@ export class OfficeScene extends Phaser.Scene {
   // M1 — networking
   private socket: VirtualOfficeSocket | null = null;
   private myPlayerId: string | null = null;
+
+  // M2 — bubble state
+  private myBubbleId: string | null = null;
+  private bubbleMemberNames: string[] = [];
   private remotePlayers = new Map<string, RemoteAvatarState>();
   private moveSeq = 0;
   /** seq number of the last server-acknowledged move for local reconciliation */
@@ -506,6 +510,30 @@ export class OfficeScene extends Phaser.Scene {
       }
       case "pong": {
         // Heartbeat acknowledged; socket manager handles stale detection
+        break;
+      }
+      case "bubble.join": {
+        this.myBubbleId = msg.bubbleId;
+        // Resolve member ids to display names (fall back to id if unknown)
+        this.bubbleMemberNames = msg.members
+          .filter((id) => id !== this.myPlayerId)
+          .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
+        this.game.events.emit("bubble:update", this.bubbleMemberNames);
+        break;
+      }
+      case "bubble.update": {
+        if (msg.bubbleId !== this.myBubbleId) break;
+        this.bubbleMemberNames = msg.members
+          .filter((id) => id !== this.myPlayerId)
+          .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
+        this.game.events.emit("bubble:update", this.bubbleMemberNames);
+        break;
+      }
+      case "bubble.leave": {
+        if (msg.bubbleId !== this.myBubbleId) break;
+        this.myBubbleId = null;
+        this.bubbleMemberNames = [];
+        this.game.events.emit("bubble:update", []);
         break;
       }
     }
