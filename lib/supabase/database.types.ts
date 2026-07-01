@@ -1564,6 +1564,19 @@ export type Database = {
           similarity: number;
         }[];
       };
+      // Atomically credit an org's wallet AND append a ledger row in one
+      // transaction (migration 20260701). Returns the new balance.
+      grant_org_credits: {
+        Args: {
+          p_org: string;
+          p_delta: number;
+          p_reason: string;
+          p_source_org?: string | null;
+          p_level?: number | null;
+          p_note?: string | null;
+        };
+        Returns: number;
+      };
       // Atomically credit an org's wallet (creating it if absent), clamped at 0
       // (migration 0039). Returns the new balance.
       increment_org_credits: {
