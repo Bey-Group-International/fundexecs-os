@@ -84,6 +84,26 @@ export const PongSchema = z.object({
 });
 export type Pong = z.infer<typeof PongSchema>;
 
+export const BubbleJoinSchema = z.object({
+  type: z.literal("bubble.join"),
+  bubbleId: z.string(),
+  members: z.array(z.string()),
+});
+export type BubbleJoin = z.infer<typeof BubbleJoinSchema>;
+
+export const BubbleLeaveSchema = z.object({
+  type: z.literal("bubble.leave"),
+  bubbleId: z.string(),
+});
+export type BubbleLeave = z.infer<typeof BubbleLeaveSchema>;
+
+export const BubbleUpdateSchema = z.object({
+  type: z.literal("bubble.update"),
+  bubbleId: z.string(),
+  members: z.array(z.string()),
+});
+export type BubbleUpdate = z.infer<typeof BubbleUpdateSchema>;
+
 export const ServerMessageSchema = z.discriminatedUnion("type", [
   WelcomeSchema,
   PlayerJoinedSchema,
@@ -91,5 +111,8 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   PlayerStateSchema,
   WorldSnapshotSchema,
   PongSchema,
+  BubbleJoinSchema,
+  BubbleLeaveSchema,
+  BubbleUpdateSchema,
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;

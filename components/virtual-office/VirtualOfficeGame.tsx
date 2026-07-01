@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type Phaser from "phaser";
 import type { OfficeSceneInitData } from "./scenes/OfficeScene";
+import { BubbleOverlay } from "./BubbleOverlay";
 
 // Canvas fills its container; game uses the container dimensions
 const GAME_WIDTH = 900;
@@ -16,6 +17,7 @@ type VirtualOfficeGameProps = {
 export function VirtualOfficeGame({ token }: VirtualOfficeGameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
+  const [bubbleMembers, setBubbleMembers] = useState<string[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !containerRef.current) return;
@@ -45,14 +47,14 @@ export function VirtualOfficeGame({ token }: VirtualOfficeGameProps) {
             mode: PhaserLib.Scale.FIT,
             autoCenter: PhaserLib.Scale.CENTER_BOTH,
           },
-          // Suppress Phaser banner in console
           banner: false,
         });
 
-        // When a token is provided, restart the scene with init data so that
-        // OfficeScene.init() receives the token and opens the WebSocket.
-        // We wait for the scene's 'create' event to ensure it's fully booted
-        // before restarting with the data payload.
+        // Bridge bubble events from Phaser scene → React state
+        game.events.on("bubble:update", (members: string[]) => {
+          setBubbleMembers([...members]);
+        });
+
         if (token) {
           const initData: OfficeSceneInitData = { token };
           game.events.once("ready", () => {
@@ -67,6 +69,7 @@ export function VirtualOfficeGame({ token }: VirtualOfficeGameProps) {
     return () => {
       game?.destroy(true);
       gameRef.current = null;
+      setBubbleMembers([]);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -80,6 +83,9 @@ export function VirtualOfficeGame({ token }: VirtualOfficeGameProps) {
           <span className="text-emerald-500/60">• multiplayer</span>
         )}
       </div>
+
+      {/* Proximity bubble overlay */}
+      <BubbleOverlay members={bubbleMembers} />
 
       {/* Phaser canvas mount point */}
       <div

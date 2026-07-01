@@ -66,9 +66,29 @@ export type PongMessage = {
   serverTime: number;
 };
 
+export type BubbleJoinMessage = {
+  type: "bubble.join";
+  bubbleId: string;
+  members: string[];
+};
+
+export type BubbleLeaveMessage = {
+  type: "bubble.leave";
+  bubbleId: string;
+};
+
+export type BubbleUpdateMessage = {
+  type: "bubble.update";
+  bubbleId: string;
+  members: string[];
+};
+
 export type ServerMessage =
   | WelcomeMessage
   | PlayerJoinedMessage
   | PlayerLeftMessage
   | PlayerStateMessage
-  | PongMessage;
+  | PongMessage
+  | BubbleJoinMessage
+  | BubbleLeaveMessage
+  | BubbleUpdateMessage;
