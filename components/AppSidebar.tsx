@@ -54,6 +54,7 @@ const MORE_ITEMS: NavItem[] = [
   { href: "/capital-map", label: "Capital Map" },
   { href: "/graph", label: "Graphs" },
   { href: "/marketplace", label: "Marketplace" },
+  { href: "/meetings", label: "Meeting Copilot" },
 ];
 
 // Account menu, in display order. Items with a real destination are links;

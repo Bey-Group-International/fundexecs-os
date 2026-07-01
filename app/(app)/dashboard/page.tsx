@@ -17,6 +17,7 @@ import { buildDigest, priorityBucket, type DigestThread } from "@/lib/inbox/inte
 import { channelMeta } from "@/lib/inbox/channels";
 import { dashboardWorkspaces } from "@/lib/dashboard/config";
 import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
+import { FirstMissionCoach } from "@/components/dashboard/FirstMissionCoach";
 import {
   DeleteWorkflowBtn,
   ClearWorkflowsBtn,
@@ -487,6 +488,9 @@ export default async function DashboardPage() {
           </div>
         )}
       </section>
+
+      {/* UX-01: First mission coaching — fires once when org has no workflows. */}
+      <FirstMissionCoach isFirstVisit={workflows.length === 0} />
     </div>
   );
 }
