@@ -30,6 +30,7 @@ interface TranscriptLine {
 type SignalMsg =
   | { type: "join"; from: string; displayName: string }
   | { type: "leave"; from: string }
+  | { type: "end"; from: string }
   | { type: "offer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
   | { type: "answer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
   | { type: "ice"; from: string; to: string; candidate: RTCIceCandidateInit };
@@ -96,20 +97,28 @@ function VideoTile({
 function ControlBar({
   micOn,
   camOn,
+  shareOn,
   copilotOpen,
+  isHost,
   onToggleMic,
   onToggleCam,
+  onToggleScreen,
   onToggleCopilot,
-  onEnd,
+  onLeave,
+  onEndForAll,
   duration,
 }: {
   micOn: boolean;
   camOn: boolean;
+  shareOn: boolean;
   copilotOpen: boolean;
+  isHost: boolean;
   onToggleMic: () => void;
   onToggleCam: () => void;
+  onToggleScreen: () => void;
   onToggleCopilot: () => void;
-  onEnd: () => void;
+  onLeave: () => void;
+  onEndForAll: () => void;
   duration: number;
 }) {
   const mins = String(Math.floor(duration / 60)).padStart(2, "0");
@@ -138,14 +147,32 @@ function ControlBar({
           activeIcon={<CamIcon />}
           inactiveIcon={<CamOffIcon />}
         />
-        <button
-          onClick={onEnd}
-          className="flex items-center gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-medium px-5 py-2 transition-colors"
-          title="End call"
-        >
-          <PhoneOffIcon />
-          End
-        </button>
+        <CtrlBtn
+          active={shareOn}
+          onClick={onToggleScreen}
+          title={shareOn ? "Stop sharing" : "Share screen"}
+          activeIcon={<ScreenShareIcon />}
+          inactiveIcon={<ScreenShareIcon />}
+        />
+        {isHost ? (
+          <button
+            onClick={onEndForAll}
+            className="flex items-center gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-medium px-5 py-2 transition-colors"
+            title="End call for everyone"
+          >
+            <PhoneOffIcon />
+            End for all
+          </button>
+        ) : (
+          <button
+            onClick={onLeave}
+            className="flex items-center gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-medium px-5 py-2 transition-colors"
+            title="Leave call"
+          >
+            <PhoneOffIcon />
+            Leave
+          </button>
+        )}
       </div>
 
       {/* Copilot toggle */}
@@ -323,11 +350,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Local media
   const localStreamRef = useRef<MediaStream | null>(null);
+  const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [shareOn, setShareOn] = useState(false);
   const [localName, setLocalName] = useState("You");
   const [meetingId, setMeetingId] = useState<string | null>(null);
+  const [isHost, setIsHost] = useState(false);
 
   // Peer connections
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -414,6 +444,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         } catch (e) {
           console.warn("[WebRTC] offer error", e);
         }
+      }
+
+      if (msg.type === "end") {
+        // Host ended the call — leave immediately without generating a report
+        peersRef.current.forEach((pc) => pc.close());
+        peersRef.current.clear();
+        channelRef.current?.unsubscribe();
+        if (recognitionRef.current) {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.stop();
+        }
+        localStreamRef.current?.getTracks().forEach((t) => t.stop());
+        router.push("/meetings");
+        return;
       }
 
       if (msg.type === "leave" && msg.from !== myId) {
@@ -511,6 +555,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         if (res.ok) {
           const d = await res.json() as { id: string };
           mId = d.id;
+          setIsHost(true);
         }
       }
     } catch {
@@ -531,6 +576,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       stream = new MediaStream();
     }
     localStreamRef.current = stream;
+    cameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
     setLocalStream(stream);
 
     // Subscribe to signaling channel
@@ -674,6 +720,62 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setCamOn((v) => !v);
   }, []);
 
+  const toggleScreen = useCallback(async () => {
+    if (shareOn) {
+      // Revert to camera track
+      const camTrack = cameraTrackRef.current;
+      if (camTrack && localStreamRef.current) {
+        // Replace screen track with camera track in all peer connections
+        peersRef.current.forEach((pc) => {
+          const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+          if (sender) void sender.replaceTrack(camTrack);
+        });
+        // Swap in the stream
+        const stream = localStreamRef.current;
+        stream.getVideoTracks().forEach((t) => { t.stop(); stream.removeTrack(t); });
+        stream.addTrack(camTrack);
+        setLocalStream(new MediaStream(stream.getTracks()));
+      }
+      setShareOn(false);
+      return;
+    }
+
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenTrack = screenStream.getVideoTracks()[0];
+      if (!screenTrack || !localStreamRef.current) return;
+
+      // Replace video track in all peer connections
+      peersRef.current.forEach((pc) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) void sender.replaceTrack(screenTrack);
+      });
+
+      // Swap in the stream
+      const stream = localStreamRef.current;
+      stream.getVideoTracks().forEach((t) => { stream.removeTrack(t); });
+      stream.addTrack(screenTrack);
+      setLocalStream(new MediaStream(stream.getTracks()));
+      setShareOn(true);
+
+      // Auto-revert when user stops from browser controls
+      screenTrack.onended = () => void toggleScreen();
+    } catch { /* user cancelled */ }
+  }, [shareOn]);
+
+  const leaveMeeting = useCallback(() => {
+    sendSignal({ type: "leave", from: myIdRef.current });
+    peersRef.current.forEach((pc) => pc.close());
+    peersRef.current.clear();
+    channelRef.current?.unsubscribe();
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      recognitionRef.current.stop();
+    }
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    router.push("/meetings");
+  }, [sendSignal, router]);
+
   const endMeeting = useCallback(async () => {
     sendSignal({ type: "leave", from: myIdRef.current });
 
@@ -712,6 +814,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     router.push("/meetings");
   }, [sendSignal, meetingId, duration, roomCode, router]);
+
+  const endForAll = useCallback(async () => {
+    sendSignal({ type: "end", from: myIdRef.current });
+    await endMeeting();
+  }, [sendSignal, endMeeting]);
 
   // ── Pre-join screen ─────────────────────────────────────────────────────
 
@@ -810,11 +917,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       <ControlBar
         micOn={micOn}
         camOn={camOn}
+        shareOn={shareOn}
         copilotOpen={copilotOpen}
+        isHost={isHost}
         onToggleMic={toggleMic}
         onToggleCam={toggleCam}
+        onToggleScreen={() => void toggleScreen()}
         onToggleCopilot={() => setCopilotOpen((v) => !v)}
-        onEnd={() => void endMeeting()}
+        onLeave={leaveMeeting}
+        onEndForAll={() => void endForAll()}
         duration={duration}
       />
     </div>
@@ -885,6 +996,15 @@ function PhoneOffIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.4 9.6a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 3.51 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.49 8.91" />
       <line x1="23" y1="1" x2="1" y2="23" />
+    </svg>
+  );
+}
+
+function ScreenShareIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <polyline points="8 21 12 17 16 21" />
     </svg>
   );
 }
