@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   deleteInvestorAction,
+  archiveInvestorAction,
   clearInvestorsAction,
   deleteDealAction,
   clearDealsAction,
@@ -44,21 +45,35 @@ export function DeleteInvestorBtn({ id }: { id: string }) {
   const [pending, start] = useTransition();
   const router = useRouter();
   function handle() {
-    if (!confirm("Remove this allocator from the directory?")) return;
+    if (!confirm("Permanently delete this allocator? This cannot be undone.")) return;
     start(async () => {
       const result = await deleteInvestorAction(id);
       if (result?.error) { alertError(result.error); return; }
       router.refresh();
     });
   }
-  return <DangerBtn onClick={handle} disabled={pending}>Remove</DangerBtn>;
+  return <DangerBtn onClick={handle} disabled={pending}>Delete</DangerBtn>;
+}
+
+export function ArchiveInvestorBtn({ id }: { id: string }) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  function handle() {
+    if (!confirm("Archive this allocator? It will be hidden from the active list.")) return;
+    start(async () => {
+      const result = await archiveInvestorAction(id);
+      if (result?.error) { alertError(result.error); return; }
+      router.refresh();
+    });
+  }
+  return <DangerBtn onClick={handle} disabled={pending}>Archive</DangerBtn>;
 }
 
 export function ClearInvestorsBtn() {
   const [pending, start] = useTransition();
   const router = useRouter();
   function handle() {
-    if (!confirm("Clear all allocators from the directory? This cannot be undone.")) return;
+    if (!confirm("Permanently delete all allocators from the directory? This cannot be undone.")) return;
     start(async () => {
       const result = await clearInvestorsAction();
       if (result?.error) { alertError(result.error); return; }

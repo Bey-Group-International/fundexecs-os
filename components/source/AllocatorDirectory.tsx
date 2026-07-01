@@ -14,7 +14,7 @@ import {
 } from "@/lib/allocator-directory";
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
 import { logContactAction, createLpInviteAction } from "@/app/(app)/[hub]/[module]/actions";
-import { DeleteInvestorBtn, ClearInvestorsBtn } from "@/components/source/SourceDeleteControls";
+import { DeleteInvestorBtn, ArchiveInvestorBtn, ClearInvestorsBtn } from "@/components/source/SourceDeleteControls";
 import { InlineContactEdit, EditContactBtn } from "@/components/source/InlineContactEdit";
 import type { ContactFields } from "@/app/(app)/[hub]/[module]/actions";
 
@@ -381,6 +381,9 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
           >
             Invite
           </button>
+          <span onClick={(e) => e.stopPropagation()}>
+            <ArchiveInvestorBtn id={entry.id} />
+          </span>
           <span onClick={(e) => e.stopPropagation()}>
             <DeleteInvestorBtn id={entry.id} />
           </span>
