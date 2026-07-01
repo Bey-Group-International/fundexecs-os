@@ -158,7 +158,7 @@ export async function fireAlert(
       org_id: (rule as { org_id: string }).org_id,
       entity_type: entityType,
       entity_id: entityId,
-      payload,
+      payload: payload as import("@/lib/supabase/database.types").Json,
     })
     .select()
     .single();

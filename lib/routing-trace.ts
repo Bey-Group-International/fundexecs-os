@@ -175,7 +175,7 @@ export async function overrideStepAgent(
 
     const { error } = await db
       .from("task_steps")
-      .update({ agent_override: agentKey })
+      .update({ agent_override: agentKey } as never)
       .eq("id", stepId);
 
     if (error) {

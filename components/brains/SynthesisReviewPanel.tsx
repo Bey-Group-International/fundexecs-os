@@ -106,15 +106,15 @@ function SynthesisCard({ item, onApprove, onDiscard }: CardProps) {
           </h3>
           {/* Source count badge */}
           <span className="inline-flex items-center rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-fg-secondary">
-            {item.artifact_ids.length}{" "}
-            {item.artifact_ids.length === 1 ? "source" : "sources"}
+            {(item.source_artifact_ids as string[])?.length ?? 0}{" "}
+            {((item.source_artifact_ids as string[])?.length ?? 0) === 1 ? "source" : "sources"}
           </span>
         </div>
         {/* Status chip */}
         <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[item.status]}`}
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[item.synthesis_status]}`}
         >
-          {item.status}
+          {item.synthesis_status}
         </span>
       </div>
 
@@ -127,7 +127,7 @@ function SynthesisCard({ item, onApprove, onDiscard }: CardProps) {
               Source Artifacts
             </p>
             <ul className="space-y-1">
-              {item.artifact_ids.map((aid) => (
+              {((item.source_artifact_ids as string[]) ?? []).map((aid) => (
                 <li
                   key={aid}
                   className="truncate font-mono text-xs text-fg-secondary"
@@ -160,13 +160,13 @@ function SynthesisCard({ item, onApprove, onDiscard }: CardProps) {
       )}
 
       {/* If no draft_content, show artifact list inline */}
-      {!item.draft_content && item.artifact_ids.length > 0 && (
+      {!item.draft_content && (((item.source_artifact_ids as string[])?.length ?? 0) > 0) && (
         <div className="mt-3">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-tertiary">
             Source Artifacts
           </p>
           <div className="flex flex-wrap gap-2">
-            {item.artifact_ids.map((aid) => (
+            {((item.source_artifact_ids as string[]) ?? []).map((aid) => (
               <span
                 key={aid}
                 className="rounded bg-surface-2 px-2 py-0.5 font-mono text-xs text-fg-secondary"

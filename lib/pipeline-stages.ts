@@ -45,7 +45,7 @@ export async function createPipelineStage(
 
   const { data, error } = await supabase
     .from("pipeline_stages")
-    .insert(args)
+    .insert(args as unknown as import("@/lib/supabase/database.types").PipelineStage)
     .select("*")
     .single();
 
@@ -67,7 +67,7 @@ export async function moveDealToStage(
     .from("deals")
     .update({ pipeline_stage_id: stageId })
     .eq("id", dealId)
-    .eq("org_id", orgId);
+    .eq("organization_id", orgId);
 
   if (updateError) {
     throw new Error(`Failed to move deal to stage: ${updateError.message}`);

@@ -186,8 +186,8 @@ export async function extractAndStoreMemories(
   }));
 
   const { data, error } = await supabase
-    .from("agent_memories" as never)
-    .insert(rows)
+    .from("agent_memories")
+    .insert(rows as never[])
     .select();
 
   if (error || !data) return [];
@@ -224,7 +224,7 @@ export async function retrieveRelevantMemories(
           match_count: limit,
         } as never,
       );
-      if (!vecError && Array.isArray(vecData) && vecData.length > 0) {
+      if (!vecError && Array.isArray(vecData) && (vecData as unknown[]).length > 0) {
         return vecData as AgentMemory[];
       }
     } catch {
@@ -234,12 +234,12 @@ export async function retrieveRelevantMemories(
 
   // Recency fallback: most-recent non-dismissed memories for this agent + org.
   const { data, error } = await supabase
-    .from("agent_memories" as never)
+    .from("agent_memories")
     .select("*")
-    .eq("org_id" as never, orgId)
-    .eq("agent_key" as never, agentKey)
-    .eq("dismissed" as never, false)
-    .order("created_at" as never, { ascending: false })
+    .eq("org_id", orgId)
+    .eq("agent_key", agentKey)
+    .eq("dismissed", false)
+    .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error || !data) return [];

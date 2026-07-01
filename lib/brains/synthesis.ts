@@ -14,12 +14,15 @@ import { createServiceClient } from "@/lib/supabase/server";
 // Public types
 // ---------------------------------------------------------------------------
 
+export type SynthesisStatus = "pending" | "processing" | "approved" | "discarded";
+export type SynthesisItem = SynthesisQueueItem;
+
 export interface SynthesisQueueItem {
   id: string;
   org_id: string;
   topic_key: string;
   source_artifact_ids: string[];
-  synthesis_status: "pending" | "processing" | "approved" | "discarded";
+  synthesis_status: SynthesisStatus;
   draft_content?: string;
   approved_at?: string;
   approved_by?: string;

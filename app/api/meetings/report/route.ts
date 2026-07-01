@@ -86,10 +86,10 @@ Generate a comprehensive post-meeting report.`,
       .insert({
         meeting_id: body.meetingId,
         summary: analysis.summary as string,
-        key_points: analysis.key_points,
-        action_items: analysis.action_items,
+        key_points: analysis.key_points as import("@/lib/supabase/database.types").Json,
+        action_items: analysis.action_items as import("@/lib/supabase/database.types").Json,
         full_transcript: body.transcript,
-        analysis,
+        analysis: analysis as import("@/lib/supabase/database.types").Json,
       })
       .select("id")
       .single();

@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Brain, ChevronDown, ChevronUp } from "lucide-react";
+function Brain({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 001.5 2.121m-3 0a2.25 2.25 0 003 0m0 0v1.5a2.25 2.25 0 002.25 2.25H18a2.25 2.25 0 002.25-2.25V15M12 3.104a24.3 24.3 0 014.5.082M9 18.75a2.25 2.25 0 002.25 2.25h1.5a2.25 2.25 0 002.25-2.25" /></svg>;
+}
+function ChevronUp({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>;
+}
+function ChevronDown({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>;
+}
 import { createClient } from "@/lib/supabase/client";
 import type { SessionMemoryCard } from "@/lib/brains/session-memory";
 

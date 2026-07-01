@@ -27,7 +27,22 @@ function configured(): boolean {
 }
 
 // Docusign base URL from env, defaulting to sandbox.
-const BASE_URL = process.env.DOCUSIGN_BASE_URL ?? "https://demo.docusign.net/restapi";
+// Only allow known Docusign hostnames to prevent SSRF via env var injection.
+const ALLOWED_DOCUSIGN_HOSTS = ["demo.docusign.net", "na4.docusign.net", "eu.docusign.net", "docusign.net"];
+function safeBaseUrl(): string {
+  const raw = process.env.DOCUSIGN_BASE_URL;
+  if (!raw) return "https://demo.docusign.net/restapi";
+  try {
+    const parsed = new URL(raw);
+    if (!ALLOWED_DOCUSIGN_HOSTS.some(h => parsed.hostname === h || parsed.hostname.endsWith("." + h))) {
+      return "https://demo.docusign.net/restapi";
+    }
+    return raw;
+  } catch {
+    return "https://demo.docusign.net/restapi";
+  }
+}
+const BASE_URL = safeBaseUrl();
 const ACCOUNT_ID = process.env.DOCUSIGN_ACCOUNT_ID ?? "";
 
 async function createEnvelope(params: IssuanceParams): Promise<string> {

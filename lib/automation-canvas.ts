@@ -61,7 +61,7 @@ export async function saveAutomationCanvas(
 
   const { error } = await supabase
     .from("automations")
-    .update({ canvas_json: layout as unknown as Record<string, unknown> })
+    .update({ canvas_json: layout as unknown as import("@/lib/supabase/database.types").Json })
     .eq("id", automationId);
 
   if (error) {

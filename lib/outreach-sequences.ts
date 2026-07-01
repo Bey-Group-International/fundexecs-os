@@ -51,7 +51,7 @@ export async function createSequence(
     .insert({
       org_id: args.org_id,
       name: args.name,
-      steps: args.steps,
+      steps: (args.steps as unknown) as import("@/lib/supabase/database.types").Json,
       stop_on_reply: args.stop_on_reply,
       active: args.active,
       created_by: args.created_by ?? null,
@@ -60,7 +60,7 @@ export async function createSequence(
     .single();
 
   if (error) throw new Error(`createSequence: ${error.message}`);
-  return data as OutreachSequence;
+  return (data as unknown) as OutreachSequence;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ export async function enrollTarget(
 
   if (seqErr) throw new Error(`enrollTarget: sequence lookup: ${seqErr.message}`);
 
-  const steps: OutreachStep[] = (seq?.steps as OutreachStep[]) ?? [];
+  const steps: OutreachStep[] = ((seq?.steps as unknown) as OutreachStep[]) ?? [];
   const firstStep = steps.find((s) => s.step_index === 0) ?? steps[0];
   const delayDays = firstStep?.delay_days ?? 0;
 
@@ -119,7 +119,7 @@ export async function listSequences(orgId: string): Promise<OutreachSequence[]> 
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`listSequences: ${error.message}`);
-  return (data ?? []) as OutreachSequence[];
+  return ((data ?? []) as unknown) as OutreachSequence[];
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ export async function processDueSteps(): Promise<number> {
   let processed = 0;
 
   for (const enrollment of enrollments) {
-    const seq = enrollment.outreach_sequences as
+    const seq = (enrollment.outreach_sequences as unknown) as
       | { steps: OutreachStep[]; stop_on_reply: boolean }
       | null;
     if (!seq) continue;

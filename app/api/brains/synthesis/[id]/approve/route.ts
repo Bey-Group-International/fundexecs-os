@@ -37,7 +37,7 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     if (body.draft_content !== undefined) {
       const { error: updateError } = await supabase
-        .from("brain_syntheses")
+        .from("synthesis_queue")
         .update({ draft_content: body.draft_content })
         .eq("id", id);
       if (updateError) throw new Error(updateError.message);

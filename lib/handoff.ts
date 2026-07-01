@@ -109,7 +109,7 @@ export async function persistHandoffPacket(
 
   const { error } = await supabase
     .from("task_steps")
-    .update({ handoff_packet: packet } as Record<string, unknown>)
+    .update({ handoff_packet: packet } as never)
     .eq("id", stepId);
 
   // Ignore errors caused by missing column or other non-critical failures

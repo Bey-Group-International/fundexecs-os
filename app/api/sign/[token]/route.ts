@@ -48,7 +48,7 @@ export async function GET(
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const envelope = recipient.envelopes as {
+    const envelope = (recipient.envelopes as unknown) as {
       id: string
       title: string
       document_content: string
