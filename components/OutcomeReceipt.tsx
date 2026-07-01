@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { fmtClockTime, type OutcomeSummary } from "@/lib/routing-trace";
+import { fmtClockTime, type OutcomeSummary } from "@/lib/routing-trace-ui";
 
 // A durable, plain-language receipt of what the operator's decision did — so a
 // completed/declined workflow always says "this went through", by whom-equivalent

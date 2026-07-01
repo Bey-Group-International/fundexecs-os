@@ -334,7 +334,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-fg-primary">{active.name}</span>
               <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                {humanize(active.channel)}
+                {humanize(active.channel ?? "")}
                 {active.audience ? ` · ${active.audience}` : ""}
               </span>
             </div>

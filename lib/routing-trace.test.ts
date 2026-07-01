@@ -1,4 +1,4 @@
-import { buildRoutingTrace, buildOutcome, desksForSteps, fmtClockTime } from "@/lib/routing-trace";
+import { buildRoutingTrace, buildOutcome, desksForSteps, fmtClockTime } from "@/lib/routing-trace-ui";
 import { deriveRouting } from "@/lib/intelligence";
 import type { Task, Approval } from "@/lib/supabase/database.types";
 

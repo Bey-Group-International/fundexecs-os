@@ -9,7 +9,7 @@ import type { SealStatus } from "@/lib/attestation-seal";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 import { routingFromTask, cursorResponse, EXECUTIVE_LABEL, EXECUTIVES, type TargetEngine, type Executive } from "@/lib/intelligence";
 import { splitPositions, type SplitPosition } from "@/lib/split-grouping";
-import { buildOutcome } from "@/lib/routing-trace";
+import { buildOutcome } from "@/lib/routing-trace-ui";
 import { RoutingTrace } from "@/components/RoutingTrace";
 import { OutcomeReceipt } from "@/components/OutcomeReceipt";
 import { EarnOrb } from "@/components/copilot/EarnOrb";

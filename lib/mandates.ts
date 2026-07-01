@@ -10,7 +10,7 @@
 // lib/capital-map.ts / lib/graph.ts). The `orgId` argument is accepted for
 // call-site clarity and forward use but is intentionally not used to filter.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database, MandateRow } from "@/lib/supabase/database.types";
 import type { ActionKind, GateTier, Mandate } from "@/lib/gates";
 
 type Client = SupabaseClient<Database>;
@@ -31,7 +31,7 @@ export async function getActiveMandate(
 
   const { data } = await supabase
     .from("mandates")
-    .select("auto_approve, autonomy_ceiling")
+    .select("auto_approve, autonomy_ceiling, scope, guardrails, blast_radius_rules")
     .eq("is_active", true)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -44,4 +44,24 @@ export async function getActiveMandate(
     autoApprove: (data.auto_approve ?? []) as ActionKind[],
     autonomyCeiling,
   };
+}
+
+/**
+ * Return the full active mandate row (including scope, guardrails, and
+ * blast_radius_rules) for UI display or Earn context injection.
+ * Returns undefined when no active mandate exists.
+ */
+export async function getActiveMandateRow(
+  supabase: Client,
+  orgId?: string,
+): Promise<Pick<MandateRow, "auto_approve" | "autonomy_ceiling" | "scope" | "guardrails" | "blast_radius_rules"> | undefined> {
+  void orgId;
+  const { data } = await supabase
+    .from("mandates")
+    .select("auto_approve, autonomy_ceiling, scope, guardrails, blast_radius_rules")
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ?? undefined;
 }

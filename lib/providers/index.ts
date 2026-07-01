@@ -4,11 +4,13 @@
 import type { IssuanceProvider, CapitalRailProvider, IdentityVerificationProvider } from "./types";
 import { mockIssuanceProvider, mockCapitalRailProvider, mockIdentityVerificationProvider } from "./mock";
 import { docusignIssuanceProvider } from "./docusign-issuance";
+import { nativeSigningProvider } from "./native-signing";
 
+// Priority: native signing (always available) → Docusign (when credentials set) → mock.
+// Native signing is the default; Docusign is an override for orgs that prefer it.
 export function getIssuanceProvider(): IssuanceProvider {
-  return docusignIssuanceProvider.isConfigured()
-    ? docusignIssuanceProvider
-    : mockIssuanceProvider;
+  if (docusignIssuanceProvider.isConfigured()) return docusignIssuanceProvider;
+  return nativeSigningProvider;
 }
 
 export function getCapitalRailProvider(): CapitalRailProvider {
