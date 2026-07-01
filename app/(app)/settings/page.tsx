@@ -15,6 +15,7 @@ import { ShortcutsAndCustomization } from "./ShortcutsAndCustomization";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { TIER_2_ACTIONS } from "./tier2-actions";
 import { deactivateMandate, setDiscoverable } from "./actions";
+import { UserProfileForm } from "./UserProfileForm";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,12 @@ export default async function SettingsPage() {
     .maybeSingle();
   const discoverable = (orgRow as { discoverable: boolean | null } | null)?.discoverable !== false;
 
+  const { data: principalRow } = await supabase
+    .from("principals")
+    .select("full_name, title, phone, avatar_url")
+    .eq("id", ctx.userId)
+    .maybeSingle();
+
   // Per-org integration connections brokered by the unified gateway.
   const connections = await loadOrgConnections(supabase, ctx.orgId);
 
@@ -112,15 +119,15 @@ export default async function SettingsPage() {
           {/* Account */}
           <Section id="account" eyebrow="You" title="Account">
             <div className="flex flex-col gap-2">
-              <div className="fx-card p-4">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
-                  Signed in as
-                </p>
-                <p className="mt-1 text-sm text-fg-primary">{ctx.email}</p>
-              </div>
-              <Link href="/build/profile" className="fx-card fx-card-hover group p-4">
-                <RowLink label="Organization profile" hint="Name, focus, and public details" />
-              </Link>
+              <UserProfileForm
+                email={ctx.email}
+                initialValues={{
+                  full_name: (principalRow as any)?.full_name ?? "",
+                  title: (principalRow as any)?.title ?? "",
+                  phone: (principalRow as any)?.phone ?? "",
+                  avatar_url: (principalRow as any)?.avatar_url ?? "",
+                }}
+              />
               <div className="fx-card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -250,7 +257,7 @@ export default async function SettingsPage() {
             id="shortcuts"
             eyebrow="Preferences"
             title="Shortcuts & customization"
-            description="Keyboard shortcuts for navigating FundExecs OS, and appearance settings for this device. This is the only place to access keyboard shortcuts."
+            description="Keyboard shortcuts for navigating FundExecs OS, and appearance settings for this device."
           >
             <ShortcutsAndCustomization />
           </Section>

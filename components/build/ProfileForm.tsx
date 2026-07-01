@@ -47,6 +47,7 @@ const COMPLETENESS_KEYS: (keyof ProfileValues)[] = [
   "name",
   "legal_name",
   "entity_type",
+  "tagline",
   "jurisdiction",
   "website",
   "description",
