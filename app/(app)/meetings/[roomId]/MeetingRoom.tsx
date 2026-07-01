@@ -350,6 +350,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [duration, setDuration] = useState(0);
   const [ready, setReady] = useState(false);
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+  const previewStreamRef = useRef<MediaStream | null>(null);
+  const notesInflightRef = useRef(false);
   const [displayName, setDisplayName] = useState("");
   const [joining, setJoining] = useState(false);
 
@@ -397,18 +399,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const myId = myIdRef.current;
 
       if (msg.type === "join" && msg.from !== myId) {
-        // New peer joined — create offer
+        // Always update displayName (ontrack may have created a stub entry with the raw UUID)
         setPeers((prev) => {
           const next = new Map(prev);
-          if (!next.has(msg.from)) {
-            next.set(msg.from, { id: msg.from, displayName: msg.displayName, stream: null });
-          }
+          const existing = next.get(msg.from);
+          next.set(msg.from, { id: msg.from, displayName: msg.displayName, stream: existing?.stream ?? null });
           return next;
         });
         const pc = createPeerConnection(msg.from);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        sendSignal({ type: "offer", from: myId, to: msg.from, sdp: offer });
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          sendSignal({ type: "offer", from: myId, to: msg.from, sdp: offer });
+        } catch (e) {
+          console.warn("[WebRTC] offer error", e);
+        }
       }
 
       if (msg.type === "leave" && msg.from !== myId) {
@@ -424,20 +429,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (msg.type === "offer" && msg.to === myId) {
         let pc = peersRef.current.get(msg.from);
         if (!pc) pc = createPeerConnection(msg.from);
-        await pc.setRemoteDescription(msg.sdp);
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        sendSignal({ type: "answer", from: myId, to: msg.from, sdp: answer });
+        try {
+          await pc.setRemoteDescription(msg.sdp);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          sendSignal({ type: "answer", from: myId, to: msg.from, sdp: answer });
+        } catch (e) {
+          console.warn("[WebRTC] glare/setRemoteDescription error", e);
+        }
       }
 
       if (msg.type === "answer" && msg.to === myId) {
         const pc = peersRef.current.get(msg.from);
-        if (pc) await pc.setRemoteDescription(msg.sdp);
+        if (pc) {
+          try {
+            await pc.setRemoteDescription(msg.sdp);
+          } catch (e) {
+            console.warn("[WebRTC] answer error", e);
+          }
+        }
       }
 
       if (msg.type === "ice" && msg.to === myId) {
         const pc = peersRef.current.get(msg.from);
-        if (pc) await pc.addIceCandidate(msg.candidate);
+        if (pc) {
+          try {
+            await pc.addIceCandidate(msg.candidate);
+          } catch { /* candidate arrived before remote description — safe to ignore */ }
+        }
       }
     },
     [createPeerConnection, sendSignal],
@@ -448,12 +467,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => {
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
-      .then((s) => setPreviewStream(s))
+      .then((s) => {
+        previewStreamRef.current = s;
+        setPreviewStream(s);
+      })
       .catch(() => {});
     return () => {
-      previewStream?.getTracks().forEach((t) => t.stop());
+      // Use ref so cleanup captures the stream even if it resolved after render
+      previewStreamRef.current?.getTracks().forEach((t) => t.stop());
+      previewStreamRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Join meeting ────────────────────────────────────────────────────────
@@ -495,6 +518,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
     setMeetingId(mId);
 
+    // Stop preview BEFORE acquiring meeting stream to avoid NotReadableError on mobile
+    previewStreamRef.current?.getTracks().forEach((t) => t.stop());
+    previewStreamRef.current = null;
+    setPreviewStream(null);
+
     // Acquire local media
     let stream: MediaStream;
     try {
@@ -502,7 +530,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     } catch {
       stream = new MediaStream();
     }
-    previewStream?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = stream;
     setLocalStream(stream);
 
@@ -607,12 +634,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => {
     if (!ready) return;
     const interval = setInterval(() => {
+      if (notesInflightRef.current) return;
       const text = transcriptRef.current
         .filter((l) => l.final)
         .map((l) => `${l.speaker}: ${l.text}`)
         .join("\n");
       if (!text) return;
 
+      notesInflightRef.current = true;
       startNotesTransition(async () => {
         try {
           const res = await fetch("/api/meetings/notes", {
@@ -621,7 +650,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             body: JSON.stringify({ transcript: text }),
           });
           if (res.ok) setNotes(await res.json() as LiveNotesResult);
-        } catch { /* silently fail */ }
+        } catch { /* silently fail */ } finally {
+          notesInflightRef.current = false;
+        }
       });
     }, 30_000);
     return () => clearInterval(interval);
@@ -649,7 +680,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     peersRef.current.forEach((pc) => pc.close());
     peersRef.current.clear();
     channelRef.current?.unsubscribe();
-    recognitionRef.current?.stop();
+    // Null onend before stopping to prevent the auto-restart loop
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      recognitionRef.current.stop();
+    }
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
 
     if (meetingId) {

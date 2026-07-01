@@ -1,6 +1,5 @@
 import { Metadata } from "next";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createServerClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { CopyButton } from "./CopyButton";
 
@@ -13,12 +12,7 @@ export const metadata: Metadata = {
 };
 
 async function getReport(roomCode: string) {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } },
-  );
+  const supabase = createServerClient();
 
   const { data: meeting } = await supabase
     .from("live_meetings")
@@ -205,4 +199,3 @@ function SentimentBadge({ value }: { value: string }) {
     </span>
   );
 }
-
