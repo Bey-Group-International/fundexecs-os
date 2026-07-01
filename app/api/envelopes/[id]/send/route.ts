@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { sendEmail, buildSigningInvitationHtml } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -43,7 +44,7 @@ export async function POST(
   // Update envelope status to 'sent'
   const { data: envelope, error: updateErr } = await supabase
     .from("envelopes")
-    .update({ status: "sent", sent_at: new Date().toISOString() })
+    .update({ status: "sent" })
     .eq("id", envelopeId)
     .eq("organization_id", orgId)
     .select("id, title, organization_id")
@@ -71,40 +72,31 @@ export async function POST(
   const rows = (recipients ?? []) as Recipient[];
 
   // Build signing URLs
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
 
   const signingUrls = rows.map((r) => ({
     recipientId: r.id,
     name: r.name,
     email: r.email,
-    url: `${baseUrl}/sign/${envelopeId}?token=${r.signing_token}`,
+    url: `${baseUrl}/sign/${r.signing_token}`,
   }));
 
-  // Send invitation emails via Resend if configured
-  const resendKey = process.env.RESEND_API_KEY;
-  if (resendKey && rows.length > 0) {
+  // Send invitation emails via Gmail or Resend
+  if (rows.length > 0) {
     await Promise.allSettled(
       signingUrls.map(({ email, name, url }) =>
-        fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${resendKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            from: process.env.RESEND_FROM_EMAIL ?? "noreply@fundexecs.com",
-            to: email,
-            subject: `You have been invited to sign: ${envelope.title ?? "Document"}`,
-            html: [
-              `<p>Hi ${name},</p>`,
-              `<p>You have been invited to review and sign a document.</p>`,
-              `<p><a href="${url}">Click here to sign</a></p>`,
-              `<p>This link is unique to you. Do not share it.</p>`,
-            ].join("\n"),
+        sendEmail({
+          to: { name, email },
+          subject: `You have been invited to sign: ${envelope.title ?? "Document"}`,
+          htmlBody: buildSigningInvitationHtml({
+            recipientName: name,
+            documentTitle: envelope.title ?? "Document",
+            signingLink: url,
           }),
-        }).catch((err) => {
-          console.error("[/api/envelopes/[id]/send] resend error", email, err);
+        }).then((result) => {
+          if (!result.ok) {
+            console.warn(`[envelopes/send] email to ${email} not sent externally (${result.detail}) — link available in-app`)
+          }
         }),
       ),
     );
@@ -113,10 +105,7 @@ export async function POST(
   // Log 'sent' audit event
   await supabase.from("envelope_events").insert({
     envelope_id: envelopeId,
-    organization_id: orgId,
-    actor_id: user.id,
     event_type: "sent",
-    created_at: new Date().toISOString(),
   });
 
   return NextResponse.json({ ok: true, signingUrls });

@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { Resend } from 'resend'
+import { sendEmail, buildSigningInvitationHtml } from '@/lib/email'
 
 export const runtime = 'nodejs'
 
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     const { data: memberRow, error: memberError } = await supabase
       .from('organization_members')
       .select('organization_id')
-      .eq('user_id', user.id)
+      .eq('principal_id', user.id)
       .limit(1)
       .single()
 
@@ -171,58 +171,26 @@ export async function POST(request: Request) {
         console.error('sentEventError', sentEventError)
       }
 
-      // Send emails via Resend if configured
-      if (process.env.RESEND_API_KEY) {
-        const resend = new Resend(process.env.RESEND_API_KEY)
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-
-        const emailPromises = insertedRecipients.map((recipient) => {
-          const signingLink = `${appUrl}/sign/${recipient.signing_token}`
-          const htmlBody = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-</head>
-<body style="font-family: sans-serif; background: #f9fafb; margin: 0; padding: 40px 20px;">
-  <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 8px; padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-    <h1 style="font-size: 20px; color: #111827; margin: 0 0 16px;">You have a document to sign</h1>
-    <p style="color: #374151; font-size: 15px; margin: 0 0 8px;">Hi ${recipient.name},</p>
-    <p style="color: #374151; font-size: 15px; margin: 0 0 24px;">
-      You have been asked to review and sign: <strong>${title}</strong>.
-    </p>
-    ${
-      message
-        ? `<p style="color: #6b7280; font-size: 14px; background: #f3f4f6; border-left: 3px solid #d1d5db; padding: 12px 16px; margin: 0 0 24px; border-radius: 4px;">${message}</p>`
-        : ''
-    }
-    <a href="${signingLink}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 15px; font-weight: 600;">
-      Review &amp; Sign Document
-    </a>
-    <p style="color: #9ca3af; font-size: 12px; margin: 32px 0 0;">
-      If the button doesn't work, copy and paste this link into your browser:<br />
-      <a href="${signingLink}" style="color: #2563eb;">${signingLink}</a>
-    </p>
-  </div>
-</body>
-</html>`
-
-          return resend.emails.send({
-            from: process.env.RESEND_FROM_EMAIL ?? 'noreply@fundexecs.com',
-            to: recipient.email,
-            subject: `Please sign: ${title}`,
-            html: htmlBody,
-          })
-        })
-
-        const emailResults = await Promise.allSettled(emailPromises)
-        emailResults.forEach((result, i) => {
-          if (result.status === 'rejected') {
-            console.error(`Failed to send email to ${insertedRecipients[i].email}:`, result.reason)
+      // Send emails via Gmail or Resend (whichever is configured)
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+      const emailPromises = insertedRecipients.map((recipient) => {
+        const signingLink = `${appUrl}/sign/${recipient.signing_token}`
+        return sendEmail({
+          to: { name: recipient.name, email: recipient.email },
+          subject: `Please sign: ${title}`,
+          htmlBody: buildSigningInvitationHtml({
+            recipientName: recipient.name,
+            documentTitle: title,
+            message,
+            signingLink,
+          }),
+        }).then((result) => {
+          if (!result.ok) {
+            console.warn(`[envelopes/create] email to ${recipient.email} not sent via external channel (${result.detail}) — signing link available in-app`)
           }
         })
-      }
+      })
+      await Promise.allSettled(emailPromises)
     }
 
     return NextResponse.json({
