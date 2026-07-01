@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import OnboardingWizard from "./wizard";
+import { DownloadOSFloat } from "@/components/DownloadOSFloat";
 
 export default async function OnboardingPage({
   searchParams,
@@ -58,6 +59,8 @@ export default async function OnboardingPage({
           userEmail={ctx.email}
         />
       </div>
+
+      <DownloadOSFloat />
     </div>
   );
 }
