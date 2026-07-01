@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext, requireOrgContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
@@ -668,7 +668,7 @@ export async function clearProvidersAction(): Promise<{ ok?: boolean; error?: st
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
     const { error } = await supabase
       .from("service_providers")
       .update({ archived_at: new Date().toISOString() })
@@ -711,7 +711,7 @@ export async function clearInvestorsAction(): Promise<{ ok?: boolean; error?: st
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
     const { error } = await supabase
       .from("investors")
       .update({ archived_at: new Date().toISOString() })
@@ -754,7 +754,7 @@ export async function clearDealsAction(): Promise<{ ok?: boolean; error?: string
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
     const { error } = await supabase
       .from("deals")
       .update({ archived_at: new Date().toISOString() })
@@ -796,7 +796,7 @@ export async function clearPartnersAction(): Promise<{ ok?: boolean; error?: str
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
     const { error } = await supabase
       .from("partners")
       .update({ archived_at: new Date().toISOString() })
