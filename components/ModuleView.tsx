@@ -273,6 +273,7 @@ export async function ModuleView({
             legal_name: org?.legal_name ?? "",
             entity_type: org?.entity_type ?? "",
             tagline: org?.tagline ?? "",
+            logo_url: org?.logo_url ?? "",
             jurisdiction: org?.jurisdiction ?? "",
             website: org?.website ?? "",
             description: org?.description ?? "",

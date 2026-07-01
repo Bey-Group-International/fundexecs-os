@@ -49,6 +49,7 @@ export async function updateProfile(formData: FormData) {
       legal_name: t("legal_name"),
       entity_type: t("entity_type"),
       tagline: t("tagline"),
+      logo_url: t("logo_url"),
       jurisdiction: t("jurisdiction"),
       website,
       description: t("description"),
