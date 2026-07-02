@@ -25,7 +25,8 @@ import { isPrincipalIdentityVerified } from "@/lib/identity";
 import { compoundingProfile } from "@/lib/compounding";
 import { spendCredits } from "@/lib/credits";
 import { effectiveStepCost } from "@/lib/agent-costs";
-import { parseStoredEdgeContext, edgeContextToPromptLine } from "@/lib/edge-context";
+import { parseStoredEdgeContext, edgeContextToPromptLine, type EdgeContextResult } from "@/lib/edge-context";
+import { selectAgentWithContext } from "@/lib/brain-routing";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -442,7 +443,13 @@ async function gatherActiveContext(ctx: Ctx, sessionId: string): Promise<string[
 // Inside an existing session, replay its earlier prompts so Earn plans the
 // follow-up with the conversation in mind (oldest first), plus the active
 // deal/asset so references like "the deal" resolve.
-async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[]> {
+async function gatherPriorContext(
+  ctx: Ctx,
+  sessionId?: string,
+  // Pass a pre-fetched EdgeContextResult to avoid a second Supabase round-trip
+  // when the caller already holds it (planPrompt / planPrompts).
+  prefetchedEdgeContext?: EdgeContextResult | null,
+): Promise<string[]> {
   // Closed-loop routing learning: prepend a preamble built from the operator's
   // recent reroute corrections (org-scoped) so the planner stops repeating the
   // same mis-routes. Purely additive and best-effort — a failure here must never
@@ -457,35 +464,48 @@ async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[
 
   if (!sessionId) return reroute;
 
-  // `edge_context` added by migration 20260702000011; cast to bypass stale
-  // generated types until the next type regeneration cycle.
-  const [sessionRes, priorRes] = await Promise.all([
-    (ctx.supabase
-      .from("sessions")
-      .select("edge_context")
-      .eq("id", sessionId)
-      .single() as unknown as Promise<{ data: { edge_context: unknown } | null; error: unknown }>),
-    ctx.supabase
+  // When prefetchedEdgeContext is supplied, skip the session fetch and use it
+  // directly. Otherwise fetch both in parallel (single-session callers like
+  // runAutomation that don't need agent re-scoring).
+  let edgeLine = "";
+  let priorData: { description: string | null }[] = [];
+
+  if (prefetchedEdgeContext !== undefined) {
+    // Caller already holds the edge context row; just fetch prior tasks.
+    const priorRes = await ctx.supabase
       .from("tasks")
       .select("description")
       .eq("session_id", sessionId)
       .is("parent_task_id", null)
-      .order("created_at", { ascending: true }),
-  ]);
-
-  // Inject edge context as a planner hint if present and unexpired.
-  const edgeLine = (() => {
+      .order("created_at", { ascending: true });
+    priorData = (priorRes.data ?? []) as { description: string | null }[];
+    edgeLine = prefetchedEdgeContext ? edgeContextToPromptLine(prefetchedEdgeContext) : "";
+  } else {
+    // `edge_context` added by migration 20260702000012; cast to bypass stale
+    // generated types until the next type regeneration cycle.
+    const [sessionRes, priorRes] = await Promise.all([
+      (ctx.supabase
+        .from("sessions")
+        .select("edge_context")
+        .eq("id", sessionId)
+        .single() as unknown as Promise<{ data: { edge_context: unknown } | null; error: unknown }>),
+      ctx.supabase
+        .from("tasks")
+        .select("description")
+        .eq("session_id", sessionId)
+        .is("parent_task_id", null)
+        .order("created_at", { ascending: true }),
+    ]);
+    priorData = (priorRes.data ?? []) as { description: string | null }[];
     try {
       const parsed = parseStoredEdgeContext(sessionRes.data?.edge_context);
-      return parsed ? edgeContextToPromptLine(parsed) : "";
+      edgeLine = parsed ? edgeContextToPromptLine(parsed) : "";
     } catch {
-      return "";
+      edgeLine = "";
     }
-  })();
+  }
 
-  const turns = ((priorRes.data ?? []) as { description: string | null }[])
-    .map((t) => t.description?.trim() ?? "")
-    .filter(Boolean);
+  const turns = priorData.map((t) => t.description?.trim() ?? "").filter(Boolean);
   const active = await gatherActiveContext(ctx, sessionId);
   return [...reroute, ...(edgeLine ? [edgeLine] : []), ...active, ...turns];
 }
@@ -513,13 +533,45 @@ export function applyDelegation(plan: AgentPlan, desk: Executive): AgentPlan {
   };
 }
 
+// Reads edge context from a session row (best-effort, returns null on miss).
+async function getSessionEdgeContext(ctx: Ctx, sessionId?: string): Promise<EdgeContextResult | null> {
+  if (!sessionId) return null;
+  try {
+    // TODO: remove cast after next `supabase gen types` regeneration cycle.
+    const { data } = await (ctx.supabase
+      .from("sessions")
+      .select("edge_context")
+      .eq("id", sessionId)
+      .single() as unknown as Promise<{ data: { edge_context: unknown } | null }>);
+    return parseStoredEdgeContext(data?.edge_context);
+  } catch {
+    return null;
+  }
+}
+
+// Re-scores each plan's primary step agent against the edge context bias map.
+// Only touches step[0] — the agent that drives hub routing and assigned_to.
+// Steps produced by the planner stay otherwise unchanged.
+function applyEdgeContextToPlan(plan: AgentPlan, edgeContext: EdgeContextResult | null): AgentPlan {
+  if (!edgeContext || !plan.steps.length) return plan;
+  const candidates = plan.steps.map((s) => s.agent);
+  const best = selectAgentWithContext(candidates, edgeContext);
+  if (best === plan.steps[0].agent) return plan;
+  return {
+    ...plan,
+    steps: plan.steps.map((s, i) => (i === 0 ? { ...s, agent: best } : s)),
+  };
+}
+
 export async function planPrompt(
   ctx: Ctx,
   body: string,
   sessionId?: string,
   delegate?: Executive,
 ): Promise<AgentPlan> {
-  const plan = await generatePlan(body, await gatherPriorContext(ctx, sessionId));
+  const edgeContext = await getSessionEdgeContext(ctx, sessionId);
+  const priorContext = await gatherPriorContext(ctx, sessionId, edgeContext);
+  const plan = applyEdgeContextToPlan(await generatePlan(body, priorContext), edgeContext);
   return delegate ? applyDelegation(plan, delegate) : plan;
 }
 
@@ -533,7 +585,11 @@ export async function planPrompts(
   sessionId?: string,
   delegate?: Executive,
 ): Promise<AgentPlan[]> {
-  const plans = await generatePlans(body, await gatherPriorContext(ctx, sessionId));
+  const edgeContext = await getSessionEdgeContext(ctx, sessionId);
+  const priorContext = await gatherPriorContext(ctx, sessionId, edgeContext);
+  const plans = (await generatePlans(body, priorContext)).map((p) =>
+    applyEdgeContextToPlan(p, edgeContext),
+  );
   return delegate ? plans.map((p) => applyDelegation(p, delegate)) : plans;
 }
 
