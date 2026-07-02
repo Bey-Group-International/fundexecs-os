@@ -540,6 +540,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [displayName, setDisplayName] = useState("");
   const [joining, setJoining] = useState(false);
 
+  // Pre-join device selection
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState("");
+  const [selectedCamId, setSelectedCamId] = useState("");
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+
   const sendSignal = useCallback(
     (msg: SignalMsg) => {
       channelRef.current?.send({ type: "broadcast", event: "signal", payload: msg });
@@ -685,9 +691,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => {
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
-      .then((s) => {
+      .then(async (s) => {
         previewStreamRef.current = s;
         setPreviewStream(s);
+        // Enumerate devices after permission grant so labels are populated
+        const all = await navigator.mediaDevices.enumerateDevices();
+        setDevices(all);
+        const defaultCam = s.getVideoTracks()[0]?.getSettings().deviceId ?? "";
+        const defaultMic = s.getAudioTracks()[0]?.getSettings().deviceId ?? "";
+        setSelectedCamId(defaultCam);
+        setSelectedMicId(defaultMic);
       })
       .catch(() => {});
     return () => {
@@ -765,7 +778,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // Acquire local media
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: selectedCamId ? { deviceId: { exact: selectedCamId } } : true,
+        audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true,
+      });
     } catch {
       stream = new MediaStream();
     }
@@ -1137,6 +1153,70 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               placeholder="Your name"
               className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
             />
+
+            {/* Device selectors */}
+            {devices.length > 0 && (
+              <div className="flex flex-col gap-2 pt-1 border-t border-[var(--line)]">
+                <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Devices</p>
+
+                {/* Camera */}
+                {devices.some((d) => d.kind === "videoinput") && (
+                  <div className="flex items-center gap-2">
+                    <CamIcon />
+                    <select
+                      value={selectedCamId}
+                      onChange={(e) => {
+                        setSelectedCamId(e.target.value);
+                        // Re-acquire preview with new camera
+                        previewStreamRef.current?.getTracks().forEach((t) => t.stop());
+                        void navigator.mediaDevices
+                          .getUserMedia({ video: { deviceId: { exact: e.target.value } }, audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true })
+                          .then((s) => { previewStreamRef.current = s; setPreviewStream(s); })
+                          .catch(() => {});
+                      }}
+                      className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
+                    >
+                      {devices.filter((d) => d.kind === "videoinput").map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Microphone */}
+                {devices.some((d) => d.kind === "audioinput") && (
+                  <div className="flex items-center gap-2">
+                    <MicIcon />
+                    <select
+                      value={selectedMicId}
+                      onChange={(e) => setSelectedMicId(e.target.value)}
+                      className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
+                    >
+                      {devices.filter((d) => d.kind === "audioinput").map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Speaker */}
+                {devices.some((d) => d.kind === "audiooutput") && (
+                  <div className="flex items-center gap-2">
+                    <SpeakerIcon />
+                    <select
+                      value={selectedSpeakerId}
+                      onChange={(e) => setSelectedSpeakerId(e.target.value)}
+                      className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
+                    >
+                      {devices.filter((d) => d.kind === "audiooutput").map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>{d.label || "Speaker"}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center gap-2 text-xs text-[var(--fg-muted)]">
               <span className="font-mono bg-[var(--surface-2)] rounded px-1.5 py-0.5">{roomCode}</span>
               <span>·</span>
