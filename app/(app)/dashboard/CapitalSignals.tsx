@@ -1,29 +1,14 @@
 import Link from "next/link";
-import type { CapitalMapEntry, Temperature } from "@/lib/capital-map";
+import type { CapitalMapEntry } from "@/lib/capital-map";
+import { TEMP_STYLE } from "@/lib/capital-map";
 import type { GateTier } from "@/lib/gates";
+import { TIER_STYLE } from "@/lib/gates";
 import type { Approval } from "@/lib/supabase/database.types";
 
 // The Capital Map's two most valuable reads, surfaced on the Command Center:
 // the hottest investors (warmth-ranked) and the gates still waiting on the
 // operator. Server-rendered — no interactivity here; the live surfaces
 // (/capital-map, /workspace) own the action loops.
-
-// Mirror CapitalMap.tsx's TEMP_STYLE so the chips read identically across both
-// surfaces.
-const TEMP_STYLE: Record<Temperature, { dot: string; label: string }> = {
-  cold: { dot: "#6b7280", label: "Cold" },
-  warm: { dot: "#e8a33d", label: "Warm" },
-  active: { dot: "#5b9bd5", label: "Active" },
-  committed: { dot: "#67c587", label: "Committed" },
-};
-
-// Mirror CapitalMap.tsx's TIER_STYLE: green = free, gold = sign-off, red = never
-// delegable.
-const TIER_STYLE: Record<GateTier, string> = {
-  1: "border-status-success/40 text-status-success",
-  2: "border-gold-500/50 text-gold-400",
-  3: "border-status-danger/50 text-status-danger",
-};
 
 // Pull the leading "Tier N" out of an approval summary (the Capital Map writes
 // them as `Tier N — …`). Falls back to Tier 2 — the operator-sign-off default.
