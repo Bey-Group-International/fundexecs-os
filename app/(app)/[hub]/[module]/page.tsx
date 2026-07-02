@@ -206,7 +206,7 @@ export default async function ModulePage({
         isActive: c.is_active ?? true,
         createdAt: c.created_at,
       }));
-      const principal = principalRes.data;
+      const principal = principalRes.data as { full_name: string | null; title: string | null } | null;
       const senderName = principal?.full_name ?? ctx.email ?? "You";
       const senderTitle = principal?.title ?? null;
 

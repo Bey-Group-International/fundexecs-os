@@ -816,6 +816,135 @@ export type CanvasElement = {
   updated_at: string;
 };
 
+// Network OS types (migration 20260702000200_network_os).
+export type MeetingBrief = {
+  id: string;
+  organization_id: string;
+  investor_id: string | null;
+  created_by: string | null;
+  meeting_title: string;
+  meeting_at: string;
+  attendees: string[];
+  brief_content: Record<string, unknown>;
+  source: string;
+  external_event_id: string | null;
+  generated_at: string | null;
+  read_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StrengthLabel = "cold" | "warm" | "active" | "strong";
+
+export type NetworkContact = {
+  id: string;
+  organization_id: string;
+  imported_by: string | null;
+  first_name: string;
+  last_name: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  avatar_url: string | null;
+  title: string | null;
+  company: string | null;
+  company_domain: string | null;
+  location: string | null;
+  seniority: string | null;
+  department: string | null;
+  connected_on: string | null;
+  source: string;
+  relationship_owner: string | null;
+  strength_score: number;
+  strength_label: StrengthLabel;
+  strength_updated_at: string | null;
+  apollo_id: string | null;
+  confidence: number;
+  verified: boolean;
+  enriched_at: string | null;
+  notes: string | null;
+  tags: string[];
+  pooled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NetworkImportJob = {
+  id: string;
+  organization_id: string;
+  created_by: string | null;
+  source: string;
+  status: string;
+  total_rows: number;
+  imported_rows: number;
+  enriched_rows: number;
+  failed_rows: number;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type IntroRequest = {
+  id: string;
+  organization_id: string;
+  requested_by: string | null;
+  target_contact_id: string | null;
+  target_name: string;
+  target_company: string | null;
+  intro_path: string[];
+  introducer_name: string | null;
+  draft_message: string | null;
+  status: string;
+  sent_via: string | null;
+  sent_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SyndicateCircle = {
+  id: string;
+  organization_id: string;
+  created_by: string | null;
+  name: string;
+  description: string | null;
+  invite_code: string | null;
+  is_active: boolean;
+  member_count: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CircleMembership = {
+  id: string;
+  circle_id: string;
+  organization_id: string;
+  user_id: string | null;
+  role: string;
+  share_network: boolean;
+  joined_at: string;
+};
+
+export type ContactList = {
+  id: string;
+  organization_id: string;
+  created_by: string | null;
+  name: string;
+  description: string | null;
+  color: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ContactListMember = {
+  id: string;
+  list_id: string;
+  contact_id: string;
+  added_at: string;
+};
+
 export type Prompt = {
   id: string;
   organization_id: string;
@@ -1903,6 +2032,14 @@ export type Database = {
       docusign_envelopes: TableShape<DocusignEnvelope>;
       canvases: TableShape<Canvas>;
       canvas_elements: TableShape<CanvasElement>;
+      meeting_briefs: TableShape<MeetingBrief>;
+      network_contacts: TableShape<NetworkContact>;
+      network_import_jobs: TableShape<NetworkImportJob>;
+      intro_requests: TableShape<IntroRequest>;
+      syndicate_circles: TableShape<SyndicateCircle>;
+      circle_memberships: TableShape<CircleMembership>;
+      contact_lists: TableShape<ContactList>;
+      contact_list_members: TableShape<ContactListMember>;
     };
     Views: Record<string, never>;
     Functions: {

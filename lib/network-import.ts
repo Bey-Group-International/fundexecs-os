@@ -150,10 +150,10 @@ export async function enrichContact(contactId: string): Promise<void> {
   const result = await enrichPerson({
     email: contact.email ?? undefined,
     linkedin_url: contact.linkedin_url ?? undefined,
+    name: `${contact.first_name} ${contact.last_name}`.trim(),
   });
 
-  // VerifiedResult uses status: 'success' | 'warning' | 'failed', not .success.
-  if (result.status === "failed" || !result.data) return;
+  if (result.status !== "success" || !result.data) return;
   const p = result.data;
 
   await any

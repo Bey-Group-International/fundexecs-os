@@ -26,7 +26,7 @@ export interface NetworkSearchResult {
 
 interface ContactRow {
   id: string;
-  full_name: string;
+  full_name: string | null;
   title: string | null;
   company: string | null;
   location: string | null;
@@ -137,7 +137,7 @@ function buildSimpleIntroPath(
   target: ContactRow,
   allContacts: ContactRow[],
 ): string[] | null {
-  if ((target.strength_score ?? 0) >= 60) return ["You", target.full_name];
+  if ((target.strength_score ?? 0) >= 60) return ["You", target.full_name ?? target.id];
 
   const bridge = allContacts.find(
     (c) =>
@@ -147,7 +147,7 @@ function buildSimpleIntroPath(
       c.company.toLowerCase() === target.company.toLowerCase() &&
       (c.strength_score ?? 0) >= 50,
   );
-  if (bridge) return ["You", bridge.full_name, target.full_name];
+  if (bridge) return ["You", bridge.full_name ?? bridge.id, target.full_name ?? target.id];
   return null;
 }
 
@@ -200,7 +200,7 @@ export async function searchNetwork(query: string, limit = 20): Promise<NetworkS
 
   return contacts.slice(0, limit).map((c) => ({
     id: c.id,
-    fullName: c.full_name,
+    fullName: c.full_name ?? "",
     title: c.title,
     company: c.company,
     location: c.location,
