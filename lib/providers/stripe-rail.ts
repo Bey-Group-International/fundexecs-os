@@ -220,12 +220,11 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
 
     try {
       assertStripeId(transferId);
-    } catch (err) {
+    } catch {
       return {
         ok: false,
         live: false,
         detail: `Invalid transfer ID "${transferId}".`,
-        error: err instanceof Error ? err.message : String(err),
         data: { transferId, status: "pending" },
       };
     }
