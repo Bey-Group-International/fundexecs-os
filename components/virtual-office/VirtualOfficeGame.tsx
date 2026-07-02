@@ -16,6 +16,8 @@ type VideoTile = {
   el: HTMLVideoElement;
 };
 
+type NpcClickPayload = { npcId: string; spriteKey: string; name: string };
+
 type VirtualOfficeGameProps = {
   /** Supabase JWT — when provided, enables multiplayer mode. */
   token?: string;
@@ -33,6 +35,8 @@ type VirtualOfficeGameProps = {
   teleportTarget?: string | null;
   /** Called whenever room occupancy counts update. */
   onOccupancyChange?: (counts: Record<string, number>) => void;
+  /** Called when the user clicks an NPC sprite. */
+  onNpcClick?: (payload: NpcClickPayload) => void;
 };
 
 export function VirtualOfficeGame({
@@ -42,15 +46,19 @@ export function VirtualOfficeGame({
   active = true,
   teleportTarget,
   onOccupancyChange,
+  onNpcClick,
 }: VirtualOfficeGameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const hasActivatedRef = useRef(false);
 
-  // Keep onOccupancyChange current without re-creating the game event listener
+  // Keep callbacks current without re-creating game event listeners
   const onOccupancyChangeRef = useRef(onOccupancyChange);
   useEffect(() => { onOccupancyChangeRef.current = onOccupancyChange; }, [onOccupancyChange]);
+
+  const onNpcClickRef = useRef(onNpcClick);
+  useEffect(() => { onNpcClickRef.current = onNpcClick; }, [onNpcClick]);
 
   // Buffer teleport targets that arrive before Phaser has loaded
   const pendingTeleportRef = useRef<string | null>(null);
@@ -118,6 +126,11 @@ export function VirtualOfficeGame({
         // Room occupancy bridge — reads ref so prop updates are always current
         game.events.on("office:occupancy", (counts: Record<string, number>) => {
           onOccupancyChangeRef.current?.(counts);
+        });
+
+        // NPC click bridge — opens Earn AI sidebar scoped to the clicked executive
+        game.events.on("npc:click", (payload: NpcClickPayload) => {
+          onNpcClickRef.current?.(payload);
         });
 
         // Video tile bridge

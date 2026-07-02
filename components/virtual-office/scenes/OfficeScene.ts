@@ -26,6 +26,7 @@ type RoomZone = { zone: Phaser.GameObjects.Zone; key: string; label: string };
 type RemoteAvatarState = {
   sprite: Phaser.Physics.Arcade.Sprite;
   label: Phaser.GameObjects.Text;
+  nameTag: Phaser.GameObjects.Graphics;
   targetX: number;
   targetY: number;
   facing: Facing;
@@ -522,6 +523,7 @@ export class OfficeScene extends Phaser.Scene {
       state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.15);
       state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.15);
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
+      state.nameTag.setPosition(state.sprite.x, state.sprite.y - 40);
     }
   }
 
@@ -541,6 +543,21 @@ export class OfficeScene extends Phaser.Scene {
     sprite.setScale(frameMap.scale);
     sprite.setDepth(8);
     sprite.anims.play(facingToAnimKey(facing, spriteKey), true);
+
+    // Make NPC clickable — emits npc:click so the React layer can open AI chat
+    sprite.setInteractive({ useHandCursor: true });
+    sprite.on("pointerdown", () => {
+      this.game.events.emit("npc:click", { npcId, spriteKey, name });
+    });
+    sprite.on("pointerover", () => {
+      sprite.setTint(0xffffff);
+      // Subtle highlight: slightly brighten
+      sprite.setAlpha(0.85);
+    });
+    sprite.on("pointerout", () => {
+      sprite.clearTint();
+      sprite.setAlpha(1);
+    });
 
     const label = this.add.text(x, y - 28, name, {
       fontFamily: "monospace",
@@ -612,11 +629,21 @@ export class OfficeScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(11);
 
+    // Small colored avatar dot above the name tag
+    const hue = playerIdToHue(remote.id);
+    const dotColor = Phaser.Display.Color.HSVColorWheel()[Math.round(hue / 360 * 359)].color;
+    const nameTag = this.add.graphics().setDepth(12);
+    nameTag.fillStyle(dotColor, 1);
+    nameTag.fillCircle(0, 0, 5);
+    nameTag.lineStyle(1, 0x0f172a, 0.8);
+    nameTag.strokeCircle(0, 0, 5);
+
     sprite.anims.play(facingToAnimKey(remote.facing, spriteKey), true);
 
     this.remotePlayers.set(remote.id, {
       sprite,
       label,
+      nameTag,
       targetX: remote.x,
       targetY: remote.y,
       facing: remote.facing,
@@ -629,6 +656,7 @@ export class OfficeScene extends Phaser.Scene {
     if (!state) return;
     state.sprite.destroy();
     state.label.destroy();
+    state.nameTag.destroy();
     this.remotePlayers.delete(playerId);
   }
 
