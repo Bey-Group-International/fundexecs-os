@@ -249,10 +249,12 @@ function ScheduleModal({ onClose }: { onClose: () => void }) {
     setLoading(true);
     try {
       const startIso = new Date(startDatetime).toISOString();
+      const roomCode = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
       const params = new URLSearchParams({
         title: schedTitle.trim() || "Meeting",
         startIso,
         durationMinutes: duration,
+        roomCode,
       });
       const res = await fetch(`/api/meetings/calendar-link?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to build calendar link");

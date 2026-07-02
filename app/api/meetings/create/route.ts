@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -15,31 +15,34 @@ function generateRoomCode(): string {
   return code;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const supabase = createServerClient();
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = await req.json() as { title?: string; orgId?: string; dealId?: string };
-    const roomCode = generateRoomCode();
+    const body = await req.json() as { title?: string; orgId?: string; dealId?: string; roomCode?: string };
+    const roomCode = body.roomCode ?? generateRoomCode();
 
-    const { data, error } = await supabase
-      .from("live_meetings")
-      .insert({
-        room_code: roomCode,
-        title: body.title?.trim() || "Meeting",
-        host_id: user.id,
-        organization_id: body.orgId ?? null,
-        deal_id: body.dealId ?? null,
-        status: "waiting",
-      })
-      .select("id, room_code")
+    const { data, error } = await (supabase
+      .from("live_meetings") as any)
+      .upsert(
+        {
+          room_code: roomCode,
+          title: body.title?.trim() || "Meeting",
+          host_id: user.id,
+          organization_id: body.orgId ?? null,
+          deal_id: body.dealId ?? null,
+          status: "waiting",
+        },
+        { onConflict: "room_code", ignoreDuplicates: false },
+      )
+      .select("id, room_code, host_id")
       .single();
 
     if (error) throw error;
-    return NextResponse.json({ id: data.id, roomCode: data.room_code });
+    return NextResponse.json({ id: data.id, roomCode: data.room_code, hostId: data.host_id });
   } catch (err) {
     console.error("[/api/meetings/create]", err);
     return NextResponse.json(
