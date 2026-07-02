@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, useCallback, useTransition } from "
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { LiveNotesResult } from "@/app/api/meetings/notes/route";
+import { MeetingCopilotConsole } from "@/app/(app)/meetings/MeetingCopilotConsole";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -310,7 +311,7 @@ function CopilotSidebar({
   onAdmit: (id: string) => void; onDeny: (id: string) => void;
   waitingPeers: WaitingPeer[]; onChatOpen: () => void;
 }) {
-  const [tab, setTab] = useState<"transcript" | "notes" | "actions" | "chat" | "people">("transcript");
+  const [tab, setTab] = useState<"transcript" | "notes" | "actions" | "chat" | "people" | "analyze">("transcript");
   const [copied, setCopied] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -349,13 +350,13 @@ function CopilotSidebar({
 
       {/* Tabs */}
       <div className="flex border-b border-[var(--line)] shrink-0 overflow-x-auto">
-        {(["transcript", "notes", "actions", "chat", "people"] as const).map((t) => (
+        {(["transcript", "notes", "actions", "chat", "people", "analyze"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`shrink-0 flex-1 py-2 text-xs font-medium transition-colors capitalize ${
               tab === t ? "text-[var(--fg-primary)] border-b-2 border-[var(--gold-400)] -mb-px"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
             }`}>
-            {t === "people" ? `People ${participants.length}` : t === "chat" ? "Chat" : t === "actions" ? "Actions" : t === "notes" ? "Notes" : "Live"}
+            {t === "people" ? `People ${participants.length}` : t === "chat" ? "Chat" : t === "actions" ? "Actions" : t === "notes" ? "Notes" : t === "analyze" ? "Analyze" : "Live"}
           </button>
         ))}
       </div>
@@ -468,6 +469,8 @@ function CopilotSidebar({
             </div>
           </div>
         )}
+
+        {tab === "analyze" && <MeetingCopilotConsole />}
       </div>
 
       {/* Chat input */}
