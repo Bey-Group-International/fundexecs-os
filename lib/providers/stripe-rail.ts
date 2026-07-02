@@ -28,13 +28,25 @@ function treasuryConfigured(): boolean {
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
-async function stripePost<T>(path: string, body: URLSearchParams): Promise<T> {
+// Stripe IDs are alphanumeric+underscore only — validate before interpolating into paths.
+function assertStripeId(id: string): void {
+  if (!/^[a-zA-Z0-9_]+$/.test(id)) throw new Error(`Invalid Stripe ID: "${id}"`);
+}
+
+// Float-safe USD→cents conversion: normalize to 10 decimal places before multiplying.
+function usdToCents(amountUsd: number): number {
+  return Math.round(Number(amountUsd.toFixed(10)) * 100);
+}
+
+async function stripePost<T>(path: string, body: URLSearchParams, idempotencyKey?: string): Promise<T> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
   const res = await fetch(`${STRIPE_API}${path}`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers,
     body: body.toString(),
     signal: AbortSignal.timeout(12_000),
   });
@@ -83,7 +95,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
       };
     }
 
-    const amountCents = Math.round(params.amountUsd * 100);
+    const amountCents = usdToCents(params.amountUsd);
     const description = params.memo ?? `${params.railType.toUpperCase()} transfer — capital event ${params.capitalEventId}`;
 
     try {
@@ -101,6 +113,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
         const transfer = await stripePost<{ id: string; amount: number }>(
           "/transfers",
           body,
+          `stripe-transfer-${params.orgId}-${params.capitalEventId}`,
         );
         return {
           ok: true,
@@ -136,6 +149,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
         const ot = await stripePost<{ id: string; status: string }>(
           "/treasury/outbound_transfers",
           body,
+          `stripe-ach-${params.orgId}-${params.capitalEventId}`,
         );
         return {
           ok: true,
@@ -162,6 +176,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
         const op = await stripePost<{ id: string; status: string }>(
           "/treasury/outbound_payments",
           body,
+          `stripe-wire-${params.orgId}-${params.capitalEventId}`,
         );
         return {
           ok: true,
@@ -199,6 +214,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
       };
     }
 
+    assertStripeId(transferId);
     // Try Treasury OutboundTransfer first, then OutboundPayment, then Transfer.
     const paths = [
       `/treasury/outbound_transfers/${transferId}`,

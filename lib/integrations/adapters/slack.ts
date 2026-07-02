@@ -27,7 +27,7 @@ export const slackAdapter: DispatchAdapter = {
     // Write to internal inbox when a Supabase client is threaded through.
     if (ctx.supabase) {
       try {
-        const threadId = `slack-${ctx.orgId}-${Date.now()}`;
+        const threadId = `slack-${ctx.orgId}-${crypto.randomUUID()}`;
         await ctx.supabase.from("inbox_threads" as never).upsert({
           id: threadId,
           org_id: ctx.orgId,

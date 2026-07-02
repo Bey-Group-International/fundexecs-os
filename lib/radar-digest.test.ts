@@ -176,12 +176,12 @@ describe("isPrefDue", () => {
   });
 });
 
-describe("slack adapter (mock-or-real discipline)", () => {
-  it("is unconfigured in the test env (no SLACK_BOT_TOKEN)", () => {
-    expect(slackAdapter.isConfigured()).toBe(false);
+describe("slack adapter (internal-inbox discipline)", () => {
+  it("is always configured — internal inbox, no external credentials needed", () => {
+    expect(slackAdapter.isConfigured()).toBe(true);
   });
 
-  it("returns a well-formed mock result when unconfigured — ok, not live, no throw", async () => {
+  it("returns a well-formed live result — ok, live, delivers to internal inbox", async () => {
     const res = await slackAdapter.dispatch({
       orgId: "org-1",
       actorId: "system",
@@ -191,8 +191,8 @@ describe("slack adapter (mock-or-real discipline)", () => {
       body: "*Daily Act-now Radar*",
     });
     expect(res.ok).toBe(true);
-    expect(res.live).toBe(false);
+    expect(res.live).toBe(true);
     expect(res.channel).toBe("slack");
-    expect(res.detail).toContain("#sourcing");
+    expect(res.detail).toContain("internal inbox");
   });
 });

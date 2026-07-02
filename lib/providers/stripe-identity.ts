@@ -18,13 +18,20 @@ function configured(): boolean {
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
-async function stripePost<T>(path: string, body: URLSearchParams): Promise<T> {
+// Stripe IDs are alphanumeric+underscore only — validate before interpolating into paths.
+function assertStripeId(id: string): void {
+  if (!/^[a-zA-Z0-9_]+$/.test(id)) throw new Error(`Invalid Stripe ID: "${id}"`);
+}
+
+async function stripePost<T>(path: string, body: URLSearchParams, idempotencyKey?: string): Promise<T> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
   const res = await fetch(`${STRIPE_API}${path}`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers,
     body: body.toString(),
     signal: AbortSignal.timeout(10_000),
   });
@@ -80,9 +87,11 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
       });
       if (params.subjectEmail) body.set("email", params.subjectEmail);
 
+      const idempotencyKey = `stripe-kyc-${params.orgId}-${params.subjectId}-${params.level}`;
       const session = await stripePost<{ id: string; status: string; url: string }>(
         "/identity/verification_sessions",
         body,
+        idempotencyKey,
       );
 
       return {
@@ -118,6 +127,7 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
     }
 
     try {
+      assertStripeId(verificationId);
       const session = await stripeGet<{ id: string; status: string; last_error?: { reason: string } }>(
         `/identity/verification_sessions/${verificationId}`,
       );
