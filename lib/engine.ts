@@ -806,6 +806,8 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
             agent: step.assigned_agent,
             orgContext,
             orgId: ctx.orgId,
+            actorId: ctx.actorId,
+            supabase: ctx.supabase,
           })
         : null;
       if (dispatched) {
