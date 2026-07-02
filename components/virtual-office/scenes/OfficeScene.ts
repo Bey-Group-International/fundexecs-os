@@ -128,6 +128,13 @@ export class OfficeScene extends Phaser.Scene {
   // M1 — HUD
   private netDot!: Phaser.GameObjects.Arc;
 
+  // Click-to-walk pathing
+  private walkPath: Array<{ x: number; y: number }> = [];
+  private walkMarker: Phaser.GameObjects.Arc | null = null;
+
+  // Minimap HUD
+  private minimapPlayerDot!: Phaser.GameObjects.Arc;
+
   constructor() {
     super({ key: "OfficeScene" });
   }
@@ -198,6 +205,7 @@ export class OfficeScene extends Phaser.Scene {
     this._setupInput();
     this._spawnExecNpcs();
     this._setupPointerTeleport();
+    this._createMinimap();
 
     // Ensure the canvas captures keyboard events immediately on scene start
     this.game.canvas.setAttribute("tabindex", "0");
@@ -234,6 +242,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateRemoteAvatars();
     this._updateNpcAvatars();
     this._updateSpatialAudio();
+    this._updateMinimap();
 
     this._interpFrame = (this._interpFrame + 1) % 2;
   }
@@ -505,6 +514,10 @@ export class OfficeScene extends Phaser.Scene {
     const left  = this.cursors.left.isDown  || this.wasd.left.isDown;
     const right = this.cursors.right.isDown || this.wasd.right.isDown;
 
+    // Keyboard input always overrides click-to-walk
+    if (up || down || left || right) this._cancelWalk();
+    else if (this._followWalkPath()) return;
+
     let vx = 0;
     let vy = 0;
 
@@ -621,25 +634,60 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
-  private _setupPointerTeleport() {
-    // Double-click anywhere on the map to teleport to that room's center
-    this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
-      if (!ptr.isDown) return;
-      if (this.input.activePointer.getDuration() < 20 && this.input.pointer1.downTime > 0) return;
-    });
+  private _createMinimap() {
+    // Clickable floor-plan minimap, scroll-locked bottom-right (Gather-style)
+    const cam = this.cameras.main;
+    const SCALE = 0.055;                        // 1152×864 world → ~63×48 px
+    const mw = WORLD_W * SCALE, mh = WORLD_H * SCALE;
+    const pad = 10;
+    const ox = cam.width - mw - pad, oy = cam.height - mh - pad - 18;
 
-    this.input.on("pointerdblclick", (ptr: Phaser.Input.Pointer) => {
-      const wx = this.cameras.main.scrollX + ptr.x / this.cameras.main.zoom;
-      const wy = this.cameras.main.scrollY + ptr.y / this.cameras.main.zoom;
-      // Find which room was clicked and teleport to its center
-      for (const room of ROOMS) {
-        const rx = room.col * ROOM_W;
-        const ry = room.row * ROOM_H;
-        if (wx >= rx && wx < rx + ROOM_W && wy >= ry && wy < ry + ROOM_H) {
-          this.player.setPosition(rx + ROOM_W / 2, ry + ROOM_H / 2);
-          break;
-        }
-      }
+    const bg = this.add.graphics().setScrollFactor(0).setDepth(28);
+    bg.fillStyle(0x0a0806, 0.85);
+    bg.fillRoundedRect(ox - 5, oy - 5, mw + 10, mh + 10, 4);
+    bg.lineStyle(1, 0xc9a84c, 0.3);
+    bg.strokeRoundedRect(ox - 5, oy - 5, mw + 10, mh + 10, 4);
+
+    for (const room of ROOMS) {
+      const rx = ox + room.col * ROOM_W * SCALE;
+      const ry = oy + room.row * ROOM_H * SCALE;
+      const rw = ROOM_W * SCALE - 1, rh = ROOM_H * SCALE - 1;
+      const cell = this.add.rectangle(rx + rw / 2, ry + rh / 2, rw, rh, 0xc9a84c, 0.12)
+        .setStrokeStyle(0.5, 0xc9a84c, 0.35)
+        .setScrollFactor(0)
+        .setDepth(29)
+        .setInteractive({ useHandCursor: true });
+      cell.on("pointerover", () => cell.setFillStyle(0xc9a84c, 0.3));
+      cell.on("pointerout",  () => cell.setFillStyle(0xc9a84c, 0.12));
+      cell.on("pointerup", (ptr: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+        ev.stopPropagation();   // don't also trigger click-to-walk
+        this.player.setPosition(room.col * ROOM_W + ROOM_W / 2, room.row * ROOM_H + ROOM_H / 2);
+        this._cancelWalk();
+      });
+    }
+
+    this.minimapPlayerDot = this.add.arc(ox, oy, 2, 0, 360, false, 0xc9a84c)
+      .setScrollFactor(0).setDepth(30);
+    // Stash origin/scale for the per-frame dot update
+    this.minimapPlayerDot.setData({ ox, oy, scale: SCALE });
+  }
+
+  private _updateMinimap() {
+    if (!this.minimapPlayerDot) return;
+    const ox = this.minimapPlayerDot.getData("ox") as number;
+    const oy = this.minimapPlayerDot.getData("oy") as number;
+    const s  = this.minimapPlayerDot.getData("scale") as number;
+    this.minimapPlayerDot.setPosition(ox + this.player.x * s, oy + this.player.y * s);
+  }
+
+  private _setupPointerTeleport() {
+    // Click-to-walk: click anywhere and the avatar pathfinds there (Gather-style)
+    this.input.on("pointerup", (ptr: Phaser.Input.Pointer) => {
+      // Ignore clicks consumed by interactive objects (NPCs, minimap cells)
+      if (this.input.hitTestPointer(ptr).length > 0) return;
+      const world = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
+      if (world.x < 0 || world.y < 0 || world.x >= WORLD_W || world.y >= WORLD_H) return;
+      this._walkTo(world.x, world.y);
     });
 
     // Emit teleport requests from the React layer (room key → room center)
@@ -647,8 +695,138 @@ export class OfficeScene extends Phaser.Scene {
       const room = ROOMS.find((r) => r.key === roomKey);
       if (!room) return;
       this.player.setPosition(room.col * ROOM_W + ROOM_W / 2, room.row * ROOM_H + ROOM_H / 2);
+      this._cancelWalk();
       this.game.canvas.focus();
     });
+  }
+
+  // ── Click-to-walk pathfinding ───────────────────────────────────────────────
+  //
+  // The world is a 3×3 room grid; movement between adjacent tiles is free
+  // inside a room, and crossing a room boundary is only allowed through the
+  // door gap at the center of each shared edge (mirrors _createWalls()).
+
+  private static readonly TILE = 32;
+
+  private _tileWalkableEdge(ax: number, ay: number, bx: number, by: number): boolean {
+    const T = OfficeScene.TILE;
+    const tilesPerRoomX = ROOM_W / T;  // 12
+    const tilesPerRoomY = ROOM_H / T;  // 9
+    // Crossing a vertical room boundary (x changes across col*12)
+    if (ax !== bx) {
+      const boundary = Math.max(ax, bx);
+      if (boundary % tilesPerRoomX === 0 && boundary > 0 && boundary < (WORLD_W / T)) {
+        // allowed only at the door row (center of the room row)
+        const roomRow = Math.floor(ay / tilesPerRoomY);
+        const doorRow = roomRow * tilesPerRoomY + Math.floor(tilesPerRoomY / 2);
+        return ay === doorRow;
+      }
+    }
+    // Crossing a horizontal room boundary (y changes across row*9)
+    if (ay !== by) {
+      const boundary = Math.max(ay, by);
+      if (boundary % tilesPerRoomY === 0 && boundary > 0 && boundary < (WORLD_H / T)) {
+        const roomCol = Math.floor(ax / tilesPerRoomX);
+        const doorColA = roomCol * tilesPerRoomX + Math.floor(tilesPerRoomX / 2) - 1;
+        return ax === doorColA || ax === doorColA + 1;
+      }
+    }
+    return true;
+  }
+
+  private _findPath(sx: number, sy: number, tx: number, ty: number): Array<{ x: number; y: number }> {
+    const T = OfficeScene.TILE;
+    const GW = WORLD_W / T, GH = WORLD_H / T;
+    const start = { x: Math.floor(sx / T), y: Math.floor(sy / T) };
+    const goal  = { x: Math.min(GW - 1, Math.max(0, Math.floor(tx / T))), y: Math.min(GH - 1, Math.max(0, Math.floor(ty / T))) };
+    if (start.x === goal.x && start.y === goal.y) return [{ x: tx, y: ty }];
+
+    const key = (x: number, y: number) => y * GW + x;
+    const open: Array<{ x: number; y: number; f: number }> = [{ ...start, f: 0 }];
+    const came = new Map<number, number>();
+    const gScore = new Map<number, number>([[key(start.x, start.y), 0]]);
+    const h = (x: number, y: number) => Math.abs(x - goal.x) + Math.abs(y - goal.y);
+
+    while (open.length > 0) {
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+      const cur = open.splice(bi, 1)[0];
+      if (cur.x === goal.x && cur.y === goal.y) {
+        // reconstruct → waypoints at tile centers, final point is the exact click
+        const path: Array<{ x: number; y: number }> = [];
+        let k = key(cur.x, cur.y);
+        while (came.has(k)) {
+          const x = k % GW, y = Math.floor(k / GW);
+          path.unshift({ x: x * T + T / 2, y: y * T + T / 2 });
+          k = came.get(k)!;
+        }
+        if (path.length > 0) path[path.length - 1] = { x: tx, y: ty };
+        else path.push({ x: tx, y: ty });
+        return path;
+      }
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+        const nx = cur.x + dx, ny = cur.y + dy;
+        if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+        if (!this._tileWalkableEdge(cur.x, cur.y, nx, ny)) continue;
+        const ng = (gScore.get(key(cur.x, cur.y)) ?? Infinity) + 1;
+        if (ng < (gScore.get(key(nx, ny)) ?? Infinity)) {
+          came.set(key(nx, ny), key(cur.x, cur.y));
+          gScore.set(key(nx, ny), ng);
+          open.push({ x: nx, y: ny, f: ng + h(nx, ny) });
+        }
+      }
+    }
+    return [];
+  }
+
+  private _walkTo(wx: number, wy: number) {
+    this.walkPath = this._findPath(this.player.x, this.player.y, wx, wy);
+    if (this.walkPath.length === 0) return;
+    // Destination marker — gold pulse ring that fades
+    this.walkMarker?.destroy();
+    this.walkMarker = this.add.arc(wx, wy, 8, 0, 360, false).setStrokeStyle(1.5, 0xc9a84c, 0.9).setDepth(7);
+    this.tweens.add({
+      targets: this.walkMarker, scale: 0.3, alpha: 0, duration: 600,
+      onComplete: () => { this.walkMarker?.destroy(); this.walkMarker = null; },
+    });
+  }
+
+  private _cancelWalk() {
+    this.walkPath = [];
+  }
+
+  /** Follow the active click-to-walk path. Returns true when auto-walking. */
+  private _followWalkPath(): boolean {
+    if (this.walkPath.length === 0) return false;
+    const next = this.walkPath[0];
+    const dx = next.x - this.player.x;
+    const dy = next.y - this.player.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 4) {
+      this.walkPath.shift();
+      if (this.walkPath.length === 0) {
+        this.player.setVelocity(0, 0);
+        this.player.anims.play(facingToAnimKey("idle", this.myCharacterId), true);
+        return true;
+      }
+      return this._followWalkPath();
+    }
+    const vx = (dx / dist) * PLAYER_SPEED;
+    const vy = (dy / dist) * PLAYER_SPEED;
+    this.player.setVelocity(vx, vy);
+    // Face dominant axis
+    if (Math.abs(vx) > Math.abs(vy)) {
+      this.player.anims.play(facingToAnimKey(vx < 0 ? "left" : "right", this.myCharacterId), true);
+    } else {
+      this.player.anims.play(facingToAnimKey(vy < 0 ? "up" : "down", this.myCharacterId), true);
+    }
+    // Mirror to server, same as keyboard movement
+    if (this.socket) {
+      const seq = ++this.moveSeq;
+      this.pendingMoves.set(seq, { vx, vy });
+      this.socket.sendMove(vx / PLAYER_SPEED, vy / PLAYER_SPEED, seq);
+    }
+    return true;
   }
 
   private _spawnExecNpcs() {

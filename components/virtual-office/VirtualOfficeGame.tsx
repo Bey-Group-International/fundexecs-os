@@ -360,7 +360,7 @@ export function VirtualOfficeGame({
           )}
           {canvasFocused && (
             <span className="text-[#c9a84c55] bg-[#0a0806aa] rounded px-2 py-1">
-              WASD / ↑↓←→
+              WASD / ↑↓←→ · click to walk
             </span>
           )}
           {token && <span className="text-emerald-500/50 bg-[#0a0806aa] rounded px-2 py-1">● live</span>}
