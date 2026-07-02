@@ -980,7 +980,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           if (res.ok) {
             const result = await res.json() as LiveNotesResult;
             setNotes(result);
-            if (meetingId) void (supabase.from("live_meetings") as any).update({ notes_snapshot: result }).eq("id", meetingId);
+            // TODO: persist live notes snapshot once a notes_snapshot column is added to live_meetings
+            // (the field does not exist in the DB schema — writing to it silently fails via `as any`)
           }
         } catch { /* ignore */ } finally { notesInflightRef.current = false; }
       });
