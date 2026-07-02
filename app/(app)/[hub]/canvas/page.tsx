@@ -59,11 +59,12 @@ export default async function CanvasPage({ params, searchParams }: PageProps) {
 
   // Verify canvas belongs to the org (RLS will enforce, but 404 gracefully)
   const supabase = createServerClient();
-  const { data: canvas } = await supabase
-    .from("canvases")
+  const { data: canvasRaw } = await supabase
+    .from("canvases" as never)
     .select("*")
     .eq("id", canvasId)
     .single();
+  const canvas = canvasRaw as { id: string; name: string; org_id: string } | null;
 
   if (!canvas) notFound();
 

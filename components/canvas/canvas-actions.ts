@@ -20,13 +20,13 @@ export async function createCanvas(
 
   const supabase = createServerClient();
   const { data, error } = await supabase
-    .from("canvases")
-    .insert({ organization_id: ctx.orgId, name, created_by: ctx.userId })
+    .from("canvases" as never)
+    .insert({ organization_id: ctx.orgId, name, created_by: ctx.userId } as never)
     .select("id")
     .single();
 
   if (error || !data) return null;
-  return { id: data.id };
+  return { id: (data as { id: string }).id };
 }
 
 export async function listCanvases(): Promise<Canvas[]> {
@@ -35,7 +35,7 @@ export async function listCanvases(): Promise<Canvas[]> {
 
   const supabase = createServerClient();
   const { data } = await supabase
-    .from("canvases")
+    .from("canvases" as never)
     .select("*")
     .eq("organization_id", ctx.orgId)
     .order("created_at", { ascending: false });
@@ -53,7 +53,7 @@ export async function listElements(canvasId: string): Promise<CanvasElement[]> {
 
   const supabase = createServerClient();
   const { data } = await supabase
-    .from("canvas_elements")
+    .from("canvas_elements" as never)
     .select("*")
     .eq("canvas_id", canvasId)
     .eq("organization_id", ctx.orgId)
@@ -89,8 +89,8 @@ export async function upsertElement(formData: FormData): Promise<void> {
 
   const supabase = createServerClient();
   await supabase
-    .from("canvas_elements")
-    .upsert(row, { onConflict: "id" });
+    .from("canvas_elements" as never)
+    .upsert(row as never, { onConflict: "id" });
 }
 
 export async function deleteElement(formData: FormData): Promise<void> {
@@ -102,7 +102,7 @@ export async function deleteElement(formData: FormData): Promise<void> {
 
   const supabase = createServerClient();
   await supabase
-    .from("canvas_elements")
+    .from("canvas_elements" as never)
     .delete()
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
