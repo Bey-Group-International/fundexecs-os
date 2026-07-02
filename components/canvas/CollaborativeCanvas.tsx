@@ -626,7 +626,6 @@ export function CollaborativeCanvas({
           {isEditing ? (
             <foreignObject x={el.x + 8} y={el.y + 8} width={el.w - 16} height={el.h - 16}>
               <textarea
-                xmlns={"http://www.w3.org/1999/xhtml" as never}
                 autoFocus
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
@@ -672,7 +671,6 @@ export function CollaborativeCanvas({
           {isEditing ? (
             <foreignObject x={el.x} y={el.y} width={Math.max(120, el.w)} height={Math.max(32, el.h)}>
               <input
-                xmlns={"http://www.w3.org/1999/xhtml" as never}
                 autoFocus
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
@@ -708,7 +706,7 @@ export function CollaborativeCanvas({
       <g key={el.id}>
         {shape}
         {/* Resize handle */}
-        {isSelected && el.type !== "arrow" && (
+        {isSelected && (
           <rect
             x={el.x + el.w - 8}
             y={el.y + el.h - 8}

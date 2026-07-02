@@ -1880,6 +1880,10 @@ export type Database = {
       workflow_templates: TableShape<WorkflowTemplate>;
       synthesis_queue: TableShape<SynthesisQueue>;
       annotations: TableShape<Annotation>;
+      nda_signatures: TableShape<NdaSignature>;
+      docusign_envelopes: TableShape<DocusignEnvelope>;
+      canvases: TableShape<Canvas>;
+      canvas_elements: TableShape<CanvasElement>;
     };
     Views: Record<string, never>;
     Functions: {

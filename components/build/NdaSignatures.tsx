@@ -56,7 +56,7 @@ export async function NdaSignatures() {
     data_room_shares: Pick<DataRoomShare, "label" | "token"> | null;
   };
 
-  const signatures = (rows ?? []) as Row[];
+  const signatures = (rows ?? []) as unknown as Row[];
 
   if (signatures.length === 0) {
     return (
