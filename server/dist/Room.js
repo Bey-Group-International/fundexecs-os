@@ -71,9 +71,9 @@ class Room {
             name: displayName,
             spriteKey,
         };
-        this.players.set(userId, { player, ws });
         this.bubbles.addPlayer(userId, virtual_office_shared_1.SPAWN_X, virtual_office_shared_1.SPAWN_Y);
         this._updateOccupancy(userId, getRoomKey(virtual_office_shared_1.SPAWN_X, virtual_office_shared_1.SPAWN_Y));
+        this.players.set(userId, { player, ws });
         return player;
     }
     removePlayer(playerId) {

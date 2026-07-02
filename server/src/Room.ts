@@ -103,9 +103,9 @@ export class Room {
       name: displayName,
       spriteKey,
     };
-    this.players.set(userId, { player, ws });
     this.bubbles.addPlayer(userId, SPAWN_X, SPAWN_Y);
     this._updateOccupancy(userId, getRoomKey(SPAWN_X, SPAWN_Y));
+    this.players.set(userId, { player, ws });
     return player;
   }
 

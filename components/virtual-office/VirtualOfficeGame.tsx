@@ -34,6 +34,13 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
   const gameRef = useRef<Phaser.Game | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
 
+  // Fix Bug 1: keep onOccupancyChange current without re-creating the game event listener
+  const onOccupancyChangeRef = useRef(onOccupancyChange);
+  useEffect(() => { onOccupancyChangeRef.current = onOccupancyChange; }, [onOccupancyChange]);
+
+  // Fix Bug 3: buffer teleport targets that arrive before Phaser has loaded
+  const pendingTeleportRef = useRef<string | null>(null);
+
   const [bubbleMembers, setBubbleMembers] = useState<string[]>([]);
   const [videoTiles, setVideoTiles] = useState<VideoTile[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -92,9 +99,9 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
           }
         });
 
-        // M5d: room occupancy bridge
+        // M5d: room occupancy bridge — reads ref so prop updates are always current (Bug 1 fix)
         game.events.on("office:occupancy", (counts: Record<string, number>) => {
-          onOccupancyChange?.(counts);
+          onOccupancyChangeRef.current?.(counts);
         });
 
         // Video tile bridge
@@ -115,6 +122,12 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
         }
 
         gameRef.current = game;
+
+        // Bug 3 fix: flush any teleport that arrived before the game was ready
+        if (pendingTeleportRef.current) {
+          game.events.emit("office:teleport", pendingTeleportRef.current);
+          pendingTeleportRef.current = null;
+        }
       });
     });
 
@@ -138,10 +151,13 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
     }
   }, [localStream]);
 
-  // M5c: teleport when target changes
+  // M5c: teleport when target changes — buffer if game not yet loaded (Bug 3 fix)
   useEffect(() => {
-    if (teleportTarget && gameRef.current) {
+    if (!teleportTarget) return;
+    if (gameRef.current) {
       gameRef.current.events.emit("office:teleport", teleportTarget);
+    } else {
+      pendingTeleportRef.current = teleportTarget;
     }
   }, [teleportTarget]);
 
