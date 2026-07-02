@@ -39,7 +39,7 @@ async function getPastMeetings(userId: string): Promise<LiveMeeting[]> {
 
   let participated: LiveMeeting[] = [];
   if (participantMeetingIds.length > 0) {
-    const hostedIds = (hosted ?? []).map((m: LiveMeeting) => m.id);
+    const hostedIds = (hosted ?? []).map((m: { id: string }) => m.id);
     const nonHostedIds = participantMeetingIds.filter((id: string) => !hostedIds.includes(id));
     if (nonHostedIds.length > 0) {
       const { data } = await supabase

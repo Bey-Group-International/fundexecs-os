@@ -18,7 +18,7 @@ export async function DELETE(req: NextRequest) {
       // Soft-hide all hosted meetings for this user
       const { error } = await supabase
         .from("live_meetings")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: new Date().toISOString() } as Record<string, unknown>)
         .eq("host_id", user.id)
         .is("deleted_at", null);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -39,7 +39,7 @@ export async function DELETE(req: NextRequest) {
   if (body.soft) {
     const { error } = await supabase
       .from("live_meetings")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({ deleted_at: new Date().toISOString() } as Record<string, unknown>)
       .eq("id", body.meetingId)
       .eq("host_id", user.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

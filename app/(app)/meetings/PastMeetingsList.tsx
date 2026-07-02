@@ -123,7 +123,7 @@ export function PastMeetingsList({ initialMeetings, userId }: Props) {
       const participantIds = (participantRows ?? []).map((r: { meeting_id: string }) => r.meeting_id);
       let participated: LiveMeeting[] = [];
       if (participantIds.length > 0) {
-        const hostedIds = (hosted ?? []).map((m: LiveMeeting) => m.id);
+        const hostedIds = (hosted ?? []).map((m: { id: string }) => m.id);
         const nonHostedIds = participantIds.filter((id: string) => !hostedIds.includes(id));
         if (nonHostedIds.length > 0) {
           const { data } = await supabase
