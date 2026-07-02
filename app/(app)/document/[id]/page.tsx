@@ -30,12 +30,24 @@ export default async function DocumentBuilderPage({ params }: { params: { id: st
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-5">
-        <Link
-          href="/build/data_room"
-          className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400 hover:underline"
-        >
-          ← Materials &amp; Data Room
-        </Link>
+        <div className="flex items-center justify-between gap-4">
+          <Link
+            href="/build/data_room"
+            className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400 hover:underline"
+          >
+            ← Materials &amp; Data Room
+          </Link>
+          {!doc.storage_key && doc.content && (
+            <a
+              href={`/api/documents/${doc.id}/pdf`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-gold-400 transition"
+            >
+              ↓ PDF
+            </a>
+          )}
+        </div>
         <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary">{doc.name}</h1>
         <p className="mt-0.5 text-sm text-fg-secondary">
           {SECTION_LABEL.get(doc.doc_type ?? "other") ?? "Document"} · build it manually, parse from your data, or draft with Earn.

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { openSection, updateDocumentStatus } from "./materials-actions";
 import { DeleteDocumentButton } from "./DeleteDocumentButton";
+import { GenerateAiButton } from "./GenerateAiButton";
 import type { DocumentStatus } from "@/lib/supabase/database.types";
 
 export interface AccordionDoc {
@@ -125,20 +126,25 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
 
         <StatusPill ready={section.ready} viaBuild={section.viaBuild} docCount={section.docCount} />
 
-        {/* Action button */}
-        <form
-          action={(fd) => startTransition(async () => { await openSection(fd); })}
-          className="shrink-0"
-        >
-          <input type="hidden" name="section" value={section.key} />
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+        {/* Action buttons */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {!hasContent && (section.key === "overview" || section.key === "thesis" || section.key === "marketing" || section.key === "team" || section.key === "track_record") && (
+            <GenerateAiButton sectionKey={section.key} />
+          )}
+          <form
+            action={(fd) => startTransition(async () => { await openSection(fd); })}
+            className="shrink-0"
           >
-            {pending ? "…" : hasContent ? "Open →" : "+ Add"}
-          </button>
-        </form>
+            <input type="hidden" name="section" value={section.key} />
+            <button
+              type="submit"
+              disabled={pending}
+              className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+            >
+              {pending ? "…" : hasContent ? "Open →" : "+ Add"}
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* Expanded content */}
