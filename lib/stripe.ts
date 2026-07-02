@@ -243,6 +243,41 @@ function friendlyStripeError(err: unknown): string {
   return "We couldn’t start checkout. Please try again in a moment.";
 }
 
+// Create a Stripe Customer Portal session for an org that already has a
+// stripe_customer_id. Returns the portal URL (redirect the browser there) or
+// an error string. The portal lets users cancel, swap plans, and update cards
+// without any custom UI on our side.
+export async function createPortalSession(
+  orgId: string,
+  returnPath = "/wallet",
+): Promise<{ url?: string; error?: string }> {
+  const service = createServiceClient();
+  const { data: wallet } = await service
+    .from("wallets")
+    .select("stripe_customer_id")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  const customerId = (wallet as { stripe_customer_id?: string | null } | null)
+    ?.stripe_customer_id;
+  if (!customerId) {
+    return { error: "No billing account found. Subscribe to a plan first." };
+  }
+
+  try {
+    const stripe = getStripe();
+    const base = appBaseUrl();
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${base}${returnPath}`,
+    });
+    return { url: session.url };
+  } catch (err) {
+    console.error("[stripe] portal session creation failed:", err);
+    return { error: "Could not open billing portal. Please try again." };
+  }
+}
+
 export interface FulfillResult {
   ok: boolean;
   kind?: string;
@@ -298,10 +333,20 @@ export async function fulfillCheckout(
         .eq("organization_id", orgId)
         .maybeSingle();
       const planStartedAt = existing?.plan_started_at ?? new Date().toISOString();
+      const stripeCustomerId =
+        typeof session.customer === "string"
+          ? session.customer
+          : (session.customer as { id?: string } | null)?.id ?? null;
       await service
         .from("wallets")
         .upsert(
-          { organization_id: orgId, plan: plan.key, plan_interval: interval, plan_started_at: planStartedAt },
+          {
+            organization_id: orgId,
+            plan: plan.key,
+            plan_interval: interval,
+            plan_started_at: planStartedAt,
+            ...(stripeCustomerId ? { stripe_customer_id: stripeCustomerId } : {}),
+          },
           { onConflict: "organization_id" },
         );
       await grantCredits(service, orgId, planGrantCredits(plan, interval), "plan_grant", {
