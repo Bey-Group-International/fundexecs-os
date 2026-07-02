@@ -21,8 +21,7 @@ export async function redeemCoupon(
   const clean = code.trim().toUpperCase();
   if (!clean) return { ok: false, error: "Enter a coupon code." };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = createServiceClient() as any;
+  const db = createServiceClient() as any; // coupons table added after last type-gen run
 
   const { data: coupon, error: lookupErr } = await db
     .from("coupons")
