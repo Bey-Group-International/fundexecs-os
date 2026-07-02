@@ -229,12 +229,12 @@ export function PastMeetingsList({ initialMeetings, userId }: Props) {
             const isActive = m.status === "active" || m.status === "waiting";
 
             return (
-              <li key={m.id} className="flex flex-col py-3 gap-2">
+              <li key={m.id} className="flex flex-col py-3.5 sm:py-3 gap-2">
                 {/* Row */}
-                <div className="flex items-center justify-between gap-4">
-                  {/* Left: title + meta */}
+                <div className="flex items-center justify-between gap-3">
+                  {/* Left: title + meta — full row is tappable for active meetings */}
                   <button
-                    className="flex flex-col gap-0.5 min-w-0 text-left flex-1"
+                    className="flex flex-col gap-0.5 min-w-0 text-left flex-1 py-0.5"
                     onClick={() =>
                       isActive
                         ? setExpanded(isExpanded ? null : m.id)
@@ -253,6 +253,16 @@ export function PastMeetingsList({ initialMeetings, userId }: Props) {
 
                   {/* Right: status + actions */}
                   <div className="flex items-center gap-2 shrink-0">
+                    {/* On mobile: show Rejoin/Report links directly for active/ended meetings */}
+                    {isActive && (
+                      <Link
+                        href={`/meetings/${m.room_code}`}
+                        className="sm:hidden text-xs font-semibold text-[var(--gold-400)] bg-[var(--gold-400)]/10 px-2.5 py-1 rounded-lg hover:bg-[var(--gold-400)]/20 transition-colors"
+                      >
+                        {m.status === "active" ? "Rejoin" : "Start"}
+                      </Link>
+                    )}
+
                     <button
                       onClick={() =>
                         isActive ? setExpanded(isExpanded ? null : m.id) : undefined
@@ -274,13 +284,13 @@ export function PastMeetingsList({ initialMeetings, userId }: Props) {
                         : m.status === "active"
                         ? "Live"
                         : "Ended"}
-                      {isActive && <span className="text-[0.6rem] opacity-60">▾</span>}
+                      {isActive && <span className="hidden sm:inline text-[0.6rem] opacity-60">▾</span>}
                     </button>
 
                     {m.status === "ended" && (
                       <Link
                         href={`/meetings/${m.room_code}/report`}
-                        className="text-xs text-[var(--gold-400)] hover:underline"
+                        className="text-xs text-[var(--gold-400)] hover:underline whitespace-nowrap"
                       >
                         View report →
                       </Link>

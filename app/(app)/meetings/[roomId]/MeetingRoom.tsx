@@ -169,7 +169,7 @@ function CtrlBtn({ active, onClick, title, activeIcon, inactiveIcon }: {
 function ControlBar({
   micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, duration, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
-  onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout,
+  onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
 }: {
   micOn: boolean; camOn: boolean; shareOn: boolean; copilotOpen: boolean; isHost: boolean;
   handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; duration: number;
@@ -178,6 +178,7 @@ function ControlBar({
   onToggleCopilot: () => void; onLeave: () => void; onEndForAll: () => void;
   onSwitchMic: (id: string) => void; onSwitchCam: (id: string) => void; onSwitchSpeaker: (id: string) => void;
   onRaiseHand: () => void; onReaction: (emoji: string) => void; onMuteAll: () => void; onToggleLayout: () => void;
+  onFlipCamera: () => void;
 }) {
   const mins = String(Math.floor(duration / 60)).padStart(2, "0");
   const secs = String(duration % 60).padStart(2, "0");
@@ -193,23 +194,31 @@ function ControlBar({
   }, [reactionOpen]);
 
   return (
-    <div className="flex items-center justify-between px-6 py-3 border-t border-[var(--line)] bg-[var(--surface-1)] shrink-0">
-      <span className="text-xs font-mono text-[var(--fg-muted)] tabular-nums w-16">{mins}:{secs}</span>
+    <div className="flex items-center justify-between px-3 sm:px-6 py-3 border-t border-[var(--line)] bg-[var(--surface-1)] shrink-0 gap-2">
+      {/* Timer — hidden on very small screens to save space */}
+      <span className="hidden sm:block text-xs font-mono text-[var(--fg-muted)] tabular-nums w-16 shrink-0">{mins}:{secs}</span>
 
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-center">
+        {/* Core controls — always visible */}
         <div className="flex items-center gap-0.5">
           <CtrlBtn active={micOn} onClick={onToggleMic} title={micOn ? "Mute" : "Unmute"} activeIcon={<MicIcon />} inactiveIcon={<MicOffIcon />} />
-          <DeviceChevron kind="audioinput" onSelect={onSwitchMic} />
+          <span className="hidden sm:block"><DeviceChevron kind="audioinput" onSelect={onSwitchMic} /></span>
         </div>
         <div className="flex items-center gap-0.5">
           <CtrlBtn active={camOn} onClick={onToggleCam} title={camOn ? "Camera off" : "Camera on"} activeIcon={<CamIcon />} inactiveIcon={<CamOffIcon />} />
-          <DeviceChevron kind="videoinput" onSelect={onSwitchCam} />
+          <span className="hidden sm:block"><DeviceChevron kind="videoinput" onSelect={onSwitchCam} /></span>
         </div>
-        <div className="flex items-center gap-0.5">
-          <CtrlBtn active onClick={() => {}} title="Speaker" activeIcon={<SpeakerIcon />} inactiveIcon={<SpeakerIcon />} />
-          <DeviceChevron kind="audiooutput" onSelect={onSwitchSpeaker} />
-        </div>
-        <CtrlBtn active={shareOn} onClick={onToggleScreen} title={shareOn ? "Stop sharing" : "Share screen"} activeIcon={<ScreenShareIcon />} inactiveIcon={<ScreenShareIcon />} />
+
+        {/* Camera flip — mobile only */}
+        <button onClick={onFlipCamera} title="Flip camera"
+          className="sm:hidden w-10 h-10 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] flex items-center justify-center text-base transition-colors">
+          🔄
+        </button>
+
+        {/* Screen share — hidden on mobile (not practical) */}
+        <span className="hidden sm:block">
+          <CtrlBtn active={shareOn} onClick={onToggleScreen} title={shareOn ? "Stop sharing" : "Share screen"} activeIcon={<ScreenShareIcon />} inactiveIcon={<ScreenShareIcon />} />
+        </span>
 
         {/* Raise hand */}
         <button onClick={onRaiseHand} title={handRaised ? "Lower hand" : "Raise hand"}
@@ -236,36 +245,43 @@ function ControlBar({
           )}
         </div>
 
-        {/* Layout toggle */}
-        <button onClick={onToggleLayout} title={layout === "grid" ? "Speaker view" : "Grid view"}
-          className="w-10 h-10 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] flex items-center justify-center transition-colors">
-          {layout === "grid" ? <SpeakerViewIcon /> : <GridViewIcon />}
-        </button>
-
-        {isHost && (
-          <button onClick={onMuteAll} title="Mute all participants"
-            className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] px-3 h-10 text-xs font-medium transition-colors">
-            Mute all
+        {/* Layout toggle — hidden on mobile */}
+        <span className="hidden sm:block">
+          <button onClick={onToggleLayout} title={layout === "grid" ? "Speaker view" : "Grid view"}
+            className="w-10 h-10 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] flex items-center justify-center transition-colors">
+            {layout === "grid" ? <SpeakerViewIcon /> : <GridViewIcon />}
           </button>
+        </span>
+
+        {/* Mute all — host only, hidden on mobile */}
+        {isHost && (
+          <span className="hidden sm:block">
+            <button onClick={onMuteAll} title="Mute all participants"
+              className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] px-3 h-10 text-xs font-medium transition-colors">
+              Mute all
+            </button>
+          </span>
         )}
 
+        {/* Leave / End — always visible */}
         {isHost ? (
           <button onClick={onEndForAll}
-            className="flex items-center gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-medium px-5 py-2 transition-colors">
-            <PhoneOffIcon /> End for all
+            className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
+            <PhoneOffIcon /> <span className="hidden sm:inline">End for all</span>
           </button>
         ) : (
           <button onClick={onLeave}
-            className="flex items-center gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-medium px-5 py-2 transition-colors">
-            <PhoneOffIcon /> Leave
+            className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
+            <PhoneOffIcon /> <span className="hidden sm:inline">Leave</span>
           </button>
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* Right side: BW indicator + copy link + copilot toggle */}
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         {bwMode === "audio-only" && (
           <span title="Low bandwidth — video paused to maintain audio" className="text-xs text-[var(--status-warning)] flex items-center gap-1 border border-[var(--status-warning)]/30 rounded-full px-2 py-1">
-            📶 Low BW
+            📶 <span className="hidden sm:inline">Low BW</span>
           </span>
         )}
         <button
@@ -274,15 +290,15 @@ function ControlBar({
             void navigator.clipboard.writeText(link).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); });
           }}
           title="Copy meeting link"
-          className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] px-3 h-8 text-xs font-medium transition-colors">
+          className="hidden sm:flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] px-3 h-8 text-xs font-medium transition-colors">
           {linkCopied ? "✓ Copied" : "Copy link"}
         </button>
         <button onClick={onToggleCopilot}
-          className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`relative flex items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors ${
             copilotOpen ? "border-[var(--gold-400)] bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
                         : "border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
           }`}>
-          ✨ Copilot
+          ✨ <span className="hidden sm:inline">Copilot</span>
           {chatUnread > 0 && !copilotOpen && (
             <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--gold-400)] text-black text-[10px] font-bold flex items-center justify-center">
               {chatUnread}
@@ -611,6 +627,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [isGuest, setIsGuest] = useState(false);
   const [showGuestUpsell, setShowGuestUpsell] = useState(false);
   const [meetingTitle, setMeetingTitle] = useState("Meeting");
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
   // Pre-join devices
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -1237,6 +1254,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   const muteAll = useCallback(() => { sendSignal({ type: "mute_all", from: myIdRef.current }); }, [sendSignal]);
 
+  const flipCamera = useCallback(async () => {
+    const next = facingMode === "user" ? "environment" : "user";
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: next }, audio: false });
+      const t = s.getVideoTracks()[0];
+      if (!t || !localStreamRef.current) return;
+      cameraTrackRef.current = t;
+      peersRef.current.forEach((pc) => { const sender = pc.getSenders().find((s) => s.track?.kind === "video"); if (sender) void sender.replaceTrack(t); });
+      localStreamRef.current.getVideoTracks().forEach((t2) => { t2.stop(); localStreamRef.current!.removeTrack(t2); });
+      localStreamRef.current.addTrack(t);
+      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      setFacingMode(next);
+    } catch (e) { console.warn("[flipCamera]", e); }
+  }, [facingMode]);
+
   const kickPeer = useCallback((peerId: string) => {
     sendSignal({ type: "kick", from: myIdRef.current, target: peerId });
     peersRef.current.get(peerId)?.close(); peersRef.current.delete(peerId);
@@ -1343,11 +1375,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       <div className="flex flex-col items-center justify-center min-h-[70vh] gap-5 px-4">
         <div className="w-full max-w-sm flex flex-col gap-3">
           {/* Camera preview */}
-          <div className="rounded-2xl overflow-hidden bg-black aspect-video border border-[var(--line)] shadow-sm">
+          <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-[var(--line)] shadow-sm">
             {previewStream ? <PreviewVideo stream={previewStream} /> : (
               <div className="flex items-center justify-center h-full">
                 <span className="text-xs text-[var(--fg-muted)]">Camera off</span>
               </div>
+            )}
+            {/* Flip camera — mobile only */}
+            {previewStream && (
+              <button
+                onClick={() => {
+                  const next = facingMode === "user" ? "environment" : "user";
+                  previewStreamRef.current?.getTracks().forEach((t) => t.stop());
+                  void navigator.mediaDevices.getUserMedia({ video: { facingMode: next }, audio: true })
+                    .then((s) => { previewStreamRef.current = s; setPreviewStream(s); setFacingMode(next); })
+                    .catch(() => {});
+                }}
+                className="sm:hidden absolute top-2 right-2 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center text-base backdrop-blur-sm"
+                title="Flip camera"
+              >
+                🔄
+              </button>
             )}
           </div>
 
@@ -1557,9 +1605,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
         </div>
 
-        {/* Copilot sidebar */}
+        {/* Copilot sidebar — side panel on desktop, overlay sheet on mobile */}
         {copilotOpen && (
-          <div className="w-80 shrink-0 flex flex-col overflow-hidden">
+          <div className="
+            sm:w-80 sm:shrink-0 sm:relative sm:flex sm:flex-col sm:overflow-hidden
+            fixed inset-0 z-40 flex flex-col overflow-hidden sm:inset-auto sm:z-auto
+            bg-[var(--surface-1)] sm:bg-transparent
+          ">
             <CopilotSidebar
               transcript={transcript} notes={notes} isUpdating={isUpdatingNotes}
               srStatus={srStatus} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
@@ -1583,6 +1635,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         onSwitchMic={switchMic} onSwitchCam={switchCam} onSwitchSpeaker={switchSpeaker}
         onRaiseHand={toggleRaiseHand} onReaction={sendReaction} onMuteAll={muteAll}
         onToggleLayout={() => setLayout((v) => v === "grid" ? "speaker" : "grid")}
+        onFlipCamera={() => void flipCamera()}
       />
 
       {/* Report generation error banner */}
