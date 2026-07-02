@@ -1262,69 +1262,90 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   if (!ready) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 px-4">
-        <div className="w-full max-w-sm flex flex-col gap-4">
-          <div className="rounded-2xl overflow-hidden bg-[var(--surface-2)] aspect-video border border-[var(--line)]">
+      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-5 px-4">
+        <div className="w-full max-w-sm flex flex-col gap-3">
+          {/* Camera preview */}
+          <div className="rounded-2xl overflow-hidden bg-black aspect-video border border-[var(--line)] shadow-sm">
             {previewStream ? <PreviewVideo stream={previewStream} /> : (
               <div className="flex items-center justify-center h-full">
-                <span className="text-xs text-[var(--fg-muted)]">Camera preview</span>
+                <span className="text-xs text-[var(--fg-muted)]">Camera off</span>
               </div>
             )}
           </div>
-          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4 flex flex-col gap-3">
-            <p className="text-sm font-medium text-[var(--fg-primary)]">Ready to join?</p>
-            <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name"
-              className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]" />
 
-            {devices.length > 0 && (
-              <div className="flex flex-col gap-2 pt-1 border-t border-[var(--line)]">
-                <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Devices</p>
-                {devices.some((d) => d.kind === "videoinput") && (
-                  <div className="flex items-center gap-2">
-                    <CamIcon />
-                    <select value={selectedCamId}
-                      onChange={(e) => {
-                        setSelectedCamId(e.target.value);
-                        previewStreamRef.current?.getTracks().forEach((t) => t.stop());
-                        void navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: e.target.value } }, audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true })
-                          .then((s) => { previewStreamRef.current = s; setPreviewStream(s); }).catch(() => {});
-                      }}
-                      className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]">
-                      {devices.filter((d) => d.kind === "videoinput").map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>)}
-                    </select>
-                  </div>
-                )}
-                {devices.some((d) => d.kind === "audioinput") && (
-                  <div className="flex items-center gap-2">
-                    <MicIcon />
-                    <select value={selectedMicId} onChange={(e) => setSelectedMicId(e.target.value)}
-                      className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]">
-                      {devices.filter((d) => d.kind === "audioinput").map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}
-                    </select>
-                  </div>
-                )}
-                {devices.some((d) => d.kind === "audiooutput") && (
-                  <div className="flex items-center gap-2">
-                    <SpeakerIcon />
-                    <select value={selectedSpeakerId} onChange={(e) => setSelectedSpeakerId(e.target.value)}
-                      className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]">
-                      {devices.filter((d) => d.kind === "audiooutput").map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Speaker"}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
-            )}
+          {/* Join card */}
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] overflow-hidden">
+            <div className="px-5 pt-5 pb-4 flex flex-col gap-4">
+              <p className="text-base font-semibold text-[var(--fg-primary)]">Ready to join?</p>
 
-            <div className="flex items-center gap-2 text-xs text-[var(--fg-muted)]">
-              <span className="font-mono bg-[var(--surface-2)] rounded px-1.5 py-0.5">{roomCode}</span>
-              <span>·</span>
-              <button onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/meetings/${roomCode}`)}
-                className="text-[var(--gold-400)] hover:text-[var(--gold-500)]">Copy invite link</button>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Your name"
+                className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
+              />
+
+              {devices.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-[var(--fg-muted)]">Devices</p>
+                  {devices.some((d) => d.kind === "videoinput") && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[var(--fg-muted)] shrink-0"><CamIcon /></span>
+                      <select value={selectedCamId}
+                        onChange={(e) => {
+                          setSelectedCamId(e.target.value);
+                          previewStreamRef.current?.getTracks().forEach((t) => t.stop());
+                          void navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: e.target.value } }, audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true })
+                            .then((s) => { previewStreamRef.current = s; setPreviewStream(s); }).catch(() => {});
+                        }}
+                        className="flex-1 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] truncate">
+                        {devices.filter((d) => d.kind === "videoinput").map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {devices.some((d) => d.kind === "audioinput") && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[var(--fg-muted)] shrink-0"><MicIcon /></span>
+                      <select value={selectedMicId} onChange={(e) => setSelectedMicId(e.target.value)}
+                        className="flex-1 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] truncate">
+                        {devices.filter((d) => d.kind === "audioinput").map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {devices.some((d) => d.kind === "audiooutput") && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[var(--fg-muted)] shrink-0"><SpeakerIcon /></span>
+                      <select value={selectedSpeakerId} onChange={(e) => setSelectedSpeakerId(e.target.value)}
+                        className="flex-1 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] truncate">
+                        {devices.filter((d) => d.kind === "audiooutput").map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Speaker"}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <button onClick={() => void joinMeeting()} disabled={joining}
-              className="rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 text-black text-sm font-semibold py-2.5 transition-colors">
-              {joining ? "Joining…" : "Join meeting"}
-            </button>
+
+            {/* Footer row */}
+            <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--line)] bg-[var(--surface-0)]">
+              <span className="font-mono text-xs text-[var(--fg-muted)] bg-[var(--surface-2)] rounded-md px-2 py-1 select-all">{roomCode}</span>
+              <button
+                onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/meetings/${roomCode}`)}
+                className="text-xs text-[var(--gold-400)] hover:text-[var(--gold-500)] transition-colors"
+              >
+                Copy invite link
+              </button>
+            </div>
+
+            <div className="px-5 pb-5 pt-3">
+              <button
+                onClick={() => void joinMeeting()}
+                disabled={joining}
+                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 text-black text-sm font-semibold py-2.5 transition-colors"
+              >
+                {joining ? "Joining…" : "Join meeting"}
+              </button>
+            </div>
           </div>
         </div>
       </div>
