@@ -309,29 +309,50 @@ export default async function MarketplacePage() {
                           </p>
                         ) : null}
 
-                        {/* Best-fit investors for this listing — take it straight
-                            to them through a gated outreach. */}
+                        {/* Best-fit investors — Fintrx/OpenVC enriched: check range + AUM + fit score. */}
                         {matchesByListing[l.id]?.length ? (
                           <div className="mt-3 rounded-lg border border-gold-500/25 bg-gold-500/[0.05] p-3">
                             <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
                               Best-fit investors
                             </p>
-                            <div className="mt-1.5 flex flex-col gap-1.5">
-                              {matchesByListing[l.id].map((m) => (
-                                <div key={m.investor.id} className="flex items-center justify-between gap-2">
-                                  <span className="min-w-0 truncate text-sm text-fg-primary">
-                                    {m.investor.name}
-                                    <span className="ml-1.5 font-mono text-[11px] text-gold-300">{m.score} fit</span>
-                                  </span>
-                                  <form action={queueListingOutreach} className="shrink-0">
-                                    <input type="hidden" name="investor_id" value={m.investor.id} />
-                                    <input type="hidden" name="listing_title" value={l.title} />
-                                    <button className="rounded-md border border-line px-2.5 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary">
-                                      Queue outreach
-                                    </button>
-                                  </form>
-                                </div>
-                              ))}
+                            <div className="mt-1.5 flex flex-col gap-2">
+                              {matchesByListing[l.id].map((m) => {
+                                const inv = m.investor;
+                                const checkRange =
+                                  inv.typical_check_min != null || inv.typical_check_max != null
+                                    ? `${inv.typical_check_min != null ? compactUsd.format(inv.typical_check_min) : "—"}–${inv.typical_check_max != null ? compactUsd.format(inv.typical_check_max) : "—"} check`
+                                    : null;
+                                const aum = inv.aum != null ? `${compactUsd.format(inv.aum)} AUM` : null;
+                                return (
+                                  <div key={inv.id} className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="text-sm font-medium text-fg-primary">{inv.name}</span>
+                                        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                                          {m.score} fit
+                                        </span>
+                                        {inv.investor_type ? (
+                                          <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                                            {inv.investor_type.replace(/_/g, " ")}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                      {(checkRange || aum) ? (
+                                        <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+                                          {[aum, checkRange].filter(Boolean).join(" · ")}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                    <form action={queueListingOutreach} className="shrink-0 self-center">
+                                      <input type="hidden" name="investor_id" value={inv.id} />
+                                      <input type="hidden" name="listing_title" value={l.title} />
+                                      <button className="rounded-md border border-line px-2.5 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary">
+                                        Queue outreach
+                                      </button>
+                                    </form>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         ) : null}

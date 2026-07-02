@@ -5,6 +5,7 @@ import { getPortfolioMonitor } from "@/lib/portfolio-monitor";
 import { PortfolioMonitor } from "@/components/portfolio/PortfolioMonitor";
 import { PortfolioHealthDashboard } from "@/components/execute/PortfolioHealthDashboard";
 import { ContractStatusBoard } from "@/components/execute/ContractStatusBoard";
+import { PortfolioExitScenarios } from "@/components/execute/PortfolioExitScenarios";
 import { computePortfolioHealth } from "@/lib/portfolio-analytics";
 import type { ConcentrationRisk } from "@/lib/portfolio-analytics";
 import type { ContractStatus, DocumentType } from "@/lib/contracts";
@@ -100,6 +101,33 @@ export default async function PortfolioPage() {
       </header>
 
       <PortfolioMonitor data={data} />
+
+      {data.hasData && (
+        <section className="mt-12">
+          <header className="mb-4">
+            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+              Forcastr-style modeling
+            </span>
+            <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+              Exit Scenarios
+            </h2>
+            <p className="mt-1 text-sm text-fg-secondary">
+              Portfolio-level exit projections at downside, base, upside, and bull multiples.
+            </p>
+          </header>
+          <PortfolioExitScenarios
+            assets={assetMetrics.map((a) => ({
+              id: a.id,
+              name: a.name,
+              cost: a.equityInvested ?? 0,
+              nav: a.currentValue ?? 0,
+              moic: a.moic,
+              holdPeriodMonths: a.holdPeriodMonths,
+            }))}
+            totalNAV={totalNAV}
+          />
+        </section>
+      )}
 
       {data.hasData && (
         <section className="mt-12">
