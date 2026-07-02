@@ -28,20 +28,23 @@ export const slackAdapter: DispatchAdapter = {
     if (ctx.supabase) {
       try {
         const threadId = `slack-${ctx.orgId}-${crypto.randomUUID()}`;
-        await ctx.supabase.from("inbox_threads" as never).upsert({
-          id: threadId,
-          org_id: ctx.orgId,
-          channel: "slack",
-          subject: ctx.subject ?? "Internal notification",
-          status: "unread",
-        } as never, { onConflict: "id", ignoreDuplicates: false });
-        await ctx.supabase.from("inbox_messages" as never).insert({
+        await (ctx.supabase.from("inbox_threads") as ReturnType<typeof ctx.supabase.from>).upsert(
+          {
+            id: threadId,
+            org_id: ctx.orgId,
+            channel: "slack",
+            subject: ctx.subject ?? "Internal notification",
+            status: "unread",
+          },
+          { onConflict: "id", ignoreDuplicates: false },
+        );
+        await (ctx.supabase.from("inbox_messages") as ReturnType<typeof ctx.supabase.from>).insert({
           thread_id: threadId,
           org_id: ctx.orgId,
           channel: "slack",
           direction: "inbound",
           body: ctx.body ?? ctx.subject ?? "",
-        } as never);
+        });
       } catch {
         // Non-fatal — dispatch_log still captures the event.
       }

@@ -35,6 +35,9 @@ function assertStripeId(id: string): void {
 
 // Float-safe USD→cents conversion: normalize to 10 decimal places before multiplying.
 function usdToCents(amountUsd: number): number {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+    throw new Error(`Invalid transfer amount: ${amountUsd}`);
+  }
   return Math.round(Number(amountUsd.toFixed(10)) * 100);
 }
 
@@ -71,8 +74,8 @@ async function stripeGet<T>(path: string): Promise<T> {
 
 function mapTransferStatus(s: string): CapitalTransferRecord["status"] {
   if (s === "posted" || s === "paid" || s === "succeeded") return "settled";
-  if (s === "failed" || s === "canceled" || s === "reversed") return "failed";
-  if (s === "processing" || s === "pending") return "pending";
+  if (s === "failed" || s === "canceled" || s === "reversed" || s === "returned") return "failed";
+  if (s === "processing" || s === "pending" || s === "in_transit") return "pending";
   return "initiated";
 }
 
@@ -113,7 +116,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
         const transfer = await stripePost<{ id: string; amount: number }>(
           "/transfers",
           body,
-          `stripe-transfer-${params.orgId}-${params.capitalEventId}`,
+          `stripe-transfer|${params.orgId}|${params.capitalEventId}`,
         );
         return {
           ok: true,
@@ -149,7 +152,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
         const ot = await stripePost<{ id: string; status: string }>(
           "/treasury/outbound_transfers",
           body,
-          `stripe-ach-${params.orgId}-${params.capitalEventId}`,
+          `stripe-ach|${params.orgId}|${params.capitalEventId}`,
         );
         return {
           ok: true,
@@ -176,7 +179,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
         const op = await stripePost<{ id: string; status: string }>(
           "/treasury/outbound_payments",
           body,
-          `stripe-wire-${params.orgId}-${params.capitalEventId}`,
+          `stripe-wire|${params.orgId}|${params.capitalEventId}`,
         );
         return {
           ok: true,
@@ -225,7 +228,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
 
     for (const path of paths) {
       try {
-        const obj = await stripeGet<{ id: string; status: string; amount: number }>(path);
+        const obj = await stripeGet<{ id: string; status: string; amount: number; created: number }>(path);
         const status = mapTransferStatus(obj.status);
         return {
           ok: true,
@@ -234,8 +237,8 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
           data: {
             transferId: obj.id,
             status,
-            ...(status === "settled" ? { settledAt: new Date().toISOString() } : {}),
-            feeUsd: 0,
+            // Use Stripe's authoritative created timestamp, not the server clock.
+            ...(status === "settled" ? { settledAt: new Date(obj.created * 1000).toISOString() } : {}),
           },
         };
       } catch {

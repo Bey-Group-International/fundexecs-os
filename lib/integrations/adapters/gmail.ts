@@ -12,7 +12,7 @@ import type {
   DispatchContext,
   DispatchResult,
 } from "../types";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, escapeHtml } from "@/lib/email";
 
 function configured(): boolean {
   return Boolean(
@@ -40,18 +40,19 @@ export const gmailAdapter: DispatchAdapter = {
 
     if (!to) {
       return {
-        ok: true,
+        ok: false,
         channel: "gmail",
         live: false,
-        detail: `Prepared email for ${recipient} — no email address on file; send manually.`,
+        detail: `No email address on file for ${recipient} — send manually.`,
       };
     }
 
+    const escaped = escapeHtml(ctx.body ?? "");
     const result = await sendEmail({
       to: { name: ctx.target?.name ?? recipient, email: to },
       subject: ctx.subject ?? "(no subject)",
-      htmlBody: ctx.body
-        ? `<p>${ctx.body.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`
+      htmlBody: escaped
+        ? `<p>${escaped.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`
         : "",
     });
 
@@ -66,9 +67,9 @@ export const gmailAdapter: DispatchAdapter = {
 
     return {
       ok: false,
-      channel: "gmail",
-      live: false,
-      detail: `Email to ${recipient} could not be sent — saved as draft. ${result.detail}`,
+      channel: result.channel,
+      live: true,
+      detail: `Email to ${recipient} could not be delivered. ${result.detail}`,
       error: result.detail,
     };
   },

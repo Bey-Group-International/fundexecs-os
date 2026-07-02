@@ -87,8 +87,12 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
       });
       if (params.subjectEmail) body.set("email", params.subjectEmail);
 
-      const idempotencyKey = `stripe-kyc-${params.orgId}-${params.subjectId}-${params.level}`;
-      const session = await stripePost<{ id: string; status: string; url: string }>(
+      // Use | separator (can't appear in Stripe IDs) to prevent field-value collision.
+      // Include today's date so a re-initiation the next day creates a fresh session
+      // rather than returning the cached canceled one within the 24h idempotency window.
+      const today = new Date().toISOString().slice(0, 10);
+      const idempotencyKey = `stripe-kyc|${params.orgId}|${params.subjectId}|${params.level}|${today}`;
+      const session = await stripePost<{ id: string; status: string; url: string; created: number }>(
         "/identity/verification_sessions",
         body,
         idempotencyKey,
@@ -128,7 +132,7 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
 
     try {
       assertStripeId(verificationId);
-      const session = await stripeGet<{ id: string; status: string; last_error?: { reason: string } }>(
+      const session = await stripeGet<{ id: string; status: string; created: number; last_error?: { reason: string } }>(
         `/identity/verification_sessions/${encodeURIComponent(verificationId)}`,
       );
 
@@ -141,7 +145,8 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
           verificationId: session.id,
           level: "kyc",
           status,
-          ...(status === "approved" ? { completedAt: new Date().toISOString() } : {}),
+          // Use Stripe's authoritative created timestamp, not the server clock.
+          ...(status === "approved" ? { completedAt: new Date(session.created * 1000).toISOString() } : {}),
           ...(session.last_error ? { notes: session.last_error.reason } : {}),
         },
       };
