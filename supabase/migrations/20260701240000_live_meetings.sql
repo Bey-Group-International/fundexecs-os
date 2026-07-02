@@ -49,6 +49,13 @@ ALTER TABLE live_meeting_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE live_meeting_transcripts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE live_meeting_reports ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "live_meetings_select" ON live_meetings;
+DROP POLICY IF EXISTS "live_meetings_insert" ON live_meetings;
+DROP POLICY IF EXISTS "live_meetings_update" ON live_meetings;
+DROP POLICY IF EXISTS "live_meeting_participants_self" ON live_meeting_participants;
+DROP POLICY IF EXISTS "live_meeting_transcripts_meeting" ON live_meeting_transcripts;
+DROP POLICY IF EXISTS "live_meeting_reports_meeting" ON live_meeting_reports;
+
 CREATE POLICY "live_meetings_select" ON live_meetings FOR SELECT
   USING (
     organization_id IS NULL
@@ -85,9 +92,21 @@ CREATE POLICY "live_meeting_reports_meeting" ON live_meeting_reports
     )
   );
 
--- Enable realtime for signaling channel
-ALTER PUBLICATION supabase_realtime ADD TABLE live_meetings;
-ALTER PUBLICATION supabase_realtime ADD TABLE live_meeting_participants;
+-- Enable realtime for signaling channel (idempotent)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'live_meetings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE live_meetings;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'live_meeting_participants'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE live_meeting_participants;
+  END IF;
+END $$;
 
 COMMENT ON TABLE live_meetings IS 'Live video meeting rooms with WebRTC mesh topology.';
 COMMENT ON TABLE live_meeting_transcripts IS 'Live speech-to-text transcript chunks from meeting participants.';

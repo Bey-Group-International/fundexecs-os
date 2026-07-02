@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
-import { analyzeMeeting } from "@/lib/claude";
 import { createServerClient } from "@/lib/supabase/server";
+import { analyzeMeeting } from "@/lib/claude";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const supabase = createServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const supabase = createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const body = await req.json() as {
       title?: string;
       participants?: string[];

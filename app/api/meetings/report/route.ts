@@ -29,6 +29,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "meetingId and transcript required" }, { status: 400 });
     }
 
+    // Verify caller is the meeting host
+    const { data: meeting } = await supabase
+      .from("live_meetings")
+      .select("id, host_id")
+      .eq("id", body.meetingId)
+      .single();
+
+    if (!meeting || meeting.host_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Cap transcript to ~12 000 chars to stay within model context / cost budget
+    const transcript = body.transcript.length > 12_000
+      ? body.transcript.slice(-12_000)
+      : body.transcript;
+
     let analysis: Record<string, unknown> = { key_points: [], action_items: [], summary: "" };
 
     if (client) {
@@ -59,7 +75,7 @@ Participants: ${body.participants?.join(", ") ?? "Unknown"}
 ${durationMin ? `Duration: ~${durationMin} minutes` : ""}
 
 FULL TRANSCRIPT:
-${body.transcript}
+${transcript}
 
 Generate a comprehensive post-meeting report.`,
           },
@@ -88,7 +104,7 @@ Generate a comprehensive post-meeting report.`,
         summary: analysis.summary as string,
         key_points: analysis.key_points as import("@/lib/supabase/database.types").Json,
         action_items: analysis.action_items as import("@/lib/supabase/database.types").Json,
-        full_transcript: body.transcript,
+        full_transcript: transcript,
         analysis: analysis as import("@/lib/supabase/database.types").Json,
       })
       .select("id")
