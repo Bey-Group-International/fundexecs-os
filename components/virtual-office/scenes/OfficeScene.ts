@@ -196,6 +196,7 @@ export class OfficeScene extends Phaser.Scene {
     this._createNetDot();
     this._setupCamera();
     this._setupInput();
+    this._spawnExecNpcs();
 
     // Receive resolved zone definitions from the React wrapper
     this.game.events.on("office:zone-config", (zones: ZoneDef[]) => {
@@ -605,6 +606,29 @@ export class OfficeScene extends Phaser.Scene {
       state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.24);
       state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
+    }
+  }
+
+  private _spawnExecNpcs() {
+    // Offset slots so multiple NPCs in the same room don't stack
+    const roomSlots: Record<string, number> = {};
+    for (const ch of executiveCharacters) {
+      if (!ch.roomKey || !ch.spriteSheet) continue;
+      const room = ROOMS.find((r) => r.key === ch.roomKey);
+      if (!room) continue;
+      const slot = roomSlots[ch.roomKey] ?? 0;
+      roomSlots[ch.roomKey] = slot + 1;
+      // Spread up to 4 NPCs per room in a 2×2 grid offset from center
+      const offsets = [
+        { dx: -56, dy: 24 },
+        { dx:  56, dy: 24 },
+        { dx: -56, dy: 64 },
+        { dx:  56, dy: 64 },
+      ];
+      const off = offsets[slot % offsets.length];
+      const x = room.col * ROOM_W + ROOM_W / 2 + off.dx;
+      const y = room.row * ROOM_H + ROOM_H / 2 + off.dy;
+      this._spawnNpc(ch.id, x, y, "down", ch.id, ch.nickname ?? ch.name.split(" ")[0]);
     }
   }
 
