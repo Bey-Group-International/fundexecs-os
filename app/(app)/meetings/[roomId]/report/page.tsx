@@ -109,6 +109,7 @@ export default function MeetingReportPage() {
   const decisions = (analysis?.decisions as string[] | null) ?? [];
   const followUp = analysis?.follow_up_draft as string | null;
   const sentiment = analysis?.sentiment as string | null;
+  const nextMeeting = analysis?.next_meeting_suggestion as string | null;
 
   const duration = meeting.started_at && meeting.ended_at
     ? Math.round((new Date(meeting.ended_at).getTime() - new Date(meeting.started_at).getTime()) / 60000)
@@ -186,6 +187,14 @@ export default function MeetingReportPage() {
             ))}
           </div>
         </Section>
+      )}
+
+      {/* Next meeting suggestion */}
+      {nextMeeting && (
+        <div className="rounded-xl border border-[var(--gold-400)]/20 bg-[var(--gold-400)]/5 px-4 py-3 flex items-start gap-3">
+          <span className="text-[var(--gold-400)] text-base shrink-0">📅</span>
+          <p className="text-sm text-[var(--fg-primary)]">{nextMeeting}</p>
+        </div>
       )}
 
       {/* Follow-up draft */}

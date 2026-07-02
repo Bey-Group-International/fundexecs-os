@@ -54,12 +54,23 @@ export async function POST(req: Request) {
         properties: {
           summary: { type: "string", description: "2-3 sentence meeting summary" },
           key_points: { type: "array", items: { type: "string" }, description: "Main discussion points" },
-          action_items: { type: "array", items: { type: "string" }, description: "Action items with owners" },
-          decisions: { type: "array", items: { type: "string" }, description: "Key decisions made" },
-          sentiment: { type: "string", enum: ["positive", "neutral", "negative"] },
-          follow_up_draft: { type: "string", description: "Draft follow-up email" },
+          action_items: {
+            type: "array",
+            items: { type: "string" },
+            description: "Action items prefixed with owner name, e.g. 'Sarah: Send deck by Friday'",
+          },
+          decisions: { type: "array", items: { type: "string" }, description: "Key decisions reached" },
+          sentiment: { type: "string", enum: ["positive", "neutral", "negative", "mixed"] },
+          next_meeting_suggestion: {
+            type: "string",
+            description: "One sentence suggesting when to meet next and why, or empty string if not applicable",
+          },
+          follow_up_draft: {
+            type: "string",
+            description: "Complete follow-up email including: greeting, 1-paragraph summary, bullet list of decisions made, numbered action items with owners, next meeting proposal (if applicable), and professional sign-off. Use plain text, no markdown.",
+          },
         },
-        required: ["summary", "key_points", "action_items", "decisions", "sentiment", "follow_up_draft"],
+        required: ["summary", "key_points", "action_items", "decisions", "sentiment", "next_meeting_suggestion", "follow_up_draft"],
       };
 
       const durationMin = body.duration ? Math.round(body.duration / 60) : null;
@@ -67,7 +78,9 @@ export async function POST(req: Request) {
       const msg = await client.messages.create({
         model: MODEL,
         max_tokens: 2048,
-        system: "You are an expert meeting analyst. Produce comprehensive, actionable meeting reports.",
+        system: `You are an expert meeting analyst for a venture-capital / investor-relations platform.
+Produce comprehensive, actionable meeting reports. Transcript lines are prefixed "SpeakerName: text" — use speaker names when assigning action items.
+For the follow_up_draft, write a ready-to-send professional email covering: (1) brief summary paragraph, (2) decisions made, (3) numbered action items with owners and deadlines where stated, (4) proposed next meeting if relevant, (5) professional closing. Plain text only.`,
         messages: [
           {
             role: "user",
