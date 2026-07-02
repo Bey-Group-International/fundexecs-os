@@ -109,10 +109,9 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
           status: mapStatus(session.status),
         },
       };
-    } catch (err) {
+    } catch {
       const ref = crypto.randomUUID().slice(0, 8);
-      // Log only error type — message may contain user-supplied IDs from the Stripe request path.
-      console.error(`[stripe-identity:${ref}] initiate failed (${err instanceof Error ? err.constructor.name : typeof err})`);
+      console.error(`[stripe-identity:${ref}] initiate failed`);
       return {
         ok: false,
         live: false,
@@ -152,10 +151,9 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
           ...(session.last_error ? { notes: session.last_error.reason } : {}),
         },
       };
-    } catch (err) {
+    } catch {
       const ref = crypto.randomUUID().slice(0, 8);
-      // Log only error type — message may contain user-supplied verificationId from the Stripe request path.
-      console.error(`[stripe-identity:${ref}] getStatus failed (${err instanceof Error ? err.constructor.name : typeof err})`);
+      console.error(`[stripe-identity:${ref}] getStatus failed`);
       return {
         ok: false,
         live: false,

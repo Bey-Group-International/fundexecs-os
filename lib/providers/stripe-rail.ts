@@ -196,11 +196,9 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
         detail: `Rail type "${params.railType}" is not supported.`,
         data: { transferId: "", status: "failed" },
       };
-    } catch (err) {
+    } catch {
       const ref = crypto.randomUUID().slice(0, 8);
-      // Log only the error type — message may contain user-supplied account refs or IDs.
-      const kind = err instanceof Error ? err.constructor.name : typeof err;
-      console.error(`[stripe-rail:${ref}] initiate failed (${kind})`);
+      console.error(`[stripe-rail:${ref}] initiate failed`);
       return {
         ok: false,
         live: false,
