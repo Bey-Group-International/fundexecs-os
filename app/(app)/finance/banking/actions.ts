@@ -87,6 +87,8 @@ export async function importBankFile(input: {
   fileText: string;
   format?: ImportFormat;
   filename?: string;
+  // Date convention for ambiguous slashed dates in CSV/QIF (default US month-first).
+  dateLocale?: "us" | "eu";
 }): Promise<BankResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
@@ -94,8 +96,9 @@ export async function importBankFile(input: {
     return { ok: false, error: "A bank account and a non-empty file are required." };
   }
   // Guard against pathologically large uploads before parsing the whole file.
+  // Measure actual UTF-8 bytes, not UTF-16 code units.
   const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
-  if (input.fileText.length > MAX_FILE_BYTES) {
+  if (Buffer.byteLength(input.fileText, "utf8") > MAX_FILE_BYTES) {
     return { ok: false, error: "Statement file must be under 10 MB." };
   }
   const format = input.format ?? detectFormat(input.fileText);
@@ -111,7 +114,7 @@ export async function importBankFile(input: {
   if (!account) return { ok: false, error: "Bank account not found." };
   const acct = account as { entity_id: string; currency: string };
 
-  const parsed = parseStatement(format, input.fileText, acct.currency);
+  const parsed = parseStatement(format, input.fileText, acct.currency, input.dateLocale ?? "us");
   if (!parsed.txns.length) return { ok: false, error: "No transactions found in the file." };
 
   // Load the entity's active categorization rules once.
@@ -148,9 +151,12 @@ export async function importBankFile(input: {
     return { ok: false, error: importErr?.message ?? "Could not record the import." };
   }
 
-  // Stage each transaction, deduped by (bank_account_id, dedup_hash).
+  // Stage each transaction, deduped by (bank_account_id, dedup_hash). Zero-amount
+  // rows are staged as 'ignored' (no cash movement to reconcile) so they remain
+  // visible rather than silently vanishing from the count.
   const rows = parsed.txns.map((t: NormalizedBankTxn) => {
-    const cat = categorize(t, rules);
+    const isZero = t.amount === 0;
+    const cat = isZero ? null : categorize(t, rules);
     return {
       organization_id: auth.ctx.orgId,
       bank_account_id: input.bankAccountId,
@@ -164,10 +170,11 @@ export async function importBankFile(input: {
       external_ref: t.externalRef ?? null,
       running_balance: t.runningBalance ?? null,
       dedup_hash: dedupHash(input.bankAccountId, t),
-      status: cat ? ("suggested" as const) : ("unmatched" as const),
+      status: isZero ? ("ignored" as const) : cat ? ("suggested" as const) : ("unmatched" as const),
       suggested_account_id: cat?.accountId ?? null,
     };
   });
+  const ignored = parsed.txns.filter((t) => t.amount === 0).length;
 
   const { data: inserted, error: stageErr } = await supabase
     .from("fin_bank_transactions")
@@ -188,7 +195,7 @@ export async function importBankFile(input: {
   revalidatePath("/finance");
   return {
     ok: true,
-    data: { importId: importRow.id, format, parsed: parsed.txns.length, staged, duplicates },
+    data: { importId: importRow.id, format, parsed: parsed.txns.length, staged, duplicates, ignored },
   };
 }
 
@@ -314,12 +321,17 @@ export async function autoReconcile(input: {
 
   const { data: txnRows } = await supabase
     .from("fin_bank_transactions")
-    .select("id, amount, txn_date")
+    .select("id, amount, txn_date, currency")
     .eq("organization_id", auth.ctx.orgId)
     .eq("bank_account_id", input.bankAccountId)
     .eq("status", "unmatched");
-  const unmatched = (txnRows ?? []) as { id: string; amount: number; txn_date: string }[];
-  if (!unmatched.length) return { ok: true, data: { matched: 0 } };
+  const unmatched = (txnRows ?? []) as {
+    id: string;
+    amount: number;
+    txn_date: string;
+    currency: string;
+  }[];
+  if (!unmatched.length) return { ok: true, data: { matched: 0, scanned: 0 } };
 
   // Posted entries with a line on the bank's GL account (status filtered in SQL),
   // excluding any already reconciled.
@@ -349,7 +361,7 @@ export async function autoReconcile(input: {
   for (const t of unmatched) {
     const pool = candidates.filter((c) => !claimed.has(c.entryId));
     const hit = autoMatch(
-      { date: t.txn_date, amount: t.amount, currency: "", description: "" },
+      { date: t.txn_date, amount: t.amount, currency: t.currency, description: "" },
       pool,
       input.windowDays ?? 3,
     );
@@ -359,7 +371,12 @@ export async function autoReconcile(input: {
   }
   const applied = await applyReconciliations(supabase, auth.ctx.userId, pairs, "auto");
   if (!applied.ok) return { ok: false, error: applied.error };
-  return { ok: true, data: { matched: applied.count, scanned: unmatched.length } };
+  // Surface attempted-vs-applied so a silent RPC skip (e.g. a txn removed mid-run)
+  // is observable rather than under-reported as a lower match count.
+  return {
+    ok: true,
+    data: { matched: applied.count, attempted: pairs.length, scanned: unmatched.length },
+  };
 }
 
 /** Create an auto-categorization rule for an entity (Tier 1). */

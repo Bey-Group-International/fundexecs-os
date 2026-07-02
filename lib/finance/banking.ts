@@ -91,8 +91,19 @@ export function parseAmount(raw: string | undefined | null): number | null {
   return round4(sign * n);
 }
 
-/** Normalize a date token from any supported format to ISO YYYY-MM-DD. */
-export function normalizeDate(raw: string | undefined | null): string | undefined {
+export type DateLocale = "us" | "eu";
+
+/**
+ * Normalize a date token from any supported format to ISO YYYY-MM-DD. Compact
+ * (YYYYMMDD) and ISO forms are unambiguous; for slashed D/M/Y vs M/D/Y the field
+ * that is > 12 disambiguates, and when both are ≤ 12 the `locale` decides
+ * (US → month-first, EU → day-first). CSV/QIF from European banks must pass
+ * "eu" or a `02/07/2026` will silently parse as Feb 7 instead of 2 July.
+ */
+export function normalizeDate(
+  raw: string | undefined | null,
+  locale: DateLocale = "us",
+): string | undefined {
   if (!raw) return undefined;
   const s = String(raw).trim();
   // OFX/CAMT compact timestamp: YYYYMMDD[HHMMSS][...]
@@ -101,18 +112,25 @@ export function normalizeDate(raw: string | undefined | null): string | undefine
   // ISO (possibly with time).
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  // D/M/Y or M/D/Y with 4-digit year — assume day-first only when >12.
+  // Slashed D/M/Y or M/D/Y.
   const dmy = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
   if (dmy) {
     let [, a, b, y] = dmy;
     if (y.length === 2) y = `20${y}`;
-    // Default to month-first (US convention — this app's default locale). Only
-    // when the first field is unambiguously > 12 do we read it as day-first.
-    let mon = a;
-    let day = b;
+    let mon: string;
+    let day: string;
     if (Number(a) > 12 && Number(b) <= 12) {
-      day = a;
+      day = a; // first field must be the day
       mon = b;
+    } else if (Number(b) > 12 && Number(a) <= 12) {
+      mon = a; // second field must be the day
+      day = b;
+    } else if (locale === "eu") {
+      day = a; // ambiguous → day-first
+      mon = b;
+    } else {
+      mon = a; // ambiguous → month-first (default)
+      day = b;
     }
     return `${y}-${mon.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
@@ -182,7 +200,7 @@ const matchColumn = (header: string): string | null => {
 };
 
 /** Parse a delimited (CSV) statement using a fuzzy header→field mapping. */
-export function parseCsv(text: string, defaultCurrency = "USD"): ParsedStatement {
+export function parseCsv(text: string, defaultCurrency = "USD", locale: DateLocale = "us"): ParsedStatement {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return { txns: [] };
   const header = splitCsvLine(lines[0]);
@@ -194,7 +212,7 @@ export function parseCsv(text: string, defaultCurrency = "USD"): ParsedStatement
       const idx = colMap.indexOf(field);
       return idx > -1 ? cells[idx] : undefined;
     };
-    const date = normalizeDate(get("date"));
+    const date = normalizeDate(get("date"), locale);
     if (!date) continue; // skip non-transaction rows (totals, blanks)
     let amount = parseAmount(get("amount"));
     if (amount == null) {
@@ -203,10 +221,12 @@ export function parseCsv(text: string, defaultCurrency = "USD"): ParsedStatement
       const credit = parseAmount(get("credit")) ?? 0;
       amount = round4(Math.abs(credit) - Math.abs(debit));
     }
-    if (amount == null || amount === 0) continue;
+    // Keep zero-amount rows (fee waivers, reversals) — they are staged as
+    // 'ignored' so nothing silently disappears; only unparseable rows are skipped.
+    if (amount == null) continue;
     txns.push({
       date,
-      valueDate: normalizeDate(get("valueDate")),
+      valueDate: normalizeDate(get("valueDate"), locale),
       amount,
       currency: (get("currency") || defaultCurrency).toUpperCase().slice(0, 3),
       description: get("description") || get("counterparty") || "",
@@ -249,11 +269,12 @@ export function parseOfx(text: string, defaultCurrency = "USD"): ParsedStatement
 // --- QIF ---------------------------------------------------------------------
 
 /** Parse a QIF statement: records separated by a lone `^`, fields keyed by D/T/P/M/N/L. */
-export function parseQif(text: string, defaultCurrency = "USD"): ParsedStatement {
+export function parseQif(text: string, defaultCurrency = "USD", locale: DateLocale = "us"): ParsedStatement {
   const txns: NormalizedBankTxn[] = [];
   let cur: Partial<NormalizedBankTxn> & { _amount?: number | null } = {};
   const flush = () => {
-    if (cur.date && cur._amount != null && cur._amount !== 0) {
+    // Keep zero-amount records (staged as 'ignored'); skip only unparseable ones.
+    if (cur.date && cur._amount != null) {
       txns.push({
         date: cur.date,
         amount: cur._amount,
@@ -277,7 +298,7 @@ export function parseQif(text: string, defaultCurrency = "USD"): ParsedStatement
     const val = line.slice(1).trim();
     switch (code) {
       case "D":
-        cur.date = normalizeDate(val);
+        cur.date = normalizeDate(val, locale);
         break;
       case "T":
       case "U":
@@ -339,15 +360,18 @@ export function parseStatement(
   format: ImportFormat,
   text: string,
   defaultCurrency = "USD",
+  locale: DateLocale = "us",
 ): ParsedStatement {
   switch (format) {
     case "csv":
-      return parseCsv(text, defaultCurrency);
+      return parseCsv(text, defaultCurrency, locale);
     case "ofx":
+      // OFX uses compact YYYYMMDD dates — locale is irrelevant.
       return parseOfx(text, defaultCurrency);
     case "qif":
-      return parseQif(text, defaultCurrency);
+      return parseQif(text, defaultCurrency, locale);
     case "camt":
+      // CAMT.053 uses ISO dates — locale is irrelevant.
       return parseCamt(text, defaultCurrency);
   }
 }

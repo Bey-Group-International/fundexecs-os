@@ -51,6 +51,13 @@ describe("normalizeDate", () => {
   it("expands 2-digit years", () => {
     expect(normalizeDate("15/02/26")).toBe("2026-02-15");
   });
+  it("respects locale for ambiguous slashed dates (both fields ≤ 12)", () => {
+    // 02/07/2026 is ambiguous: US → Feb 7, EU → 2 July.
+    expect(normalizeDate("02/07/2026", "us")).toBe("2026-02-07");
+    expect(normalizeDate("02/07/2026", "eu")).toBe("2026-07-02");
+    // A field > 12 disambiguates regardless of locale.
+    expect(normalizeDate("15/02/2026", "us")).toBe("2026-02-15");
+  });
 });
 
 describe("splitCsvLine", () => {
@@ -104,6 +111,16 @@ describe("parseCsv", () => {
     const csv = ["Date,Description,Amount", "TOTAL,,100", "2026-01-02,Coffee,-4.50"].join("\n");
     const { txns } = parseCsv(csv);
     expect(txns).toHaveLength(1);
+  });
+  it("keeps zero-amount rows (staged as ignored downstream, not dropped)", () => {
+    const csv = ["Date,Description,Amount", "2026-01-02,Fee waiver,0.00", "2026-01-03,Coffee,-4.50"].join("\n");
+    const { txns } = parseCsv(csv);
+    expect(txns).toHaveLength(2);
+    expect(txns[0].amount).toBe(0);
+  });
+  it("parses EU day-first dates when locale is 'eu'", () => {
+    const csv = ["Date,Description,Amount", "02/07/2026,Rent,-1500.00"].join("\n");
+    expect(parseCsv(csv, "GBP", "eu").txns[0].date).toBe("2026-07-02");
   });
 });
 
