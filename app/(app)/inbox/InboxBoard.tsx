@@ -43,6 +43,7 @@ const FILTERS: { key: "all" | InboxCategory; label: string }[] = [
   { key: "booking", label: "Booking" },
   { key: "video", label: "Video" },
   { key: "signing", label: "Signing" },
+  { key: "finance", label: "Finance" },
 ];
 
 export function InboxBoard({ cards }: { cards: InboxCardData[] }) {

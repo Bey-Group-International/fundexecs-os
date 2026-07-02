@@ -93,8 +93,10 @@ export type InboxChannel =
   | "docusign"
   | "ecosystem"
   | "deal_share"
-  | "radar_digest";
-export type InboxCategory = "messaging" | "booking" | "video" | "signing";
+  | "radar_digest"
+  | "xero"
+  | "jax";
+export type InboxCategory = "messaging" | "booking" | "video" | "signing" | "finance";
 export type InboxThreadStatus = "open" | "snoozed" | "done";
 export type InboxDirection = "inbound" | "outbound";
 
