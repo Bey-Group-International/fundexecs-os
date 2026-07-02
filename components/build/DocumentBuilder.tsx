@@ -282,7 +282,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                   <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-lg border border-line bg-surface-1 p-3">
                     {messages.length === 0 ? (
                       <p className="text-xs text-fg-muted">
-                        Ask Earn to draft or revise this document — e.g. "Draft an executive summary highlighting our track record."
+                        Ask Earn to draft or revise this document — e.g. &quot;Draft an executive summary highlighting our track record.&quot;
                       </p>
                     ) : (
                       messages.map((m, i) => (
