@@ -124,6 +124,19 @@ export async function createCheckout(
     metadata.interval = intent.interval;
     params = {
       mode: "subscription",
+      // subscription_data.metadata is copied onto the Stripe Subscription object
+      // and is what the webhook reads on renewal (invoice.payment_succeeded +
+      // billing_reason=subscription_cycle). The checkout session metadata is NOT
+      // automatically propagated to the subscription, so we set it here explicitly
+      // to ensure org_id, plan_key, and interval survive past the initial checkout.
+      subscription_data: {
+        metadata: {
+          org_id: intent.orgId,
+          plan_key: plan.key,
+          interval: intent.interval,
+          created_by: intent.createdBy ?? "",
+        },
+      },
       line_items: [
         {
           quantity: 1,
