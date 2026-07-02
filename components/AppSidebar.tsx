@@ -41,6 +41,14 @@ interface GroupItem {
   name: string;
 }
 
+// Per-hub visual identity — icon glyph + left-edge accent color.
+const HUB_IDENTITY: Record<string, { icon: string; color: string }> = {
+  build:   { icon: "⬡", color: "#f59e0b" },  // gold — foundation
+  source:  { icon: "◎", color: "#38bdf8" },  // blue — deal radar
+  run:     { icon: "⚡", color: "#22c55e" }, // emerald — execution
+  execute: { icon: "▶", color: "#a78bfa" },  // violet — outbound
+};
+
 // Secondary destinations folded under "More".
 const MORE_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Command Center" },
@@ -470,8 +478,17 @@ export function AppSidebar({
         </p>
         {hubs.map((hub) => {
           const isOpen = openHub === hub.key;
+          const identity = HUB_IDENTITY[hub.key];
           return (
-            <div key={hub.key}>
+            <div key={hub.key} className="relative">
+              {/* Left-edge accent stripe when open */}
+              {isOpen && identity && (
+                <span
+                  aria-hidden
+                  className="absolute left-0 top-[15%] bottom-[15%] w-[2px] rounded-r-full"
+                  style={{ background: identity.color, boxShadow: `0 0 6px ${identity.color}` }}
+                />
+              )}
               <button
                 type="button"
                 onClick={() => setOpenHub(isOpen ? null : hub.key)}
@@ -483,11 +500,14 @@ export function AppSidebar({
                 }`}
               >
                 <span className="flex items-center gap-1.5">
-                  {isOpen && (
+                  {identity && (
                     <span
                       aria-hidden
-                      className="h-1.5 w-1.5 rounded-full bg-neural-400 shadow-[0_0_6px_rgb(var(--fx-accent-rgb)/0.8)]"
-                    />
+                      className="shrink-0 font-mono text-[13px] leading-none"
+                      style={{ color: isOpen ? identity.color : undefined, opacity: isOpen ? 1 : 0.5 }}
+                    >
+                      {identity.icon}
+                    </span>
                   )}
                   {hub.label}
                   {hub.approvalGated ? (

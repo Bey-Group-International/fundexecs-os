@@ -33,8 +33,13 @@ export function GlobalTopBar({
   }
 
   return (
-    <div className="flex min-h-12 items-center gap-2 border-b border-line bg-surface-0/82 px-3 py-2 backdrop-blur-xl sm:h-12 sm:px-4">
-      <span className="font-mono text-xs uppercase tracking-wider text-fg-muted">FundExecs OS</span>
+    <div className="relative flex min-h-12 items-center gap-2 border-b border-line bg-surface-0/82 px-3 py-2 backdrop-blur-xl sm:h-12 sm:px-4">
+      {/* Gradient top accent stripe */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/40 to-transparent"
+      />
+      <span className="font-display text-sm font-semibold tracking-tight text-fg-secondary">FundExecs OS</span>
       <div className="ml-auto flex items-center gap-1">
         <TopNavAlerts initialMessages={messagesUnread} initialDeals={dealsUnread} />
         <Link
