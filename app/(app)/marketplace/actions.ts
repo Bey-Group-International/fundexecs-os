@@ -278,6 +278,65 @@ export async function expressInterestInListing(
   return {};
 }
 
+export async function updateListing(formData: FormData): Promise<{ error?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "Not authenticated" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "Listing id is required" };
+
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return { error: "Title is required" };
+
+  const summary = String(formData.get("summary") ?? "").trim() || null;
+  const listingType = String(formData.get("listing_type") ?? "").trim() || undefined;
+  const amountRaw = String(formData.get("amount") ?? "").trim();
+  const targetIrrRaw = String(formData.get("target_irr") ?? "").trim();
+  const holdPeriodRaw = String(formData.get("hold_period_years") ?? "").trim();
+  const geography = String(formData.get("geography") ?? "").trim() || null;
+  const assetClass = String(formData.get("asset_class") ?? "").trim() || null;
+  const teaserUrl = String(formData.get("teaser_url") ?? "").trim() || null;
+
+  let amount: number | null = null;
+  if (amountRaw) {
+    const parsed = Number(amountRaw.replace(/[^0-9.]/g, ""));
+    if (!Number.isNaN(parsed)) amount = parsed;
+  }
+  let targetIrr: number | null = null;
+  if (targetIrrRaw) {
+    const parsed = Number(targetIrrRaw.replace(/[^0-9.]/g, ""));
+    if (!Number.isNaN(parsed) && parsed > 0) targetIrr = parsed;
+  }
+  let holdPeriodYears: number | null = null;
+  if (holdPeriodRaw) {
+    const parsed = Number(holdPeriodRaw.replace(/[^0-9.]/g, ""));
+    if (!Number.isNaN(parsed) && parsed > 0) holdPeriodYears = parsed;
+  }
+
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("marketplace_listings")
+    .update({
+      title,
+      summary,
+      ...(listingType ? { listing_type: listingType } : {}),
+      amount,
+      target_irr: targetIrr,
+      hold_period_years: holdPeriodYears,
+      geography,
+      asset_class: assetClass,
+      teaser_url: teaserUrl,
+    })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/marketplace");
+  revalidatePath(`/marketplace/${id}`);
+  return {};
+}
+
 export async function deleteListing(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
