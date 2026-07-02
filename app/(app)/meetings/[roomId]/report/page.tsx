@@ -15,7 +15,6 @@ type Meeting = {
 };
 
 type Report = {
-  status: string | null;
   summary: string | null;
   key_points: string[] | null;
   action_items: string[] | null;
@@ -47,18 +46,18 @@ export default function MeetingReportPage() {
       return;
     }
 
-    const { data: report } = await (supabase as any)
+    const { data: report } = await supabase
       .from("live_meeting_reports")
-      .select("status, summary, key_points, action_items, analysis, full_transcript")
+      .select("summary, key_points, action_items, analysis, full_transcript")
       .eq("meeting_id", meeting.id)
       .order("created_at", { ascending: false })
       .limit(1)
-      .single() as { data: Report | null };
+      .maybeSingle();
 
-    setData({ meeting, report: report ?? null });
+    setData({ meeting, report: (report as Report | null) ?? null });
 
-    // Stop polling once report is ready or failed
-    if (report && report.status !== "generating") {
+    // Stop polling once the summary is populated (report generation complete)
+    if (report?.summary !== null && report?.summary !== undefined) {
       stopPolling();
     }
   }
@@ -99,8 +98,8 @@ export default function MeetingReportPage() {
 
   const { meeting, report } = data;
 
-  // Report row doesn't exist yet or still generating
-  if (!report || report.status === "generating") {
+  // Report row doesn't exist yet or summary not populated yet
+  if (!report || report.summary === null) {
     return <GeneratingState />;
   }
 
