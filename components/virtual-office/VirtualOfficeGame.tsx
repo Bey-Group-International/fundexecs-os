@@ -23,28 +23,41 @@ type VirtualOfficeGameProps = {
   displayName?: string;
   /** Executive character id from characterConfig (e.g. "earnest-fundmaker"). */
   characterId?: string;
+  /**
+   * Whether this panel is currently the active/visible tab.
+   * Phaser init is deferred until the first time this becomes true,
+   * ensuring the canvas is measured against a visible (non-zero) container.
+   */
+  active?: boolean;
   /** If set, teleports the player to this virtual room key on mount / change. */
   teleportTarget?: string | null;
   /** Called whenever room occupancy counts update. */
   onOccupancyChange?: (counts: Record<string, number>) => void;
 };
 
-export function VirtualOfficeGame({ token, displayName = "You", characterId, teleportTarget, onOccupancyChange }: VirtualOfficeGameProps) {
+export function VirtualOfficeGame({
+  token,
+  displayName = "You",
+  characterId,
+  active = true,
+  teleportTarget,
+  onOccupancyChange,
+}: VirtualOfficeGameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const hasActivatedRef = useRef(false);
 
-  // Fix Bug 1: keep onOccupancyChange current without re-creating the game event listener
+  // Keep onOccupancyChange current without re-creating the game event listener
   const onOccupancyChangeRef = useRef(onOccupancyChange);
   useEffect(() => { onOccupancyChangeRef.current = onOccupancyChange; }, [onOccupancyChange]);
 
-  // Fix Bug 3: buffer teleport targets that arrive before Phaser has loaded
+  // Buffer teleport targets that arrive before Phaser has loaded
   const pendingTeleportRef = useRef<string | null>(null);
 
   const [bubbleMembers, setBubbleMembers] = useState<string[]>([]);
   const [videoTiles, setVideoTiles] = useState<VideoTile[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  // "idle" = not in bubble; "prompt" = in bubble, awaiting; "active" = granted; "dismissed" = skipped
   const [mediaState, setMediaState] = useState<"idle" | "prompt" | "active" | "dismissed">("idle");
 
   const requestMedia = useCallback(async () => {
@@ -59,10 +72,13 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
     }
   }, []);
 
+  // ── Phaser init — deferred until first activation ─────────────────────────
   useEffect(() => {
+    if (!active) return;             // don't init while hidden
+    if (hasActivatedRef.current) return; // already initialised
     if (typeof window === "undefined" || !containerRef.current) return;
-    if (gameRef.current) return;
 
+    hasActivatedRef.current = true;
     let game: Phaser.Game | null = null;
 
     import("phaser").then((PhaserModule) => {
@@ -99,7 +115,7 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
           }
         });
 
-        // M5d: room occupancy bridge — reads ref so prop updates are always current (Bug 1 fix)
+        // Room occupancy bridge — reads ref so prop updates are always current
         game.events.on("office:occupancy", (counts: Record<string, number>) => {
           onOccupancyChangeRef.current?.(counts);
         });
@@ -123,7 +139,7 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
 
         gameRef.current = game;
 
-        // Bug 3 fix: flush any teleport that arrived before the game was ready
+        // Flush any teleport that arrived before the game was ready
         if (pendingTeleportRef.current) {
           game.events.emit("office:teleport", pendingTeleportRef.current);
           pendingTeleportRef.current = null;
@@ -134,6 +150,7 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
     return () => {
       game?.destroy(true);
       gameRef.current = null;
+      hasActivatedRef.current = false;
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
       setLocalStream(null);
@@ -142,7 +159,20 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
       setMediaState("idle");
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [active]);
+
+  // ── Scale refresh on every activation ────────────────────────────────────
+  // When the panel transitions from hidden to visible the browser doesn't fire
+  // a resize event, so Phaser's Scale Manager never re-measures the container.
+  // Call scale.refresh() explicitly whenever the tab becomes active.
+  useEffect(() => {
+    if (!active || !gameRef.current) return;
+    // Small delay ensures the DOM has painted the panel as block before we measure
+    const id = setTimeout(() => {
+      gameRef.current?.scale.refresh();
+    }, 50);
+    return () => clearTimeout(id);
+  }, [active]);
 
   // Push local stream into MeshManager when it becomes available
   useEffect(() => {
@@ -151,7 +181,7 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
     }
   }, [localStream]);
 
-  // M5c: teleport when target changes — buffer if game not yet loaded (Bug 3 fix)
+  // Teleport when target changes — buffer if game not yet loaded
   useEffect(() => {
     if (!teleportTarget) return;
     if (gameRef.current) {

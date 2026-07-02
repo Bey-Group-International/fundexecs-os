@@ -61,10 +61,13 @@ export function OfficeTabs() {
       <div className={tab === "hq" ? "block" : "hidden"}>
         <ExecutiveHQ onNavigateRoom={handleNavigateRoom} roomOccupancy={occupancy} />
       </div>
-      <div className={tab === "virtual" ? "block p-4" : "hidden"}>
+      {/* Virtual panel: always in DOM but hidden via CSS visibility so Phaser can
+          measure dimensions correctly after the first activation. */}
+      <div className={tab === "virtual" ? "block p-4" : "invisible h-0 overflow-hidden"}>
         <VirtualOfficeGame
           token={token}
           characterId={characterId}
+          active={tab === "virtual"}
           teleportTarget={teleportTarget}
           onOccupancyChange={setOccupancy}
         />
