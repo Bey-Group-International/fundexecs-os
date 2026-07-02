@@ -227,7 +227,7 @@ export function BrowseListings({
                       <span className="font-mono text-[10px] text-fg-muted">{timeAgo(l.created_at)}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-fg-primary">{l.title}</span>
+                      <a href={`/marketplace/${l.id}`} className="text-sm font-medium text-fg-primary hover:text-gold-200 transition">{l.title}</a>
                       <span
                         className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${STATUS_BADGE[l.status]}`}
                       >

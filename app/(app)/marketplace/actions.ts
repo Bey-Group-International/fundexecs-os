@@ -31,6 +31,11 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
   const statusRaw = String(formData.get("status") ?? "draft").trim();
   const isPublic = formData.get("is_public") === "on";
   const dealId = String(formData.get("deal_id") ?? "").trim() || null;
+  const targetIrrRaw = String(formData.get("target_irr") ?? "").trim();
+  const holdPeriodRaw = String(formData.get("hold_period_years") ?? "").trim();
+  const geography = String(formData.get("geography") ?? "").trim() || null;
+  const assetClass = String(formData.get("asset_class") ?? "").trim() || null;
+  const teaserUrl = String(formData.get("teaser_url") ?? "").trim() || null;
 
   if (!title) return { error: "Title is required" };
 
@@ -42,6 +47,16 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
   if (amountRaw) {
     const parsed = Number(amountRaw.replace(/[^0-9.]/g, ""));
     if (!Number.isNaN(parsed)) amount = parsed;
+  }
+  let targetIrr: number | null = null;
+  if (targetIrrRaw) {
+    const parsed = Number(targetIrrRaw.replace(/[^0-9.]/g, ""));
+    if (!Number.isNaN(parsed) && parsed > 0) targetIrr = parsed;
+  }
+  let holdPeriodYears: number | null = null;
+  if (holdPeriodRaw) {
+    const parsed = Number(holdPeriodRaw.replace(/[^0-9.]/g, ""));
+    if (!Number.isNaN(parsed) && parsed > 0) holdPeriodYears = parsed;
   }
 
   // Governance gate (TOKENIZATION_LAYERS.md §4.2/§4.3): only orgs entitled to
@@ -65,6 +80,11 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
       amount,
       status,
       is_public: isPublic,
+      target_irr: targetIrr,
+      hold_period_years: holdPeriodYears,
+      geography,
+      asset_class: assetClass,
+      teaser_url: teaserUrl,
     })
     .select("id")
     .single();
@@ -203,8 +223,7 @@ export async function toggleListingPublic(formData: FormData): Promise<void> {
   revalidatePath("/marketplace");
 }
 
-// Queue outreach to the owner of a public listing the viewer is interested in.
-// This wraps queueListingOutreach but takes a listing id from the browse page.
+// Record interest in a listing and notify the listing owner via an agenda task.
 export async function expressInterestInListing(
   listingId: string,
   listingTitle: string,
@@ -217,21 +236,31 @@ export async function expressInterestInListing(
     .from("marketplace_listings")
     .select("organization_id")
     .eq("id", listingId)
-    .eq("is_public", true)
     .maybeSingle();
 
-  if (!listing) return { error: "Listing not found or not public." };
+  if (!listing) return { error: "Listing not found." };
   if (listing.organization_id === ctx.orgId)
     return { error: "This is your own listing." };
 
-  // Re-use the capital-map outreach gate to create a routable action.
+  // Record the interest (upsert so double-clicks are idempotent).
+  const { error: intErr } = await supabase
+    .from("marketplace_interests")
+    .upsert(
+      { listing_id: listingId, organization_id: ctx.orgId, user_id: ctx.userId },
+      { onConflict: "listing_id,organization_id", ignoreDuplicates: true },
+    );
+  if (intErr) return { error: intErr.message };
+
+  // Queue a routable outreach action so the interest surfaces in the
+  // capital-map approval flow.
   try {
     await queueNextAction(listingId, "send_outreach", `Marketplace interest · ${listingTitle}`);
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "Could not queue outreach." };
+  } catch {
+    // Non-fatal — interest is recorded even if outreach queueing fails.
   }
 
   revalidatePath("/marketplace/browse");
+  revalidatePath(`/marketplace/${listingId}`);
   return {};
 }
 

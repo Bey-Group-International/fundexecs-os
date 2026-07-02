@@ -150,11 +150,66 @@ export function NewListingForm({
               <span className="text-fg-muted">— visible on Browse</span>
             </span>
           </label>
+        </div>
 
+        {/* Deal card fields */}
+        <details className="group">
+          <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary transition select-none">
+            <span className="group-open:hidden">▸ Add deal details (optional)</span>
+            <span className="hidden group-open:inline">▾ Deal details</span>
+          </summary>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Target IRR %</span>
+              <input
+                name="target_irr"
+                inputMode="decimal"
+                placeholder="22.5"
+                className="w-20 rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Hold (yrs)</span>
+              <input
+                name="hold_period_years"
+                inputMode="decimal"
+                placeholder="5"
+                className="w-16 rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Geography</span>
+              <input
+                name="geography"
+                placeholder="Southeast US"
+                className="w-36 rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Asset class</span>
+              <input
+                name="asset_class"
+                placeholder="Multifamily"
+                className="w-32 rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Teaser URL</span>
+              <input
+                name="teaser_url"
+                type="url"
+                placeholder="https://…"
+                className="w-48 rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+            </label>
+          </div>
+        </details>
+
+        <div className="flex justify-end">
           <button
             type="submit"
             disabled={pending}
-            className="ml-auto rounded-md bg-gold-500 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-400 disabled:opacity-60"
+            className="rounded-md bg-gold-500 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-400 disabled:opacity-60"
           >
             {pending ? "Saving…" : "Create listing"}
           </button>

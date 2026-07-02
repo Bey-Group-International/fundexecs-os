@@ -249,7 +249,7 @@ export default async function MarketplacePage() {
                         <div className="flex items-start gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-medium text-fg-primary">{l.title}</span>
+                              <Link href={`/marketplace/${l.id}`} className="text-sm font-medium text-fg-primary hover:text-gold-200 transition">{l.title}</Link>
                               <span
                                 className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${STATUS_BADGE[l.status]}`}
                               >

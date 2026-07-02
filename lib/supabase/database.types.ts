@@ -655,6 +655,20 @@ export type MarketplaceListing = Timestamps & {
   status: MarketplaceStatus;
   is_public: boolean;
   metadata: Json;
+  // Structured deal-card fields (migration 0011)
+  target_irr: number | null;
+  hold_period_years: number | null;
+  geography: string | null;
+  asset_class: string | null;
+  teaser_url: string | null;
+}
+
+export type MarketplaceInterest = {
+  id: string;
+  listing_id: string;
+  organization_id: string;
+  user_id: string;
+  created_at: string;
 }
 
 export type TrackRecord = Timestamps & {
@@ -1817,6 +1831,7 @@ export type Database = {
       service_providers: TableShape<ServiceProvider>;
       debt_facilities: TableShape<DebtFacility>;
       marketplace_listings: TableShape<MarketplaceListing>;
+      marketplace_interests: TableShape<MarketplaceInterest>;
       brain_runs: TableShape<BrainRun>;
       brain_documents: TableShape<BrainDocument>;
       brain_kb_chunks: TableShape<BrainKbChunk>;
