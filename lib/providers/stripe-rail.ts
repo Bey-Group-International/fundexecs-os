@@ -215,11 +215,12 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
     }
 
     assertStripeId(transferId);
+    const safeId = encodeURIComponent(transferId);
     // Try Treasury OutboundTransfer first, then OutboundPayment, then Transfer.
     const paths = [
-      `/treasury/outbound_transfers/${transferId}`,
-      `/treasury/outbound_payments/${transferId}`,
-      `/transfers/${transferId}`,
+      `/treasury/outbound_transfers/${safeId}`,
+      `/treasury/outbound_payments/${safeId}`,
+      `/transfers/${safeId}`,
     ];
 
     for (const path of paths) {

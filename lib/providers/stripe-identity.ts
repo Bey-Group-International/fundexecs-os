@@ -129,7 +129,7 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
     try {
       assertStripeId(verificationId);
       const session = await stripeGet<{ id: string; status: string; last_error?: { reason: string } }>(
-        `/identity/verification_sessions/${verificationId}`,
+        `/identity/verification_sessions/${encodeURIComponent(verificationId)}`,
       );
 
       const status = mapStatus(session.status);
