@@ -16,6 +16,8 @@ type SignalMsg =
   | { type: "join"; from: string; displayName: string }
   | { type: "leave"; from: string }
   | { type: "end"; from: string }
+  | { type: "admit"; from: string; to: string }
+  | { type: "deny"; from: string; to: string }
   | { type: "offer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
   | { type: "answer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
   | { type: "ice"; from: string; to: string; candidate: RTCIceCandidateInit }
@@ -574,6 +576,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [selectedCamId, setSelectedCamId] = useState("");
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
 
+  // Waiting room state
+  const [waitingForAdmit, setWaitingForAdmit] = useState(false);
+  const [waitingTimedOut, setWaitingTimedOut] = useState(false);
+  const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const waitingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearWaitingTimers = useCallback(() => {
+    if (waitingTimerRef.current !== null) {
+      clearTimeout(waitingTimerRef.current);
+      waitingTimerRef.current = null;
+    }
+    if (waitingPollRef.current !== null) {
+      clearInterval(waitingPollRef.current);
+      waitingPollRef.current = null;
+    }
+  }, []);
+
   const sendSignal = useCallback((msg: SignalMsg) => {
     channelRef.current?.send({ type: "broadcast", event: "signal", payload: msg });
   }, []);
@@ -637,6 +656,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "end") {
+      clearWaitingTimers();
       peersRef.current.forEach((pc) => pc.close()); peersRef.current.clear();
       channelRef.current?.unsubscribe();
       if (recognitionRef.current) { recognitionRef.current.onend = null; recognitionRef.current.stop(); }
@@ -713,16 +733,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "admit" && msg.target === myId) {
+      clearWaitingTimers();
       setWaitingForAdmit(false);
+      setWaitingTimedOut(false);
+      setReady(true);
       sendSignalRef.current({ type: "join", from: myId, displayName: localNameRef.current });
     }
 
     if (msg.type === "deny" && msg.target === myId) {
+      clearWaitingTimers();
+      setWaitingForAdmit(false);
       channelRef.current?.unsubscribe();
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
       router.push("/meetings");
     }
-  }, [createPeerConnection, router]);
+  }, [createPeerConnection, router, clearWaitingTimers]);
 
   // ── Preview camera ────────────────────────────────────────────────────────
 
@@ -823,8 +848,36 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         }
       });
 
-    setReady(true); setJoining(false);
-  }, [displayName, roomCode, supabase, handleSignal, sendSignal, router, selectedCamId, selectedMicId]);
+    if (hostFlag) {
+      setReady(true);
+    } else {
+      // Non-host enters the waiting room
+      // 2-minute timeout
+      waitingTimerRef.current = setTimeout(() => {
+        setWaitingTimedOut(true);
+      }, 120_000);
+
+      // Poll every 10s for meeting ended
+      const currentMId = mId;
+      waitingPollRef.current = setInterval(async () => {
+        if (!currentMId) return;
+        try {
+          const { data } = await supabase
+            .from("live_meetings")
+            .select("status")
+            .eq("id", currentMId)
+            .single();
+          const row = data as { status: string } | null;
+          if (row?.status === "ended") {
+            clearWaitingTimers();
+            router.push(`/meetings/${roomCode}/report`);
+          }
+        } catch { /* ignore */ }
+      }, 10_000);
+    }
+
+    setJoining(false);
+  }, [displayName, roomCode, supabase, handleSignal, sendSignal, clearWaitingTimers, router, selectedCamId, selectedMicId]);
 
   // Apply selected speaker on join
   useEffect(() => {
@@ -1124,13 +1177,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, [sendSignal]);
 
   const leaveMeeting = useCallback(() => {
+    clearWaitingTimers();
     sendSignal({ type: "leave", from: myIdRef.current });
     peersRef.current.forEach((pc) => pc.close()); peersRef.current.clear();
     channelRef.current?.unsubscribe();
     if (recognitionRef.current) { recognitionRef.current.onend = null; recognitionRef.current.stop(); }
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     router.push("/meetings");
-  }, [sendSignal, router]);
+  }, [sendSignal, clearWaitingTimers, router]);
 
   const endMeeting = useCallback(async () => {
     sendSignal({ type: "end", from: myIdRef.current });
@@ -1151,6 +1205,58 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const endForAll = useCallback(async () => {
     await endMeeting();
   }, [endMeeting]);
+
+  // ── Waiting room screen ─────────────────────────────────────────────────
+
+  if (waitingForAdmit) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 px-4 text-center">
+        <div className="w-full max-w-sm flex flex-col items-center gap-6">
+          {waitingTimedOut ? (
+            <>
+              <div className="w-14 h-14 rounded-full bg-[var(--status-warning)]/15 flex items-center justify-center text-2xl">
+                ⏱
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-base font-semibold text-[var(--fg-primary)]">
+                  The host hasn&apos;t responded.
+                </p>
+                <p className="text-sm text-[var(--fg-muted)]">
+                  You can try again or leave the meeting.
+                </p>
+              </div>
+              <button
+                onClick={leaveMeeting}
+                className="rounded-lg bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-semibold px-6 py-2.5 transition-colors"
+              >
+                Leave
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="w-14 h-14 rounded-full bg-[var(--gold-400)]/15 flex items-center justify-center">
+                <span className="animate-pulse text-2xl">🔔</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-base font-semibold text-[var(--fg-primary)]">
+                  Waiting for host to admit you…
+                </p>
+                <p className="text-sm text-[var(--fg-muted)]">
+                  The host will let you in shortly.
+                </p>
+              </div>
+              <button
+                onClick={leaveMeeting}
+                className="rounded-lg border border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] text-sm px-5 py-2 transition-colors"
+              >
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ── Pre-join screen ───────────────────────────────────────────────────────
 
