@@ -1249,7 +1249,7 @@ export class OfficeScene extends Phaser.Scene {
       }
       case "player.emote": {
         // Sanitize: only render allowlisted emojis from the server
-        if (!OfficeScene.EMOTES.includes(msg.emoji)) break;
+        if (!OfficeScene.EMOTES.some((e) => e === msg.emoji)) break;
         const state = this.remotePlayers.get(msg.playerId);
         if (state) {
           this._showEmote(state.sprite.x, state.sprite.y, msg.emoji);
