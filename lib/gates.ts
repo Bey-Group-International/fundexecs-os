@@ -47,6 +47,10 @@ export type ActionKind =
   // reversing an entry are routine internal work product.
   | "post_journal_entry"
   | "reverse_journal_entry"
+  // Finance banking (internal bookkeeping): importing a statement file and
+  // reconciling a staged transaction are routine internal work product.
+  | "import_bank_file"
+  | "reconcile_transaction"
   // Tier 3 — compliance- or capital-binding; creates an obligation.
   | "sign_document"
   | "submit_term_sheet"
@@ -70,6 +74,8 @@ const TIER_1: ActionKind[] = [
   "create_video_meeting",
   "post_journal_entry",
   "reverse_journal_entry",
+  "import_bank_file",
+  "reconcile_transaction",
 ];
 
 const TIER_2: ActionKind[] = [

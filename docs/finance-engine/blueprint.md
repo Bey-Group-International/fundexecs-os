@@ -28,6 +28,14 @@ to zero.
 - **Banking** — bank accounts mapped to GL; statement-file ingestion
   (CSV/OFX/QIF/CAMT.053) behind a pluggable adapter seam; staged transactions →
   auto-categorization rules → reconciliation workflow → cashflow engine.
+  - _Dedup caveat_: staged transactions are deduped by the bank's own reference
+    (OFX `FITID`, CAMT `AcctSvcrRef`) when present, else by
+    (date, amount, description). Files without a per-line reference therefore
+    collapse two genuinely-distinct same-day/same-amount/same-description lines
+    (e.g. two identical ATM withdrawals) to one — an inherent limit of
+    reference-less hash dedup. Prefer OFX/CAMT feeds where exactness matters.
+  - _Date locale_: ambiguous slashed CSV/QIF dates default to US month-first;
+    European statements must import with `dateLocale: "eu"` (day-first).
 - **Billing/AR/AP** — customer invoices + vendor bills → AR/AP control accounts;
   recurring invoices; payments with multi-invoice allocation; aging; dunning;
   vendor + customer master data.
