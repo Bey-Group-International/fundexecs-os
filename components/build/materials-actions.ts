@@ -88,14 +88,13 @@ export async function updateDocument(formData: FormData): Promise<void> {
 
   // Snapshot version on every save (content only — links have no content to version).
   if (patch.content !== undefined) {
-    // @ts-expect-error document_versions not yet in generated Supabase types
     await supabase.from("document_versions").insert({
       document_id: id,
       organization_id: ctx.orgId,
       content: patch.content ?? null,
       name: patch.name ?? name,
       saved_by: ctx.userId,
-    });
+    } as never);
   }
   revalidatePath(ROOM);
 }
@@ -208,7 +207,6 @@ export async function listDocumentVersions(docId: string): Promise<DocumentVersi
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return [];
   const supabase = createServerClient();
-  // @ts-expect-error document_versions not yet in generated Supabase types
   const { data } = await supabase
     .from("document_versions")
     .select("*")
@@ -226,7 +224,6 @@ export async function restoreDocumentVersion(formData: FormData): Promise<void> 
   const docId = String(formData.get("doc_id") ?? "");
   if (!versionId || !docId) return;
   const supabase = createServerClient();
-  // @ts-expect-error document_versions not yet in generated Supabase types
   const { data } = await supabase
     .from("document_versions")
     .select("*")
