@@ -221,7 +221,9 @@ async function routeClosedPeriodApproval(
       graph_touched: "capital",
       requires_approval: true,
       // Full posting context, so the entry can be replayed verbatim on approval.
-      result: { finClosedPeriodPost: args } as unknown as Json,
+      // Round-trip through JSON so the stored value is guaranteed serializable
+      // (and drops the unknown-cast) — this field is replay-critical.
+      result: JSON.parse(JSON.stringify({ finClosedPeriodPost: args })) as Json,
       created_by: auth.ctx.userId,
       step_order: 0,
     })
