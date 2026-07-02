@@ -13,9 +13,8 @@ export async function DELETE(req: NextRequest) {
     soft?: boolean;
   };
 
-  // deleted_at column added in migration 20260702000003; types not yet regenerated
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const softPayload = { deleted_at: new Date().toISOString() } as any;
+  // deleted_at added in migration 20260702000003; types not yet regenerated
+  const softPayload = { deleted_at: new Date().toISOString() } as any; // eslint-disable-line
 
   if (body.clearAll) {
     if (body.soft) {

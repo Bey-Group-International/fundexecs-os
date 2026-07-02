@@ -81,7 +81,7 @@ function CopyRoomCode({ code }: { code: string }) {
     void navigator.clipboard.writeText(code).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }).catch(() => {});
   }
   return (
     <button
@@ -185,11 +185,7 @@ export function PastMeetingsList({ initialMeetings, userId }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clearAll: true, soft }),
     });
-    if (soft) {
-      setMeetings((prev) => prev.filter((m) => m.host_id !== userId));
-    } else {
-      setMeetings([]);
-    }
+    setMeetings((prev) => prev.filter((m) => m.host_id !== userId));
     setBusy(null);
   }
 
