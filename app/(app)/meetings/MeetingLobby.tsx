@@ -43,14 +43,14 @@ export function MeetingLobby() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-8 px-4">
-      {/* Hero */}
-      <div className="text-center flex flex-col gap-2">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[var(--gold-400)]/10 border border-[var(--gold-400)]/20 mb-2 mx-auto">
+    <div className="flex flex-col items-center gap-5 sm:gap-8 px-4 pt-6 sm:pt-0 sm:justify-center sm:min-h-[60vh]">
+      {/* Hero — compact on mobile */}
+      <div className="text-center flex flex-col gap-1.5 sm:gap-2">
+        <div className="inline-flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-[var(--gold-400)]/10 border border-[var(--gold-400)]/20 mb-1 sm:mb-2 mx-auto">
           <VideoIcon />
         </div>
-        <h1 className="text-2xl font-semibold text-[var(--fg-primary)]">Meeting</h1>
-        <p className="text-sm text-[var(--fg-muted)] max-w-sm">
+        <h1 className="text-xl sm:text-2xl font-semibold text-[var(--fg-primary)]">Meeting</h1>
+        <p className="hidden sm:block text-sm text-[var(--fg-muted)] max-w-sm">
           High-quality video meetings with AI-powered transcription, live notes, and action items.
         </p>
       </div>
@@ -142,8 +142,8 @@ export function MeetingLobby() {
 
       {scheduleOpen && <ScheduleModal onClose={() => setScheduleOpen(false)} />}
 
-      {/* Feature list */}
-      <div className="grid grid-cols-3 gap-4 w-full max-w-md">
+      {/* Feature list — hidden on mobile to reduce scroll */}
+      <div className="hidden sm:grid grid-cols-3 gap-4 w-full max-w-md">
         {[
           { icon: "🎙", label: "Live transcription" },
           { icon: "✨", label: "AI-generated notes" },
