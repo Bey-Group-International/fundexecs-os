@@ -40,22 +40,20 @@ function isLowQuality(output: string): boolean {
   return false;
 }
 
-function rerouteAgent(failedAgent: AgentKey, hub: Hub): AgentKey | null {
-  const pool = HUB_REROUTE[hub] ?? [];
-  const alt = pool.find((a) => a !== failedAgent);
-  return alt ?? null;
-}
-
 export interface ObserveArgs {
   autonomy: AutonomyMode;
-  hub: Hub;
+  /** null-safe: passing null or undefined skips rerouting (no pool available). */
+  hub: Hub | null | undefined;
   workflowTitle: string;
   agent: AgentKey;
   stepTitle: string;
+  stepId: string;
   stepDescription: string;
   priorOutputs: string[];
   orgContext?: string;
   documentMode?: boolean;
+  /** Called once per retry so the engine can debit credits and emit live events. */
+  onRetry?: (retryAgent: AgentKey, retryNumber: number) => Promise<void>;
 }
 
 export interface ObserveResult {
@@ -80,17 +78,30 @@ export async function observeOutput(
   if (args.autonomy !== "auto") {
     return { output: initialOutput, agent: args.agent, retryCount: 0 };
   }
+  // No hub → no reroute pool; pass through.
+  if (!args.hub) {
+    return { output: initialOutput, agent: args.agent, retryCount: 0 };
+  }
 
+  const hub = args.hub;
+  const pool = HUB_REROUTE[hub] ?? [];
   let output = initialOutput;
   let agent = args.agent;
   let retries = 0;
+  // Track every attempted agent so we never revisit a failed one.
+  const attempted = new Set<AgentKey>([args.agent]);
 
   while (isLowQuality(output) && retries < OBSERVE_MAX_RETRIES) {
-    const nextAgent = rerouteAgent(agent, args.hub);
-    if (!nextAgent) break; // no alternate available
+    const nextAgent = pool.find((a) => !attempted.has(a));
+    if (!nextAgent) break; // pool exhausted
 
     retries += 1;
     agent = nextAgent;
+    attempted.add(agent);
+
+    // Notify the caller before executing — allows credit debit and live
+    // canvas event emission before the retry LLM call blocks.
+    await args.onRetry?.(agent, retries);
 
     output = await executeStep({
       workflowTitle: args.workflowTitle,
