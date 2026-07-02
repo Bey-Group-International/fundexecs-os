@@ -230,6 +230,8 @@ export class OfficeScene extends Phaser.Scene {
       const tx = room.col * ROOM_W + ROOM_W / 2;
       const ty = room.row * ROOM_H + ROOM_H / 2;
       this.player.setPosition(tx, ty);
+      this._cancelWalk();
+      this.game.canvas.focus();
     });
   }
 
@@ -716,7 +718,9 @@ export class OfficeScene extends Phaser.Scene {
     if (ax !== bx) {
       const boundary = Math.max(ax, bx);
       if (boundary % tilesPerRoomX === 0 && boundary > 0 && boundary < (WORLD_W / T)) {
-        // allowed only at the door row (center of the room row)
+        // The 64px DOOR_GAP centered on the odd-height (9-tile) room edge fully
+        // covers only tile row 4; the adjacent rows are half-blocked, so a
+        // 20px body walking their centers would clip the wall. One row only.
         const roomRow = Math.floor(ay / tilesPerRoomY);
         const doorRow = roomRow * tilesPerRoomY + Math.floor(tilesPerRoomY / 2);
         return ay === doorRow;
@@ -748,6 +752,8 @@ export class OfficeScene extends Phaser.Scene {
     const h = (x: number, y: number) => Math.abs(x - goal.x) + Math.abs(y - goal.y);
 
     while (open.length > 0) {
+      // TODO: replace linear-scan open set with a min-heap if the map grows
+      // beyond the current 36×27 grid (O(n²) is ~fine at 972 tiles).
       let bi = 0;
       for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
       const cur = open.splice(bi, 1)[0];
