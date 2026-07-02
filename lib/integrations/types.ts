@@ -8,6 +8,8 @@
 // follow a mock-or-real discipline: when their credentials are absent they still
 // return a well-formed result in mock mode (prepared/queued, not sent), so the
 // product behaves identically whether or not a provider is connected.
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
 import type { ActionKind } from "@/lib/gates";
 
 export interface DispatchContext {
@@ -40,6 +42,9 @@ export interface DispatchContext {
   // unverified, weakly-grounded work product. Omit for actions with no backing
   // artifact — those dispatch exactly as before.
   backingArtifact?: { verification_status: string; grounding_score: number };
+  // Optional Supabase client — passed through from the engine when adapters need
+  // to write to internal tables (e.g. inbox, meetings) without an HTTP hop.
+  supabase?: SupabaseClient<Database>;
 }
 
 export interface DispatchResult {

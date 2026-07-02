@@ -6,17 +6,22 @@
 import type { AdapterModule } from "../types";
 import { gmailModule } from "./gmail";
 import { docusignModule } from "./docusign";
+import { nativeMeetingModule } from "./native-meeting";
 import { calendlyModule } from "./calendly";
 import { slackModule } from "./slack";
 import { INBOX_MODULES } from "./inbox";
 import { FINANCE_MODULES } from "./finance";
 
-// slackModule is appended last so, as the final module to claim the "slack"
-// channel, it supersedes the inbox placeholder for channel-pinned dispatch (the
-// Act-now Radar digest pins to "slack" via the DispatchContext.channel hint).
+// Registration order determines channel ownership when multiple modules claim
+// the same ActionKind:
+// - nativeMeetingModule is before calendlyModule so it wins propose_meeting /
+//   confirm_booking — meeting rooms are generated natively.
+// - slackModule is last so it supersedes the inbox Slack placeholder for
+//   channel-pinned dispatch (the Radar digest pins to "slack").
 export const ADAPTERS: AdapterModule[] = [
   gmailModule,
   docusignModule,
+  nativeMeetingModule,
   calendlyModule,
   ...INBOX_MODULES,
   ...FINANCE_MODULES,

@@ -1,18 +1,15 @@
 // lib/integrations/adapters/slack.ts
-// Slack dispatch for the Act-now Radar digest (and any future chat push) — the
-// channel that carries the recurring sourcing brief into the operator's Slack.
+// Internal notification dispatch — delivers digest posts and step notifications
+// to the unified inbox (in-platform). No external Slack API dependency.
 //
-// Mock-or-real: with no Slack credentials in the environment the adapter
-// operates in mock mode (it prepares the message but does not post), so the
-// digest send -> dispatch flow behaves identically whether or not the operator
-// has connected Slack. The real chat.postMessage send is wired at the marked
-// seam, once the bot-token credential plumbing lands.
+// When ctx.supabase is available the adapter writes an inbox_threads +
+// inbox_messages row so the message surfaces immediately in the inbox UI.
+// The dispatch_log (lib/integrations/log.ts) captures every dispatch regardless,
+// so nothing is lost even if the DB write fails.
 //
 // Routing: the digest send reaches this adapter via the DispatchContext.channel
-// hint ("slack") rather than by ActionKind, so no new ActionKind is added to
-// lib/gates. Registered in ./index by appending slackModule to ADAPTERS; as the
-// last module to claim the "slack" channel it supersedes the inbox placeholder
-// for channel-pinned dispatch.
+// hint ("slack") rather than by ActionKind. Registered last in ./index so it
+// supersedes the inbox placeholder for channel-pinned dispatch.
 import type {
   AdapterModule,
   DispatchAdapter,
@@ -20,45 +17,48 @@ import type {
   DispatchResult,
 } from "../types";
 
-function configured(): boolean {
-  return Boolean(process.env.SLACK_BOT_TOKEN);
-}
-
 export const slackAdapter: DispatchAdapter = {
   channel: "slack",
-  isConfigured: configured,
+  // Always available — no external credentials required.
+  isConfigured: () => true,
   async dispatch(ctx: DispatchContext): Promise<DispatchResult> {
-    // The Slack destination: a channel id / name passed as the target email or
-    // name by the caller (the digest passes the configured recipient here).
     const destination = ctx.target?.email ?? ctx.target?.name ?? "the workspace";
+    let persisted = false;
 
-    // Per-org connection wins when the caller resolved it; else the env default.
-    if (!(ctx.connected ?? configured())) {
-      return {
-        ok: true,
-        channel: "slack",
-        live: false,
-        detail: `Prepared a Slack message for ${destination} (Slack not connected — saved to review).`,
-      };
+    // Write to internal inbox when a Supabase client is threaded through.
+    if (ctx.supabase) {
+      try {
+        const threadId = `slack-${ctx.orgId}-${crypto.randomUUID()}`;
+        await (ctx.supabase.from("inbox_threads") as ReturnType<typeof ctx.supabase.from>).upsert(
+          {
+            id: threadId,
+            org_id: ctx.orgId,
+            channel: "slack",
+            subject: ctx.subject ?? "Internal notification",
+            status: "unread",
+          },
+          { onConflict: "id", ignoreDuplicates: false },
+        );
+        await (ctx.supabase.from("inbox_messages") as ReturnType<typeof ctx.supabase.from>).insert({
+          thread_id: threadId,
+          org_id: ctx.orgId,
+          channel: "slack",
+          direction: "inbound",
+          body: ctx.body ?? ctx.subject ?? "",
+        });
+        persisted = true;
+      } catch {
+        // Non-fatal — dispatch_log still captures the event.
+      }
     }
 
-    // SEAM: the real post goes here once bot-token plumbing lands —
-    //   await fetch("https://slack.com/api/chat.postMessage", {
-    //     method: "POST",
-    //     headers: {
-    //       Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
-    //       "Content-Type": "application/json",
-    //     },
-    //     body: JSON.stringify({ channel: destination, text: ctx.body, mrkdwn: true }),
-    //   });
-    // Until then we return a configured-but-queued result rather than calling an
-    // external API from this server action — the contract stays honest and the
-    // loop stays observable.
     return {
       ok: true,
       channel: "slack",
-      live: false,
-      detail: `Queued a Slack message for ${destination} via connected Slack.`,
+      live: persisted,
+      detail: persisted
+        ? `Notification delivered to internal inbox for ${destination}.`
+        : `Notification logged for ${destination} — internal inbox unavailable.`,
     };
   },
 };
