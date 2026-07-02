@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition, type ReactNode, type MutableRefObject } from "react";
+import React, { useRef, useState, useTransition, type ReactNode, type MutableRefObject } from "react";
 import { useRouter } from "next/navigation";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -49,7 +49,7 @@ export function AutosaveForm({
 
   return (
     <form
-      ref={formRef}
+      ref={formRef as React.RefObject<HTMLFormElement>}
       action={handleSubmit}
       onInput={scheduleSave}
       onChange={scheduleSave}
