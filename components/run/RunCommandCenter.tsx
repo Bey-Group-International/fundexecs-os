@@ -90,7 +90,7 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
             Deal command center
           </span>
           <Link
-            href="/run/search"
+            href="/run/diligence"
             className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
           >
             ✶ AI Evaluate
@@ -148,7 +148,7 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
               </span>
             ) : null}
             <Link
-              href="/run/search"
+              href="/run/diligence"
               className="ml-auto rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
             >
               ✶ AI Evaluate
