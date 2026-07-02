@@ -843,9 +843,14 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           orgContext,
           documentMode: stepIntent === "draft_document",
           onRetry: async (retryAgent, retryNumber) => {
-            // Debit credits for each retry attempt — same cost as the initial run.
+            // Debit credits for each retry attempt — same guard as the initial run.
             const retryCost = effectiveStepCost(retryAgent, orgProfile);
-            await spendCredits(ctx.orgId, retryCost, retryAgent);
+            const retrySpent = await spendCredits(ctx.orgId, retryCost, retryAgent);
+            if (!retrySpent.ok) {
+              throw new Error(
+                `Insufficient credits for retry: ${retrySpent.balance ?? 0} available, ${retryCost} required. Top up on the Wallet page to continue.`,
+              );
+            }
             emitProgress(onProgress, {
               type: "step_retry",
               step_id: step.id,
