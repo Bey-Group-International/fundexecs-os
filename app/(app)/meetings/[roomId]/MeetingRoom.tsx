@@ -96,6 +96,70 @@ function VideoTile({
   );
 }
 
+// ─── Device picker ───────────────────────────────────────────────────────────
+
+function DeviceChevron({
+  kind,
+  onSelect,
+}: {
+  kind: "audioinput" | "videoinput" | "audiooutput";
+  onSelect: (deviceId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const openPicker = async () => {
+    const all = await navigator.mediaDevices.enumerateDevices();
+    setDevices(all.filter((d) => d.kind === kind && d.deviceId));
+    setOpen(true);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => void openPicker()}
+        title={`Switch ${kind === "audioinput" ? "microphone" : kind === "videoinput" ? "camera" : "speaker"}`}
+        className="flex items-center justify-center w-4 h-4 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
+      >
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+          <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-50 min-w-[200px] rounded-xl border border-[var(--line)] bg-[var(--surface-2)] shadow-xl p-1">
+          <p className="text-[10px] font-medium text-[var(--fg-muted)] uppercase tracking-wide px-2 py-1">
+            {kind === "audioinput" ? "Microphone" : kind === "videoinput" ? "Camera" : "Speaker"}
+          </p>
+          {devices.length === 0 ? (
+            <p className="text-xs text-[var(--fg-muted)] px-2 py-1">No devices found</p>
+          ) : (
+            devices.map((d) => (
+              <button
+                key={d.deviceId}
+                onClick={() => { onSelect(d.deviceId); setOpen(false); }}
+                className="w-full text-left text-xs text-[var(--fg-primary)] px-2 py-1.5 rounded-lg hover:bg-[var(--surface-3)] transition-colors truncate"
+              >
+                {d.label || `Device ${d.deviceId.slice(0, 6)}`}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Controls bar ────────────────────────────────────────────────────────────
 
 function ControlBar({
@@ -110,6 +174,9 @@ function ControlBar({
   onToggleCopilot,
   onLeave,
   onEndForAll,
+  onSwitchMic,
+  onSwitchCam,
+  onSwitchSpeaker,
   duration,
 }: {
   micOn: boolean;
@@ -123,6 +190,9 @@ function ControlBar({
   onToggleCopilot: () => void;
   onLeave: () => void;
   onEndForAll: () => void;
+  onSwitchMic: (deviceId: string) => void;
+  onSwitchCam: (deviceId: string) => void;
+  onSwitchSpeaker: (deviceId: string) => void;
   duration: number;
 }) {
   const mins = String(Math.floor(duration / 60)).padStart(2, "0");
@@ -137,20 +207,36 @@ function ControlBar({
 
       {/* Core controls */}
       <div className="flex items-center gap-3">
-        <CtrlBtn
-          active={micOn}
-          onClick={onToggleMic}
-          title={micOn ? "Mute" : "Unmute"}
-          activeIcon={<MicIcon />}
-          inactiveIcon={<MicOffIcon />}
-        />
-        <CtrlBtn
-          active={camOn}
-          onClick={onToggleCam}
-          title={camOn ? "Turn off camera" : "Turn on camera"}
-          activeIcon={<CamIcon />}
-          inactiveIcon={<CamOffIcon />}
-        />
+        <div className="flex items-center gap-0.5">
+          <CtrlBtn
+            active={micOn}
+            onClick={onToggleMic}
+            title={micOn ? "Mute" : "Unmute"}
+            activeIcon={<MicIcon />}
+            inactiveIcon={<MicOffIcon />}
+          />
+          <DeviceChevron kind="audioinput" onSelect={onSwitchMic} />
+        </div>
+        <div className="flex items-center gap-0.5">
+          <CtrlBtn
+            active={camOn}
+            onClick={onToggleCam}
+            title={camOn ? "Turn off camera" : "Turn on camera"}
+            activeIcon={<CamIcon />}
+            inactiveIcon={<CamOffIcon />}
+          />
+          <DeviceChevron kind="videoinput" onSelect={onSwitchCam} />
+        </div>
+        <div className="flex items-center gap-0.5">
+          <CtrlBtn
+            active={true}
+            onClick={() => {}}
+            title="Speaker"
+            activeIcon={<SpeakerIcon />}
+            inactiveIcon={<SpeakerIcon />}
+          />
+          <DeviceChevron kind="audiooutput" onSelect={onSwitchSpeaker} />
+        </div>
         <CtrlBtn
           active={shareOn}
           onClick={onToggleScreen}
@@ -924,6 +1010,50 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     } catch { /* user cancelled */ }
   }, [shareOn]);
 
+  const switchMic = useCallback(async (deviceId: string) => {
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } }, video: false });
+      const newTrack = newStream.getAudioTracks()[0];
+      if (!newTrack || !localStreamRef.current) return;
+      // Replace in all peer connections
+      peersRef.current.forEach((pc) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+        if (sender) void sender.replaceTrack(newTrack);
+      });
+      // Swap in local stream
+      localStreamRef.current.getAudioTracks().forEach((t) => { t.stop(); localStreamRef.current!.removeTrack(t); });
+      localStreamRef.current.addTrack(newTrack);
+      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+    } catch (e) { console.warn("[switchMic]", e); }
+  }, []);
+
+  const switchCam = useCallback(async (deviceId: string) => {
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } }, audio: false });
+      const newTrack = newStream.getVideoTracks()[0];
+      if (!newTrack || !localStreamRef.current) return;
+      cameraTrackRef.current = newTrack;
+      peersRef.current.forEach((pc) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) void sender.replaceTrack(newTrack);
+      });
+      localStreamRef.current.getVideoTracks().forEach((t) => { t.stop(); localStreamRef.current!.removeTrack(t); });
+      localStreamRef.current.addTrack(newTrack);
+      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+    } catch (e) { console.warn("[switchCam]", e); }
+  }, []);
+
+  const switchSpeaker = useCallback(async (deviceId: string) => {
+    // setSinkId is not in standard TS types yet
+    const videos = document.querySelectorAll("video");
+    for (const v of Array.from(videos)) {
+      const el = v as any;
+      if (typeof el.setSinkId === "function") {
+        try { await el.setSinkId(deviceId); } catch { /* ignore */ }
+      }
+    }
+  }, []);
+
   const leaveMeeting = useCallback(() => {
     sendSignal({ type: "leave", from: myIdRef.current });
     peersRef.current.forEach((pc) => pc.close());
@@ -1095,6 +1225,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         onToggleCopilot={() => setCopilotOpen((v) => !v)}
         onLeave={leaveMeeting}
         onEndForAll={() => void endForAll()}
+        onSwitchMic={switchMic}
+        onSwitchCam={switchCam}
+        onSwitchSpeaker={switchSpeaker}
         duration={duration}
       />
     </div>
@@ -1174,6 +1307,16 @@ function ScreenShareIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="3" width="20" height="14" rx="2" />
       <polyline points="8 21 12 17 16 21" />
+    </svg>
+  );
+}
+
+function SpeakerIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
     </svg>
   );
 }
