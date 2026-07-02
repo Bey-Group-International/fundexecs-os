@@ -152,7 +152,7 @@ export function RadarAttribution({ live }: { live?: boolean; initialPrompt?: str
         ) : (
           <p className="mt-6 rounded-xl border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">
             No accepted recommendations yet. Act on a move from the{" "}
-            <a href="/source/radar" className="text-gold-300 hover:underline">Radar</a> — once you
+            <a href="/source/lp_pipeline" className="text-gold-300 hover:underline">Radar</a> — once you
             accept recommendations, their outcomes are traced here.
           </p>
         )

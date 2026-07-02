@@ -164,7 +164,7 @@ export function SourceFunnel({ live }: { live?: boolean; initialPrompt?: string 
         ) : (
           <p className="mt-6 rounded-xl border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">
             Nothing in the funnel yet. Build your catalog from{" "}
-            <a href="/source/intel" className="text-gold-300 hover:underline">Intelligence</a>, then
+            <a href="/source/lp_pipeline" className="text-gold-300 hover:underline">Intelligence</a>, then
             run outreach — outcomes show up here as targets move through the suite.
           </p>
         )

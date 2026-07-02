@@ -81,7 +81,7 @@ function SubjectCard({ subject }: { subject: SubjectSignals }) {
           <div className="flex flex-wrap items-baseline gap-2">
             {subject.entityId ? (
               <Link
-                href={`/source/intel?entity=${subject.entityId}`}
+                href={`/source/lp_pipeline?entity=${subject.entityId}`}
                 className="truncate text-sm font-medium text-fg-primary hover:text-gold-200"
               >
                 {subject.subjectName}
@@ -209,7 +209,7 @@ export function SourceSignals({
             </span>
           ) : null}
           <Link
-            href="/source/intel"
+            href="/source/lp_pipeline"
             className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-gold-200"
           >
             → Intelligence
@@ -265,7 +265,7 @@ export function SourceSignals({
         ) : (
           <p className="mt-6 rounded-xl border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">
             No signals yet. Add entities in{" "}
-            <Link href="/source/intel" className="text-gold-200 hover:underline">
+            <Link href="/source/lp_pipeline" className="text-gold-200 hover:underline">
               Intelligence
             </Link>
             , then “Scan for signals” to start the watchlist.
