@@ -203,7 +203,7 @@ export function BrandStudio({
       <div className="flex flex-col gap-2 text-sm">
         <span className="text-fg-secondary">Palette</span>
         <p className="text-[11px] text-fg-muted">
-          Open the picker and choose a color — it's added instantly.
+          Open the picker and choose a color — it&apos;s added instantly.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           {/* Palette picker — adds on blur (when you close the picker) */}
