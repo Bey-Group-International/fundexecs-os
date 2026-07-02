@@ -27,6 +27,8 @@ import { spendCredits } from "@/lib/credits";
 import { effectiveStepCost } from "@/lib/agent-costs";
 import { parseStoredEdgeContext, edgeContextToPromptLine, type EdgeContextResult } from "@/lib/edge-context";
 import { selectAgentWithContext } from "@/lib/brain-routing";
+import { resolveAutonomyForIntent } from "@/lib/autonomy";
+import { getActiveMandate } from "@/lib/mandates";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -747,11 +749,16 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
   const priorOutputs: string[] = [];
   const artifactIds: string[] = [];
 
-  const orgContext = await loadOrgContext(ctx, workflow);
-  // Resolve the org's compounding profile once for the whole workflow so all
-  // steps share the same discount. Fetched after orgContext to avoid an extra
-  // round-trip on the hot path; profile is safe to compute unconditionally.
-  const orgProfile = await compoundingProfile(ctx.orgId);
+  const [orgContext, orgProfile, activeMandate] = await Promise.all([
+    loadOrgContext(ctx, workflow),
+    // Resolve the org's compounding profile once for the whole workflow so all
+    // steps share the same discount.
+    compoundingProfile(ctx.orgId),
+    // Fetch the active mandate once per workflow. Used to resolve per-step
+    // autonomy mode — Tier-1 steps run auto, Tier-2 run auto when pre-authorized
+    // by the mandate, Tier-3 always run manual. Best-effort: undefined on miss.
+    getActiveMandate(ctx.supabase, ctx.orgId).catch(() => undefined),
+  ]);
 
   for (let i = 0; i < list.length; i++) {
     const step = list[i];
@@ -855,7 +862,10 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
         {
           objective: step.description?.trim() || step.title,
           context: priorOutputs.length ? priorOutputs.join("\n\n") : undefined,
-          autonomy: "semi",
+          autonomy: resolveAutonomyForIntent(
+            classifyStepIntent(step.title, step.description ?? ""),
+            activeMandate,
+          ),
         },
       );
     } catch {
