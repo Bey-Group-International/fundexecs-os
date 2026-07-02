@@ -5,6 +5,8 @@
 // client-side without a round-trip, and the API can re-check server-side.
 export type EarnIntent = "chat" | "task";
 
+import type { EdgeContextResult } from "@/lib/edge-context";
+
 // Verbs that ask Earn to *do* work — these spin up a planned, gated workflow.
 const TASK_SIGNAL =
   /\b(build|create|draft|write|generate|model|underwrite|underwriting|source|sources?|prospect|find|search|prepare|compile|analy[sz]e|screen|run|launch|send|email|schedule|review|update|stress.?test|diligence|produce|assemble|automate|outreach|distribute|memo|deck|pipeline|raise|close)\b/i;
@@ -18,8 +20,16 @@ const QUESTION_LEAD =
  * Questions and short asks become chat; explicit work requests become tasks;
  * longer declarative work descriptions default to task to preserve the agentic
  * product. Empty input is treated as chat.
+ *
+ * Optional edgeContext: when the user is in an active relationship or sourcing
+ * workflow context, short ambiguous messages lean toward "task" since the
+ * surrounding environment signals intent to act. The context only tips a tie —
+ * it never overrides an explicit question or a clear conversational opener.
  */
-export function classifyIntent(prompt: string): EarnIntent {
+export function classifyIntent(
+  prompt: string,
+  edgeContext?: EdgeContextResult
+): EarnIntent {
   const p = prompt.trim();
   if (!p) return "chat";
 
@@ -30,8 +40,20 @@ export function classifyIntent(prompt: string): EarnIntent {
   if (isTask && !isQuestion) return "task";
   // Anything question-shaped → answer it conversationally.
   if (isQuestion) return "chat";
-  // Short, verbless messages (greetings, acks, one-liners) → chat.
-  if (p.split(/\s+/).length <= 6) return "chat";
+
+  // Short messages: normally chat, but if session context is action-oriented
+  // (user is in sourcing/relationship mode) treat ambiguous short imperatives
+  // as tasks (e.g. "draft outreach", "pull connections").
+  const wordCount = p.split(/\s+/).length;
+  if (wordCount <= 6) {
+    const actionContext =
+      edgeContext &&
+      (edgeContext.workflowContext === "relationship_management" ||
+        edgeContext.workflowContext === "deal_sourcing");
+    if (actionContext && isTask) return "task";
+    return "chat";
+  }
+
   // Longer declarative messages that still name work → task; else chat.
   return isTask ? "task" : "chat";
 }
