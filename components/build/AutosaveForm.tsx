@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition, type ReactNode, type RefObject } from "react";
+import { useRef, useState, useTransition, type ReactNode, type MutableRefObject } from "react";
 import { useRouter } from "next/navigation";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -17,7 +17,7 @@ export function AutosaveForm({
   action: (formData: FormData) => Promise<void>;
   children: ReactNode;
   className?: string;
-  formRef?: RefObject<HTMLFormElement | null>;
+  formRef?: MutableRefObject<HTMLFormElement | null>;
 }) {
   const internalRef = useRef<HTMLFormElement>(null);
   const formRef = externalRef ?? internalRef;
