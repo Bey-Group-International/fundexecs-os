@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ExecutiveHQ } from "./ExecutiveHQ";
 import { executiveCharacters } from "@/components/characters/characterConfig";
+import { MeetingModal } from "@/components/virtual-office/MeetingModal";
 
 // Load Phaser only in the browser
 const VirtualOfficeGame = dynamic(
@@ -83,6 +84,9 @@ export function OfficeTabs() {
           onNpcClick={handleNpcClick}
         />
       </div>
+
+      {/* Meeting modal — listens for office:start-meeting window event */}
+      <MeetingModal />
     </div>
   );
 }
