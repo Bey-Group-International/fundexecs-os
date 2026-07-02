@@ -83,15 +83,20 @@ export function isInboxOverdue(
 
 /** A workflow awaiting approval → an inbox row linking to its session. */
 export function workflowToApprovalItem(
-  task: Pick<Task, "id" | "title" | "session_id" | "assigned_agent">,
+  task: Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">,
 ): InboxItem {
   const agentName = task.assigned_agent ? String(task.assigned_agent).replace(/_/g, " ") : null;
   const subtitle = agentName
     ? `Raised by ${agentName} · awaiting your approval`
     : "Workflow awaiting your approval";
-  // Approvals are reviewed inside the war-room session that owns them; fall
-  // back to /inbox so sessionless approvals surface in the approvals lane.
-  const href = task.session_id ? `/session/${task.session_id}` : "/workspace";
+  // Deep-link priority: session → description path → workspace fallback.
+  // Marketplace interest tasks encode the listing path in description.
+  const descPath = task.description?.trim();
+  const href = task.session_id
+    ? `/session/${task.session_id}`
+    : descPath?.startsWith("/")
+      ? descPath
+      : "/workspace";
   return {
     id: `approval:${task.id}`,
     kind: "approval",
@@ -155,7 +160,7 @@ export function riskToInboxItem(
  */
 export function buildInbox(
   deals: DealConviction[],
-  awaitingApproval: Pick<Task, "id" | "title" | "session_id" | "assigned_agent">[],
+  awaitingApproval: Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">[],
   todayIso: string,
 ): Inbox {
   const dealName = new Map<string, string>();
@@ -195,16 +200,16 @@ export function buildInbox(
  */
 async function fetchAwaitingApproval(
   orgId: string,
-): Promise<Pick<Task, "id" | "title" | "session_id" | "assigned_agent">[]> {
+): Promise<Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">[]> {
   const supabase = createServerClient();
   const { data } = await supabase
     .from("tasks")
-    .select("id, title, session_id, assigned_agent")
+    .select("id, title, session_id, assigned_agent, description")
     .eq("organization_id", orgId)
     .is("parent_task_id", null)
     .eq("status", "awaiting_approval")
     .order("created_at", { ascending: false });
-  const rows = (data ?? []) as Pick<Task, "id" | "title" | "session_id" | "assigned_agent">[];
+  const rows = (data ?? []) as Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">[];
   // Deduplicate by title — multiple pending approvals with identical titles
   // are the same logical action queued more than once. Keep the most recent.
   const seen = new Set<string>();
