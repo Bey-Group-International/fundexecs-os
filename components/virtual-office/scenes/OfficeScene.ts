@@ -143,6 +143,12 @@ export class OfficeScene extends Phaser.Scene {
   private nearestInteractive: InteractiveObject | null = null;
   private keyX!: Phaser.Input.Keyboard.Key;
 
+  // Follow-mode (press F near a remote player to follow them)
+  private followTargetId: string | null = null;
+  private followHud!: Phaser.GameObjects.Text;
+  private followRepathMs = 0;
+  private keyF!: Phaser.Input.Keyboard.Key;
+
   // Emotes
   private emoteKeys: Phaser.Input.Keyboard.Key[] = [];
   // Start within the natural 9-16s window so no ambient emote fires on frame 1
@@ -221,6 +227,7 @@ export class OfficeScene extends Phaser.Scene {
     this._createMinimap();
     this._createInteractives();
     this._setupEmotes();
+    this._setupFollowMode();
 
     // Ensure the canvas captures keyboard events immediately on scene start
     this.game.canvas.setAttribute("tabindex", "0");
@@ -253,6 +260,7 @@ export class OfficeScene extends Phaser.Scene {
   // ── update ──────────────────────────────────────────────────────────────────
 
   update(_time: number, delta: number) {
+    this._updateFollowMode(delta);
     this._handleMovement();
     this._updateInteractives();
     this._updateEmotes(delta);
@@ -535,8 +543,8 @@ export class OfficeScene extends Phaser.Scene {
     const left  = this.cursors.left.isDown  || this.wasd.left.isDown;
     const right = this.cursors.right.isDown || this.wasd.right.isDown;
 
-    // Keyboard input always overrides click-to-walk
-    if (up || down || left || right) this._cancelWalk();
+    // Keyboard input always overrides click-to-walk and follow-mode
+    if (up || down || left || right) { this._cancelWalk(); this._cancelFollow(); }
     else if (this._followWalkPath()) return;
 
     let vx = 0;
@@ -718,6 +726,67 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  // ── Follow-mode — press F near a remote player to walk behind them ─────────
+
+  private static readonly FOLLOW_PICK_RADIUS = 96;
+  private static readonly FOLLOW_STOP_DIST = 44;
+
+  private _setupFollowMode() {
+    this.keyF = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.F);
+    this.followHud = this.add.text(0, 0, "", {
+      fontFamily: "'Georgia','Times New Roman',serif",
+      fontSize: "10px",
+      color: "#c9a84c",
+      backgroundColor: "#0a0806e6",
+      padding: { x: 10, y: 5 },
+    }).setScrollFactor(0).setDepth(25).setVisible(false);
+  }
+
+  private _cancelFollow() {
+    if (!this.followTargetId) return;
+    this.followTargetId = null;
+    this.followHud.setVisible(false);
+    this._cancelWalk();
+  }
+
+  private _updateFollowMode(delta: number) {
+    if (Phaser.Input.Keyboard.JustDown(this.keyF)) {
+      if (this.followTargetId) {
+        this._cancelFollow();
+      } else {
+        // Pick the nearest remote player within reach
+        let bestId: string | null = null;
+        let bestDist = OfficeScene.FOLLOW_PICK_RADIUS;
+        for (const [id, state] of this.remotePlayers) {
+          const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, state.sprite.x, state.sprite.y);
+          if (d < bestDist) { bestDist = d; bestId = id; }
+        }
+        if (bestId) {
+          this.followTargetId = bestId;
+          const name = this.remotePlayers.get(bestId)?.label.text ?? "player";
+          this.followHud.setText(`◈  Following ${name} — F to stop`);
+          const cam = this.cameras.main;
+          this.followHud.setPosition(cam.width / 2 - this.followHud.width / 2, 40);
+          this.followHud.setVisible(true);
+        }
+      }
+    }
+
+    if (!this.followTargetId) return;
+    const target = this.remotePlayers.get(this.followTargetId);
+    if (!target) { this._cancelFollow(); return; }  // target left the office
+
+    // Re-path on a short cadence so we trail the target without thrashing A*
+    this.followRepathMs -= delta;
+    const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, target.sprite.x, target.sprite.y);
+    if (dist <= OfficeScene.FOLLOW_STOP_DIST) {
+      this._cancelWalk();
+    } else if (this.followRepathMs <= 0) {
+      this.followRepathMs = 350;
+      this.walkPath = this._findPath(this.player.x, this.player.y, target.sprite.x, target.sprite.y);
+    }
+  }
+
   // ── Emotes — Gather-style reactions on keys 1-4 ─────────────────────────────
 
   private static readonly EMOTES = ["👋", "👍", "❤️", "🎉"];
@@ -835,6 +904,7 @@ export class OfficeScene extends Phaser.Scene {
       if (this.input.hitTestPointer(ptr).length > 0) return;
       const world = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
       if (world.x < 0 || world.y < 0 || world.x >= WORLD_W || world.y >= WORLD_H) return;
+      this._cancelFollow();
       this._walkTo(world.x, world.y);
     });
 
@@ -844,6 +914,7 @@ export class OfficeScene extends Phaser.Scene {
       if (!room) return;
       this.player.setPosition(room.col * ROOM_W + ROOM_W / 2, room.row * ROOM_H + ROOM_H / 2);
       this._cancelWalk();
+      this._cancelFollow();
       this.game.canvas.focus();
     });
   }
