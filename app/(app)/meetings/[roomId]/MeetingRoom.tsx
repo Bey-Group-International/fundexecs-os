@@ -749,6 +749,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
   }, [createPeerConnection, router, clearWaitingTimers]);
 
+  // ── Detect host status on mount (pre-join screen label) ──────────────────
+
+  useEffect(() => {
+    async function detectHost() {
+      const [{ data: { user } }, { data: meeting }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.from("live_meetings").select("host_id").eq("room_code", roomCode).maybeSingle(),
+      ]);
+      const m = meeting as { host_id: string } | null;
+      if (user && m && user.id === m.host_id) {
+        setIsHost(true);
+        isHostRef.current = true;
+      }
+    }
+    void detectHost();
+  }, [roomCode]);
+
   // ── Preview camera ────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -779,11 +796,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     let mId: string | null = null;
     let hostFlag = false;
     try {
-      const { data: existing } = await supabase.from("live_meetings").select("id, status").eq("room_code", roomCode).single();
-      const ex = existing as { id: string; status: string } | null;
+      const { data: existing } = await supabase.from("live_meetings").select("id, status, host_id").eq("room_code", roomCode).single();
+      const ex = existing as { id: string; status: string; host_id: string } | null;
       if (ex) {
         mId = ex.id;
         if (ex.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
+        const { data: { user } } = await supabase.auth.getUser();
+        hostFlag = !!user && user.id === ex.host_id;
       } else {
         const res = await fetch("/api/meetings/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Meeting", roomCode }) });
         if (res.ok) {
@@ -1276,7 +1295,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           {/* Join card */}
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] overflow-hidden">
             <div className="px-5 pt-5 pb-4 flex flex-col gap-4">
-              <p className="text-base font-semibold text-[var(--fg-primary)]">Ready to join?</p>
+              <p className="text-base font-semibold text-[var(--fg-primary)]">{isHost ? "Ready to start?" : "Ready to join?"}</p>
 
               <input
                 type="text"
