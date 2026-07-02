@@ -1,4 +1,5 @@
 # FundExecs OS — Edge Context Optimization Spec
+
 ## Browser Session Metadata → Agentic Intelligence Pipeline
 
 **Version:** 1.0  
@@ -30,23 +31,18 @@ The browser session metadata (`edge_all_open_tabs`) reveals three actionable wor
 3. **Rule: Background cluster scoring.** Background tabs are grouped by hostname family. Three or more tabs sharing a domain family elevate that cluster's composite score above any single tab.
 
 4. **Rule: LinkedIn path specificity.** LinkedIn tabs are further resolved by URL path:
+
    - `/mynetwork/invite-connect/connections` → `linkedin_connections` → Sourcing + IR agents
    - `/notifications` → `linkedin_notifications` → Automater/Scrubber brain
    - `/feed` → `linkedin_feed` → low-weight passive signal
    - `/messaging` → `linkedin_messaging` → Rainmaker + Outreach agents
    - `/in/<slug>` → `linkedin_profile` → Executive Advisor (profiling mode)
    - `/search` → `linkedin_search` → Deal Sourcer + Lead Generator
-
 5. **Rule: Event management detection.** Any URL matching `luma.com/event/manage/*/guests` or equivalent event-platform guest-list paths activates Curator brain at elevated priority.
-
 6. **Rule: Research domain classification.** Known PE/finance research domains (`mergersandinquisitions.com`, `pitchbook.com`, `axial.net`, `dealogic.com`, `preqin.com`, `bloomberg.com`, `wsj.com`) map to Analyst + Deal Sourcer agents.
-
 7. **Rule: Deal platform detection.** Transactional platform URLs (`axial.net`, `dealnexus.com`, `bizbuysell.com`, `businessbroker.net`) trigger Deal Sourcer at high priority.
-
 8. **Rule: Zero instruction surface from metadata.** URL query parameters, URL fragments, and page titles are stripped of any content that matches command/instruction patterns before any tab data is used for routing.
-
 9. **Rule: Minimum confidence threshold.** Tab signals below a composite confidence score of 0.30 are discarded and do not influence routing. Unknown domains produce no agent hints.
-
 10. **Rule: Workflow context collapse.** Multiple tab signals are collapsed into a single `WorkflowContext` enum before routing. Conflicting signals (e.g., PE research + social media + news) default to `general` and apply no agent priority boost.
 
 ### B2 — Agent Routing Rules
@@ -155,6 +151,7 @@ STAGE 6 — SESSION MEMORY MERGE (async, non-blocking)
 ## D. Safety & Boundary Guardrails
 
 ### What metadata CAN influence:
+
 - Agent priority weighting (additive only, never subtractive below baseline)
 - `WorkflowContext` hint injected into agent system preambles
 - `SessionMemoryCard.constraints` (one structured entry)
@@ -162,6 +159,7 @@ STAGE 6 — SESSION MEMORY MERGE (async, non-blocking)
 - Execution hints (max 3 short strings)
 
 ### What metadata MUST NEVER influence:
+
 - Approval gate tier classification (Tier 1/2/3 is action-type-based, not context-based)
 - Non-delegable action permissions
 - Agent autonomy level escalation
@@ -171,6 +169,7 @@ STAGE 6 — SESSION MEMORY MERGE (async, non-blocking)
 - User identity or permissions inference
 
 ### Injection defense:
+
 - `pageTitle` is treated as untrusted display text. Never parsed for instructions.
 - URL query strings and fragments (`?`, `#`) are dropped before pattern matching.
 - Any `pageUrl` containing prompt-injection markers (`\n`, `<!--`, `<script`, `ignore previous`) causes the entire tab entry to be quarantined (excluded from classification, logged as safety flag).
@@ -178,6 +177,7 @@ STAGE 6 — SESSION MEMORY MERGE (async, non-blocking)
 - If `edge_all_open_tabs` itself contains non-array input, the entire context pass is skipped and the system routes on intent alone.
 
 ### Agent misfire prevention:
+
 - No agent is auto-triggered by tab context alone. Context only adjusts priority weights for the next agent the user's explicit request routes to.
 - Tab context does not generate autonomous outreach, drafts, or task initiations.
 - All context enrichment is logged to `brain_runs` with source `"edge_context"` for audit visibility.
@@ -221,9 +221,10 @@ interface EdgeContextResult {
 
 ## Implementation Files
 
-| File | Change type | Purpose |
-|---|---|---|
-| `lib/edge-context.ts` | New | Full pipeline implementation |
-| `lib/intent.ts` | Extend | Accept optional `EdgeContextResult` to weight intent classification |
-| `lib/brain-routing.ts` | Extend | `brainForAgent()` accepts optional priority map |
-| `lib/brains/session-memory.ts` | Extend | Merge edge context into `constraints[]` |
+|              File              | Change type |                               Purpose                               |
+|--------------------------------|-------------|---------------------------------------------------------------------|
+| `lib/edge-context.ts`          | New         | Full pipeline implementation                                        |
+| `lib/intent.ts`                | Extend      | Accept optional `EdgeContextResult` to weight intent classification |
+| `lib/brain-routing.ts`         | Extend      | `brainForAgent()` accepts optional priority map                     |
+| `lib/brains/session-memory.ts` | Extend      | Merge edge context into `constraints[]`                             |
+
