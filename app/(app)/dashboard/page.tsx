@@ -6,6 +6,7 @@ import { AGENTS } from "@/lib/agents";
 import type { Task, Deal, Asset, Artifact, AgentKey } from "@/lib/supabase/database.types";
 import { SessionsSection } from "./SessionsSection";
 import { MissionControl } from "@/components/dashboard/MissionControl";
+import { StatTile } from "@/components/dashboard/StatTile";
 import { HottestCapital, PendingGates } from "./CapitalSignals";
 import { Outbox } from "./Outbox";
 import type { Session, SessionGroup, Approval, DispatchLog } from "@/lib/supabase/database.types";
@@ -290,18 +291,10 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div style={{ animationDelay: "0ms" }}>
-          <Stat label="Workflows" value={workflows.length} />
-        </div>
-        <div style={{ animationDelay: "60ms" }}>
-          <Stat label="Deliverables" value={stepsCompleted} />
-        </div>
-        <div style={{ animationDelay: "120ms" }}>
-          <Stat label="Deals in pipeline" value={deals.length} />
-        </div>
-        <div style={{ animationDelay: "180ms" }}>
-          <Stat label="Portfolio assets" value={assets.length} />
-        </div>
+        <StatTile label="Workflows" value={workflows.length} delay={0} />
+        <StatTile label="Deliverables" value={stepsCompleted} delay={60} />
+        <StatTile label="Deals in pipeline" value={deals.length} delay={120} />
+        <StatTile label="Portfolio assets" value={assets.length} delay={180} />
       </section>
 
       <Link
@@ -477,6 +470,24 @@ export default async function DashboardPage() {
 
         <div>
           <SectionHeading action={deals.length > 0 ? <ClearDealsBtn /> : undefined}>Deal pipeline</SectionHeading>
+          {/* Horizontal pipeline shape bar */}
+          {deals.length > 0 ? (
+            <div className="mb-3 flex h-1.5 overflow-hidden rounded-full bg-surface-3/60">
+              {DEAL_STAGES.map((stage) => {
+                const count = dealByStage.get(stage) ?? 0;
+                const pct = (count / deals.length) * 100;
+                if (pct === 0) return null;
+                return (
+                  <div
+                    key={stage}
+                    className="h-full transition-[width] duration-700"
+                    style={{ width: `${pct}%`, backgroundColor: STAGE_COLORS[stage] }}
+                    title={`${stage.replace("_", " ")}: ${count}`}
+                  />
+                );
+              })}
+            </div>
+          ) : null}
           <div className="grid grid-cols-5 gap-1.5">
             {DEAL_STAGES.map((stage) => {
               const count = dealByStage.get(stage) ?? 0;

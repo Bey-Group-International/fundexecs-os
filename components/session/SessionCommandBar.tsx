@@ -51,6 +51,11 @@ export function SessionCommandBar({
 
   return (
     <div className="relative flex min-h-12 items-center gap-2 border-b border-line bg-surface-0/82 px-3 py-2 backdrop-blur-xl sm:h-12 sm:px-4">
+      {/* Gradient top accent stripe */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/40 to-transparent"
+      />
       {/* Session name */}
       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: accent }} />
       {renaming ? (
@@ -74,7 +79,7 @@ export function SessionCommandBar({
         <button
           onClick={() => setRenaming(true)}
           title="Rename session"
-          className="truncate text-sm font-medium text-fg-primary hover:text-gold-300"
+          className="truncate font-display text-sm font-semibold tracking-tight text-fg-primary hover:text-gold-300"
         >
           {name}
         </button>

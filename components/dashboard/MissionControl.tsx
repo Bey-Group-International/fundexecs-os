@@ -54,13 +54,25 @@ function Ring({ value, tone }: { value: number; tone: SignalTone }) {
   );
 }
 
+const TONE_STRIPE: Record<SignalTone, string> = {
+  good: "#5FB87A",
+  warn: "rgb(var(--fx-accent-400))",
+  muted: "rgb(var(--fx-line))",
+};
+
 function HubTile({ signal }: { signal: HubSignal }) {
   const tone = scoreTone(signal.score);
   return (
     <Link
       href={signal.href}
-      className="group flex flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-4 transition hover:border-gold-500/40 hover:bg-surface-2/40"
+      className="fx-neural-card group flex flex-col gap-3 p-4"
     >
+      {/* Tone stripe at top */}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-[2px] rounded-t-2xl opacity-70 transition-opacity duration-300 group-hover:opacity-100"
+        style={{ background: TONE_STRIPE[tone] }}
+      />
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
           {signal.label}
