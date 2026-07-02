@@ -197,6 +197,11 @@ export class OfficeScene extends Phaser.Scene {
     this._setupCamera();
     this._setupInput();
     this._spawnExecNpcs();
+    this._setupPointerTeleport();
+
+    // Ensure the canvas captures keyboard events immediately on scene start
+    this.game.canvas.setAttribute("tabindex", "0");
+    this.game.canvas.focus();
 
     // Receive resolved zone definitions from the React wrapper
     this.game.events.on("office:zone-config", (zones: ZoneDef[]) => {
@@ -265,17 +270,23 @@ export class OfficeScene extends Phaser.Scene {
 
     // Room borders and name labels on top of tiles
     for (const room of ROOMS) {
+      // Subtle gold room border
       const gfx = this.add.graphics().setDepth(2);
-      gfx.lineStyle(1, 0x334155, 0.5);
-      gfx.strokeRect(room.col * ROOM_W, room.row * ROOM_H, ROOM_W, ROOM_H);
+      gfx.lineStyle(1.5, 0xc9a84c, 0.25);
+      gfx.strokeRect(room.col * ROOM_W + 2, room.row * ROOM_H + 2, ROOM_W - 4, ROOM_H - 4);
 
-      this.add.text(room.col * ROOM_W + 10, room.row * ROOM_H + 10, room.label.toUpperCase(), {
-        fontFamily: "monospace",
-        fontSize: "9px",
-        color: "#fbbf24",
-        stroke: "#0f172a",
-        strokeThickness: 2,
-      }).setDepth(3).setAlpha(0.7);
+      // Professional room label — pill badge bottom-left of room
+      const lx = room.col * ROOM_W + 10;
+      const ly = room.row * ROOM_H + ROOM_H - 24;
+      const label = this.add.text(lx + 6, ly + 3, room.label.toUpperCase(), {
+        fontFamily: "'Georgia','Times New Roman',serif",
+        fontSize: "8px",
+        color: "#c9a84c",
+        letterSpacing: 2,
+      }).setDepth(4).setAlpha(0.9);
+      const bg = this.add.graphics().setDepth(3);
+      bg.fillStyle(0x0f172a, 0.72);
+      bg.fillRoundedRect(lx, ly, label.width + 12, 18, 4);
     }
   }
 
@@ -436,13 +447,14 @@ export class OfficeScene extends Phaser.Scene {
   private _createRoomLabel() {
     this.roomLabel = this.add
       .text(0, 0, "", {
-        fontFamily: "monospace",
-        fontSize: "13px",
-        color: "#fbbf24",
-        backgroundColor: "#0f172aCC",
-        padding: { x: 10, y: 6 },
-        stroke: "#0f172a",
+        fontFamily: "'Georgia','Times New Roman',serif",
+        fontSize: "11px",
+        color: "#c9a84c",
+        backgroundColor: "#0a0806e6",
+        padding: { x: 14, y: 7 },
+        stroke: "#0a0806",
         strokeThickness: 1,
+        letterSpacing: 3,
       })
       .setScrollFactor(0)
       .setDepth(20)
@@ -473,8 +485,8 @@ export class OfficeScene extends Phaser.Scene {
   private _setupCamera() {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_W, WORLD_H);
-    cam.startFollow(this.player, true, 0.1, 0.1);
-    cam.setZoom(1.5);
+    cam.startFollow(this.player, true, 0.08, 0.08);
+    cam.setZoom(2.0);
   }
 
   private _setupInput() {
@@ -607,6 +619,36 @@ export class OfficeScene extends Phaser.Scene {
       state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
     }
+  }
+
+  private _setupPointerTeleport() {
+    // Double-click anywhere on the map to teleport to that room's center
+    this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
+      if (!ptr.isDown) return;
+      if (this.input.activePointer.getDuration() < 20 && this.input.pointer1.downTime > 0) return;
+    });
+
+    this.input.on("pointerdblclick", (ptr: Phaser.Input.Pointer) => {
+      const wx = this.cameras.main.scrollX + ptr.x / this.cameras.main.zoom;
+      const wy = this.cameras.main.scrollY + ptr.y / this.cameras.main.zoom;
+      // Find which room was clicked and teleport to its center
+      for (const room of ROOMS) {
+        const rx = room.col * ROOM_W;
+        const ry = room.row * ROOM_H;
+        if (wx >= rx && wx < rx + ROOM_W && wy >= ry && wy < ry + ROOM_H) {
+          this.player.setPosition(rx + ROOM_W / 2, ry + ROOM_H / 2);
+          break;
+        }
+      }
+    });
+
+    // Emit teleport requests from the React layer (room key → room center)
+    this.game.events.on("office:teleport-room", (roomKey: string) => {
+      const room = ROOMS.find((r) => r.key === roomKey);
+      if (!room) return;
+      this.player.setPosition(room.col * ROOM_W + ROOM_W / 2, room.row * ROOM_H + ROOM_H / 2);
+      this.game.canvas.focus();
+    });
   }
 
   private _spawnExecNpcs() {

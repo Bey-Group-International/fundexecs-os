@@ -100,6 +100,8 @@ export function VirtualOfficeGame({
   const [mediaState, setMediaState] = useState<"idle" | "prompt" | "active" | "dismissed">("idle");
   const [roomActions, setRoomActions] = useState<RoomAction[]>([]);
   const [activeZone, setActiveZone] = useState<ZoneDef | null>(null);
+  const [canvasFocused, setCanvasFocused] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState<string>("");
 
   const requestMedia = useCallback(async () => {
     try {
@@ -166,9 +168,10 @@ export function VirtualOfficeGame({
           onNpcClickRef.current?.(payload);
         });
 
-        // Room enter bridge — updates room-specific action panel
-        game.events.on("office:room-enter", (_key: string, actions: RoomAction[]) => {
+        // Room enter bridge — updates room-specific action panel + current room state
+        game.events.on("office:room-enter", (key: string, actions: RoomAction[]) => {
           setRoomActions(actions);
+          setCurrentRoom(key);
         });
 
         // Iframe zone bridge
@@ -259,8 +262,27 @@ export function VirtualOfficeGame({
     }
   }, []);
 
+  // Room navigation config — matches ROOMS in types.ts
+  const ROOM_NAV = [
+    { key: "ceo",       label: "CEO Office",      icon: "◆" },
+    { key: "boardroom", label: "Boardroom",        icon: "◈" },
+    { key: "trading",   label: "Trading Floor",   icon: "▲" },
+    { key: "research",  label: "Research Hub",    icon: "◉" },
+    { key: "office",    label: "Main Office",     icon: "⬡" },
+    { key: "ops",       label: "Operations",      icon: "⚙" },
+    { key: "legal",     label: "Legal Corner",    icon: "§" },
+    { key: "marketing", label: "Marketing",       icon: "◬" },
+    { key: "reception", label: "Reception",       icon: "⬢" },
+  ];
+
+  const teleportTo = (roomKey: string) => {
+    gameRef.current?.events.emit("office:teleport-room", roomKey);
+  };
+
   return (
-    <div className="flex flex-col bg-slate-950 rounded-xl overflow-hidden border border-slate-800">
+    <div className="flex flex-col bg-[#080604] rounded-xl overflow-hidden border border-[#c9a84c22]"
+      style={{ boxShadow: "0 0 40px rgba(201,168,76,0.06), inset 0 1px 0 rgba(201,168,76,0.08)" }}>
+
       {/* Media permission banner */}
       {mediaState === "prompt" && (
         <MediaPermissionBanner
@@ -276,12 +298,12 @@ export function VirtualOfficeGame({
         localLabel={displayName}
       />
 
-      {/* Iframe zone overlay — slides up when player enters a zone */}
+      {/* Iframe zone overlay */}
       {activeZone && (
-        <div className="relative flex flex-col border-t border-amber-400/20 bg-slate-950">
-          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800">
-            <span className="text-[11px] font-mono text-amber-400 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+        <div className="relative flex flex-col border-t border-amber-400/20 bg-[#0a0806]">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-[#0f0d0a] border-b border-[#c9a84c22]">
+            <span className="text-[11px] font-mono text-[#c9a84c] flex items-center gap-1.5" style={{ letterSpacing: "0.12em" }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#c9a84c] animate-pulse" />
               {activeZone.title}
             </span>
             <button
@@ -296,34 +318,74 @@ export function VirtualOfficeGame({
             key={activeZone.id}
             src={activeZone.url}
             title={activeZone.title}
-            className="w-full h-48 border-0 bg-slate-950"
+            className="w-full h-48 border-0 bg-[#0a0806]"
             sandbox="allow-scripts allow-same-origin allow-popups"
           />
         </div>
       )}
 
+      {/* ── Navigation bar ── */}
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-[#c9a84c18] bg-[#0a0806] overflow-x-auto"
+        style={{ scrollbarWidth: "none" }}>
+        <span className="text-[9px] text-[#c9a84c55] uppercase tracking-widest mr-2 shrink-0"
+          style={{ fontFamily: "Georgia, serif" }}>Rooms</span>
+        {ROOM_NAV.map((r) => (
+          <button
+            key={r.key}
+            onClick={() => teleportTo(r.key)}
+            className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+            style={{
+              fontFamily: "Georgia, serif",
+              letterSpacing: "0.06em",
+              color: currentRoom === r.key ? "#c9a84c" : "#94a3b8",
+              background: currentRoom === r.key ? "rgba(201,168,76,0.12)" : "transparent",
+              border: `1px solid ${currentRoom === r.key ? "rgba(201,168,76,0.35)" : "rgba(255,255,255,0.05)"}`,
+            }}
+          >
+            <span className="opacity-60 text-[8px]">{r.icon}</span>
+            {r.label}
+          </button>
+        ))}
+      </div>
+
       {/* Game canvas area */}
       <div className="relative">
         {/* Controls hint */}
-        <div className="absolute top-3 right-3 z-10 flex gap-2 text-[10px] text-slate-500 bg-slate-900/80 rounded px-2 py-1 pointer-events-none">
-          <span>WASD / ↑↓←→ to move</span>
-          {token && <span className="text-emerald-500/60">• multiplayer</span>}
-          {mediaState === "active" && <span className="text-blue-400/70">• on call</span>}
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-2 text-[9px] pointer-events-none"
+          style={{ fontFamily: "Georgia, serif", letterSpacing: "0.08em" }}>
+          {!canvasFocused && (
+            <span className="text-[#c9a84c] bg-[#0a0806cc] border border-[#c9a84c44] rounded px-2 py-1 animate-pulse">
+              Click to move
+            </span>
+          )}
+          {canvasFocused && (
+            <span className="text-[#c9a84c55] bg-[#0a0806aa] rounded px-2 py-1">
+              WASD / ↑↓←→
+            </span>
+          )}
+          {token && <span className="text-emerald-500/50 bg-[#0a0806aa] rounded px-2 py-1">● live</span>}
         </div>
 
         {/* Proximity bubble overlay */}
         <BubbleOverlay members={bubbleMembers} />
 
-        {/* Room-specific action panel — bottom-left, fades in on room enter */}
+        {/* Room-specific action panel */}
         {roomActions.length > 0 && (
           <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1">
             {roomActions.map((action) => (
               <button
                 key={action.id}
                 onClick={() => handleRoomAction(action)}
-                className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium rounded-lg bg-slate-900/90 border border-slate-700/60 text-slate-300 hover:text-amber-400 hover:border-amber-400/40 hover:bg-slate-800/90 transition-colors backdrop-blur-sm"
+                className="flex items-center gap-2 px-3 py-1.5 text-[11px] rounded-lg transition-colors backdrop-blur-sm"
+                style={{
+                  fontFamily: "Georgia, serif",
+                  letterSpacing: "0.06em",
+                  color: "#c9a84c",
+                  background: "rgba(10,8,6,0.88)",
+                  border: "1px solid rgba(201,168,76,0.3)",
+                }}
               >
-                <span className="text-amber-400/70 font-mono">{action.icon}</span>
+                <span className="opacity-70 font-mono">{action.icon}</span>
                 {action.label}
               </button>
             ))}
@@ -334,7 +396,13 @@ export function VirtualOfficeGame({
         <div
           ref={containerRef}
           style={{ width: GAME_WIDTH, height: GAME_HEIGHT, maxWidth: "100%" }}
-          className="mx-auto"
+          className="mx-auto cursor-pointer"
+          onClick={() => {
+            const canvas = containerRef.current?.querySelector("canvas");
+            if (canvas) { canvas.focus(); setCanvasFocused(true); }
+          }}
+          onBlur={() => setCanvasFocused(false)}
+          onFocus={() => setCanvasFocused(true)}
         />
       </div>
     </div>
