@@ -1,9 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ExecutiveHQ } from "./ExecutiveHQ";
+import { executiveCharacters } from "@/components/characters/characterConfig";
 
 // Load Phaser only in the browser
 const VirtualOfficeGame = dynamic(
@@ -32,6 +33,15 @@ export function OfficeTabs() {
       const meta = data.session?.user?.user_metadata;
       if (meta?.character_id) setCharacterId(meta.character_id as string);
     });
+  }, []);
+
+  const handleNpcClick = useCallback(({ spriteKey, name }: { npcId: string; spriteKey: string; name: string }) => {
+    const exec = executiveCharacters.find((c) => c.id === spriteKey);
+    const execName = exec?.name ?? name;
+    const prompt = exec
+      ? `I'm talking to ${execName} in the virtual office. ${exec.promptBoundary}`
+      : `I'm talking to ${execName} in the virtual office.`;
+    window.dispatchEvent(new CustomEvent("earn:open-with-context", { detail: { execName, prompt } }));
   }, []);
 
   const handleNavigateRoom = (hqRoomId: string) => {
@@ -70,6 +80,7 @@ export function OfficeTabs() {
           active={tab === "virtual"}
           teleportTarget={teleportTarget}
           onOccupancyChange={setOccupancy}
+          onNpcClick={handleNpcClick}
         />
       </div>
     </div>
