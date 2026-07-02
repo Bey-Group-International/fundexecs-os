@@ -1368,6 +1368,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     ? allPeers.map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))
     : [{ id: "local", displayName: localName, stream: localStream, isLocal: true }, ...allPeers.filter((p) => p.id !== speakerTileId).map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))];
 
+  // Speaker view: first remote peer is the "active speaker"; local goes to sidebar.
+  // If no remote peers exist, show local large.
+  const speakerPeer = allPeers[0] ?? null;
+  const sidebarPeers = speakerPeer
+    ? [{ id: "__local__", displayName: localName, stream: localStream, isLocal: true }, ...allPeers.slice(1)]
+    : [];
+
   return (
     <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex flex-col">
       <div className="flex flex-1 overflow-hidden min-h-0">
