@@ -18,7 +18,7 @@ export async function computeGPScorecard(
   orgId: string
 ): Promise<GPScorecardData> {
   const [assetsRes, dealsRes, partnersRes, thesisRes, investorsRes, serviceRes] = await Promise.all([
-    supabase.from("assets").select("moic, cost, nav, created_at").eq("organization_id", orgId),
+    supabase.from("assets").select("moic, cost, nav, created_at").eq("organization_id", orgId).is("archived_at", null),
     supabase.from("deals").select("id, stage").eq("organization_id", orgId),
     supabase.from("partners").select("id, partner_type, role, created_at").eq("organization_id", orgId),
     supabase.from("investment_thesis").select("asset_classes, geographies, target_irr, target_moic").eq("organization_id", orgId).eq("is_active", true).limit(1),
@@ -32,6 +32,17 @@ export async function computeGPScorecard(
   const moics = assets.map((a) => a.moic).filter((m): m is number => m != null);
   const moicAvg = moics.length ? moics.reduce((s, m) => s + m, 0) / moics.length : null;
   const dealCount = deals.length;
+
+  // Approximate IRR from MOIC + hold period (years since asset created_at).
+  const irrSamples = assets
+    .map((a) => {
+      if (!a.moic || a.moic <= 0) return null;
+      const holdYears = (Date.now() - new Date(a.created_at).getTime()) / (365.25 * 86_400_000);
+      if (holdYears < 0.1) return null;
+      return (Math.pow(a.moic, 1 / holdYears) - 1) * 100;
+    })
+    .filter((v): v is number => v != null);
+  const irrAvg = irrSamples.length ? irrSamples.reduce((s, v) => s + v, 0) / irrSamples.length : null;
 
   // Score: >2× avg moic → 90, >1.5× → 70, >1× → 50, else 20; bonus for volume
   let trackScore = 20;
@@ -57,6 +68,8 @@ export async function computeGPScorecard(
   // ── Thesis Clarity ────────────────────────────────────────────────────────
   const thesis = thesisRes.data?.[0] ?? null;
   const sectorsCount = thesis?.asset_classes?.length ?? 0;
+  // geographies doubles as a proxy for geographic diversification (stages field
+  // doesn't exist on InvestmentThesis; using geos as a clarity signal instead).
   const stagesCount = thesis?.geographies?.length ?? 0;
   const thesisScore = thesis
     ? Math.min(100, 30 + sectorsCount * 15 + stagesCount * 10 + (thesis.target_moic ? 15 : 0) + (thesis.target_irr ? 10 : 0))
@@ -87,7 +100,7 @@ export async function computeGPScorecard(
 
   return {
     overallScore: overall,
-    trackRecord: { score: trackScore, moicAvg, irrAvg: null, dealCount },
+    trackRecord: { score: trackScore, moicAvg, irrAvg, dealCount },
     teamStrength: { score: teamScore, seniorYears, boardSeats: seniorPartners.length },
     thesisClarity: { score: thesisScore, sectorsCount, stagesCount },
     networkReach: { score: networkScore, lpRelationships: lpCount, coInvestors },

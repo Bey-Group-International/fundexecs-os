@@ -270,7 +270,7 @@ export default async function ModulePage({
     // Source › Deal Pipeline — PipelineRoad stage funnel (with real deal counts).
     if (params.hub === "source" && params.module === "deal_pipeline") {
       const dealsRes = ctx?.orgId
-        ? await supabase.from("deals").select("id, stage, updated_at").eq("organization_id", ctx.orgId)
+        ? await supabase.from("deals").select("id, stage, updated_at").eq("organization_id", ctx.orgId).is("archived_at", null)
         : { data: [] };
       const deals = dealsRes.data ?? [];
       const STAGE_ORDER = ["sourced", "screening", "diligence", "ic_review", "closing"] as const;
