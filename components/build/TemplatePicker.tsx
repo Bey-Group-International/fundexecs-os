@@ -95,7 +95,7 @@ export function TemplatePicker({
               </>
             ) : (
               <div className="flex h-full items-center justify-center">
-                <p className="text-xs text-fg-muted">Hover a template to preview</p>
+                <p className="text-xs text-fg-muted">Select a template to preview</p>
               </div>
             )}
           </div>

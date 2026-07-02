@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { scoreDocument } from "@/lib/document-quality";
@@ -13,7 +13,7 @@ import { VersionHistory } from "./VersionHistory";
 import { MarkdownRenderer } from "@/components/dataroom/MarkdownRenderer";
 import type { DraftTurn } from "@/lib/claude";
 
-type Tab = "guided" | "parse" | "earn";
+type Tab = "guided" | "import" | "earn";
 type PaneMode = "split" | "edit" | "preview";
 type SidePanel = "none" | "history";
 
@@ -41,6 +41,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
   const [statusPending, startStatusTransition] = useTransition();
   const [pending, startTransition] = useTransition();
   const isLink = !!doc.storage_key;
+  const showZeroState = !content.trim() && !isLink;
 
   const STATUS_CYCLE: DocumentStatus[] = ["draft", "review", "ready"];
   const STATUS_LABELS: Record<DocumentStatus, string> = { draft: "Draft", review: "Review", ready: "Ready ✓" };
@@ -60,6 +61,10 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
       await updateDocumentStatus(fd);
     });
   }
+
+  useEffect(() => {
+    if (window.innerWidth < 768) setPaneMode("edit");
+  }, []);
 
   const [messages, setMessages] = useState<DraftTurn[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -91,7 +96,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     else {
       setContent(res.content);
       setTab("guided");
-      setNote("Composed a draft from your firm data — review and save.");
+      setNote("Composed a draft from your firm data — review and save when ready.");
     }
   }
 
@@ -108,7 +113,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     const text = await file.text();
     setContent(text);
     setTab("guided");
-    setNote(`Imported ${file.name} — review and save.`);
+    setNote(`Imported ${file.name} — review and save when ready.`);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -139,6 +144,21 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     }
     setMessages([...next, { role: "assistant", content: res.reply }]);
     setContent(res.content);
+  }
+
+  function printDoc() {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const safe = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    win.document.write(
+      `<!DOCTYPE html><html><head><title>${safe(name)}</title><style>` +
+      `body{font-family:Georgia,serif;max-width:700px;margin:40px auto;color:#111;line-height:1.6}` +
+      `h1,h2,h3{font-family:sans-serif}pre{white-space:pre-wrap;font-family:inherit}` +
+      `@media print{body{margin:0}}</style></head>` +
+      `<body><h1>${safe(name)}</h1><pre>${safe(content)}</pre></body></html>`,
+    );
+    win.document.close();
+    win.print();
   }
 
   function handleTemplateSelect(templateContent: string, templateName: string) {
@@ -187,7 +207,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
         />
       )}
 
-      <div className={`grid gap-5 ${sidePanel !== "none" ? "lg:grid-cols-[1fr_300px]" : ""}`}>
+      <div className={`grid gap-5 overflow-x-hidden ${sidePanel !== "none" ? "lg:grid-cols-[1fr_300px]" : ""}`}>
         <div className="flex flex-col gap-5">
           {/* Identity row */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -209,11 +229,11 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
 
           {isLink ? (
             <p className="-mt-2 text-xs text-fg-muted">
-              Linked file:{" "}
+              This is a linked file.{" "}
               <a href={doc.storage_key ?? "#"} target="_blank" rel="noopener noreferrer" className="text-gold-400 hover:underline">
-                open original →
+                Open original →
               </a>{" "}
-              · the draft below is saved with the document.
+              Any notes you write below are saved with this document.
             </p>
           ) : null}
 
@@ -222,8 +242,8 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
             {/* Left: mode controls */}
             <div className="flex flex-col gap-4">
               <div className="flex flex-wrap gap-1.5">
-                {tabBtn("guided", "Guided setup")}
-                {tabBtn("parse", "Parse")}
+                {tabBtn("guided", "Guided")}
+                {tabBtn("import", "Import")}
                 {tabBtn("earn", "✶ Earn")}
                 <button
                   type="button"
@@ -238,11 +258,60 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                 <p className="rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2 text-xs text-fg-secondary">{note}</p>
               ) : null}
 
-              {tab === "guided" ? (
+              {tab === "guided" && showZeroState ? (
+                <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-1 p-4">
+                  <p className="text-sm font-medium text-fg-primary">How would you like to start?</p>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={compose}
+                      disabled={busy}
+                      className="flex items-start gap-3 rounded-lg border border-line bg-surface-0 px-4 py-3 text-left transition hover:border-gold-500/40 disabled:opacity-60"
+                    >
+                      <span className="text-gold-400">✶</span>
+                      <div>
+                        <p className="text-sm font-medium text-fg-primary">Generate from my data</p>
+                        <p className="text-xs text-fg-muted">Builds a first draft from your profile, thesis, and track record.</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowTemplatePicker(true)}
+                      className="flex items-start gap-3 rounded-lg border border-line bg-surface-0 px-4 py-3 text-left transition hover:border-gold-500/40"
+                    >
+                      <span className="text-gold-400">⊞</span>
+                      <div>
+                        <p className="text-sm font-medium text-fg-primary">Start from a template</p>
+                        <p className="text-xs text-fg-muted">Choose an institutional template for this section.</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTab("earn")}
+                      className="flex items-start gap-3 rounded-lg border border-line bg-surface-0 px-4 py-3 text-left transition hover:border-gold-500/40"
+                    >
+                      <span className="text-gold-400">✶</span>
+                      <div>
+                        <p className="text-sm font-medium text-fg-primary">Draft with Earn</p>
+                        <p className="text-xs text-fg-muted">Chat with Earn to write the document collaboratively.</p>
+                      </div>
+                    </button>
+                  </div>
+                  <p className="text-xs text-fg-muted">
+                    Or{" "}
+                    <button type="button" onClick={() => setTab("import")} className="text-gold-400 hover:underline">
+                      import from a file
+                    </button>
+                    .
+                  </p>
+                </div>
+              ) : null}
+
+              {tab === "guided" && !showZeroState ? (
                 <BuilderWizard docId={doc.id} name={name} section={section} onContent={setContent} />
               ) : null}
 
-              {tab === "parse" ? (
+              {tab === "import" ? (
                 <div className="flex flex-col gap-3">
                   <button
                     type="button"
@@ -253,7 +322,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                     {busy ? "Composing…" : "✶ Compose from my data"}
                   </button>
                   <p className="text-xs text-fg-muted">
-                    Builds a first draft from your Profile, Thesis, Track Record, and Team.
+                    Builds a first draft from your profile, thesis, track record, and team.
                   </p>
                   <label className="flex flex-col gap-1 text-sm">
                     <span className="text-fg-secondary">Import a text file</span>
@@ -282,7 +351,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                   <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-lg border border-line bg-surface-1 p-3">
                     {messages.length === 0 ? (
                       <p className="text-xs text-fg-muted">
-                        Ask Earn to draft or revise this document — e.g. &quot;Draft an executive summary highlighting our track record.&quot;
+                        Ask Earn to draft or revise this document — e.g. {'"'}Draft an executive summary highlighting our track record.{'"'}
                       </p>
                     ) : (
                       messages.map((m, i) => (
@@ -322,7 +391,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                       Send
                     </button>
                   </div>
-                  <p className="text-xs text-fg-muted">Earn updates the draft on the right. Review and Save.</p>
+                  <p className="text-xs text-fg-muted">Earn updates the draft on the right. Review and save when ready.</p>
                 </div>
               ) : null}
             </div>
@@ -344,7 +413,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                   type="button"
                   onClick={cycleStatus}
                   disabled={statusPending}
-                  title="Click to advance publish status: Draft → Review → Ready"
+                  title="Click to advance status: Draft → Review → Ready"
                   className={`rounded-full border px-2.5 py-0.5 font-mono text-[9px] uppercase tracking-wider transition hover:opacity-80 disabled:opacity-50 ${STATUS_CLASSES[docStatus]}`}
                 >
                   {STATUS_LABELS[docStatus]}
@@ -370,9 +439,19 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                   type="button"
                   onClick={() => void institutionalizeDraft()}
                   disabled={busy || !content.trim()}
+                  title="Refines your draft to meet institutional LP standards — tightens language, adds structure, and fills gaps."
                   className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
                 >
                   {busy ? "Working…" : "✶ Institutionalize"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={printDoc}
+                  disabled={!content.trim()}
+                  className="rounded-md border border-line px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary transition hover:text-fg-primary disabled:opacity-40"
+                >
+                  ⤓ PDF
                 </button>
 
                 <button
@@ -477,6 +556,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
             </div>
             <VersionHistory
               docId={doc.id}
+              currentContent={content}
               onRestore={(restoredContent) => {
                 setContent(restoredContent);
                 setNote("Version restored — review the draft and save to confirm.");
