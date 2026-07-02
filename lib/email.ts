@@ -97,6 +97,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
   return { ok: false, channel: "in-app", detail: "no email provider configured" };
 }
 
+
 // ---------------------------------------------------------------------------
 // LP email template helpers
 // ---------------------------------------------------------------------------
@@ -198,6 +199,7 @@ export function documentReadyEmail(
     ${goldButton(shareUrl, "View Document")}`;
   return { subject: `Document ready: ${docName} — ${orgName}`, html: lpBaseHtml(body) };
 }
+
 
 export function escapeHtml(s: string): string {
   return s

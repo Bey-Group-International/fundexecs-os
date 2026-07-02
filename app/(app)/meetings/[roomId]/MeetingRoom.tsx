@@ -314,7 +314,10 @@ function CopilotSidebar({
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const txBottomRef = useRef<HTMLDivElement>(null);
-  const inviteLink = typeof window !== "undefined" ? `${window.location.origin}/meetings/${roomCode}` : "";
+  const inviteLink = typeof window !== "undefined" ? `${window.location.origin}/meeting-invite/${roomCode}` : "";
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   useEffect(() => { if (tab === "transcript") txBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [transcript, tab]);
   useEffect(() => { if (tab === "chat") chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, tab]);
@@ -325,6 +328,23 @@ function CopilotSidebar({
     if (!text) return;
     onSendChat(text);
     setChatInput("");
+  };
+
+  const sendEmailInvites = async () => {
+    const emails = emailInput.split(/[\s,;]+/).map((e) => e.trim()).filter((e) => e.includes("@"));
+    if (emails.length === 0) return;
+    setEmailSending(true);
+    const res = await fetch("/api/meetings/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomCode, emails }),
+    });
+    setEmailSending(false);
+    if (res.ok) {
+      setEmailSent(true);
+      setEmailInput("");
+    }
+    setTimeout(() => setEmailSent(false), 3000);
   };
 
   return (
@@ -438,13 +458,29 @@ function CopilotSidebar({
 
             {/* Invite */}
             <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-3 flex flex-col gap-2">
-              <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Invite link</p>
-              <p className="text-xs text-[var(--fg-muted)] font-mono break-all">{roomCode}</p>
+              <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Invite people</p>
               <button
-                onClick={() => { void navigator.clipboard.writeText(inviteLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                onClick={() => { void navigator.clipboard.writeText(inviteLink).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
                 className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-black text-xs font-semibold py-2 transition-colors">
-                {copied ? "Copied!" : "Copy invite link"}
+                {copied ? "Link copied!" : "Copy invite link"}
               </button>
+              <div className="flex gap-1.5 mt-1">
+                <input
+                  value={emailInput}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmailInput(e.target.value)}
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") void sendEmailInvites(); }}
+                  placeholder="Email addresses, comma separated"
+                  className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-400)]"
+                />
+                <button
+                  onClick={() => void sendEmailInvites()}
+                  disabled={!emailInput.trim() || emailSending}
+                  className="rounded-lg bg-[var(--surface-2)] border border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] text-xs px-2.5 py-1.5 transition-colors disabled:opacity-40"
+                >
+                  {emailSent ? "Sent!" : emailSending ? "…" : "Send"}
+                </button>
+              </div>
+              <p className="text-[10px] text-[var(--fg-muted)]">Guests can join without an account</p>
             </div>
 
             {/* Participant list */}
