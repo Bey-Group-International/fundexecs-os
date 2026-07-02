@@ -139,14 +139,16 @@ export async function POST(request: Request) {
   const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
 
   // Pull edge context from the session row and append to liveContext if present.
+  // `edge_context` is added by migration 20260702000011; cast to bypass stale
+  // generated types until the next type regeneration cycle.
   if (sessionId) {
     try {
       const supabase = createServerClient();
-      const { data: sessionRow } = await supabase
+      const { data: sessionRow } = await (supabase
         .from("sessions")
         .select("edge_context")
         .eq("id", sessionId)
-        .single();
+        .single() as unknown as Promise<{ data: { edge_context: unknown } | null }>);
       const edgeResult = parseStoredEdgeContext(sessionRow?.edge_context);
       const edgeLine = edgeResult ? edgeContextToPromptLine(edgeResult) : "";
       if (edgeLine) liveContext = liveContext ? `${liveContext}\n${edgeLine}` : edgeLine;

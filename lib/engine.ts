@@ -457,12 +457,14 @@ async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[
 
   if (!sessionId) return reroute;
 
+  // `edge_context` added by migration 20260702000011; cast to bypass stale
+  // generated types until the next type regeneration cycle.
   const [sessionRes, priorRes] = await Promise.all([
-    ctx.supabase
+    (ctx.supabase
       .from("sessions")
       .select("edge_context")
       .eq("id", sessionId)
-      .single(),
+      .single() as unknown as Promise<{ data: { edge_context: unknown } | null; error: unknown }>),
     ctx.supabase
       .from("tasks")
       .select("description")
