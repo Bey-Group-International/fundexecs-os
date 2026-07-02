@@ -537,6 +537,7 @@ export function applyDelegation(plan: AgentPlan, desk: Executive): AgentPlan {
 async function getSessionEdgeContext(ctx: Ctx, sessionId?: string): Promise<EdgeContextResult | null> {
   if (!sessionId) return null;
   try {
+    // TODO: remove cast after next `supabase gen types` regeneration cycle.
     const { data } = await (ctx.supabase
       .from("sessions")
       .select("edge_context")

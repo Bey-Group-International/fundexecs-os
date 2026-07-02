@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import type { EdgeTab } from "@/lib/edge-context";
 
-const STORAGE_KEY = "earn:edge_tab_history";
+const STORAGE_KEY = "fundexecs:edge_tab_history";
 const MAX_HISTORY = 10;
 const DEBOUNCE_MS = 8_000;
 const FOCUS_DEBOUNCE_MS = 30_000;
@@ -72,6 +72,7 @@ export function useEdgeContext(sessionId: string | null | undefined) {
   }, [pathname]);
 
   // Send on session activation and route changes (debounced).
+  // Effect 1 already pushed history for this pathname — just read it here.
   useEffect(() => {
     if (!sessionId) return;
     const now = Date.now();
@@ -81,10 +82,7 @@ export function useEdgeContext(sessionId: string | null | undefined) {
     sessionRef.current = sessionId;
     lastSentRef.current = now;
 
-    const url = window.location.href;
-    const title = document.title;
-    pushHistory(url, title);
-    void postEdgeContext(sessionId, buildTabs(url, title));
+    void postEdgeContext(sessionId, buildTabs(window.location.href, document.title));
   }, [sessionId, pathname]);
 
   // Send on window focus (long debounce — user switched back to this tab).
