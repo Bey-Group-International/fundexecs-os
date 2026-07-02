@@ -33,10 +33,10 @@ create policy marketplace_interests_owner_select on public.marketplace_interests
       select 1 from public.marketplace_listings ml
       join public.organization_members om on om.organization_id = ml.organization_id
       where ml.id = marketplace_interests.listing_id
-        and om.user_id = auth.uid()
+        and om.principal_id = auth.uid()
     )
     or organization_id in (
-      select organization_id from public.organization_members where user_id = auth.uid()
+      select organization_id from public.organization_members where principal_id = auth.uid()
     )
   );
 
@@ -44,7 +44,7 @@ create policy marketplace_interests_insert on public.marketplace_interests
   for insert with check (
     user_id = auth.uid()
     and organization_id in (
-      select organization_id from public.organization_members where user_id = auth.uid()
+      select organization_id from public.organization_members where principal_id = auth.uid()
     )
   );
 

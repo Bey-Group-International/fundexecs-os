@@ -78,7 +78,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
 
   if (!raw) notFound();
 
-  const listing = raw as MarketplaceListing & { organizations: { name: string } | null };
+  const listing = raw as unknown as MarketplaceListing & { organizations: { name: string } | null };
   const isOwner = listing.organization_id === ctx.orgId;
 
   // Non-owners can only see public listings
