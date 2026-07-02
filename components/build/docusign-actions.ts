@@ -152,7 +152,7 @@ export async function getEnvelopeStatus(
           ...(data.status === "completed"
             ? { completed_at: new Date().toISOString() }
             : {}),
-        })
+        } as never)
         .eq("envelope_id", envelopeId)
         .eq("organization_id", ctx.orgId);
     }
