@@ -13,12 +13,15 @@ export async function DELETE(req: NextRequest) {
     soft?: boolean;
   };
 
+  // deleted_at column added in migration 20260702000003; types not yet regenerated
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const softPayload = { deleted_at: new Date().toISOString() } as any;
+
   if (body.clearAll) {
     if (body.soft) {
-      // Soft-hide all hosted meetings for this user
       const { error } = await supabase
         .from("live_meetings")
-        .update({ deleted_at: new Date().toISOString() } as Record<string, unknown>)
+        .update(softPayload)
         .eq("host_id", user.id)
         .is("deleted_at", null);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -39,7 +42,7 @@ export async function DELETE(req: NextRequest) {
   if (body.soft) {
     const { error } = await supabase
       .from("live_meetings")
-      .update({ deleted_at: new Date().toISOString() } as Record<string, unknown>)
+      .update(softPayload)
       .eq("id", body.meetingId)
       .eq("host_id", user.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
