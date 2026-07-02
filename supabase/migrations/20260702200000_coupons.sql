@@ -32,7 +32,10 @@ create policy "coupons_active_read" on public.coupons
   for select using (is_active = true);
 
 -- Org members can see their own redemptions.
+-- NB: a set-returning function (current_principal_org_ids) may not appear
+-- directly in a policy expression — Postgres raises 0A000. Use the subquery
+-- form, matching every other RLS policy in this project.
 create policy "coupon_redemptions_org_read" on public.coupon_redemptions
-  for select using (organization_id = any(current_principal_org_ids()));
+  for select using (organization_id in (select current_principal_org_ids()));
 
 -- All writes are service-role only (no INSERT/UPDATE/DELETE for authenticated).

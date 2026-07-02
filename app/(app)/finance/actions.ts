@@ -37,7 +37,9 @@ export async function createEntity(input: {
 }): Promise<FinResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  if (!input.name?.trim() || !/^[A-Za-z]{3}$/.test(input.baseCurrency ?? "")) {
+  // Normalize first, then validate, so the checked and the stored value match.
+  const baseCurrency = (input.baseCurrency ?? "").trim().toUpperCase();
+  if (!input.name?.trim() || !/^[A-Z]{3}$/.test(baseCurrency)) {
     return { ok: false, error: "Name and a 3-letter base currency are required." };
   }
   const supabase = createServerClient();
@@ -46,7 +48,7 @@ export async function createEntity(input: {
     .insert({
       organization_id: auth.ctx.orgId,
       name: input.name.trim(),
-      base_currency: input.baseCurrency.toUpperCase(),
+      base_currency: baseCurrency,
       parent_entity_id: input.parentEntityId ?? null,
       tax_jurisdiction: input.taxJurisdiction ?? null,
     })
@@ -142,7 +144,8 @@ async function postToLedger(
         organization_id: auth.ctx.orgId,
         title: `Post to a closed period — ${args.memo ?? args.entryDate}`,
         description: `Force-post a journal entry into a closed accounting period on ledger ${args.ledgerId}.`,
-        hub: "source",
+        // Capital/compliance control lives in the Execute hub, not deal sourcing.
+        hub: "execute",
         assigned_agent: "fund_admin",
         status: "awaiting_approval",
         progress: 0,
@@ -256,7 +259,10 @@ export async function reverseJournalEntry(args: {
     })),
   );
 
-  const posted = await postToLedger(auth, {
+  // The RPC posts the reversal AND flips the original to 'reversed' atomically
+  // (guarded by a row lock + a unique index on reverses_entry_id), so there is no
+  // separate, non-atomic status update here and no double-reversal race.
+  return postToLedger(auth, {
     ledgerId: e.ledger_id,
     periodId: e.period_id,
     entryDate: args.entryDate,
@@ -265,14 +271,4 @@ export async function reverseJournalEntry(args: {
     reverses: args.entryId,
     lines: reversal,
   });
-  if (!posted.ok || posted.gated) return posted;
-
-  // Mark the original reversed (allowed transition on a posted entry).
-  await supabase
-    .from("fin_journal_entries")
-    .update({ status: "reversed" })
-    .eq("organization_id", auth.ctx.orgId)
-    .eq("id", args.entryId);
-  revalidatePath("/finance");
-  return posted;
 }
