@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type Phaser from "phaser";
 import type { OfficeSceneInitData } from "./scenes/OfficeScene";
-import type { RoomAction } from "./types";
+import type { RoomAction, ZoneDef } from "./types";
 import { BubbleOverlay } from "./BubbleOverlay";
 import { VideoTileBar } from "./VideoTileBar";
 import { MediaPermissionBanner } from "./MediaPermissionBanner";
@@ -69,6 +69,7 @@ export function VirtualOfficeGame({
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [mediaState, setMediaState] = useState<"idle" | "prompt" | "active" | "dismissed">("idle");
   const [roomActions, setRoomActions] = useState<RoomAction[]>([]);
+  const [activeZone, setActiveZone] = useState<ZoneDef | null>(null);
 
   const requestMedia = useCallback(async () => {
     try {
@@ -140,6 +141,10 @@ export function VirtualOfficeGame({
           setRoomActions(actions);
         });
 
+        // Iframe zone bridge
+        game.events.on("office:zone-enter", (def: ZoneDef) => setActiveZone(def));
+        game.events.on("office:zone-leave", () => setActiveZone(null));
+
         // Video tile bridge
         game.events.on("rtc:video", (peerId: string, el: HTMLVideoElement | null) => {
           setVideoTiles((prev) => {
@@ -178,6 +183,7 @@ export function VirtualOfficeGame({
       setVideoTiles([]);
       setMediaState("idle");
       setRoomActions([]);
+      setActiveZone(null);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
@@ -236,6 +242,32 @@ export function VirtualOfficeGame({
         localStream={localStream}
         localLabel={displayName}
       />
+
+      {/* Iframe zone overlay — slides up when player enters a zone */}
+      {activeZone && (
+        <div className="relative flex flex-col border-t border-amber-400/20 bg-slate-950">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800">
+            <span className="text-[11px] font-mono text-amber-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              {activeZone.title}
+            </span>
+            <button
+              onClick={() => setActiveZone(null)}
+              className="text-slate-500 hover:text-slate-300 text-xs leading-none transition-colors"
+              aria-label="Close zone"
+            >
+              ✕
+            </button>
+          </div>
+          <iframe
+            key={activeZone.id}
+            src={activeZone.url}
+            title={activeZone.title}
+            className="w-full h-48 border-0 bg-slate-950"
+            sandbox="allow-scripts allow-same-origin allow-popups"
+          />
+        </div>
+      )}
 
       {/* Game canvas area */}
       <div className="relative">

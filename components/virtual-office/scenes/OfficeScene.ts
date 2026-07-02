@@ -12,6 +12,8 @@ import {
   DOOR_GAP,
   ANIM_ROWS,
   ROOM_ACTIONS,
+  IFRAME_ZONES,
+  type ZoneDef,
 } from "../types";
 import { VirtualOfficeSocket, type ConnectionStatus } from "../net/VirtualOfficeSocket";
 import type { Facing, RemotePlayer, ServerMessage } from "../net/messages";
@@ -119,6 +121,10 @@ export class OfficeScene extends Phaser.Scene {
   private lastPlayerCol = -1;
   private lastPlayerRow = -1;
   private _interpFrame = 0;
+
+  // Iframe zones
+  private iframeZoneRects: Array<{ rect: Phaser.Geom.Rectangle; def: ZoneDef }> = [];
+  private currentZoneId: string | null = null;
   /** seq number of the last server-acknowledged move for local reconciliation */
   private lastAckedSeq = 0;
   /** velocity at the time each seq was sent, used for reconciliation */
@@ -198,6 +204,7 @@ export class OfficeScene extends Phaser.Scene {
     this._createPlayer();
     this._createAnimations();
     this._createRoomZones();
+    this._createIframeZones();
     this._createRoomLabel();
     this._createNetDot();
     this._setupCamera();
@@ -224,6 +231,7 @@ export class OfficeScene extends Phaser.Scene {
   update() {
     this._handleMovement();
     this._updateRoomLabel();
+    this._updateIframeZones();
     this._updateRemoteAvatars();
     this._updateNpcAvatars();
     this._updateSpatialAudio();
@@ -442,6 +450,29 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  private _createIframeZones() {
+    for (const def of IFRAME_ZONES) {
+      const room = ROOMS.find((r) => r.key === def.roomKey);
+      if (!room) continue;
+      const worldX = room.col * ROOM_W + def.x;
+      const worldY = room.row * ROOM_H + def.y;
+      const rect = new Phaser.Geom.Rectangle(worldX, worldY, def.w, def.h);
+      this.iframeZoneRects.push({ rect, def });
+
+      // Visual indicator: dashed amber border at depth 6
+      const gfx = this.add.graphics().setDepth(6);
+      gfx.lineStyle(1, 0xfbbf24, 0.35);
+      gfx.strokeRect(worldX, worldY, def.w, def.h);
+      this.add.text(worldX + 6, worldY + 4, `⬛ ${def.title}`, {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: "#fbbf24",
+        stroke: "#0f172a",
+        strokeThickness: 2,
+      }).setDepth(6).setAlpha(0.6);
+    }
+  }
+
   private _createRoomLabel() {
     this.roomLabel = this.add
       .text(0, 0, "", {
@@ -569,6 +600,30 @@ export class OfficeScene extends Phaser.Scene {
       }
       // Notify React layer of room change so it can render room-specific actions
       this.game.events.emit("office:room-enter", found, ROOM_ACTIONS[found] ?? []);
+    }
+  }
+
+  private _updateIframeZones() {
+    const px = this.player.x;
+    const py = this.player.y;
+    let enteredId: string | null = null;
+    let enteredDef: ZoneDef | null = null;
+
+    for (const { rect, def } of this.iframeZoneRects) {
+      if (Phaser.Geom.Rectangle.Contains(rect, px, py)) {
+        enteredId = def.id;
+        enteredDef = def;
+        break;
+      }
+    }
+
+    if (enteredId !== this.currentZoneId) {
+      this.currentZoneId = enteredId;
+      if (enteredDef) {
+        this.game.events.emit("office:zone-enter", enteredDef);
+      } else {
+        this.game.events.emit("office:zone-leave");
+      }
     }
   }
 
