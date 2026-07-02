@@ -4,6 +4,11 @@
 // claude-haiku-4-5-20251001 after each new user/assistant message.
 
 import { createServiceClient } from "@/lib/supabase/server";
+import {
+  type EdgeContextResult,
+  edgeContextToMemoryConstraint,
+  isEdgeContextExpired,
+} from "@/lib/edge-context";
 
 export interface SessionMemoryCard {
   entities: Array<{
@@ -153,6 +158,52 @@ export async function updateSessionMemoryCard(
     .eq("id", sessionId);
 
   return updatedCard;
+}
+
+/**
+ * Merges an EdgeContextResult into the session memory card's constraints
+ * without invoking Haiku. Called async after background tab processing.
+ * Safe to call on every request — deduplicates by context hash.
+ */
+export async function mergeEdgeContextIntoMemory(
+  sessionId: string,
+  edgeContext: EdgeContextResult
+): Promise<void> {
+  if (isEdgeContextExpired(edgeContext)) return;
+  if (edgeContext.workflowContext === "general") return;
+
+  const supabase = createServiceClient();
+  const constraint = edgeContextToMemoryConstraint(edgeContext);
+  const hashTag = `[edge:${edgeContext.contextHash}]`;
+
+  const { data: row } = await supabase
+    .from("sessions")
+    .select("memory_card")
+    .eq("id", sessionId)
+    .single();
+
+  if (!row?.memory_card) return;
+
+  const mc = row.memory_card as Partial<SessionMemoryCard>;
+  const existingConstraints: string[] = Array.isArray(mc.constraints) ? mc.constraints : [];
+
+  // Idempotent: skip if this context hash is already stored.
+  if (existingConstraints.some((c) => c.includes(hashTag))) return;
+
+  // Remove any prior edge context constraint and add the new one.
+  const filtered = existingConstraints.filter((c) => !c.includes("[edge:"));
+  const updatedCard: SessionMemoryCard = {
+    entities: Array.isArray(mc.entities) ? mc.entities : [],
+    decisions: Array.isArray(mc.decisions) ? mc.decisions : [],
+    open_questions: Array.isArray(mc.open_questions) ? mc.open_questions : [],
+    constraints: [...filtered, `${constraint} ${hashTag}`],
+    updated_at: new Date().toISOString(),
+  };
+
+  await supabase
+    .from("sessions")
+    .update({ memory_card: updatedCard } as never)
+    .eq("id", sessionId);
 }
 
 /**
