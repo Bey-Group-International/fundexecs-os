@@ -197,11 +197,12 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
         data: { transferId: "", status: "failed" },
       };
     } catch (err) {
+      const ref = crypto.randomUUID().slice(0, 8);
+      console.error(`[stripe-rail:${ref}]`, err);
       return {
         ok: false,
         live: false,
-        detail: `Capital transfer of $${params.amountUsd.toLocaleString()} could not be initiated.`,
-        error: err instanceof Error ? err.message : String(err),
+        detail: `Capital transfer of $${params.amountUsd.toLocaleString()} could not be initiated. Ref: ${ref}`,
         data: { transferId: "", status: "failed" },
       };
     }
@@ -238,7 +239,7 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
 
     for (const path of paths) {
       try {
-        const obj = await stripeGet<{ id: string; status: string; amount: number; created: number }>(path);
+        const obj = await stripeGet<{ id: string; status: string; amount: number; created: number; posted_at?: number }>(path);
         const status = mapTransferStatus(obj.status);
         return {
           ok: true,
@@ -247,8 +248,9 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
           data: {
             transferId: obj.id,
             status,
-            // Use Stripe's authoritative created timestamp, not the server clock.
-            ...(status === "settled" ? { settledAt: new Date(obj.created * 1000).toISOString() } : {}),
+            // posted_at is the authoritative settlement time for Treasury objects;
+            // fall back to created (initiation time) for plain Transfers.
+            ...(status === "settled" ? { settledAt: new Date((obj.posted_at ?? obj.created) * 1000).toISOString() } : {}),
           },
         };
       } catch {

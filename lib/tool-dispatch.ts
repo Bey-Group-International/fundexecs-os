@@ -126,7 +126,8 @@ export async function dispatchStepTool(args: {
     channel,
     connected: isConnected,
     subject: `${args.workflowTitle} — ${args.stepTitle}`,
-    body: args.stepDescription.trim() + (args.orgContext ? `\n\n---\n${args.orgContext}` : ""),
+    // orgContext contains internal deal/LP notes — only append for internal channels.
+    body: args.stepDescription.trim() + (args.orgContext && channel !== "gmail" ? `\n\n---\n${args.orgContext}` : ""),
     metadata: { stepTitle: args.stepTitle, workflowTitle: args.workflowTitle },
     supabase: args.supabase,
   };

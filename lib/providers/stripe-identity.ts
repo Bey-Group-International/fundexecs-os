@@ -110,11 +110,12 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
         },
       };
     } catch (err) {
+      const ref = crypto.randomUUID().slice(0, 8);
+      console.error(`[stripe-identity:${ref}]`, err);
       return {
         ok: false,
         live: false,
-        detail: `Identity verification could not be initiated for ${params.subjectName}.`,
-        error: err instanceof Error ? err.message : String(err),
+        detail: `Identity verification could not be initiated for ${params.subjectName}. Ref: ${ref}`,
         data: { verificationId: "", level: params.level, status: "pending" },
       };
     }
@@ -151,11 +152,12 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
         },
       };
     } catch (err) {
+      const ref = crypto.randomUUID().slice(0, 8);
+      console.error(`[stripe-identity:${ref}]`, err);
       return {
         ok: false,
         live: false,
-        detail: `Could not fetch verification status for ${verificationId}.`,
-        error: err instanceof Error ? err.message : String(err),
+        detail: `Could not fetch verification status for ${verificationId}. Ref: ${ref}`,
         data: { verificationId, level: "kyc", status: "pending" },
       };
     }
