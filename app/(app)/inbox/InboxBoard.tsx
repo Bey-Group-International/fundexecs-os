@@ -14,6 +14,7 @@ import {
   clearInbox,
   getThreadMessages,
   replyToThread,
+  draftThreadReply,
   type ThreadActionResult,
   type ThreadMessageView,
 } from "./actions";
@@ -184,10 +185,25 @@ function ThreadCard({ card }: { card: InboxCardData }) {
   const [messages, setMessages] = useState<ThreadMessageView[] | null>(null);
   const [msgLoading, startMsgTransition] = useTransition();
   const [replyText, setReplyText] = useState("");
+  const [drafting, startDraftTransition] = useTransition();
 
   const loadMessages = useCallback(() => {
     startMsgTransition(async () => {
       setMessages(await getThreadMessages(card.id));
+    });
+  }, [card.id]);
+
+  // Draft a reply with Earn and drop it into the composer for review/edit. This
+  // never sends — the operator still hits Send (the gated move) themselves.
+  const draftWithEarn = useCallback(() => {
+    setResult(null);
+    startDraftTransition(async () => {
+      const r = await draftThreadReply(card.id);
+      if (r.ok && r.draft) {
+        setReplyText(r.draft);
+      } else {
+        setResult({ ok: false, error: r.error ?? "Couldn't draft a reply. Try again." });
+      }
     });
   }, [card.id]);
 
@@ -348,18 +364,29 @@ function ThreadCard({ card }: { card: InboxCardData }) {
               placeholder={`Reply to ${card.counterparty}…`}
               className="w-full resize-none rounded-md border border-line bg-surface-2 px-2.5 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
             />
-            <div className="mt-1.5 flex items-center justify-between">
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
               <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
                 Send routes through your approvals if required
               </span>
-              <button
-                type="button"
-                disabled={pending || !replyText.trim()}
-                onClick={sendReply}
-                className="rounded-md border border-line bg-surface-0/80 px-3 py-1.5 text-sm text-fg-primary transition hover:-translate-y-px hover:border-gold-500 disabled:opacity-50"
-              >
-                {pending && active === "reply" ? "Sending…" : "Send reply"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={drafting || pending}
+                  onClick={draftWithEarn}
+                  title="Draft a reply with Earn — you review and edit before sending"
+                  className="inline-flex items-center gap-1 rounded-md border border-gold-500/40 bg-gold-500/5 px-3 py-1.5 text-sm text-gold-300 transition hover:-translate-y-px hover:border-gold-500 disabled:opacity-50"
+                >
+                  {drafting ? "Drafting…" : "✦ Draft with Earn"}
+                </button>
+                <button
+                  type="button"
+                  disabled={pending || drafting || !replyText.trim()}
+                  onClick={sendReply}
+                  className="rounded-md border border-line bg-surface-0/80 px-3 py-1.5 text-sm text-fg-primary transition hover:-translate-y-px hover:border-gold-500 disabled:opacity-50"
+                >
+                  {pending && active === "reply" ? "Sending…" : "Send reply"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

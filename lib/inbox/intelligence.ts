@@ -265,3 +265,97 @@ export function fallbackSummary(input: ThreadDigestInput): ThreadSummary {
     intent: FALLBACK_INTENT[input.category],
   };
 }
+
+// --- AI reply drafting (async, Claude-backed with deterministic fallback) ----
+//
+// Drafting is internal prep — it produces text for the operator to review and
+// edit, and never reaches the counterparty on its own (the send is the gated
+// Tier-2 move). So a draft is always safe to generate; the human stays in the
+// loop between the draft and the send.
+
+export interface ThreadDraftResult {
+  draft: string;
+  // True when Claude produced the draft; false for the deterministic template.
+  live: boolean;
+}
+
+const DRAFT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    draft: {
+      type: "string",
+      description:
+        "A concise, professional reply the operator can send as-is or edit. First person, no salutation line, no signature.",
+    },
+  },
+  required: ["draft"],
+} as const;
+
+/**
+ * Draft a reply to a thread on the operator's behalf. Uses Claude when
+ * ANTHROPIC_API_KEY is present; otherwise returns a deterministic, category-aware
+ * acknowledgement so "Draft with Earn" still gives the operator a starting point
+ * offline / in CI. Never sends — the caller shows the draft in the composer.
+ */
+export async function draftReply(input: ThreadDigestInput): Promise<ThreadDraftResult> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { draft: fallbackDraft(input), live: false };
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const transcript = input.messages
+      .slice(-8)
+      .map((m) => `${m.direction === "inbound" ? input.counterparty ?? "Them" : "You"}: ${m.body}`)
+      .join("\n");
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 400,
+      system:
+        "You draft replies for a private-markets operator's inbox. Write what the operator would " +
+        "send back: concise, professional, first person. Address the counterparty's ask directly. " +
+        "Never invent facts, figures, dates, or commitments the thread does not support — if a detail " +
+        "is unknown, say you'll follow up rather than fabricate it. No salutation line, no signature.",
+      output_config: { effort: "low", format: { type: "json_schema", schema: DRAFT_SCHEMA } },
+      messages: [
+        {
+          role: "user",
+          content: `Channel pillar: ${input.category}\nSubject: ${input.subject}\nCounterparty: ${input.counterparty ?? "Unknown"}\n\n${transcript}`,
+        },
+      ],
+    });
+    const text = message.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
+    if (!text) return { draft: fallbackDraft(input), live: false };
+    const raw = JSON.parse(text) as { draft?: unknown };
+    const draft = typeof raw.draft === "string" ? raw.draft.trim() : "";
+    return draft ? { draft, live: true } : { draft: fallbackDraft(input), live: false };
+  } catch {
+    return { draft: fallbackDraft(input), live: false };
+  }
+}
+
+// Category-aware acknowledgement templates for offline / no-key drafting. Each
+// opens by acknowledging the counterparty and commits only to a follow-up, so
+// the fallback never fabricates specifics.
+const FALLBACK_DRAFT: Record<InboxCategory, string> = {
+  messaging:
+    "Thanks for the note — I appreciate you reaching out. Let me look into this and I'll come back to you shortly with specifics.",
+  booking:
+    "Thanks for reaching out — happy to find time. I'll send a couple of options that work on my side shortly.",
+  video:
+    "Thanks — a call works well. I'll get a meeting link over to you and confirm a time that suits us both.",
+  signing:
+    "Thanks for flagging this. I'll review the documents on my side and follow up as soon as they're ready to execute.",
+  finance:
+    "Thanks — I've received this and will review it against our records, then confirm next steps shortly.",
+};
+
+export function fallbackDraft(input: ThreadDigestInput): string {
+  const who = input.counterparty ?? "there";
+  const base = FALLBACK_DRAFT[input.category];
+  // Lead with the counterparty's name when known, keeping the body template-safe.
+  return who === "there" ? base : base.replace(/^Thanks/, `Thanks, ${who}`);
+}

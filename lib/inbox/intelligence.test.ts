@@ -5,6 +5,8 @@ import {
   suggestedAction,
   buildDigest,
   fallbackSummary,
+  fallbackDraft,
+  draftReply,
   type DigestThread,
 } from "./intelligence";
 
@@ -126,5 +128,53 @@ describe("fallbackSummary", () => {
     expect(out.summary).toContain("Acme FO");
     expect(out.summary).toContain("30 minutes");
     expect(out.intent).toBe("Wants to schedule");
+  });
+});
+
+describe("fallbackDraft", () => {
+  it("opens by naming the counterparty when known and only commits to a follow-up", () => {
+    const draft = fallbackDraft({
+      subject: "Invoice overdue",
+      category: "finance",
+      counterparty: "Blackpine",
+      messages: [{ direction: "inbound", body: "Invoice INV-2043 is past due." }],
+    });
+    expect(draft).toContain("Blackpine");
+    // Never fabricates specifics — commits to reviewing / following up.
+    expect(draft.toLowerCase()).toMatch(/review|follow up|next steps/);
+  });
+
+  it("stays generic (no name) when the counterparty is unknown", () => {
+    const draft = fallbackDraft({
+      subject: "Hello",
+      category: "messaging",
+      counterparty: null,
+      messages: [],
+    });
+    expect(draft.length).toBeGreaterThan(0);
+    expect(draft).not.toContain("undefined");
+    expect(draft).not.toContain("null");
+  });
+});
+
+describe("draftReply (offline / no API key)", () => {
+  const prev = process.env.ANTHROPIC_API_KEY;
+  beforeAll(() => {
+    delete process.env.ANTHROPIC_API_KEY;
+  });
+  afterAll(() => {
+    if (prev !== undefined) process.env.ANTHROPIC_API_KEY = prev;
+  });
+
+  it("returns the deterministic fallback draft with live=false and no network", async () => {
+    const input = {
+      subject: "Re: Fund II — allocation",
+      category: "messaging" as const,
+      counterparty: "Acme FO",
+      messages: [{ direction: "inbound" as const, body: "Can you confirm the minimum?" }],
+    };
+    const out = await draftReply(input);
+    expect(out.live).toBe(false);
+    expect(out.draft).toBe(fallbackDraft(input));
   });
 });
