@@ -42,6 +42,9 @@ export interface InboxCardData {
   meetingUrl: string | null;
   context: { kind: "deal" | "investor"; id: string; name: string; href: string } | null;
   assignee: { id: string; name: string } | null;
+  // Whether this org has connected the thread's channel; drives the composer's
+  // "connect to send" hint.
+  connected: boolean;
   suggested: { action: ActionKind; label: string; tier: GateTier } | null;
   canShare: boolean;
   shareTier: GateTier;
@@ -498,9 +501,18 @@ function ThreadCard({
               className="w-full resize-none rounded-md border border-line bg-surface-2 px-2.5 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
             />
             <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                Send routes through your approvals if required
-              </span>
+              {card.connected ? (
+                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  Routes through connected {card.channelLabel} · approvals if required
+                </span>
+              ) : (
+                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  {card.channelLabel} not connected — sends save as drafts.{" "}
+                  <Link href="/settings/integrations" className="text-gold-400 hover:underline">
+                    Connect →
+                  </Link>
+                </span>
+              )}
               <div className="flex items-center gap-2">
                 <button
                   type="button"

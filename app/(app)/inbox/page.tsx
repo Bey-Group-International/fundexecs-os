@@ -13,6 +13,7 @@ import {
 import { channelMeta, INBOX_CHANNELS } from "@/lib/inbox/channels";
 import type { InboxChannel } from "@/lib/supabase/database.types";
 import { UNASSIGNED, type InboxThreadFilters } from "@/lib/inbox/data";
+import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import { tierForAction, type GateTier } from "@/lib/gates";
 import { markOpenThreadsRead, getOrgTeammates } from "./actions";
 import { InboxBoard, type InboxCardData } from "./InboxBoard";
@@ -67,10 +68,11 @@ export default async function InboxPage({
   // diligence, IC-ready deals, open risks) and the unified communications
   // stream (booking / messaging / video), plus the org's teammates for the
   // assignee picker — all fetched in parallel.
-  const [inbox, views, teammates] = await Promise.all([
+  const [inbox, views, teammates, connectedChannels] = await Promise.all([
     getInbox(ctx.orgId),
     getInboxThreads(supabase, filters),
     getOrgTeammates(),
+    orgConnectedChannels(supabase, ctx.orgId),
   ]);
 
   // Prepare every comms display field on the server so the client board never
@@ -96,6 +98,10 @@ export default async function InboxPage({
       meetingUrl: thread.meeting_url,
       context,
       assignee,
+      // Whether this org has connected the thread's channel (gateway-resolved).
+      // Drives the composer's "connect to send" hint and matches how dispatch
+      // decides prepared (draft) vs queued (route through the connected provider).
+      connected: connectedChannels.has(thread.channel),
       suggested: move
         ? { action: move.action, label: move.label, tier: tierForAction(move.action) as GateTier }
         : null,

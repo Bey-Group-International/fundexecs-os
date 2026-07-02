@@ -40,7 +40,8 @@ function makeModule(spec: FinanceChannelSpec): AdapterModule {
     isConfigured: configured,
     async dispatch(ctx: DispatchContext): Promise<DispatchResult> {
       const target = ctx.target?.name ?? ctx.target?.email ?? "the counterparty";
-      if (!configured()) {
+      // Per-org connection wins when the caller resolved it; else the env default.
+      if (!(ctx.connected ?? configured())) {
         return {
           ok: true,
           channel: spec.channel,

@@ -7,6 +7,7 @@ import { gateDecision, type ActionKind } from "@/lib/gates";
 import { isVerifiable } from "@/lib/grounding";
 import { getActiveMandate } from "@/lib/mandates";
 import { dispatchAction } from "@/lib/integrations";
+import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import { recordDispatch } from "@/lib/integrations/log";
 import { computePriority, fallbackSummary, draftReply } from "@/lib/inbox/intelligence";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
@@ -169,12 +170,16 @@ async function performThreadAction(
     };
   }
 
-  // Free to run: dispatch now, pinned to the thread's own channel.
+  // Free to run: dispatch now, pinned to the thread's own channel. Resolve the
+  // org's connection state for that channel so the adapter reflects whether THIS
+  // org has connected it (queued) or not (prepared/draft) — not just an env var.
+  const connectedChannels = await orgConnectedChannels(supabase, orgId);
   const result = await dispatchAction({
     orgId,
     actorId: auth.ctx.userId,
     action,
     channel: t.channel,
+    connected: connectedChannels.has(t.channel),
     target: { name: t.counterparty_name ?? undefined, email: t.counterparty_email ?? undefined },
     // The operator's composed reply text, when this is an inline reply — a live
     // adapter sends exactly this; a mock adapter ignores it and returns its
