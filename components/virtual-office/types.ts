@@ -51,6 +51,8 @@ export const IFRAME_ZONES: ZoneDef[] = [
     id: "reception-lp-portal",
     roomKey: "reception",
     x: 48, y: 48, w: 288, h: 192,
+    // Intentionally no default URL: the zone only renders when an LP portal
+    // link is injected via zoneUrlOverrides["lp-portal"]; otherwise dropped.
     url: "{{lp-portal}}",
     title: "LP Portal",
   },
@@ -80,7 +82,7 @@ export const INTERACTIVE_OBJECTS: InteractiveObject[] = [
   { id: "ops-screens",     roomKey: "ops",       x: 6*32+16, y: 2*32+16, label: "Automation Hub",  icon: "⚙", href: "/dashboard/automation" },
   { id: "legal-desk",      roomKey: "legal",     x: 6*32+16, y: 3*32+16, label: "Capital",         icon: "◈", href: "/dashboard/capital" },
   { id: "marketing-board", roomKey: "marketing", x: 1*32+16, y: 1*32+16, label: "Marketing Hub",   icon: "◉", href: "/dashboard/marketing" },
-  { id: "reception-desk",  roomKey: "reception", x: 4*32+32, y: 2*32+16, label: "Investor Relations", icon: "⬢", href: "/dashboard/investor-relations" },
+  { id: "reception-desk",  roomKey: "reception", x: 4*32+16, y: 2*32+16, label: "Investor Relations", icon: "⬢", href: "/dashboard/investor-relations" },
 ];
 
 export type RoomAction = {
