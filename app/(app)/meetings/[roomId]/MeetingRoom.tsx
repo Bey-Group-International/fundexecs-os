@@ -1343,7 +1343,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 disabled={joining}
                 className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 text-black text-sm font-semibold py-2.5 transition-colors"
               >
-                {joining ? "Joining…" : "Join meeting"}
+                {joining ? (isHost ? "Starting…" : "Joining…") : (isHost ? "Start meeting" : "Join meeting")}
               </button>
             </div>
           </div>
