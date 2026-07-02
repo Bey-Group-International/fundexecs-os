@@ -1,4 +1,4 @@
--- 20260702000012_inbox_realtime.sql
+-- 20260702000014_inbox_realtime.sql
 -- Put the Unified Inbox on the realtime bus. The inbox page now subscribes to
 -- its org's inbox_threads / inbox_messages changes (app/(app)/inbox/InboxLive)
 -- so a newly ingested thread, a triage update, or an incoming reply refreshes

@@ -8,7 +8,7 @@ import { isVerifiable } from "@/lib/grounding";
 import { getActiveMandate } from "@/lib/mandates";
 import { dispatchAction } from "@/lib/integrations";
 import { recordDispatch } from "@/lib/integrations/log";
-import { computePriority, fallbackSummary } from "@/lib/inbox/intelligence";
+import { computePriority, fallbackSummary, draftReply } from "@/lib/inbox/intelligence";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
 import type {
   AgentKey,
@@ -302,6 +302,56 @@ export async function getThreadMessages(threadId: string): Promise<ThreadMessage
       occurredAt: m.occurred_at,
     }),
   );
+}
+
+export interface DraftReplyResult {
+  ok: boolean;
+  draft?: string;
+  // True when Claude produced the draft; false for the deterministic fallback.
+  live?: boolean;
+  error?: string;
+}
+
+/**
+ * Draft a reply to a thread with Earn for the operator to review and edit. This
+ * is internal prep (Tier-1 draft_reply) — it only returns text to the composer
+ * and never reaches the counterparty; the send stays the gated Tier-2 move. Uses
+ * Claude when configured, a deterministic template otherwise.
+ */
+export async function draftThreadReply(threadId: string): Promise<DraftReplyResult> {
+  if (!threadId) return { ok: false, error: "Missing thread." };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = createServerClient();
+
+  const { data: thread } = await supabase
+    .from("inbox_threads")
+    .select("subject, category, counterparty_name, counterparty_email")
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", threadId)
+    .maybeSingle();
+  if (!thread) return { ok: false, error: "Thread not found." };
+  const t = thread as Pick<
+    InboxThread,
+    "subject" | "category" | "counterparty_name" | "counterparty_email"
+  >;
+
+  const { data: msgs } = await supabase
+    .from("inbox_messages")
+    .select("direction, author, body")
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("thread_id", threadId)
+    .order("occurred_at", { ascending: true })
+    .limit(20);
+
+  const messages = (msgs as Pick<InboxMessage, "direction" | "author" | "body">[] | null) ?? [];
+  const { draft, live } = await draftReply({
+    subject: t.subject,
+    category: t.category,
+    counterparty: t.counterparty_name ?? t.counterparty_email,
+    messages: messages.map((m) => ({ direction: m.direction, author: m.author, body: m.body })),
+  });
+  return { ok: true, draft, live };
 }
 
 /**
