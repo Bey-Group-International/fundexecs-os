@@ -85,14 +85,14 @@ compliance tables per the diagram above.
 
 **Integrity (DB-enforced):**
 - `BEFORE UPDATE/DELETE` trigger on `fin_journal_entries` / `fin_journal_lines`
-  raises unless the row is still `draft` — a posted entry is immutable; a
-  correction is a new reversing entry.
+raises unless the row is still `draft` — a posted entry is immutable; a
+correction is a new reversing entry.
 - Deferred constraint trigger on post: `Σ base_amount = 0`, `Σ amount = 0` per
-  currency, period `open`, ≥2 distinct accounts.
+currency, period `open`, ≥2 distinct accounts.
 - `entry_no` from a per-ledger sequence at post time; `hash` chains to the prior
-  entry's hash for a tamper-evident chain.
+entry's hash for a tamper-evident chain.
 - RLS everywhere: `select` for org members, `insert` for `is_org_writer`; no
-  `update`/`delete` grant on posted ledger rows.
+`update`/`delete` grant on posted ledger rows.
 
 ---
 
@@ -139,6 +139,7 @@ URL-driven search/filter, and the finance inbox pillar for alerts.
 ## 6. Automation logic
 
 Rule DSL stored as JSON (`conditions`/`actions`):
+
 ```jsonc
 { "event":"bank_txn.imported",
   "conditions":[{"field":"description","op":"matches","value":"(?i)stripe|payout"},
@@ -146,6 +147,7 @@ Rule DSL stored as JSON (`conditions`/`actions`):
   "actions":[{"type":"set_category","account_code":"4000"},
              {"type":"set_status","value":"suggested"}] }
 ```
+
 - **Auto-categorization** — ordered, deterministic, explainable rules over staged
   bank transactions; frequent manual codings become suggested rules (never
   auto-applied).
@@ -185,11 +187,11 @@ Command → compliance.controls (RBAC + gate tier + SoD + period guard)
 
 **Phased build (each a PR, merged before the next):**
 1. **Ledger foundation** — entities/ledgers/accounts/periods/journal + posting
-   engine + immutability & balance triggers + gate integration + tests. ← *Phase 1*
+engine + immutability & balance triggers + gate integration + tests. ← *Phase 1*
 2. **Banking** — bank accounts, file-import adapters, staging, categorization,
-   reconciliation, cashflow.
+reconciliation, cashflow.
 3. **AR/AP + invoicing** — parties, invoices/bills, tax codes, payments/allocation,
-   recurring, aging.
+recurring, aging.
 4. **Reporting** — BS/P&L/cashflow/TB + custom engine + consolidation + FX reval.
 5. **Automation + compliance** — rule engine, bots, anomaly detection, RBAC roles,
-   controls, audit-hash verification, inbox emission.
+controls, audit-hash verification, inbox emission.
