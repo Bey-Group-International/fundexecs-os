@@ -559,6 +559,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [copilotOpen, setCopilotOpen] = useState(true);
   const [duration, setDuration] = useState(0);
   const [ready, setReady] = useState(false);
+  const [endError, setEndError] = useState(false);
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -1108,7 +1109,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, [sendSignal, router]);
 
   const endMeeting = useCallback(async () => {
-    sendSignal({ type: "leave", from: myIdRef.current });
+    sendSignal({ type: "end", from: myIdRef.current });
     peersRef.current.forEach((pc) => pc.close()); peersRef.current.clear();
     channelRef.current?.unsubscribe();
     if (recognitionRef.current) { recognitionRef.current.onend = null; recognitionRef.current.stop(); }
@@ -1118,15 +1119,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       try {
         const res = await fetch("/api/meetings/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meetingId, transcript: fullText, duration }) });
         if (res.ok) { router.push(`/meetings/${roomCode}/report`); return; }
-      } catch { /* fallback */ }
+      } catch { setEndError(true); return; }
     }
     router.push("/meetings");
-  }, [sendSignal, meetingId, duration, roomCode, router]);
+  }, [sendSignal, meetingId, duration, roomCode, router, setEndError]);
 
   const endForAll = useCallback(async () => {
-    sendSignal({ type: "end", from: myIdRef.current });
     await endMeeting();
-  }, [sendSignal, endMeeting]);
+  }, [endMeeting]);
 
   // ── Pre-join screen ───────────────────────────────────────────────────────
 
@@ -1303,6 +1303,37 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         onRaiseHand={toggleRaiseHand} onReaction={sendReaction} onMuteAll={muteAll}
         onToggleLayout={() => setLayout((v) => v === "grid" ? "speaker" : "grid")}
       />
+
+      {/* Report generation error banner */}
+      {endError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="rounded-2xl border border-[var(--status-danger)]/40 bg-[var(--surface-1)] shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4">
+            <div className="flex items-start gap-3">
+              <span className="text-xl shrink-0">⚠️</span>
+              <div>
+                <p className="text-sm font-semibold text-[var(--fg-primary)]">Report generation failed</p>
+                <p className="text-sm text-[var(--fg-muted)] mt-1">
+                  Your transcript is preserved — try ending the meeting again.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setEndError(false); void endForAll(); }}
+                className="flex-1 rounded-lg bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-semibold py-2 transition-colors"
+              >
+                Retry
+              </button>
+              <button
+                onClick={() => router.push("/meetings")}
+                className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[var(--fg-primary)] text-sm font-medium py-2 transition-colors"
+              >
+                Exit anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
