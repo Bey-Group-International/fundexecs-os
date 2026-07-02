@@ -731,18 +731,24 @@ export class OfficeScene extends Phaser.Scene {
     ];
     this.emoteKeys = codes.map((c) => this.input.keyboard!.addKey(c));
 
-    // TODO: broadcast emotes via the socket (like sendMove) so remote players
-    // in the same room see them; local-only for this milestone.
     // React layer can also trigger emotes (emote button bar)
     this.game.events.on("office:emote", (emoji: string) => {
-      this._showEmote(this.player.x, this.player.y, emoji);
+      this._triggerLocalEmote(emoji);
     });
+  }
+
+  /** Show an emote above the local player and broadcast it to the room. */
+  private _triggerLocalEmote(emoji: string) {
+    this._showEmote(this.player.x, this.player.y, emoji);
+    if (this.socket && OfficeScene.EMOTES.includes(emoji)) {
+      this.socket.sendEmote(emoji);
+    }
   }
 
   private _updateEmotes(delta: number) {
     for (let i = 0; i < this.emoteKeys.length; i++) {
       if (Phaser.Input.Keyboard.JustDown(this.emoteKeys[i])) {
-        this._showEmote(this.player.x, this.player.y, OfficeScene.EMOTES[i]);
+        this._triggerLocalEmote(OfficeScene.EMOTES[i]);
       }
     }
     // Ambient NPC emotes — a random exec reacts every 9-16s for liveliness
@@ -1165,6 +1171,15 @@ export class OfficeScene extends Phaser.Scene {
               state.sprite.anims.play(facingToAnimKey(msg.facing, state.spriteKey), true);
             }
           }
+        }
+        break;
+      }
+      case "player.emote": {
+        // Sanitize: only render allowlisted emojis from the server
+        if (!OfficeScene.EMOTES.includes(msg.emoji)) break;
+        const state = this.remotePlayers.get(msg.playerId);
+        if (state) {
+          this._showEmote(state.sprite.x, state.sprite.y, msg.emoji);
         }
         break;
       }

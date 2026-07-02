@@ -45,6 +45,10 @@ export class VirtualOfficeSocket {
     this._send({ type: "player.move", dx, dy, seq });
   }
 
+  sendEmote(emoji: string): void {
+    this._send({ type: "emote", emoji });
+  }
+
   sendPing(): void {
     this._send({ type: "ping", clientTime: Date.now() });
   }
