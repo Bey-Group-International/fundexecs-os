@@ -655,6 +655,20 @@ export type MarketplaceListing = Timestamps & {
   status: MarketplaceStatus;
   is_public: boolean;
   metadata: Json;
+  // Structured deal-card fields (migration 0011)
+  target_irr: number | null;
+  hold_period_years: number | null;
+  geography: string | null;
+  asset_class: string | null;
+  teaser_url: string | null;
+}
+
+export type MarketplaceInterest = {
+  id: string;
+  listing_id: string;
+  organization_id: string;
+  user_id: string;
+  created_at: string;
 }
 
 export type TrackRecord = Timestamps & {
