@@ -12,8 +12,9 @@ import { TemplatePicker } from "./TemplatePicker";
 import { VersionHistory } from "./VersionHistory";
 import { MarkdownRenderer } from "@/components/dataroom/MarkdownRenderer";
 import type { DraftTurn } from "@/lib/claude";
+import { DeckBuilder, emptyDeck, parseDeck } from "./DeckBuilder";
 
-type Tab = "guided" | "import" | "earn";
+type Tab = "guided" | "import" | "earn" | "deck";
 type PaneMode = "split" | "edit" | "preview";
 type SidePanel = "none" | "history";
 
@@ -72,14 +73,14 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
   const [note, setNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function save() {
+  function save(overrideContent?: string) {
     setDirtySaved("saving");
     startTransition(async () => {
       const fd = new FormData();
       fd.set("id", doc.id);
       fd.set("name", name.trim() || doc.name);
       fd.set("section", section);
-      fd.set("content", content);
+      fd.set("content", overrideContent ?? content);
       if (isLink) fd.set("url", doc.storage_key ?? "");
       await updateDocument(fd);
       setDirtySaved("saved");
@@ -170,6 +171,8 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     }
   }
 
+  const isDeck = content.startsWith('{"__deck"');
+
   const tabBtn = (t: Tab, label: string) => (
     <button
       type="button"
@@ -237,26 +240,42 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
             </p>
           ) : null}
 
+          {/* Tab row — always visible */}
+          <div className="flex flex-wrap gap-1.5">
+            {tabBtn("guided", "Guided")}
+            {tabBtn("import", "Import")}
+            {tabBtn("earn", "✶ Earn")}
+            {tabBtn("deck", "⊟ Deck")}
+            <button
+              type="button"
+              onClick={() => setShowTemplatePicker(true)}
+              className="rounded-md border border-gold-500/40 bg-gold-500/5 px-3 py-1.5 text-sm text-gold-300 transition hover:bg-gold-500/15"
+            >
+              Templates
+            </button>
+          </div>
+
+          {note ? (
+            <p className="rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2 text-xs text-fg-secondary">{note}</p>
+          ) : null}
+
+          {/* Deck mode — full width */}
+          {tab === "deck" ? (
+            <DeckBuilder
+              initialDeck={isDeck ? (parseDeck(content) ?? emptyDeck()) : emptyDeck()}
+              docName={name}
+              saving={dirtySaved === "saving"}
+              onSave={(deckJson) => {
+                setContent(deckJson);
+                save(deckJson);
+              }}
+            />
+          ) : null}
+
           {/* Two-column: mode controls left, editor right */}
-          <div className="grid gap-5 lg:grid-cols-2">
+          {tab !== "deck" ? <div className="grid gap-5 lg:grid-cols-2">
             {/* Left: mode controls */}
             <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap gap-1.5">
-                {tabBtn("guided", "Guided")}
-                {tabBtn("import", "Import")}
-                {tabBtn("earn", "✶ Earn")}
-                <button
-                  type="button"
-                  onClick={() => setShowTemplatePicker(true)}
-                  className="rounded-md border border-gold-500/40 bg-gold-500/5 px-3 py-1.5 text-sm text-gold-300 transition hover:bg-gold-500/15"
-                >
-                  Templates
-                </button>
-              </div>
-
-              {note ? (
-                <p className="rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2 text-xs text-fg-secondary">{note}</p>
-              ) : null}
 
               {tab === "guided" && showZeroState ? (
                 <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-1 p-4">
@@ -456,7 +475,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
 
                 <button
                   type="button"
-                  onClick={save}
+                  onClick={() => save()}
                   disabled={pending}
                   className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
                 >
@@ -542,7 +561,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                 )}
               </div>
             </div>
-          </div>
+          </div> : null}
         </div>
 
         {/* Side panel: version history */}

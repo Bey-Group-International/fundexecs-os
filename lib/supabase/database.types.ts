@@ -694,6 +694,11 @@ export type DataRoomShare = {
   revoked_at: string | null;
   created_by: string | null;
   created_at: string;
+  // Phase 1 gate fields
+  require_email: boolean;
+  require_nda: boolean;
+  nda_text: string | null;
+  password_hash: string | null;
 };
 
 export type DataRoomView = {
@@ -703,6 +708,10 @@ export type DataRoomView = {
   document_id: string | null;
   kind: "room" | "document";
   created_at: string;
+  // Phase 2 engagement fields
+  viewer_email: string | null;
+  duration_seconds: number | null;
+  session_id: string | null;
 };
 
 export type InvestorPortalShare = {
