@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { verifySharePassword } from "@/components/build/materials-actions";
+import { recordNdaSignature } from "@/components/dataroom/viewer-actions";
 
 export interface GateConfig {
   requireEmail: boolean;
@@ -12,6 +13,8 @@ export interface GateConfig {
 
 interface Props {
   token: string;
+  /** UUID of the data_room_shares row — needed to persist NDA signatures. */
+  shareId: string;
   config: GateConfig;
   /** Called once all required gates are passed, with the captured email (or null). */
   onPass: (email: string | null) => void;
@@ -92,47 +95,135 @@ function EmailGate({ onNext, accent }: { onNext: (email: string) => void; accent
 
 function NdaGate({
   ndaText,
+  shareId,
+  signerEmail,
   onNext,
   accent,
 }: {
   ndaText: string | null;
+  shareId: string;
+  signerEmail: string | null;
   onNext: () => void;
   accent: string;
 }) {
-  const [checked, setChecked] = useState(false);
+  const [signerName, setSignerName] = useState("");
+  const [pending, startTransition] = useTransition();
 
   const defaultNda = `By proceeding, you agree to keep all information in this data room strictly confidential. You shall not disclose, reproduce, or distribute any materials herein to any third party without prior written consent from the issuing organization. This obligation survives the termination of any relationship with the organization.`;
 
+  const trimmedName = signerName.trim();
+  const canSubmit = trimmedName.length > 0 && !pending;
+
+  // Build the legal-timestamp string shown beneath the signature preview.
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const timeStr = now.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  });
+
+  function submit() {
+    if (!canSubmit) return;
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("share_id", shareId);
+      fd.set("signer_name", trimmedName);
+      fd.set("signer_email", signerEmail ?? "");
+      fd.set("signed_at", new Date().toISOString());
+      await recordNdaSignature(fd);
+      onNext();
+    });
+  }
+
   return (
-    <div className="w-full max-w-lg">
-      <h2 className="font-display text-xl font-semibold text-fg-primary">Non-Disclosure Agreement</h2>
-      <p className="mt-2 text-sm text-fg-secondary">
-        Please read and accept the NDA below before viewing this data room.
-      </p>
-      <div className="mt-4 max-h-56 overflow-y-auto rounded-lg border border-line bg-surface-1 p-4 text-xs leading-relaxed text-fg-secondary">
-        {ndaText ?? defaultNda}
+    <>
+      {/* Google Fonts — Dancing Script for the cursive signature preview */}
+      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap"
+      />
+      <div className="w-full max-w-lg">
+        <h2 className="font-display text-xl font-semibold text-fg-primary">
+          Non-Disclosure Agreement
+        </h2>
+        <p className="mt-2 text-sm text-fg-secondary">
+          Please read the NDA below, then sign with your full name to proceed.
+        </p>
+
+        {/* NDA text scroll box */}
+        <div className="mt-4 max-h-48 overflow-y-auto rounded-lg border border-line bg-surface-1 p-4 text-xs leading-relaxed text-fg-secondary">
+          {ndaText ?? defaultNda}
+        </div>
+
+        {/* Signer name input */}
+        <div className="mt-5 space-y-3">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-fg-secondary">
+              Your full name
+            </span>
+            <input
+              type="text"
+              autoFocus
+              autoComplete="name"
+              placeholder="Jane Smith"
+              value={signerName}
+              onChange={(e) => setSignerName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              className="w-full rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-400 focus:outline-none"
+            />
+          </label>
+
+          {/* Live signature preview */}
+          {trimmedName ? (
+            <div className="rounded-lg border border-line bg-surface-0 px-4 py-3">
+              <p className="mb-1 text-xs text-fg-muted">Signature preview</p>
+              <p
+                style={{
+                  fontFamily: "'Dancing Script', cursive",
+                  fontSize: "1.6rem",
+                  lineHeight: 1.2,
+                  color: accent,
+                }}
+              >
+                {trimmedName}
+              </p>
+            </div>
+          ) : null}
+
+          {/* Legal timestamp */}
+          <p className="text-xs text-fg-muted">
+            By clicking <span className="font-medium text-fg-secondary">Sign &amp; Continue</span>,{" "}
+            {trimmedName ? (
+              <span className="font-medium text-fg-secondary">{trimmedName}</span>
+            ) : (
+              "you"
+            )}{" "}
+            agree to the NDA on{" "}
+            <span className="font-medium text-fg-secondary">{dateStr}</span> at{" "}
+            <span className="font-medium text-fg-secondary">{timeStr} UTC</span>.
+          </p>
+
+          <button
+            type="button"
+            disabled={!canSubmit}
+            onClick={submit}
+            className="w-full rounded-lg py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ backgroundColor: accent }}
+          >
+            {pending ? "Recording signature…" : "Sign & Continue →"}
+          </button>
+        </div>
       </div>
-      <label className="mt-4 flex cursor-pointer items-start gap-3">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => setChecked(e.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-gold-400"
-        />
-        <span className="text-sm text-fg-secondary">
-          I have read and agree to the terms of this Non-Disclosure Agreement.
-        </span>
-      </label>
-      <button
-        type="button"
-        disabled={!checked}
-        onClick={onNext}
-        className="mt-5 w-full rounded-lg py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-        style={{ backgroundColor: accent }}
-      >
-        Accept &amp; Continue
-      </button>
-    </div>
+    </>
   );
 }
 
@@ -197,7 +288,7 @@ function PasswordGate({
 // ViewerGate — orchestrates the gate sequence
 // ---------------------------------------------------------------------------
 
-export function ViewerGate({ token, config, onPass }: Props) {
+export function ViewerGate({ token, shareId, config, onPass }: Props) {
   const accent = "#D4AF6A";
 
   // Determine the starting stage by reading localStorage (client-only).
@@ -263,7 +354,13 @@ export function ViewerGate({ token, config, onPass }: Props) {
         {stage === "email" ? (
           <EmailGate accent={accent} onNext={(e) => advance("email", e)} />
         ) : stage === "nda" ? (
-          <NdaGate ndaText={config.ndaText} accent={accent} onNext={() => advance("nda")} />
+          <NdaGate
+            ndaText={config.ndaText}
+            shareId={shareId}
+            signerEmail={email}
+            accent={accent}
+            onNext={() => advance("nda")}
+          />
         ) : stage === "password" ? (
           <PasswordGate token={token} accent={accent} onNext={() => advance("password")} />
         ) : null}

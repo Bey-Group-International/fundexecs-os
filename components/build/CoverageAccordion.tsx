@@ -13,6 +13,7 @@ export interface AccordionDoc {
   status: DocumentStatus;
   qualityScore?: number | null;
   qualityLevel?: string | null;
+  qualityGaps?: number | null;
 }
 
 export interface AccordionSection {
@@ -166,6 +167,19 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
                     }`}
                   >
                     {d.qualityLevel}
+                  </span>
+                ) : null}
+                {d.qualityScore != null ? (
+                  <span className="shrink-0 font-mono text-[9px] text-fg-muted">
+                    {d.qualityScore}%
+                  </span>
+                ) : null}
+                {d.qualityScore != null && d.qualityScore < 80 && d.qualityGaps != null && d.qualityGaps > 0 ? (
+                  <span
+                    title={`${d.qualityGaps} quality gap${d.qualityGaps > 1 ? "s" : ""} remaining`}
+                    className="flex h-4 min-w-[1rem] shrink-0 items-center justify-center rounded-full bg-amber-500/15 px-1 font-mono text-[8px] text-amber-400"
+                  >
+                    {d.qualityGaps}
                   </span>
                 ) : null}
                 <StatusCycler doc={d} />

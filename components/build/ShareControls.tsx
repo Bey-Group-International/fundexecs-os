@@ -91,6 +91,7 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
   const [requireNda, setRequireNda] = useState(false);
   const [showNdaText, setShowNdaText] = useState(false);
   const [requirePassword, setRequirePassword] = useState(false);
+  const [notifyOnOpen, setNotifyOnOpen] = useState(false);
 
   return (
     <form
@@ -110,6 +111,16 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
           type="number"
           min={1}
           placeholder="Expires in days (optional)"
+          className={inputClass}
+        />
+      </div>
+
+      {/* Recipient */}
+      <div className="mt-3">
+        <input
+          name="recipient_email"
+          type="email"
+          placeholder="Recipient email (optional — sends them the link automatically)"
           className={inputClass}
         />
       </div>
@@ -180,6 +191,18 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
             className={`${inputClass} mt-1`}
           />
         )}
+
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            name="notify_on_open"
+            value="1"
+            checked={notifyOnOpen}
+            onChange={(e) => setNotifyOnOpen(e.target.checked)}
+            className="h-3.5 w-3.5 accent-gold-400"
+          />
+          <span className="text-sm text-fg-secondary">Notify me when this link is opened</span>
+        </label>
       </div>
 
       <div className="mt-3 flex items-center gap-3">

@@ -243,6 +243,7 @@ export function DataRoomViewer({
         {/* Gate modal */}
         <ViewerGate
           token={token}
+          shareId={shareId}
           config={gateConfig}
           onPass={(email) => {
             setViewerEmail(email);

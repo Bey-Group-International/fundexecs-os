@@ -6,6 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import type { Document, DocumentVersion } from "@/lib/supabase/database.types";
+import { sendEmail, shareGrantedEmail, documentUpdatedEmail } from "@/lib/email";
 
 const SECTION_KEYS = new Set(DATA_ROOM_SECTIONS.map((s) => s.key));
 const ROOM = "/build/data_room";
@@ -97,6 +98,34 @@ export async function updateDocument(formData: FormData): Promise<void> {
     } as never);
   }
   revalidatePath(ROOM);
+
+  // Notify LP recipients on all active shares for this org.
+  void notifyShareRecipientsDocumentUpdated(ctx.orgId, name).catch(() => undefined);
+}
+
+async function notifyShareRecipientsDocumentUpdated(orgId: string, docName: string): Promise<void> {
+  const supabase = createServerClient();
+  // Fetch org name and active shares with recipient emails in one pass.
+  const [{ data: orgRow }, { data: shares }] = await Promise.all([
+    supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
+    supabase
+      .from("data_room_shares")
+      .select("token, recipient_email")
+      .eq("organization_id", orgId)
+      .is("revoked_at", null)
+      .not("recipient_email", "is", null),
+  ]);
+  if (!orgRow || !shares || shares.length === 0) return;
+  const orgName = orgRow.name as string;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.fundexecs.com";
+  await Promise.all(
+    (shares as Array<{ token: string; recipient_email: string | null }>)
+      .filter((s) => s.recipient_email)
+      .map((s) => {
+        const { subject, html } = documentUpdatedEmail(orgName, docName, `${baseUrl}/dataroom/${s.token}`);
+        return sendEmail({ to: { name: "", email: s.recipient_email! }, subject, htmlBody: html });
+      }),
+  );
 }
 
 export async function deleteDocument(formData: FormData): Promise<void> {
@@ -203,19 +232,43 @@ export async function createShare(formData: FormData): Promise<void> {
   const ndaText = String(formData.get("nda_text") ?? "").trim() || null;
   const passwordRaw = String(formData.get("password") ?? "").trim();
   const password_hash = passwordRaw ? await hashPassword(passwordRaw) : null;
+  const recipientEmail = String(formData.get("recipient_email") ?? "").trim() || null;
+  const notifyOnOpen = formData.get("notify_on_open") === "1";
 
   const supabase = createServerClient();
-  await supabase.from("data_room_shares").insert({
-    organization_id: ctx.orgId,
-    label,
-    expires_at,
-    created_by: ctx.userId,
-    require_email: requireEmail,
-    require_nda: requireNda,
-    nda_text: ndaText,
-    password_hash,
-  } as never);
+  const { data: inserted } = await supabase
+    .from("data_room_shares")
+    .insert({
+      organization_id: ctx.orgId,
+      label,
+      expires_at,
+      created_by: ctx.userId,
+      require_email: requireEmail,
+      require_nda: requireNda,
+      nda_text: ndaText,
+      password_hash,
+      recipient_email: recipientEmail,
+      notify_on_open: notifyOnOpen,
+    } as never)
+    .select("token")
+    .maybeSingle();
+
   revalidatePath(ROOM);
+
+  // Send share-granted email to the recipient if provided.
+  if (recipientEmail && inserted) {
+    const { data: orgRow } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", ctx.orgId)
+      .maybeSingle();
+    if (orgRow) {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.fundexecs.com";
+      const shareUrl = `${baseUrl}/dataroom/${(inserted as { token: string }).token}`;
+      const { subject, html } = shareGrantedEmail(orgRow.name as string, label, shareUrl, expires_at);
+      void sendEmail({ to: { name: "", email: recipientEmail }, subject, htmlBody: html }).catch(() => undefined);
+    }
+  }
 }
 
 /** Verify a data-room password from the public viewer (no auth required). */
@@ -254,16 +307,25 @@ export async function trackDwell(formData: FormData): Promise<void> {
   // Validate the share exists and is still valid before recording.
   const { data: share } = await supabase
     .from("data_room_shares")
-    .select("organization_id, revoked_at, expires_at")
+    .select("organization_id, revoked_at, expires_at, label, notify_on_open, created_by")
     .eq("id", shareId)
     .maybeSingle();
   if (!share || share.revoked_at) return;
   if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return;
 
+  const shareData = share as {
+    organization_id: string;
+    revoked_at: string | null;
+    expires_at: string | null;
+    label: string | null;
+    notify_on_open: boolean;
+    created_by: string | null;
+  };
+
   await supabase
     .from("data_room_views")
     .insert({
-      organization_id: share.organization_id,
+      organization_id: shareData.organization_id,
       share_id: shareId,
       document_id: documentId,
       kind: documentId ? "document" : "room",
@@ -272,6 +334,61 @@ export async function trackDwell(formData: FormData): Promise<void> {
       session_id: sessionId,
     } as never)
     .then(() => undefined, () => undefined);
+
+  // GP notification: email the share creator when notify_on_open is set.
+  if (shareData.notify_on_open && shareData.created_by) {
+    void notifyGpOnOpen({
+      supabase,
+      creatorId: shareData.created_by,
+      orgId: shareData.organization_id,
+      shareLabel: shareData.label,
+      viewerEmail,
+    }).catch(() => undefined);
+  }
+}
+
+async function notifyGpOnOpen(args: {
+  supabase: ReturnType<typeof import("@/lib/supabase/server").createServiceClient>;
+  creatorId: string;
+  orgId: string;
+  shareLabel: string | null;
+  viewerEmail: string | null;
+}): Promise<void> {
+  const { sendEmail: send } = await import("@/lib/email");
+  // Fetch creator email from auth.users via the profiles table or org members.
+  // Fall back to organization members — use created_by as principal_id.
+  const { data: principal } = await args.supabase.auth.admin
+    .getUserById(args.creatorId)
+    .catch(() => ({ data: null }));
+  const gpEmail = (principal as { user?: { email?: string } } | null)?.user?.email;
+  if (!gpEmail) return;
+
+  const { data: orgRow } = await args.supabase
+    .from("organizations")
+    .select("name")
+    .eq("id", args.orgId)
+    .maybeSingle();
+  const orgName = (orgRow as { name: string } | null)?.name ?? "your fund";
+  const label = args.shareLabel ?? "your data room link";
+  const viewer = args.viewerEmail ? ` by ${args.viewerEmail}` : "";
+  const subject = `Your data room link was opened${viewer}`;
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; margin: 0; padding: 40px 20px;">
+  <div style="max-width: 560px; margin: 0 auto; background: #111111; border: 1px solid #222222; border-radius: 12px; overflow: hidden;">
+    <div style="padding: 6px 24px; background: #F59E0B;">
+      <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #0a0a0a; text-transform: uppercase;">FundExecs OS</span>
+    </div>
+    <div style="padding: 32px 24px;">
+      <h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">Someone opened your link</h1>
+      <p style="margin: 0; font-size: 15px; color: #AAAAAA;">Your share link <strong style="color: #F5F5F5;">${label}</strong> for <strong style="color: #F5F5F5;">${orgName}</strong> was just opened${viewer}.</p>
+      ${args.viewerEmail ? `<p style="margin: 16px 0 0; font-size: 13px; color: #888888;">Viewer email: ${args.viewerEmail}</p>` : ""}
+    </div>
+  </div>
+</body>
+</html>`;
+  await send({ to: { name: "", email: gpEmail }, subject, htmlBody: html });
 }
 
 export async function revokeShare(formData: FormData): Promise<void> {
