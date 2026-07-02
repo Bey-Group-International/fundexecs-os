@@ -43,6 +43,7 @@ export interface InvestorWarRoom {
   investor: Investor;
   temperature: Temperature;
   thesisFit: ThesisFit | null;
+  thesis: InvestmentThesis | null;
   commitments: CommitmentWithFund[];
   committedTotal: number;
   calledTotal: number;
@@ -210,6 +211,7 @@ export async function getInvestorWarRoom(
     investor,
     temperature,
     thesisFit,
+    thesis,
     commitments: commitmentsWithFund,
     committedTotal,
     calledTotal,
