@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type Phaser from "phaser";
 import type { OfficeSceneInitData } from "./scenes/OfficeScene";
+import type { RoomAction, ZoneDef } from "./types";
+import { IFRAME_ZONES, ZONE_URL_CALENDLY, CALENDLY_DEFAULT_URL } from "./types";
 import { BubbleOverlay } from "./BubbleOverlay";
 import { VideoTileBar } from "./VideoTileBar";
 import { MediaPermissionBanner } from "./MediaPermissionBanner";
@@ -10,11 +12,26 @@ import { MediaPermissionBanner } from "./MediaPermissionBanner";
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
 
+/** Replace sentinel URLs in IFRAME_ZONES with runtime values from overrides. */
+function _resolveZones(overrides: Record<string, string>) {
+  return IFRAME_ZONES.map((z) => {
+    if (z.url.startsWith("{{") && z.url.endsWith("}}")) {
+      const key = z.url.slice(2, -2);
+      const resolved = overrides[key] ?? (key === "calendly" ? CALENDLY_DEFAULT_URL : null);
+      if (!resolved) return null; // skip zones with no URL yet
+      return { ...z, url: resolved };
+    }
+    return z;
+  }).filter((z): z is NonNullable<typeof z> => z !== null);
+}
+
 type VideoTile = {
   peerId: string;
   label: string;
   el: HTMLVideoElement;
 };
+
+type NpcClickPayload = { npcId: string; spriteKey: string; name: string };
 
 type VirtualOfficeGameProps = {
   /** Supabase JWT — when provided, enables multiplayer mode. */
@@ -23,22 +40,66 @@ type VirtualOfficeGameProps = {
   displayName?: string;
   /** Executive character id from characterConfig (e.g. "earnest-fundmaker"). */
   characterId?: string;
+  /**
+   * Whether this panel is currently the active/visible tab.
+   * Phaser init is deferred until the first time this becomes true,
+   * ensuring the canvas is measured against a visible (non-zero) container.
+   */
+  active?: boolean;
   /** If set, teleports the player to this virtual room key on mount / change. */
   teleportTarget?: string | null;
   /** Called whenever room occupancy counts update. */
   onOccupancyChange?: (counts: Record<string, number>) => void;
+  /** Called when the user clicks an NPC sprite. */
+  onNpcClick?: (payload: NpcClickPayload) => void;
+  /**
+   * Per-zone URL overrides keyed by zone id or sentinel string.
+   * Sentinel values in IFRAME_ZONES (e.g. "{{calendly}}") are replaced with
+   * the matching value here before being passed into the Phaser scene.
+   */
+  zoneUrlOverrides?: Record<string, string>;
 };
 
-export function VirtualOfficeGame({ token, displayName = "You", characterId, teleportTarget, onOccupancyChange }: VirtualOfficeGameProps) {
+export function VirtualOfficeGame({
+  token,
+  displayName = "You",
+  characterId,
+  active = true,
+  teleportTarget,
+  onOccupancyChange,
+  onNpcClick,
+  zoneUrlOverrides = {},
+}: VirtualOfficeGameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const hasActivatedRef = useRef(false);
+
+  // Keep callbacks current without re-creating game event listeners
+  const onOccupancyChangeRef = useRef(onOccupancyChange);
+  useEffect(() => { onOccupancyChangeRef.current = onOccupancyChange; }, [onOccupancyChange]);
+
+  const onNpcClickRef = useRef(onNpcClick);
+  useEffect(() => { onNpcClickRef.current = onNpcClick; }, [onNpcClick]);
+
+  // Keep zone overrides current; re-emit zone config if game is already running
+  const zoneUrlOverridesRef = useRef(zoneUrlOverrides);
+  useEffect(() => {
+    zoneUrlOverridesRef.current = zoneUrlOverrides;
+    if (gameRef.current) {
+      gameRef.current.events.emit("office:zone-config", _resolveZones(zoneUrlOverrides));
+    }
+  }, [zoneUrlOverrides]);
+
+  // Buffer teleport targets that arrive before Phaser has loaded
+  const pendingTeleportRef = useRef<string | null>(null);
 
   const [bubbleMembers, setBubbleMembers] = useState<string[]>([]);
   const [videoTiles, setVideoTiles] = useState<VideoTile[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  // "idle" = not in bubble; "prompt" = in bubble, awaiting; "active" = granted; "dismissed" = skipped
   const [mediaState, setMediaState] = useState<"idle" | "prompt" | "active" | "dismissed">("idle");
+  const [roomActions, setRoomActions] = useState<RoomAction[]>([]);
+  const [activeZone, setActiveZone] = useState<ZoneDef | null>(null);
 
   const requestMedia = useCallback(async () => {
     try {
@@ -52,10 +113,13 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
     }
   }, []);
 
+  // ── Phaser init — deferred until first activation ─────────────────────────
   useEffect(() => {
+    if (!active) return;             // don't init while hidden
+    if (hasActivatedRef.current) return; // already initialised
     if (typeof window === "undefined" || !containerRef.current) return;
-    if (gameRef.current) return;
 
+    hasActivatedRef.current = true;
     let game: Phaser.Game | null = null;
 
     import("phaser").then((PhaserModule) => {
@@ -92,10 +156,24 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
           }
         });
 
-        // M5d: room occupancy bridge
+        // Room occupancy bridge — reads ref so prop updates are always current
         game.events.on("office:occupancy", (counts: Record<string, number>) => {
-          onOccupancyChange?.(counts);
+          onOccupancyChangeRef.current?.(counts);
         });
+
+        // NPC click bridge — opens Earn AI sidebar scoped to the clicked executive
+        game.events.on("npc:click", (payload: NpcClickPayload) => {
+          onNpcClickRef.current?.(payload);
+        });
+
+        // Room enter bridge — updates room-specific action panel
+        game.events.on("office:room-enter", (_key: string, actions: RoomAction[]) => {
+          setRoomActions(actions);
+        });
+
+        // Iframe zone bridge
+        game.events.on("office:zone-enter", (def: ZoneDef) => setActiveZone(def));
+        game.events.on("office:zone-leave", () => setActiveZone(null));
 
         // Video tile bridge
         game.events.on("rtc:video", (peerId: string, el: HTMLVideoElement | null) => {
@@ -115,21 +193,46 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
         }
 
         gameRef.current = game;
+
+        // Send resolved zone config to the scene
+        game.events.emit("office:zone-config", _resolveZones(zoneUrlOverridesRef.current));
+
+        // Flush any teleport that arrived before the game was ready
+        if (pendingTeleportRef.current) {
+          game.events.emit("office:teleport", pendingTeleportRef.current);
+          pendingTeleportRef.current = null;
+        }
       });
     });
 
     return () => {
       game?.destroy(true);
       gameRef.current = null;
+      hasActivatedRef.current = false;
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
       setLocalStream(null);
       setBubbleMembers([]);
       setVideoTiles([]);
       setMediaState("idle");
+      setRoomActions([]);
+      setActiveZone(null);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [active]);
+
+  // ── Scale refresh on every activation ────────────────────────────────────
+  // When the panel transitions from hidden to visible the browser doesn't fire
+  // a resize event, so Phaser's Scale Manager never re-measures the container.
+  // Call scale.refresh() explicitly whenever the tab becomes active.
+  useEffect(() => {
+    if (!active || !gameRef.current) return;
+    // Small delay ensures the DOM has painted the panel as block before we measure
+    const id = setTimeout(() => {
+      gameRef.current?.scale.refresh();
+    }, 50);
+    return () => clearTimeout(id);
+  }, [active]);
 
   // Push local stream into MeshManager when it becomes available
   useEffect(() => {
@@ -138,12 +241,23 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
     }
   }, [localStream]);
 
-  // M5c: teleport when target changes
+  // Teleport when target changes — buffer if game not yet loaded
   useEffect(() => {
-    if (teleportTarget && gameRef.current) {
+    if (!teleportTarget) return;
+    if (gameRef.current) {
       gameRef.current.events.emit("office:teleport", teleportTarget);
+    } else {
+      pendingTeleportRef.current = teleportTarget;
     }
   }, [teleportTarget]);
+
+  const handleRoomAction = useCallback((action: RoomAction) => {
+    if (action.href) {
+      window.location.href = action.href;
+    } else if (action.event) {
+      window.dispatchEvent(new CustomEvent(action.event, { detail: {} }));
+    }
+  }, []);
 
   return (
     <div className="flex flex-col bg-slate-950 rounded-xl overflow-hidden border border-slate-800">
@@ -162,6 +276,32 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
         localLabel={displayName}
       />
 
+      {/* Iframe zone overlay — slides up when player enters a zone */}
+      {activeZone && (
+        <div className="relative flex flex-col border-t border-amber-400/20 bg-slate-950">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800">
+            <span className="text-[11px] font-mono text-amber-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              {activeZone.title}
+            </span>
+            <button
+              onClick={() => setActiveZone(null)}
+              className="text-slate-500 hover:text-slate-300 text-xs leading-none transition-colors"
+              aria-label="Close zone"
+            >
+              ✕
+            </button>
+          </div>
+          <iframe
+            key={activeZone.id}
+            src={activeZone.url}
+            title={activeZone.title}
+            className="w-full h-48 border-0 bg-slate-950"
+            sandbox="allow-scripts allow-same-origin allow-popups"
+          />
+        </div>
+      )}
+
       {/* Game canvas area */}
       <div className="relative">
         {/* Controls hint */}
@@ -173,6 +313,22 @@ export function VirtualOfficeGame({ token, displayName = "You", characterId, tel
 
         {/* Proximity bubble overlay */}
         <BubbleOverlay members={bubbleMembers} />
+
+        {/* Room-specific action panel — bottom-left, fades in on room enter */}
+        {roomActions.length > 0 && (
+          <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1">
+            {roomActions.map((action) => (
+              <button
+                key={action.id}
+                onClick={() => handleRoomAction(action)}
+                className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium rounded-lg bg-slate-900/90 border border-slate-700/60 text-slate-300 hover:text-amber-400 hover:border-amber-400/40 hover:bg-slate-800/90 transition-colors backdrop-blur-sm"
+              >
+                <span className="text-amber-400/70 font-mono">{action.icon}</span>
+                {action.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Phaser canvas mount point */}
         <div

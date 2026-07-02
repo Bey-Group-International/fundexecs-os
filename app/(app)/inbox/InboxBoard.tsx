@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ActionKind, GateTier } from "@/lib/gates";
+import { TIER_STYLE } from "@/lib/gates";
 import type { InboxCategory, InboxChannel } from "@/lib/supabase/database.types";
 import { actOnThread, shareCommandCenter, setThreadStatus, deleteThreadAction, clearInbox, type ThreadActionResult } from "./actions";
 
@@ -30,14 +31,6 @@ export interface InboxCardData {
   shareTier: GateTier;
 }
 
-// Tier → badge color. Mirrors the gate semantics used across the app: green =
-// free, gold = sign-off, red = never delegable.
-const TIER_STYLE: Record<GateTier, string> = {
-  1: "border-status-success/40 text-status-success",
-  2: "border-gold-500/50 text-gold-400",
-  3: "border-status-danger/50 text-status-danger",
-};
-
 const BUCKETS = [
   { key: "now", label: "Needs you now", tone: "text-status-success" },
   { key: "soon", label: "Soon", tone: "text-gold-400" },
@@ -50,6 +43,7 @@ const FILTERS: { key: "all" | InboxCategory; label: string }[] = [
   { key: "booking", label: "Booking" },
   { key: "video", label: "Video" },
   { key: "signing", label: "Signing" },
+  { key: "finance", label: "Finance" },
 ];
 
 export function InboxBoard({ cards }: { cards: InboxCardData[] }) {

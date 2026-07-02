@@ -14,6 +14,7 @@ import type {
   ConvictionSnapshot,
   RiskSeverity,
 } from "@/lib/supabase/database.types";
+import { fetchDealComps, type DealComp } from "@/lib/deal-comps";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -22,6 +23,7 @@ export interface DealWarRoom {
   decisions: IcDecision[];
   snapshots: ConvictionSnapshot[];
   mandate: Mandate | null;
+  comps: DealComp[];
 }
 
 /**
@@ -101,7 +103,7 @@ export async function getDealWarRoom(orgId: string, dealId: string): Promise<Dea
   const conviction = await computeDealConviction(supabase, orgId, dealId);
   if (!conviction) return null;
 
-  const [decRes, snapRes, mandate] = await Promise.all([
+  const [decRes, snapRes, mandate, comps] = await Promise.all([
     supabase
       .from("ic_decisions")
       .select("*")
@@ -114,6 +116,7 @@ export async function getDealWarRoom(orgId: string, dealId: string): Promise<Dea
       .eq("deal_id", dealId)
       .order("captured_at", { ascending: true }),
     getMandate(orgId),
+    fetchDealComps(orgId, dealId),
   ]);
 
   return {
@@ -121,6 +124,7 @@ export async function getDealWarRoom(orgId: string, dealId: string): Promise<Dea
     decisions: (decRes.data ?? []) as IcDecision[],
     snapshots: (snapRes.data ?? []) as ConvictionSnapshot[],
     mandate,
+    comps,
   };
 }
 

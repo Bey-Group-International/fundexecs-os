@@ -11,6 +11,8 @@ import {
   WALL_THICKNESS,
   DOOR_GAP,
   ANIM_ROWS,
+  ROOM_ACTIONS,
+  type ZoneDef,
 } from "../types";
 import { VirtualOfficeSocket, type ConnectionStatus } from "../net/VirtualOfficeSocket";
 import type { Facing, RemotePlayer, ServerMessage } from "../net/messages";
@@ -26,6 +28,7 @@ type RoomZone = { zone: Phaser.GameObjects.Zone; key: string; label: string };
 type RemoteAvatarState = {
   sprite: Phaser.Physics.Arcade.Sprite;
   label: Phaser.GameObjects.Text;
+  nameTag: Phaser.GameObjects.Graphics;
   targetX: number;
   targetY: number;
   facing: Facing;
@@ -110,6 +113,13 @@ export class OfficeScene extends Phaser.Scene {
   private remotePlayers = new Map<string, RemoteAvatarState>();
   private npcAvatars = new Map<string, NpcAvatarState>();
   private moveSeq = 0;
+
+  private _interpFrame = 0;
+
+  // Iframe zones — populated via office:zone-config event from React layer
+  private iframeZoneDefs: ZoneDef[] = [];
+  private iframeZoneRects: Array<{ rect: Phaser.Geom.Rectangle; def: ZoneDef }> = [];
+  private currentZoneId: string | null = null;
   /** seq number of the last server-acknowledged move for local reconciliation */
   private lastAckedSeq = 0;
   /** velocity at the time each seq was sent, used for reconciliation */
@@ -149,10 +159,9 @@ export class OfficeScene extends Phaser.Scene {
   // ── preload ─────────────────────────────────────────────────────────────────
 
   preload() {
-    // Room background images
-    for (const room of ROOMS) {
-      this.load.image(room.key, room.imagePath);
-    }
+    // Tilemap + tileset — replaces per-room PNG backgrounds
+    this.load.tilemapTiledJSON("office-world", "/assets/fundexecs/office/maps/office-world.tmj");
+    this.load.image("office-tiles", "/assets/fundexecs/office/tilesets/office-tiles.png");
 
     // Earnest Fundmaker sprite sheet (32×32 frames)
     const earnestMap = spriteFrameMaps.earnest;
@@ -178,7 +187,7 @@ export class OfficeScene extends Phaser.Scene {
   create() {
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
 
-    this._createRooms();
+    this._createTilemap();
     this._createWalls();
     this._createPlayer();
     this._createAnimations();
@@ -187,6 +196,12 @@ export class OfficeScene extends Phaser.Scene {
     this._createNetDot();
     this._setupCamera();
     this._setupInput();
+
+    // Receive resolved zone definitions from the React wrapper
+    this.game.events.on("office:zone-config", (zones: ZoneDef[]) => {
+      this.iframeZoneDefs = zones;
+      this._createIframeZones();
+    });
 
     // M3/M4: receive local media stream from React wrapper
     this.game.events.on("rtc:localStream", (stream: MediaStream) => {
@@ -209,15 +224,20 @@ export class OfficeScene extends Phaser.Scene {
   update() {
     this._handleMovement();
     this._updateRoomLabel();
+    this._updateIframeZones();
     this._updateRemoteAvatars();
     this._updateNpcAvatars();
     this._updateSpatialAudio();
+
+    this._interpFrame = (this._interpFrame + 1) % 2;
   }
 
   // ── shutdown ─────────────────────────────────────────────────────────────────
 
   shutdown() {
     this.game.events.off("office:teleport");
+    this.game.events.off("office:zone-config");
+    this.game.events.off("rtc:localStream");
     if (this.sfuMode) {
       this.sfu?.leave();
     } else {
@@ -233,27 +253,28 @@ export class OfficeScene extends Phaser.Scene {
 
   // ── private helpers ─────────────────────────────────────────────────────────
 
-  private _createRooms() {
-    for (const room of ROOMS) {
-      const x = room.col * ROOM_W + ROOM_W / 2;
-      const y = room.row * ROOM_H + ROOM_H / 2;
-      const img = this.add.image(x, y, room.key);
-      // Scale the pre-rendered room image to fill the room cell
-      img.setDisplaySize(ROOM_W, ROOM_H);
+  private _createTilemap() {
+    const map = this.make.tilemap({ key: "office-world" });
+    const tileset = map.addTilesetImage("office-tiles", "office-tiles");
+    if (!tileset) return;
 
-      // Subtle room border
-      const gfx = this.add.graphics();
-      gfx.lineStyle(1, 0x334155, 0.4);
+    // Render floor and decor tile layers beneath everything
+    map.createLayer("floor", tileset, 0, 0)?.setDepth(0);
+    map.createLayer("decor", tileset, 0, 0)?.setDepth(1);
+
+    // Room borders and name labels on top of tiles
+    for (const room of ROOMS) {
+      const gfx = this.add.graphics().setDepth(2);
+      gfx.lineStyle(1, 0x334155, 0.5);
       gfx.strokeRect(room.col * ROOM_W, room.row * ROOM_H, ROOM_W, ROOM_H);
 
-      // Room name label (in-world, small, top-left of room)
       this.add.text(room.col * ROOM_W + 10, room.row * ROOM_H + 10, room.label.toUpperCase(), {
         fontFamily: "monospace",
         fontSize: "9px",
-        color: "#e2e8f0",
+        color: "#fbbf24",
         stroke: "#0f172a",
         strokeThickness: 2,
-      }).setDepth(5);
+      }).setDepth(3).setAlpha(0.7);
     }
   }
 
@@ -386,6 +407,31 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  private _createIframeZones() {
+    // Clear any previously rendered zone graphics (safe to call multiple times)
+    this.iframeZoneRects = [];
+    for (const def of this.iframeZoneDefs) {
+      const room = ROOMS.find((r) => r.key === def.roomKey);
+      if (!room) continue;
+      const worldX = room.col * ROOM_W + def.x;
+      const worldY = room.row * ROOM_H + def.y;
+      const rect = new Phaser.Geom.Rectangle(worldX, worldY, def.w, def.h);
+      this.iframeZoneRects.push({ rect, def });
+
+      // Visual indicator: dashed amber border at depth 6
+      const gfx = this.add.graphics().setDepth(6);
+      gfx.lineStyle(1, 0xfbbf24, 0.35);
+      gfx.strokeRect(worldX, worldY, def.w, def.h);
+      this.add.text(worldX + 6, worldY + 4, `⬛ ${def.title}`, {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: "#fbbf24",
+        stroke: "#0f172a",
+        strokeThickness: 2,
+      }).setDepth(6).setAlpha(0.6);
+    }
+  }
+
   private _createRoomLabel() {
     this.roomLabel = this.add
       .text(0, 0, "", {
@@ -511,23 +557,53 @@ export class OfficeScene extends Phaser.Scene {
       } else {
         this.roomLabel.setVisible(false);
       }
+      // Notify React layer of room change so it can render room-specific actions
+      this.game.events.emit("office:room-enter", found, ROOM_ACTIONS[found] ?? []);
+    }
+  }
+
+  private _updateIframeZones() {
+    const px = this.player.x;
+    const py = this.player.y;
+    let enteredId: string | null = null;
+    let enteredDef: ZoneDef | null = null;
+
+    for (const { rect, def } of this.iframeZoneRects) {
+      if (Phaser.Geom.Rectangle.Contains(rect, px, py)) {
+        enteredId = def.id;
+        enteredDef = def;
+        break;
+      }
+    }
+
+    if (enteredId !== this.currentZoneId) {
+      this.currentZoneId = enteredId;
+      if (enteredDef) {
+        this.game.events.emit("office:zone-enter", enteredDef);
+      } else {
+        this.game.events.emit("office:zone-leave");
+      }
     }
   }
 
   // ── Multiplayer: remote avatar rendering ────────────────────────────────────
 
   private _updateRemoteAvatars() {
+    // Interpolate every other frame — server sends at ~10 Hz so 30 Hz is plenty
+    if (this._interpFrame !== 0) return;
     for (const [, state] of this.remotePlayers) {
-      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.15);
-      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.15);
+      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.3);
+      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.3);
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
+      state.nameTag.setPosition(state.sprite.x, state.sprite.y - 40);
     }
   }
 
   private _updateNpcAvatars() {
+    if (this._interpFrame !== 0) return;
     for (const [, state] of this.npcAvatars) {
-      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.12);
-      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.12);
+      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.24);
+      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
     }
   }
@@ -540,6 +616,21 @@ export class OfficeScene extends Phaser.Scene {
     sprite.setScale(frameMap.scale);
     sprite.setDepth(8);
     sprite.anims.play(facingToAnimKey(facing, spriteKey), true);
+
+    // Make NPC clickable — emits npc:click so the React layer can open AI chat
+    sprite.setInteractive({ useHandCursor: true });
+    sprite.on("pointerdown", () => {
+      this.game.events.emit("npc:click", { npcId, spriteKey, name });
+    });
+    sprite.on("pointerover", () => {
+      sprite.setTint(0xffffff);
+      // Subtle highlight: slightly brighten
+      sprite.setAlpha(0.85);
+    });
+    sprite.on("pointerout", () => {
+      sprite.clearTint();
+      sprite.setAlpha(1);
+    });
 
     const label = this.add.text(x, y - 28, name, {
       fontFamily: "monospace",
@@ -611,11 +702,21 @@ export class OfficeScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(11);
 
+    // Small colored avatar dot above the name tag
+    const hue = playerIdToHue(remote.id);
+    const dotColor = Phaser.Display.Color.HSVColorWheel()[Math.round(hue / 360 * 359)].color;
+    const nameTag = this.add.graphics().setDepth(12);
+    nameTag.fillStyle(dotColor, 1);
+    nameTag.fillCircle(0, 0, 5);
+    nameTag.lineStyle(1, 0x0f172a, 0.8);
+    nameTag.strokeCircle(0, 0, 5);
+
     sprite.anims.play(facingToAnimKey(remote.facing, spriteKey), true);
 
     this.remotePlayers.set(remote.id, {
       sprite,
       label,
+      nameTag,
       targetX: remote.x,
       targetY: remote.y,
       facing: remote.facing,
@@ -628,6 +729,7 @@ export class OfficeScene extends Phaser.Scene {
     if (!state) return;
     state.sprite.destroy();
     state.label.destroy();
+    state.nameTag.destroy();
     this.remotePlayers.delete(playerId);
   }
 
@@ -792,6 +894,9 @@ export class OfficeScene extends Phaser.Scene {
       case "room.occupancy": {
         this.game.events.emit("office:occupancy", msg.counts);
         break;
+      }
+      default: {
+        console.warn("[OfficeScene] unhandled message type:", (msg as { type: string }).type);
       }
     }
   }

@@ -37,6 +37,10 @@ export const INBOX_CHANNELS: Record<InboxChannel, ChannelMeta> = {
   // The recurring Act-now Radar digest — the ranked sourcing brief delivered
   // in-app (lib/radar-digest, lib/radar-send).
   radar_digest: { channel: "radar_digest", label: "Radar digest", category: "messaging", icon: "◎" },
+  // Accounting: Xero invoices, bills, and overdue/awaiting-approval alerts.
+  xero: { channel: "xero", label: "Xero", category: "finance", icon: "▤" },
+  // Payments: Jax transactions, statements, and payment-status alerts.
+  jax: { channel: "jax", label: "Jax", category: "finance", icon: "▥" },
 };
 
 export interface CategoryMeta {
@@ -44,12 +48,13 @@ export interface CategoryMeta {
   label: string;
 }
 
-// Presentation order for the three intelligence pillars plus signing.
+// Presentation order for the three intelligence pillars plus signing and finance.
 export const INBOX_CATEGORIES: CategoryMeta[] = [
   { category: "messaging", label: "Messaging" },
   { category: "booking", label: "Booking" },
   { category: "video", label: "Video" },
   { category: "signing", label: "Signing" },
+  { category: "finance", label: "Finance" },
 ];
 
 export function channelMeta(channel: InboxChannel): ChannelMeta {

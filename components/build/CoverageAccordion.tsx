@@ -11,6 +11,9 @@ export interface AccordionDoc {
   name: string;
   storage_key: string | null;
   status: DocumentStatus;
+  qualityScore?: number | null;
+  qualityLevel?: string | null;
+  qualityGaps?: number | null;
 }
 
 export interface AccordionSection {
@@ -153,6 +156,32 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
                 >
                   {d.name}
                 </Link>
+                {d.qualityLevel ? (
+                  <span
+                    className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[8px] uppercase tracking-wider ${
+                      d.qualityLevel === "Institutional"
+                        ? "border-emerald-400/40 text-emerald-300"
+                        : d.qualityLevel === "Solid"
+                          ? "border-gold-500/40 text-gold-300"
+                          : "border-line text-fg-muted"
+                    }`}
+                  >
+                    {d.qualityLevel}
+                  </span>
+                ) : null}
+                {d.qualityScore != null ? (
+                  <span className="shrink-0 font-mono text-[9px] text-fg-muted">
+                    {d.qualityScore}%
+                  </span>
+                ) : null}
+                {d.qualityScore != null && d.qualityScore < 80 && d.qualityGaps != null && d.qualityGaps > 0 ? (
+                  <span
+                    title={`${d.qualityGaps} quality gap${d.qualityGaps > 1 ? "s" : ""} remaining`}
+                    className="flex h-4 min-w-[1rem] shrink-0 items-center justify-center rounded-full bg-amber-500/15 px-1 font-mono text-[8px] text-amber-400"
+                  >
+                    {d.qualityGaps}
+                  </span>
+                ) : null}
                 <StatusCycler doc={d} />
                 <DeleteDocumentButton id={d.id} name={d.name} />
               </div>
@@ -175,15 +204,27 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
 export function CoverageAccordion({
   sections,
   nextSuggestion,
+  institutionalCount,
 }: {
   sections: AccordionSection[];
   nextSuggestion?: { key: string; label: string; suggestion: string } | null;
+  institutionalCount?: number;
 }) {
   const readyCount = sections.filter((s) => s.ready).length;
   const total = sections.length;
 
   return (
     <div>
+      {/* Institutional banner */}
+      {institutionalCount != null && institutionalCount > 0 ? (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2.5">
+          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          <span className="text-sm text-emerald-400">
+            {institutionalCount} document{institutionalCount > 1 ? "s" : ""} at institutional standard
+          </span>
+        </div>
+      ) : null}
+
       {/* Section list */}
       <div className="flex flex-col gap-2">
         {sections.map((s) => (

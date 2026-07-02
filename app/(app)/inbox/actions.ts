@@ -443,6 +443,26 @@ const DEMO_THREADS: DemoThread[] = [
     link: "investor",
     messages: [{ direction: "inbound", body: "Sub docs are ready on your side — we'll counter-sign as soon as you execute." }],
   },
+  {
+    channel: "xero",
+    subject: "Invoice INV-2043 — overdue",
+    counterparty_name: "Blackpine Advisory",
+    counterparty_email: "billing@blackpine.test",
+    ageHours: 3,
+    messages: [
+      { direction: "inbound", body: "Invoice INV-2043 for Q2 fund administration ($42,500) is now 6 days past due. Approve for payment or flag a dispute." },
+    ],
+  },
+  {
+    channel: "jax",
+    subject: "Payment failed — management fee draw",
+    counterparty_name: "Jax Payments",
+    counterparty_email: "alerts@jax.test",
+    ageHours: 8,
+    messages: [
+      { direction: "inbound", body: "The scheduled management-fee transfer of $18,200 failed (insufficient balance on the operating account). Retry or reschedule." },
+    ],
+  },
 ];
 
 export async function seedInboxDemo(): Promise<void> {

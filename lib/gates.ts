@@ -166,3 +166,11 @@ export function gateDecision(action: ActionKind, mandate?: Mandate, backing?: Ba
     ? { tier, requiresApproval: false, reason: "Pre-authorized by your active mandate." }
     : { tier, requiresApproval: true, reason: TIER_DESCRIPTION[2] };
 }
+
+// Tier → badge Tailwind classes. Green = free, gold = sign-off, red = never delegable.
+// Shared across CapitalMap, Inbox, and any other surface that renders tier badges.
+export const TIER_STYLE: Record<GateTier, string> = {
+  1: "border-status-success/40 text-status-success",
+  2: "border-gold-500/50 text-gold-400",
+  3: "border-status-danger/50 text-status-danger",
+};

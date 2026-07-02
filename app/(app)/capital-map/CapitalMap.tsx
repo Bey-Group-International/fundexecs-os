@@ -2,28 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import type { CapitalMapEntry, Temperature } from "@/lib/capital-map";
+import { TEMP_STYLE } from "@/lib/capital-map";
 import type { ListingMatch } from "@/lib/matching";
 import type { GateTier } from "@/lib/gates";
-import { TIER_LABEL } from "@/lib/gates";
+import { TIER_LABEL, TIER_STYLE } from "@/lib/gates";
 import { queueNextAction, type QueueActionResult } from "./actions";
 import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
 
-const TEMP_STYLE: Record<Temperature, { dot: string; label: string }> = {
-  cold: { dot: "#6b7280", label: "Cold" },
-  warm: { dot: "#e8a33d", label: "Warm" },
-  active: { dot: "#5b9bd5", label: "Active" },
-  committed: { dot: "#67c587", label: "Committed" },
-};
-
 const TEMP_ORDER: Temperature[] = ["committed", "active", "warm", "cold"];
-
-// Tier → badge color. Mirrors the gate semantics: green = free, gold = sign-off,
-// red = never delegable.
-const TIER_STYLE: Record<GateTier, string> = {
-  1: "border-status-success/40 text-status-success",
-  2: "border-gold-500/50 text-gold-400",
-  3: "border-status-danger/50 text-status-danger",
-};
 
 const usd = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -358,6 +344,22 @@ function InvestorCard({
             {investor.jurisdiction ? ` · ${investor.jurisdiction}` : ""}
             {committedAmount > 0 ? ` · ${usd.format(committedAmount)} committed` : ""}
           </p>
+          {/* Fintrx-style AUM + check range — capacity context at a glance. */}
+          {(investor.aum != null || investor.typical_check_min != null || investor.typical_check_max != null) ? (
+            <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+              {investor.aum != null ? (
+                <span className="mr-3 text-fg-secondary">{usd.format(investor.aum)} AUM</span>
+              ) : null}
+              {(investor.typical_check_min != null || investor.typical_check_max != null) ? (
+                <span>
+                  {investor.typical_check_min != null ? usd.format(investor.typical_check_min) : "—"}
+                  {" – "}
+                  {investor.typical_check_max != null ? usd.format(investor.typical_check_max) : "—"}
+                  {" check"}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
         </div>
 
         {thesisFit ? (

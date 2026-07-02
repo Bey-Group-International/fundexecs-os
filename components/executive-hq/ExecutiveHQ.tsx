@@ -82,37 +82,6 @@ const ROOMS: RoomData[] = [
   { id:"reception", label:"RECEPTION",       href:"/dashboard/investor-relations",gridArea:"reception",accentColor:"#b49320", monitorColor:"#fcd34d", executives:[E.investorRelations] },
 ];
 
-// ─── Room background PNG mapping ─────────────────────────────────────────────
-
-const ROOM_BACKGROUNDS: Record<string, string> = {
-  ceo:       "ceo-office",
-  boardroom: "boardroom",
-  trading:   "trading-floor",
-  research:  "research-hub",
-  investor:  "reception-lounge",
-  ops:       "operations-hub",
-  legal:     "legal-corner",
-  marketing: "marketing-saloon",
-  reception: "reception-lounge",
-};
-
-function roomBgSrc(roomId: string, mode: "day" | "night"): string {
-  const name = ROOM_BACKGROUNDS[roomId] ?? roomId;
-  return `/assets/fundexecs/office/rooms/${mode}/${name}-${mode}-empty.png`;
-}
-
-// objectPosition values so each per-room PNG crop centres on the room subject
-const ROOM_OBJECT_POSITION: Record<string, string> = {
-  ceo:       "left top",
-  boardroom: "center top",
-  trading:   "center top",
-  research:  "right top",
-  investor:  "left center",
-  ops:       "center center",
-  legal:     "center center",
-  marketing: "right center",
-  reception: "center bottom",
-};
 
 // ─── Mini-map ─────────────────────────────────────────────────────────────────
 
@@ -620,7 +589,7 @@ export function ExecutiveHQ({
   });
   const [nightMode, setNightMode]         = useState(() => new Date().getHours() >= 18);
   const [zoomingRoom, setZoomingRoom]     = useState<string | null>(null);
-  const [activeBubble]                    = useState<BubbleState>(null);
+  const [activeBubble, setActiveBubble]   = useState<BubbleState>(null);
   const [isVisible, setIsVisible]         = useState(true);
   const [reducedEffects, setReducedEffects] = useState(false);
   const [focusedRoomIndex, setFocusedRoomIndex] = useState<number | null>(null);
@@ -682,6 +651,8 @@ export function ExecutiveHQ({
   }, [router, zoomingRoom, onNavigateRoom]);
 
   const handleExecClick = useCallback((exec: ExecData) => {
+    setActiveBubble({ execId: exec.id, text: exec.hint });
+    setTimeout(() => setActiveBubble(null), 3000);
     window.dispatchEvent(new CustomEvent("earn:open-with-context", {
       detail: { execName: exec.name, prompt: `You are advising ${exec.name}. What can I help you with today?` },
     }));
@@ -869,6 +840,39 @@ export function ExecutiveHQ({
 
       {/* Mini-map */}
       <MiniMap activeId={hoveredRoomId ?? (focusedRoomIndex !== null ? ROOMS[focusedRoomIndex]?.id ?? null : null)} nightMode={nightMode} occupancy={roomOccupancy} />
+
+      {/* ── Interactive room grid overlay ── */}
+      <div style={{
+        position: "absolute",
+        inset: 0,
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr 1fr",
+        gridTemplateRows: "38fr 30fr 32fr",
+        gridTemplateAreas: `
+          "ceo     board    trading  research"
+          "legal   ops      ops      marketing"
+          "investor reception reception ."
+        `,
+        zIndex: 4,
+      }}>
+        {ROOMS.map((room, idx) => (
+          <RoomCell
+            key={room.id}
+            room={room}
+            roomIndex={idx}
+            onExecClick={handleExecClick}
+            onRoomClick={handleRoomClick}
+            zoomingRoom={zoomingRoom}
+            activeBubble={activeBubble}
+            reducedEffects={reducedEffects}
+            nightMode={nightMode}
+            isFocused={focusedRoomIndex === idx}
+            activity={(ROOM_ACTIVITY[room.id] ?? 0) as 0 | 1 | 2 | 3}
+            onHoverChange={handleHoverChange}
+            debugGrid={debugGrid}
+          />
+        ))}
+      </div>
 
       {/* ── Boardroom delegation scene ── */}
       {(animPhase === 'huddle' || animPhase === 'brief' || animPhase === 'dispatch') && (

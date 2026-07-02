@@ -85,6 +85,139 @@ function ShareRow({ share }: { share: ShareView }) {
   );
 }
 
+function CreateShareForm({ onDone }: { onDone: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [requireEmail, setRequireEmail] = useState(false);
+  const [requireNda, setRequireNda] = useState(false);
+  const [showNdaText, setShowNdaText] = useState(false);
+  const [requirePassword, setRequirePassword] = useState(false);
+  const [notifyOnOpen, setNotifyOnOpen] = useState(false);
+
+  return (
+    <form
+      action={(fd) =>
+        startTransition(async () => {
+          await createShare(fd);
+          onDone();
+        })
+      }
+      className="mb-4 rounded-xl border border-gold-500/20 bg-surface-1 p-4"
+    >
+      {/* Basic fields */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <input name="label" placeholder="Label (e.g. 'Q3 2025 raise')" className={inputClass} />
+        <input
+          name="expires_in_days"
+          type="number"
+          min={1}
+          placeholder="Expires in days (optional)"
+          className={inputClass}
+        />
+      </div>
+
+      {/* Recipient */}
+      <div className="mt-3">
+        <input
+          name="recipient_email"
+          type="email"
+          placeholder="Recipient email (optional — sends them the link automatically)"
+          className={inputClass}
+        />
+      </div>
+
+      {/* Gate toggles */}
+      <div className="mt-4 space-y-2 rounded-lg border border-line bg-surface-0 p-3">
+        <p className="mb-2 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Access gates</p>
+
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            name="require_email"
+            value="1"
+            checked={requireEmail}
+            onChange={(e) => setRequireEmail(e.target.checked)}
+            className="h-3.5 w-3.5 accent-gold-400"
+          />
+          <span className="text-sm text-fg-secondary">Require viewer email</span>
+        </label>
+
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            name="require_nda"
+            value="1"
+            checked={requireNda}
+            onChange={(e) => {
+              setRequireNda(e.target.checked);
+              if (!e.target.checked) setShowNdaText(false);
+            }}
+            className="h-3.5 w-3.5 accent-gold-400"
+          />
+          <span className="text-sm text-fg-secondary">Require NDA acceptance</span>
+          {requireNda && (
+            <button
+              type="button"
+              onClick={() => setShowNdaText((v) => !v)}
+              className="ml-auto font-mono text-[9px] uppercase tracking-wider text-gold-400 hover:text-gold-300"
+            >
+              {showNdaText ? "Hide text" : "Custom text"}
+            </button>
+          )}
+        </label>
+        {requireNda && showNdaText && (
+          <textarea
+            name="nda_text"
+            rows={4}
+            placeholder="Custom NDA text (leave blank to use default)"
+            className={`${inputClass} mt-1 resize-none text-xs`}
+          />
+        )}
+
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={requirePassword}
+            onChange={(e) => setRequirePassword(e.target.checked)}
+            className="h-3.5 w-3.5 accent-gold-400"
+          />
+          <span className="text-sm text-fg-secondary">Password protect</span>
+        </label>
+        {requirePassword && (
+          <input
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Set a password"
+            className={`${inputClass} mt-1`}
+          />
+        )}
+
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            name="notify_on_open"
+            value="1"
+            checked={notifyOnOpen}
+            onChange={(e) => setNotifyOnOpen(e.target.checked)}
+            className="h-3.5 w-3.5 accent-gold-400"
+          />
+          <span className="text-sm text-fg-secondary">Notify me when this link is opened</span>
+        </label>
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          disabled={pending}
+          className="rounded-lg bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+        >
+          {pending ? "Creating…" : "Create link"}
+        </button>
+        <p className="text-xs text-fg-muted">Anyone with the link can view — no login required.</p>
+      </div>
+    </form>
+  );
+}
+
 // Create + manage read-only public links to the data room.
 export function ShareControls({ shares, activeCount }: { shares: ShareView[]; activeCount?: number }) {
   const [open, setOpen] = useState(false);
@@ -110,24 +243,7 @@ export function ShareControls({ shares, activeCount }: { shares: ShareView[]; ac
       </div>
 
       {open ? (
-        <form
-          action={(fd) => startTransition(async () => { await createShare(fd); setOpen(false); })}
-          className="mb-4 rounded-xl border border-gold-500/20 bg-surface-1 p-4"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <input name="label" placeholder="Label (e.g. 'Q3 2025 raise')" className={inputClass} />
-            <input name="expires_in_days" type="number" min={1} placeholder="Expires in days (optional)" className={inputClass} />
-          </div>
-          <div className="mt-3 flex items-center gap-3">
-            <button
-              disabled={pending}
-              className="rounded-lg bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
-            >
-              {pending ? "Creating…" : "Create link"}
-            </button>
-            <p className="text-xs text-fg-muted">Anyone with the link can view — no login required.</p>
-          </div>
-        </form>
+        <CreateShareForm onDone={() => setOpen(false)} />
       ) : null}
 
       {active.length === 0 && !open ? (

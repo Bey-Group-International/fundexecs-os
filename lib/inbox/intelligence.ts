@@ -35,12 +35,16 @@ export interface TriageSignals {
 // clock, so it outranks an ambient message all else equal.
 const CATEGORY_BASE: Record<InboxCategory, number> = {
   signing: 35,
+  // Accounting/payments move on a due-date clock — an overdue invoice or a
+  // failed payment outranks an ambient message, just under a pending signature.
+  finance: 33,
   booking: 30,
   video: 28,
   messaging: 20,
 };
 
-const URGENT_CUES = /\b(urgent|asap|today|tonight|deadline|eod|term sheet|wire|commit|sign)\b/i;
+const URGENT_CUES =
+  /\b(urgent|asap|today|tonight|deadline|eod|term sheet|wire|commit|sign|overdue|past due|payment failed)\b/i;
 
 /**
  * Score a thread 0-100. Deterministic and explainable: a category floor, plus
@@ -90,7 +94,9 @@ export interface SuggestedAction {
  * The single gated next move for a thread, by pillar. Booking flips from
  * "propose a time" to "confirm" once a time is on the table. Signing threads
  * have no inbox-originated move — they are driven from the Docusign flow — so
- * they return null.
+ * they return null. Finance threads (Xero / Jax) are read-only for now: the
+ * acting move (approve a bill, reconcile, pay) is reviewed in the provider, so
+ * they surface and triage but carry no inbox-originated dispatch yet.
  */
 export function suggestedAction(thread: {
   category: InboxCategory;
@@ -106,6 +112,8 @@ export function suggestedAction(thread: {
     case "video":
       return { action: "create_video_meeting", label: "Create meeting link" };
     case "signing":
+      return null;
+    case "finance":
       return null;
   }
 }
@@ -245,6 +253,7 @@ const FALLBACK_INTENT: Record<InboxCategory, string> = {
   booking: "Wants to schedule",
   video: "Video meeting",
   signing: "Signature pending",
+  finance: "Needs review",
 };
 
 export function fallbackSummary(input: ThreadDigestInput): ThreadSummary {

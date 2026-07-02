@@ -7,6 +7,103 @@ export type RoomDef = {
   href: string;
 };
 
+/**
+ * An interactive zone inside a room. The player walks into it and an iframe
+ * overlay appears. Coordinates are relative to the room's top-left corner in
+ * world pixels. In future this can be sourced from Tiled object layers.
+ */
+export type ZoneDef = {
+  id: string;
+  roomKey: string;
+  /** World-space rect. x/y are room-relative offsets from room top-left. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  url: string;
+  title: string;
+};
+
+/**
+ * Sentinel value in a ZoneDef url field.
+ * OfficeTabs replaces it at runtime with the user's actual Calendly scheduling URL
+ * (from user_metadata.calendly_scheduling_url, falling back to CALENDLY_DEFAULT_URL).
+ */
+export const ZONE_URL_CALENDLY = "{{calendly}}";
+export const CALENDLY_DEFAULT_URL = "https://calendly.com/fundexecs";
+
+export const IFRAME_ZONES: ZoneDef[] = [
+  {
+    id: "boardroom-calendly",
+    roomKey: "boardroom",
+    x: 48, y: 48, w: 288, h: 192,
+    url: ZONE_URL_CALENDLY,
+    title: "Schedule a Meeting",
+  },
+  {
+    id: "trading-market-data",
+    roomKey: "trading",
+    x: 48, y: 48, w: 288, h: 192,
+    url: "https://widget.finnhub.io/widgets/stocks/chart?symbol=SPY&watermarkColor=%231db954&backgroundColor=%230f172a&textColor=white",
+    title: "Market Data",
+  },
+  {
+    id: "reception-lp-portal",
+    roomKey: "reception",
+    x: 48, y: 48, w: 288, h: 192,
+    url: "{{lp-portal}}",
+    title: "LP Portal",
+  },
+];
+
+export type RoomAction = {
+  id: string;
+  label: string;
+  icon: string;
+  /** If set, opens this path on click. */
+  href?: string;
+  /** If set, dispatches this window CustomEvent on click (no detail). */
+  event?: string;
+};
+
+export const ROOM_ACTIONS: Record<string, RoomAction[]> = {
+  ceo: [
+    { id: "ask-earn", label: "Ask Earn",       icon: "✦", event: "earn:open-with-context" },
+    { id: "dashboard",label: "Dashboard",      icon: "⌂", href: "/dashboard" },
+  ],
+  boardroom: [
+    { id: "start-meeting", label: "Start Meeting", icon: "▶", event: "office:start-meeting" },
+    { id: "ask-earn",      label: "Ask Earn",       icon: "✦", event: "earn:open-with-context" },
+  ],
+  trading: [
+    { id: "view-deals",  label: "View Deals",     icon: "◈", href: "/dashboard/deals" },
+    { id: "add-deal",    label: "Add Deal",        icon: "+", href: "/dashboard/deals/new" },
+  ],
+  research: [
+    { id: "ask-earn",    label: "Research Brief",  icon: "✦", event: "earn:open-with-context" },
+    { id: "dashboard",   label: "Dashboard",       icon: "⌂", href: "/dashboard" },
+  ],
+  office: [
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  ],
+  ops: [
+    { id: "automation",  label: "Automation Hub",  icon: "⚙", href: "/dashboard/automation" },
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  ],
+  legal: [
+    { id: "capital",     label: "Capital",         icon: "◈", href: "/dashboard/capital" },
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  ],
+  marketing: [
+    { id: "marketing",   label: "Marketing Hub",   icon: "◉", href: "/dashboard/marketing" },
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  ],
+  reception: [
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+    { id: "office-tour", label: "Office Tour",     icon: "◎", event: "fx:open-tour" },
+  ],
+};
+
 export const TILE_SIZE = 32;
 export const ROOM_COLS = 12; // tiles wide
 export const ROOM_ROWS_COUNT = 9; // tiles tall

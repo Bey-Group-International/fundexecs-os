@@ -4,8 +4,8 @@ import { useRef, useState } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { AutosaveForm } from "./AutosaveForm";
 import { updateBrand } from "./actions";
+import { resizeLogo } from "./logo-resize";
 
-// Five curated brand-voice presets. The stored value is the label string.
 const VOICE_PRESETS = [
   "Institutional & precise",
   "Visionary & bold",
@@ -16,7 +16,6 @@ const VOICE_PRESETS = [
 
 const DARK = "#0B0A08";
 const WHITE = "#FFFFFF";
-const MAX_LOGO_BYTES = 600 * 1024;
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -24,7 +23,6 @@ function normalizeHex(value: string): string {
   let v = value.trim();
   if (!v) return "";
   if (!v.startsWith("#")) v = `#${v}`;
-  // Expand shorthand (#abc -> #aabbcc).
   if (/^#[0-9a-fA-F]{3}$/.test(v)) {
     v = `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`;
   }
@@ -35,7 +33,6 @@ function isValidHex(value: string): boolean {
   return HEX_RE.test(normalizeHex(value));
 }
 
-// Relative luminance per WCAG 2.x.
 function luminance(hex: string): number {
   const h = normalizeHex(hex).slice(1);
   const rgb = [0, 2, 4].map((i) => {
@@ -92,11 +89,8 @@ export function BrandStudio({
   firmName,
 }: BrandStudioProps) {
   const [hasSavedColor, setHasSavedColor] = useState(isValidHex(brandColor));
-  // When no brand color is saved, default the picker to black so the UI state
-  // is clearly "not set" rather than misleading the user with a grey swatch.
   const initialColor = isValidHex(brandColor) ? normalizeHex(brandColor) : "#000000";
   const [color, setColor] = useState(initialColor);
-  const [hexText, setHexText] = useState(isValidHex(brandColor) ? normalizeHex(brandColor) : "");
   const [palette, setPalette] = useState<string[]>(
     brandPalette.map(normalizeHex).filter(isValidHex),
   );
@@ -108,64 +102,43 @@ export function BrandStudio({
   );
   const [taglineText, setTaglineText] = useState(tagline ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Debounce timer for palette picker — adds after picker is idle for 300ms.
+  const paletteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keep the hex text field in sync when the picker changes the color.
   function pickColor(value: string) {
     const v = normalizeHex(value);
     setColor(v);
-    setHexText(v);
     setHasSavedColor(true);
   }
 
-  function onHexTextChange(value: string) {
-    setHexText(value);
-    if (isValidHex(value)) {
-      setColor(normalizeHex(value));
-      setHasSavedColor(true);
-    }
-  }
-
-  function addToPalette() {
-    const v = normalizeHex(paletteDraft);
+  function addToPalette(hex: string) {
+    const v = normalizeHex(hex);
     if (!isValidHex(v)) return;
     setPalette((prev) => (prev.includes(v) ? prev : [...prev, v]));
   }
 
   function removeFromPalette(hex: string) {
     setPalette((prev) => prev.filter((c) => c !== hex));
+    // Palette hidden input updates synchronously in React but emits no native
+    // event, so we manually submit the form to persist the removal.
+    setTimeout(() => formRef.current?.requestSubmit(), 50);
+  }
+
+  function onPalettePickerChange(value: string) {
+    setPaletteDraft(value);
+    // Debounce: add after 300ms of inactivity (fires when picker closes).
+    if (paletteTimer.current) clearTimeout(paletteTimer.current);
+    paletteTimer.current = setTimeout(() => addToPalette(value), 300);
   }
 
   async function onLogoFile(file: File) {
     setLogoError("");
-    const url = URL.createObjectURL(file);
-    try {
-      const img = await loadImage(url);
-      const longest = Math.max(img.width, img.height);
-      const scale = longest > 512 ? 512 / longest : 1;
-      const w = Math.max(1, Math.round(img.width * scale));
-      const h = Math.max(1, Math.round(img.height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        setLogoError("Could not process this image. Try another file.");
-        return;
-      }
-      ctx.drawImage(img, 0, 0, w, h);
-      let dataUrl = canvas.toDataURL("image/webp", 0.85);
-      if (!dataUrl.startsWith("data:image/webp")) {
-        dataUrl = canvas.toDataURL("image/png");
-      }
-      if (estimateBytes(dataUrl) > MAX_LOGO_BYTES) {
-        setLogoError("That image is too large after compression (>600KB). Try a smaller or simpler image.");
-        return;
-      }
-      setLogo(dataUrl);
-    } catch {
-      setLogoError("Could not read that file. Make sure it's a valid image.");
-    } finally {
-      URL.revokeObjectURL(url);
+    const result = await resizeLogo(file);
+    if ("error" in result) {
+      setLogoError(result.error);
+    } else {
+      setLogo(result.dataUrl);
     }
   }
 
@@ -180,11 +153,8 @@ export function BrandStudio({
   const initial = (firmName || "F").charAt(0).toUpperCase();
 
   return (
-    <AutosaveForm action={updateBrand} className="grid max-w-2xl gap-6 pt-5">
-      {/* Hidden fields submitted to updateBrand */}
-      {/* Only submit brand_color when a color has been explicitly saved or chosen
-          so the default picker state never overwrites a null DB value. */}
-      <input type="hidden" name="brand_color" value={hasSavedColor || hexText ? (isValidHex(color) ? color : "") : ""} />
+    <AutosaveForm formRef={formRef} action={updateBrand} className="grid max-w-2xl gap-6 pt-5">
+      <input type="hidden" name="brand_color" value={hasSavedColor ? (isValidHex(color) ? color : "") : ""} />
       <input type="hidden" name="brand_palette" value={palette.join(",")} />
       <input type="hidden" name="logo_url" value={logo} />
       <input type="hidden" name="brand_voice" value={voice} />
@@ -212,36 +182,29 @@ export function BrandStudio({
             onChange={(e) => pickColor(e.target.value)}
             className="h-10 w-12 cursor-pointer rounded-md border border-line bg-surface-0 p-1"
           />
-          <div className="flex flex-col gap-1">
-            <input
-              value={hexText}
-              onChange={(e) => onHexTextChange(e.target.value)}
-              placeholder="#d4af6a"
-              spellCheck={false}
-              className={`${inputClass} w-32 font-mono`}
-            />
-            {!hasSavedColor && (
-              <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                Default — not saved
-              </span>
-            )}
-          </div>
+          {hasSavedColor && isValidHex(color) ? (
+            <span className="select-all font-mono text-xs text-fg-secondary">{color}</span>
+          ) : (
+            <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              Not set — open the picker
+            </span>
+          )}
           <div className="flex flex-wrap gap-2">
             <ContrastBadge label="on dark" ratio={darkRatio} />
             <ContrastBadge label="on white" ratio={whiteRatio} />
           </div>
         </div>
-        {isValidHex(color) && (whiteRatio < 4.5 || darkRatio < 4.5) ? (
+        {isValidHex(color) && hasSavedColor && (whiteRatio < 4.5 || darkRatio < 4.5) ? (
           <p className="text-[11px] text-status-warning">
             Fails AA on{" "}
             {[darkRatio < 4.5 && "dark backgrounds", whiteRatio < 4.5 && "white backgrounds"]
               .filter(Boolean)
               .join(" & ")}{" "}
-            — try <span className="font-mono">#a07840</span> or a darker shade to reach ≥4.5:1.
+            — try a darker shade to reach ≥4.5:1.
           </p>
         ) : (
           <p className="text-[11px] text-fg-muted">
-            Readability scores — WCAG AA requires ≥4.5:1 so your brand color stays legible on LP materials. Hover a badge for details.
+            WCAG AA readability scores — hover a badge for details.
           </p>
         )}
       </div>
@@ -249,47 +212,44 @@ export function BrandStudio({
       {/* Palette */}
       <div className="flex flex-col gap-2 text-sm">
         <span className="text-fg-secondary">Palette</span>
-        <div className="flex items-center gap-3">
+        <p className="text-[11px] text-fg-muted">
+          Open the picker and choose a color — it&apos;s added instantly.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
           <input
             type="color"
-            aria-label="Pick palette color"
+            aria-label="Pick a palette color"
             value={isValidHex(paletteDraft) ? normalizeHex(paletteDraft) : "#000000"}
-            onChange={(e) => setPaletteDraft(e.target.value)}
+            onChange={(e) => onPalettePickerChange(e.target.value)}
             className="h-10 w-12 cursor-pointer rounded-md border border-line bg-surface-0 p-1"
           />
-          <button
-            type="button"
-            onClick={addToPalette}
-            className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-2 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20"
-          >
-            + Add to palette
-          </button>
+          {palette.map((c) => (
+            <div key={c} className="group relative">
+              <button
+                type="button"
+                title={`Set ${c} as primary`}
+                onClick={() => pickColor(c)}
+                className="h-10 w-10 rounded-md border-2 border-transparent transition hover:border-gold-500/60"
+                style={{ backgroundColor: c }}
+              />
+              <button
+                type="button"
+                aria-label={`Remove ${c}`}
+                onClick={() => removeFromPalette(c)}
+                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-line bg-surface-2 text-[10px] leading-none text-fg-secondary opacity-0 transition group-hover:opacity-100 hover:bg-status-danger/20 hover:text-status-danger"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {palette.length === 0 && (
+            <p className="text-xs text-fg-muted">No colors yet.</p>
+          )}
         </div>
-        {palette.length ? (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {palette.map((c) => (
-              <div key={c} className="group relative">
-                <button
-                  type="button"
-                  title={`Set ${c} as primary`}
-                  onClick={() => pickColor(c)}
-                  className="h-9 w-9 rounded-md border border-line"
-                  style={{ backgroundColor: c }}
-                />
-                <button
-                  type="button"
-                  aria-label={`Remove ${c}`}
-                  onClick={() => removeFromPalette(c)}
-                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-line bg-surface-2 text-[10px] leading-none text-fg-secondary transition hover:bg-status-danger/20 hover:text-status-danger"
-                >
-                  ×
-                </button>
-                <span className="mt-1 block text-center font-mono text-[9px] text-fg-muted">{c}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-fg-muted">No swatches yet. Pick a color and add it.</p>
+        {palette.length > 0 && (
+          <p className="text-[11px] text-fg-muted">
+            Click a swatch to set it as primary. Hover to remove.
+          </p>
         )}
       </div>
 
@@ -313,13 +273,17 @@ export function BrandStudio({
               onClick={removeLogo}
               className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:border-status-danger/40 hover:text-status-danger"
             >
-              Remove logo
+              Remove
             </button>
           ) : null}
         </div>
+        {logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={`${firmName} logo`} className="mt-1 h-14 w-14 rounded-lg border border-line object-contain bg-surface-1 p-1" />
+        ) : null}
         {logoError ? <p className="text-xs text-status-danger">{logoError}</p> : null}
         <p className="text-[11px] text-fg-muted">
-          Images are downscaled to 512px and stored inline — no upload server needed.
+          Images are downscaled to 512px and stored inline.
         </p>
       </div>
 
@@ -355,7 +319,7 @@ export function BrandStudio({
           <div className="flex items-center gap-3">
             {logo ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logo} alt="" className="h-12 w-12 shrink-0 rounded-lg object-contain" />
+              <img src={logo} alt={`${firmName} logo`} className="h-12 w-12 shrink-0 rounded-lg object-contain" />
             ) : (
               <span
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg font-display text-xl font-semibold"
@@ -400,24 +364,19 @@ export function BrandStudio({
           ) : null}
         </div>
       </div>
+
+      {/* Save */}
+      <div className="flex items-center gap-3 border-t border-line pt-4">
+        <button
+          type="submit"
+          className="rounded-md bg-gold-500 px-4 py-2 text-sm font-semibold text-surface-0 transition hover:opacity-90 active:opacity-75"
+        >
+          Save changes
+        </button>
+        <p className="text-[11px] text-fg-muted">
+          Changes also auto-save as you type.
+        </p>
+      </div>
     </AutosaveForm>
   );
-}
-
-// --- helpers ---------------------------------------------------------------
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-// Approximate decoded byte size of a base64 data URL.
-function estimateBytes(dataUrl: string): number {
-  const i = dataUrl.indexOf(",");
-  const b64 = i >= 0 ? dataUrl.slice(i + 1) : dataUrl;
-  return Math.floor((b64.length * 3) / 4);
 }

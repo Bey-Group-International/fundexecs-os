@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { ViewerGate } from "./ViewerGate";
+import type { GateConfig } from "./ViewerGate";
+import { trackDwell } from "@/components/build/materials-actions";
+
+export type { GateConfig };
 
 export interface ViewerOrg {
   name: string;
@@ -62,12 +67,14 @@ export interface ViewerSection {
 
 interface Props {
   token: string;
+  shareId: string;
   org: ViewerOrg;
   blended: ViewerTrackRecord;
   thesis: ViewerThesis | null;
   team: ViewerTeamMember[];
   entities: ViewerEntity[];
   docSections: ViewerSection[];
+  gateConfig: GateConfig;
 }
 
 function compactUsd(n: number | null): string | null {
@@ -97,22 +104,159 @@ type NavItem =
   | { key: "structure"; label: string }
   | { key: string; label: string; docs: ViewerDoc[] };
 
-export function DataRoomViewer({ token, org, blended, thesis, team, entities, docSections }: Props) {
-  const accent = org.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color) ? org.brand_color : "#D4AF6A";
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
-  // Build nav: always show build-backed sections if they have data, then doc sections
-  const nav: NavItem[] = [];
-  nav.push({ key: "overview", label: "Overview" });
-  if (blended.dealCount > 0) nav.push({ key: "track_record", label: "Track Record" });
-  if (thesis) nav.push({ key: "thesis", label: "Investment Thesis" });
-  if (team.length > 0) nav.push({ key: "team", label: "Team" });
-  if (entities.length > 0) nav.push({ key: "structure", label: "Structure" });
-  for (const s of docSections) {
-    if (s.docs.length > 0) nav.push({ key: s.key, label: s.label, docs: s.docs } as NavItem);
-  }
+export function DataRoomViewer({
+  token,
+  shareId,
+  org,
+  blended,
+  thesis,
+  team,
+  entities,
+  docSections,
+  gateConfig,
+}: Props) {
+  const accent =
+    org.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color)
+      ? org.brand_color
+      : "#D4AF6A";
+
+  // Gate state — false until ViewerGate calls onPass.
+  const [gatePassed, setGatePassed] = useState(false);
+  const [viewerEmail, setViewerEmail] = useState<string | null>(null);
+
+  // Stable session ID for this page load.
+  const sessionId = useMemo(() => crypto.randomUUID(), []);
+
+  // If no gates are required, pass immediately.
+  const noGates =
+    !gateConfig.requireEmail && !gateConfig.requireNda && !gateConfig.passwordProtected;
+
+  useEffect(() => {
+    if (noGates && !gatePassed) {
+      setGatePassed(true);
+    }
+  }, [noGates, gatePassed]);
+
+  // Build nav
+  const nav: NavItem[] = useMemo(() => {
+    const items: NavItem[] = [];
+    items.push({ key: "overview", label: "Overview" });
+    if (blended.dealCount > 0) items.push({ key: "track_record", label: "Track Record" });
+    if (thesis) items.push({ key: "thesis", label: "Investment Thesis" });
+    if (team.length > 0) items.push({ key: "team", label: "Team" });
+    if (entities.length > 0) items.push({ key: "structure", label: "Structure" });
+    for (const s of docSections) {
+      if (s.docs.length > 0) items.push({ key: s.key, label: s.label, docs: s.docs } as NavItem);
+    }
+    return items;
+  }, [blended.dealCount, thesis, team.length, entities.length, docSections]);
 
   const [selected, setSelected] = useState<string>(nav[0]?.key ?? "overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Dwell tracking
+  // ---------------------------------------------------------------------------
+
+  const dwellStart = useRef<number>(Date.now());
+  const dwellSection = useRef<string>(selected);
+  // Map section key → first document id in that section (for analytics).
+  const sectionDocId = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const s of docSections) {
+      m.set(s.key, s.docs[0]?.id ?? null);
+    }
+    return m;
+  }, [docSections]);
+
+  const fireDwell = useCallback(
+    (sectionKey: string, startMs: number) => {
+      const duration = Math.round((Date.now() - startMs) / 1000);
+      if (duration < 3) return; // Skip accidental hovers
+
+      const docId = sectionDocId.get(sectionKey) ?? null;
+      const fd = new FormData();
+      fd.set("share_id", shareId);
+      if (docId) fd.set("document_id", docId);
+      fd.set("duration_seconds", String(duration));
+      fd.set("session_id", sessionId);
+      if (viewerEmail) fd.set("viewer_email", viewerEmail);
+
+      void trackDwell(fd);
+    },
+    [shareId, sessionId, viewerEmail, sectionDocId],
+  );
+
+  // Fire dwell on section change.
+  const handleSelect = useCallback(
+    (key: string) => {
+      if (key === selected) return;
+      fireDwell(dwellSection.current, dwellStart.current);
+      dwellSection.current = key;
+      dwellStart.current = Date.now();
+      setSelected(key);
+      setSidebarOpen(false);
+    },
+    [selected, fireDwell],
+  );
+
+  // Fire dwell on page unload.
+  useEffect(() => {
+    if (!gatePassed) return;
+    const handleUnload = () => fireDwell(dwellSection.current, dwellStart.current);
+    window.addEventListener("pagehide", handleUnload);
+    return () => window.removeEventListener("pagehide", handleUnload);
+  }, [gatePassed, fireDwell]);
+
+  // Reset dwell timer when gate is passed.
+  useEffect(() => {
+    if (gatePassed) {
+      dwellStart.current = Date.now();
+    }
+  }, [gatePassed]);
+
+  // ---------------------------------------------------------------------------
+  // Gate overlay — shown until all gates pass.
+  // ---------------------------------------------------------------------------
+
+  if (!gatePassed) {
+    return (
+      <>
+        {/* Blurred background preview */}
+        <div className="flex min-h-screen flex-col bg-surface-0 text-fg-primary select-none pointer-events-none blur-sm opacity-40" aria-hidden>
+          <header className="flex shrink-0 items-center gap-4 border-b border-line px-4 py-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-display text-sm font-semibold text-surface-0"
+                style={{ backgroundColor: accent }}
+              >
+                {org.name.charAt(0).toUpperCase()}
+              </span>
+              <p className="truncate font-display text-sm font-semibold text-fg-primary">{org.name}</p>
+            </div>
+          </header>
+        </div>
+        {/* Gate modal */}
+        <ViewerGate
+          token={token}
+          shareId={shareId}
+          config={gateConfig}
+          onPass={(email) => {
+            setViewerEmail(email);
+            setGatePassed(true);
+          }}
+        />
+      </>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Main viewer
+  // ---------------------------------------------------------------------------
 
   const current = nav.find((n) => n.key === selected) ?? nav[0];
 
@@ -188,7 +332,7 @@ export function DataRoomViewer({ token, org, blended, thesis, team, entities, do
                   <button
                     key={item.key}
                     type="button"
-                    onClick={() => { setSelected(item.key); setSidebarOpen(false); }}
+                    onClick={() => handleSelect(item.key)}
                     className={`
                       w-full rounded-lg px-3 py-2 text-left text-sm transition
                       ${active
@@ -208,6 +352,9 @@ export function DataRoomViewer({ token, org, blended, thesis, team, entities, do
           </div>
 
           <div className="shrink-0 border-t border-line px-4 py-3">
+            {viewerEmail ? (
+              <p className="truncate font-mono text-[9px] text-fg-muted">{viewerEmail}</p>
+            ) : null}
             <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
               FundExecs OS
             </p>
@@ -226,6 +373,7 @@ export function DataRoomViewer({ token, org, blended, thesis, team, entities, do
             docSections={docSections}
             token={token}
             accent={accent}
+            current={current}
           />
         </main>
       </div>
@@ -253,6 +401,7 @@ function ContentPanel({
   docSections: ViewerSection[];
   token: string;
   accent: string;
+  current: NavItem;
 }) {
   if (selected === "overview") {
     return (

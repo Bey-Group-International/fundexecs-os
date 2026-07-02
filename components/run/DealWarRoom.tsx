@@ -11,6 +11,9 @@ import {
   addUnderwriting,
   recordIcDecision,
 } from "@/app/(app)/deal/[id]/actions";
+import { DealCompsPanel } from "@/components/run/DealCompsPanel";
+import { ScenarioComparisonTable } from "@/components/run/ScenarioComparisonTable";
+import { SecondaryLiquidityPanel } from "@/components/run/SecondaryLiquidityPanel";
 
 // --- Small primitives ------------------------------------------------------
 function Ring({ value, size = 72 }: { value: number; size?: number }) {
@@ -481,6 +484,19 @@ export function DealWarRoom({ data }: { data: WarRoom }) {
         <Heatmap data={data} />
       </div>
       <Diligence data={data} />
+      {/* ── PitchBook-style comparable transactions ─────────────────── */}
+      <DealCompsPanel comps={data.comps} />
+      {/* ── ForgeGlobal-style secondary market liquidity ────────────── */}
+      <SecondaryLiquidityPanel positions={[]} />
+      {/* ── Forcastr-style multi-scenario exit comparison ───────────── */}
+      {data.conviction.baseCase && (
+        <ScenarioComparisonTable
+          cost={(data.conviction.baseCase.model as Record<string, number> | null)?.cost_basis ?? data.conviction.baseCase.equity_required ?? 0}
+          currentValue={(data.conviction.baseCase.model as Record<string, number> | null)?.current_value ?? 0}
+          paidIn={(data.conviction.baseCase.model as Record<string, number> | null)?.paid_in ?? data.conviction.baseCase.equity_required ?? 0}
+          holdYears={(data.conviction.baseCase.model as Record<string, number> | null)?.hold_years ?? 5}
+        />
+      )}
     </div>
   );
 }

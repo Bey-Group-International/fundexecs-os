@@ -93,10 +93,26 @@ export type InboxChannel =
   | "docusign"
   | "ecosystem"
   | "deal_share"
-  | "radar_digest";
-export type InboxCategory = "messaging" | "booking" | "video" | "signing";
+  | "radar_digest"
+  | "xero"
+  | "jax";
+export type InboxCategory = "messaging" | "booking" | "video" | "signing" | "finance";
 export type InboxThreadStatus = "open" | "snoozed" | "done";
 export type InboxDirection = "inbound" | "outbound";
+
+// DocuSign envelopes (migration 20260702000008_docusign_envelopes).
+export type DocusignEnvelope = {
+  id: string;
+  organization_id: string;
+  envelope_id: string;
+  template_id: string | null;
+  signer_name: string | null;
+  signer_email: string | null;
+  subject: string | null;
+  status: string;
+  sent_at: string;
+  completed_at: string | null;
+};
 
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
@@ -675,6 +691,26 @@ export type Document = {
   created_at: string;
 };
 
+export type DocumentVersion = {
+  id: string;
+  document_id: string;
+  organization_id: string;
+  content: string | null;
+  name: string;
+  saved_by: string | null;
+  created_at: string;
+};
+
+export type NdaSignature = {
+  id: string;
+  share_id: string;
+  organization_id: string;
+  signer_name: string;
+  signer_email: string | null;
+  signed_at: string;
+  ip_hint: string | null;
+};
+
 export type DataRoomShare = {
   id: string;
   organization_id: string;
@@ -684,6 +720,14 @@ export type DataRoomShare = {
   revoked_at: string | null;
   created_by: string | null;
   created_at: string;
+  // Phase 1 gate fields
+  require_email: boolean;
+  require_nda: boolean;
+  nda_text: string | null;
+  password_hash: string | null;
+  // LP notification fields
+  recipient_email: string | null;
+  notify_on_open: boolean;
 };
 
 export type DataRoomView = {
@@ -693,6 +737,10 @@ export type DataRoomView = {
   document_id: string | null;
   kind: "room" | "document";
   created_at: string;
+  // Phase 2 engagement fields
+  viewer_email: string | null;
+  duration_seconds: number | null;
+  session_id: string | null;
 };
 
 export type InvestorPortalShare = {
@@ -724,6 +772,32 @@ export type ValuationMark = {
   note: string | null;
   created_by: string | null;
   created_at: string;
+};
+
+export type Canvas = {
+  id: string;
+  organization_id: string;
+  name: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type CanvasElement = {
+  id: string;
+  canvas_id: string;
+  organization_id: string;
+  type: "sticky" | "text" | "shape" | "arrow" | "image";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  content: string;
+  color: string;
+  from_id?: string | null;
+  to_id?: string | null;
+  shape_kind?: string | null;
+  created_by: string | null;
+  updated_at: string;
 };
 
 export type Prompt = {
@@ -1710,6 +1784,7 @@ export type Database = {
       deals: TableShape<Deal>;
       assets: TableShape<Asset>;
       documents: TableShape<Document>;
+      document_versions: TableShape<DocumentVersion>;
       underwritings: TableShape<Underwriting>;
       diligence_items: TableShape<DiligenceItem>;
       ic_decisions: TableShape<IcDecision>;
@@ -1807,6 +1882,10 @@ export type Database = {
       workflow_templates: TableShape<WorkflowTemplate>;
       synthesis_queue: TableShape<SynthesisQueue>;
       annotations: TableShape<Annotation>;
+      nda_signatures: TableShape<NdaSignature>;
+      docusign_envelopes: TableShape<DocusignEnvelope>;
+      canvases: TableShape<Canvas>;
+      canvas_elements: TableShape<CanvasElement>;
     };
     Views: Record<string, never>;
     Functions: {

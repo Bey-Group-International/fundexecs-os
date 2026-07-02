@@ -8,6 +8,7 @@ import { gmailModule } from "./gmail";
 import { docusignModule } from "./docusign";
 import { slackModule } from "./slack";
 import { INBOX_MODULES } from "./inbox";
+import { FINANCE_MODULES } from "./finance";
 
 // slackModule is appended last so, as the final module to claim the "slack"
 // channel, it supersedes the inbox placeholder for channel-pinned dispatch (the
@@ -16,5 +17,6 @@ export const ADAPTERS: AdapterModule[] = [
   gmailModule,
   docusignModule,
   ...INBOX_MODULES,
+  ...FINANCE_MODULES,
   slackModule,
 ];

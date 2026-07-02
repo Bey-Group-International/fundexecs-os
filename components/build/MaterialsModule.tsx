@@ -17,6 +17,7 @@ import { blendTrackRecord } from "@/lib/track-record";
 import { computeBuildReadiness } from "@/lib/build-readiness";
 import { DATA_ROOM_SECTIONS, summarizeDataRoom } from "@/lib/data-room";
 import { SectionHighlighter } from "@/components/build/SectionHighlighter";
+import { scoreDocument } from "@/lib/document-quality";
 import { PrintButton } from "./PrintButton";
 import { ShareControls } from "./ShareControls";
 import { CoverageAccordion } from "./CoverageAccordion";
@@ -190,15 +191,24 @@ export async function MaterialsModule() {
     ready: item.ready,
     docCount: item.docCount,
     viaBuild: item.viaBuild,
-    docs: (docsBySection.get(item.key) ?? []).map((d) => ({
-      id: d.id,
-      name: d.name,
-      storage_key: d.storage_key ?? null,
-      status: d.status ?? "ready",
-    })),
+    docs: (docsBySection.get(item.key) ?? []).map((d) => {
+      const q = d.content ? scoreDocument(d.name, d.doc_type ?? null, d.content) : null;
+      return {
+        id: d.id,
+        name: d.name,
+        storage_key: d.storage_key ?? null,
+        status: d.status ?? "ready",
+        qualityScore: q?.score ?? null,
+        qualityLevel: q?.level ?? null,
+      };
+    }),
     suggestion: item.suggestion,
     weight: item.weight,
   }));
+
+  const institutionalCount = accordionSections
+    .flatMap((s) => s.docs)
+    .filter((d) => d.qualityLevel === "Institutional").length;
 
   const nextSuggestion = summary.suggestions[0]
     ? { key: summary.suggestions[0].key, label: summary.suggestions[0].label, suggestion: summary.suggestions[0].suggestion }
@@ -252,7 +262,7 @@ export async function MaterialsModule() {
 
         {/* Accordion sections */}
         <div className="flex flex-col gap-2 p-4">
-          <CoverageAccordion sections={accordionSections} nextSuggestion={nextSuggestion} />
+          <CoverageAccordion sections={accordionSections} nextSuggestion={nextSuggestion} institutionalCount={institutionalCount} />
         </div>
       </div>
 

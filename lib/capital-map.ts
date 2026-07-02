@@ -31,6 +31,13 @@ type Client = SupabaseClient<Database>;
 
 export type Temperature = "cold" | "warm" | "active" | "committed";
 
+export const TEMP_STYLE: Record<Temperature, { dot: string; label: string }> = {
+  cold: { dot: "#6b7280", label: "Cold" },
+  warm: { dot: "#e8a33d", label: "Warm" },
+  active: { dot: "#5b9bd5", label: "Active" },
+  committed: { dot: "#67c587", label: "Committed" },
+};
+
 export interface ThesisFit {
   // 0..100 — how well this investor matches the active thesis.
   score: number;
