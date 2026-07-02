@@ -742,6 +742,8 @@ export type DataRoomShare = {
   // LP notification fields
   recipient_email: string | null;
   notify_on_open: boolean;
+  // Selective sharing — null = full data room, array = only these section keys
+  allowed_sections: string[] | null;
 };
 
 export type DataRoomView = {

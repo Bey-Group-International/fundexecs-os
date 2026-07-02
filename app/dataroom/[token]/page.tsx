@@ -118,9 +118,12 @@ export default async function PublicDataRoom({ params }: { params: { token: stri
   }
 
   // Build ordered section list (only sections that have ready docs).
+  // If the share has an allowed_sections whitelist, filter to only those keys.
+  const allowedSections = (share as { allowed_sections?: string[] | null }).allowed_sections ?? null;
   const docSections: ViewerSection[] = DATA_ROOM_SECTIONS
     .map((s) => ({ key: s.key, label: s.label, docs: docsBySection.get(s.key) ?? [] }))
-    .filter((s) => s.docs.length > 0);
+    .filter((s) => s.docs.length > 0)
+    .filter((s) => !allowedSections || allowedSections.includes(s.key));
 
   // Serialize for client component.
   const viewerOrg: ViewerOrg = {

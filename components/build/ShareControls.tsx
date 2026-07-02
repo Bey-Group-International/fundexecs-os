@@ -4,6 +4,25 @@ import { useEffect, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { createShare, revokeShare } from "./materials-actions";
 
+// Section keys the GP can selectively expose — matches DATA_ROOM_SECTIONS keys.
+const ALL_SECTIONS: { key: string; label: string }[] = [
+  { key: "overview", label: "Fund Overview" },
+  { key: "marketing", label: "Marketing" },
+  { key: "thesis", label: "Investment Thesis" },
+  { key: "track_record", label: "Track Record" },
+  { key: "portfolio", label: "Portfolio" },
+  { key: "team", label: "Team" },
+  { key: "fund_terms", label: "Fund Terms" },
+  { key: "legal", label: "Legal" },
+  { key: "financials", label: "Financials" },
+  { key: "compliance", label: "Compliance" },
+  { key: "operations", label: "Operations" },
+  { key: "esg", label: "ESG" },
+  { key: "risk", label: "Risk" },
+  { key: "diligence", label: "Diligence" },
+  { key: "references", label: "References" },
+];
+
 export interface ShareView {
   id: string;
   token: string;
@@ -11,6 +30,7 @@ export interface ShareView {
   expires_at: string | null;
   revoked_at: string | null;
   created_at: string | null;
+  allowed_sections: string[] | null;
 }
 
 function status(s: ShareView): { label: string; tone: string } {
@@ -75,10 +95,17 @@ function ShareRow({ share }: { share: ShareView }) {
           </div>
         ) : null}
       </div>
-      {/* URL preview strip */}
+      {/* URL preview strip + section scope */}
       {live ? (
-        <div className="border-t border-line/50 bg-surface-0 px-4 py-1.5">
+        <div className="border-t border-line/50 bg-surface-0 px-4 py-2">
           <p className="truncate font-mono text-[9px] text-fg-muted">{url}</p>
+          {share.allowed_sections && share.allowed_sections.length > 0 ? (
+            <p className="mt-1 font-mono text-[9px] text-fg-muted/70">
+              Sections: {share.allowed_sections.join(", ")}
+            </p>
+          ) : (
+            <p className="mt-1 font-mono text-[9px] text-fg-muted/50">Full data room</p>
+          )}
         </div>
       ) : null}
     </div>
@@ -92,15 +119,29 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
   const [showNdaText, setShowNdaText] = useState(false);
   const [requirePassword, setRequirePassword] = useState(false);
   const [notifyOnOpen, setNotifyOnOpen] = useState(false);
+  const [limitSections, setLimitSections] = useState(false);
+  const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set());
+
+  function toggleSection(key: string) {
+    setSelectedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   return (
     <form
-      action={(fd) =>
+      action={(fd) => {
+        if (limitSections && selectedSections.size > 0) {
+          fd.set("allowed_sections", JSON.stringify([...selectedSections]));
+        }
         startTransition(async () => {
           await createShare(fd);
           onDone();
-        })
-      }
+        });
+      }}
       className="mb-4 rounded-xl border border-gold-500/20 bg-surface-1 p-4"
     >
       {/* Basic fields */}
@@ -205,6 +246,41 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
         </label>
       </div>
 
+      {/* Section scope */}
+      <div className="mt-3 space-y-2 rounded-lg border border-line bg-surface-0 p-3">
+        <p className="mb-2 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Scope</p>
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={limitSections}
+            onChange={(e) => {
+              setLimitSections(e.target.checked);
+              if (!e.target.checked) setSelectedSections(new Set());
+            }}
+            className="h-3.5 w-3.5 accent-gold-400"
+          />
+          <span className="text-sm text-fg-secondary">Limit to specific sections</span>
+        </label>
+        {limitSections && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {ALL_SECTIONS.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => toggleSection(s.key)}
+                className={`rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition ${
+                  selectedSections.has(s.key)
+                    ? "border-gold-500/60 bg-gold-500/15 text-gold-300"
+                    : "border-line text-fg-muted hover:border-gold-500/30 hover:text-fg-secondary"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="mt-3 flex items-center gap-3">
         <button
           disabled={pending}
@@ -212,7 +288,11 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
         >
           {pending ? "Creating…" : "Create link"}
         </button>
-        <p className="text-xs text-fg-muted">Anyone with the link can view — no login required.</p>
+        <p className="text-xs text-fg-muted">
+          {limitSections && selectedSections.size > 0
+            ? `${selectedSections.size} section${selectedSections.size > 1 ? "s" : ""} will be visible`
+            : "Full data room — anyone with the link can view"}
+        </p>
       </div>
     </form>
   );
