@@ -35,6 +35,15 @@ export const PingSchema = z.object({
 });
 export type Ping = z.infer<typeof PingSchema>;
 
+// Emotes — allowlisted emoji reactions broadcast to the room
+export const ALLOWED_EMOTES = ["👋", "👍", "❤️", "🎉"] as const;
+
+export const EmoteSchema = z.object({
+  type: z.literal("emote"),
+  emoji: z.string(),
+});
+export type Emote = z.infer<typeof EmoteSchema>;
+
 // Extended below with RTC variants after those schemas are defined
 
 // Server → Client messages
@@ -72,6 +81,13 @@ export const PlayerStateSchema = z.object({
   seq: z.number(),
 });
 export type PlayerState = z.infer<typeof PlayerStateSchema>;
+
+export const PlayerEmoteSchema = z.object({
+  type: z.literal("player.emote"),
+  playerId: z.string(),
+  emoji: z.string(),
+});
+export type PlayerEmote = z.infer<typeof PlayerEmoteSchema>;
 
 export const PongSchema = z.object({
   type: z.literal("pong"),
@@ -262,6 +278,7 @@ export type RoomOccupancy = z.infer<typeof RoomOccupancySchema>;
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   PlayerMoveSchema,
   PingSchema,
+  EmoteSchema,
   RtcOfferClientSchema,
   RtcAnswerClientSchema,
   RtcIceClientSchema,
@@ -282,6 +299,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   PlayerJoinedSchema,
   PlayerLeftSchema,
   PlayerStateSchema,
+  PlayerEmoteSchema,
   WorldSnapshotSchema,
   PongSchema,
   BubbleJoinSchema,

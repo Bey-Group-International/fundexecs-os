@@ -1,4 +1,5 @@
 import type { ClientMessage, ServerMessage } from "./messages";
+import type { ALLOWED_EMOTES } from "./messages";
 
 type MessageHandler = (msg: ServerMessage) => void;
 
@@ -43,6 +44,10 @@ export class VirtualOfficeSocket {
 
   sendMove(dx: number, dy: number, seq: number): void {
     this._send({ type: "player.move", dx, dy, seq });
+  }
+
+  sendEmote(emoji: (typeof ALLOWED_EMOTES)[number]): void {
+    this._send({ type: "emote", emoji });
   }
 
   sendPing(): void {

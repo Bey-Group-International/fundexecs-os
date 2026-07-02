@@ -7,6 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import { ExecutiveHQ } from "./ExecutiveHQ";
 import { executiveCharacters } from "@/components/characters/characterConfig";
 import { MeetingModal } from "@/components/virtual-office/MeetingModal";
+import {
+  CharacterPicker,
+  CHARACTER_STORAGE_KEY,
+  useCharacterSelection,
+} from "@/components/virtual-office/CharacterPicker";
 
 // Load Phaser only in the browser
 const VirtualOfficeGame = dynamic(
@@ -22,7 +27,8 @@ const HQ_TO_VIRTUAL: Record<string, string> = { investor: "office" };
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("hq");
   const [token, setToken] = useState<string | undefined>(undefined);
-  const [characterId, setCharacterId] = useState<string | undefined>(undefined);
+  const [characterId, setCharacterId] = useCharacterSelection();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [displayName, setDisplayName] = useState<string>("You");
   const [teleportTarget, setTeleportTarget] = useState<string | null>(null);
   const [occupancy, setOccupancy] = useState<Record<string, number>>({});
@@ -44,7 +50,10 @@ export function OfficeTabs() {
       const t = data.session?.access_token;
       if (t) setToken(t);
       const meta = data.session?.user?.user_metadata;
-      if (meta?.character_id) setCharacterId(meta.character_id as string);
+      // Seed from account metadata only when the user hasn't picked locally.
+      if (meta?.character_id && !window.localStorage.getItem(CHARACTER_STORAGE_KEY)) {
+        setCharacterId(meta.character_id as string);
+      }
       if (meta?.display_name) setDisplayName(meta.display_name as string);
       // Populate dynamic zone URLs from integration metadata
       const overrides: Record<string, string> = {};
@@ -53,7 +62,7 @@ export function OfficeTabs() {
       if (Object.keys(overrides).length > 0) setZoneUrlOverrides(overrides);
       setSessionChecked(true);
     });
-  }, []);
+  }, [setCharacterId]);
 
   // Auto-teleport when ?room= param is present (guest join links)
   useEffect(() => {
@@ -178,16 +187,38 @@ export function OfficeTabs() {
             </div>
           </div>
         ) : (
-          <VirtualOfficeGame
-            token={token}
-            characterId={characterId}
-            displayName={displayName}
-            active={tab === "virtual"}
-            teleportTarget={teleportTarget}
-            onOccupancyChange={setOccupancy}
-            onNpcClick={handleNpcClick}
-            zoneUrlOverrides={zoneUrlOverrides}
-          />
+          <>
+            {/* Character selection — collapsible header row above the game */}
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={() => setPickerOpen((open) => !open)}
+                className="mb-2 rounded border px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] transition-colors"
+                style={{
+                  color: "#c9a84c",
+                  borderColor: "rgba(201, 168, 76, 0.35)",
+                  background: "#0a0806",
+                  fontFamily: "Georgia, 'Times New Roman', serif",
+                }}
+              >
+                {pickerOpen ? "Hide characters" : "Change character"}
+              </button>
+              {pickerOpen && (
+                <CharacterPicker selectedId={characterId} onSelect={setCharacterId} />
+              )}
+            </div>
+            <VirtualOfficeGame
+              key={characterId}
+              token={token}
+              characterId={characterId}
+              displayName={displayName}
+              active={tab === "virtual"}
+              teleportTarget={teleportTarget}
+              onOccupancyChange={setOccupancy}
+              onNpcClick={handleNpcClick}
+              zoneUrlOverrides={zoneUrlOverrides}
+            />
+          </>
         )}
       </div>
 

@@ -26,6 +26,14 @@ export type PingMessage = {
   clientTime: number;
 };
 
+// Allowlisted emote emojis — must match the server allowlist
+export const ALLOWED_EMOTES = ["👋", "👍", "❤️", "🎉"] as const;
+
+export type EmoteMessage = {
+  type: "emote";
+  emoji: string;
+};
+
 export type RtcOfferClientMessage = {
   type: "rtc.offer";
   to: string;
@@ -77,6 +85,7 @@ export type SfuLeaveMessage = { type: "sfu.leave" };
 export type ClientMessage =
   | PlayerMoveMessage
   | PingMessage
+  | EmoteMessage
   | RtcOfferClientMessage
   | RtcAnswerClientMessage
   | RtcIceClientMessage
@@ -120,6 +129,12 @@ export type PlayerStateMessage = {
   y: number;
   facing: Facing;
   seq: number;
+};
+
+export type PlayerEmoteMessage = {
+  type: "player.emote";
+  playerId: string;
+  emoji: string;
 };
 
 export type PongMessage = {
@@ -217,6 +232,7 @@ export type ServerMessage =
   | PlayerJoinedMessage
   | PlayerLeftMessage
   | PlayerStateMessage
+  | PlayerEmoteMessage
   | PongMessage
   | BubbleJoinMessage
   | BubbleLeaveMessage

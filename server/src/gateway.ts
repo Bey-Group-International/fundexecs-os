@@ -1,5 +1,5 @@
 import uWS from "uWebSockets.js";
-import { ClientMessageSchema } from "@fundexecs/virtual-office-shared";
+import { ClientMessageSchema, ALLOWED_EMOTES } from "@fundexecs/virtual-office-shared";
 import type { RoomManager } from "./RoomManager";
 import type { AuthService } from "./AuthService";
 import type { SocketData } from "./Room";
@@ -8,6 +8,8 @@ function getQueryParam(query: string, key: string): string | undefined {
   const params = new URLSearchParams(query);
   return params.get(key) ?? undefined;
 }
+
+const EMOTE_RATE_LIMIT_MS = 500;
 
 function handleAsync(fn: () => Promise<void>): void {
   fn().catch((err) => console.error("[SFU]", err));
@@ -18,6 +20,9 @@ export function createGateway(
   authService: AuthService
 ): uWS.TemplatedApp {
   const app = uWS.App();
+
+  // Rate-limit state: last emote timestamp per player
+  const lastEmoteAt = new Map<string, number>();
 
   app.ws<SocketData>("/ws", {
     idleTimeout: 60,
@@ -109,6 +114,16 @@ export function createGateway(
             seq: msg.seq,
           });
         }
+
+      } else if (msg.type === "emote") {
+        // Sanitize: only relay allowlisted emojis
+        if (!(ALLOWED_EMOTES as readonly string[]).includes(msg.emoji)) return;
+        // Rate-limit: ignore if the player emoted within the last 500ms
+        const now = Date.now();
+        const last = lastEmoteAt.get(playerId) ?? 0;
+        if (now - last < EMOTE_RATE_LIMIT_MS) return;
+        lastEmoteAt.set(playerId, now);
+        room.broadcast({ type: "player.emote", playerId, emoji: msg.emoji }, playerId);
 
       } else if (msg.type === "ping") {
         room.sendTo(playerId, { type: "pong", clientTime: msg.clientTime, serverTime: Date.now() });
@@ -215,6 +230,7 @@ export function createGateway(
 
     close: async (ws, _code, _message) => {
       const { playerId, roomId } = ws.getUserData();
+      lastEmoteAt.delete(playerId);
       const room = roomManager.getRoom(roomId);
       if (!room) return;
 
