@@ -81,8 +81,8 @@ function conviction(
   } as DealConviction;
 }
 
-function task(over: Partial<Task> & { id: string }): Pick<Task, "id" | "title" | "session_id" | "assigned_agent"> {
-  return { id: over.id, title: over.title ?? "Workflow", session_id: over.session_id ?? null, assigned_agent: over.assigned_agent ?? "analyst" };
+function task(over: Partial<Task> & { id: string }): Pick<Task, "id" | "title" | "description" | "session_id" | "assigned_agent"> {
+  return { id: over.id, title: over.title ?? "Workflow", description: over.description ?? null, session_id: over.session_id ?? null, assigned_agent: over.assigned_agent ?? "analyst" };
 }
 
 // --- isInboxOverdue ---------------------------------------------------------

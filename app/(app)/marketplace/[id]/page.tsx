@@ -126,7 +126,6 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
       .from("investors")
       .select("*")
       .eq("organization_id", ctx.orgId)
-      .neq("status", "archived")
       .order("name");
     if (investors?.length) {
       const ctx_listing = {
