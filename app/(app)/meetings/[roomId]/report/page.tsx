@@ -209,14 +209,6 @@ export default function MeetingReportPage() {
         </details>
       )}
 
-      {/* Failed state */}
-      {report.status === "failed" && (
-        <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-8 text-center">
-          <p className="text-sm text-[var(--fg-muted)]">
-            Report generation failed. Please try again later.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
