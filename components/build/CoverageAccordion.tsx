@@ -117,7 +117,7 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
           <span className={`truncate text-sm font-medium ${section.ready ? "text-fg-primary" : "text-fg-secondary"}`}>
             {section.label}
           </span>
-          {section.weight >= 12 && !section.ready && (
+          {section.weight >= 3 && !section.ready && (
             <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-amber-400">
               Priority
             </span>

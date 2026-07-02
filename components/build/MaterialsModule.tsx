@@ -11,7 +11,6 @@ import type {
   Principal,
   Document,
   DataRoomShare,
-  DataRoomView,
 } from "@/lib/supabase/database.types";
 import { blendTrackRecord } from "@/lib/track-record";
 import { computeBuildReadiness } from "@/lib/build-readiness";
@@ -21,7 +20,8 @@ import { scoreDocument } from "@/lib/document-quality";
 import { PrintButton } from "./PrintButton";
 import { ShareControls } from "./ShareControls";
 import { CoverageAccordion } from "./CoverageAccordion";
-import { AnalyticsPanel } from "./AnalyticsPanel";
+import { ViewerAnalytics } from "./ViewerAnalytics";
+import { NdaSignatures } from "./NdaSignatures";
 
 function safeHref(url: string | null): string | null {
   if (!url) return null;
@@ -107,7 +107,7 @@ export async function MaterialsModule() {
   if (!ctx?.orgId) redirect("/login");
   const supabase = createServerClient();
 
-  const [orgRes, thesesRes, recordsRes, entitiesRes, membersRes, docsRes, sharesRes, viewsRes] =
+  const [orgRes, thesesRes, recordsRes, entitiesRes, membersRes, docsRes, sharesRes] =
     await Promise.all([
       supabase.from("organizations").select("*").eq("id", ctx.orgId).maybeSingle(),
       supabase
@@ -134,12 +134,6 @@ export async function MaterialsModule() {
         .select("*")
         .eq("organization_id", ctx.orgId)
         .order("created_at", { ascending: false }),
-      supabase
-        .from("data_room_views")
-        .select("*")
-        .eq("organization_id", ctx.orgId)
-        .order("created_at", { ascending: false })
-        .limit(100),
     ]);
 
   const org = orgRes.data as Organization | null;
@@ -150,7 +144,6 @@ export async function MaterialsModule() {
   const members = (membersRes.data ?? []) as OrganizationMember[];
   const documents = (docsRes.data ?? []) as Document[];
   const shares = (sharesRes.data ?? []) as DataRoomShare[];
-  const views = (viewsRes.data ?? []) as DataRoomView[];
 
   let principals: Principal[] = [];
   if (members.length) {
@@ -440,28 +433,8 @@ export async function MaterialsModule() {
           activeCount={activeShareCount}
         />
 
-        {/* LP Analytics */}
-        <div>
-          <div className="mb-3">
-            <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">LP Analytics</h3>
-            <p className="mt-0.5 text-sm text-fg-secondary">
-              Who opened what, for how long, and via which link.
-            </p>
-          </div>
-          <AnalyticsPanel
-            shares={shares.map((s) => ({ id: s.id, token: s.token, label: s.label, revoked_at: s.revoked_at }))}
-            views={views.map((v) => ({
-              id: v.id,
-              share_id: v.share_id,
-              document_id: v.document_id,
-              kind: v.kind,
-              created_at: v.created_at,
-              viewer_email: v.viewer_email,
-              duration_seconds: v.duration_seconds,
-            }))}
-            docs={documents.map((d) => ({ id: d.id, name: d.name }))}
-          />
-        </div>
+        <ViewerAnalytics />
+        <NdaSignatures />
       </div>
     </div>
   );
