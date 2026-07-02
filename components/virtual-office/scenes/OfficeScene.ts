@@ -112,6 +112,13 @@ export class OfficeScene extends Phaser.Scene {
   private remotePlayers = new Map<string, RemoteAvatarState>();
   private npcAvatars = new Map<string, NpcAvatarState>();
   private moveSeq = 0;
+
+  // Lazy room loading
+  private roomImages = new Map<string, Phaser.GameObjects.Image>();
+  private loadedRoomKeys = new Set<string>();
+  private lastPlayerCol = -1;
+  private lastPlayerRow = -1;
+  private _interpFrame = 0;
   /** seq number of the last server-acknowledged move for local reconciliation */
   private lastAckedSeq = 0;
   /** velocity at the time each seq was sent, used for reconciliation */
@@ -151,9 +158,15 @@ export class OfficeScene extends Phaser.Scene {
   // ── preload ─────────────────────────────────────────────────────────────────
 
   preload() {
-    // Room background images
+    // Preload only rooms adjacent to spawn (SPAWN_X=192, SPAWN_Y=144 → col 0, row 0).
+    // All other rooms are loaded lazily the first time the player walks near them.
+    const spawnCol = 0;
+    const spawnRow = 0;
     for (const room of ROOMS) {
-      this.load.image(room.key, room.imagePath);
+      if (Math.abs(room.col - spawnCol) <= 1 && Math.abs(room.row - spawnRow) <= 1) {
+        this.load.image(room.key, room.imagePath);
+        this.loadedRoomKeys.add(room.key);
+      }
     }
 
     // Earnest Fundmaker sprite sheet (32×32 frames)
@@ -214,6 +227,12 @@ export class OfficeScene extends Phaser.Scene {
     this._updateRemoteAvatars();
     this._updateNpcAvatars();
     this._updateSpatialAudio();
+
+    const col = Math.floor(this.player.x / ROOM_W);
+    const row = Math.floor(this.player.y / ROOM_H);
+    this._lazyLoadRoomsNear(col, row);
+
+    this._interpFrame = (this._interpFrame + 1) % 2;
   }
 
   // ── shutdown ─────────────────────────────────────────────────────────────────
@@ -240,9 +259,19 @@ export class OfficeScene extends Phaser.Scene {
     for (const room of ROOMS) {
       const x = room.col * ROOM_W + ROOM_W / 2;
       const y = room.row * ROOM_H + ROOM_H / 2;
-      const img = this.add.image(x, y, room.key);
-      // Scale the pre-rendered room image to fill the room cell
+
+      // Use the real texture if already loaded, otherwise a dark placeholder rectangle
+      let img: Phaser.GameObjects.Image;
+      if (this.loadedRoomKeys.has(room.key) && this.textures.exists(room.key)) {
+        img = this.add.image(x, y, room.key);
+      } else {
+        // Placeholder: dark slate rect — will be swapped when texture loads
+        img = this.add.image(x, y, "__DEFAULT");
+        img.setDisplaySize(ROOM_W, ROOM_H);
+        img.setTint(0x1e293b);
+      }
       img.setDisplaySize(ROOM_W, ROOM_H);
+      this.roomImages.set(room.key, img);
 
       // Subtle room border
       const gfx = this.add.graphics();
@@ -257,6 +286,30 @@ export class OfficeScene extends Phaser.Scene {
         stroke: "#0f172a",
         strokeThickness: 2,
       }).setDepth(5);
+    }
+  }
+
+  private _lazyLoadRoomsNear(playerCol: number, playerRow: number) {
+    if (playerCol === this.lastPlayerCol && playerRow === this.lastPlayerRow) return;
+    this.lastPlayerCol = playerCol;
+    this.lastPlayerRow = playerRow;
+
+    for (const room of ROOMS) {
+      if (this.loadedRoomKeys.has(room.key)) continue;
+      if (Math.abs(room.col - playerCol) > 1 || Math.abs(room.row - playerRow) > 1) continue;
+
+      // Start loading — swap the placeholder image when done
+      this.loadedRoomKeys.add(room.key);
+      this.load.image(room.key, room.imagePath);
+      this.load.once(`filecomplete-image-${room.key}`, () => {
+        const img = this.roomImages.get(room.key);
+        if (img && this.textures.exists(room.key)) {
+          img.setTexture(room.key);
+          img.setDisplaySize(ROOM_W, ROOM_H);
+          img.clearTint();
+        }
+      });
+      this.load.start();
     }
   }
 
@@ -522,18 +575,21 @@ export class OfficeScene extends Phaser.Scene {
   // ── Multiplayer: remote avatar rendering ────────────────────────────────────
 
   private _updateRemoteAvatars() {
+    // Interpolate every other frame — server sends at ~10 Hz so 30 Hz is plenty
+    if (this._interpFrame !== 0) return;
     for (const [, state] of this.remotePlayers) {
-      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.15);
-      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.15);
+      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.3);
+      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.3);
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
       state.nameTag.setPosition(state.sprite.x, state.sprite.y - 40);
     }
   }
 
   private _updateNpcAvatars() {
+    if (this._interpFrame !== 0) return;
     for (const [, state] of this.npcAvatars) {
-      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.12);
-      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.12);
+      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.24);
+      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
     }
   }
