@@ -11,15 +11,15 @@ import {
 
 describe("directReward", () => {
   it("escalates with the referrer's cumulative direct count", () => {
-    // Tiers: 1–2 → 250, 3–5 → 400, 6–9 → 600, 10+ → 900.
-    expect(directReward(1)).toBe(250);
-    expect(directReward(2)).toBe(250);
-    expect(directReward(3)).toBe(400);
-    expect(directReward(5)).toBe(400);
-    expect(directReward(6)).toBe(600);
-    expect(directReward(9)).toBe(600);
-    expect(directReward(10)).toBe(900);
-    expect(directReward(100)).toBe(900);
+    // Tiers: 1–2 → 500, 3–5 → 700, 6–9 → 900, 10+ → 1200.
+    expect(directReward(1)).toBe(500);
+    expect(directReward(2)).toBe(500);
+    expect(directReward(3)).toBe(700);
+    expect(directReward(5)).toBe(700);
+    expect(directReward(6)).toBe(900);
+    expect(directReward(9)).toBe(900);
+    expect(directReward(10)).toBe(1_200);
+    expect(directReward(100)).toBe(1_200);
   });
 
   it("never pays less for a later referral than an earlier one (monotonic)", () => {
