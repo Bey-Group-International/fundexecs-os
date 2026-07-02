@@ -20,6 +20,12 @@ export interface DispatchContext {
   // Slack thread vs. an email thread) and pins dispatch to that channel. When set
   // and a matching adapter is registered, it overrides ActionKind routing.
   channel?: string;
+  // Per-org connection state for this channel, resolved through the gateway
+  // (lib/integrations/gateway). When provided, it authoritatively decides the
+  // prepared (draft/mock) vs queued (route through the connected provider)
+  // outcome — so dispatch reflects whether THIS org has connected the channel,
+  // not just a deploy-wide env var. Omit to fall back to the adapter's env check.
+  connected?: boolean;
   // The counterparty this action reaches, when known.
   target?: { name?: string; email?: string };
   // Drafted content when the action carries a message.

@@ -7,6 +7,7 @@ import { gateDecision, type ActionKind } from "@/lib/gates";
 import { isVerifiable } from "@/lib/grounding";
 import { getActiveMandate } from "@/lib/mandates";
 import { dispatchAction } from "@/lib/integrations";
+import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import { recordDispatch } from "@/lib/integrations/log";
 import { computePriority, fallbackSummary, draftReply } from "@/lib/inbox/intelligence";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
@@ -169,12 +170,16 @@ async function performThreadAction(
     };
   }
 
-  // Free to run: dispatch now, pinned to the thread's own channel.
+  // Free to run: dispatch now, pinned to the thread's own channel. Resolve the
+  // org's connection state for that channel so the adapter reflects whether THIS
+  // org has connected it (queued) or not (prepared/draft) — not just an env var.
+  const connectedChannels = await orgConnectedChannels(supabase, orgId);
   const result = await dispatchAction({
     orgId,
     actorId: auth.ctx.userId,
     action,
     channel: t.channel,
+    connected: connectedChannels.has(t.channel),
     target: { name: t.counterparty_name ?? undefined, email: t.counterparty_email ?? undefined },
     // The operator's composed reply text, when this is an inline reply — a live
     // adapter sends exactly this; a mock adapter ignores it and returns its
@@ -474,6 +479,108 @@ export async function markOpenThreadsRead(): Promise<void> {
     .neq("channel", "deal_share");
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
+}
+
+// ---------------------------------------------------------------------------
+// Assignment + bulk triage.
+// ---------------------------------------------------------------------------
+
+export interface Teammate {
+  id: string;
+  name: string;
+}
+
+/**
+ * The org's teammates (principals) for the assignee picker. Two batched queries
+ * (members → principals), org-scoped by RLS. Best-effort: returns [] on failure.
+ */
+export async function getOrgTeammates(): Promise<Teammate[]> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return [];
+  const supabase = createServerClient();
+
+  const { data: members } = await supabase
+    .from("organization_members")
+    .select("principal_id")
+    .eq("organization_id", auth.ctx.orgId)
+    .limit(200);
+  const ids = [...new Set((members ?? []).map((m) => m.principal_id).filter(Boolean))];
+  if (!ids.length) return [];
+
+  const { data: principals } = await supabase
+    .from("principals")
+    .select("id, full_name")
+    .in("id", ids);
+  return (principals ?? [])
+    .map((p) => ({ id: p.id, name: p.full_name || "Teammate" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Route a thread to a teammate (or clear the assignment when assigneeId is null).
+ * Org-scoped; the assignee must be a member of the same org.
+ */
+export async function assignThread(threadId: string, assigneeId: string | null): Promise<{ ok: boolean }> {
+  if (!threadId) return { ok: false };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false };
+  const supabase = createServerClient();
+
+  // Guard: an assignee must belong to this org (RLS scopes the read to the org).
+  if (assigneeId) {
+    const { data: member } = await supabase
+      .from("organization_members")
+      .select("principal_id")
+      .eq("organization_id", auth.ctx.orgId)
+      .eq("principal_id", assigneeId)
+      .maybeSingle();
+    if (!member) return { ok: false };
+  }
+
+  const { error } = await supabase
+    .from("inbox_threads")
+    .update({ assigned_to: assigneeId })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", threadId);
+  if (error) return { ok: false };
+
+  revalidatePath("/inbox");
+  return { ok: true };
+}
+
+export type BulkAction = "done" | "snooze" | "read";
+
+/**
+ * Apply a triage action to many threads at once (bulk done / snooze / mark read).
+ * One org-scoped update over the id set — no N+1. Returns the count affected.
+ */
+export async function bulkThreadAction(
+  threadIds: string[],
+  action: BulkAction,
+): Promise<{ ok: boolean; count: number }> {
+  const ids = [...new Set(threadIds.filter(Boolean))].slice(0, 200);
+  if (!ids.length) return { ok: false, count: 0 };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, count: 0 };
+  const supabase = createServerClient();
+
+  const patch: Partial<InboxThread> =
+    action === "done"
+      ? { status: "done", unread: false }
+      : action === "snooze"
+        ? { status: "snoozed", unread: false }
+        : { unread: false };
+
+  const { error } = await supabase
+    .from("inbox_threads")
+    .update(patch)
+    .eq("organization_id", auth.ctx.orgId)
+    .in("id", ids);
+  if (error) return { ok: false, count: 0 };
+
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+  return { ok: true, count: ids.length };
 }
 
 // ---------------------------------------------------------------------------

@@ -25,7 +25,8 @@ export const gmailAdapter: DispatchAdapter = {
     const to = ctx.target?.email;
     const recipient = to ?? ctx.target?.name ?? "the contact";
 
-    if (!configured()) {
+    // Per-org connection wins when the caller resolved it; else the env default.
+    if (!(ctx.connected ?? configured())) {
       return {
         ok: true,
         channel: "gmail",

@@ -32,7 +32,8 @@ export const slackAdapter: DispatchAdapter = {
     // name by the caller (the digest passes the configured recipient here).
     const destination = ctx.target?.email ?? ctx.target?.name ?? "the workspace";
 
-    if (!configured()) {
+    // Per-org connection wins when the caller resolved it; else the env default.
+    if (!(ctx.connected ?? configured())) {
       return {
         ok: true,
         channel: "slack",

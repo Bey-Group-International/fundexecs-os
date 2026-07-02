@@ -29,7 +29,8 @@ export const docusignAdapter: DispatchAdapter = {
     const action = ctx.action.replace(/_/g, " ");
     const target = ctx.target?.name ?? ctx.target?.email ?? "the counterparty";
 
-    if (!configured()) {
+    // Per-org connection wins when the caller resolved it; else the env default.
+    if (!(ctx.connected ?? configured())) {
       return {
         ok: true,
         channel: "docusign",

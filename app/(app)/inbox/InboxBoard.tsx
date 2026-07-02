@@ -15,8 +15,12 @@ import {
   getThreadMessages,
   replyToThread,
   draftThreadReply,
+  assignThread,
+  bulkThreadAction,
   type ThreadActionResult,
   type ThreadMessageView,
+  type Teammate,
+  type BulkAction,
 } from "./actions";
 
 // Fully server-prepared card data — no intelligence/AI module reaches the client.
@@ -37,6 +41,10 @@ export interface InboxCardData {
   meetingAt: string | null;
   meetingUrl: string | null;
   context: { kind: "deal" | "investor"; id: string; name: string; href: string } | null;
+  assignee: { id: string; name: string } | null;
+  // Whether this org has connected the thread's channel; drives the composer's
+  // "connect to send" hint.
+  connected: boolean;
   suggested: { action: ActionKind; label: string; tier: GateTier } | null;
   canShare: boolean;
   shareTier: GateTier;
@@ -57,11 +65,26 @@ const FILTERS: { key: "all" | InboxCategory; label: string }[] = [
   { key: "finance", label: "Finance" },
 ];
 
-export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
+export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teammates: Teammate[] }) {
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | InboxCategory>("all");
   const [clearing, startClearTransition] = useTransition();
   const [clearError, setClearError] = useState<string | null>(null);
+
+  // Multi-select for bulk triage. A Set of thread ids; the bulk bar appears when
+  // any are selected.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [bulking, startBulkTransition] = useTransition();
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
 
   function handleClear() {
     const n = visible.filter((c) => c.status === "open").length;
@@ -80,6 +103,22 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
   const visible = useMemo(
     () => cards.filter((c) => c.status !== "done" && (filter === "all" || c.category === filter)),
     [cards, filter],
+  );
+
+  // Run a bulk triage action over the current selection, then clear it.
+  const runBulk = useCallback(
+    (action: BulkAction) => {
+      const ids = visible.filter((c) => selected.has(c.id)).map((c) => c.id);
+      if (!ids.length) return;
+      startBulkTransition(async () => {
+        const r = await bulkThreadAction(ids, action);
+        if (r.ok) {
+          clearSelection();
+          router.refresh();
+        }
+      });
+    },
+    [visible, selected, clearSelection, router],
   );
 
   const counts = useMemo(() => {
@@ -142,6 +181,46 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
         <p className="text-xs text-status-danger">{clearError}</p>
       ) : null}
 
+      {/* Bulk-triage bar — appears when threads are selected. */}
+      {selected.size > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gold-500/40 bg-gold-500/5 px-3 py-2">
+          <span className="text-xs font-medium text-gold-300">{selected.size} selected</span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={bulking}
+              onClick={() => runBulk("done")}
+              className="rounded-md border border-line bg-surface-0/80 px-2.5 py-1 text-xs text-fg-primary transition hover:border-gold-500 disabled:opacity-50"
+            >
+              {bulking ? "Working…" : "Mark done"}
+            </button>
+            <button
+              type="button"
+              disabled={bulking}
+              onClick={() => runBulk("snooze")}
+              className="rounded-md border border-line bg-surface-0/80 px-2.5 py-1 text-xs text-fg-primary transition hover:border-gold-500 disabled:opacity-50"
+            >
+              Snooze
+            </button>
+            <button
+              type="button"
+              disabled={bulking}
+              onClick={() => runBulk("read")}
+              className="rounded-md border border-line bg-surface-0/80 px-2.5 py-1 text-xs text-fg-primary transition hover:border-gold-500 disabled:opacity-50"
+            >
+              Mark read
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {visible.length === 0 ? (
         <p className="px-1 py-6 text-sm text-fg-muted">Nothing here — inbox clear for this filter.</p>
       ) : (
@@ -156,7 +235,13 @@ export function InboxBoard({ cards }: { cards: InboxCardData[] }) {
               </h2>
               <div className="flex flex-col gap-2">
                 {inBucket.map((c) => (
-                  <ThreadCard key={c.id} card={c} />
+                  <ThreadCard
+                    key={c.id}
+                    card={c}
+                    teammates={teammates}
+                    selected={selected.has(c.id)}
+                    onToggleSelect={toggleSelect}
+                  />
                 ))}
               </div>
             </section>
@@ -172,13 +257,35 @@ function relativeMeeting(iso: string): string {
   return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function ThreadCard({ card }: { card: InboxCardData }) {
+function ThreadCard({
+  card,
+  teammates,
+  selected,
+  onToggleSelect,
+}: {
+  card: InboxCardData;
+  teammates: Teammate[];
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+}) {
   const router = useRouter();
   const [result, setResult] = useState<ThreadActionResult | null>(null);
   const [pending, startTransition] = useTransition();
   const [active, setActive] = useState<string | null>(null);
   const [deleting, startDeleteTransition] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [assigning, startAssignTransition] = useTransition();
+
+  // Assign / reassign the thread to a teammate (empty value clears it).
+  const onAssign = useCallback(
+    (value: string) => {
+      startAssignTransition(async () => {
+        const r = await assignThread(card.id, value || null);
+        if (r.ok) router.refresh();
+      });
+    },
+    [card.id, router],
+  );
 
   // Expandable conversation view + inline composer.
   const [expanded, setExpanded] = useState(false);
@@ -270,7 +377,7 @@ function ThreadCard({ card }: { card: InboxCardData }) {
   }
 
   return (
-    <div className="fx-card fx-card-hover relative overflow-hidden p-4">
+    <div className={`fx-card fx-card-hover relative overflow-hidden p-4 ${selected ? "ring-1 ring-gold-500/60" : ""}`}>
       <span
         aria-hidden
         className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-gold-500/60 to-transparent"
@@ -280,6 +387,13 @@ function ThreadCard({ card }: { card: InboxCardData }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(card.id)}
+              aria-label={`Select thread: ${card.subject}`}
+              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-gold-500"
+            />
             <span className="font-mono text-base leading-none text-gold-400" title={card.channelLabel}>
               {card.channelIcon}
             </span>
@@ -316,6 +430,28 @@ function ThreadCard({ card }: { card: InboxCardData }) {
             Meeting link →
           </a>
         ) : null}
+        {/* Assignee picker — route the thread to a teammate. */}
+        <label className="ml-auto inline-flex items-center gap-1 text-fg-muted">
+          <span className="font-mono text-[9px] uppercase tracking-wider">Owner</span>
+          <select
+            value={card.assignee?.id ?? ""}
+            disabled={assigning}
+            onChange={(e) => onAssign(e.target.value)}
+            aria-label="Assign thread to a teammate"
+            className="max-w-[9rem] rounded border border-line bg-surface-2 px-1.5 py-0.5 text-[11px] text-fg-secondary outline-none focus:border-gold-500 disabled:opacity-50"
+          >
+            <option value="">Unassigned</option>
+            {/* Keep the current assignee selectable even if they've since left the member list. */}
+            {card.assignee && !teammates.some((t) => t.id === card.assignee!.id) ? (
+              <option value={card.assignee.id}>{card.assignee.name}</option>
+            ) : null}
+            {teammates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {/* Expand into the full conversation + inline composer */}
@@ -365,9 +501,18 @@ function ThreadCard({ card }: { card: InboxCardData }) {
               className="w-full resize-none rounded-md border border-line bg-surface-2 px-2.5 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
             />
             <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                Send routes through your approvals if required
-              </span>
+              {card.connected ? (
+                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  Routes through connected {card.channelLabel} · approvals if required
+                </span>
+              ) : (
+                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  {card.channelLabel} not connected — sends save as drafts.{" "}
+                  <Link href="/settings/integrations" className="text-gold-400 hover:underline">
+                    Connect →
+                  </Link>
+                </span>
+              )}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
