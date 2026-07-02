@@ -198,7 +198,9 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
       };
     } catch (err) {
       const ref = crypto.randomUUID().slice(0, 8);
-      console.error(`[stripe-rail:${ref}]`, err);
+      // Log only the error type — message may contain user-supplied account refs or IDs.
+      const kind = err instanceof Error ? err.constructor.name : typeof err;
+      console.error(`[stripe-rail:${ref}] initiate failed (${kind})`);
       return {
         ok: false,
         live: false,

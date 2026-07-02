@@ -153,11 +153,13 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
       };
     } catch (err) {
       const ref = crypto.randomUUID().slice(0, 8);
-      console.error(`[stripe-identity:${ref}]`, err);
+      // Log sanitized message only — err.message may contain user-supplied verificationId via the Stripe path.
+      const msg = err instanceof Error ? err.message.replace(verificationId, "[id]") : "unknown error";
+      console.error(`[stripe-identity:${ref}] getStatus failed:`, msg);
       return {
         ok: false,
         live: false,
-        detail: `Could not fetch verification status for ${verificationId}. Ref: ${ref}`,
+        detail: `Could not fetch verification status. Ref: ${ref}`,
         data: { verificationId, level: "kyc", status: "pending" },
       };
     }
