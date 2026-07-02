@@ -760,14 +760,24 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         mId = ex.id;
         if (ex.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
       } else {
-        const res = await fetch("/api/meetings/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Meeting" }) });
-        if (res.ok) { const d = await res.json() as { id: string }; mId = d.id; hostFlag = true; }
+        const res = await fetch("/api/meetings/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Meeting", roomCode }) });
+        if (res.ok) {
+          const d = await res.json() as { id: string; roomCode: string; hostId: string };
+          mId = d.id;
+          const { data: { user } } = await supabase.auth.getUser();
+          hostFlag = !!user && user.id === d.hostId;
+        }
       }
     } catch { /* proceed */ }
 
     setMeetingId(mId); setIsHost(hostFlag); isHostRef.current = hostFlag;
 
     if (mId) {
+      void (supabase.from("live_meetings") as any)
+        .update({ started_at: new Date().toISOString() })
+        .eq("id", mId)
+        .is("started_at", null);
+
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         void (supabase.from("live_meeting_participants") as any).upsert(
