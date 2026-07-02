@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { getSessionContext } from "@/lib/auth";
 import { stripeConfigured, createCheckout } from "@/lib/stripe";
 import {
@@ -8,6 +9,7 @@ import {
   type PlanInterval,
   type PlanKey,
 } from "@/lib/billing";
+import { redeemCoupon } from "@/lib/coupons";
 
 type ActionResult = { error?: string; ok?: boolean; clientSecret?: string };
 
@@ -62,5 +64,25 @@ export async function purchasePackAction(formData: FormData): Promise<ActionResu
   } catch (err) {
     console.error("[wallet] purchasePackAction failed:", err);
     return { error: "Something went wrong starting checkout. Please try again." };
+  }
+}
+
+// Redeem a coupon code for a free credit grant. One-time per org.
+export async function redeemCouponAction(
+  formData: FormData,
+): Promise<{ ok?: boolean; credits?: number; error?: string }> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return { error: "Not authenticated" };
+
+    const code = String(formData.get("code") ?? "").trim();
+    if (!code) return { error: "Enter a coupon code." };
+
+    const result = await redeemCoupon(code, ctx.orgId);
+    if (result.ok) revalidatePath("/wallet");
+    return result;
+  } catch (err) {
+    console.error("[wallet] redeemCouponAction failed:", err);
+    return { error: "Something went wrong. Please try again." };
   }
 }

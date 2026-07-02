@@ -9,7 +9,7 @@
 //   3. One-time milestone bonuses reward sustained referring.
 
 // Welcome bonus credited to a newly-referred org when it redeems a code.
-export const REFERRAL_WELCOME_BONUS = 200;
+export const REFERRAL_WELCOME_BONUS = 500;
 
 // Direct (level-1) reward escalates with the referrer's lifetime direct-referral
 // count, so the Nth referral can pay more than the (N-1)th.
@@ -19,10 +19,10 @@ export interface DirectTier {
   reward: number;
 }
 export const DIRECT_TIERS: DirectTier[] = [
-  { upTo: 2, reward: 250 },
-  { upTo: 5, reward: 400 },
-  { upTo: 9, reward: 600 },
-  { upTo: Number.POSITIVE_INFINITY, reward: 900 },
+  { upTo: 2, reward: 500 },
+  { upTo: 5, reward: 700 },
+  { upTo: 9, reward: 900 },
+  { upTo: Number.POSITIVE_INFINITY, reward: 1_200 },
 ];
 
 /** Credits the referrer earns for their `nth` direct referral (1-indexed). */
@@ -96,6 +96,7 @@ export type LedgerReason =
   | "gift_sent"
   | "plan_grant"
   | "pack_purchase"
+  | "coupon_redemption"
   | "stake_lock"
   | "stake_release"
   | "spend"

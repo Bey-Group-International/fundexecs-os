@@ -58,11 +58,19 @@ export async function recentSpend(orgId: string, days = 30): Promise<number> {
   return Math.abs(raw);
 }
 
+// How far into negative territory an org may go before agent execution is
+// blocked. Allows a task that starts near-empty to finish without a mid-run
+// paywall — the balance floors at 0 (the RPC clamp), so this is a runway
+// check only; actual wallet balance never goes below zero.
+export const CREDIT_GRACE_BUFFER = 100;
+
 // Debit `amount` credits from an org for an AI agent step. Honors the
 // CREDITS_SPEND_ENABLED env gate: when unset the call is a no-op that logs what
-// would have been spent (safe for preview/free-trial). When enabled and the org
-// has insufficient credits, returns { ok: false, insufficient: true } — the
-// caller should surface this as a step failure so the workflow stops cleanly.
+// would have been spent (safe for preview/free-trial). When enabled, the org
+// may run up to CREDIT_GRACE_BUFFER credits below the cost before being blocked,
+// so a task that starts near-empty can finish. Returns { ok: false,
+// insufficient: true } when the buffer is exhausted — the caller surfaces this
+// as a step failure so the workflow stops cleanly.
 export async function spendCredits(
   orgId: string,
   amount: number,
@@ -78,7 +86,7 @@ export async function spendCredits(
     .eq("organization_id", orgId)
     .maybeSingle();
   const balance = data?.credits ?? 0;
-  if (balance < amount) {
+  if (balance + CREDIT_GRACE_BUFFER < amount) {
     return { ok: false, insufficient: true, balance };
   }
   const service = createServiceClient();

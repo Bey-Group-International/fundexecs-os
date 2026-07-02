@@ -10,49 +10,35 @@ const REASON_META: Record<
   string,
   { label: string; colorClass: string; icon: string }
 > = {
-  free_tier: {
-    label: "Free-tier grant",
-    colorClass: "text-emerald-600",
-    icon: "◇",
-  },
-  gift: { label: "Credit gift", colorClass: "text-emerald-600", icon: "◇" },
-  referral: {
-    label: "Referral reward",
-    colorClass: "text-emerald-600",
-    icon: "◇",
-  },
-  referral_l1: {
-    label: "Referral L1",
-    colorClass: "text-emerald-600",
-    icon: "◇",
-  },
-  referral_l2: {
-    label: "Referral L2",
-    colorClass: "text-emerald-500",
-    icon: "◇",
-  },
-  referral_l3: {
-    label: "Referral L3",
-    colorClass: "text-emerald-400",
-    icon: "◇",
-  },
-  milestone: {
-    label: "Milestone bonus",
-    colorClass: "text-emerald-600",
-    icon: "◇",
-  },
-  subscription: {
-    label: "Plan renewal",
-    colorClass: "text-emerald-600",
-    icon: "◇",
-  },
-  loyalty: {
-    label: "Loyalty bonus",
-    colorClass: "text-emerald-600",
-    icon: "◇",
-  },
-  spend: { label: "AI action", colorClass: "text-rose-500", icon: "−" },
-  manual: { label: "Manual adjustment", colorClass: "text-fg", icon: "○" },
+  // Plans + packs
+  plan_grant:         { label: "Plan credits",       colorClass: "text-emerald-500", icon: "◇" },
+  pack_purchase:      { label: "Credit pack",         colorClass: "text-emerald-500", icon: "◇" },
+  // Referrals
+  referral_welcome:   { label: "Welcome bonus",       colorClass: "text-emerald-400", icon: "◇" },
+  referral_direct:    { label: "Referral reward",     colorClass: "text-emerald-500", icon: "◇" },
+  referral_override:  { label: "Network override",    colorClass: "text-emerald-400", icon: "◇" },
+  referral_milestone: { label: "Milestone bonus",     colorClass: "text-gold-300",    icon: "★" },
+  // Gifts
+  gift_received:      { label: "Gift received",       colorClass: "text-emerald-500", icon: "◇" },
+  gift_sent:          { label: "Gift sent",           colorClass: "text-rose-400",    icon: "−" },
+  // Coupons
+  coupon_redemption:  { label: "Coupon redeemed",     colorClass: "text-emerald-500", icon: "◇" },
+  // Loyalty
+  loyalty:            { label: "Loyalty bonus",       colorClass: "text-gold-300",    icon: "◇" },
+  // Gamification
+  task_complete:      { label: "Task reward",         colorClass: "text-emerald-400", icon: "◇" },
+  streak_bonus:       { label: "Streak bonus",        colorClass: "text-emerald-400", icon: "◇" },
+  milestone_bonus:    { label: "Achievement",         colorClass: "text-gold-300",    icon: "★" },
+  hub_achievement:    { label: "Hub achievement",     colorClass: "text-gold-300",    icon: "★" },
+  quest_complete:     { label: "Quest complete",      colorClass: "text-emerald-500", icon: "◇" },
+  // Stake
+  stake_lock:         { label: "Stake locked",        colorClass: "text-rose-400",    icon: "−" },
+  stake_release:      { label: "Stake released",      colorClass: "text-emerald-400", icon: "◇" },
+  // AI actions + admin
+  spend:              { label: "AI action",           colorClass: "text-rose-500",    icon: "−" },
+  manual:             { label: "Manual adjustment",   colorClass: "text-fg-muted",    icon: "○" },
+  // Legacy keys kept for historical rows
+  free_tier:          { label: "Free-tier grant",     colorClass: "text-emerald-500", icon: "◇" },
 };
 
 function reasonMeta(reason: string | null) {
