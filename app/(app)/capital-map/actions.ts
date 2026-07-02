@@ -38,6 +38,8 @@ const AGENT_FOR_ACTION: Record<ActionKind, AgentKey> = {
   reverse_journal_entry: "fund_admin",
   import_bank_file: "fund_admin",
   reconcile_transaction: "fund_admin",
+  issue_invoice: "fund_admin",
+  record_payment: "fund_admin",
   post_to_closed_period: "fund_admin",
   close_period: "fund_admin",
   reopen_period: "fund_admin",

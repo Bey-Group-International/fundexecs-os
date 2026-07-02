@@ -1865,6 +1865,84 @@ export type FinReconciliation = {
   created_at: string;
 };
 
+// --- Finance Engine — Phase 3 AR/AP (migration 20260703120000) ---------------
+export type FinPartyKind = "customer" | "vendor" | "both";
+export type FinInvoiceKind = "receivable" | "payable";
+export type FinInvoiceStatus = "draft" | "open" | "partial" | "paid" | "void";
+export type FinPaymentDirection = "inbound" | "outbound";
+
+export type FinParty = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  kind: FinPartyKind;
+  name: string;
+  email: string | null;
+  tax_id: string | null;
+  ar_control_account_id: string | null;
+  ap_control_account_id: string | null;
+  is_active: boolean;
+};
+
+export type FinInvoice = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  party_id: string;
+  kind: FinInvoiceKind;
+  invoice_no: string;
+  issue_date: string;
+  due_date: string;
+  currency: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  amount_paid: number;
+  status: FinInvoiceStatus;
+  memo: string | null;
+  posted_entry_id: string | null;
+  created_by: string | null;
+};
+
+export type FinInvoiceLine = {
+  id: string;
+  organization_id: string;
+  invoice_id: string;
+  line_no: number;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  tax_rate: number;
+  income_account_id: string | null;
+  line_subtotal: number;
+  line_tax: number;
+  line_total: number;
+};
+
+export type FinPayment = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  party_id: string;
+  direction: FinPaymentDirection;
+  payment_date: string;
+  currency: string;
+  amount: number;
+  memo: string | null;
+  bank_account_id: string | null;
+  posted_entry_id: string | null;
+  created_by: string | null;
+};
+
+export type FinPaymentAllocation = {
+  id: string;
+  organization_id: string;
+  payment_id: string;
+  invoice_id: string;
+  amount: number;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -2234,6 +2312,11 @@ export type Database = {
       fin_bank_transactions: TableShape<FinBankTransaction>;
       fin_txn_rules: TableShape<FinTxnRule>;
       fin_reconciliations: TableShape<FinReconciliation>;
+      fin_parties: TableShape<FinParty>;
+      fin_invoices: TableShape<FinInvoice>;
+      fin_invoice_lines: TableShape<FinInvoiceLine>;
+      fin_payments: TableShape<FinPayment>;
+      fin_payment_allocations: TableShape<FinPaymentAllocation>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -2263,6 +2346,17 @@ export type Database = {
           p_actor: string | null;
         };
         Returns: number;
+      };
+      // Atomically insert a payment, its allocations, and bump each allocated
+      // invoice's amount_paid + status in one transaction (migration
+      // 20260703120000). Returns the new payment id.
+      fin_apply_payment: {
+        Args: {
+          p_payment: Json;
+          p_allocations: Json;
+          p_actor: string | null;
+        };
+        Returns: string;
       };
       // Cosine-search a Brain's KB corpus (migration 0024). embedding args are
       // sent as the pgvector text literal "[0.1,0.2,...]".
@@ -2369,6 +2463,10 @@ export type Database = {
       fin_recon_match_kind: FinReconMatchKind;
       fin_rule_match_type: FinRuleMatchType;
       fin_rule_match_field: FinRuleMatchField;
+      fin_party_kind: FinPartyKind;
+      fin_invoice_kind: FinInvoiceKind;
+      fin_invoice_status: FinInvoiceStatus;
+      fin_payment_direction: FinPaymentDirection;
     };
   };
 }
