@@ -387,36 +387,44 @@ export function AppSidebar({
   ];
 
   const linkClass =
-    "flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary";
+    "flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition duration-150 hover:bg-surface-2/80 hover:text-fg-primary";
+  const activeLinkClass = "fx-nav-active rounded-md px-2 py-1.5 text-fg-primary transition duration-150";
 
   return (
-    <aside className="hidden w-[224px] shrink-0 flex-col border-r border-line bg-surface-1/95 backdrop-blur-xl md:flex">
-      {/* Logo — centralized coin mark + wordmark */}
-      <div className="flex h-12 items-center gap-2 border-b border-line px-4">
+    <aside className="hidden w-[224px] shrink-0 flex-col border-r border-line/60 bg-surface-1/95 backdrop-blur-xl md:flex">
+      {/* Logo — centralized coin mark + wordmark, with subtle glow beneath */}
+      <div className="relative flex h-12 items-center gap-2 border-b border-line/60 px-4">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold-500/30 to-transparent"
+        />
         <Logo href="/workspace" variant="coin-wordmark" />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
-        {/* Top-level destinations, in mockup order: Sessions · Workflows ·
-            Inbox · More. "Sessions" opens a fresh Earn conversation (the
-            launcher); a session row is created lazily on the first prompt, so
-            this never leaves empties. */}
+        {/* Top-level destinations */}
         <div className="flex flex-col gap-0.5">
           <Link
             href="/workspace"
-            className={`${linkClass} ${pathname === "/workspace" ? "bg-surface-2 text-fg-primary" : ""}`}
+            className={pathname === "/workspace" ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
             Sessions
           </Link>
-          <Link href="/automations" className={linkClass}>
+          <Link
+            href="/automations"
+            className={pathname === "/automations" ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+          >
             Automations
           </Link>
-          <Link href="/inbox" className={`${linkClass} justify-between`}>
+          <Link
+            href="/inbox"
+            className={`${pathname === "/inbox" ? `${activeLinkClass} flex items-center justify-between gap-2` : `${linkClass} justify-between`}`}
+          >
             <span className="flex items-center gap-2">
               Inbox
             </span>
             {inboxUnread > 0 ? (
-              <span className="rounded-full bg-gold-400 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none text-surface-0">
+              <span className="rounded-full bg-gradient-to-r from-gold-400 to-gold-300 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-surface-0 shadow-[0_0_8px_rgb(var(--fx-gold-rgb)/0.5)]">
                 {inboxUnread > 99 ? "99+" : inboxUnread}
               </span>
             ) : null}
@@ -433,17 +441,21 @@ export function AppSidebar({
               <span className="font-mono text-base leading-none text-gold-400">⋯</span>
               More
             </span>
-            <span className="font-mono text-[10px] text-fg-muted">
-              {moreOpen ? "▾" : "▸"}
+            <span className="font-mono text-[10px] text-fg-muted transition-transform duration-150" style={{ transform: moreOpen ? "rotate(90deg)" : "rotate(0deg)" }}>
+              ▸
             </span>
           </button>
           {moreOpen ? (
-            <div className="flex flex-col">
+            <div className="flex flex-col animate-fade-up">
               {MORE_ITEMS.map((item) => (
                 <Link
                   key={item.label}
                   href={item.href}
-                  className="rounded-md px-2 py-1 pl-9 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                  className={`rounded-md px-2 py-1 pl-9 text-xs transition duration-150 ${
+                    pathname === item.href
+                      ? "text-gold-300 bg-gold-500/8"
+                      : "text-fg-secondary hover:bg-surface-2/80 hover:text-fg-primary"
+                  }`}
                 >
                   {item.label}
                 </Link>
@@ -452,7 +464,7 @@ export function AppSidebar({
           ) : null}
         </div>
 
-        <p className="mb-1 mt-5 px-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+        <p className="mb-1.5 mt-5 px-2 font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted/70">
           Hubs
         </p>
         {hubs.map((hub) => {
@@ -463,54 +475,74 @@ export function AppSidebar({
                 type="button"
                 onClick={() => setOpenHub(isOpen ? null : hub.key)}
                 aria-expanded={isOpen}
-                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 transition duration-150 ${
+                  isOpen
+                    ? "bg-gradient-to-r from-neural-400/8 to-transparent text-fg-primary"
+                    : "text-fg-secondary hover:bg-surface-2/80 hover:text-fg-primary"
+                }`}
               >
                 <span className="flex items-center gap-1.5">
+                  {isOpen && (
+                    <span
+                      aria-hidden
+                      className="h-1.5 w-1.5 rounded-full bg-neural-400 shadow-[0_0_6px_rgb(var(--fx-accent-rgb)/0.8)]"
+                    />
+                  )}
                   {hub.label}
                   {hub.approvalGated ? (
                     <span
                       title="Approval gate — actions in this hub run behind your explicit sign-off before any outward-facing work executes"
                       className="rounded border border-gold-500/40 bg-gold-500/10 px-1 py-px font-mono text-[8px] font-medium uppercase leading-none tracking-wider text-gold-300"
                     >
-                      Approval gate
+                      gate
                     </span>
                   ) : null}
                 </span>
-                <span className="font-mono text-[10px] text-fg-muted">
-                  {isOpen ? "▾" : "▸"}
+                <span
+                  className="font-mono text-[10px] text-fg-muted transition-transform duration-200"
+                  style={{ transform: isOpen ? "rotate(90deg)" : "rotate(0deg)" }}
+                >
+                  ▸
                 </span>
               </button>
               {/* Modules reveal on click. */}
               {isOpen ? (
-                <div className="flex flex-col">
-                  {hub.modules.map((mod) => (
-                    <Link
-                      key={mod.href}
-                      href={mod.href}
-                      className="flex items-center gap-1.5 rounded-md px-2 py-1 pl-7 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
-                    >
-                      {mod.status ? (
-                        <span
-                          aria-hidden
-                          title={
-                            mod.status === "complete"
-                              ? "Complete"
-                              : mod.status === "started"
-                                ? "In progress"
-                                : "Not started"
-                          }
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                            mod.status === "complete"
-                              ? "bg-emerald-400"
-                              : mod.status === "started"
-                                ? "bg-gold-400"
-                                : "bg-line"
-                          }`}
-                        />
-                      ) : null}
-                      <span className="truncate">{mod.label}</span>
-                    </Link>
-                  ))}
+                <div className="flex flex-col animate-fade-up">
+                  {hub.modules.map((mod) => {
+                    const isModActive = pathname === mod.href;
+                    return (
+                      <Link
+                        key={mod.href}
+                        href={mod.href}
+                        className={`flex items-center gap-1.5 rounded-md px-2 py-1 pl-7 text-xs transition duration-150 ${
+                          isModActive
+                            ? "bg-gradient-to-r from-neural-400/10 to-transparent text-fg-primary font-medium"
+                            : "text-fg-secondary hover:bg-surface-2/80 hover:text-fg-primary"
+                        }`}
+                      >
+                        {mod.status ? (
+                          <span
+                            aria-hidden
+                            title={
+                              mod.status === "complete"
+                                ? "Complete"
+                                : mod.status === "started"
+                                  ? "In progress"
+                                  : "Not started"
+                            }
+                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                              mod.status === "complete"
+                                ? "bg-emerald-400 shadow-[0_0_5px_#34d399]"
+                                : mod.status === "started"
+                                  ? "bg-gold-400 shadow-[0_0_5px_rgb(var(--fx-gold-rgb)/0.7)]"
+                                  : "bg-line"
+                            }`}
+                          />
+                        ) : null}
+                        <span className="truncate">{mod.label}</span>
+                      </Link>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
@@ -606,43 +638,52 @@ export function AppSidebar({
       </nav>
 
       {/* Account — name + plan; menu pops out on click, Sign out pinned below */}
-      <div className="border-t border-line p-3" ref={accountRef}>
+      <div className="relative border-t border-line/60 p-3" ref={accountRef}>
+        {/* Subtle top glow line */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-500/20 to-transparent"
+        />
         <div className="relative">
           <button
             type="button"
             onClick={() => setAccountOpen((v) => !v)}
             aria-expanded={accountOpen}
-            className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left transition hover:bg-surface-2"
+            className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left transition duration-150 hover:bg-surface-2/80"
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold-400 font-display text-xs font-bold text-surface-0">
+            {/* Avatar with gold ring */}
+            <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold-300 to-gold-500 font-display text-xs font-bold text-surface-0 shadow-[0_0_10px_rgb(var(--fx-gold-rgb)/0.4)]">
               {name.charAt(0).toUpperCase()}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-medium text-fg-primary">
+              <span className="block truncate text-xs font-semibold text-fg-primary">
                 {name}
               </span>
-              <span className="block truncate text-[10px] text-fg-muted">
+              <span className="block truncate text-[10px] text-gold-400/70">
                 {planName} plan
               </span>
             </span>
-            <span className="font-mono text-[10px] text-fg-muted">
-              {accountOpen ? "▾" : "▸"}
+            <span
+              className="font-mono text-[10px] text-fg-muted transition-transform duration-200"
+              style={{ transform: accountOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+            >
+              ▾
             </span>
           </button>
 
           {accountOpen ? (
-            <div className="absolute bottom-full left-0 right-0 mb-2 flex flex-col gap-0.5 rounded-xl border border-line/80 bg-surface-1/95 p-1.5 shadow-2xl backdrop-blur-xl">
+            <div className="absolute bottom-full left-0 right-0 mb-2 flex flex-col gap-0.5 rounded-xl border border-line/80 bg-surface-1/95 p-1.5 shadow-[0_-8px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl animate-fade-up">
               {ACCOUNT_ITEMS.map((item) => {
                 const inner = (
                   <>
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-surface-2 font-mono text-[11px] leading-none text-gold-400/90 transition group-hover:bg-gold-500/15 group-hover:text-gold-300">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-surface-2/80 font-mono text-[11px] leading-none text-gold-400/90 transition group-hover:bg-gold-500/15 group-hover:text-gold-300">
                       {item.icon}
                     </span>
                     {item.label}
                   </>
                 );
                 const cls =
-                  "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary";
+                  "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-fg-secondary transition duration-100 hover:bg-surface-2/80 hover:text-fg-primary";
                 return item.href ? (
                   <Link
                     key={item.label}
@@ -672,7 +713,7 @@ export function AppSidebar({
 
         {/* Sign out — at the very bottom */}
         <form action={signOutAction} className="mt-2">
-          <button className="w-full rounded-md border border-line px-2 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
+          <button className="w-full rounded-md border border-line/60 px-2 py-1.5 text-xs text-fg-muted transition duration-150 hover:border-line hover:bg-surface-2/60 hover:text-fg-secondary">
             Sign out
           </button>
         </form>

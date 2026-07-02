@@ -190,6 +190,89 @@ body {
     background-size: auto, auto, 48px 48px, 48px 48px;
     mask-image: radial-gradient(circle at 50% 0%, black, transparent 78%);
   }
+
+  /* Active sidebar navigation link — left-edge gold accent bar + gradient bg. */
+  .fx-nav-active {
+    @apply relative bg-gradient-to-r from-gold-500/12 to-transparent text-fg-primary;
+  }
+  .fx-nav-active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 18%;
+    bottom: 18%;
+    width: 3px;
+    border-radius: 9999px;
+    background: linear-gradient(to bottom, rgb(var(--fx-gold-300)), rgb(var(--fx-gold-500)));
+    box-shadow: 0 0 8px rgb(var(--fx-gold-rgb) / 0.6);
+  }
+
+  /* Stat tile shimmer overlay — diagonal highlight sweep on hover. */
+  .fx-stat-shimmer {
+    @apply relative overflow-hidden;
+  }
+  .fx-stat-shimmer::after {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -75%;
+    width: 50%;
+    height: 200%;
+    background: linear-gradient(
+      105deg,
+      transparent 40%,
+      rgb(var(--fx-gold-rgb) / 0.12) 50%,
+      transparent 60%
+    );
+    transform: skewX(-15deg);
+    animation: fxShimmer 3.5s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  /* Live status ring — concentric pulsing glow for active agent/process dots. */
+  .fx-live-ring {
+    position: absolute;
+    inset: -4px;
+    border-radius: 9999px;
+    animation: fxBorderPulse 2.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  /* Deal stage pill — colored top edge per stage. */
+  .fx-stage-pill {
+    @apply relative overflow-hidden rounded-lg border border-line/60 bg-gradient-to-b from-surface-2/80 to-surface-1/40 p-2.5 text-center transition duration-200 hover:border-gold-500/40 hover:-translate-y-0.5;
+  }
+  .fx-stage-pill::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 9999px 9999px 0 0;
+    background: var(--fx-stage-color, rgb(var(--fx-accent-rgb)));
+    opacity: 0.65;
+  }
+
+  /* Section heading — left accent glow bar. */
+  .fx-heading-bar {
+    display: inline-block;
+    width: 3px;
+    height: 14px;
+    border-radius: 9999px;
+    background: linear-gradient(to bottom, rgb(var(--fx-gold-300)), rgb(var(--fx-gold-500)));
+    box-shadow: 0 0 6px rgb(var(--fx-gold-rgb) / 0.55);
+    flex-shrink: 0;
+  }
+}
+
+@keyframes fxShimmer {
+  0% { transform: translateX(-100%) skewX(-15deg); }
+  100% { transform: translateX(400%) skewX(-15deg); }
+}
+
+@keyframes fxBorderPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--fx-accent-rgb) / 0.45); }
+  50% { box-shadow: 0 0 0 5px rgb(var(--fx-accent-rgb) / 0); }
 }
 
 /* Ambient blue glow anchored to the top of the Command Center — gives the page

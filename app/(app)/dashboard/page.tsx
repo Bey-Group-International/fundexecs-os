@@ -37,6 +37,14 @@ const AGENT_GROUPS: { label: string; keys: AgentKey[] }[] = [
 const ACTIVE = new Set(["pending", "in_progress", "awaiting_approval", "blocked"]);
 const DEAL_STAGES = ["sourced", "screening", "diligence", "ic_review", "closing"] as const;
 
+const STAGE_COLORS: Record<string, string> = {
+  sourced: "#38bdf8",
+  screening: "#6366f1",
+  diligence: "#f59e0b",
+  ic_review: "#ef4444",
+  closing: "#5FB87A",
+};
+
 function compactUsd(n: number | null): string | null {
   if (!n || n <= 0) return null;
   return new Intl.NumberFormat("en-US", {
@@ -49,23 +57,33 @@ function compactUsd(n: number | null): string | null {
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="fx-card fx-card-hover group relative overflow-hidden p-4">
-      {/* Top-edge gold hairline that brightens on hover */}
+    <div className="fx-card fx-card-hover fx-stat-shimmer group relative overflow-hidden p-4 animate-fade-up">
+      {/* Top-edge gold hairline brightens on hover */}
       <span
         aria-hidden
-        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-500/40 to-transparent transition-opacity duration-200 group-hover:via-gold-400/70"
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/55 to-transparent transition-opacity duration-300 group-hover:via-gold-300/80"
       />
-      <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{label}</p>
-      <p className="mt-1.5 font-display text-3xl font-semibold leading-none tracking-tight text-fg-primary">
+      {/* Bottom neural sweep on hover */}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-neural-400/30 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+      />
+      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">{label}</p>
+      <p className="mt-2 font-display text-[2.1rem] font-bold leading-none tracking-tight text-fg-primary transition-colors duration-200 group-hover:text-white">
         {value}
       </p>
+      {/* Ghost watermark number — subtle depth */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute bottom-1.5 right-3 select-none font-display text-[2rem] font-bold leading-none text-gold-400/6 transition-colors duration-300 group-hover:text-gold-400/12"
+      >
+        {value}
+      </span>
     </div>
   );
 }
 
-// Standardized section heading — a short gold tick before a mono-cased label,
-// with an optional trailing action. Gives the Command Center a consistent
-// rhythm down the page.
+// Standardized section heading — glowing left bar, bold mono label, optional action.
 function SectionHeading({
   children,
   action,
@@ -74,9 +92,9 @@ function SectionHeading({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fg-muted">
-        <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <h2 className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-fg-secondary">
+        <span aria-hidden className="fx-heading-bar" />
         {children}
       </h2>
       {action}
@@ -181,13 +199,21 @@ export default async function DashboardPage() {
 
   return (
     <div className="fx-ambient fx-blueprint mx-auto max-w-6xl">
-      <header className="fx-glass mb-6 flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between">
-        <div>
+      <header className="fx-glass mb-6 flex flex-col gap-5 overflow-hidden p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between animate-fade-up">
+        {/* Ambient right-side glow */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_80%_at_92%_10%,rgba(56,189,248,0.10),transparent_70%)]"
+        />
+        <div className="relative">
           <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-            <span aria-hidden className="h-4 w-1 rounded-full bg-gradient-to-b from-gold-300 to-gold-500" />
+            <span
+              aria-hidden
+              className="h-4 w-[3px] rounded-full bg-gradient-to-b from-gold-300 to-gold-500 shadow-[0_0_6px_rgb(var(--fx-gold-rgb)/0.6)]"
+            />
             Command Center
           </span>
-          <h1 className="mt-2.5 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-4xl">
+          <h1 className="mt-2.5 font-display text-3xl font-bold tracking-tight text-fg-primary sm:text-4xl">
             Private Markets Command Center
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">
@@ -195,11 +221,12 @@ export default async function DashboardPage() {
             capital, approvals, and deliverables.
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="relative flex shrink-0 flex-wrap items-center gap-2">
           <Link
             href="/workspace"
-            className="rounded-lg bg-gold-500 px-3.5 py-2 text-xs font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400 hover:shadow-[0_12px_28px_-14px_rgb(var(--fx-accent-rgb)/0.95)]"
+            className="group relative overflow-hidden rounded-lg bg-gradient-to-r from-gold-400 to-gold-500 px-4 py-2 text-xs font-semibold text-surface-0 shadow-[0_8px_20px_-10px_rgb(var(--fx-gold-rgb)/0.8)] transition hover:from-gold-300 hover:to-gold-400 hover:shadow-[0_12px_28px_-10px_rgb(var(--fx-gold-rgb)/0.9)]"
           >
+            <span aria-hidden className="absolute inset-0 bg-white/10 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
             New Session
           </Link>
         </div>
@@ -214,22 +241,32 @@ export default async function DashboardPage() {
           executive team in real time. */}
       <Link
         href="/dashboard/office"
-        className="fx-card fx-card-hover group relative mb-6 flex items-center gap-4 overflow-hidden p-5"
+        className="fx-neural-card group relative mb-6 flex items-center gap-4 p-5 transition-all duration-300"
       >
+        {/* Right-side neural glow */}
         <span
           aria-hidden
-          className="absolute inset-0 bg-[radial-gradient(60%_120%_at_85%_50%,rgba(56,189,248,0.18),transparent_70%)]"
+          className="absolute inset-0 bg-[radial-gradient(55%_130%_at_90%_50%,rgba(56,189,248,0.22),transparent_65%)] transition-opacity duration-300 group-hover:opacity-130"
         />
-        <div className="relative min-w-0 flex-1">
+        {/* Live indicator bar */}
+        <span
+          aria-hidden
+          className="absolute left-0 top-1/4 bottom-1/4 w-[3px] rounded-r-full bg-gradient-to-b from-neural-300 to-neural-500 opacity-70 shadow-[0_0_8px_rgb(var(--fx-accent-rgb)/0.8)]"
+        />
+        <div className="relative min-w-0 flex-1 pl-2">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
-              Command Center
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-neural-400">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neural-400 opacity-60" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-neural-400" />
+              </span>
+              Live
             </span>
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
-              Live floor
+              Spatial office
             </span>
           </div>
-          <p className="mt-1.5 font-display text-lg font-semibold text-fg-primary">
+          <p className="mt-1.5 font-display text-lg font-bold text-fg-primary">
             Enter the spatial office
           </p>
           <p className="mt-0.5 text-sm text-fg-muted">
@@ -237,7 +274,7 @@ export default async function DashboardPage() {
             offices — executives execute in real time.
           </p>
         </div>
-        <span className="relative shrink-0 font-mono text-xl text-gold-400 transition group-hover:translate-x-1">
+        <span className="relative shrink-0 font-mono text-xl text-neural-400 transition-all duration-200 group-hover:translate-x-1 group-hover:text-neural-300">
           →
         </span>
       </Link>
@@ -252,10 +289,18 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Workflows" value={workflows.length} />
-        <Stat label="Deliverables" value={stepsCompleted} />
-        <Stat label="Deals in pipeline" value={deals.length} />
-        <Stat label="Portfolio assets" value={assets.length} />
+        <div style={{ animationDelay: "0ms" }}>
+          <Stat label="Workflows" value={workflows.length} />
+        </div>
+        <div style={{ animationDelay: "60ms" }}>
+          <Stat label="Deliverables" value={stepsCompleted} />
+        </div>
+        <div style={{ animationDelay: "120ms" }}>
+          <Stat label="Deals in pipeline" value={deals.length} />
+        </div>
+        <div style={{ animationDelay: "180ms" }}>
+          <Stat label="Portfolio assets" value={assets.length} />
+        </div>
       </section>
 
       <Link
@@ -357,26 +402,38 @@ export default async function DashboardPage() {
         <div className="grid gap-3 sm:grid-cols-3">
           {AGENT_GROUPS.map((group) => (
             <div key={group.label} className="fx-card p-4">
-              <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
+              <p className="mb-3.5 font-mono text-[10px] uppercase tracking-widest text-gold-400">
                 {group.label}
               </p>
-              <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-3">
                 {group.keys.map((key) => {
                   const agent = AGENTS.find((a) => a.key === key)!;
                   const count = workload.get(key) ?? 0;
                   const active = count > 0;
                   return (
-                    <div key={key} className="flex items-center gap-2">
+                    <div key={key} className="flex items-center gap-2.5">
+                      {/* Status dot with live glow ring when active */}
+                      <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
+                        {active && (
+                          <span
+                            className="absolute inset-0 rounded-full animate-ping opacity-60"
+                            style={{ backgroundColor: agent.color }}
+                          />
+                        )}
+                        <span
+                          className="relative h-2.5 w-2.5 rounded-full"
+                          style={{
+                            backgroundColor: agent.color,
+                            boxShadow: active ? `0 0 10px ${agent.color}` : "none",
+                            opacity: active ? 1 : 0.35,
+                          }}
+                        />
+                      </span>
+                      <span className={`text-sm ${active ? "text-fg-primary font-medium" : "text-fg-secondary"}`}>
+                        {agent.name}
+                      </span>
                       <span
-                        className={`h-2.5 w-2.5 rounded-full ${active ? "animate-pulse" : ""}`}
-                        style={{
-                          backgroundColor: agent.color,
-                          boxShadow: active ? `0 0 8px ${agent.color}` : "none",
-                        }}
-                      />
-                      <span className="text-sm text-fg-primary">{agent.name}</span>
-                      <span
-                        className={`ml-auto font-mono text-[10px] ${active ? "text-gold-300" : "text-fg-muted"}`}
+                        className={`ml-auto font-mono text-[10px] tabular-nums ${active ? "text-gold-300" : "text-fg-muted"}`}
                       >
                         {active ? `${count} active` : "idle"}
                       </span>
@@ -420,16 +477,27 @@ export default async function DashboardPage() {
         <div>
           <SectionHeading action={deals.length > 0 ? <ClearDealsBtn /> : undefined}>Deal pipeline</SectionHeading>
           <div className="grid grid-cols-5 gap-1.5">
-            {DEAL_STAGES.map((stage) => (
-              <div key={stage} className="fx-card p-2 text-center">
-                <p className="font-display text-lg font-semibold text-fg-primary">
-                  {dealByStage.get(stage) ?? 0}
-                </p>
-                <p className="font-mono text-[9px] uppercase tracking-wide text-fg-muted">
-                  {stage.replace("_", " ")}
-                </p>
-              </div>
-            ))}
+            {DEAL_STAGES.map((stage) => {
+              const count = dealByStage.get(stage) ?? 0;
+              const color = STAGE_COLORS[stage] ?? "#38bdf8";
+              return (
+                <div
+                  key={stage}
+                  className="fx-stage-pill group"
+                  style={{ "--fx-stage-color": color } as React.CSSProperties}
+                >
+                  <p
+                    className="font-display text-xl font-bold leading-none tracking-tight transition-colors duration-200"
+                    style={{ color: count > 0 ? color : undefined }}
+                  >
+                    {count}
+                  </p>
+                  <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-fg-muted">
+                    {stage.replace("_", " ")}
+                  </p>
+                </div>
+              );
+            })}
           </div>
           {deals.length === 0 ? (
             <p className="mt-3 text-xs text-fg-muted">
