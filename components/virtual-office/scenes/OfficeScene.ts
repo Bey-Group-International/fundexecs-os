@@ -218,6 +218,7 @@ export class OfficeScene extends Phaser.Scene {
 
   shutdown() {
     this.game.events.off("office:teleport");
+    this.game.events.off("rtc:localStream");
     if (this.sfuMode) {
       this.sfu?.leave();
     } else {
@@ -792,6 +793,9 @@ export class OfficeScene extends Phaser.Scene {
       case "room.occupancy": {
         this.game.events.emit("office:occupancy", msg.counts);
         break;
+      }
+      default: {
+        console.warn("[OfficeScene] unhandled message type:", (msg as { type: string }).type);
       }
     }
   }
