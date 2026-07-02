@@ -1831,6 +1831,7 @@ export type Database = {
       service_providers: TableShape<ServiceProvider>;
       debt_facilities: TableShape<DebtFacility>;
       marketplace_listings: TableShape<MarketplaceListing>;
+      marketplace_interests: TableShape<MarketplaceInterest>;
       brain_runs: TableShape<BrainRun>;
       brain_documents: TableShape<BrainDocument>;
       brain_kb_chunks: TableShape<BrainKbChunk>;

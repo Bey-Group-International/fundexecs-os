@@ -69,6 +69,11 @@ export function dealToListing(deal: Deal): MarketplaceListing {
     status: "listed",
     is_public: true,
     metadata: {},
+    target_irr: null,
+    hold_period_years: null,
+    geography: null,
+    asset_class: null,
+    teaser_url: null,
     created_at: deal.created_at,
     updated_at: deal.updated_at,
   };
