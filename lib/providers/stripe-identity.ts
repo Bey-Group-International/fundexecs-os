@@ -111,7 +111,8 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
       };
     } catch (err) {
       const ref = crypto.randomUUID().slice(0, 8);
-      console.error(`[stripe-identity:${ref}]`, err);
+      // Log only error type — message may contain user-supplied IDs from the Stripe request path.
+      console.error(`[stripe-identity:${ref}] initiate failed (${err instanceof Error ? err.constructor.name : typeof err})`);
       return {
         ok: false,
         live: false,
@@ -153,9 +154,8 @@ export const stripeIdentityProvider: IdentityVerificationProvider = {
       };
     } catch (err) {
       const ref = crypto.randomUUID().slice(0, 8);
-      // Log sanitized message only — err.message may contain user-supplied verificationId via the Stripe path.
-      const msg = err instanceof Error ? err.message.replace(verificationId, "[id]") : "unknown error";
-      console.error(`[stripe-identity:${ref}] getStatus failed:`, msg);
+      // Log only error type — message may contain user-supplied verificationId from the Stripe request path.
+      console.error(`[stripe-identity:${ref}] getStatus failed (${err instanceof Error ? err.constructor.name : typeof err})`);
       return {
         ok: false,
         live: false,
