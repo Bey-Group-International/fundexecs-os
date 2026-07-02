@@ -12,6 +12,19 @@ import { MediaPermissionBanner } from "./MediaPermissionBanner";
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
 
+// Room navigation config — matches ROOMS in types.ts
+const ROOM_NAV = [
+  { key: "ceo",       label: "CEO Office",      icon: "◆" },
+  { key: "boardroom", label: "Boardroom",        icon: "◈" },
+  { key: "trading",   label: "Trading Floor",   icon: "▲" },
+  { key: "research",  label: "Research Hub",    icon: "◉" },
+  { key: "office",    label: "Main Office",     icon: "⬡" },
+  { key: "ops",       label: "Operations",      icon: "⚙" },
+  { key: "legal",     label: "Legal Corner",    icon: "§" },
+  { key: "marketing", label: "Marketing",       icon: "◬" },
+  { key: "reception", label: "Reception",       icon: "⬢" },
+];
+
 /** Replace sentinel URLs in IFRAME_ZONES with runtime values from overrides. */
 function _resolveZones(overrides: Record<string, string>) {
   return IFRAME_ZONES.map((z) => {
@@ -261,19 +274,6 @@ export function VirtualOfficeGame({
       window.dispatchEvent(new CustomEvent(action.event, { detail: {} }));
     }
   }, []);
-
-  // Room navigation config — matches ROOMS in types.ts
-  const ROOM_NAV = [
-    { key: "ceo",       label: "CEO Office",      icon: "◆" },
-    { key: "boardroom", label: "Boardroom",        icon: "◈" },
-    { key: "trading",   label: "Trading Floor",   icon: "▲" },
-    { key: "research",  label: "Research Hub",    icon: "◉" },
-    { key: "office",    label: "Main Office",     icon: "⬡" },
-    { key: "ops",       label: "Operations",      icon: "⚙" },
-    { key: "legal",     label: "Legal Corner",    icon: "§" },
-    { key: "marketing", label: "Marketing",       icon: "◬" },
-    { key: "reception", label: "Reception",       icon: "⬢" },
-  ];
 
   const teleportTo = (roomKey: string) => {
     gameRef.current?.events.emit("office:teleport-room", roomKey);
