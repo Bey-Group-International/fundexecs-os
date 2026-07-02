@@ -234,7 +234,7 @@ async function routeClosedPeriodApproval(
     organization_id: auth.ctx.orgId,
     task_id: task.id,
     requested_by_agent: "fund_admin",
-    summary: `Tier 3 — force-post into a closed period`,
+    summary: `Tier ${tier} — force-post into a closed period`,
   });
   if (approvalError) {
     return { ok: false, error: "Could not queue the closed-period approval." };

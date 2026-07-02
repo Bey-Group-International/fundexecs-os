@@ -1,24 +1,16 @@
--- 20260703000000_finance_hardening.sql
--- Finance Phase 1 hardening (review follow-up, PRs #482 & #485):
---   M3  — cross-org / cross-entity parent references. Foreign-key checks bypass
---         RLS, so a writer could point fin_entities.parent_entity_id or
---         fin_accounts.parent_account_id at another org's row, creating a
---         dangling cross-tenant hierarchy link. These triggers require a parent
---         to belong to the same organization (and, for accounts, the same
---         entity), and reject self-parenting.
---   m3  — multi-hop hierarchy cycles (A → B → C → A). The self-parent guard only
---         blocks the one-hop case; a recursive ancestor walk in each trigger now
---         rejects any cycle, so a recursive rollup (reporting, consolidation)
---         can never loop. Existing rows are always acyclic because this guard
---         maintains that invariant on every write, so the CTE terminates.
---   m1  — TOCTOU closed-period post surfaced a raw error the app matched by
---         message text. The posting RPC now raises that case with a STABLE
---         SQLSTATE ('FIN01') so the app can branch on error.code instead of a
---         fragile string. (The message is preserved as a fallback.)
+-- 20260703000000_finance_hardening_followups.sql
+-- Finance Phase 1 hardening — follow-ups to review of PR #485. Delivered as a
+-- NEW migration (not an edit/rename of 20260702240000) because that file is
+-- already applied on the preview branch; renaming an applied migration breaks
+-- the branch's migration history ("remote migration versions not found").
+--   m1 — the closed-period TOCTOU RAISE now carries a stable SQLSTATE ('FIN01')
+--        so the app branches on error.code, not fragile message text.
+--   m3 — the entity/account parent guards reject multi-hop cycles
+--        (A → B → C → A) via a recursive ancestor walk, not only self-parenting.
 
--- --- m1: rebuild the posting RPC with a stable SQLSTATE on the closed-period
--- guard. Identical to 20260702230000 except the closed-period RAISE now carries
--- ERRCODE 'FIN01'. CREATE OR REPLACE, so the latest definition wins.
+-- --- m1: rebuild the posting RPC. Identical to 20260702230000 except the
+-- closed-period RAISE now carries ERRCODE 'FIN01'. CREATE OR REPLACE — the
+-- latest definition wins.
 create or replace function public.fin_post_journal_entry(
   p_ledger uuid, p_period uuid, p_entry_date date, p_memo text,
   p_source text, p_source_ref uuid, p_reverses uuid, p_lines jsonb, p_actor uuid
@@ -92,7 +84,9 @@ begin
   return v_entry;
 end $$;
 
--- --- M3 + m3: entity parent must be same-org, non-self, and acyclic.
+-- --- m3: entity parent guard, now with a multi-hop cycle check. Redefines the
+-- function 20260702240000 created; the existing trigger already binds to it by
+-- name, so it picks up this definition (trigger re-created too, idempotently).
 create or replace function public.fin_entity_parent_same_org() returns trigger
 language plpgsql as $$
 begin
@@ -132,7 +126,7 @@ create trigger fin_entity_parent_same_org_trg
   before insert or update on public.fin_entities
   for each row execute function public.fin_entity_parent_same_org();
 
--- --- M3 + m3: account parent must be same-org AND same-entity, non-self, acyclic.
+-- --- m3: account parent guard, same-org AND same-entity, now cycle-checked.
 create or replace function public.fin_account_parent_same_org() returns trigger
 language plpgsql as $$
 begin
