@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { Annotation, EntityType } from "@/lib/annotations";
 
@@ -34,15 +34,21 @@ export function AnnotationLayer({ entityType, entityId, orgId, children }: Props
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  // Memoized so the realtime subscription below isn't torn down and recreated on
+  // every render (a fresh client each render would resubscribe in a loop).
+  const supabase = useMemo(
+    () =>
+      createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      ),
+    [],
   );
 
-  async function load() {
+  const load = useCallback(async () => {
     const res = await fetch(`/api/annotations?entityType=${entityType}&entityId=${entityId}`);
     if (res.ok) setAnnotations(await res.json());
-  }
+  }, [entityType, entityId]);
 
   useEffect(() => {
     load();
@@ -51,7 +57,7 @@ export function AnnotationLayer({ entityType, entityId, orgId, children }: Props
       .on("postgres_changes", { event: "*", schema: "public", table: "annotations", filter: `entity_id=eq.${entityId}` }, load)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [entityId]);
+  }, [entityId, load, supabase]);
 
   function handleContainerClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!containerRef.current) return;

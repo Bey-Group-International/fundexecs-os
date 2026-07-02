@@ -89,6 +89,11 @@ export function GuidedTour({ orgId, initialHidden = false }: { orgId: string; in
       window.removeEventListener("fx:open-tour", openTour);
       window.removeEventListener("fx:hide-tour", hideTour);
     };
+  // Per-orgId mount setup: reads initial state from localStorage once and wires
+  // the window listeners. initialHidden / persist* are intentionally read at
+  // setup time only — re-running on their identity would re-register listeners
+  // and clobber user-changed state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
   function persistDone(next: number[]) {

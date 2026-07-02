@@ -753,7 +753,10 @@ export function ExecutiveHQ({
         .hq-paused * { animation-play-state: paused !important; }
       `}</style>
 
-      {/* Full-office PNG background (walls, corridors, lobby) */}
+      {/* Full-office PNG background (walls, corridors, lobby). A decorative,
+          local, full-bleed asset with dynamic objectFit — next/image's wrapper
+          and optimization add layout risk without benefit for a static file. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`/assets/fundexecs/office/rooms/${nightMode ? "night" : "day"}/office-${nightMode ? "night" : "day"}-empty.png`}
         alt=""

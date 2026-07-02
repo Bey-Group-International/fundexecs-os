@@ -356,8 +356,8 @@ export default function Copilot({
     return () => {
       supabase.removeChannel(channel);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   // router.refresh is stable in App Router — excluded to prevent channel re-subscription on navigation
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
   async function submit(e: React.FormEvent) {
