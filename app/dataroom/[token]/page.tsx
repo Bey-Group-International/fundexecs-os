@@ -20,6 +20,7 @@ import type {
   ViewerEntity,
   ViewerSection,
   ViewerDoc,
+  GateConfig,
 } from "@/components/dataroom/DataRoomViewer";
 
 // Public, read-only data room — outside the authed (app) group so it's
@@ -170,15 +171,24 @@ export default async function PublicDataRoom({ params }: { params: { token: stri
     entity_type: (e as { entity_type?: string | null }).entity_type ?? null,
   }));
 
+  const gateConfig: GateConfig = {
+    requireEmail: share.require_email ?? false,
+    requireNda: share.require_nda ?? false,
+    ndaText: share.nda_text ?? null,
+    passwordProtected: Boolean(share.password_hash),
+  };
+
   return (
     <DataRoomViewer
       token={params.token}
+      shareId={share.id}
       org={viewerOrg}
       blended={viewerBlended}
       thesis={viewerThesis}
       team={viewerTeam}
       entities={viewerEntities}
       docSections={docSections}
+      gateConfig={gateConfig}
     />
   );
 }

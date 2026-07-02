@@ -171,6 +171,20 @@ export async function updateDocumentStatus(formData: FormData): Promise<void> {
 }
 
 // --- Shareable data-room links --------------------------------------------
+
+/** Compute a simple SHA-256 based hash for data-room password protection.
+ *  Stored as "sha256:<hex>" to allow future algorithm migration. */
+async function hashPassword(password: string): Promise<string> {
+  const { createHash } = await import("crypto");
+  const hex = createHash("sha256").update(password).digest("hex");
+  return `sha256:${hex}`;
+}
+
+async function comparePassword(password: string, stored: string): Promise<boolean> {
+  const expected = await hashPassword(password);
+  return expected === stored;
+}
+
 export async function createShare(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
@@ -178,14 +192,81 @@ export async function createShare(formData: FormData): Promise<void> {
   const days = Number(String(formData.get("expires_in_days") ?? "").trim());
   const expires_at =
     Number.isFinite(days) && days > 0 ? new Date(Date.now() + days * 86_400_000).toISOString() : null;
+
+  const requireEmail = formData.get("require_email") === "1";
+  const requireNda = formData.get("require_nda") === "1";
+  const ndaText = String(formData.get("nda_text") ?? "").trim() || null;
+  const passwordRaw = String(formData.get("password") ?? "").trim();
+  const password_hash = passwordRaw ? await hashPassword(passwordRaw) : null;
+
   const supabase = createServerClient();
   await supabase.from("data_room_shares").insert({
     organization_id: ctx.orgId,
     label,
     expires_at,
     created_by: ctx.userId,
-  });
+    require_email: requireEmail,
+    require_nda: requireNda,
+    nda_text: ndaText,
+    password_hash,
+  } as never);
   revalidatePath(ROOM);
+}
+
+/** Verify a data-room password from the public viewer (no auth required). */
+export async function verifySharePassword(token: string, password: string): Promise<boolean> {
+  const { createServiceClient, hasSupabaseServiceEnv } = await import("@/lib/supabase/server");
+  if (!hasSupabaseServiceEnv()) return false;
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("data_room_shares")
+    .select("password_hash, revoked_at, expires_at")
+    .eq("token", token)
+    .maybeSingle();
+  if (!data?.password_hash) return false;
+  if (data.revoked_at) return false;
+  if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) return false;
+  return comparePassword(password, data.password_hash);
+}
+
+/**
+ * Record section dwell time from the public data-room viewer.
+ * Uses the service role because the data_room_views table has no anon insert policy.
+ */
+export async function trackDwell(formData: FormData): Promise<void> {
+  const shareId = String(formData.get("share_id") ?? "").trim();
+  const documentId = String(formData.get("document_id") ?? "").trim() || null;
+  const durationSeconds = parseInt(String(formData.get("duration_seconds") ?? "0"), 10);
+  const viewerEmail = String(formData.get("viewer_email") ?? "").trim() || null;
+  const sessionId = String(formData.get("session_id") ?? "").trim() || null;
+
+  if (!shareId || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return;
+
+  const { createServiceClient, hasSupabaseServiceEnv } = await import("@/lib/supabase/server");
+  if (!hasSupabaseServiceEnv()) return;
+  const supabase = createServiceClient();
+
+  // Validate the share exists and is still valid before recording.
+  const { data: share } = await supabase
+    .from("data_room_shares")
+    .select("organization_id, revoked_at, expires_at")
+    .eq("id", shareId)
+    .maybeSingle();
+  if (!share || share.revoked_at) return;
+  if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return;
+
+  await supabase
+    .from("data_room_views")
+    .insert({
+      organization_id: share.organization_id,
+      share_id: shareId,
+      document_id: documentId,
+      kind: documentId ? "document" : "room",
+      viewer_email: viewerEmail,
+      duration_seconds: durationSeconds,
+      session_id: sessionId,
+    } as never)
+    .then(() => undefined, () => undefined);
 }
 
 export async function revokeShare(formData: FormData): Promise<void> {
