@@ -1,6 +1,6 @@
 // Natural-language network search powered by Claude.
-// Queries the org-pooled network_contacts table plus the existing investors/
-// relationships tables. Returns ranked contacts with relationship context.
+// Queries the org-pooled network_contacts table plus existing relationships.
+// New tables not in database.types.ts — cast supabase client to bypass strict typing.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerClient } from "@/lib/supabase/server";
@@ -85,7 +85,7 @@ Rules:
   }
 }
 
-// Score why a contact is relevant to the query and generate a reason.
+// Score why a contact is relevant and generate a reason string.
 async function scoreRelevance(
   query: string,
   contacts: ContactRow[],
@@ -132,9 +132,7 @@ Return JSON: {"reasons":{"<id>":"<reason>"}}`,
   return map;
 }
 
-// Build a simple intro path from the network_contacts data.
-// Uses a 2-hop heuristic: find any contact who shares the same company
-// as someone with high strength_score.
+// 2-hop intro path heuristic: if a high-strength contact shares the same company, use them as a bridge.
 function buildSimpleIntroPath(
   target: ContactRow,
   allContacts: ContactRow[],
@@ -159,9 +157,11 @@ export async function searchNetwork(query: string, limit = 20): Promise<NetworkS
   const auth = await requireOrgContext();
   if (!auth.ok) return [];
   const { ctx } = auth;
-  const supabase = createServerClient();
 
-  // Parse intent.
+  // Cast to any — network_contacts is not yet in database.types.ts.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createServerClient() as any;
+
   const intent = await parseQueryIntent(query);
   const allTerms = [
     ...intent.roles,
@@ -171,20 +171,17 @@ export async function searchNetwork(query: string, limit = 20): Promise<NetworkS
     ...intent.keywords,
   ].filter(Boolean);
 
-  // Build a text search across name, title, company, location, notes.
-  // Use Postgres ILIKE for multi-term matching.
   let dbQuery = supabase
     .from("network_contacts")
     .select(
       "id, full_name, title, company, location, email, linkedin_url, avatar_url, strength_score, strength_label, connected_on, notes, tags",
     )
     .eq("organization_id", ctx.orgId)
-    .limit(limit * 3); // Fetch extra for scoring
+    .limit(limit * 3);
 
-  // Apply text filters. Use `or` to match any term across key fields.
   if (allTerms.length > 0) {
     const conditions = allTerms
-      .flatMap((term) => [
+      .flatMap((term: string) => [
         `full_name.ilike.%${term}%`,
         `title.ilike.%${term}%`,
         `company.ilike.%${term}%`,
@@ -195,11 +192,10 @@ export async function searchNetwork(query: string, limit = 20): Promise<NetworkS
     dbQuery = dbQuery.or(conditions);
   }
 
-  // Fallback: if no terms, return by strength score.
-  const { data: contacts } = await dbQuery.order("strength_score", { ascending: false });
-  if (!contacts || contacts.length === 0) return [];
+  const { data: rawContacts } = await dbQuery.order("strength_score", { ascending: false });
+  const contacts: ContactRow[] = (rawContacts ?? []) as ContactRow[];
+  if (contacts.length === 0) return [];
 
-  // Score relevance with Claude.
   const reasons = await scoreRelevance(query, contacts.slice(0, limit));
 
   return contacts.slice(0, limit).map((c) => ({

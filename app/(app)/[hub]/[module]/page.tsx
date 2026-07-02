@@ -181,17 +181,19 @@ export default async function ModulePage({
   // Source › Network — relationship capital search, LinkedIn import, warm intros, syndicate circles.
   if (params.hub === "source" && params.module === "network") {
     const ctx = await getSessionContext();
-    const supabase = createServerClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient() as any;
 
     // Count contacts for the org.
     let contactCount = 0;
     let circles: { id: string; name: string; description: string | null; memberCount: number; inviteCode: string; isActive: boolean; createdAt: string }[] = [];
 
     if (ctx?.orgId) {
+      const typedSupabase = createServerClient();
       const [contactsRes, circlesRes, principalRes] = await Promise.all([
         supabase.from("network_contacts").select("id", { count: "exact", head: true }).eq("organization_id", ctx.orgId),
         supabase.from("syndicate_circles").select("id, name, description, member_count, invite_code, is_active, created_at").eq("organization_id", ctx.orgId).eq("is_active", true).order("created_at", { ascending: false }),
-        supabase.from("principals").select("full_name, title").eq("organization_id", ctx.orgId).limit(1).single(),
+        typedSupabase.from("principals").select("full_name, title").eq("id", ctx.userId).limit(1).single(),
       ]);
       contactCount = contactsRes.count ?? 0;
       type CircleRow = { id: string; name: string; description: string | null; member_count: number | null; invite_code: string | null; is_active: boolean | null; created_at: string };

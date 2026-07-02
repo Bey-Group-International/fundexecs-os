@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
-  const supabase = createServerClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createServerClient() as any;
   const { data, error } = await supabase
     .from("syndicate_circles")
     .insert({

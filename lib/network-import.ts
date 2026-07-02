@@ -69,6 +69,10 @@ function parseRow(line: string): string[] {
 }
 
 // Insert parsed rows into network_contacts and return the job ID.
+// New tables are not yet in database.types.ts so we cast to bypass strict typing.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = (supabase: ReturnType<typeof createServerClient>) => supabase as any;
+
 export async function importLinkedInContacts(
   csvText: string,
   pooled = true,
@@ -77,12 +81,13 @@ export async function importLinkedInContacts(
   if (!auth.ok) throw new Error(auth.error);
   const { ctx } = auth;
   const supabase = createServerClient();
+  const any = db(supabase);
 
   const rows = parseLinkedInCsv(csvText);
   if (rows.length === 0) throw new Error("No valid contacts found in CSV");
 
   // Create a job record.
-  const { data: job } = await supabase
+  const { data: job } = await any
     .from("network_import_jobs")
     .insert({
       organization_id: ctx.orgId,
@@ -97,7 +102,7 @@ export async function importLinkedInContacts(
 
   if (!job) throw new Error("Failed to create import job");
 
-  // Upsert contacts in batches of 50.
+  // Insert contacts in batches of 50.
   const BATCH = 50;
   let imported = 0;
   for (let i = 0; i < rows.length; i += BATCH) {
@@ -115,12 +120,11 @@ export async function importLinkedInContacts(
       source: "linkedin_csv",
       pooled,
     }));
-    await supabase.from("network_contacts").insert(records);
+    await any.from("network_contacts").insert(records);
     imported += batch.length;
   }
 
-  // Update job to done (enrichment happens async via /api/network/enrich).
-  await supabase
+  await any
     .from("network_import_jobs")
     .update({ status: "done", imported_rows: imported, completed_at: new Date().toISOString() })
     .eq("id", job.id);
@@ -131,32 +135,35 @@ export async function importLinkedInContacts(
 // Enrich a single contact via Apollo. Called lazily when a contact card is viewed.
 export async function enrichContact(contactId: string): Promise<void> {
   const supabase = createServerClient();
-  const { data: contact } = await supabase
+  const any = db(supabase);
+
+  const { data: contact } = await any
     .from("network_contacts")
-    .select("email, linkedin_url, first_name, last_name, company")
+    .select("email, linkedin_url, company")
     .eq("id", contactId)
     .single();
   if (!contact) return;
 
+  // PersonEnrichParams only accepts email and linkedin_url.
+  if (!contact.email && !contact.linkedin_url) return;
+
   const result = await enrichPerson({
     email: contact.email ?? undefined,
     linkedin_url: contact.linkedin_url ?? undefined,
-    first_name: contact.first_name,
-    last_name: contact.last_name,
   });
 
-  if (!result.success || !result.data) return;
+  // VerifiedResult uses status: 'success' | 'warning' | 'failed', not .success.
+  if (result.status === "failed" || !result.data) return;
   const p = result.data;
 
-  await supabase
+  await any
     .from("network_contacts")
     .update({
-      title: p.title ?? contact.first_name,
+      title: p.title ?? null,
       company: p.company ?? contact.company,
       location: p.location ?? null,
       phone: p.phone ?? null,
-      avatar_url: p.avatarUrl ?? null,
-      confidence: p.confidence ?? 0,
+      confidence: Math.round((p.confidence ?? 0) * 100),
       verified: true,
       enriched_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
