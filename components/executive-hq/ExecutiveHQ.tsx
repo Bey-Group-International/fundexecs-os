@@ -50,6 +50,19 @@ const ROOM_ZOOM_TRANSLATE: Record<string, string> = {
 
 const LIGHT_FLICKER_DELAYS = ["0s","2.3s","5.1s","1.7s","3.8s","4.2s","0.9s","6.1s","1.2s"];
 
+// Room id → image filename slug for per-room backgrounds
+const ROOM_BG_SLUG: Record<string, string> = {
+  ceo:       "ceo-office",
+  boardroom: "boardroom",
+  trading:   "trading-floor",
+  research:  "research-hub",
+  investor:  "office",
+  ops:       "operations-hub",
+  legal:     "legal-corner",
+  marketing: "marketing-saloon",
+  reception: "reception-lounge",
+};
+
 const ROOM_ROWS = [[0,1,2,3],[4,5,6,7],[8]];
 
 // ─── Exec data ────────────────────────────────────────────────────────────────
@@ -324,6 +337,22 @@ function RoomCell({
           : "transform 0.2s cubic-bezier(0.2,0,0,1), box-shadow 0.25s ease, opacity 0s",
       }}
     >
+      {/* Per-room background image */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/assets/fundexecs/office/rooms/${mode}/${ROOM_BG_SLUG[room.id] ?? "office"}-${mode}-empty.png`}
+        alt=""
+        aria-hidden="true"
+        style={{
+          position:"absolute", inset:0,
+          width:"100%", height:"100%",
+          objectFit:"cover", objectPosition:"center center",
+          pointerEvents:"none", userSelect:"none",
+          filter: roomNight ? "brightness(0.82) saturate(0.85)" : "brightness(0.92) saturate(0.96)",
+          transition:"filter 0.4s ease",
+        }}
+      />
+
 {/* Hover brightness lift */}
       <div style={{
         position:"absolute", inset:0, zIndex:1, pointerEvents:"none",
@@ -847,9 +876,8 @@ export function ExecutiveHQ({
         .hq-paused * { animation-play-state: paused !important; }
       `}</style>
 
-      {/* Full-office PNG background (walls, corridors, lobby). A decorative,
-          local, full-bleed asset with dynamic objectFit — next/image's wrapper
-          and optimization add layout risk without benefit for a static file. */}
+      {/* Zoom-in cinematic overlay: scales the full floor plan to center the
+          entered room. Opacity 0 at rest — only visible during the pan-in. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`/assets/fundexecs/office/rooms/${nightMode ? "night" : "day"}/office-${nightMode ? "night" : "day"}-empty.png`}
@@ -858,16 +886,18 @@ export function ExecutiveHQ({
         style={{
           position: "absolute", inset: 0,
           width: "100%", height: "100%",
-          objectFit: nightMode ? "contain" : "cover", objectPosition: "center center",
+          objectFit: "cover", objectPosition: "center center",
           pointerEvents: "none", userSelect: "none",
           filter: nightMode ? "brightness(0.88) saturate(0.88)" : "brightness(0.95) saturate(0.97)",
           transformOrigin: "center center",
+          opacity: zoomingRoom ? 1 : 0,
           transform: zoomingRoom
             ? `scale(3.5) ${ROOM_ZOOM_TRANSLATE[zoomingRoom] ?? ""}`
             : "scale(1) translate(0,0)",
           transition: zoomingRoom
-            ? "transform 0.45s cubic-bezier(0.4,0,0.6,1)"
-            : "transform 0s",
+            ? "transform 0.45s cubic-bezier(0.4,0,0.6,1), opacity 0.15s ease"
+            : "opacity 0.3s ease, transform 0s",
+          zIndex: zoomingRoom ? 10 : -1,
         }}
       />
 
