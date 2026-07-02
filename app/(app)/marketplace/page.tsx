@@ -8,6 +8,7 @@ import { compoundingProfile } from "@/lib/compounding";
 import { requiredListingStake } from "@/lib/stake";
 import { TierBadge, tierLabel } from "@/components/TierBadge";
 import { NewListingForm } from "./NewListingForm";
+import { EditListingForm } from "./EditListingForm";
 import { updateListingStatus, toggleListingPublic, deleteListing, queueListingOutreach } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -286,6 +287,7 @@ export default async function MarketplacePage() {
                                 {NEXT_LABEL[l.status]}
                               </button>
                             </form>
+                            <EditListingForm listing={l} />
                             <form action={toggleListingPublic}>
                               <input type="hidden" name="id" value={l.id} />
                               <input type="hidden" name="is_public" value={String(l.is_public)} />
