@@ -4,6 +4,7 @@ import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 import { copilotLive } from "@/lib/claude";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { NetworkModule } from "@/components/source/NetworkModule";
 import { buildCapitalMap } from "@/lib/capital-map";
 import { computeGPScorecard } from "@/lib/gp-scorecard";
 import type { LPMatch } from "@/components/source/LPDiscoveryPanel";
@@ -175,6 +176,54 @@ export default async function ModulePage({
         </div>
       </div>
     );
+  }
+
+  // Source › Network — relationship capital search, LinkedIn import, warm intros, syndicate circles.
+  if (params.hub === "source" && params.module === "network") {
+    const ctx = await getSessionContext();
+    const supabase = createServerClient() as any;
+
+    // Count contacts for the org.
+    let contactCount = 0;
+    let circles: { id: string; name: string; description: string | null; memberCount: number; inviteCode: string; isActive: boolean; createdAt: string }[] = [];
+
+    if (ctx?.orgId) {
+      const typedSupabase = createServerClient();
+      const [contactsRes, circlesRes, principalRes] = await Promise.all([
+        supabase.from("network_contacts").select("id", { count: "exact", head: true }).eq("organization_id", ctx.orgId),
+        supabase.from("syndicate_circles").select("id, name, description, member_count, invite_code, is_active, created_at").eq("organization_id", ctx.orgId).eq("is_active", true).order("created_at", { ascending: false }),
+        typedSupabase.from("principals").select("full_name, title").eq("id", ctx.userId).limit(1).single(),
+      ]);
+      contactCount = contactsRes.count ?? 0;
+      type CircleRow = { id: string; name: string; description: string | null; member_count: number | null; invite_code: string | null; is_active: boolean | null; created_at: string };
+      circles = ((circlesRes.data ?? []) as CircleRow[]).map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        memberCount: c.member_count ?? 1,
+        inviteCode: c.invite_code ?? "",
+        isActive: c.is_active ?? true,
+        createdAt: c.created_at,
+      }));
+      const principal = principalRes.data as { full_name: string | null; title: string | null } | null;
+      const senderName = principal?.full_name ?? ctx.email ?? "You";
+      const senderTitle = principal?.title ?? null;
+
+      return (
+        <div className="mx-auto max-w-5xl px-4 py-6">
+          <div className="mb-6">
+            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted mb-1">Network OS</p>
+            <p className="text-sm text-fg-muted">Search your relationship capital, request warm introductions, and pool your network with trusted syndicate partners.</p>
+          </div>
+          <NetworkModule
+            senderName={senderName}
+            senderTitle={senderTitle}
+            initialContacts={contactCount}
+            circles={circles}
+          />
+        </div>
+      );
+    }
   }
 
   // Source › People Lookups — live Apollo people search + email verification.
