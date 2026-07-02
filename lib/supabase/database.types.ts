@@ -1720,6 +1720,7 @@ export type Database = {
       deals: TableShape<Deal>;
       assets: TableShape<Asset>;
       documents: TableShape<Document>;
+      document_versions: TableShape<DocumentVersion>;
       underwritings: TableShape<Underwriting>;
       diligence_items: TableShape<DiligenceItem>;
       ic_decisions: TableShape<IcDecision>;
