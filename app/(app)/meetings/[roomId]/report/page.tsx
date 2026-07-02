@@ -269,10 +269,14 @@ function SentimentBadge({ value }: { value: string }) {
     positive: "bg-[var(--status-success)]/15 text-[var(--status-success)]",
     neutral: "bg-[var(--surface-3)] text-[var(--fg-secondary)]",
     negative: "bg-[var(--status-danger)]/15 text-[var(--status-danger)]",
+    mixed: "bg-[var(--status-warning)]/15 text-[var(--status-warning)]",
   };
+  const knownKey = value?.toLowerCase();
+  const className = map[knownKey] ?? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400";
+  const label = map[knownKey] ? value : `${value} (?)`;
   return (
-    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${map[value] ?? map.neutral}`}>
-      {value}
+    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${className}`}>
+      {label}
     </span>
   );
 }
