@@ -555,6 +555,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [bwMode, setBwMode] = useState<"normal" | "degraded" | "audio-only">("normal");
   const bwCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Media error (permission denial, no devices, etc.)
+  const [mediaError, setMediaError] = useState<string | null>(null);
+
   // UI
   const [copilotOpen, setCopilotOpen] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -783,7 +786,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         video: selectedCamId ? { deviceId: { exact: selectedCamId } } : true,
         audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true,
       });
-    } catch { stream = new MediaStream(); }
+    } catch (err) {
+      const name = err instanceof Error ? err.name : "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setMediaError("Camera and microphone access was denied. Click the camera icon in your browser's address bar to allow access, then rejoin.");
+      } else if (name === "NotFoundError") {
+        setMediaError("No camera or microphone found. Check that your devices are connected.");
+      } else {
+        setMediaError("Could not access camera/microphone. Check your device settings.");
+      }
+      stream = new MediaStream();
+    }
     localStreamRef.current = stream;
     cameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
     setLocalStream(stream);
@@ -1243,6 +1256,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Video area */}
         <div className="flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)] min-w-0">
+          {/* Media permission warning */}
+          {mediaError && (
+            <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 shrink-0">
+              <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+              <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{mediaError}</p>
+              <button onClick={() => setMediaError(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+            </div>
+          )}
           {layout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
               <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} />
