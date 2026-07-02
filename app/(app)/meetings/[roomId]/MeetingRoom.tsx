@@ -42,6 +42,28 @@ const NOTES_INTERVAL_MS = 15_000;
 const TRANSCRIPT_FLUSH_MS = 60_000;
 const REACTIONS = ["👍", "👏", "😂", "❤️", "🎉", "🤔"];
 
+// Synthesize a short chime using Web Audio API (no audio files needed)
+function playChime(type: "join" | "leave") {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    if (type === "join") {
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+    } else {
+      osc.frequency.setValueAtTime(660, ctx.currentTime);
+      osc.frequency.setValueAtTime(440, ctx.currentTime + 0.1);
+    }
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.35);
+    osc.onended = () => void ctx.close();
+  } catch { /* AudioContext not available */ }
+}
+
 // ─── VideoTile ────────────────────────────────────────────────────────────────
 
 function VideoTile({
@@ -144,12 +166,13 @@ function CtrlBtn({ active, onClick, title, activeIcon, inactiveIcon }: {
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
 function ControlBar({
-  micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, duration,
+  micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, duration, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout,
 }: {
   micOn: boolean; camOn: boolean; shareOn: boolean; copilotOpen: boolean; isHost: boolean;
   handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; duration: number;
+  roomCode: string; bwMode: "normal" | "degraded" | "audio-only";
   onToggleMic: () => void; onToggleCam: () => void; onToggleScreen: () => void;
   onToggleCopilot: () => void; onLeave: () => void; onEndForAll: () => void;
   onSwitchMic: (id: string) => void; onSwitchCam: (id: string) => void; onSwitchSpeaker: (id: string) => void;
@@ -158,6 +181,7 @@ function ControlBar({
   const mins = String(Math.floor(duration / 60)).padStart(2, "0");
   const secs = String(duration % 60).padStart(2, "0");
   const [reactionOpen, setReactionOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const reactionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -237,18 +261,34 @@ function ControlBar({
         )}
       </div>
 
-      <button onClick={onToggleCopilot}
-        className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-          copilotOpen ? "border-[var(--gold-400)] bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
-                      : "border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
-        }`}>
-        ✨ Copilot
-        {chatUnread > 0 && !copilotOpen && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--gold-400)] text-black text-[10px] font-bold flex items-center justify-center">
-            {chatUnread}
+      <div className="flex items-center gap-2">
+        {bwMode === "audio-only" && (
+          <span title="Low bandwidth — video paused to maintain audio" className="text-xs text-[var(--status-warning)] flex items-center gap-1 border border-[var(--status-warning)]/30 rounded-full px-2 py-1">
+            📶 Low BW
           </span>
         )}
-      </button>
+        <button
+          onClick={() => {
+            const link = `${window.location.origin}/meetings/${roomCode}`;
+            void navigator.clipboard.writeText(link).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); });
+          }}
+          title="Copy meeting link"
+          className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] px-3 h-8 text-xs font-medium transition-colors">
+          {linkCopied ? "✓ Copied" : "Copy link"}
+        </button>
+        <button onClick={onToggleCopilot}
+          className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+            copilotOpen ? "border-[var(--gold-400)] bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
+                        : "border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
+          }`}>
+          ✨ Copilot
+          {chatUnread > 0 && !copilotOpen && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--gold-400)] text-black text-[10px] font-bold flex items-center justify-center">
+              {chatUnread}
+            </span>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -511,6 +551,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [layout, setLayout] = useState<"grid" | "speaker">("grid");
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
 
+  // Bandwidth adaptation
+  const [bwMode, setBwMode] = useState<"normal" | "degraded" | "audio-only">("normal");
+  const bwCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // UI
   const [copilotOpen, setCopilotOpen] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -573,6 +617,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const myId = myIdRef.current;
 
     if (msg.type === "join" && msg.from !== myId) {
+      playChime("join");
       setPeers((prev) => {
         const next = new Map<string, Peer>(prev);
         const existing = next.get(msg.from);
@@ -597,6 +642,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "leave" && msg.from !== myId) {
+      playChime("leave");
       peersRef.current.get(msg.from)?.close();
       peersRef.current.delete(msg.from);
       setPeers((prev) => { const next = new Map<string, Peer>(prev); next.delete(msg.from); return next; });
@@ -848,6 +894,62 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }, 500);
     return () => { clearInterval(interval); ctxs.forEach(({ ctx }) => void ctx.close()); };
   }, [ready, layout, localStream, peers]);
+
+  // ── Bandwidth adaptation ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!ready) return;
+    const CHECK_INTERVAL = 8000;
+    const LOW_BW_KBPS = 80;  // kbps threshold to downgrade
+    const OK_BW_KBPS = 200;  // kbps threshold to restore
+
+    let prevBytes: Record<string, number> = {};
+    let prevTs = Date.now();
+
+    const check = async () => {
+      const pcs = [...peersRef.current.values()];
+      if (!pcs.length) return;
+
+      let totalBps = 0;
+      const now = Date.now();
+      const elapsed = (now - prevTs) / 1000;
+      prevTs = now;
+
+      for (const pc of pcs) {
+        try {
+          const stats = await pc.getStats();
+          stats.forEach((s) => {
+            if (s.type === "inbound-rtp" && "bytesReceived" in s) {
+              const id = s.id as string;
+              const bytes = s.bytesReceived as number;
+              if (prevBytes[id] !== undefined) totalBps += (bytes - prevBytes[id]) / elapsed;
+              prevBytes[id] = bytes;
+            }
+          });
+        } catch { /* ignore */ }
+      }
+
+      const kbps = (totalBps * 8) / 1000;
+      setBwMode((prev) => {
+        if (kbps > 0 && kbps < LOW_BW_KBPS) {
+          // Disable outgoing video to save bandwidth
+          if (prev === "normal") {
+            localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = false; });
+            return "audio-only";
+          }
+          return prev;
+        }
+        if (kbps >= OK_BW_KBPS && prev !== "normal") {
+          localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = true; });
+          return "normal";
+        }
+        return prev;
+      });
+    };
+
+    bwCheckRef.current = setInterval(() => { void check(); }, CHECK_INTERVAL);
+    return () => { if (bwCheckRef.current) clearInterval(bwCheckRef.current); };
+  }, [ready]);
 
   // ── Notes ─────────────────────────────────────────────────────────────────
 
@@ -1192,6 +1294,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       <ControlBar
         micOn={micOn} camOn={camOn} shareOn={shareOn} copilotOpen={copilotOpen}
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread} duration={duration}
+        roomCode={roomCode} bwMode={bwMode}
         onToggleMic={toggleMic} onToggleCam={toggleCam}
         onToggleScreen={() => void toggleScreen()}
         onToggleCopilot={() => { setCopilotOpen((v) => { if (v) chatOpenRef.current = false; return !v; }); }}
