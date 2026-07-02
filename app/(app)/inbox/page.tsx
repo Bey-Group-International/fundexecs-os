@@ -3,7 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { getInbox } from "@/lib/inbox";
 import { InboxView } from "@/components/inbox/InboxView";
-import { getInboxThreads } from "@/lib/inbox/data";
+import { getInboxThreads, autoUnsnoozeExpired } from "@/lib/inbox/data";
 import {
   buildDigest,
   priorityBucket,
@@ -64,6 +64,9 @@ export default async function InboxPage({
   const hasFilters = Boolean(filters.q || filters.channel || filters.unreadOnly || filters.assignedTo);
 
   const supabase = createServerClient();
+  // Wake any snoozed threads whose time has passed, so they reappear on this
+  // render rather than the next one.
+  await autoUnsnoozeExpired(supabase, ctx.orgId);
   // Two lanes, one inbox: the action queue ("needs you" — approvals, overdue
   // diligence, IC-ready deals, open risks) and the unified communications
   // stream (booking / messaging / video), plus the org's teammates for the
@@ -94,6 +97,7 @@ export default async function InboxPage({
       bucket: priorityBucket(thread.priority),
       unread: thread.unread,
       status: thread.status,
+      snoozedUntil: thread.snoozed_until,
       meetingAt: thread.meeting_at,
       meetingUrl: thread.meeting_url,
       context,

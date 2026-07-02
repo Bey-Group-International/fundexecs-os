@@ -451,6 +451,8 @@ export async function setThreadStatus(formData: FormData): Promise<{ ok: boolean
 
   const patch: Partial<InboxThread> = { status: status as InboxThread["status"] };
   if (unreadRaw != null) patch.unread = unreadRaw === "true";
+  // Leaving the snoozed state clears any pending wake time so it doesn't linger.
+  if (status !== "snoozed") patch.snoozed_until = null;
   const { error } = await supabase
     .from("inbox_threads")
     .update(patch)
@@ -568,7 +570,9 @@ export async function bulkThreadAction(
     action === "done"
       ? { status: "done", unread: false }
       : action === "snooze"
-        ? { status: "snoozed", unread: false }
+        ? // Bulk snooze wakes the threads tomorrow (24h); per-thread snooze can
+          // pick a specific time via snoozeThread.
+          { status: "snoozed", unread: false, snoozed_until: new Date(Date.now() + 86_400_000).toISOString() }
         : { unread: false };
 
   const { error } = await supabase
@@ -581,6 +585,30 @@ export async function bulkThreadAction(
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true, count: ids.length };
+}
+
+/**
+ * Snooze a single thread until a specific time — it leaves the active board and
+ * auto-returns to open once the time passes (autoUnsnoozeExpired on read).
+ */
+export async function snoozeThread(threadId: string, untilIso: string): Promise<{ ok: boolean }> {
+  if (!threadId) return { ok: false };
+  const until = new Date(untilIso);
+  if (Number.isNaN(until.getTime())) return { ok: false };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false };
+  const supabase = createServerClient();
+
+  const { error } = await supabase
+    .from("inbox_threads")
+    .update({ status: "snoozed", unread: false, snoozed_until: until.toISOString() })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", threadId);
+  if (error) return { ok: false };
+
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

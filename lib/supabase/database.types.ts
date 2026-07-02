@@ -1103,6 +1103,8 @@ export type InboxThread = Timestamps & {
   created_by: string | null;
   // Optional teammate (principal) the thread is routed to (migration 20260702000016).
   assigned_to: string | null;
+  // When a snoozed thread should auto-return to open (migration 20260702000017).
+  snoozed_until: string | null;
 };
 
 // One message within an inbox thread (migration 0038).

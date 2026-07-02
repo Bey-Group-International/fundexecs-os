@@ -51,6 +51,25 @@ function sanitizeForOr(term: string): string {
 }
 
 /**
+ * Wake any snoozed threads whose snoozed_until has passed: flip them back to
+ * open and clear the wake time, in one org-scoped update. Best-effort — a
+ * failure just leaves them snoozed until the next load. Call before reading the
+ * board so returned threads reappear on the same render.
+ */
+export async function autoUnsnoozeExpired(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  now: string = new Date().toISOString(),
+): Promise<void> {
+  await supabase
+    .from("inbox_threads")
+    .update({ status: "open", snoozed_until: null })
+    .eq("organization_id", orgId)
+    .eq("status", "snoozed")
+    .lte("snoozed_until", now);
+}
+
+/**
  * Load the org's inbox threads, newest/hottest first, each shaped with its
  * resolved Command Center context. Deal/investor names are fetched in two batch
  * queries (not N+1) and joined in memory. Optional filters narrow the list in
