@@ -28,7 +28,67 @@ type SignalMsg =
   | { type: "kick"; from: string; target: string }
   | { type: "admit_request"; from: string; displayName: string }
   | { type: "admit"; from: string; target: string }
-  | { type: "deny"; from: string; target: string };
+  | { type: "deny"; from: string; target: string }
+  | { type: "walkthrough_step"; from: string; stepIndex: number; stepTitle: string };
+
+// ─── Walkthrough ──────────────────────────────────────────────────────────────
+
+interface WalkthroughStep {
+  title: string;
+  talkingPoints: string[];
+  suggestedQuestions: string[];
+  keywords: string[]; // transcript keywords that signal this topic is covered
+}
+
+const FUNDEXECS_PROGRAM: WalkthroughStep[] = [
+  {
+    title: "Platform Overview",
+    talkingPoints: [
+      "FundExecs OS is an all-in-one operating system for fund managers and investor relations teams.",
+      "It centralizes deal flow, investor communications, data rooms, and meeting intelligence in one place.",
+      "Built specifically for the VC/PE/family office space — not a generic CRM.",
+      "Secure, compliant, and designed for teams that manage complex cap tables and LP relationships.",
+    ],
+    suggestedQuestions: [
+      "How many LPs or deals are you currently managing?",
+      "What tools are you using today for deal tracking and investor comms?",
+      "What's your biggest operational bottleneck right now?",
+    ],
+    keywords: ["overview", "platform", "what is", "fundexecs", "fund manager", "investor relations"],
+  },
+  {
+    title: "Key Modules Demo",
+    talkingPoints: [
+      "Deals hub: track deal flow from sourcing to close with pipeline views, notes, and document attachments.",
+      "Data Room: secure document sharing with granular access controls and view analytics.",
+      "Inbox: unified investor communications with AI-drafted responses and thread management.",
+      "Canvas: collaborative workspace for memos, models, and internal documents.",
+      "Secondaries & Cap Table: manage LP transfers, secondary transactions, and equity schedules.",
+    ],
+    suggestedQuestions: [
+      "Which of these modules would have the biggest immediate impact for your team?",
+      "Do you currently have a data room solution? How is document access managed?",
+      "How do you handle LP updates and capital call communications today?",
+    ],
+    keywords: ["deals", "data room", "inbox", "canvas", "secondaries", "cap table", "module", "feature"],
+  },
+  {
+    title: "AI Copilot Features",
+    talkingPoints: [
+      "Every meeting gets AI transcription, live notes, and action items — automatically.",
+      "The copilot identifies speakers, tracks decisions made, and generates a follow-up email draft.",
+      "Post-meeting reports include sentiment analysis, key points, and next meeting suggestions.",
+      "The Analyze tab lets you paste any transcript for deal sentiment scoring and CRM update suggestions.",
+      "All AI features run on Claude (Anthropic) — the most capable and safest model available.",
+    ],
+    suggestedQuestions: [
+      "How much time does your team spend on meeting follow-ups each week?",
+      "Would auto-generated action items sync well with how you currently track tasks?",
+      "Are there other AI use cases in your workflow where this could help?",
+    ],
+    keywords: ["ai", "copilot", "transcription", "notes", "action items", "report", "claude", "intelligence"],
+  },
+];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -310,11 +370,133 @@ function ControlBar({
   );
 }
 
+// ─── WalkthroughPanel ────────────────────────────────────────────────────────
+
+function WalkthroughPanel({
+  stepIndex, nudge, onNavigate, onDismissNudge,
+}: {
+  stepIndex: number | null;
+  nudge: boolean;
+  onNavigate: (idx: number | null) => void;
+  onDismissNudge: () => void;
+}) {
+  const isActive = stepIndex !== null;
+  const step = isActive ? FUNDEXECS_PROGRAM[stepIndex] : null;
+  const isFirst = stepIndex === 0;
+  const isLast = stepIndex === FUNDEXECS_PROGRAM.length - 1;
+
+  if (!isActive) {
+    return (
+      <div className="flex flex-col gap-4 py-2">
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-0)] p-4 flex flex-col gap-3">
+          <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">FundExecs OS Program</p>
+          <p className="text-xs text-[var(--fg-muted)]">Walk prospects through the platform step by step. Participants will see the current step in a banner above the video.</p>
+          <div className="flex flex-col gap-1.5">
+            {FUNDEXECS_PROGRAM.map((s, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
+                <span className="w-4 h-4 rounded-full border border-[var(--line)] flex items-center justify-center text-[0.6rem] font-medium shrink-0">{i + 1}</span>
+                {s.title}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => onNavigate(0)}
+            className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-black text-xs font-semibold py-2.5 transition-colors"
+          >
+            Start walkthrough
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 py-1">
+      {/* AI nudge */}
+      {nudge && (
+        <div className="rounded-lg border border-[var(--gold-400)]/30 bg-[var(--gold-400)]/8 p-3 flex items-start gap-2">
+          <span className="text-[var(--gold-400)] text-sm shrink-0">✨</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-[var(--fg-primary)]">Ready to move on?</p>
+            <p className="text-xs text-[var(--fg-muted)] mt-0.5">This topic looks covered. Advance to the next step when you&apos;re ready.</p>
+          </div>
+          <button onClick={onDismissNudge} className="text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] text-xs shrink-0">✕</button>
+        </div>
+      )}
+
+      {/* Step header */}
+      <div className="flex items-center justify-between">
+        <span className="text-[0.65rem] font-medium text-[var(--fg-muted)] uppercase tracking-wide">Step {stepIndex! + 1} of {FUNDEXECS_PROGRAM.length}</span>
+        <button onClick={() => onNavigate(null)} className="text-[0.65rem] text-[var(--fg-muted)] hover:text-[var(--status-danger)] transition-colors">End walkthrough</button>
+      </div>
+
+      {/* Step progress pills */}
+      <div className="flex gap-1.5">
+        {FUNDEXECS_PROGRAM.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => onNavigate(i)}
+            className={`h-1 flex-1 rounded-full transition-colors ${i === stepIndex ? "bg-[var(--gold-400)]" : i < stepIndex! ? "bg-[var(--gold-400)]/40" : "bg-[var(--line)]"}`}
+            title={FUNDEXECS_PROGRAM[i].title}
+          />
+        ))}
+      </div>
+
+      {/* Step title */}
+      <h3 className="text-sm font-semibold text-[var(--fg-primary)]">{step!.title}</h3>
+
+      {/* Talking points */}
+      <div className="flex flex-col gap-2">
+        <p className="text-[0.65rem] font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Talking Points</p>
+        {step!.talkingPoints.map((pt, i) => (
+          <div key={i} className="flex items-start gap-2 rounded-lg bg-[var(--surface-0)] border border-[var(--line)] p-2.5">
+            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-[var(--gold-400)] shrink-0" />
+            <span className="text-xs text-[var(--fg-primary)] leading-relaxed">{pt}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Suggested questions */}
+      <div className="flex flex-col gap-2">
+        <p className="text-[0.65rem] font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Ask the Prospect</p>
+        {step!.suggestedQuestions.map((q, i) => (
+          <div key={i} className="flex items-start gap-2 rounded-lg bg-[var(--surface-0)] border border-[var(--line)] p-2.5">
+            <span className="text-[var(--gold-400)] text-xs shrink-0 mt-0.5">?</span>
+            <span className="text-xs text-[var(--fg-secondary)] italic leading-relaxed">{q}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Navigation */}
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={() => onNavigate(stepIndex! - 1)}
+          disabled={isFirst}
+          className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] text-[var(--fg-secondary)] text-xs font-medium py-2 hover:bg-[var(--surface-2)] disabled:opacity-30 transition-colors"
+        >
+          ← Back
+        </button>
+        <button
+          onClick={() => isLast ? onNavigate(null) : onNavigate(stepIndex! + 1)}
+          className={`flex-1 rounded-lg text-xs font-semibold py-2 transition-colors ${
+            isLast
+              ? "bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/30 hover:bg-[var(--status-success)]/25"
+              : "bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-black"
+          }`}
+        >
+          {isLast ? "Finish ✓" : "Next →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── CopilotSidebar ───────────────────────────────────────────────────────────
 
 function CopilotSidebar({
   transcript, notes, isUpdating, srStatus, participants, roomCode, meetingTitle,
   chatMessages, onSendChat, isHost, raisedHands, onKick, onAdmit, onDeny, waitingPeers, onChatOpen,
+  walkthroughStepIndex, walkthroughNudge, onWalkthroughStep, onWalkthroughNudgeDismiss,
 }: {
   transcript: TranscriptLine[]; notes: LiveNotesResult | null; isUpdating: boolean;
   srStatus: "idle" | "active" | "error" | "unsupported";
@@ -324,8 +506,12 @@ function CopilotSidebar({
   raisedHands: Set<string>; onKick: (id: string) => void;
   onAdmit: (id: string) => void; onDeny: (id: string) => void;
   waitingPeers: WaitingPeer[]; onChatOpen: () => void;
+  walkthroughStepIndex: number | null;
+  walkthroughNudge: boolean;
+  onWalkthroughStep: (idx: number | null) => void;
+  onWalkthroughNudgeDismiss: () => void;
 }) {
-  const [tab, setTab] = useState<"transcript" | "notes" | "actions" | "chat" | "people" | "analyze">("transcript");
+  const [tab, setTab] = useState<"transcript" | "notes" | "actions" | "chat" | "people" | "walkthrough" | "analyze">("transcript");
   const [copied, setCopied] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -384,13 +570,16 @@ function CopilotSidebar({
 
       {/* Tabs */}
       <div className="flex border-b border-[var(--line)] shrink-0 overflow-x-auto">
-        {(["transcript", "notes", "actions", "chat", "people", "analyze"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`shrink-0 flex-1 py-2 text-xs font-medium transition-colors capitalize ${
+        {(["transcript", "notes", "actions", "chat", "people", ...(isHost ? (["walkthrough", "analyze"] as const) : (["analyze"] as const))] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t as typeof tab)}
+            className={`relative shrink-0 flex-1 py-2 text-xs font-medium transition-colors capitalize ${
               tab === t ? "text-[var(--fg-primary)] border-b-2 border-[var(--gold-400)] -mb-px"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
             }`}>
-            {t === "people" ? `People ${participants.length}` : t === "chat" ? "Chat" : t === "actions" ? "Actions" : t === "notes" ? "Notes" : t === "analyze" ? "Analyze" : "Live"}
+            {t === "people" ? `People ${participants.length}` : t === "chat" ? "Chat" : t === "actions" ? "Actions" : t === "notes" ? "Notes" : t === "analyze" ? "Analyze" : t === "walkthrough" ? "Guide" : "Live"}
+            {t === "walkthrough" && walkthroughNudge && (
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--gold-400)]" />
+            )}
           </button>
         ))}
       </div>
@@ -537,6 +726,15 @@ function CopilotSidebar({
         )}
 
         {tab === "analyze" && <MeetingCopilotConsole />}
+
+        {tab === "walkthrough" && isHost && (
+          <WalkthroughPanel
+            stepIndex={walkthroughStepIndex}
+            nudge={walkthroughNudge}
+            onNavigate={onWalkthroughStep}
+            onDismissNudge={onWalkthroughNudgeDismiss}
+          />
+        )}
       </div>
 
       {/* Chat input */}
@@ -607,6 +805,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [srStatus, setSrStatus] = useState<"idle" | "active" | "error" | "unsupported">("idle");
   const notesInflightRef = useRef(false);
   const lastNotesFlushedIdxRef = useRef(0);
+
+  // Walkthrough
+  const [walkthroughStepIndex, setWalkthroughStepIndex] = useState<number | null>(null);
+  const [walkthroughNudge, setWalkthroughNudge] = useState(false);
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -822,6 +1024,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       channelRef.current?.unsubscribe();
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
       router.push("/meetings");
+    }
+
+    if (msg.type === "walkthrough_step") {
+      setWalkthroughStepIndex(msg.stepIndex);
     }
   }, [createPeerConnection, router, clearWaitingTimers]);
 
@@ -1169,6 +1375,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             const result = await res.json() as LiveNotesResult;
             setNotes(result);
             lastNotesFlushedIdxRef.current = finalLines.length;
+            // AI nudge: check if current walkthrough step appears covered
+            setWalkthroughStepIndex((idx) => {
+              if (idx === null || idx >= FUNDEXECS_PROGRAM.length - 1) return idx;
+              const step = FUNDEXECS_PROGRAM[idx];
+              const recentText = fullText.slice(-2000).toLowerCase();
+              const covered = step.keywords.filter((kw) => recentText.includes(kw)).length >= 2;
+              if (covered) setWalkthroughNudge(true);
+              return idx;
+            });
           }
         } catch { /* ignore */ } finally { notesInflightRef.current = false; }
       });
@@ -1594,6 +1809,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               <button onClick={() => setMediaError(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
             </div>
           )}
+          {/* Walkthrough step indicator — visible to all participants */}
+          {walkthroughStepIndex !== null && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-[var(--gold-400)]/8 border-b border-[var(--gold-400)]/20 shrink-0">
+              <span className="text-[var(--gold-400)] text-xs shrink-0">📍</span>
+              <span className="text-xs text-[var(--fg-secondary)] flex-1">
+                <span className="font-medium text-[var(--fg-primary)]">{FUNDEXECS_PROGRAM[walkthroughStepIndex]?.title}</span>
+                <span className="text-[var(--fg-muted)] ml-1.5">· Step {walkthroughStepIndex + 1} of {FUNDEXECS_PROGRAM.length}</span>
+              </span>
+            </div>
+          )}
           {/* Guest upsell banner */}
           {isGuest && (
             <div className="flex items-center gap-3 px-4 py-2 bg-[var(--gold-400)]/8 border-b border-[var(--gold-400)]/20 shrink-0">
@@ -1649,6 +1874,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               raisedHands={raisedHands} onKick={kickPeer} onAdmit={admitPeer} onDeny={denyPeer}
               waitingPeers={waitingPeers}
               onChatOpen={() => { chatOpenRef.current = true; setChatUnread(0); }}
+              walkthroughStepIndex={walkthroughStepIndex}
+              walkthroughNudge={walkthroughNudge}
+              onWalkthroughStep={(idx) => {
+                setWalkthroughStepIndex(idx);
+                setWalkthroughNudge(false);
+                const step = idx !== null ? FUNDEXECS_PROGRAM[idx] : null;
+                sendSignalRef.current({
+                  type: "walkthrough_step",
+                  from: myIdRef.current,
+                  stepIndex: idx ?? -1,
+                  stepTitle: step?.title ?? "",
+                });
+              }}
+              onWalkthroughNudgeDismiss={() => setWalkthroughNudge(false)}
             />
           </div>
         )}
