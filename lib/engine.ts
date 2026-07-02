@@ -862,10 +862,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
         {
           objective: step.description?.trim() || step.title,
           context: priorOutputs.length ? priorOutputs.join("\n\n") : undefined,
-          autonomy: resolveAutonomyForIntent(
-            classifyStepIntent(step.title, step.description ?? ""),
-            activeMandate,
-          ),
+          autonomy: resolveAutonomyForIntent(stepIntent, activeMandate),
         },
       );
     } catch {
