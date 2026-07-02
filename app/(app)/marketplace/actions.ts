@@ -13,6 +13,7 @@ import {
   forfeitListingStakeViaDispute,
 } from "@/lib/stake";
 import { queueNextAction } from "@/app/(app)/capital-map/actions";
+import type { AgentKey } from "@/lib/supabase/database.types";
 import type { MarketplaceStatus } from "@/lib/supabase/database.types";
 
 const STATUSES: MarketplaceStatus[] = ["draft", "listed", "paused", "closed"];
@@ -251,12 +252,25 @@ export async function expressInterestInListing(
     );
   if (intErr) return { error: intErr.message };
 
-  // Queue a routable outreach action so the interest surfaces in the
-  // capital-map approval flow.
+  // Notify the listing owner: insert an awaiting-approval task in their org so
+  // the interest surfaces in their inbox needsApproval lane. Use service client
+  // to write across org boundary. Encode the listing URL in description so the
+  // inbox can deep-link directly to the listing detail page.
   try {
-    await queueNextAction(listingId, "send_outreach", `Marketplace interest · ${listingTitle}`);
+    const service = createServiceClient();
+    await service.from("tasks").insert({
+      organization_id: listing.organization_id,
+      title: `Marketplace interest · ${listingTitle}`,
+      description: `/marketplace/${listingId}`,
+      hub: "source" as const,
+      assigned_agent: "rainmaker" as AgentKey,
+      status: "awaiting_approval",
+      progress: 0,
+      requires_approval: true,
+      step_order: 0,
+    });
   } catch {
-    // Non-fatal — interest is recorded even if outreach queueing fails.
+    // Non-fatal — interest is recorded even if notification fails.
   }
 
   revalidatePath("/marketplace/browse");

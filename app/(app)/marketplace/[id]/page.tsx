@@ -5,8 +5,10 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { MarketplaceListing, MarketplaceStatus } from "@/lib/supabase/database.types";
 import { compoundingProfile, tierForScore, type ReputationTier } from "@/lib/compounding";
 import { TierBadge, tierLabel } from "@/components/TierBadge";
-import { expressInterestInListing, updateListingStatus, toggleListingPublic, deleteListing } from "../actions";
+import { expressInterestInListing, updateListingStatus, toggleListingPublic, deleteListing, queueListingOutreach } from "../actions";
 import { InterestButton } from "./InterestButton";
+import { rankInvestorsForListing } from "@/lib/matching";
+import type { Investor } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
 
@@ -114,6 +116,29 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
   const interestCount = interestRes.count ?? 0;
   const alreadyInterested = !isOwner && !!myInterestRes.data;
   const ownerTier = ownerProfile.tier as ReputationTier;
+
+  // Proactive investor matching — only computed for the listing owner.
+  // Fetches their capital-map investors and ranks them against this listing
+  // so the owner can immediately see who to take it to.
+  let matchedInvestors: { investor: Investor; score: number; reasons: string[] }[] = [];
+  if (isOwner) {
+    const { data: investors } = await supabase
+      .from("investors")
+      .select("*")
+      .eq("organization_id", ctx.orgId)
+      .order("name");
+    if (investors?.length) {
+      const ctx_listing = {
+        geography: listing.geography ?? undefined,
+        assetClass: listing.asset_class ?? undefined,
+      };
+      matchedInvestors = rankInvestorsForListing(
+        listing,
+        investors as Investor[],
+        { ctx: ctx_listing, minScore: 40, limit: 5 },
+      );
+    }
+  }
 
   const dealCardFields = [
     listing.target_irr != null && { label: "Target IRR", value: formatPct(listing.target_irr) },
@@ -271,6 +296,42 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
                   {interestCount} {interestCount === 1 ? "firm has" : "firms have"} expressed interest.
                 </p>
               ) : null}
+            </div>
+          ) : null}
+
+          {/* Matched investors from capital map */}
+          {isOwner && matchedInvestors.length > 0 ? (
+            <div className="fx-card p-4">
+              <p className="mb-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                Matched from your pipeline
+              </p>
+              <div className="flex flex-col gap-2">
+                {matchedInvestors.map(({ investor, score, reasons }) => (
+                  <div key={investor.id} className="rounded-md border border-line bg-surface-1 p-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-fg-primary">{investor.name}</p>
+                        {reasons[0] ? (
+                          <p className="mt-0.5 text-[11px] leading-snug text-fg-muted">{reasons[0]}</p>
+                        ) : null}
+                      </div>
+                      <span className="shrink-0 rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] text-gold-300">
+                        {score}
+                      </span>
+                    </div>
+                    <form action={queueListingOutreach} className="mt-2">
+                      <input type="hidden" name="investor_id" value={investor.id} />
+                      <input type="hidden" name="listing_title" value={listing.title} />
+                      <button className="w-full rounded border border-line px-2 py-1 text-[11px] text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300">
+                        Queue outreach
+                      </button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-fg-muted">
+                Scored by check size, geography, and investor type.
+              </p>
             </div>
           ) : null}
 
