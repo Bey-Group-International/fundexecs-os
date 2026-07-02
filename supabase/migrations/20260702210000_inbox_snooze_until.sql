@@ -1,4 +1,4 @@
--- 20260702000017_inbox_snooze_until.sql
+-- 20260702210000_inbox_snooze_until.sql
 -- Snooze-until-time for inbox threads. Until now "snooze" only cleared the
 -- unread flag — the thread never actually left the board. This adds a wake time:
 -- a snoozed thread is hidden from the active board until snoozed_until passes,
