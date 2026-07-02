@@ -5,7 +5,6 @@ import type { Organization } from "@/lib/supabase/database.types";
 import { ModuleHeader } from "./DraftWithEarn";
 import { BrandStudio } from "./BrandStudio";
 import { BrandSheet } from "./BrandSheet";
-import { ComponentGallery } from "@/components/design-system/ComponentGallery";
 
 export async function BrandModule() {
   const ctx = await getSessionContext();
@@ -42,11 +41,6 @@ export async function BrandModule() {
         brandPalette={palette}
       />
 
-      <div className="mt-8 border-t border-line pt-8">
-        <h2 className="mb-4 font-display text-lg font-semibold text-fg-primary">Design System</h2>
-        <p className="mb-6 text-sm text-fg-secondary">Token reference and component variant gallery for FundExecs OS.</p>
-        <ComponentGallery />
-      </div>
     </div>
   );
 }

@@ -5,7 +5,7 @@ export function DraftWithEarn({ module }: { module: string }) {
   return (
     <form action={draftWithEarn}>
       <input type="hidden" name="module" value={module} />
-      <button className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20">
+      <button type="submit" className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20">
         ✶ Draft with Earn
       </button>
     </form>
