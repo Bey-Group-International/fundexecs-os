@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { gatherFoundationContext } from "@/lib/foundation-context";
@@ -261,4 +262,62 @@ export async function finalizeWithEarn(
   // the answers deterministically instead.
   const final = content.trim() ? content : answersToMarkdown(doc.name, questions, answers);
   return { content: final };
+}
+
+// One-click "Generate with AI" — creates a new draft document from the firm's
+// Build foundation and Claude, then redirects to the editor. Only supported for
+// sections that map to a recognised first-party document type.
+const AI_DOC_NAMES: Record<string, string> = {
+  overview: "Fund Overview",
+  thesis: "Investment Thesis",
+  marketing: "Fund Marketing Deck",
+  team: "Team & Track Record",
+  track_record: "Track Record Summary",
+};
+
+export async function generateAiDocument(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+
+  const sectionKey = String(formData.get("section") ?? "").trim();
+  const docName = (AI_DOC_NAMES[sectionKey] ?? String(formData.get("doc_name") ?? "").trim()) || "Untitled";
+
+  const foundation = await loadFoundation(ctx.orgId);
+  const skeleton = composeDraft(docName, sectionKey, foundation);
+
+  // Expand the deterministic skeleton into institutional LP prose via Claude.
+  const { content: aiContent } = await conversationalDraft({
+    docName,
+    section: sectionKey,
+    currentContent: skeleton,
+    foundation: await gatherFoundationContext(ctx.orgId),
+    messages: [
+      {
+        role: "user",
+        content:
+          "Expand this skeleton into a polished, institutional-grade document ready for LP review. " +
+          "Keep all firm data exactly as stated, structure it per institutional norms for this document type, " +
+          "and mark any missing information as [TODO]. Return the complete document in Markdown.",
+      },
+    ],
+  });
+
+  const content = aiContent.trim() ? aiContent : skeleton;
+
+  const supabase = createServerClient();
+  const { data: created } = await supabase
+    .from("documents")
+    .insert({
+      organization_id: ctx.orgId,
+      name: docName,
+      doc_type: sectionKey || null,
+      content,
+      mime_type: "text/markdown",
+      status: "draft",
+      uploaded_by: ctx.userId,
+    } as never)
+    .select("id")
+    .maybeSingle();
+
+  if (created?.id) redirect(`/document/${created.id}`);
 }
