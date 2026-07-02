@@ -88,11 +88,8 @@ export async function moveDealToStage(
   ) as PipelineStage["auto_actions"];
 
   for (const action of autoActions) {
-    // Gateway wiring is future work — log for now.
-    console.log(
-      `[pipeline-stages] auto_action fired for deal=${dealId} stage=${stageId}:`,
-      JSON.stringify(action),
-    );
+    // Gateway wiring is future work — actions are queued but not dispatched yet.
+    void action;
   }
 
   return { ok: true, auto_actions_fired: autoActions.length };

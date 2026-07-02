@@ -201,10 +201,6 @@ export async function processDueSteps(): Promise<number> {
     }
 
     // Future work: dispatch via channel gateway (email, slack, envelope)
-    console.log(
-      `[outreach-sequences] Processing enrollment ${enrollment.id} ` +
-        `step ${currentStep} via ${currentStepDef.channel}`,
-    );
 
     // Advance to next step or mark complete
     const nextStepDef = steps.find((s) => s.step_index === currentStep + 1);

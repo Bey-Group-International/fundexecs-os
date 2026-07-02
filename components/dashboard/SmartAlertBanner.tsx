@@ -72,7 +72,7 @@ function AlertBanner({
   }
 
   function handleInvestigate() {
-    console.log("Investigate alert:", alert);
+    // TODO: open investigation panel for alert
   }
 
   return (

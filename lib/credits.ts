@@ -69,9 +69,6 @@ export async function spendCredits(
   agentKey?: string | null,
 ): Promise<{ ok: boolean; balance?: number; insufficient?: boolean }> {
   if (process.env.CREDITS_SPEND_ENABLED !== "true") {
-    console.log(
-      `[credits:spend] gate off — would debit ${amount} cr (org:${orgId} agent:${agentKey ?? "—"})`,
-    );
     return { ok: true };
   }
   const supabase = createServerClient();
