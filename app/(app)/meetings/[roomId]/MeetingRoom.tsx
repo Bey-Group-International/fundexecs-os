@@ -780,7 +780,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        void (supabase.from("live_meeting_participants") as any).upsert(
+        void supabase.from("live_meeting_participants").upsert(
           { meeting_id: mId, user_id: user.id, display_name: name, joined_at: new Date().toISOString() },
           { onConflict: "meeting_id,user_id" },
         );
