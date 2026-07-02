@@ -113,6 +113,8 @@ export async function deleteElement(formData: FormData): Promise<void> {
 
   const canvasId = String(formData.get("canvas_id") ?? "").trim();
   if (canvasId) {
-    revalidatePath(`/build/canvas?id=${canvasId}`);
+    for (const hub of ["build", "source", "run", "execute"]) {
+      revalidatePath(`/${hub}/canvas?id=${canvasId}`);
+    }
   }
 }

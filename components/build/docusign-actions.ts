@@ -5,7 +5,8 @@ import { getSessionContext } from "@/lib/auth";
 
 const ACCOUNT_ID = process.env.DOCUSIGN_ACCOUNT_ID ?? "";
 const ACCESS_TOKEN = process.env.DOCUSIGN_ACCESS_TOKEN ?? "";
-const BASE_URL = `https://na4.docusign.net/restapi/v2.1/accounts/${ACCOUNT_ID}`;
+const DS_HOST = process.env.DOCUSIGN_BASE_URL ?? "https://na4.docusign.net";
+const BASE_URL = `${DS_HOST}/restapi/v2.1/accounts/${ACCOUNT_ID}`;
 
 function missingConfig(): { error: string } | null {
   if (!ACCOUNT_ID || !ACCESS_TOKEN) {
@@ -110,7 +111,7 @@ export async function sendSubscriptionEnvelope(
     const ctx = await getSessionContext();
     if (ctx?.orgId) {
       const supabase = createServerClient();
-      await supabase.from("docusign_envelopes").insert({
+      await supabase.from("docusign_envelopes" as never).insert({
         organization_id: ctx.orgId,
         envelope_id: envelopeId,
         template_id: template_id || null,
@@ -118,7 +119,7 @@ export async function sendSubscriptionEnvelope(
         signer_email: signer_email || null,
         subject: subject || null,
         status: "sent",
-      });
+      } as never);
     }
   } catch {
     // Non-fatal — envelope was sent; DB write failure doesn't block the user.
@@ -145,7 +146,7 @@ export async function getEnvelopeStatus(
     if (ctx?.orgId) {
       const supabase = createServerClient();
       await supabase
-        .from("docusign_envelopes")
+        .from("docusign_envelopes" as never)
         .update({
           status: data.status,
           ...(data.status === "completed"
@@ -179,7 +180,7 @@ export async function listSentEnvelopes(): Promise<
 
   const supabase = createServerClient();
   const { data } = await supabase
-    .from("docusign_envelopes")
+    .from("docusign_envelopes" as never)
     .select(
       "id, envelope_id, subject, status, sent_at, signer_name, signer_email"
     )

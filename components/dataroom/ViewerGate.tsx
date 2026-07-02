@@ -138,8 +138,8 @@ function NdaGate({
       fd.set("signer_name", trimmedName);
       fd.set("signer_email", signerEmail ?? "");
       fd.set("signed_at", new Date().toISOString());
-      await recordNdaSignature(fd);
-      onNext();
+      const result = await recordNdaSignature(fd);
+      if (result.ok) onNext();
     });
   }
 

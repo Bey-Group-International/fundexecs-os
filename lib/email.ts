@@ -199,7 +199,7 @@ export function documentReadyEmail(
   return { subject: `Document ready: ${docName} — ${orgName}`, html: lpBaseHtml(body) };
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

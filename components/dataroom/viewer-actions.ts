@@ -8,13 +8,13 @@ import { createServiceClient } from "@/lib/supabase/server";
  * Uses the service client so the insert bypasses RLS
  * (the table has no authenticated-role insert policy by design).
  */
-export async function recordNdaSignature(formData: FormData): Promise<void> {
+export async function recordNdaSignature(formData: FormData): Promise<{ ok: boolean }> {
   const shareId = String(formData.get("share_id") ?? "").trim();
   const signerName = String(formData.get("signer_name") ?? "").trim();
   const signerEmail = String(formData.get("signer_email") ?? "").trim() || null;
   const signedAt = String(formData.get("signed_at") ?? "").trim();
 
-  if (!shareId || !signerName || !signedAt) return;
+  if (!shareId || !signerName || !signedAt) return { ok: false };
 
   // Derive IP hint (first 3 octets) for lightweight audit trail.
   // We never store the full IP to minimise PII exposure.
@@ -50,14 +50,16 @@ export async function recordNdaSignature(formData: FormData): Promise<void> {
     .eq("id", shareId)
     .single();
 
-  if (shareErr || !share) return;
+  if (shareErr || !share) return { ok: false };
 
-  await supabase.from("nda_signatures").insert({
+  const { error: insertErr } = await supabase.from("nda_signatures" as never).insert({
     share_id: shareId,
-    organization_id: share.organization_id,
+    organization_id: (share as { organization_id: string }).organization_id,
     signer_name: signerName,
     signer_email: signerEmail,
     signed_at: signedAt,
     ip_hint: ipHint,
-  });
+  } as never);
+
+  return { ok: !insertErr };
 }

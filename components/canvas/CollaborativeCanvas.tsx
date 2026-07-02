@@ -74,6 +74,8 @@ export function CollaborativeCanvas({
   currentUserInitials,
 }: Props) {
   const [elements, setElements] = useState<CanvasElement[]>(initialElements);
+  const elementsRef = useRef(elements);
+  elementsRef.current = elements;
   const [tool, setTool] = useState<Tool>("select");
   const [shapeKind, setShapeKind] = useState<ShapeKind>("rect");
   const [stickyColor, setStickyColor] = useState<string>(STICKY_COLORS[0]);
@@ -311,7 +313,7 @@ export function CollaborativeCanvas({
     if (dragRef.current) {
       const id = dragRef.current.id;
       dragRef.current = null;
-      const el = elements.find((ev) => ev.id === id);
+      const el = elementsRef.current.find((ev) => ev.id === id);
       if (el) {
         broadcastElement(el);
         persistElement(el);
@@ -322,7 +324,7 @@ export function CollaborativeCanvas({
     if (resizeRef.current) {
       const id = resizeRef.current.id;
       resizeRef.current = null;
-      const el = elements.find((ev) => ev.id === id);
+      const el = elementsRef.current.find((ev) => ev.id === id);
       if (el) {
         broadcastElement(el);
         persistElement(el);
@@ -333,7 +335,7 @@ export function CollaborativeCanvas({
     if (drawRef.current?.active) {
       const id = drawRef.current.id;
       drawRef.current = { ...drawRef.current, active: false };
-      const el = elements.find((ev) => ev.id === id);
+      const el = elementsRef.current.find((ev) => ev.id === id);
       if (el && el.w >= MIN_SIZE && el.h >= MIN_SIZE) {
         broadcastElement(el);
         persistElement(el);

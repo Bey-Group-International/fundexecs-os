@@ -6,7 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import type { Document, DocumentVersion } from "@/lib/supabase/database.types";
-import { sendEmail, shareGrantedEmail, documentUpdatedEmail } from "@/lib/email";
+import { sendEmail, shareGrantedEmail, documentUpdatedEmail, escapeHtml } from "@/lib/email";
 
 const SECTION_KEYS = new Set(DATA_ROOM_SECTIONS.map((s) => s.key));
 const ROOM = "/build/data_room";
@@ -368,9 +368,10 @@ async function notifyGpOnOpen(args: {
     .select("name")
     .eq("id", args.orgId)
     .maybeSingle();
-  const orgName = (orgRow as { name: string } | null)?.name ?? "your fund";
-  const label = args.shareLabel ?? "your data room link";
-  const viewer = args.viewerEmail ? ` by ${args.viewerEmail}` : "";
+  const orgName = escapeHtml((orgRow as { name: string } | null)?.name ?? "your fund");
+  const label = escapeHtml(args.shareLabel ?? "your data room link");
+  const safeViewer = args.viewerEmail ? escapeHtml(args.viewerEmail) : null;
+  const viewer = safeViewer ? ` by ${safeViewer}` : "";
   const subject = `Your data room link was opened${viewer}`;
   const html = `<!DOCTYPE html>
 <html>
@@ -383,7 +384,7 @@ async function notifyGpOnOpen(args: {
     <div style="padding: 32px 24px;">
       <h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">Someone opened your link</h1>
       <p style="margin: 0; font-size: 15px; color: #AAAAAA;">Your share link <strong style="color: #F5F5F5;">${label}</strong> for <strong style="color: #F5F5F5;">${orgName}</strong> was just opened${viewer}.</p>
-      ${args.viewerEmail ? `<p style="margin: 16px 0 0; font-size: 13px; color: #888888;">Viewer email: ${args.viewerEmail}</p>` : ""}
+      ${safeViewer ? `<p style="margin: 16px 0 0; font-size: 13px; color: #888888;">Viewer email: ${safeViewer}</p>` : ""}
     </div>
   </div>
 </body>
