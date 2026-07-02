@@ -1,54 +1,201 @@
-// LinkedIn CSV import + Apollo enrichment pipeline.
-// LinkedIn exports contacts as CSV with headers:
-//   "First Name","Last Name","URL","Email Address","Company","Position","Connected On"
+// Network contact import: LinkedIn CSV, person-list XLSX (family offices),
+// and firm-list XLSX (seed funds / VC lists).
+// Auto-detects format from headers; supports both person-level and firm-level rows.
 
+import * as XLSX from "xlsx";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { enrichPerson } from "@/lib/integrations/providers/apollo";
 
-export interface LinkedInRow {
+export type ImportMode = "person" | "firm" | "auto";
+
+export interface ParsedContact {
   firstName: string;
   lastName: string;
-  email: string;
-  company: string;
-  position: string;
-  linkedinUrl: string;
+  email: string | null;
+  company: string | null;
+  title: string | null;
+  linkedinUrl: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
   connectedOn: string | null;
+  source: "linkedin_csv" | "xlsx_person_list" | "xlsx_firm_list";
 }
 
-// Parse LinkedIn CSV export into structured rows.
-export function parseLinkedInCsv(csvText: string): LinkedInRow[] {
+// ── Sanitization helpers ──────────────────────────────────────────────────────
+
+function clean(v: unknown): string {
+  if (v == null) return "";
+  return String(v).trim().replace(/^﻿/, ""); // strip BOM + whitespace
+}
+
+function cleanPhone(v: unknown): string | null {
+  const s = clean(v).replace(/\s+/g, " ").trim();
+  return s || null;
+}
+
+function cleanEmail(v: unknown): string | null {
+  const s = clean(v).toLowerCase();
+  if (!s || s.includes("redacted") || s.includes("protect") || !s.includes("@")) return null;
+  return s;
+}
+
+function cleanUrl(v: unknown): string | null {
+  const s = clean(v);
+  return s.startsWith("http") ? s : null;
+}
+
+function normalizeDate(v: unknown): string | null {
+  if (!v) return null;
+  const s = clean(v);
+  if (!s) return null;
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+  return null;
+}
+
+// ── XLSX parsing ──────────────────────────────────────────────────────────────
+
+const PERSON_SIGNALS = ["first name", "last name", "email", "linkedin", "job title", "company"];
+const FIRM_SIGNALS = ["firm", "fund", "city", "stage", "seed", "venture"];
+
+function findHeaderRow(rows: unknown[][]): { idx: number; headers: string[] } | null {
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const cells = rows[i].map((c) => clean(c).toLowerCase());
+    const hits = cells.filter((c) => [...PERSON_SIGNALS, ...FIRM_SIGNALS].some((s) => c.includes(s)));
+    if (hits.length >= 2) return { idx: i, headers: cells };
+  }
+  return null;
+}
+
+function detectMode(headers: string[]): "person" | "firm" {
+  const hasPerson = headers.some((h) => h.includes("first name") || h.includes("last name"));
+  return hasPerson ? "person" : "firm";
+}
+
+function colIdx(headers: string[], ...names: string[]): number {
+  for (const name of names) {
+    const i = headers.findIndex((h) => h.includes(name));
+    if (i !== -1) return i;
+  }
+  return -1;
+}
+
+export function parseXlsx(buffer: ArrayBuffer, modeHint: ImportMode = "auto"): ParsedContact[] {
+  const wb = XLSX.read(buffer, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+  const found = findHeaderRow(raw);
+  if (!found) return [];
+
+  const { idx: headerIdx, headers } = found;
+  const mode = modeHint === "auto" ? detectMode(headers) : modeHint;
+  const dataRows = raw.slice(headerIdx + 1);
+
+  return mode === "firm" ? parseFirmRows(headers, dataRows) : parsePersonRows(headers, dataRows);
+}
+
+function parsePersonRows(headers: string[], rows: unknown[][]): ParsedContact[] {
+  const iFirst = colIdx(headers, "first name");
+  const iLast = colIdx(headers, "last name");
+  const iEmail = colIdx(headers, "email");
+  const iTitle = colIdx(headers, "job title", "position", "title");
+  const iCompany = colIdx(headers, "company name", "company");
+  const iLinkedin = colIdx(headers, "linkedin url", "linkedin");
+  const iPhone = colIdx(headers, "phone number", "mobile phone", "phone");
+  const iCity = colIdx(headers, "city");
+  const iState = colIdx(headers, "state", "region");
+  const iCountry = colIdx(headers, "country");
+  const iConnected = colIdx(headers, "connected on");
+
+  return rows
+    .map((row): ParsedContact | null => {
+      const firstName = clean(row[iFirst]);
+      const lastName = clean(row[iLast]);
+      if (!firstName && !lastName) return null;
+      return {
+        firstName, lastName,
+        email: cleanEmail(row[iEmail]),
+        company: clean(row[iCompany]) || null,
+        title: clean(row[iTitle]) || null,
+        linkedinUrl: cleanUrl(row[iLinkedin]),
+        phone: cleanPhone(row[iPhone]),
+        city: clean(row[iCity]) || null,
+        state: clean(row[iState]) || null,
+        country: clean(row[iCountry]) || null,
+        connectedOn: normalizeDate(row[iConnected]),
+        source: "xlsx_person_list",
+      };
+    })
+    .filter((r): r is ParsedContact => r !== null);
+}
+
+function parseFirmRows(headers: string[], rows: unknown[][]): ParsedContact[] {
+  const iFirm = colIdx(headers, "firm", "fund name", "company");
+  const iCity = colIdx(headers, "city");
+  const iState = colIdx(headers, "state");
+  const iWebsite = colIdx(headers, "website", "url");
+
+  return rows
+    .map((row): ParsedContact | null => {
+      const firm = clean(row[iFirm]);
+      if (!firm || firm.length < 2) return null;
+      return {
+        firstName: firm,
+        lastName: "",
+        email: null,
+        company: firm,
+        title: "Fund / Firm",
+        linkedinUrl: cleanUrl(row[iWebsite]),
+        phone: null,
+        city: clean(row[iCity]) || null,
+        state: clean(row[iState]) || null,
+        country: "United States",
+        connectedOn: null,
+        source: "xlsx_firm_list",
+      };
+    })
+    .filter((r): r is ParsedContact => r !== null);
+}
+
+// ── LinkedIn CSV parsing ──────────────────────────────────────────────────────
+
+export function parseLinkedInCsv(csvText: string): ParsedContact[] {
   const lines = csvText.split(/\r?\n/);
-  // LinkedIn CSVs often start with a few note lines before the header.
-  const headerIdx = lines.findIndex((l) =>
-    l.toLowerCase().includes("first name") && l.toLowerCase().includes("last name"),
+  const headerIdx = lines.findIndex(
+    (l) => l.toLowerCase().includes("first name") && l.toLowerCase().includes("last name"),
   );
   if (headerIdx === -1) return [];
 
-  const headers = parseRow(lines[headerIdx]).map((h) => h.toLowerCase().trim());
+  const headers = parseCsvRow(lines[headerIdx]).map((h) => h.toLowerCase().trim());
   const col = (name: string) => headers.indexOf(name);
 
-  const rows: LinkedInRow[] = [];
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const cells = parseRow(lines[i]);
-    if (cells.length < 3) continue;
-    const firstName = cells[col("first name")] ?? "";
-    const lastName = cells[col("last name")] ?? "";
-    if (!firstName && !lastName) continue;
-    rows.push({
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: (cells[col("email address")] ?? "").trim(),
-      company: (cells[col("company")] ?? "").trim(),
-      position: (cells[col("position")] ?? "").trim(),
-      linkedinUrl: (cells[col("url")] ?? "").trim(),
-      connectedOn: (cells[col("connected on")] ?? "").trim() || null,
-    });
-  }
-  return rows;
+  return lines
+    .slice(headerIdx + 1)
+    .map((line): ParsedContact | null => {
+      const cells = parseCsvRow(line);
+      if (cells.length < 3) return null;
+      const firstName = clean(cells[col("first name")]);
+      const lastName = clean(cells[col("last name")]);
+      if (!firstName && !lastName) return null;
+      return {
+        firstName, lastName,
+        email: cleanEmail(cells[col("email address")]),
+        company: clean(cells[col("company")]) || null,
+        title: clean(cells[col("position")]) || null,
+        linkedinUrl: cleanUrl(cells[col("url")]),
+        phone: null, city: null, state: null, country: null,
+        connectedOn: normalizeDate(cells[col("connected on")]),
+        source: "linkedin_csv",
+      };
+    })
+    .filter((r): r is ParsedContact => r !== null);
 }
 
-function parseRow(line: string): string[] {
+function parseCsvRow(line: string): string[] {
   const cells: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -68,32 +215,32 @@ function parseRow(line: string): string[] {
   return cells;
 }
 
-// Insert parsed rows into network_contacts and return the job ID.
-// New tables are not yet in database.types.ts so we cast to bypass strict typing.
-const db = (supabase: ReturnType<typeof createServerClient>) => supabase as any;
+// ── DB insert ─────────────────────────────────────────────────────────────────
 
-export async function importLinkedInContacts(
-  csvText: string,
+const anyDb = (supabase: ReturnType<typeof createServerClient>) => supabase as any;
+
+export async function importContacts(
+  contacts: ParsedContact[],
   pooled = true,
 ): Promise<{ jobId: string; total: number }> {
   const auth = await requireOrgContext();
   if (!auth.ok) throw new Error(auth.error);
   const { ctx } = auth;
   const supabase = createServerClient();
-  const any = db(supabase);
+  const db = anyDb(supabase);
 
-  const rows = parseLinkedInCsv(csvText);
-  if (rows.length === 0) throw new Error("No valid contacts found in CSV");
+  if (contacts.length === 0) throw new Error("No valid contacts found");
 
-  // Create a job record.
-  const { data: job } = await any
+  const source = contacts[0]?.source ?? "linkedin_csv";
+
+  const { data: job } = await db
     .from("network_import_jobs")
     .insert({
       organization_id: ctx.orgId,
       created_by: ctx.userId,
-      source: "linkedin_csv",
+      source,
       status: "processing",
-      total_rows: rows.length,
+      total_rows: contacts.length,
       started_at: new Date().toISOString(),
     })
     .select("id")
@@ -101,29 +248,32 @@ export async function importLinkedInContacts(
 
   if (!job) throw new Error("Failed to create import job");
 
-  // Insert contacts in batches of 50.
   const BATCH = 50;
   let imported = 0;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i + BATCH);
-    const records = batch.map((r) => ({
+
+  for (let i = 0; i < contacts.length; i += BATCH) {
+    const batch = contacts.slice(i, i + BATCH);
+    const records = batch.map((c) => ({
       organization_id: ctx.orgId,
       imported_by: ctx.userId,
-      first_name: r.firstName,
-      last_name: r.lastName,
-      email: r.email || null,
-      linkedin_url: r.linkedinUrl || null,
-      title: r.position || null,
-      company: r.company || null,
-      connected_on: r.connectedOn || null,
-      source: "linkedin_csv",
+      first_name: c.firstName,
+      last_name: c.lastName || "",
+      email: c.email,
+      linkedin_url: c.linkedinUrl,
+      phone: c.phone,
+      title: c.title,
+      company: c.company,
+      location: [c.city, c.state, c.country].filter(Boolean).join(", ") || null,
+      connected_on: c.connectedOn,
+      source: c.source,
       pooled,
     }));
-    await any.from("network_contacts").insert(records);
+
+    await db.from("network_contacts").insert(records);
     imported += batch.length;
   }
 
-  await any
+  await db
     .from("network_import_jobs")
     .update({ status: "done", imported_rows: imported, completed_at: new Date().toISOString() })
     .eq("id", job.id);
@@ -131,31 +281,37 @@ export async function importLinkedInContacts(
   return { jobId: job.id, total: imported };
 }
 
-// Enrich a single contact via Apollo. Called lazily when a contact card is viewed.
+// Legacy shim for any callers using the old CSV-only API.
+export async function importLinkedInContacts(
+  csvText: string,
+  pooled = true,
+): Promise<{ jobId: string; total: number }> {
+  return importContacts(parseLinkedInCsv(csvText), pooled);
+}
+
+// ── Apollo enrichment ─────────────────────────────────────────────────────────
+
 export async function enrichContact(contactId: string): Promise<void> {
   const supabase = createServerClient();
-  const any = db(supabase);
+  const db = anyDb(supabase);
 
-  const { data: contact } = await any
+  const { data: contact } = await db
     .from("network_contacts")
     .select("email, linkedin_url, company")
     .eq("id", contactId)
     .single();
   if (!contact) return;
-
-  // PersonEnrichParams only accepts email and linkedin_url.
   if (!contact.email && !contact.linkedin_url) return;
 
   const result = await enrichPerson({
     email: contact.email ?? undefined,
     linkedin_url: contact.linkedin_url ?? undefined,
-    name: `${contact.first_name} ${contact.last_name}`.trim(),
   });
 
-  if (result.status !== "success" || !result.data) return;
+  if (result.status === "failed" || !result.data) return;
   const p = result.data;
 
-  await any
+  await db
     .from("network_contacts")
     .update({
       title: p.title ?? null,
