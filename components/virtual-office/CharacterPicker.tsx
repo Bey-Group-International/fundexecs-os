@@ -6,14 +6,15 @@ import { executiveCharacters } from "@/components/characters/characterConfig";
 export const CHARACTER_STORAGE_KEY = "fx-office-character";
 const DEFAULT_CHARACTER_ID = "earnest-fundmaker";
 
-/** Frame dimensions per sprite-sheet layout (row 0 frame 0 = idle facing down). */
-const FRAME_SIZE: Record<"earnest" | "executive", { w: number; h: number }> = {
-  earnest: { w: 32, h: 32 },
-  executive: { w: 16, h: 32 },
+/**
+ * Frame dims + frames-per-row per sheet layout (row 0 frame 0 = idle-down).
+ * earnest: 512px sheet / 32px frames = 16 cols; executive: 64px / 16px = 4.
+ */
+const SHEET_LAYOUT: Record<"earnest" | "executive", { w: number; h: number; cols: number }> = {
+  earnest: { w: 32, h: 32, cols: 16 },
+  executive: { w: 16, h: 32, cols: 4 },
 };
 
-/** Sheets are 4 frames wide × 5 rows tall. */
-const SHEET_COLS = 4;
 const SHEET_ROWS = 5;
 
 /**
@@ -53,7 +54,7 @@ function SpriteThumb({
   spriteSheet: string;
   frameMapKind: "earnest" | "executive";
 }) {
-  const { w, h } = FRAME_SIZE[frameMapKind];
+  const { w, h, cols } = SHEET_LAYOUT[frameMapKind];
   const scale = 2;
   return (
     <div
@@ -64,7 +65,7 @@ function SpriteThumb({
         backgroundImage: `url(${spriteSheet})`,
         backgroundPosition: "0 0",
         backgroundRepeat: "no-repeat",
-        backgroundSize: `${w * SHEET_COLS * scale}px ${h * SHEET_ROWS * scale}px`,
+        backgroundSize: `${w * cols * scale}px ${h * SHEET_ROWS * scale}px`,
         imageRendering: "pixelated",
       }}
     />

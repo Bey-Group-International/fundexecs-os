@@ -789,7 +789,7 @@ export class OfficeScene extends Phaser.Scene {
 
   // ── Emotes — Gather-style reactions on keys 1-4 ─────────────────────────────
 
-  private static readonly EMOTES = ["👋", "👍", "❤️", "🎉"];
+  private static readonly EMOTES = ["👋", "👍", "❤️", "🎉"] as const;
 
   private _setupEmotes() {
     const codes = [
@@ -809,8 +809,9 @@ export class OfficeScene extends Phaser.Scene {
   /** Show an emote above the local player and broadcast it to the room. */
   private _triggerLocalEmote(emoji: string) {
     this._showEmote(this.player.x, this.player.y, emoji);
-    if (this.socket && OfficeScene.EMOTES.includes(emoji)) {
-      this.socket.sendEmote(emoji);
+    const allowed = OfficeScene.EMOTES.find((e) => e === emoji);
+    if (this.socket && allowed) {
+      this.socket.sendEmote(allowed);
     }
   }
 
@@ -880,6 +881,7 @@ export class OfficeScene extends Phaser.Scene {
         ev.stopPropagation();   // don't also trigger click-to-walk
         this.player.setPosition(room.col * ROOM_W + ROOM_W / 2, room.row * ROOM_H + ROOM_H / 2);
         this._cancelWalk();
+        this._cancelFollow();
       });
     }
 
