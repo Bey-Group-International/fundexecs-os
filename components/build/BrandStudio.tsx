@@ -6,7 +6,6 @@ import { AutosaveForm } from "./AutosaveForm";
 import { updateBrand } from "./actions";
 import { resizeLogo } from "./logo-resize";
 
-// Five curated brand-voice presets. The stored value is the label string.
 const VOICE_PRESETS = [
   "Institutional & precise",
   "Visionary & bold",
@@ -34,7 +33,6 @@ function isValidHex(value: string): boolean {
   return HEX_RE.test(normalizeHex(value));
 }
 
-// Relative luminance per WCAG 2.x.
 function luminance(hex: string): number {
   const h = normalizeHex(hex).slice(1);
   const rgb = [0, 2, 4].map((i) => {
@@ -104,6 +102,9 @@ export function BrandStudio({
   );
   const [taglineText, setTaglineText] = useState(tagline ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Debounce timer for palette picker — adds after picker is idle for 300ms.
+  const paletteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function pickColor(value: string) {
     const v = normalizeHex(value);
@@ -119,6 +120,16 @@ export function BrandStudio({
 
   function removeFromPalette(hex: string) {
     setPalette((prev) => prev.filter((c) => c !== hex));
+    // Palette hidden input updates synchronously in React but emits no native
+    // event, so we manually submit the form to persist the removal.
+    setTimeout(() => formRef.current?.requestSubmit(), 50);
+  }
+
+  function onPalettePickerChange(value: string) {
+    setPaletteDraft(value);
+    // Debounce: add after 300ms of inactivity (fires when picker closes).
+    if (paletteTimer.current) clearTimeout(paletteTimer.current);
+    paletteTimer.current = setTimeout(() => addToPalette(value), 300);
   }
 
   async function onLogoFile(file: File) {
@@ -142,8 +153,7 @@ export function BrandStudio({
   const initial = (firmName || "F").charAt(0).toUpperCase();
 
   return (
-    <AutosaveForm action={updateBrand} className="grid max-w-2xl gap-6 pt-5">
-      {/* Only submit brand_color when a color has been explicitly chosen. */}
+    <AutosaveForm formRef={formRef} action={updateBrand} className="grid max-w-2xl gap-6 pt-5">
       <input type="hidden" name="brand_color" value={hasSavedColor ? (isValidHex(color) ? color : "") : ""} />
       <input type="hidden" name="brand_palette" value={palette.join(",")} />
       <input type="hidden" name="logo_url" value={logo} />
@@ -206,13 +216,11 @@ export function BrandStudio({
           Open the picker and choose a color — it&apos;s added instantly.
         </p>
         <div className="flex flex-wrap items-center gap-3">
-          {/* Palette picker — adds on blur (when you close the picker) */}
           <input
             type="color"
             aria-label="Pick a palette color"
             value={isValidHex(paletteDraft) ? normalizeHex(paletteDraft) : "#000000"}
-            onChange={(e) => setPaletteDraft(e.target.value)}
-            onBlur={() => addToPalette(paletteDraft)}
+            onChange={(e) => onPalettePickerChange(e.target.value)}
             className="h-10 w-12 cursor-pointer rounded-md border border-line bg-surface-0 p-1"
           />
           {palette.map((c) => (
@@ -265,13 +273,17 @@ export function BrandStudio({
               onClick={removeLogo}
               className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:border-status-danger/40 hover:text-status-danger"
             >
-              Remove logo
+              Remove
             </button>
           ) : null}
         </div>
+        {logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={`${firmName} logo`} className="mt-1 h-14 w-14 rounded-lg border border-line object-contain bg-surface-1 p-1" />
+        ) : null}
         {logoError ? <p className="text-xs text-status-danger">{logoError}</p> : null}
         <p className="text-[11px] text-fg-muted">
-          Images are downscaled to 512px and stored inline — no upload server needed.
+          Images are downscaled to 512px and stored inline.
         </p>
       </div>
 
@@ -351,6 +363,19 @@ export function BrandStudio({
             </p>
           ) : null}
         </div>
+      </div>
+
+      {/* Save */}
+      <div className="flex items-center gap-3 border-t border-line pt-4">
+        <button
+          type="submit"
+          className="rounded-md bg-gold-500 px-4 py-2 text-sm font-semibold text-surface-0 transition hover:opacity-90 active:opacity-75"
+        >
+          Save changes
+        </button>
+        <p className="text-[11px] text-fg-muted">
+          Changes also auto-save as you type.
+        </p>
       </div>
     </AutosaveForm>
   );

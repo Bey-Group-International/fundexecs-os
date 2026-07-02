@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition, type ReactNode } from "react";
+import React, { useRef, useState, useTransition, type ReactNode, type MutableRefObject } from "react";
 import { useRouter } from "next/navigation";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -12,12 +12,15 @@ export function AutosaveForm({
   action,
   children,
   className,
+  formRef: externalRef,
 }: {
   action: (formData: FormData) => Promise<void>;
   children: ReactNode;
   className?: string;
+  formRef?: MutableRefObject<HTMLFormElement | null>;
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
+  const internalRef = useRef<HTMLFormElement>(null);
+  const formRef = externalRef ?? internalRef;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [, startTransition] = useTransition();
@@ -46,7 +49,7 @@ export function AutosaveForm({
 
   return (
     <form
-      ref={formRef}
+      ref={formRef as React.RefObject<HTMLFormElement>}
       action={handleSubmit}
       onInput={scheduleSave}
       onChange={scheduleSave}
