@@ -3,7 +3,14 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getStripe, fulfillCheckout } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { grantCredits } from "@/lib/credits";
-import { PLAN_BY_KEY, loyaltyBonus, tenureMonths, type PlanKey } from "@/lib/billing";
+import {
+  PLAN_BY_KEY,
+  planGrantCredits,
+  loyaltyBonus,
+  tenureMonths,
+  type PlanKey,
+  type PlanInterval,
+} from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -49,11 +56,16 @@ export async function POST(req: NextRequest) {
           const meta = subscription.metadata as Record<string, string>;
           const orgId = meta.org_id ?? invoice.metadata?.org_id;
           const planKey = meta.plan_key ?? invoice.metadata?.plan_key;
+          const interval: PlanInterval =
+            (meta.interval ?? invoice.metadata?.interval) === "annual" ? "annual" : "monthly";
           const plan = planKey ? PLAN_BY_KEY[planKey as PlanKey] : null;
           if (orgId && plan) {
             const service = createServiceClient();
-            await grantCredits(service, orgId, plan.creditsPerMonth, "plan_grant", {
-              note: `${plan.name} plan — renewal`,
+            // planGrantCredits returns creditsPerMonth for monthly, creditsPerMonth*12
+            // for annual. Annual subscriptions bill once/year via Stripe, so this
+            // event fires once/year — we must grant the full annual allotment.
+            await grantCredits(service, orgId, planGrantCredits(plan, interval), "plan_grant", {
+              note: `${plan.name} plan — renewal (${interval})`,
             });
             // Also grant the loyalty bonus accrued since plan_started_at so the
             // dashboard's loyalty display and the actual credit grant stay in sync.
