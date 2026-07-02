@@ -14,10 +14,20 @@ export interface ThreadContext {
   href: string;
 }
 
+export interface ThreadAssignee {
+  id: string;
+  name: string;
+}
+
 export interface InboxThreadView {
   thread: InboxThread;
   context: ThreadContext | null;
+  // The teammate the thread is routed to, resolved to a name; null if unassigned.
+  assignee: ThreadAssignee | null;
 }
+
+// Sentinel filter value meaning "threads with no assignee".
+export const UNASSIGNED = "unassigned";
 
 // Server-side filters for the inbox list. All optional; omitted fields don't
 // constrain the query. Applied in the DB (not the client) so search scales past
@@ -29,6 +39,9 @@ export interface InboxThreadFilters {
   channel?: InboxChannel;
   // Only threads still marked unread.
   unreadOnly?: boolean;
+  // A principal id to restrict to that teammate's threads, or UNASSIGNED for
+  // threads with no assignee.
+  assignedTo?: string;
 }
 
 // Escape PostgREST `or()` filter metacharacters in user input: commas separate
@@ -56,6 +69,8 @@ export async function getInboxThreads(
 
   if (filters.channel) query = query.eq("channel", filters.channel);
   if (filters.unreadOnly) query = query.eq("unread", true);
+  if (filters.assignedTo === UNASSIGNED) query = query.is("assigned_to", null);
+  else if (filters.assignedTo) query = query.eq("assigned_to", filters.assignedTo);
   const term = filters.q ? sanitizeForOr(filters.q) : "";
   if (term) {
     const like = `%${term}%`;
@@ -75,20 +90,36 @@ export async function getInboxThreads(
   const investorIds = [
     ...new Set(threads.map((t) => t.investor_id).filter((v): v is string => !!v)),
   ];
+  const assigneeIds = [
+    ...new Set(threads.map((t) => t.assigned_to).filter((v): v is string => !!v)),
+  ];
 
-  const [dealsRes, investorsRes] = await Promise.all([
+  const [dealsRes, investorsRes, assigneesRes] = await Promise.all([
     dealIds.length
       ? supabase.from("deals").select("id, name").in("id", dealIds)
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
     investorIds.length
       ? supabase.from("investors").select("id, name").in("id", investorIds)
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    assigneeIds.length
+      ? supabase.from("principals").select("id, full_name").in("id", assigneeIds)
+      : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
   ]);
 
   const dealName = new Map((dealsRes.data ?? []).map((d) => [d.id, d.name]));
   const investorName = new Map((investorsRes.data ?? []).map((i) => [i.id, i.name]));
+  const assigneeName = new Map(
+    (assigneesRes.data ?? []).map((p) => [p.id, p.full_name || "Teammate"]),
+  );
 
-  return threads.map((thread) => ({ thread, context: resolveContext(thread, dealName, investorName) }));
+  return threads.map((thread) => ({
+    thread,
+    context: resolveContext(thread, dealName, investorName),
+    assignee:
+      thread.assigned_to && assigneeName.has(thread.assigned_to)
+        ? { id: thread.assigned_to, name: assigneeName.get(thread.assigned_to)! }
+        : null,
+  }));
 }
 
 function resolveContext(

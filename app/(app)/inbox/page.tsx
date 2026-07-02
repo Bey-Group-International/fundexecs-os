@@ -12,9 +12,9 @@ import {
 } from "@/lib/inbox/intelligence";
 import { channelMeta, INBOX_CHANNELS } from "@/lib/inbox/channels";
 import type { InboxChannel } from "@/lib/supabase/database.types";
-import type { InboxThreadFilters } from "@/lib/inbox/data";
+import { UNASSIGNED, type InboxThreadFilters } from "@/lib/inbox/data";
 import { tierForAction, type GateTier } from "@/lib/gates";
-import { markOpenThreadsRead } from "./actions";
+import { markOpenThreadsRead, getOrgTeammates } from "./actions";
 import { InboxBoard, type InboxCardData } from "./InboxBoard";
 import { InboxReadMarker } from "./InboxReadMarker";
 import { InboxLive } from "./InboxLive";
@@ -35,7 +35,7 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: { q?: string; channel?: string; unread?: string };
+  searchParams: { q?: string; channel?: string; unread?: string; assigned?: string };
 }) {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
@@ -43,28 +43,39 @@ export default async function InboxPage({
 
   // Parse the search/filter bar's URL params into DB-side filters. Channel is
   // validated against the catalog so an unknown value is ignored rather than
-  // silently returning nothing.
+  // silently returning nothing. The assignee filter accepts "me", "unassigned",
+  // or a teammate's principal id.
   const channelParam = searchParams.channel;
+  const assignedParam = searchParams.assigned;
+  const assignedTo =
+    assignedParam === "me"
+      ? ctx.userId
+      : assignedParam === UNASSIGNED
+        ? UNASSIGNED
+        : assignedParam || undefined;
   const filters: InboxThreadFilters = {
     q: searchParams.q?.trim() || undefined,
     channel:
       channelParam && channelParam in INBOX_CHANNELS ? (channelParam as InboxChannel) : undefined,
     unreadOnly: searchParams.unread === "1",
+    assignedTo,
   };
-  const hasFilters = Boolean(filters.q || filters.channel || filters.unreadOnly);
+  const hasFilters = Boolean(filters.q || filters.channel || filters.unreadOnly || filters.assignedTo);
 
   const supabase = createServerClient();
   // Two lanes, one inbox: the action queue ("needs you" — approvals, overdue
   // diligence, IC-ready deals, open risks) and the unified communications
-  // stream (booking / messaging / video), each fetched in parallel.
-  const [inbox, views] = await Promise.all([
+  // stream (booking / messaging / video), plus the org's teammates for the
+  // assignee picker — all fetched in parallel.
+  const [inbox, views, teammates] = await Promise.all([
     getInbox(ctx.orgId),
     getInboxThreads(supabase, filters),
+    getOrgTeammates(),
   ]);
 
   // Prepare every comms display field on the server so the client board never
   // imports the intelligence module (and its AI SDK) into the browser bundle.
-  const cards: InboxCardData[] = views.map(({ thread, context }) => {
+  const cards: InboxCardData[] = views.map(({ thread, context, assignee }) => {
     const meta = channelMeta(thread.channel);
     const move = suggestedAction(thread);
     return {
@@ -84,6 +95,7 @@ export default async function InboxPage({
       meetingAt: thread.meeting_at,
       meetingUrl: thread.meeting_url,
       context,
+      assignee,
       suggested: move
         ? { action: move.action, label: move.label, tier: tierForAction(move.action) as GateTier }
         : null,
@@ -132,13 +144,13 @@ export default async function InboxPage({
       {/* Lane 2 — unified communications: booking, messaging, video. */}
       <section>
         <SectionHeading>Communications</SectionHeading>
-        <InboxSearch />
+        <InboxSearch teammates={teammates} />
         {cards.length === 0 && hasFilters ? (
           <div className="fx-card p-8 text-center">
             <p className="text-sm text-fg-muted">No threads match your search. Clear the filters to see the full inbox.</p>
           </div>
         ) : (
-          <InboxBoard cards={cards} />
+          <InboxBoard cards={cards} teammates={teammates} />
         )}
       </section>
     </div>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
+import type { Teammate } from "./actions";
 
 // Server-driven search + filter bar for the communications inbox. Writes q /
 // channel / unread into the URL so the RSC page re-queries in the database
@@ -13,7 +14,7 @@ const CHANNEL_OPTIONS = Object.values(INBOX_CHANNELS)
   .filter((c) => c.channel !== "deal_share")
   .map((c) => ({ value: c.channel, label: c.label }));
 
-export function InboxSearch() {
+export function InboxSearch({ teammates }: { teammates: Teammate[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -23,7 +24,7 @@ export function InboxSearch() {
 
   // Push a changed param set to the URL, preserving the others. Empty values are
   // removed so the URL stays clean and filters clear cleanly.
-  function apply(next: { q?: string; channel?: string; unread?: string }) {
+  function apply(next: { q?: string; channel?: string; unread?: string; assigned?: string }) {
     const sp = new URLSearchParams(params.toString());
     for (const [key, value] of Object.entries(next)) {
       if (value) sp.set(key, value);
@@ -47,6 +48,7 @@ export function InboxSearch() {
 
   const channel = params.get("channel") ?? "";
   const unread = params.get("unread") === "1";
+  const assigned = params.get("assigned") ?? "";
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -66,6 +68,22 @@ export function InboxSearch() {
         {CHANNEL_OPTIONS.map((c) => (
           <option key={c.value} value={c.value}>
             {c.label}
+          </option>
+        ))}
+      </select>
+      <select
+        value={assigned}
+        onChange={(e) => apply({ assigned: e.target.value })}
+        className="rounded-md border border-line bg-surface-2 px-2.5 py-1.5 text-sm text-fg-secondary outline-none focus:border-gold-500"
+        aria-label="Filter by assignee"
+      >
+        <option value="">Anyone</option>
+        <option value="me">Assigned to me</option>
+        <option value="unassigned">Unassigned</option>
+        {teammates.length > 0 ? <option disabled>──────────</option> : null}
+        {teammates.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
           </option>
         ))}
       </select>
