@@ -430,16 +430,32 @@ function CopilotSidebar({
         )}
 
         {tab === "actions" && (
-          notes?.action_items?.length ? (
-            <div className="flex flex-col gap-2">
-              {notes.action_items.map((item, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-2.5">
-                  <span className="mt-0.5 text-[var(--status-success)]">☐</span>
-                  <span className="text-sm text-[var(--fg-primary)]">{item}</span>
+          (notes?.action_items?.length || notes?.decisions?.length) ? (
+            <div className="flex flex-col gap-3">
+              {notes.action_items?.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Action Items</p>
+                  {notes.action_items.map((item, i) => (
+                    <div key={i} className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-2.5">
+                      <span className="mt-0.5 text-[var(--status-success)] shrink-0">☐</span>
+                      <span className="text-sm text-[var(--fg-primary)]">{item}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+              {notes.decisions?.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Decisions</p>
+                  {notes.decisions.map((d, i) => (
+                    <div key={i} className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-2.5">
+                      <span className="mt-0.5 text-[var(--status-success)] shrink-0">✓</span>
+                      <span className="text-sm text-[var(--fg-primary)]">{d}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ) : <EmptyCopilot label="Action items will be extracted as you discuss tasks." />
+          ) : <EmptyCopilot label="Action items and decisions will be extracted as you discuss tasks." />
         )}
 
         {tab === "chat" && (
@@ -590,6 +606,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [isUpdatingNotes, startNotesTransition] = useTransition();
   const [srStatus, setSrStatus] = useState<"idle" | "active" | "error" | "unsupported">("idle");
   const notesInflightRef = useRef(false);
+  const lastNotesFlushedIdxRef = useRef(0);
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -1128,23 +1145,36 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (!ready || waitingForAdmit) return;
     const interval = setInterval(() => {
       if (notesInflightRef.current) return;
-      const text = transcriptRef.current.filter((l) => l.final).map((l) => `${l.speaker}: ${l.text}`).join("\n");
-      if (!text) return;
+      const finalLines = transcriptRef.current.filter((l) => l.final);
+      if (!finalLines.length) return;
+      const newLines = finalLines.slice(lastNotesFlushedIdxRef.current);
+      if (!newLines.length) return; // nothing new since last update
+      const fullText = finalLines.map((l) => `${l.speaker}: ${l.text}`).join("\n");
+      const newText = newLines.map((l) => `${l.speaker}: ${l.text}`).join("\n");
       notesInflightRef.current = true;
+      const participants = [...peersDataRef.current.values()].map((p) => p.displayName);
       startNotesTransition(async () => {
         try {
-          const res = await fetch("/api/meetings/notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ transcript: text }) });
+          const res = await fetch("/api/meetings/notes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transcript: fullText,
+              newTranscript: newText,
+              title: meetingTitle || undefined,
+              participants,
+            }),
+          });
           if (res.ok) {
             const result = await res.json() as LiveNotesResult;
             setNotes(result);
-            // TODO: persist live notes snapshot once a notes_snapshot column is added to live_meetings
-            // (the field does not exist in the DB schema — writing to it silently fails via `as any`)
+            lastNotesFlushedIdxRef.current = finalLines.length;
           }
         } catch { /* ignore */ } finally { notesInflightRef.current = false; }
       });
     }, NOTES_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [ready, waitingForAdmit, meetingId]);
+  }, [ready, waitingForAdmit, meetingId, meetingTitle]);
 
   // ── Transcript flush ──────────────────────────────────────────────────────
 
