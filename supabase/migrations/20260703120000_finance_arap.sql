@@ -117,11 +117,14 @@ create table if not exists public.fin_payment_allocations (
 );
 create index if not exists fin_payment_allocations_invoice_idx on public.fin_payment_allocations (invoice_id);
 
--- --- updated_at triggers ----------------------------------------------------
+-- --- updated_at triggers (drop-then-create so a re-apply is idempotent) ------
+drop trigger if exists fin_parties_set_updated_at on public.fin_parties;
 create trigger fin_parties_set_updated_at before update on public.fin_parties
   for each row execute function public.set_updated_at();
+drop trigger if exists fin_invoices_set_updated_at on public.fin_invoices;
 create trigger fin_invoices_set_updated_at before update on public.fin_invoices
   for each row execute function public.set_updated_at();
+drop trigger if exists fin_payments_set_updated_at on public.fin_payments;
 create trigger fin_payments_set_updated_at before update on public.fin_payments
   for each row execute function public.set_updated_at();
 

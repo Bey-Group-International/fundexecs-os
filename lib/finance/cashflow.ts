@@ -110,6 +110,9 @@ export function projectCashflow(
 ): CashflowProjection {
   const { asOf, horizonDays, granularity } = opts;
   const startMs = toMs(asOf);
+  // Guard an unparseable asOf: NaN comparisons are all false, which would let
+  // every event through (the opposite of the intended empty result).
+  if (Number.isNaN(startMs)) throw new Error(`projectCashflow: invalid asOf date "${asOf}"`);
   const endMs = startMs + horizonDays * DAY_MS; // inclusive upper bound
 
   // Group in-range events by bucket start.

@@ -140,6 +140,13 @@ describe("projectCashflow", () => {
     expect(p.shortfall).toBe(false);
   });
 
+  it("throws on an unparseable asOf instead of passing every event through", () => {
+    const events: CashflowEvent[] = [{ date: "2026-07-10", amount: 100 }];
+    expect(() =>
+      projectCashflow(0, events, { asOf: "not-a-date", horizonDays: 30, granularity: "week" }),
+    ).toThrow(/invalid asOf/);
+  });
+
   it("groups by calendar month across a longer horizon", () => {
     const events: CashflowEvent[] = [
       { date: "2026-07-10", amount: 100 },
