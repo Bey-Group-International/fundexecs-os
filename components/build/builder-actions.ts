@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { gatherFoundationContext } from "@/lib/foundation-context";
@@ -279,7 +280,7 @@ export async function generateAiDocument(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
 
   const sectionKey = String(formData.get("section") ?? "").trim();
-  const docName = AI_DOC_NAMES[sectionKey] ?? String(formData.get("doc_name") ?? "").trim() || "Untitled";
+  const docName = (AI_DOC_NAMES[sectionKey] ?? String(formData.get("doc_name") ?? "").trim()) || "Untitled";
 
   const foundation = await loadFoundation(ctx.orgId);
   const skeleton = composeDraft(docName, sectionKey, foundation);
