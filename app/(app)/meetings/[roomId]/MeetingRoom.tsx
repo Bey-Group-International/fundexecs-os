@@ -44,6 +44,9 @@ const FALLBACK_ICE: RTCConfiguration = {
   ],
 };
 
+const NOTES_INTERVAL_MS = 15_000;
+const TRANSCRIPT_FLUSH_MS = 60_000;
+
 // ─── Video tile ──────────────────────────────────────────────────────────────
 
 function VideoTile({
@@ -225,12 +228,23 @@ function CopilotSidebar({
   transcript,
   notes,
   isUpdating,
+  srStatus,
+  participants,
+  roomCode,
 }: {
   transcript: TranscriptLine[];
   notes: LiveNotesResult | null;
   isUpdating: boolean;
+  srStatus: "idle" | "active" | "error" | "unsupported";
+  participants: { id: string; displayName: string }[];
+  roomCode: string;
 }) {
-  const [tab, setTab] = useState<"transcript" | "notes" | "actions">("transcript");
+  const [tab, setTab] = useState<"transcript" | "notes" | "actions" | "people">("transcript");
+  const [copied, setCopied] = useState(false);
+
+  const inviteLink = typeof window !== "undefined"
+    ? `${window.location.origin}/meetings/${roomCode}`
+    : "";
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -249,11 +263,25 @@ function CopilotSidebar({
             <span className="text-xs text-[var(--gold-400)] animate-pulse">Updating…</span>
           )}
         </div>
+        <div className="flex items-center gap-1.5">
+          {srStatus === "active" && (
+            <span className="flex items-center gap-1 text-xs text-[var(--status-success)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
+              Live
+            </span>
+          )}
+          {srStatus === "error" && (
+            <span className="text-xs text-[var(--status-danger)]" title="Microphone error">⚠ Mic</span>
+          )}
+          {srStatus === "unsupported" && (
+            <span className="text-xs text-[var(--fg-muted)]" title="Browser doesn't support live transcription">No STT</span>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-[var(--line)]">
-        {(["transcript", "notes", "actions"] as const).map((t) => (
+        {(["transcript", "notes", "actions", "people"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -263,7 +291,7 @@ function CopilotSidebar({
                 : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
             }`}
           >
-            {t === "actions" ? "Actions" : t === "notes" ? "Notes" : "Transcript"}
+            {t === "actions" ? "Actions" : t === "notes" ? "Notes" : t === "people" ? `People ${participants.length}` : "Transcript"}
           </button>
         ))}
       </div>
@@ -329,6 +357,40 @@ function CopilotSidebar({
             )}
           </>
         )}
+
+        {tab === "people" && (
+          <div className="flex flex-col gap-3">
+            {/* Invite link */}
+            <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-3 flex flex-col gap-2">
+              <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Invite link</p>
+              <p className="text-xs text-[var(--fg-muted)] font-mono break-all">{roomCode}</p>
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(inviteLink);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-black text-xs font-semibold py-2 transition-colors"
+              >
+                {copied ? "Copied!" : "Copy invite link"}
+              </button>
+            </div>
+
+            {/* Participant list */}
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide px-1">In this call</p>
+              {participants.map((p) => (
+                <div key={p.id} className="flex items-center gap-2.5 rounded-lg px-2 py-2">
+                  <div className="w-7 h-7 rounded-full bg-[var(--gold-400)]/20 border border-[var(--gold-400)]/30 flex items-center justify-center text-xs font-semibold text-[var(--gold-400)]">
+                    {p.displayName.slice(0, 1).toUpperCase()}
+                  </div>
+                  <span className="text-sm text-[var(--fg-primary)]">{p.displayName}</span>
+                  {p.id === "local" && <span className="ml-auto text-xs text-[var(--fg-muted)]">You</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -377,6 +439,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Copilot notes
   const [notes, setNotes] = useState<LiveNotesResult | null>(null);
   const [isUpdatingNotes, startNotesTransition] = useTransition();
+
+  // Speech recognition status
+  const [srStatus, setSrStatus] = useState<"idle" | "active" | "error" | "unsupported">("idle");
 
   // UI state
   const [copilotOpen, setCopilotOpen] = useState(true);
@@ -639,12 +704,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       ? (w.SpeechRecognition ?? w.webkitSpeechRecognition)
       : undefined) as (new () => any) | undefined;
 
-    if (!SR) return;
+    if (!SR) {
+      setSrStatus("unsupported");
+      return;
+    }
 
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
+
+    recognition.onstart = () => setSrStatus("active");
 
     recognition.onresult = (ev: any) => {
       let interim = "";
@@ -682,11 +752,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     };
 
     recognition.onerror = (ev: any) => {
-      if (ev.error !== "no-speech") console.warn("[SR]", ev.error);
+      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+        setSrStatus("error");
+      } else if (ev.error !== "no-speech") {
+        console.warn("[SR]", ev.error);
+      }
     };
 
     recognition.onend = () => {
-      try { recognition.start(); } catch { /* ignore */ }
+      // Auto-restart unless we hit a hard error
+      setSrStatus((prev) => {
+        if (prev === "error" || prev === "unsupported") return prev;
+        try { recognition.start(); } catch { /* ignore */ }
+        return "active";
+      });
     };
 
     recognition.start();
@@ -718,14 +797,45 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ transcript: text }),
           });
-          if (res.ok) setNotes(await res.json() as LiveNotesResult);
+          if (res.ok) {
+            const result = await res.json() as LiveNotesResult;
+            setNotes(result);
+            // Persist snapshot to DB so command center can surface it
+            if (meetingId) {
+              void (supabase.from("live_meetings") as any).update({
+                notes_snapshot: result,
+              }).eq("id", meetingId);
+            }
+          }
         } catch { /* silently fail */ } finally {
           notesInflightRef.current = false;
         }
       });
-    }, 30_000);
+    }, NOTES_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [ready]);
+  }, [ready, meetingId]);
+
+  // ── Periodic transcript flush to DB ────────────────────────────────────
+
+  useEffect(() => {
+    if (!ready || !meetingId) return;
+    const lastFlushedRef = { idx: 0 };
+    const interval = setInterval(() => {
+      const finalLines = transcriptRef.current.filter((l) => l.final);
+      const newLines = finalLines.slice(lastFlushedRef.idx);
+      if (!newLines.length) return;
+      lastFlushedRef.idx = finalLines.length;
+      void (supabase.from("live_meeting_transcripts") as any).insert(
+        newLines.map((l) => ({
+          meeting_id: meetingId,
+          speaker: l.speaker,
+          text: l.text,
+          ts: new Date(l.ts).toISOString(),
+        })),
+      );
+    }, TRANSCRIPT_FLUSH_MS);
+    return () => clearInterval(interval);
+  }, [ready, meetingId]);
 
   // ── Controls ────────────────────────────────────────────────────────────
 
@@ -903,8 +1013,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     totalCount <= 4 ? "grid-cols-2" :
     "grid-cols-3";
 
+  const participantList = [
+    { id: "local", displayName: localName },
+    ...allPeers.map((p) => ({ id: p.id, displayName: p.displayName })),
+  ];
+
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex flex-col">
       <div className="flex flex-1 overflow-hidden">
         {/* Video area */}
         <div className="flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)]">
@@ -932,6 +1047,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               transcript={transcript}
               notes={notes}
               isUpdating={isUpdatingNotes}
+              srStatus={srStatus}
+              participants={participantList}
+              roomCode={roomCode}
             />
           </div>
         )}
