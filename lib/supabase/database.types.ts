@@ -1784,6 +1784,7 @@ export type FinImportStatus = "pending" | "staged" | "failed";
 export type FinBankTxnStatus = "unmatched" | "suggested" | "matched" | "reconciled" | "ignored";
 export type FinReconMatchKind = "auto" | "manual";
 export type FinRuleMatchType = "contains" | "exact" | "regex";
+export type FinRuleMatchField = "description" | "counterparty";
 
 export type FinBankAccount = Timestamps & {
   id: string;
@@ -1843,7 +1844,7 @@ export type FinTxnRule = Timestamps & {
   name: string;
   priority: number;
   match_type: FinRuleMatchType;
-  match_field: string;
+  match_field: FinRuleMatchField;
   pattern: string;
   amount_min: number | null;
   amount_max: number | null;
@@ -2252,6 +2253,17 @@ export type Database = {
         };
         Returns: string;
       };
+      // Atomically apply a batch of (txn, entry) reconciliations: insert each
+      // audit row and flip the bank txn to 'reconciled' in one transaction
+      // (migration 20260703110000). Returns the count applied.
+      fin_reconcile_txns: {
+        Args: {
+          p_pairs: Json;
+          p_match_kind: FinReconMatchKind;
+          p_actor: string | null;
+        };
+        Returns: number;
+      };
       // Cosine-search a Brain's KB corpus (migration 0024). embedding args are
       // sent as the pgvector text literal "[0.1,0.2,...]".
       match_brain_kb_chunks: {
@@ -2356,6 +2368,7 @@ export type Database = {
       fin_bank_txn_status: FinBankTxnStatus;
       fin_recon_match_kind: FinReconMatchKind;
       fin_rule_match_type: FinRuleMatchType;
+      fin_rule_match_field: FinRuleMatchField;
     };
   };
 }

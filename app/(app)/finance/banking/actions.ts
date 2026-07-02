@@ -15,7 +15,7 @@ import {
   type TxnRule,
   type EntryCandidate,
 } from "@/lib/finance/banking";
-import type { FinTxnRule } from "@/lib/supabase/database.types";
+import type { FinTxnRule, Json } from "@/lib/supabase/database.types";
 import { postJournalEntry } from "../actions";
 
 export interface BankResult {
@@ -92,6 +92,11 @@ export async function importBankFile(input: {
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   if (!input.bankAccountId || !input.fileText?.trim()) {
     return { ok: false, error: "A bank account and a non-empty file are required." };
+  }
+  // Guard against pathologically large uploads before parsing the whole file.
+  const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+  if (input.fileText.length > MAX_FILE_BYTES) {
+    return { ok: false, error: "Statement file must be under 10 MB." };
   }
   const format = input.format ?? detectFormat(input.fileText);
   if (!format) return { ok: false, error: "Could not detect the statement format (CSV/OFX/QIF/CAMT)." };
@@ -247,38 +252,42 @@ export async function matchTransaction(input: {
   }
 
   if (!entryId) return { ok: false, error: "Provide an entry to match, or a coding to post." };
-  return linkReconciliation(supabase, auth.ctx, txn.bank_account_id, input.bankTxnId, entryId, "manual");
+  const linked = await applyReconciliations(
+    supabase,
+    auth.ctx.userId,
+    [{ txnId: input.bankTxnId, entryId }],
+    "manual",
+  );
+  if (!linked.ok || linked.count < 1) {
+    // The link (insert + status flip) is atomic, so nothing half-applies here.
+    // But a coding entry may already have been posted in the step above — surface
+    // it explicitly so the operator can relink or reverse it, never orphan it.
+    const orphan = input.newCoding
+      ? ` A journal entry (${entryId}) was posted but not linked — reverse or relink it.`
+      : "";
+    return { ok: false, error: `Could not link the reconciliation.${orphan}` };
+  }
+  return { ok: true, data: { bankTxnId: input.bankTxnId, entryId, matchKind: "manual" } };
 }
 
-async function linkReconciliation(
+// Apply a batch of (txn, entry) reconciliations atomically via the RPC: each
+// pair's audit-row insert and bank-txn status flip happen in one transaction,
+// so a link can never half-apply. One round-trip for the whole batch.
+async function applyReconciliations(
   supabase: ReturnType<typeof createServerClient>,
-  ctx: { orgId: string; userId: string },
-  bankAccountId: string,
-  bankTxnId: string,
-  entryId: string,
+  actorId: string,
+  pairs: { txnId: string; entryId: string }[],
   matchKind: "auto" | "manual",
-): Promise<BankResult> {
-  const { error: reconErr } = await supabase.from("fin_reconciliations").insert({
-    organization_id: ctx.orgId,
-    bank_account_id: bankAccountId,
-    bank_txn_id: bankTxnId,
-    entry_id: entryId,
-    match_kind: matchKind,
-    matched_by: ctx.userId,
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  if (!pairs.length) return { ok: true, count: 0 };
+  const { data, error } = await supabase.rpc("fin_reconcile_txns", {
+    p_pairs: pairs as unknown as Json,
+    p_match_kind: matchKind,
+    p_actor: actorId,
   });
-  if (reconErr) return { ok: false, error: reconErr.message };
-  await supabase
-    .from("fin_bank_transactions")
-    .update({
-      status: "reconciled",
-      matched_entry_id: entryId,
-      reconciled_by: ctx.userId,
-      reconciled_at: new Date().toISOString(),
-    })
-    .eq("organization_id", ctx.orgId)
-    .eq("id", bankTxnId);
+  if (error) return { ok: false, error: error.message };
   revalidatePath("/finance");
-  return { ok: true, data: { bankTxnId, entryId, matchKind } };
+  return { ok: true, count: (data as number) ?? 0 };
 }
 
 /**
@@ -312,12 +321,14 @@ export async function autoReconcile(input: {
   const unmatched = (txnRows ?? []) as { id: string; amount: number; txn_date: string }[];
   if (!unmatched.length) return { ok: true, data: { matched: 0 } };
 
-  // Posted entries with a line on the bank's GL account, not already reconciled.
+  // Posted entries with a line on the bank's GL account (status filtered in SQL),
+  // excluding any already reconciled.
   const { data: lineRows } = await supabase
     .from("fin_journal_lines")
-    .select("amount, entry:fin_journal_entries!inner(id, entry_date, status)")
+    .select("amount, entry:fin_journal_entries!inner(id, entry_date)")
     .eq("organization_id", auth.ctx.orgId)
-    .eq("account_id", glAccountId);
+    .eq("account_id", glAccountId)
+    .eq("fin_journal_entries.status", "posted");
   const { data: reconRows } = await supabase
     .from("fin_reconciliations")
     .select("entry_id")
@@ -327,26 +338,28 @@ export async function autoReconcile(input: {
 
   const candidates: EntryCandidate[] = ((lineRows ?? []) as unknown as {
     amount: number;
-    entry: { id: string; entry_date: string; status: string } | null;
+    entry: { id: string; entry_date: string } | null;
   }[])
-    .filter((l) => l.entry && l.entry.status === "posted" && !usedEntries.has(l.entry.id))
+    .filter((l) => l.entry && !usedEntries.has(l.entry.id))
     .map((l) => ({ entryId: l.entry!.id, entryDate: l.entry!.entry_date, bankLineAmount: l.amount }));
 
-  let matched = 0;
+  // Collect all unambiguous matches, then apply them in a single atomic batch.
   const claimed = new Set<string>();
+  const pairs: { txnId: string; entryId: string }[] = [];
   for (const t of unmatched) {
     const pool = candidates.filter((c) => !claimed.has(c.entryId));
-    const hit = autoMatch({ date: t.txn_date, amount: t.amount, currency: "", description: "" }, pool, input.windowDays ?? 3);
+    const hit = autoMatch(
+      { date: t.txn_date, amount: t.amount, currency: "", description: "" },
+      pool,
+      input.windowDays ?? 3,
+    );
     if (!hit) continue;
-    const res = await linkReconciliation(supabase, auth.ctx, input.bankAccountId, t.id, hit, "auto");
-    if (res.ok) {
-      claimed.add(hit);
-      matched++;
-    }
+    claimed.add(hit);
+    pairs.push({ txnId: t.id, entryId: hit });
   }
-
-  revalidatePath("/finance");
-  return { ok: true, data: { matched, scanned: unmatched.length } };
+  const applied = await applyReconciliations(supabase, auth.ctx.userId, pairs, "auto");
+  if (!applied.ok) return { ok: false, error: applied.error };
+  return { ok: true, data: { matched: applied.count, scanned: unmatched.length } };
 }
 
 /** Create an auto-categorization rule for an entity (Tier 1). */
