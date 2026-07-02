@@ -60,7 +60,7 @@ async function RecentMeetingsCard() {
         <ul className="flex flex-col gap-3">
           {meetingsWithReports.map((meeting) => {
             const keyPoints: string[] = Array.isArray(meeting.report?.key_points)
-              ? meeting.report.key_points
+              ? (meeting.report.key_points as string[])
               : [];
             const actionItems: unknown[] = Array.isArray(meeting.report?.action_items)
               ? meeting.report.action_items
