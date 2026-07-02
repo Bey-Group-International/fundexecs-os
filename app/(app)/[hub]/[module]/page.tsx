@@ -61,6 +61,21 @@ const WorkspaceDocumentListLive = nextDynamic(() =>
 const PeopleLookupLive = nextDynamic(() =>
   import("@/components/source/PeopleLookupLive").then((m) => m.PeopleLookupLive),
 );
+const LPDiscoveryPanel = nextDynamic(() =>
+  import("@/components/source/LPDiscoveryPanel").then((m) => m.LPDiscoveryPanel),
+);
+const DealStageFunnel = nextDynamic(() =>
+  import("@/components/source/DealStageFunnel").then((m) => m.DealStageFunnel),
+);
+const OutreachPriorityQueue = nextDynamic(() =>
+  import("@/components/source/OutreachPriorityQueue").then((m) => m.OutreachPriorityQueue),
+);
+const ShareholderComms = nextDynamic(() =>
+  import("@/components/execute/ShareholderComms").then((m) => m.ShareholderComms),
+);
+const GPProfileScorecard = nextDynamic(() =>
+  import("@/components/build/GPProfileScorecard").then((m) => m.GPProfileScorecard),
+);
 
 // The `source` hub's standalone modules: a registry of module key → render fn.
 // Each shares the same shape (a sourcing-live surface keyed off ?q), so they live
@@ -165,6 +180,73 @@ export default function ModulePage({
           </p>
           <PeopleLookupLive />
         </section>
+        <div className="border-t border-line pt-8">
+          <ModuleView hub={params.hub} module={params.module} />
+        </div>
+      </div>
+    );
+  }
+
+  // Source › LP Pipeline — GPLPMatch LP Discovery Engine.
+  if (params.hub === "source" && params.module === "lp_pipeline") {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+        <LPDiscoveryPanel investors={[]} />
+        <div className="border-t border-line pt-8">
+          <ModuleView hub={params.hub} module={params.module} />
+        </div>
+      </div>
+    );
+  }
+
+  // Source › Deal Pipeline — PipelineRoad stage funnel.
+  if (params.hub === "source" && params.module === "deal_pipeline") {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+        <DealStageFunnel stages={[]} />
+        <div className="border-t border-line pt-8">
+          <ModuleView hub={params.hub} module={params.module} />
+        </div>
+      </div>
+    );
+  }
+
+  // Source › Outreach — GPLPMatch priority queue above OutreachStudio.
+  if (params.hub === "source" && params.module === "outreach") {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+        <OutreachPriorityQueue items={[]} />
+        <div className="border-t border-line pt-8">
+          <OutreachStudio live={sourcingLive()} />
+        </div>
+      </div>
+    );
+  }
+
+  // Execute › Reporting — ForgeGlobal shareholder comms center.
+  if (params.hub === "execute" && params.module === "reporting") {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+        <ShareholderComms templates={[]} />
+        <div className="border-t border-line pt-8">
+          <ModuleView hub={params.hub} module={params.module} />
+        </div>
+      </div>
+    );
+  }
+
+  // Build › Profile — GPLPMatch GP Profile Scorecard.
+  if (params.hub === "build" && params.module === "profile") {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+        <GPProfileScorecard scorecard={{
+          overallScore: 0,
+          trackRecord: { score: 0, moicAvg: null, irrAvg: null, dealCount: 0 },
+          teamStrength: { score: 0, seniorYears: null, boardSeats: null },
+          thesisClarity: { score: 0, sectorsCount: 0, stagesCount: 0 },
+          networkReach: { score: 0, lpRelationships: 0, coInvestors: 0 },
+          operationalReadiness: { score: 0, hasAuditor: false, hasCounsel: false, hasAdmin: false },
+        }} />
         <div className="border-t border-line pt-8">
           <ModuleView hub={params.hub} module={params.module} />
         </div>

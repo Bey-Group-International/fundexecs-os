@@ -8,6 +8,7 @@ import type { GateTier } from "@/lib/gates";
 import type { CapitalEventType, InvestorType } from "@/lib/supabase/database.types";
 import { ThesisAlignmentBreakdown } from "@/components/source/ThesisAlignmentBreakdown";
 import { AumHistoryChart } from "@/components/source/AumHistoryChart";
+import { CapitalCallNotices } from "@/components/execute/CapitalCallNotices";
 
 // --- Small primitives ------------------------------------------------------
 // Thesis-fit ring — same SVG idiom as the Run-hub deal war room.
@@ -347,6 +348,8 @@ export function InvestorWarRoom({ data }: { data: WarRoom }) {
       </div>
       <Header data={data} />
       <Commitments data={data} />
+      {/* ── FundWave-style capital call notices ──────────────────────── */}
+      <CapitalCallNotices notices={[]} />
       {/* ── Fintrx-style AUM history + capital deployment ───────────── */}
       <AumHistoryChart
         investor={data.investor}

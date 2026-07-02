@@ -13,6 +13,7 @@ import {
 } from "@/app/(app)/deal/[id]/actions";
 import { DealCompsPanel } from "@/components/run/DealCompsPanel";
 import { ScenarioComparisonTable } from "@/components/run/ScenarioComparisonTable";
+import { SecondaryLiquidityPanel } from "@/components/run/SecondaryLiquidityPanel";
 
 // --- Small primitives ------------------------------------------------------
 function Ring({ value, size = 72 }: { value: number; size?: number }) {
@@ -485,6 +486,8 @@ export function DealWarRoom({ data }: { data: WarRoom }) {
       <Diligence data={data} />
       {/* ── PitchBook-style comparable transactions ─────────────────── */}
       <DealCompsPanel comps={data.comps} />
+      {/* ── ForgeGlobal-style secondary market liquidity ────────────── */}
+      <SecondaryLiquidityPanel positions={[]} />
       {/* ── Forcastr-style multi-scenario exit comparison ───────────── */}
       {data.conviction.baseCase && (
         <ScenarioComparisonTable

@@ -18,6 +18,7 @@ import { channelMeta } from "@/lib/inbox/channels";
 import { dashboardWorkspaces } from "@/lib/dashboard/config";
 import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
 import { FirstMissionCoach } from "@/components/dashboard/FirstMissionCoach";
+import { StaleDealAlerts } from "@/components/dashboard/StaleDealAlerts";
 import {
   DeleteWorkflowBtn,
   ClearWorkflowsBtn,
@@ -159,6 +160,24 @@ export default async function DashboardPage() {
   const dealByStage = new Map<string, number>();
   for (const d of deals) dealByStage.set(d.stage, (dealByStage.get(d.stage) ?? 0) + 1);
 
+  const now = Date.now();
+  const staleDeals = deals
+    .map((d) => {
+      const lastActivity = d.updated_at ?? d.created_at;
+      const daysStale = Math.floor((now - new Date(lastActivity).getTime()) / 86_400_000);
+      return {
+        id: d.id,
+        name: d.name,
+        stage: d.stage,
+        daysStale,
+        lastActivityDate: lastActivity,
+        assignee: d.lead_principal ?? null,
+        dealValue: d.target_amount ?? null,
+      };
+    })
+    .filter((d) => d.daysStale >= 14)
+    .sort((a, b) => b.daysStale - a.daysStale);
+
   // Unified Inbox digest + the few threads that actually need attention today.
   const inboxDigest = buildDigest(
     inboxViews.map(({ thread }): DigestThread => ({
@@ -289,6 +308,12 @@ export default async function DashboardPage() {
           <span className="text-lg text-fg-muted">%</span>
         </span>
       </Link>
+
+      {staleDeals.length > 0 && (
+        <section className="mt-8">
+          <StaleDealAlerts deals={staleDeals} />
+        </section>
+      )}
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
         <HottestCapital entries={hottestCapital} />
