@@ -2,6 +2,13 @@ import nextDynamic from "next/dynamic";
 import { ModuleView } from "@/components/ModuleView";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 import { copilotLive } from "@/lib/claude";
+import { getSessionContext } from "@/lib/auth";
+import { createServerClient } from "@/lib/supabase/server";
+import { buildCapitalMap } from "@/lib/capital-map";
+import { computeGPScorecard } from "@/lib/gp-scorecard";
+import type { LPMatch } from "@/components/source/LPDiscoveryPanel";
+import type { OutreachItem } from "@/components/source/OutreachPriorityQueue";
+import type { CommTemplate } from "@/components/execute/ShareholderComms";
 
 // Lazily loaded — each search/triage surface is heavy and hub-specific.
 // next/dynamic splits them into separate chunks loaded only when the matching
@@ -92,7 +99,7 @@ const SOURCE_MODULES: Record<string, (initialPrompt?: string) => JSX.Element> = 
   triage: (initialPrompt) => <SourceTriage live={sourcingLive()} initialPrompt={initialPrompt} />,
   buyers: (initialPrompt) => <OwnershipIntel live={sourcingLive()} initialPrompt={initialPrompt} />,
   intel: (initialPrompt) => <SourcingIntel live={sourcingLive()} initialPrompt={initialPrompt} />,
-  outreach: () => <OutreachStudio live={sourcingLive()} />,
+  // outreach handled by custom block below (includes OutreachPriorityQueue)
   signals: (initialPrompt) => <SourceSignals live={sourcingLive()} initialPrompt={initialPrompt} />,
   radar: (initialPrompt) => <SourceRadar live={sourcingLive()} initialPrompt={initialPrompt} />,
   funnel: (initialPrompt) => <SourceFunnel live={sourcingLive()} initialPrompt={initialPrompt} />,
@@ -108,7 +115,7 @@ export const dynamic = "force-dynamic";
 // this renders the module's view (shared with the in-session frame). A few hubs
 // route a pseudo-module ("search" / "triage") to a conversational, Earn-driven
 // surface instead of a table.
-export default function ModulePage({
+export default async function ModulePage({
   params,
   searchParams,
 }: {
@@ -187,71 +194,146 @@ export default function ModulePage({
     );
   }
 
-  // Source › LP Pipeline — GPLPMatch LP Discovery Engine.
-  if (params.hub === "source" && params.module === "lp_pipeline") {
-    return (
-      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
-        <LPDiscoveryPanel investors={[]} />
-        <div className="border-t border-line pt-8">
-          <ModuleView hub={params.hub} module={params.module} />
-        </div>
-      </div>
-    );
-  }
+  // ── Data-dependent modules: LP pipeline, outreach, reporting, profile ─────
+  // These pull from the DB via the capital map and GP scorecard helpers.
+  const needsCapitalMap =
+    (params.hub === "source" && (params.module === "lp_pipeline" || params.module === "outreach"));
+  const needsGPScorecard = params.hub === "build" && params.module === "profile";
+  const isReporting = params.hub === "execute" && params.module === "reporting";
+  const isDealPipeline = params.hub === "source" && params.module === "deal_pipeline";
 
-  // Source › Deal Pipeline — PipelineRoad stage funnel.
-  if (params.hub === "source" && params.module === "deal_pipeline") {
-    return (
-      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
-        <DealStageFunnel stages={[]} />
-        <div className="border-t border-line pt-8">
-          <ModuleView hub={params.hub} module={params.module} />
-        </div>
-      </div>
-    );
-  }
+  if (needsCapitalMap || needsGPScorecard || isReporting || isDealPipeline) {
+    const ctx = await getSessionContext();
+    const supabase = createServerClient();
 
-  // Source › Outreach — GPLPMatch priority queue above OutreachStudio.
-  if (params.hub === "source" && params.module === "outreach") {
-    return (
-      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
-        <OutreachPriorityQueue items={[]} />
-        <div className="border-t border-line pt-8">
-          <OutreachStudio live={sourcingLive()} />
+    // Source › LP Pipeline — GPLPMatch LP Discovery Engine.
+    if (params.hub === "source" && params.module === "lp_pipeline") {
+      const capitalMap = ctx?.orgId ? await buildCapitalMap(supabase) : [];
+      const now = Date.now();
+      const investors: LPMatch[] = capitalMap.map((entry) => ({
+        id: entry.investor.id,
+        name: entry.investor.name,
+        type: entry.investor.investor_type,
+        aum: entry.investor.aum,
+        typical_check_min: entry.investor.typical_check_min,
+        typical_check_max: entry.investor.typical_check_max,
+        thesisFitScore: entry.thesisFit?.score ?? 0,
+        warmth: entry.warmth,
+        outreachPriority: entry.temperature === "committed" ? 3 : entry.temperature === "active" ? 1 : entry.temperature === "warm" ? 2 : 3,
+        lastContact: entry.investor.updated_at
+          ? `${Math.floor((now - new Date(entry.investor.updated_at).getTime()) / 86_400_000)}d ago`
+          : null,
+      }));
+      return (
+        <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+          <LPDiscoveryPanel investors={investors} />
+          <div className="border-t border-line pt-8">
+            <ModuleView hub={params.hub} module={params.module} />
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  // Execute › Reporting — ForgeGlobal shareholder comms center.
-  if (params.hub === "execute" && params.module === "reporting") {
-    return (
-      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
-        <ShareholderComms templates={[]} />
-        <div className="border-t border-line pt-8">
-          <ModuleView hub={params.hub} module={params.module} />
+    // Source › Outreach — GPLPMatch priority queue above OutreachStudio.
+    if (params.hub === "source" && params.module === "outreach") {
+      const capitalMap = ctx?.orgId ? await buildCapitalMap(supabase) : [];
+      const now = Date.now();
+      const items: OutreachItem[] = capitalMap
+        .filter((e) => e.temperature !== "committed")
+        .map((entry) => {
+          const daysStale = entry.investor.updated_at
+            ? Math.floor((now - new Date(entry.investor.updated_at).getTime()) / 86_400_000)
+            : null;
+          const priority: 1 | 2 | 3 =
+            entry.temperature === "active" ? 1 : entry.temperature === "warm" ? 2 : 3;
+          const topAction = entry.nextActions[0];
+          return {
+            id: entry.investor.id,
+            investorName: entry.investor.name,
+            priority,
+            reason: entry.thesisFit?.reasons[0] ?? `${entry.temperature} relationship`,
+            suggestedAction: topAction?.label ?? "Reach out",
+            daysStale,
+            thesisFitScore: entry.thesisFit?.score ?? null,
+          };
+        });
+      return (
+        <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+          <OutreachPriorityQueue items={items} />
+          <div className="border-t border-line pt-8">
+            <OutreachStudio live={sourcingLive()} />
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  // Build › Profile — GPLPMatch GP Profile Scorecard.
-  if (params.hub === "build" && params.module === "profile") {
-    return (
-      <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
-        <GPProfileScorecard scorecard={{
-          overallScore: 0,
-          trackRecord: { score: 0, moicAvg: null, irrAvg: null, dealCount: 0 },
-          teamStrength: { score: 0, seniorYears: null, boardSeats: null },
-          thesisClarity: { score: 0, sectorsCount: 0, stagesCount: 0 },
-          networkReach: { score: 0, lpRelationships: 0, coInvestors: 0 },
-          operationalReadiness: { score: 0, hasAuditor: false, hasCounsel: false, hasAdmin: false },
-        }} />
-        <div className="border-t border-line pt-8">
-          <ModuleView hub={params.hub} module={params.module} />
+    // Source › Deal Pipeline — PipelineRoad stage funnel (with real deal counts).
+    if (params.hub === "source" && params.module === "deal_pipeline") {
+      const dealsRes = ctx?.orgId
+        ? await supabase.from("deals").select("id, stage, updated_at").eq("organization_id", ctx.orgId)
+        : { data: [] };
+      const deals = dealsRes.data ?? [];
+      const STAGE_ORDER = ["sourced", "screening", "diligence", "ic_review", "closing"] as const;
+      const now = Date.now();
+      const countByStage = new Map<string, { count: number; stale: string[] }>();
+      for (const s of STAGE_ORDER) countByStage.set(s, { count: 0, stale: [] });
+      for (const d of deals) {
+        const bucket = countByStage.get(d.stage) ?? { count: 0, stale: [] };
+        bucket.count++;
+        const days = d.updated_at ? Math.floor((now - new Date(d.updated_at).getTime()) / 86_400_000) : 0;
+        if (days >= 30) bucket.stale.push(d.id);
+        countByStage.set(d.stage, bucket);
+      }
+      let prevCount: number | null = null;
+      const stages = STAGE_ORDER.map((s) => {
+        const { count, stale } = countByStage.get(s)!;
+        const stage = { label: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), count, convertedFrom: prevCount, avgDaysInStage: null, staleDealIds: stale };
+        prevCount = count || null;
+        return stage;
+      });
+      return (
+        <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+          <DealStageFunnel stages={stages} />
+          <div className="border-t border-line pt-8">
+            <ModuleView hub={params.hub} module={params.module} />
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+
+    // Execute › Reporting — ForgeGlobal shareholder comms with static seed templates.
+    if (params.hub === "execute" && params.module === "reporting") {
+      const templates: CommTemplate[] = [
+        { id: "q1", title: "Q1 Investor Update", type: "quarterly_update", lastSentDate: null, recipientCount: null, status: "draft" },
+        { id: "q2", title: "Q2 Investor Update", type: "quarterly_update", lastSentDate: null, recipientCount: null, status: "draft" },
+        { id: "cc1", title: "Capital Call Notice", type: "capital_call", lastSentDate: null, recipientCount: null, status: "draft" },
+        { id: "ar1", title: "Annual Report", type: "annual_report", lastSentDate: null, recipientCount: null, status: "draft" },
+        { id: "dn1", title: "Distribution Notice", type: "distribution_notice", lastSentDate: null, recipientCount: null, status: "draft" },
+      ];
+      return (
+        <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+          <ShareholderComms templates={templates} />
+          <div className="border-t border-line pt-8">
+            <ModuleView hub={params.hub} module={params.module} />
+          </div>
+        </div>
+      );
+    }
+
+    // Build › Profile — GPLPMatch GP Profile Scorecard auto-derived from org data.
+    if (params.hub === "build" && params.module === "profile") {
+      const scorecard = ctx?.orgId
+        ? await computeGPScorecard(supabase, ctx.orgId)
+        : { overallScore: 0, trackRecord: { score: 0, moicAvg: null, irrAvg: null, dealCount: 0 }, teamStrength: { score: 0, seniorYears: null, boardSeats: null }, thesisClarity: { score: 0, sectorsCount: 0, stagesCount: 0 }, networkReach: { score: 0, lpRelationships: 0, coInvestors: 0 }, operationalReadiness: { score: 0, hasAuditor: false, hasCounsel: false, hasAdmin: false } };
+      return (
+        <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
+          <GPProfileScorecard scorecard={scorecard} />
+          <div className="border-t border-line pt-8">
+            <ModuleView hub={params.hub} module={params.module} />
+          </div>
+        </div>
+      );
+    }
   }
 
   // Build › Thesis — Deal Signal Feed + Sector Heatmap.

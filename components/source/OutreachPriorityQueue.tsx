@@ -2,7 +2,7 @@
 
 import React from "react";
 
-interface OutreachItem {
+export interface OutreachItem {
   id: string;
   investorName: string;
   priority: 1 | 2 | 3;
