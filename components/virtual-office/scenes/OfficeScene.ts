@@ -145,7 +145,8 @@ export class OfficeScene extends Phaser.Scene {
 
   // Emotes
   private emoteKeys: Phaser.Input.Keyboard.Key[] = [];
-  private npcEmoteTimer = 0;
+  // Start within the natural 9-16s window so no ambient emote fires on frame 1
+  private npcEmoteTimer = 9000 + Math.random() * 7000;
 
   constructor() {
     super({ key: "OfficeScene" });
@@ -730,6 +731,8 @@ export class OfficeScene extends Phaser.Scene {
     ];
     this.emoteKeys = codes.map((c) => this.input.keyboard!.addKey(c));
 
+    // TODO: broadcast emotes via the socket (like sendMove) so remote players
+    // in the same room see them; local-only for this milestone.
     // React layer can also trigger emotes (emote button bar)
     this.game.events.on("office:emote", (emoji: string) => {
       this._showEmote(this.player.x, this.player.y, emoji);
