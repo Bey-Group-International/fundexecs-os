@@ -2,7 +2,7 @@
 
 import React from "react";
 
-interface LPMatch {
+export interface LPMatch {
   id: string;
   name: string;
   type: string;
