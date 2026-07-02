@@ -6,7 +6,17 @@ import { useRouter } from "next/navigation";
 import type { ActionKind, GateTier } from "@/lib/gates";
 import { TIER_STYLE } from "@/lib/gates";
 import type { InboxCategory, InboxChannel } from "@/lib/supabase/database.types";
-import { actOnThread, shareCommandCenter, setThreadStatus, deleteThreadAction, clearInbox, type ThreadActionResult } from "./actions";
+import {
+  actOnThread,
+  shareCommandCenter,
+  setThreadStatus,
+  deleteThreadAction,
+  clearInbox,
+  getThreadMessages,
+  replyToThread,
+  type ThreadActionResult,
+  type ThreadMessageView,
+} from "./actions";
 
 // Fully server-prepared card data — no intelligence/AI module reaches the client.
 export interface InboxCardData {
@@ -169,6 +179,46 @@ function ThreadCard({ card }: { card: InboxCardData }) {
   const [deleting, startDeleteTransition] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Expandable conversation view + inline composer.
+  const [expanded, setExpanded] = useState(false);
+  const [messages, setMessages] = useState<ThreadMessageView[] | null>(null);
+  const [msgLoading, startMsgTransition] = useTransition();
+  const [replyText, setReplyText] = useState("");
+
+  const loadMessages = useCallback(() => {
+    startMsgTransition(async () => {
+      setMessages(await getThreadMessages(card.id));
+    });
+  }, [card.id]);
+
+  const toggleThread = useCallback(() => {
+    setExpanded((open) => {
+      const next = !open;
+      if (next && messages === null) loadMessages();
+      return next;
+    });
+  }, [messages, loadMessages]);
+
+  const sendReply = useCallback(() => {
+    const body = replyText.trim();
+    if (!body) return;
+    setResult(null);
+    startTransition(async () => {
+      setActive("reply");
+      const f = new FormData();
+      f.set("thread_id", card.id);
+      f.set("body", body);
+      const r = await replyToThread(f);
+      setResult(r);
+      if (r.ok) {
+        setReplyText("");
+        loadMessages();
+        router.refresh();
+      }
+    });
+    // startTransition / setActive are stable; card.id, replyText, loadMessages, router captured.
+  }, [replyText, card.id, loadMessages, router, startTransition]);
+
   const handleDelete = useCallback(() => {
     if (!confirm("Delete this thread? This cannot be undone.")) return;
     setDeleteError(null);
@@ -251,6 +301,69 @@ function ThreadCard({ card }: { card: InboxCardData }) {
           </a>
         ) : null}
       </div>
+
+      {/* Expand into the full conversation + inline composer */}
+      <button
+        type="button"
+        onClick={toggleThread}
+        aria-expanded={expanded}
+        className="mt-2 inline-flex items-center gap-1 text-[11px] text-fg-muted transition hover:text-fg-primary"
+      >
+        <span className="font-mono text-[9px]">{expanded ? "▾" : "▸"}</span>
+        {expanded ? "Hide thread" : "View thread"}
+      </button>
+
+      {expanded ? (
+        <div className="mt-2 rounded-lg border border-line/70 bg-surface-0/40 p-3">
+          {msgLoading && messages === null ? (
+            <p className="text-xs text-fg-muted">Loading conversation…</p>
+          ) : messages && messages.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                    m.direction === "outbound"
+                      ? "self-end border border-gold-500/30 bg-gold-500/10 text-fg-primary"
+                      : "self-start border border-line/60 bg-surface-1 text-fg-secondary"
+                  }`}
+                >
+                  <div className="mb-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    {m.author ?? (m.direction === "outbound" ? "You" : card.counterparty)} · {relativeMeeting(m.occurredAt)}
+                  </div>
+                  <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-fg-muted">No messages on this thread yet.</p>
+          )}
+
+          {/* Inline composer — routes through the same gate as every outward move. */}
+          <div className="mt-3 border-t border-line/60 pt-3">
+            <textarea
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              rows={2}
+              placeholder={`Reply to ${card.counterparty}…`}
+              className="w-full resize-none rounded-md border border-line bg-surface-2 px-2.5 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
+            />
+            <div className="mt-1.5 flex items-center justify-between">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                Send routes through your approvals if required
+              </span>
+              <button
+                type="button"
+                disabled={pending || !replyText.trim()}
+                onClick={sendReply}
+                className="rounded-md border border-line bg-surface-0/80 px-3 py-1.5 text-sm text-fg-primary transition hover:-translate-y-px hover:border-gold-500 disabled:opacity-50"
+              >
+                {pending && active === "reply" ? "Sending…" : "Send reply"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Gated next moves */}
       <div className="mt-3 flex flex-wrap items-center gap-2">

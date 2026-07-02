@@ -14,6 +14,7 @@ import type {
   AgentKey,
   InboxCategory,
   InboxChannel,
+  InboxMessage,
   InboxThread,
   Json,
 } from "@/lib/supabase/database.types";
@@ -71,7 +72,7 @@ type BackingArtifact = { verification_status: string; grounding_score: number };
 async function performThreadAction(
   threadId: string,
   action: ActionKind,
-  opts: { sharePreface?: string; backingArtifact?: BackingArtifact } = {},
+  opts: { sharePreface?: string; backingArtifact?: BackingArtifact; replyBody?: string } = {},
 ): Promise<ThreadActionResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
@@ -100,13 +101,19 @@ async function performThreadAction(
   const agent = AGENT_FOR_INBOX_ACTION[action] ?? "investor_relations";
   const who = t.counterparty_name ?? t.counterparty_email ?? t.subject;
   const title = `${ACTION_LABEL[action] ?? action.replace(/_/g, " ")} — ${who}`;
+  // When the operator composed a reply inline, carry the draft into the task
+  // description so it is preserved for an approver (Tier 2/3) and not lost if the
+  // action is gated before dispatch.
+  const description = opts.replyBody
+    ? `Unified-inbox reply on the ${t.channel} thread "${t.subject}":\n\n${opts.replyBody}`
+    : `Unified-inbox action on the ${t.channel} thread "${t.subject}".`;
 
   const { data: task, error } = await supabase
     .from("tasks")
     .insert({
       organization_id: orgId,
       title,
-      description: `Unified-inbox action on the ${t.channel} thread "${t.subject}".`,
+      description,
       hub: "source",
       assigned_agent: agent,
       status: decision.requiresApproval ? "awaiting_approval" : "pending",
@@ -169,6 +176,10 @@ async function performThreadAction(
     action,
     channel: t.channel,
     target: { name: t.counterparty_name ?? undefined, email: t.counterparty_email ?? undefined },
+    // The operator's composed reply text, when this is an inline reply — a live
+    // adapter sends exactly this; a mock adapter ignores it and returns its
+    // prepared status. Undefined for suggested/share actions.
+    body: opts.replyBody,
     // Pre-flight trust guard: an unverifiable backing artifact is refused here
     // before it reaches the counterparty (no-op when none was supplied).
     backingArtifact: opts.backingArtifact,
@@ -183,7 +194,14 @@ async function performThreadAction(
   });
 
   const now = new Date().toISOString();
-  const body = opts.sharePreface ? `${opts.sharePreface}\n\n${result.detail}` : result.detail;
+  // What lands on the thread as the outbound message: the operator's composed
+  // reply verbatim when present; otherwise the (optionally prefaced) dispatch
+  // status. The mock/live dispatch detail is kept in metadata either way.
+  const body = opts.replyBody
+    ? opts.replyBody
+    : opts.sharePreface
+      ? `${opts.sharePreface}\n\n${result.detail}`
+      : result.detail;
   await supabase.from("inbox_messages").insert({
     organization_id: orgId,
     thread_id: threadId,
@@ -191,7 +209,7 @@ async function performThreadAction(
     author: "Earn",
     body,
     occurred_at: now,
-    metadata: { action, channel: result.channel, reference: result.reference ?? null } as Json,
+    metadata: { action, channel: result.channel, reference: result.reference ?? null, dispatch_detail: result.detail } as Json,
   });
 
   // Reflect the outcome back onto the thread: it's been actioned (read), its
@@ -244,6 +262,60 @@ export async function actOnThread(formData: FormData): Promise<ThreadActionResul
   if (!threadId) return { ok: false, error: "Missing thread." };
   if (!THREAD_ACTIONS.includes(action)) return { ok: false, error: "Unsupported action." };
   return performThreadAction(threadId, action);
+}
+
+// One message in the thread view — the display shape sent to the client.
+export interface ThreadMessageView {
+  id: string;
+  direction: "inbound" | "outbound";
+  author: string | null;
+  body: string;
+  occurredAt: string;
+}
+
+/**
+ * Load a thread's full message history for the expanded conversation view,
+ * oldest-first. Org-scoped by RLS and an explicit filter; returns [] on any
+ * failure so the card degrades to its summary rather than breaking.
+ */
+export async function getThreadMessages(threadId: string): Promise<ThreadMessageView[]> {
+  if (!threadId) return [];
+  const auth = await requireOrgContext();
+  if (!auth.ok) return [];
+  const supabase = createServerClient();
+
+  const { data, error } = await supabase
+    .from("inbox_messages")
+    .select("id, direction, author, body, occurred_at")
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("thread_id", threadId)
+    .order("occurred_at", { ascending: true })
+    .limit(200);
+  if (error || !data) return [];
+
+  return (data as Pick<InboxMessage, "id" | "direction" | "author" | "body" | "occurred_at">[]).map(
+    (m) => ({
+      id: m.id,
+      direction: m.direction,
+      author: m.author,
+      body: m.body,
+      occurredAt: m.occurred_at,
+    }),
+  );
+}
+
+/**
+ * Send an operator-composed reply on a thread. Routes through the exact same
+ * gate + dispatch loop as every other outward move (send_reply is Tier 2, so it
+ * lands in approvals unless a mandate auto-approves it), pinned to the thread's
+ * own channel, and records the composed text as the outbound message.
+ */
+export async function replyToThread(formData: FormData): Promise<ThreadActionResult> {
+  const threadId = String(formData.get("thread_id") ?? "");
+  const body = String(formData.get("body") ?? "").trim();
+  if (!threadId) return { ok: false, error: "Missing thread." };
+  if (!body) return { ok: false, error: "Write a reply first." };
+  return performThreadAction(threadId, "send_reply", { replyBody: body });
 }
 
 /**

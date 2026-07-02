@@ -5,7 +5,7 @@
 // item always opens straight into its Command Center context. Best-effort: any
 // read failure degrades to an empty list rather than breaking the page.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, InboxThread } from "@/lib/supabase/database.types";
+import type { Database, InboxChannel, InboxThread } from "@/lib/supabase/database.types";
 
 export interface ThreadContext {
   kind: "deal" | "investor";
@@ -19,20 +19,52 @@ export interface InboxThreadView {
   context: ThreadContext | null;
 }
 
+// Server-side filters for the inbox list. All optional; omitted fields don't
+// constrain the query. Applied in the DB (not the client) so search scales past
+// the 100-row page.
+export interface InboxThreadFilters {
+  // Free-text match against subject / counterparty / preview.
+  q?: string;
+  // Restrict to a single provider channel.
+  channel?: InboxChannel;
+  // Only threads still marked unread.
+  unreadOnly?: boolean;
+}
+
+// Escape PostgREST `or()` filter metacharacters in user input: commas separate
+// filters and parens group them, so a raw value could break out of the clause.
+function sanitizeForOr(term: string): string {
+  return term.replace(/[,()]/g, " ").trim();
+}
+
 /**
  * Load the org's inbox threads, newest/hottest first, each shaped with its
  * resolved Command Center context. Deal/investor names are fetched in two batch
- * queries (not N+1) and joined in memory.
+ * queries (not N+1) and joined in memory. Optional filters narrow the list in
+ * the database so search/channel/unread scale past the page limit.
  */
 export async function getInboxThreads(
   supabase: SupabaseClient<Database>,
+  filters: InboxThreadFilters = {},
 ): Promise<InboxThreadView[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("inbox_threads")
     .select("*")
     // The inbox focuses on messages — capital, partners, providers, and comms.
     // Shared-deal updates live in their own "deals that fit you" feed.
-    .neq("channel", "deal_share")
+    .neq("channel", "deal_share");
+
+  if (filters.channel) query = query.eq("channel", filters.channel);
+  if (filters.unreadOnly) query = query.eq("unread", true);
+  const term = filters.q ? sanitizeForOr(filters.q) : "";
+  if (term) {
+    const like = `%${term}%`;
+    query = query.or(
+      `subject.ilike.${like},counterparty_name.ilike.${like},preview.ilike.${like}`,
+    );
+  }
+
+  const { data, error } = await query
     .order("priority", { ascending: false })
     .order("last_message_at", { ascending: false, nullsFirst: false })
     .limit(100);

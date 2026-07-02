@@ -10,11 +10,15 @@ import {
   suggestedAction,
   type DigestThread,
 } from "@/lib/inbox/intelligence";
-import { channelMeta } from "@/lib/inbox/channels";
+import { channelMeta, INBOX_CHANNELS } from "@/lib/inbox/channels";
+import type { InboxChannel } from "@/lib/supabase/database.types";
+import type { InboxThreadFilters } from "@/lib/inbox/data";
 import { tierForAction, type GateTier } from "@/lib/gates";
-import { seedInboxDemo, clearInbox, markOpenThreadsRead } from "./actions";
+import { markOpenThreadsRead } from "./actions";
 import { InboxBoard, type InboxCardData } from "./InboxBoard";
 import { InboxReadMarker } from "./InboxReadMarker";
+import { InboxLive } from "./InboxLive";
+import { InboxSearch } from "./InboxSearch";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +32,26 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function InboxPage() {
+export default async function InboxPage({
+  searchParams,
+}: {
+  searchParams: { q?: string; channel?: string; unread?: string };
+}) {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
+
+  // Parse the search/filter bar's URL params into DB-side filters. Channel is
+  // validated against the catalog so an unknown value is ignored rather than
+  // silently returning nothing.
+  const channelParam = searchParams.channel;
+  const filters: InboxThreadFilters = {
+    q: searchParams.q?.trim() || undefined,
+    channel:
+      channelParam && channelParam in INBOX_CHANNELS ? (channelParam as InboxChannel) : undefined,
+    unreadOnly: searchParams.unread === "1",
+  };
+  const hasFilters = Boolean(filters.q || filters.channel || filters.unreadOnly);
 
   const supabase = createServerClient();
   // Two lanes, one inbox: the action queue ("needs you" — approvals, overdue
@@ -39,7 +59,7 @@ export default async function InboxPage() {
   // stream (booking / messaging / video), each fetched in parallel.
   const [inbox, views] = await Promise.all([
     getInbox(ctx.orgId),
-    getInboxThreads(supabase),
+    getInboxThreads(supabase, filters),
   ]);
 
   // Prepare every comms display field on the server so the client board never
@@ -85,6 +105,8 @@ export default async function InboxPage() {
     <div className="fx-ambient mx-auto max-w-4xl">
       {/* Mark all visible open threads as read when the operator opens the inbox. */}
       <InboxReadMarker action={markOpenThreadsRead} />
+      {/* Live updates: refresh as threads/messages arrive or change. */}
+      <InboxLive orgId={ctx.orgId} />
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
@@ -110,7 +132,14 @@ export default async function InboxPage() {
       {/* Lane 2 — unified communications: booking, messaging, video. */}
       <section>
         <SectionHeading>Communications</SectionHeading>
-        <InboxBoard cards={cards} />
+        <InboxSearch />
+        {cards.length === 0 && hasFilters ? (
+          <div className="fx-card p-8 text-center">
+            <p className="text-sm text-fg-muted">No threads match your search. Clear the filters to see the full inbox.</p>
+          </div>
+        ) : (
+          <InboxBoard cards={cards} />
+        )}
       </section>
     </div>
   );
