@@ -43,12 +43,21 @@ export type ActionKind =
   | "send_reply"
   | "propose_meeting"
   | "confirm_booking"
+  // Finance ledger (internal bookkeeping): posting to an OPEN period and
+  // reversing an entry are routine internal work product.
+  | "post_journal_entry"
+  | "reverse_journal_entry"
   // Tier 3 — compliance- or capital-binding; creates an obligation.
   | "sign_document"
   | "submit_term_sheet"
   | "move_capital"
   | "capital_call"
-  | "execute_subdoc";
+  | "execute_subdoc"
+  // Finance controls: force-posting into a closed period, or closing/reopening a
+  // period, lock or unlock the books — never delegable.
+  | "post_to_closed_period"
+  | "close_period"
+  | "reopen_period";
 
 const TIER_1: ActionKind[] = [
   "draft_message",
@@ -59,6 +68,8 @@ const TIER_1: ActionKind[] = [
   "build_list",
   "draft_reply",
   "create_video_meeting",
+  "post_journal_entry",
+  "reverse_journal_entry",
 ];
 
 const TIER_2: ActionKind[] = [
@@ -78,6 +89,9 @@ const TIER_3: ActionKind[] = [
   "move_capital",
   "capital_call",
   "execute_subdoc",
+  "post_to_closed_period",
+  "close_period",
+  "reopen_period",
 ];
 
 export function tierForAction(action: ActionKind): GateTier {

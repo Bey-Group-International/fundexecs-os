@@ -1103,6 +1103,8 @@ export type InboxThread = Timestamps & {
   created_by: string | null;
   // Optional teammate (principal) the thread is routed to (migration 20260702000016).
   assigned_to: string | null;
+  // When a snoozed thread should auto-return to open (migration 20260702000017).
+  snoozed_until: string | null;
 };
 
 // One message within an inbox thread (migration 0038).
@@ -1685,6 +1687,97 @@ export type SectorHeatmapSnapshot = {
   created_at: string;
 };
 
+// --- Finance Engine — Phase 1 ledger core (migration 20260702220000) ---------
+export type FinAccountType = "asset" | "liability" | "equity" | "income" | "expense";
+export type FinNormalSide = "debit" | "credit";
+export type FinPeriodStatus = "open" | "closed" | "locked";
+export type FinEntryStatus = "draft" | "posted" | "reversed" | "reversal" | "void";
+
+export type FinEntity = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  base_currency: string;
+  parent_entity_id: string | null;
+  tax_jurisdiction: string | null;
+};
+
+export type FinLedger = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  code: string;
+  currency: string;
+  is_primary: boolean;
+  entry_seq: number;
+};
+
+export type FinAccount = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  code: string;
+  name: string;
+  type: FinAccountType;
+  normal_side: FinNormalSide;
+  parent_account_id: string | null;
+  is_control: boolean;
+  is_active: boolean;
+  currency: string | null;
+};
+
+export type FinPeriod = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  starts_on: string;
+  ends_on: string;
+  status: FinPeriodStatus;
+  closed_by: string | null;
+  closed_at: string | null;
+};
+
+export type FinFxRate = {
+  organization_id: string;
+  as_of: string;
+  from_ccy: string;
+  to_ccy: string;
+  rate: number;
+};
+
+export type FinJournalEntry = Timestamps & {
+  id: string;
+  organization_id: string;
+  ledger_id: string;
+  entity_id: string;
+  period_id: string;
+  entry_no: number | null;
+  entry_date: string;
+  memo: string | null;
+  source: string;
+  source_ref: string | null;
+  status: FinEntryStatus;
+  reverses_entry_id: string | null;
+  posted_by: string | null;
+  posted_at: string | null;
+  hash: string | null;
+  created_by: string | null;
+};
+
+export type FinJournalLine = {
+  id: string;
+  organization_id: string;
+  entry_id: string;
+  account_id: string;
+  line_no: number;
+  currency: string;
+  amount: number;
+  base_amount: number;
+  fx_rate: number;
+  memo: string | null;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -2042,9 +2135,32 @@ export type Database = {
       circle_memberships: TableShape<CircleMembership>;
       contact_lists: TableShape<ContactList>;
       contact_list_members: TableShape<ContactListMember>;
+      fin_entities: TableShape<FinEntity>;
+      fin_ledgers: TableShape<FinLedger>;
+      fin_accounts: TableShape<FinAccount>;
+      fin_periods: TableShape<FinPeriod>;
+      fin_fx_rates: TableShape<FinFxRate>;
+      fin_journal_entries: TableShape<FinJournalEntry>;
+      fin_journal_lines: TableShape<FinJournalLine>;
     };
     Views: Record<string, never>;
     Functions: {
+      // Atomically post a balanced journal entry: bump the ledger sequence,
+      // insert the entry + lines in one transaction (migration 20260702220000).
+      fin_post_journal_entry: {
+        Args: {
+          p_ledger: string;
+          p_period: string;
+          p_entry_date: string;
+          p_memo: string | null;
+          p_source: string | null;
+          p_source_ref: string | null;
+          p_reverses: string | null;
+          p_lines: Json;
+          p_actor: string | null;
+        };
+        Returns: string;
+      };
       // Cosine-search a Brain's KB corpus (migration 0024). embedding args are
       // sent as the pgvector text literal "[0.1,0.2,...]".
       match_brain_kb_chunks: {
@@ -2140,6 +2256,10 @@ export type Database = {
       inbox_category: InboxCategory;
       inbox_thread_status: InboxThreadStatus;
       inbox_direction: InboxDirection;
+      fin_account_type: FinAccountType;
+      fin_normal_side: FinNormalSide;
+      fin_period_status: FinPeriodStatus;
+      fin_entry_status: FinEntryStatus;
     };
   };
 }

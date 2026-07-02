@@ -17,11 +17,29 @@ import {
   draftThreadReply,
   assignThread,
   bulkThreadAction,
+  snoozeThread,
   type ThreadActionResult,
   type ThreadMessageView,
   type Teammate,
   type BulkAction,
 } from "./actions";
+
+// Snooze presets, resolved to an absolute wake time when chosen (client-side so
+// it's the operator's local clock). "Tomorrow" is 9am the next day.
+const SNOOZE_PRESETS: { key: string; label: string; until: () => Date }[] = [
+  { key: "3h", label: "3 hours", until: () => new Date(Date.now() + 3 * 3_600_000) },
+  {
+    key: "tomorrow",
+    label: "Tomorrow 9am",
+    until: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(9, 0, 0, 0);
+      return d;
+    },
+  },
+  { key: "week", label: "Next week", until: () => new Date(Date.now() + 7 * 86_400_000) },
+];
 
 // Fully server-prepared card data — no intelligence/AI module reaches the client.
 export interface InboxCardData {
@@ -38,6 +56,7 @@ export interface InboxCardData {
   bucket: "now" | "soon" | "later";
   unread: boolean;
   status: "open" | "snoozed" | "done";
+  snoozedUntil: string | null;
   meetingAt: string | null;
   meetingUrl: string | null;
   context: { kind: "deal" | "investor"; id: string; name: string; href: string } | null;
@@ -104,6 +123,11 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
     () => cards.filter((c) => c.status !== "done" && (filter === "all" || c.category === filter)),
     [cards, filter],
   );
+  // Snoozed threads leave the active board and sit in their own collapsible
+  // section until their wake time returns them to open (autoUnsnoozeExpired).
+  const active = useMemo(() => visible.filter((c) => c.status !== "snoozed"), [visible]);
+  const snoozed = useMemo(() => visible.filter((c) => c.status === "snoozed"), [visible]);
+  const [showSnoozed, setShowSnoozed] = useState(false);
 
   // Run a bulk triage action over the current selection, then clear it.
   const runBulk = useCallback(
@@ -124,7 +148,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
   const counts = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of cards) {
-      if (c.status === "done") continue;
+      if (c.status === "done" || c.status === "snoozed") continue;
       m.set("all", (m.get("all") ?? 0) + 1);
       m.set(c.category, (m.get(c.category) ?? 0) + 1);
     }
@@ -221,11 +245,11 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
         </div>
       ) : null}
 
-      {visible.length === 0 ? (
+      {active.length === 0 ? (
         <p className="px-1 py-6 text-sm text-fg-muted">Nothing here — inbox clear for this filter.</p>
       ) : (
         BUCKETS.map((bucket) => {
-          const inBucket = visible.filter((c) => c.bucket === bucket.key);
+          const inBucket = active.filter((c) => c.bucket === bucket.key);
           if (inBucket.length === 0) return null;
           return (
             <section key={bucket.key}>
@@ -248,10 +272,40 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
           );
         })
       )}
+
+      {/* Snoozed — collapsed by default; each returns to the board at its wake time. */}
+      {snoozed.length > 0 ? (
+        <section>
+          <button
+            type="button"
+            onClick={() => setShowSnoozed((s) => !s)}
+            className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted transition hover:text-fg-primary"
+            aria-expanded={showSnoozed}
+          >
+            <span className="text-[9px]">{showSnoozed ? "▾" : "▸"}</span>
+            Snoozed
+            <span>{snoozed.length}</span>
+          </button>
+          {showSnoozed ? (
+            <div className="flex flex-col gap-2">
+              {snoozed.map((c) => (
+                <ThreadCard
+                  key={c.id}
+                  card={c}
+                  teammates={teammates}
+                  selected={selected.has(c.id)}
+                  onToggleSelect={toggleSelect}
+                />
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
 
+// Compact absolute time, e.g. "Jul 3, 9:00 AM" — used for meeting and snooze-wake labels.
 function relativeMeeting(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -425,6 +479,9 @@ function ThreadCard({
         {card.meetingAt ? (
           <span className="text-fg-secondary">🗓 {relativeMeeting(card.meetingAt)}</span>
         ) : null}
+        {card.status === "snoozed" && card.snoozedUntil ? (
+          <span className="text-fg-muted">💤 until {relativeMeeting(card.snoozedUntil)}</span>
+        ) : null}
         {card.meetingUrl ? (
           <a href={card.meetingUrl} target="_blank" rel="noreferrer" className="text-gold-400 hover:underline">
             Meeting link →
@@ -579,17 +636,44 @@ function ThreadCard({
         >
           Done
         </button>
-        <button
-          type="button"
-          disabled={pending || deleting}
-          onClick={() => run("snooze", async () => {
-            const r = await setThreadStatus(fd({ status: "snoozed", unread: "false" }));
-            return r.ok ? { ok: true, message: "Snoozed." } : { ok: false, error: "Failed to snooze. Try again." };
-          })}
-          className="rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
-        >
-          Snooze
-        </button>
+        {card.status === "snoozed" ? (
+          <button
+            type="button"
+            disabled={pending || deleting}
+            onClick={() => run("unsnooze", async () => {
+              const r = await setThreadStatus(fd({ status: "open" }));
+              return r.ok ? { ok: true, message: "Back in inbox." } : { ok: false, error: "Couldn't unsnooze. Try again." };
+            })}
+            className="rounded-md px-2 py-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-50"
+          >
+            Unsnooze
+          </button>
+        ) : (
+          <select
+            aria-label="Snooze thread until…"
+            disabled={pending || deleting}
+            value=""
+            onChange={(e) => {
+              const preset = SNOOZE_PRESETS.find((p) => p.key === e.target.value);
+              if (!preset) return;
+              const iso = preset.until().toISOString();
+              run("snooze", async () => {
+                const r = await snoozeThread(card.id, iso);
+                return r.ok ? { ok: true, message: `Snoozed until ${preset.label.toLowerCase()}.` } : { ok: false, error: "Failed to snooze. Try again." };
+              });
+            }}
+            className="rounded-md bg-transparent px-1.5 py-1 text-xs text-fg-muted outline-none transition hover:text-fg-primary disabled:opacity-50"
+          >
+            <option value="" disabled>
+              Snooze…
+            </option>
+            {SNOOZE_PRESETS.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        )}
         <button
           type="button"
           disabled={pending || deleting}

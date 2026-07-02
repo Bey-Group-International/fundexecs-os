@@ -34,6 +34,11 @@ const AGENT_FOR_ACTION: Record<ActionKind, AgentKey> = {
   move_capital: "fund_admin",
   capital_call: "fund_admin",
   execute_subdoc: "associate",
+  post_journal_entry: "fund_admin",
+  reverse_journal_entry: "fund_admin",
+  post_to_closed_period: "fund_admin",
+  close_period: "fund_admin",
+  reopen_period: "fund_admin",
 };
 
 export interface QueueActionResult {
