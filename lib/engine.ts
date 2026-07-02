@@ -829,28 +829,34 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
         });
         // Observe: auto-retry with rerouting if output quality falls below
         // threshold. Only fires in "auto" mode — semi/manual pass through.
+        // onRetry fires before each retry: debits credits and emits a live
+        // step_retry canvas event with the correct per-iteration agent.
         const observed = await observeOutput(rawOutput, {
           autonomy: stepAutonomy,
           hub: step.hub,
           workflowTitle: workflow.title,
           agent: step.assigned_agent,
+          stepId: step.id,
           stepTitle: step.title,
           stepDescription: step.description ?? "",
           priorOutputs,
           orgContext,
           documentMode: stepIntent === "draft_document",
+          onRetry: async (retryAgent, retryNumber) => {
+            // Debit credits for each retry attempt — same cost as the initial run.
+            const retryCost = effectiveStepCost(retryAgent, orgProfile);
+            await spendCredits(ctx.orgId, retryCost, retryAgent);
+            emitProgress(onProgress, {
+              type: "step_retry",
+              step_id: step.id,
+              title: step.title,
+              retry: retryNumber,
+              agent: retryAgent,
+            });
+          },
         });
         output = observed.output;
         effectiveAgent = observed.agent;
-        for (let r = 0; r < observed.retryCount; r++) {
-          emitProgress(onProgress, {
-            type: "step_retry",
-            step_id: step.id,
-            title: step.title,
-            retry: r + 1,
-            agent: observed.agent,
-          });
-        }
       }
     } catch (stepErr) {
       // A step failure must never abort the remaining steps. Mark this step
