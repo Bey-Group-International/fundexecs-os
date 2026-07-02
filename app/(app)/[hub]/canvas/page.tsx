@@ -5,6 +5,7 @@ import { CollaborativeCanvas } from "@/components/canvas/CollaborativeCanvas";
 import {
   listCanvases,
   createCanvas,
+  createCanvasForm,
   listElements,
 } from "@/components/canvas/canvas-actions";
 import type { Hub } from "@/lib/supabase/database.types";
@@ -99,7 +100,7 @@ export default async function CanvasPage({ params, searchParams }: PageProps) {
         )}
 
         {/* New canvas form */}
-        <form action={createCanvas} className="ml-auto flex items-center gap-2">
+        <form action={createCanvasForm} className="ml-auto flex items-center gap-2">
           <input
             name="name"
             placeholder="New canvas name…"

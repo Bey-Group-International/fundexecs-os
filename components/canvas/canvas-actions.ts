@@ -9,6 +9,10 @@ import type { Canvas, CanvasElement } from "@/lib/supabase/database.types";
 // Canvases
 // ---------------------------------------------------------------------------
 
+export async function createCanvasForm(formData: FormData): Promise<void> {
+  await createCanvas(formData);
+}
+
 export async function createCanvas(
   formData: FormData,
 ): Promise<{ id: string } | null> {
