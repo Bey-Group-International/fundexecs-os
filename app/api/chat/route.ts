@@ -2,6 +2,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { earnChatStream, earnChatFallback } from "@/lib/claude";
 import { EARN_MODELS, type EarnModelKey } from "@/lib/earn-conversation";
+import { parseStoredEdgeContext, edgeContextToPromptLine } from "@/lib/edge-context";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
 // default request window.
@@ -136,6 +137,25 @@ export async function POST(request: Request) {
     ? prior.filter((x: unknown) => x && typeof x === "object").slice(-30)
     : [];
   const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
+
+  // Pull edge context from the session row and append to liveContext if present.
+  // `edge_context` is added by migration 20260702000011; cast to bypass stale
+  // generated types until the next type regeneration cycle.
+  if (sessionId) {
+    try {
+      const supabase = createServerClient();
+      const { data: sessionRow } = await (supabase
+        .from("sessions")
+        .select("edge_context")
+        .eq("id", sessionId)
+        .single() as unknown as Promise<{ data: { edge_context: unknown } | null }>);
+      const edgeResult = parseStoredEdgeContext(sessionRow?.edge_context);
+      const edgeLine = edgeResult ? edgeContextToPromptLine(edgeResult) : "";
+      if (edgeLine) liveContext = liveContext ? `${liveContext}\n${edgeLine}` : edgeLine;
+    } catch {
+      // Non-fatal — proceed without edge context.
+    }
+  }
 
   // Cross-session summary: if the client sent a prior_session_id, load its last
   // messages and summarize them as context for this reply.

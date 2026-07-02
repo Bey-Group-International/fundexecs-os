@@ -25,6 +25,7 @@ import { isPrincipalIdentityVerified } from "@/lib/identity";
 import { compoundingProfile } from "@/lib/compounding";
 import { spendCredits } from "@/lib/credits";
 import { effectiveStepCost } from "@/lib/agent-costs";
+import { parseStoredEdgeContext, edgeContextToPromptLine } from "@/lib/edge-context";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -455,17 +456,38 @@ async function gatherPriorContext(ctx: Ctx, sessionId?: string): Promise<string[
   }
 
   if (!sessionId) return reroute;
-  const { data: prior } = await ctx.supabase
-    .from("tasks")
-    .select("description")
-    .eq("session_id", sessionId)
-    .is("parent_task_id", null)
-    .order("created_at", { ascending: true });
-  const turns = ((prior ?? []) as { description: string | null }[])
+
+  // `edge_context` added by migration 20260702000011; cast to bypass stale
+  // generated types until the next type regeneration cycle.
+  const [sessionRes, priorRes] = await Promise.all([
+    (ctx.supabase
+      .from("sessions")
+      .select("edge_context")
+      .eq("id", sessionId)
+      .single() as unknown as Promise<{ data: { edge_context: unknown } | null; error: unknown }>),
+    ctx.supabase
+      .from("tasks")
+      .select("description")
+      .eq("session_id", sessionId)
+      .is("parent_task_id", null)
+      .order("created_at", { ascending: true }),
+  ]);
+
+  // Inject edge context as a planner hint if present and unexpired.
+  const edgeLine = (() => {
+    try {
+      const parsed = parseStoredEdgeContext(sessionRes.data?.edge_context);
+      return parsed ? edgeContextToPromptLine(parsed) : "";
+    } catch {
+      return "";
+    }
+  })();
+
+  const turns = ((priorRes.data ?? []) as { description: string | null }[])
     .map((t) => t.description?.trim() ?? "")
     .filter(Boolean);
   const active = await gatherActiveContext(ctx, sessionId);
-  return [...reroute, ...active, ...turns];
+  return [...reroute, ...(edgeLine ? [edgeLine] : []), ...active, ...turns];
 }
 
 // Apply an operator's explicit desk delegation to a generated plan, overriding
