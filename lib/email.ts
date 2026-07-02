@@ -97,7 +97,109 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
   return { ok: false, channel: "in-app", detail: "no email provider configured" };
 }
 
-function escapeHtml(s: string): string {
+// ---------------------------------------------------------------------------
+// LP email template helpers
+// ---------------------------------------------------------------------------
+
+export interface EmailTemplate {
+  subject: string;
+  html: string;
+}
+
+function lpBaseHtml(body: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; margin: 0; padding: 40px 20px;">
+  <div style="max-width: 560px; margin: 0 auto; background: #111111; border: 1px solid #222222; border-radius: 12px; overflow: hidden;">
+    <div style="padding: 6px 24px; background: #F59E0B;">
+      <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #0a0a0a; text-transform: uppercase;">FundExecs OS</span>
+    </div>
+    <div style="padding: 32px 24px;">
+      ${body}
+    </div>
+    <div style="padding: 16px 24px; border-top: 1px solid #222222;">
+      <p style="margin: 0; font-size: 11px; color: #555555;">You received this message because you were granted access to a data room on FundExecs OS. If this was unexpected, you can safely ignore it.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function goldButton(href: string, text: string): string {
+  const safe = /^https?:\/\//i.test(href) ? href : "#";
+  return `<a href="${escapeHtml(safe)}" style="display: inline-block; background: #F59E0B; color: #0a0a0a; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 700; margin-top: 24px;">${escapeHtml(text)}</a>`;
+}
+
+export function shareGrantedEmail(
+  orgName: string,
+  shareLabel: string | null,
+  shareUrl: string,
+  expiresAt: string | null,
+): EmailTemplate {
+  const org = escapeHtml(orgName);
+  const label = escapeHtml(shareLabel ?? "Data Room");
+  const expiry = expiresAt
+    ? `<p style="font-size: 13px; color: #888888; margin: 16px 0 0;">This link expires on ${escapeHtml(new Date(expiresAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))}.</p>`
+    : "";
+  const body = `
+    <h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">${org} shared a data room with you</h1>
+    <p style="margin: 0; font-size: 15px; color: #AAAAAA;">You've been granted access to <strong style="color: #F5F5F5;">${label}</strong>. Click below to view documents, financials, and fund materials.</p>
+    ${goldButton(shareUrl, "Open Data Room")}
+    ${expiry}
+    <p style="margin: 20px 0 0; font-size: 12px; color: #555555;">Or copy this link: <a href="${escapeHtml(shareUrl)}" style="color: #F59E0B;">${escapeHtml(shareUrl)}</a></p>`;
+  return { subject: `${orgName} shared their data room with you`, html: lpBaseHtml(body) };
+}
+
+export function documentUpdatedEmail(
+  orgName: string,
+  docName: string,
+  shareUrl: string,
+): EmailTemplate {
+  const org = escapeHtml(orgName);
+  const doc = escapeHtml(docName);
+  const body = `
+    <h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">Document updated</h1>
+    <p style="margin: 0; font-size: 15px; color: #AAAAAA;"><strong style="color: #F5F5F5;">${org}</strong> has updated <strong style="color: #F5F5F5;">${doc}</strong> in your shared data room.</p>
+    ${goldButton(shareUrl, "View Data Room")}`;
+  return { subject: `${orgName} updated a document — ${docName}`, html: lpBaseHtml(body) };
+}
+
+export function fundUpdateEmail(
+  orgName: string,
+  updateTitle: string,
+  previewText: string,
+  shareUrl: string,
+): EmailTemplate {
+  const org = escapeHtml(orgName);
+  const title = escapeHtml(updateTitle);
+  const preview = escapeHtml(previewText);
+  const body = `
+    <h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">Fund update from ${org}</h1>
+    <h2 style="margin: 0 0 12px; font-size: 16px; color: #F59E0B; font-weight: 600;">${title}</h2>
+    <p style="margin: 0; font-size: 15px; color: #AAAAAA; line-height: 1.6;">${preview}</p>
+    ${goldButton(shareUrl, "Read Full Update")}`;
+  return { subject: `Fund update: ${updateTitle} — ${orgName}`, html: lpBaseHtml(body) };
+}
+
+export function documentReadyEmail(
+  orgName: string,
+  docName: string,
+  shareUrl: string,
+): EmailTemplate {
+  const org = escapeHtml(orgName);
+  const doc = escapeHtml(docName);
+  const body = `
+    <h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">Your requested document is ready</h1>
+    <p style="margin: 0; font-size: 15px; color: #AAAAAA;"><strong style="color: #F5F5F5;">${org}</strong> has fulfilled your document request: <strong style="color: #F5F5F5;">${doc}</strong> is now available in your data room.</p>
+    ${goldButton(shareUrl, "View Document")}`;
+  return { subject: `Document ready: ${docName} — ${orgName}`, html: lpBaseHtml(body) };
+}
+
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

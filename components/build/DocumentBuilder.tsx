@@ -515,12 +515,45 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                 <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-2">
                   <div className="h-full bg-gold-400" style={{ width: `${report.score}%` }} />
                 </div>
+
+                {/* Per-check progress bars */}
+                {report.checks.length > 0 && report.level !== "Empty" ? (
+                  <div className="mt-2 flex flex-col gap-1">
+                    {report.checks.map((c, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span
+                          className={`shrink-0 text-[10px] ${c.ok ? "text-emerald-400" : "text-fg-muted"}`}
+                        >
+                          {c.ok ? "✓" : "○"}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] text-fg-muted">{c.label}</span>
+                        <div className="h-0.5 w-10 overflow-hidden rounded-full bg-surface-2">
+                          <div
+                            className={`h-full ${c.ok ? "bg-emerald-400" : "bg-surface-2"}`}
+                            style={{ width: c.ok ? "100%" : "0%" }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
                 {report.gaps.length > 0 ? (
-                  <ul className="mt-2 flex flex-col gap-0.5">
+                  <ul className="mt-2 flex flex-col gap-1">
                     {report.gaps.map((g, i) => (
                       <li key={i} className="flex items-start gap-1.5 text-xs text-fg-secondary">
-                        <span className="text-fg-muted">○</span>
-                        {g}
+                        <span className="mt-0.5 shrink-0 text-fg-muted">○</span>
+                        <span className="flex-1">{g}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChatInput(`Please add the following to this document: ${g}`);
+                            setTab("earn");
+                          }}
+                          className="ml-auto shrink-0 rounded text-[11px] text-gold-400 hover:underline"
+                        >
+                          Fix with Earn →
+                        </button>
                       </li>
                     ))}
                   </ul>

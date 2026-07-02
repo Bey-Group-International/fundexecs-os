@@ -98,6 +98,20 @@ export type InboxCategory = "messaging" | "booking" | "video" | "signing";
 export type InboxThreadStatus = "open" | "snoozed" | "done";
 export type InboxDirection = "inbound" | "outbound";
 
+// DocuSign envelopes (migration 20260702000008_docusign_envelopes).
+export type DocusignEnvelope = {
+  id: string;
+  organization_id: string;
+  envelope_id: string;
+  template_id: string | null;
+  signer_name: string | null;
+  signer_email: string | null;
+  subject: string | null;
+  status: string;
+  sent_at: string;
+  completed_at: string | null;
+};
+
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
 // Common audit columns present on most tables.
@@ -685,6 +699,16 @@ export type DocumentVersion = {
   created_at: string;
 };
 
+export type NdaSignature = {
+  id: string;
+  share_id: string;
+  organization_id: string;
+  signer_name: string;
+  signer_email: string | null;
+  signed_at: string;
+  ip_hint: string | null;
+};
+
 export type DataRoomShare = {
   id: string;
   organization_id: string;
@@ -699,6 +723,9 @@ export type DataRoomShare = {
   require_nda: boolean;
   nda_text: string | null;
   password_hash: string | null;
+  // LP notification fields
+  recipient_email: string | null;
+  notify_on_open: boolean;
 };
 
 export type DataRoomView = {
@@ -743,6 +770,32 @@ export type ValuationMark = {
   note: string | null;
   created_by: string | null;
   created_at: string;
+};
+
+export type Canvas = {
+  id: string;
+  organization_id: string;
+  name: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type CanvasElement = {
+  id: string;
+  canvas_id: string;
+  organization_id: string;
+  type: "sticky" | "text" | "shape" | "arrow" | "image";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  content: string;
+  color: string;
+  from_id?: string | null;
+  to_id?: string | null;
+  shape_kind?: string | null;
+  created_by: string | null;
+  updated_at: string;
 };
 
 export type Prompt = {
@@ -1827,6 +1880,10 @@ export type Database = {
       workflow_templates: TableShape<WorkflowTemplate>;
       synthesis_queue: TableShape<SynthesisQueue>;
       annotations: TableShape<Annotation>;
+      nda_signatures: TableShape<NdaSignature>;
+      docusign_envelopes: TableShape<DocusignEnvelope>;
+      canvases: TableShape<Canvas>;
+      canvas_elements: TableShape<CanvasElement>;
     };
     Views: Record<string, never>;
     Functions: {
