@@ -6,6 +6,9 @@ import { formatCompactCurrency } from "@/lib/source-war-room";
 import type { Temperature, NextAction } from "@/lib/capital-map";
 import type { GateTier } from "@/lib/gates";
 import type { CapitalEventType, InvestorType } from "@/lib/supabase/database.types";
+import { ThesisAlignmentBreakdown } from "@/components/source/ThesisAlignmentBreakdown";
+import { AumHistoryChart } from "@/components/source/AumHistoryChart";
+import { CapitalCallNotices } from "@/components/execute/CapitalCallNotices";
 
 // --- Small primitives ------------------------------------------------------
 // Thesis-fit ring — same SVG idiom as the Run-hub deal war room.
@@ -345,9 +348,19 @@ export function InvestorWarRoom({ data }: { data: WarRoom }) {
       </div>
       <Header data={data} />
       <Commitments data={data} />
+      {/* ── FundWave-style capital call notices ──────────────────────── */}
+      <CapitalCallNotices notices={[]} />
+      {/* ── Fintrx-style AUM history + capital deployment ───────────── */}
+      <AumHistoryChart
+        investor={data.investor}
+        commitments={data.commitments}
+        capitalEvents={data.capitalEvents}
+      />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CapitalFlows data={data} />
         <NextActions data={data} />
+        {/* ── OpenVC / Fintrx thesis alignment breakdown ──────────────── */}
+        <ThesisAlignmentBreakdown investor={data.investor} thesis={data.thesis} />
       </div>
       <Relationships data={data} />
     </div>

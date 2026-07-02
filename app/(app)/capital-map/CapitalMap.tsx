@@ -358,6 +358,22 @@ function InvestorCard({
             {investor.jurisdiction ? ` · ${investor.jurisdiction}` : ""}
             {committedAmount > 0 ? ` · ${usd.format(committedAmount)} committed` : ""}
           </p>
+          {/* Fintrx-style AUM + check range — capacity context at a glance. */}
+          {(investor.aum != null || investor.typical_check_min != null || investor.typical_check_max != null) ? (
+            <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+              {investor.aum != null ? (
+                <span className="mr-3 text-fg-secondary">{usd.format(investor.aum)} AUM</span>
+              ) : null}
+              {(investor.typical_check_min != null || investor.typical_check_max != null) ? (
+                <span>
+                  {investor.typical_check_min != null ? usd.format(investor.typical_check_min) : "—"}
+                  {" – "}
+                  {investor.typical_check_max != null ? usd.format(investor.typical_check_max) : "—"}
+                  {" check"}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
         </div>
 
         {thesisFit ? (
