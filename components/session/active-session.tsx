@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import type { BarTask } from "./SessionCommandBar";
+import { useEdgeContext } from "@/hooks/useEdgeContext";
 
 // Lets the global top bar adapt to the session you're in. The session frame
 // publishes its session here; the bar (rendered once in the app shell) shows
@@ -63,5 +64,8 @@ export function ActiveSessionSetter({
     return () => set(null, []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, session.name, session.color, taskKey]);
+
+  useEdgeContext(session.id);
+
   return null;
 }
