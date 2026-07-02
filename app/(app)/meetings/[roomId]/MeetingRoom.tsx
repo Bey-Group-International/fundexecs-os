@@ -33,7 +33,8 @@ type SignalMsg =
   | { type: "end"; from: string }
   | { type: "offer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
   | { type: "answer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
-  | { type: "ice"; from: string; to: string; candidate: RTCIceCandidateInit };
+  | { type: "ice"; from: string; to: string; candidate: RTCIceCandidateInit }
+  | { type: "transcript"; from: string; speaker: string; text: string; ts: number };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -460,6 +461,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     [],
   );
 
+  // Stable ref so SR closure always has the latest sendSignal without needing it in deps
+  const sendSignalRef = useRef(sendSignal);
+  useEffect(() => { sendSignalRef.current = sendSignal; }, [sendSignal]);
+
   // ── Peer connection helpers ─────────────────────────────────────────────
 
   const createPeerConnection = useCallback(
@@ -560,6 +565,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             console.warn("[WebRTC] answer error", e);
           }
         }
+      }
+
+      if (msg.type === "transcript" && msg.from !== myId) {
+        const newLine: TranscriptLine = {
+          id: crypto.randomUUID(),
+          speaker: msg.speaker,
+          text: msg.text,
+          ts: msg.ts,
+          final: true,
+        };
+        setTranscript((prev) => {
+          const next = [...prev, newLine];
+          transcriptRef.current = next;
+          return next;
+        });
       }
 
       if (msg.type === "ice" && msg.to === myId) {
@@ -728,14 +748,22 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       setTranscript((prev) => {
         const next = [...prev.filter((l) => l.final)];
         if (finalText.trim()) {
+          const finalTs = Date.now();
           next.push({
             id: crypto.randomUUID(),
             speaker: localName,
             text: finalText.trim(),
-            ts: Date.now(),
+            ts: finalTs,
             final: true,
           });
           interimIdRef.current = crypto.randomUUID();
+          sendSignalRef.current({
+            type: "transcript",
+            from: myIdRef.current,
+            speaker: localName,
+            text: finalText.trim(),
+            ts: finalTs,
+          });
         }
         if (interim) {
           next.push({
