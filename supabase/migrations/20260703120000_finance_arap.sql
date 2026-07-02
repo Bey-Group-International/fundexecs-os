@@ -238,9 +238,12 @@ begin
   foreach t in array array[
     'fin_parties','fin_invoices','fin_invoice_lines','fin_payments','fin_payment_allocations'
   ] loop
+    -- drop-then-create so a preview-branch reset / re-apply is idempotent.
+    execute format('drop policy if exists %1$s_select on public.%1$s;', t);
     execute format(
       'create policy %1$s_select on public.%1$s for select using (organization_id in (select public.current_principal_org_ids()));',
       t);
+    execute format('drop policy if exists %1$s_write on public.%1$s;', t);
     execute format(
       'create policy %1$s_write on public.%1$s for all using (public.is_org_writer(organization_id)) with check (public.is_org_writer(organization_id));',
       t);

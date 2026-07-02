@@ -29,6 +29,9 @@ export async function getCashflowProjection(input: {
   if (!input.entityId || !input.asOf) {
     return { ok: false, error: "Entity and as-of date are required." };
   }
+  if (Number.isNaN(Date.parse(`${input.asOf}T00:00:00Z`))) {
+    return { ok: false, error: "Invalid as-of date." };
+  }
   const supabase = createServerClient();
 
   // Opening cash ≈ net of all staged bank transactions on/before as-of.

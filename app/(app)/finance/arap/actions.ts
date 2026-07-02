@@ -106,7 +106,9 @@ export async function issueInvoice(input: {
       subtotal: totals.subtotal,
       tax: totals.tax,
       total: totals.total,
-      status: "open",
+      // Insert as 'draft' first: aging/cashflow only see 'open'/'partial', so
+      // there is no window where a header without lines is counted anywhere.
+      status: "draft",
       memo: input.memo?.trim() || null,
       created_by: auth.ctx.userId,
     })
@@ -128,10 +130,12 @@ export async function issueInvoice(input: {
   }));
   const { error: lineErr } = await supabase.from("fin_invoice_lines").insert(lineRows);
   if (lineErr) {
-    // Roll back the header so we never leave a total with no lines behind it.
+    // Clean up the draft (already invisible to reports) on line failure.
     await supabase.from("fin_invoices").delete().eq("id", invoice.id);
     return { ok: false, error: lineErr.message };
   }
+  // Lines are in place — publish the invoice.
+  await supabase.from("fin_invoices").update({ status: "open" }).eq("id", invoice.id);
 
   revalidatePath("/finance");
   return { ok: true, data: { invoiceId: invoice.id, total: totals.total } };
@@ -214,6 +218,9 @@ export async function agingReport(input: {
 }): Promise<ArapResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
+  if (Number.isNaN(Date.parse(`${input.asOf}T00:00:00Z`))) {
+    return { ok: false, error: "Invalid as-of date." };
+  }
   const supabase = createServerClient();
   const { data: rows } = await supabase
     .from("fin_invoices")
