@@ -7,6 +7,54 @@ export type RoomDef = {
   href: string;
 };
 
+export type RoomAction = {
+  id: string;
+  label: string;
+  icon: string;
+  /** If set, opens this path on click. */
+  href?: string;
+  /** If set, dispatches this window CustomEvent on click (no detail). */
+  event?: string;
+};
+
+export const ROOM_ACTIONS: Record<string, RoomAction[]> = {
+  ceo: [
+    { id: "ask-earn", label: "Ask Earn",       icon: "✦", event: "earn:open-with-context" },
+    { id: "dashboard",label: "Dashboard",      icon: "⌂", href: "/dashboard" },
+  ],
+  boardroom: [
+    { id: "start-meeting", label: "Start Meeting", icon: "▶", event: "office:start-meeting" },
+    { id: "ask-earn",      label: "Ask Earn",       icon: "✦", event: "earn:open-with-context" },
+  ],
+  trading: [
+    { id: "view-deals",  label: "View Deals",     icon: "◈", href: "/dashboard/deals" },
+    { id: "add-deal",    label: "Add Deal",        icon: "+", href: "/dashboard/deals/new" },
+  ],
+  research: [
+    { id: "ask-earn",    label: "Research Brief",  icon: "✦", event: "earn:open-with-context" },
+    { id: "dashboard",   label: "Dashboard",       icon: "⌂", href: "/dashboard" },
+  ],
+  office: [
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  ],
+  ops: [
+    { id: "automation",  label: "Automation Hub",  icon: "⚙", href: "/dashboard/automation" },
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  ],
+  legal: [
+    { id: "capital",     label: "Capital",         icon: "◈", href: "/dashboard/capital" },
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  ],
+  marketing: [
+    { id: "marketing",   label: "Marketing Hub",   icon: "◉", href: "/dashboard/marketing" },
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  ],
+  reception: [
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+    { id: "office-tour", label: "Office Tour",     icon: "◎", event: "fx:open-tour" },
+  ],
+};
+
 export const TILE_SIZE = 32;
 export const ROOM_COLS = 12; // tiles wide
 export const ROOM_ROWS_COUNT = 9; // tiles tall

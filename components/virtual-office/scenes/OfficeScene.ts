@@ -11,6 +11,7 @@ import {
   WALL_THICKNESS,
   DOOR_GAP,
   ANIM_ROWS,
+  ROOM_ACTIONS,
 } from "../types";
 import { VirtualOfficeSocket, type ConnectionStatus } from "../net/VirtualOfficeSocket";
 import type { Facing, RemotePlayer, ServerMessage } from "../net/messages";
@@ -513,6 +514,8 @@ export class OfficeScene extends Phaser.Scene {
       } else {
         this.roomLabel.setVisible(false);
       }
+      // Notify React layer of room change so it can render room-specific actions
+      this.game.events.emit("office:room-enter", found, ROOM_ACTIONS[found] ?? []);
     }
   }
 
