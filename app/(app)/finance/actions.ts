@@ -27,6 +27,13 @@ export interface FinResult {
   tier?: 1 | 2 | 3;
 }
 
+// The posting RPC raises the closed-period TOCTOU case with this stable SQLSTATE
+// (see 20260703000000_finance_hardening.sql). We branch on error.code first and
+// keep the message text only as a fallback, so re-wording the exception never
+// silently drops the case out of the Tier-3 approval path.
+const CLOSED_PERIOD_SQLSTATE = "FIN01";
+const CLOSED_PERIOD_MESSAGE = "posting requires an open period";
+
 // --- Setup: entities & accounts ---------------------------------------------
 
 export async function createEntity(input: {
@@ -173,8 +180,9 @@ async function postToLedger(
   if (error) {
     // TOCTOU: the period closed between our status read and the post (the RPC's
     // own lock caught it). Re-route through the Tier-3 approval path rather than
-    // surfacing a raw DB error.
-    if (error.message.includes("posting requires an open period")) {
+    // surfacing a raw DB error. Match the stable SQLSTATE first; message is a
+    // fallback for older RPC definitions on not-yet-migrated databases.
+    if (error.code === CLOSED_PERIOD_SQLSTATE || error.message.includes(CLOSED_PERIOD_MESSAGE)) {
       return routeClosedPeriodApproval(supabase, auth, args, 3);
     }
     return { ok: false, error: error.message };
@@ -183,15 +191,23 @@ async function postToLedger(
   return { ok: true, tier: decision.tier, data: { entryId } };
 }
 
+// The full posting payload passed to postToLedger — persisted verbatim on the
+// approval task so the approval-decision path can reconstruct and re-post the
+// entry exactly as intended once the Tier-3 gate clears.
+type PostPayload = Parameters<typeof postToLedger>[1];
+
 // Open a Tier-3 approval task for a force-post into a closed/locked period. The
-// approval-decision path posts it (with the same context) once cleared.
+// full entry payload is stored on the task so the approval-decision path can
+// post it (with the same context) once cleared. The task and its approval row
+// are written as a pair: if either write fails the caller sees an error rather
+// than a silently orphaned task or a lost payload.
 async function routeClosedPeriodApproval(
   supabase: ReturnType<typeof createServerClient>,
   auth: { ctx: { orgId: string; userId: string } },
-  args: { ledgerId: string; entryDate: string; memo?: string },
+  args: PostPayload,
   tier: 1 | 2 | 3,
 ): Promise<FinResult> {
-  const { data: task } = await supabase
+  const { data: task, error: taskError } = await supabase
     .from("tasks")
     .insert({
       organization_id: auth.ctx.orgId,
@@ -204,21 +220,27 @@ async function routeClosedPeriodApproval(
       progress: 0,
       graph_touched: "capital",
       requires_approval: true,
+      // Full posting context, so the entry can be replayed verbatim on approval.
+      result: { finClosedPeriodPost: args } as unknown as Json,
       created_by: auth.ctx.userId,
       step_order: 0,
     })
     .select("id")
     .single();
-  if (task) {
-    await supabase.from("approvals").insert({
-      organization_id: auth.ctx.orgId,
-      task_id: task.id,
-      requested_by_agent: "fund_admin",
-      summary: `Tier 3 — force-post into a closed period`,
-    });
+  if (taskError || !task) {
+    return { ok: false, error: "Could not queue the closed-period approval." };
+  }
+  const { error: approvalError } = await supabase.from("approvals").insert({
+    organization_id: auth.ctx.orgId,
+    task_id: task.id,
+    requested_by_agent: "fund_admin",
+    summary: `Tier 3 — force-post into a closed period`,
+  });
+  if (approvalError) {
+    return { ok: false, error: "Could not queue the closed-period approval." };
   }
   revalidatePath("/finance");
-  return { ok: true, gated: true, tier, data: { taskId: task?.id } };
+  return { ok: true, gated: true, tier, data: { taskId: task.id } };
 }
 
 /** Post a balanced journal entry to a ledger (Tier-1 in an open period). */
