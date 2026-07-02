@@ -235,6 +235,18 @@ export async function createShare(formData: FormData): Promise<void> {
   const recipientEmail = String(formData.get("recipient_email") ?? "").trim() || null;
   const notifyOnOpen = formData.get("notify_on_open") === "1";
 
+  // Selective sections: serialized as JSON array from the form, or null = full room.
+  const sectionsRaw = String(formData.get("allowed_sections") ?? "").trim();
+  let allowed_sections: string[] | null = null;
+  if (sectionsRaw) {
+    try {
+      const parsed = JSON.parse(sectionsRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) allowed_sections = parsed.map(String);
+    } catch {
+      // ignore malformed input
+    }
+  }
+
   const supabase = createServerClient();
   const { data: inserted } = await supabase
     .from("data_room_shares")
@@ -249,6 +261,7 @@ export async function createShare(formData: FormData): Promise<void> {
       password_hash,
       recipient_email: recipientEmail,
       notify_on_open: notifyOnOpen,
+      allowed_sections,
     } as never)
     .select("token")
     .maybeSingle();

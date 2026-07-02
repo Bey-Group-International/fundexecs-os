@@ -11,7 +11,6 @@ import type {
   Principal,
   Document,
   DataRoomShare,
-  DataRoomView,
 } from "@/lib/supabase/database.types";
 import { blendTrackRecord } from "@/lib/track-record";
 import { computeBuildReadiness } from "@/lib/build-readiness";
@@ -21,6 +20,8 @@ import { scoreDocument } from "@/lib/document-quality";
 import { PrintButton } from "./PrintButton";
 import { ShareControls } from "./ShareControls";
 import { CoverageAccordion } from "./CoverageAccordion";
+import { ViewerAnalytics } from "./ViewerAnalytics";
+import { NdaSignatures } from "./NdaSignatures";
 
 function safeHref(url: string | null): string | null {
   if (!url) return null;
@@ -106,7 +107,7 @@ export async function MaterialsModule() {
   if (!ctx?.orgId) redirect("/login");
   const supabase = createServerClient();
 
-  const [orgRes, thesesRes, recordsRes, entitiesRes, membersRes, docsRes, sharesRes, viewsRes] =
+  const [orgRes, thesesRes, recordsRes, entitiesRes, membersRes, docsRes, sharesRes] =
     await Promise.all([
       supabase.from("organizations").select("*").eq("id", ctx.orgId).maybeSingle(),
       supabase
@@ -133,12 +134,6 @@ export async function MaterialsModule() {
         .select("*")
         .eq("organization_id", ctx.orgId)
         .order("created_at", { ascending: false }),
-      supabase
-        .from("data_room_views")
-        .select("*")
-        .eq("organization_id", ctx.orgId)
-        .order("created_at", { ascending: false })
-        .limit(100),
     ]);
 
   const org = orgRes.data as Organization | null;
@@ -149,7 +144,6 @@ export async function MaterialsModule() {
   const members = (membersRes.data ?? []) as OrganizationMember[];
   const documents = (docsRes.data ?? []) as Document[];
   const shares = (sharesRes.data ?? []) as DataRoomShare[];
-  const views = (viewsRes.data ?? []) as DataRoomView[];
 
   let principals: Principal[] = [];
   if (members.length) {
@@ -173,12 +167,6 @@ export async function MaterialsModule() {
   const readiness = computeBuildReadiness({ org, theses, entities, records, members, principals, docCounts });
   const summary = summarizeDataRoom(readiness.statuses, docCounts);
 
-  const roomOpens = views.filter((v) => v.kind === "room").length;
-  const docOpens = views.filter((v) => v.kind === "document").length;
-  const lastViewed = views[0]?.created_at
-    ? new Date(views[0].created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-    : "—";
-
   const blended = blendTrackRecord(records);
   const accent = org?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color) ? org.brand_color : null;
 
@@ -200,6 +188,7 @@ export async function MaterialsModule() {
         status: d.status ?? "ready",
         qualityScore: q?.score ?? null,
         qualityLevel: q?.level ?? null,
+        qualityGaps: q?.gaps.length ?? null,
       };
     }),
     suggestion: item.suggestion,
@@ -439,40 +428,13 @@ export async function MaterialsModule() {
             expires_at: s.expires_at,
             revoked_at: s.revoked_at,
             created_at: s.created_at,
+            allowed_sections: (s as { allowed_sections?: string[] | null }).allowed_sections ?? null,
           }))}
           activeCount={activeShareCount}
         />
 
-        {/* Access log */}
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">Access</h3>
-            {views.length > 0 ? (
-              <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Last {views.length} events</span>
-            ) : null}
-          </div>
-          {views.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-line bg-surface-1 px-4 py-8 text-center">
-              <p className="text-sm text-fg-muted">No views yet.</p>
-              <p className="mt-1 text-xs text-fg-muted/70">Shared links record when the room and its documents are opened.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-3 rounded-xl border border-line bg-surface-1 p-4">
-              <div className="text-center">
-                <p className="font-display text-2xl font-semibold text-fg-primary">{roomOpens}</p>
-                <p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Room opens</p>
-              </div>
-              <div className="text-center">
-                <p className="font-display text-2xl font-semibold text-fg-primary">{docOpens}</p>
-                <p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Doc opens</p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium text-fg-primary">{lastViewed}</p>
-                <p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Last viewed</p>
-              </div>
-            </div>
-          )}
-        </div>
+        <ViewerAnalytics />
+        <NdaSignatures />
       </div>
     </div>
   );
