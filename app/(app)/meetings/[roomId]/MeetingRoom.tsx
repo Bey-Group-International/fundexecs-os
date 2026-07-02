@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState, useCallback, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { LiveNotesResult } from "@/app/api/meetings/notes/route";
 import { MeetingCopilotConsole } from "@/app/(app)/meetings/MeetingCopilotConsole";
@@ -536,6 +536,7 @@ function EmptyCopilot({ label }: { label: string }) {
 
 export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   // Memoized so effects that subscribe/query with it can list it as a stable
   // dependency without tearing down and recreating on every render.
   const supabase = useMemo(() => createClient(), []);
@@ -607,6 +608,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const previewStreamRef = useRef<MediaStream | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [joining, setJoining] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
+  const [showGuestUpsell, setShowGuestUpsell] = useState(false);
 
   // Pre-join devices
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -817,6 +820,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }).catch(() => {});
     return () => { previewStreamRef.current?.getTracks().forEach((t) => t.stop()); previewStreamRef.current = null; };
   }, []);
+
+  // ── Auto-join for guests arriving from invite link ────────────────────────
+
+  useEffect(() => {
+    const guestParam = searchParams.get("guest");
+    const nameParam = searchParams.get("name");
+    if (guestParam !== "1") return;
+    setIsGuest(true);
+    // Recover name from URL param or sessionStorage fallback
+    const storedName = typeof sessionStorage !== "undefined"
+      ? sessionStorage.getItem(`guest_name_${roomCode}`) ?? ""
+      : "";
+    const guestName = nameParam ? decodeURIComponent(nameParam) : storedName;
+    if (guestName) setDisplayName(guestName);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── joinMeeting ──────────────────────────────────────────────────────────
 
@@ -1240,8 +1258,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     channelRef.current?.unsubscribe();
     if (recognitionRef.current) { recognitionRef.current.onend = null; recognitionRef.current.stop(); }
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    if (isGuest) { setShowGuestUpsell(true); return; }
     router.push("/meetings");
-  }, [sendSignal, clearWaitingTimers, router]);
+  }, [sendSignal, clearWaitingTimers, router, isGuest]);
 
   const endMeeting = useCallback(async () => {
     sendSignal({ type: "end", from: myIdRef.current });
@@ -1446,6 +1465,42 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     ? allPeers.map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))
     : [{ id: "local", displayName: localName, stream: localStream, isLocal: true }, ...allPeers.filter((p) => p.id !== speakerTileId).map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))];
 
+  if (showGuestUpsell) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex items-center justify-center px-4">
+        <div className="w-full max-w-sm flex flex-col gap-6 text-center">
+          <div className="flex flex-col gap-2">
+            <span className="text-3xl">✦</span>
+            <h2 className="text-xl font-semibold text-[var(--fg-primary)]">Thanks for joining!</h2>
+            <p className="text-sm text-[var(--fg-secondary)]">
+              Sign up to get AI-generated meeting notes, transcripts, and action items — automatically.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <a
+              href="/login?mode=signup"
+              className="w-full rounded-lg bg-[var(--gold-400)] text-black text-sm font-semibold py-2.5 text-center hover:opacity-90 transition-opacity"
+            >
+              Sign up free →
+            </a>
+            <a
+              href="/login"
+              className="w-full rounded-lg border border-[var(--line)] text-[var(--fg-secondary)] text-sm py-2.5 text-center hover:bg-[var(--surface-2)] transition-colors"
+            >
+              I already have an account
+            </a>
+            <button
+              onClick={() => router.push("/")}
+              className="text-xs text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] transition-colors"
+            >
+              No thanks, leave
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex flex-col">
       <div className="flex flex-1 overflow-hidden min-h-0">
@@ -1457,6 +1512,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
               <p className="flex-1 text-sm text-amber-600 dark:text-amber-400">{mediaError}</p>
               <button onClick={() => setMediaError(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
+            </div>
+          )}
+          {/* Guest upsell banner */}
+          {isGuest && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-[var(--gold-400)]/8 border-b border-[var(--gold-400)]/20 shrink-0">
+              <span className="text-[var(--gold-400)] text-xs shrink-0">✦</span>
+              <p className="flex-1 text-xs text-[var(--fg-secondary)]">You&apos;re joining as a guest. Sign up for AI transcription, notes, and action items.</p>
+              <a href="/login?mode=signup" className="shrink-0 text-xs font-semibold text-[var(--gold-400)] hover:text-[var(--gold-500)] whitespace-nowrap transition-colors">Sign up free →</a>
             </div>
           )}
           {layout === "grid" ? (

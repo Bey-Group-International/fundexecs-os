@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Metadata } from "next";
 import { MeetingRoom } from "./MeetingRoom";
 
@@ -15,5 +16,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function MeetingRoomPage({ params }: Props) {
   const { roomId } = await params;
-  return <MeetingRoom roomCode={roomId} />;
+  return (
+    <Suspense>
+      <MeetingRoom roomCode={roomId} />
+    </Suspense>
+  );
 }
