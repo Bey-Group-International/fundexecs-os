@@ -1,43 +1,92 @@
-import { Metadata } from "next";
-import { createServerClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { CopyButton } from "./CopyButton";
 
-interface Props {
-  params: Promise<{ roomId: string }>;
-}
-
-export const metadata: Metadata = {
-  title: "Meeting Report — FundExecs OS",
+type Meeting = {
+  id: string;
+  title: string | null;
+  created_at: string;
+  started_at: string | null;
+  ended_at: string | null;
 };
 
-async function getReport(roomCode: string) {
-  const supabase = createServerClient();
+type Report = {
+  status: string | null;
+  summary: string | null;
+  key_points: string[] | null;
+  action_items: string[] | null;
+  analysis: Record<string, unknown> | null;
+  full_transcript: string | null;
+};
 
-  const { data: meeting } = await supabase
-    .from("live_meetings")
-    .select("id, title, created_at, started_at, ended_at")
-    .eq("room_code", roomCode)
-    .single();
+type Data = { meeting: Meeting; report: Report | null } | null;
 
-  if (!meeting) return null;
+const POLL_INTERVAL = 5000;
 
-  const { data: report } = await supabase
-    .from("live_meeting_reports")
-    .select("*")
-    .eq("meeting_id", meeting.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+export default function MeetingReportPage() {
+  const { roomId } = useParams<{ roomId: string }>();
+  const [data, setData] = useState<Data | undefined>(undefined);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  return { meeting, report };
-}
+  async function fetchReport() {
+    const supabase = createClient();
 
-export default async function MeetingReportPage({ params }: Props) {
-  const { roomId } = await params;
-  const data = await getReport(roomId);
+    const { data: meeting } = await supabase
+      .from("live_meetings")
+      .select("id, title, created_at, started_at, ended_at")
+      .eq("room_code", roomId)
+      .single();
 
-  if (!data) {
+    if (!meeting) {
+      setData(null);
+      stopPolling();
+      return;
+    }
+
+    const { data: report } = await supabase
+      .from("live_meeting_reports")
+      .select("status, summary, key_points, action_items, analysis, full_transcript")
+      .eq("meeting_id", meeting.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    setData({ meeting, report: report ?? null });
+
+    // Stop polling once report is ready or failed
+    if (report && report.status !== "generating") {
+      stopPolling();
+    }
+  }
+
+  function stopPolling() {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    fetchReport();
+
+    // Start polling; fetchReport will stop it when status is terminal
+    intervalRef.current = setInterval(fetchReport, POLL_INTERVAL);
+
+    return () => stopPolling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
+
+  // Initial load
+  if (data === undefined) {
+    return <GeneratingState />;
+  }
+
+  // Meeting not found
+  if (data === null) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
         <p className="text-[var(--fg-muted)]">Meeting not found.</p>
@@ -49,9 +98,15 @@ export default async function MeetingReportPage({ params }: Props) {
   }
 
   const { meeting, report } = data;
-  const keyPoints = (report?.key_points as string[] | null) ?? [];
-  const actionItems = (report?.action_items as string[] | null) ?? [];
-  const analysis = report?.analysis as Record<string, unknown> | null;
+
+  // Report row doesn't exist yet or still generating
+  if (!report || report.status === "generating") {
+    return <GeneratingState />;
+  }
+
+  const keyPoints = (report.key_points as string[] | null) ?? [];
+  const actionItems = (report.action_items as string[] | null) ?? [];
+  const analysis = report.analysis as Record<string, unknown> | null;
   const decisions = (analysis?.decisions as string[] | null) ?? [];
   const followUp = analysis?.follow_up_draft as string | null;
   const sentiment = analysis?.sentiment as string | null;
@@ -86,9 +141,9 @@ export default async function MeetingReportPage({ params }: Props) {
       </div>
 
       {/* Summary */}
-      {report?.summary && (
+      {report.summary && (
         <Section title="Summary">
-          <p className="text-sm text-[var(--fg-primary)] leading-relaxed">{report.summary as string}</p>
+          <p className="text-sm text-[var(--fg-primary)] leading-relaxed">{report.summary}</p>
         </Section>
       )}
 
@@ -144,25 +199,47 @@ export default async function MeetingReportPage({ params }: Props) {
       )}
 
       {/* Full transcript */}
-      {report?.full_transcript && (
+      {report.full_transcript && (
         <details className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)]">
           <summary className="px-4 py-3 text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide cursor-pointer select-none">
             Full Transcript
           </summary>
           <pre className="px-4 pb-4 text-xs text-[var(--fg-muted)] whitespace-pre-wrap font-mono leading-relaxed">
-            {report.full_transcript as string}
+            {report.full_transcript}
           </pre>
         </details>
       )}
 
-      {/* No report yet */}
-      {!report && (
+      {/* Failed state */}
+      {report.status === "failed" && (
         <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-8 text-center">
           <p className="text-sm text-[var(--fg-muted)]">
-            The meeting report is being generated…
+            Report generation failed. Please try again later.
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function GeneratingState() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
+      <svg
+        className="animate-spin h-6 w-6 text-[var(--gold-400)]"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path
+          className="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+        />
+      </svg>
+      <p className="text-sm text-[var(--fg-muted)]">Generating your report…</p>
     </div>
   );
 }
