@@ -24,7 +24,6 @@ function normalizeHex(value: string): string {
   let v = value.trim();
   if (!v) return "";
   if (!v.startsWith("#")) v = `#${v}`;
-  // Expand shorthand (#abc -> #aabbcc).
   if (/^#[0-9a-fA-F]{3}$/.test(v)) {
     v = `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`;
   }
@@ -92,11 +91,8 @@ export function BrandStudio({
   firmName,
 }: BrandStudioProps) {
   const [hasSavedColor, setHasSavedColor] = useState(isValidHex(brandColor));
-  // When no brand color is saved, default the picker to black so the UI state
-  // is clearly "not set" rather than misleading the user with a grey swatch.
   const initialColor = isValidHex(brandColor) ? normalizeHex(brandColor) : "#000000";
   const [color, setColor] = useState(initialColor);
-  const [hexText, setHexText] = useState(isValidHex(brandColor) ? normalizeHex(brandColor) : "");
   const [palette, setPalette] = useState<string[]>(
     brandPalette.map(normalizeHex).filter(isValidHex),
   );
@@ -109,24 +105,14 @@ export function BrandStudio({
   const [taglineText, setTaglineText] = useState(tagline ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Keep the hex text field in sync when the picker changes the color.
   function pickColor(value: string) {
     const v = normalizeHex(value);
     setColor(v);
-    setHexText(v);
     setHasSavedColor(true);
   }
 
-  function onHexTextChange(value: string) {
-    setHexText(value);
-    if (isValidHex(value)) {
-      setColor(normalizeHex(value));
-      setHasSavedColor(true);
-    }
-  }
-
-  function addToPalette() {
-    const v = normalizeHex(paletteDraft);
+  function addToPalette(hex: string) {
+    const v = normalizeHex(hex);
     if (!isValidHex(v)) return;
     setPalette((prev) => (prev.includes(v) ? prev : [...prev, v]));
   }
@@ -157,10 +143,8 @@ export function BrandStudio({
 
   return (
     <AutosaveForm action={updateBrand} className="grid max-w-2xl gap-6 pt-5">
-      {/* Hidden fields submitted to updateBrand */}
-      {/* Only submit brand_color when a color has been explicitly saved or chosen
-          so the default picker state never overwrites a null DB value. */}
-      <input type="hidden" name="brand_color" value={hasSavedColor || hexText ? (isValidHex(color) ? color : "") : ""} />
+      {/* Only submit brand_color when a color has been explicitly chosen. */}
+      <input type="hidden" name="brand_color" value={hasSavedColor ? (isValidHex(color) ? color : "") : ""} />
       <input type="hidden" name="brand_palette" value={palette.join(",")} />
       <input type="hidden" name="logo_url" value={logo} />
       <input type="hidden" name="brand_voice" value={voice} />
@@ -188,36 +172,29 @@ export function BrandStudio({
             onChange={(e) => pickColor(e.target.value)}
             className="h-10 w-12 cursor-pointer rounded-md border border-line bg-surface-0 p-1"
           />
-          <div className="flex flex-col gap-1">
-            <input
-              value={hexText}
-              onChange={(e) => onHexTextChange(e.target.value)}
-              placeholder="#d4af6a"
-              spellCheck={false}
-              className={`${inputClass} w-32 font-mono`}
-            />
-            {!hasSavedColor && (
-              <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
-                Default — not saved
-              </span>
-            )}
-          </div>
+          {hasSavedColor && isValidHex(color) ? (
+            <span className="select-all font-mono text-xs text-fg-secondary">{color}</span>
+          ) : (
+            <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              Not set — open the picker
+            </span>
+          )}
           <div className="flex flex-wrap gap-2">
             <ContrastBadge label="on dark" ratio={darkRatio} />
             <ContrastBadge label="on white" ratio={whiteRatio} />
           </div>
         </div>
-        {isValidHex(color) && (whiteRatio < 4.5 || darkRatio < 4.5) ? (
+        {isValidHex(color) && hasSavedColor && (whiteRatio < 4.5 || darkRatio < 4.5) ? (
           <p className="text-[11px] text-status-warning">
             Fails AA on{" "}
             {[darkRatio < 4.5 && "dark backgrounds", whiteRatio < 4.5 && "white backgrounds"]
               .filter(Boolean)
               .join(" & ")}{" "}
-            — try <span className="font-mono">#a07840</span> or a darker shade to reach ≥4.5:1.
+            — try a darker shade to reach ≥4.5:1.
           </p>
         ) : (
           <p className="text-[11px] text-fg-muted">
-            Readability scores — WCAG AA requires ≥4.5:1 so your brand color stays legible on LP materials. Hover a badge for details.
+            WCAG AA readability scores — hover a badge for details.
           </p>
         )}
       </div>
@@ -225,47 +202,46 @@ export function BrandStudio({
       {/* Palette */}
       <div className="flex flex-col gap-2 text-sm">
         <span className="text-fg-secondary">Palette</span>
-        <div className="flex items-center gap-3">
+        <p className="text-[11px] text-fg-muted">
+          Open the picker and choose a color — it&apos;s added instantly.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Palette picker — adds on blur (when you close the picker) */}
           <input
             type="color"
-            aria-label="Pick palette color"
+            aria-label="Pick a palette color"
             value={isValidHex(paletteDraft) ? normalizeHex(paletteDraft) : "#000000"}
             onChange={(e) => setPaletteDraft(e.target.value)}
+            onBlur={() => addToPalette(paletteDraft)}
             className="h-10 w-12 cursor-pointer rounded-md border border-line bg-surface-0 p-1"
           />
-          <button
-            type="button"
-            onClick={addToPalette}
-            className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-2 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20"
-          >
-            + Add to palette
-          </button>
+          {palette.map((c) => (
+            <div key={c} className="group relative">
+              <button
+                type="button"
+                title={`Set ${c} as primary`}
+                onClick={() => pickColor(c)}
+                className="h-10 w-10 rounded-md border-2 border-transparent transition hover:border-gold-500/60"
+                style={{ backgroundColor: c }}
+              />
+              <button
+                type="button"
+                aria-label={`Remove ${c}`}
+                onClick={() => removeFromPalette(c)}
+                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-line bg-surface-2 text-[10px] leading-none text-fg-secondary opacity-0 transition group-hover:opacity-100 hover:bg-status-danger/20 hover:text-status-danger"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {palette.length === 0 && (
+            <p className="text-xs text-fg-muted">No colors yet.</p>
+          )}
         </div>
-        {palette.length ? (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {palette.map((c) => (
-              <div key={c} className="group relative">
-                <button
-                  type="button"
-                  title={`Set ${c} as primary`}
-                  onClick={() => pickColor(c)}
-                  className="h-9 w-9 rounded-md border border-line"
-                  style={{ backgroundColor: c }}
-                />
-                <button
-                  type="button"
-                  aria-label={`Remove ${c}`}
-                  onClick={() => removeFromPalette(c)}
-                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-line bg-surface-2 text-[10px] leading-none text-fg-secondary transition hover:bg-status-danger/20 hover:text-status-danger"
-                >
-                  ×
-                </button>
-                <span className="mt-1 block text-center font-mono text-[9px] text-fg-muted">{c}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-fg-muted">No swatches yet. Pick a color and add it.</p>
+        {palette.length > 0 && (
+          <p className="text-[11px] text-fg-muted">
+            Click a swatch to set it as primary. Hover to remove.
+          </p>
         )}
       </div>
 
@@ -379,4 +355,3 @@ export function BrandStudio({
     </AutosaveForm>
   );
 }
-
