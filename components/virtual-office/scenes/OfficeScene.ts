@@ -114,11 +114,6 @@ export class OfficeScene extends Phaser.Scene {
   private npcAvatars = new Map<string, NpcAvatarState>();
   private moveSeq = 0;
 
-  // Lazy room loading
-  private roomImages = new Map<string, Phaser.GameObjects.Image>();
-  private loadedRoomKeys = new Set<string>();
-  private lastPlayerCol = -1;
-  private lastPlayerRow = -1;
   private _interpFrame = 0;
 
   // Iframe zones — populated via office:zone-config event from React layer
@@ -164,16 +159,9 @@ export class OfficeScene extends Phaser.Scene {
   // ── preload ─────────────────────────────────────────────────────────────────
 
   preload() {
-    // Preload only rooms adjacent to spawn (SPAWN_X=192, SPAWN_Y=144 → col 0, row 0).
-    // All other rooms are loaded lazily the first time the player walks near them.
-    const spawnCol = 0;
-    const spawnRow = 0;
-    for (const room of ROOMS) {
-      if (Math.abs(room.col - spawnCol) <= 1 && Math.abs(room.row - spawnRow) <= 1) {
-        this.load.image(room.key, room.imagePath);
-        this.loadedRoomKeys.add(room.key);
-      }
-    }
+    // Tilemap + tileset — replaces per-room PNG backgrounds
+    this.load.tilemapTiledJSON("office-world", "/assets/fundexecs/office/maps/office-world.tmj");
+    this.load.image("office-tiles", "/assets/fundexecs/office/tilesets/office-tiles.png");
 
     // Earnest Fundmaker sprite sheet (32×32 frames)
     const earnestMap = spriteFrameMaps.earnest;
@@ -199,7 +187,7 @@ export class OfficeScene extends Phaser.Scene {
   create() {
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
 
-    this._createRooms();
+    this._createTilemap();
     this._createWalls();
     this._createPlayer();
     this._createAnimations();
@@ -241,10 +229,6 @@ export class OfficeScene extends Phaser.Scene {
     this._updateNpcAvatars();
     this._updateSpatialAudio();
 
-    const col = Math.floor(this.player.x / ROOM_W);
-    const row = Math.floor(this.player.y / ROOM_H);
-    this._lazyLoadRoomsNear(col, row);
-
     this._interpFrame = (this._interpFrame + 1) % 2;
   }
 
@@ -269,61 +253,28 @@ export class OfficeScene extends Phaser.Scene {
 
   // ── private helpers ─────────────────────────────────────────────────────────
 
-  private _createRooms() {
+  private _createTilemap() {
+    const map = this.make.tilemap({ key: "office-world" });
+    const tileset = map.addTilesetImage("office-tiles", "office-tiles");
+    if (!tileset) return;
+
+    // Render floor and decor tile layers beneath everything
+    map.createLayer("floor", tileset, 0, 0)?.setDepth(0);
+    map.createLayer("decor", tileset, 0, 0)?.setDepth(1);
+
+    // Room borders and name labels on top of tiles
     for (const room of ROOMS) {
-      const x = room.col * ROOM_W + ROOM_W / 2;
-      const y = room.row * ROOM_H + ROOM_H / 2;
-
-      // Use the real texture if already loaded, otherwise a dark placeholder rectangle
-      let img: Phaser.GameObjects.Image;
-      if (this.loadedRoomKeys.has(room.key) && this.textures.exists(room.key)) {
-        img = this.add.image(x, y, room.key);
-      } else {
-        // Placeholder: dark slate rect — will be swapped when texture loads
-        img = this.add.image(x, y, "__DEFAULT");
-        img.setDisplaySize(ROOM_W, ROOM_H);
-        img.setTint(0x1e293b);
-      }
-      img.setDisplaySize(ROOM_W, ROOM_H);
-      this.roomImages.set(room.key, img);
-
-      // Subtle room border
-      const gfx = this.add.graphics();
-      gfx.lineStyle(1, 0x334155, 0.4);
+      const gfx = this.add.graphics().setDepth(2);
+      gfx.lineStyle(1, 0x334155, 0.5);
       gfx.strokeRect(room.col * ROOM_W, room.row * ROOM_H, ROOM_W, ROOM_H);
 
-      // Room name label (in-world, small, top-left of room)
       this.add.text(room.col * ROOM_W + 10, room.row * ROOM_H + 10, room.label.toUpperCase(), {
         fontFamily: "monospace",
         fontSize: "9px",
-        color: "#e2e8f0",
+        color: "#fbbf24",
         stroke: "#0f172a",
         strokeThickness: 2,
-      }).setDepth(5);
-    }
-  }
-
-  private _lazyLoadRoomsNear(playerCol: number, playerRow: number) {
-    if (playerCol === this.lastPlayerCol && playerRow === this.lastPlayerRow) return;
-    this.lastPlayerCol = playerCol;
-    this.lastPlayerRow = playerRow;
-
-    for (const room of ROOMS) {
-      if (this.loadedRoomKeys.has(room.key)) continue;
-      if (Math.abs(room.col - playerCol) > 1 || Math.abs(room.row - playerRow) > 1) continue;
-
-      // Start loading — swap the placeholder image when done
-      this.loadedRoomKeys.add(room.key);
-      this.load.image(room.key, room.imagePath);
-      this.load.once(`filecomplete-image-${room.key}`, () => {
-        const img = this.roomImages.get(room.key);
-        if (img && this.textures.exists(room.key)) {
-          img.setTexture(room.key);
-          img.setDisplaySize(ROOM_W, ROOM_H);
-          img.clearTint();
-        }
-      });
-      this.load.start();
+      }).setDepth(3).setAlpha(0.7);
     }
   }
 
