@@ -486,6 +486,36 @@ export function injectEdgeContext(systemPrompt: string, result: EdgeContextResul
 }
 
 /**
+ * Read a stored EdgeContextResult from a session row.
+ * Returns null if absent, invalid, or expired.
+ */
+export function parseStoredEdgeContext(raw: unknown): EdgeContextResult | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Partial<EdgeContextResult>;
+  if (
+    typeof r.contextHash !== "string" ||
+    typeof r.capturedAt !== "number" ||
+    typeof r.workflowContext !== "string"
+  ) {
+    return null;
+  }
+  const result = r as EdgeContextResult;
+  if (isEdgeContextExpired(result)) return null;
+  return result;
+}
+
+/**
+ * Format edge context as a short context line for the planner prompt.
+ * Returns empty string when there is nothing useful to surface.
+ */
+export function edgeContextToPromptLine(result: EdgeContextResult): string {
+  if (result.workflowContext === "general") return "";
+  const ctx = result.workflowContext.replace(/_/g, " ");
+  const hints = result.executionHints.slice(0, 2).join(" ");
+  return hints ? `[Session environment: ${ctx}. ${hints}]` : `[Session environment: ${ctx}.]`;
+}
+
+/**
  * Format edge context as a SessionMemoryCard constraints entry.
  */
 export function edgeContextToMemoryConstraint(result: EdgeContextResult): string {
