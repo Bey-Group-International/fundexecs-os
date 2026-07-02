@@ -27,7 +27,9 @@ export const calendlyAdapter: DispatchAdapter = {
     const target = ctx.target?.name ?? ctx.target?.email ?? "the counterparty";
     const topic = ctx.subject ?? ctx.metadata?.["stepTitle"] as string ?? "meeting";
 
-    if (!configured()) {
+    // Honour the gateway contract: ctx.connected reflects the org's integration_connections
+    // row; process.env.CALENDLY_API_KEY gates the live API path. Both must be true to proceed.
+    if (!ctx.connected || !configured()) {
       return {
         ok: true,
         channel: "calendly",
@@ -37,12 +39,15 @@ export const calendlyAdapter: DispatchAdapter = {
     }
 
     try {
+      const authHeaders = {
+        Authorization: `Bearer ${process.env.CALENDLY_API_KEY}`,
+        "Content-Type": "application/json",
+      };
+
       // Fetch the current user to get their Calendly URI.
       const meRes = await fetch("https://api.calendly.com/users/me", {
-        headers: {
-          Authorization: `Bearer ${process.env.CALENDLY_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders,
+        signal: AbortSignal.timeout(8000),
       });
       if (!meRes.ok) throw new Error(`Calendly users/me: ${meRes.status}`);
       const me = await meRes.json() as { resource: { uri: string; scheduling_url: string } };
@@ -52,10 +57,8 @@ export const calendlyAdapter: DispatchAdapter = {
       const etRes = await fetch(
         `https://api.calendly.com/event_types?user=${encodeURIComponent(userUri)}&active=true&count=1`,
         {
-          headers: {
-            Authorization: `Bearer ${process.env.CALENDLY_API_KEY}`,
-            "Content-Type": "application/json",
-          },
+          headers: authHeaders,
+          signal: AbortSignal.timeout(8000),
         },
       );
       if (!etRes.ok) throw new Error(`Calendly event_types: ${etRes.status}`);
