@@ -270,7 +270,7 @@ function ControlBar({
         )}
         <button
           onClick={() => {
-            const link = `${window.location.origin}/meetings/${roomCode}`;
+            const link = `${window.location.origin}/meeting-invite/${roomCode}`;
             void navigator.clipboard.writeText(link).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); });
           }}
           title="Copy meeting link"
@@ -297,13 +297,13 @@ function ControlBar({
 // ─── CopilotSidebar ───────────────────────────────────────────────────────────
 
 function CopilotSidebar({
-  transcript, notes, isUpdating, srStatus, participants, roomCode,
+  transcript, notes, isUpdating, srStatus, participants, roomCode, meetingTitle,
   chatMessages, onSendChat, isHost, raisedHands, onKick, onAdmit, onDeny, waitingPeers, onChatOpen,
 }: {
   transcript: TranscriptLine[]; notes: LiveNotesResult | null; isUpdating: boolean;
   srStatus: "idle" | "active" | "error" | "unsupported";
   participants: { id: string; displayName: string }[];
-  roomCode: string; chatMessages: ChatMessage[];
+  roomCode: string; meetingTitle: string; chatMessages: ChatMessage[];
   onSendChat: (text: string) => void; isHost: boolean;
   raisedHands: Set<string>; onKick: (id: string) => void;
   onAdmit: (id: string) => void; onDeny: (id: string) => void;
@@ -337,7 +337,7 @@ function CopilotSidebar({
     const res = await fetch("/api/meetings/invite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roomCode, emails }),
+      body: JSON.stringify({ roomCode, emails, meetingTitle }),
     });
     setEmailSending(false);
     if (res.ok) {
@@ -610,6 +610,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [joining, setJoining] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
   const [showGuestUpsell, setShowGuestUpsell] = useState(false);
+  const [meetingTitle, setMeetingTitle] = useState("Meeting");
 
   // Pre-join devices
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -852,10 +853,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     let mId: string | null = null;
     let hostFlag = false;
     try {
-      const { data: existing } = await supabase.from("live_meetings").select("id, status, host_id").eq("room_code", roomCode).single();
-      const ex = existing as { id: string; status: string; host_id: string } | null;
+      const { data: existing } = await supabase.from("live_meetings").select("id, status, host_id, title").eq("room_code", roomCode).single();
+      const ex = existing as { id: string; status: string; host_id: string; title: string | null } | null;
       if (ex) {
         mId = ex.id;
+        if (ex.title) setMeetingTitle(ex.title);
         if (ex.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
         const { data: { user } } = await supabase.auth.getUser();
         hostFlag = !!user && user.id === ex.host_id;
@@ -1406,7 +1408,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--line)] bg-[var(--surface-0)]">
               <span className="font-mono text-xs text-[var(--fg-muted)] bg-[var(--surface-2)] rounded-md px-2 py-1 select-all">{roomCode}</span>
               <button
-                onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/meetings/${roomCode}`)}
+                onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/meeting-invite/${roomCode}`)}
                 className="text-xs text-[var(--gold-400)] hover:text-[var(--gold-500)] transition-colors"
               >
                 Copy invite link
@@ -1560,7 +1562,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           <div className="w-80 shrink-0 flex flex-col overflow-hidden">
             <CopilotSidebar
               transcript={transcript} notes={notes} isUpdating={isUpdatingNotes}
-              srStatus={srStatus} participants={participantList} roomCode={roomCode}
+              srStatus={srStatus} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
               chatMessages={chatMessages} onSendChat={sendChat} isHost={isHost}
               raisedHands={raisedHands} onKick={kickPeer} onAdmit={admitPeer} onDeny={denyPeer}
               waitingPeers={waitingPeers}
