@@ -83,7 +83,7 @@ export function BrandSheet({
         >
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg object-contain" />
+            <img src={logoUrl} alt={`${firmName} logo`} className="h-12 w-12 shrink-0 rounded-lg object-contain" />
           ) : (
             <span
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg font-display text-xl font-semibold text-surface-0"

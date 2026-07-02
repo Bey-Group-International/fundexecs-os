@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { AutosaveForm } from "./AutosaveForm";
 import { updateBrand } from "./actions";
+import { resizeLogo } from "./logo-resize";
 
 // Five curated brand-voice presets. The stored value is the label string.
 const VOICE_PRESETS = [
@@ -16,7 +17,6 @@ const VOICE_PRESETS = [
 
 const DARK = "#0B0A08";
 const WHITE = "#FFFFFF";
-const MAX_LOGO_BYTES = 600 * 1024;
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -137,35 +137,11 @@ export function BrandStudio({
 
   async function onLogoFile(file: File) {
     setLogoError("");
-    const url = URL.createObjectURL(file);
-    try {
-      const img = await loadImage(url);
-      const longest = Math.max(img.width, img.height);
-      const scale = longest > 512 ? 512 / longest : 1;
-      const w = Math.max(1, Math.round(img.width * scale));
-      const h = Math.max(1, Math.round(img.height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        setLogoError("Could not process this image. Try another file.");
-        return;
-      }
-      ctx.drawImage(img, 0, 0, w, h);
-      let dataUrl = canvas.toDataURL("image/webp", 0.85);
-      if (!dataUrl.startsWith("data:image/webp")) {
-        dataUrl = canvas.toDataURL("image/png");
-      }
-      if (estimateBytes(dataUrl) > MAX_LOGO_BYTES) {
-        setLogoError("That image is too large after compression (>600KB). Try a smaller or simpler image.");
-        return;
-      }
-      setLogo(dataUrl);
-    } catch {
-      setLogoError("Could not read that file. Make sure it's a valid image.");
-    } finally {
-      URL.revokeObjectURL(url);
+    const result = await resizeLogo(file);
+    if ("error" in result) {
+      setLogoError(result.error);
+    } else {
+      setLogo(result.dataUrl);
     }
   }
 
@@ -355,7 +331,7 @@ export function BrandStudio({
           <div className="flex items-center gap-3">
             {logo ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logo} alt="" className="h-12 w-12 shrink-0 rounded-lg object-contain" />
+              <img src={logo} alt={`${firmName} logo`} className="h-12 w-12 shrink-0 rounded-lg object-contain" />
             ) : (
               <span
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg font-display text-xl font-semibold"
@@ -404,20 +380,3 @@ export function BrandStudio({
   );
 }
 
-// --- helpers ---------------------------------------------------------------
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-// Approximate decoded byte size of a base64 data URL.
-function estimateBytes(dataUrl: string): number {
-  const i = dataUrl.indexOf(",");
-  const b64 = i >= 0 ? dataUrl.slice(i + 1) : dataUrl;
-  return Math.floor((b64.length * 3) / 4);
-}
