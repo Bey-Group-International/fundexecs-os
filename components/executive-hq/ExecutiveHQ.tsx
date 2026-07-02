@@ -119,7 +119,10 @@ const ROOM_OBJECT_POSITION: Record<string, string> = {
 const GOLD = "#c9a84c";
 const GOLD_DIM = "#c9a84c55";
 
-function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: boolean }) {
+// HQ room id → virtual office room key mapping (for occupancy lookup)
+const HQ_TO_VIRTUAL_KEY: Record<string, string> = { investor: "office" };
+
+function MiniMap({ activeId, nightMode, occupancy = {} }: { activeId: string | null; nightMode: boolean; occupancy?: Record<string, number> }) {
   const W = 28; const H = 18; const G = 2;
   const cells = [
     {id:"ceo",       c:0,r:0,s:1,col:"#c9a84c"},
@@ -147,15 +150,28 @@ function MiniMap({ activeId, nightMode }: { activeId: string | null; nightMode: 
       <svg width={tw} height={th} viewBox={`0 0 ${tw} ${th}`}>
         {cells.map(cell=>{
           const active = cell.id === activeId;
+          const virtualKey = HQ_TO_VIRTUAL_KEY[cell.id] ?? cell.id;
+          const count = occupancy[virtualKey] ?? 0;
+          const cellX = cell.c*(W+G);
+          const cellY = cell.r*(H+G);
+          const cellW = W*cell.s+G*(cell.s-1);
           return (
-            <rect key={cell.id}
-              x={cell.c*(W+G)} y={cell.r*(H+G)}
-              width={W*cell.s+G*(cell.s-1)} height={H}
-              fill={active ? `${cell.col}40` : `${cell.col}18`}
-              stroke={active ? cell.col : `${cell.col}40`}
-              strokeWidth={active ? 1 : 0.5}
-              rx={1}
-            />
+            <g key={cell.id}>
+              <rect
+                x={cellX} y={cellY}
+                width={cellW} height={H}
+                fill={active ? `${cell.col}40` : `${cell.col}18`}
+                stroke={active ? cell.col : `${cell.col}40`}
+                strokeWidth={active ? 1 : 0.5}
+                rx={1}
+              />
+              {count > 0 && (
+                <g>
+                  <circle cx={cellX+cellW-4} cy={cellY+4} r={3.5} fill="#22c55e" opacity={0.9} />
+                  <text x={cellX+cellW-4} y={cellY+4+2} textAnchor="middle" fontSize={4} fill="#fff" fontFamily="monospace">{count > 9 ? "9+" : count}</text>
+                </g>
+              )}
+            </g>
           );
         })}
       </svg>
@@ -590,7 +606,13 @@ function BoardroomScene({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ExecutiveHQ() {
+export function ExecutiveHQ({
+  onNavigateRoom,
+  roomOccupancy = {},
+}: {
+  onNavigateRoom?: (hqRoomId: string) => void;
+  roomOccupancy?: Record<string, number>;
+} = {}) {
   const router = useRouter();
   const [booting, setBooting]             = useState(() => {
     if (typeof window === "undefined") return true;
@@ -651,9 +673,13 @@ export function ExecutiveHQ() {
 
   const handleRoomClick = useCallback((roomId: string, href: string) => {
     if (zoomingRoom) return;
+    if (onNavigateRoom) {
+      onNavigateRoom(roomId);
+      return;
+    }
     setZoomingRoom(roomId);
     setTimeout(() => { router.push(href); setZoomingRoom(null); }, 420);
-  }, [router, zoomingRoom]);
+  }, [router, zoomingRoom, onNavigateRoom]);
 
   const handleExecClick = useCallback((exec: ExecData) => {
     window.dispatchEvent(new CustomEvent("earn:open-with-context", {
@@ -842,7 +868,7 @@ export function ExecutiveHQ() {
       </div>
 
       {/* Mini-map */}
-      <MiniMap activeId={hoveredRoomId ?? (focusedRoomIndex !== null ? ROOMS[focusedRoomIndex]?.id ?? null : null)} nightMode={nightMode} />
+      <MiniMap activeId={hoveredRoomId ?? (focusedRoomIndex !== null ? ROOMS[focusedRoomIndex]?.id ?? null : null)} nightMode={nightMode} occupancy={roomOccupancy} />
 
       {/* ── Boardroom delegation scene ── */}
       {(animPhase === 'huddle' || animPhase === 'brief' || animPhase === 'dispatch') && (

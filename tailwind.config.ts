@@ -21,13 +21,13 @@ const config: Config = {
           3: "rgb(var(--fx-surface-3) / <alpha-value>)",
         },
         line: "rgb(var(--fx-line) / <alpha-value>)",
-        // Kept as `gold` to avoid churn across existing components; the token
-        // now resolves to the requested blue accent family.
+        // Warm investment-bank gold — financial numbers, CTAs, accent highlights.
         gold: {
-          300: "rgb(var(--fx-accent-300) / <alpha-value>)",
-          400: "rgb(var(--fx-accent-400) / <alpha-value>)",
-          500: "rgb(var(--fx-accent-500) / <alpha-value>)",
+          300: "rgb(var(--fx-gold-300) / <alpha-value>)",
+          400: "rgb(var(--fx-gold-400) / <alpha-value>)",
+          500: "rgb(var(--fx-gold-500) / <alpha-value>)",
         },
+        // Neural / data-terminal blue — grid lines, tech surfaces, AI indicators.
         neural: {
           300: "rgb(var(--fx-accent-300) / <alpha-value>)",
           400: "rgb(var(--fx-accent-400) / <alpha-value>)",
@@ -109,10 +109,10 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateX(-6px)" },
           "100%": { opacity: "1", transform: "translateX(0)" },
         },
-        // Slide in from the right.
+        // SlidePanel entrance — panel slides in from the right edge.
         fxSlideInRight: {
-          "0%": { opacity: "0", transform: "translateX(10px)" },
-          "100%": { opacity: "1", transform: "translateX(0)" },
+          "0%":   { transform: "translateX(100%)", opacity: "0" },
+          "100%": { transform: "translateX(0)",    opacity: "1" },
         },
         // Scale-fade in — for badges, dots, avatars.
         fxScaleFade: {
@@ -129,37 +129,41 @@ const config: Config = {
           "0%, 100%": { boxShadow: "0 0 0 0 rgb(var(--fx-accent-rgb) / 0.5)" },
           "50%": { boxShadow: "0 0 0 5px rgb(var(--fx-accent-rgb) / 0)" },
         },
-        // Streak / credit flame oscillation.
+        // Streak flame oscillation for the sidebar streak counter.
         fxStreakFlame: {
-          "0%, 100%": { transform: "scaleY(1) rotate(-2deg)" },
-          "50%": { transform: "scaleY(1.12) rotate(2deg)" },
+          "0%, 100%": { transform: "scaleY(1) rotate(-2deg)", opacity: "0.9" },
+          "35%":      { transform: "scaleY(1.18) rotate(2deg)", opacity: "1" },
+          "70%":      { transform: "scaleY(0.92) rotate(-1deg)", opacity: "0.85" },
         },
-        // Milestone burst — achievement scale-in.
+        // Milestone burst: scale-in with an outward ring.
         fxMilestoneBurst: {
-          "0%": { transform: "scale(0.4)", opacity: "0" },
-          "60%": { transform: "scale(1.15)", opacity: "1" },
+          "0%":   { transform: "scale(0.5)", opacity: "0" },
+          "55%":  { transform: "scale(1.12)", opacity: "1" },
+          "80%":  { transform: "scale(0.97)", opacity: "1" },
           "100%": { transform: "scale(1)", opacity: "1" },
         },
-        // Badge reveal — flip and settle.
+        // Badge flip-in for achievement unlocks.
         fxBadgeReveal: {
-          "0%": { transform: "rotateY(-90deg) scale(0.8)", opacity: "0" },
-          "100%": { transform: "rotateY(0deg) scale(1)", opacity: "1" },
+          "0%":   { transform: "rotateY(-90deg)", opacity: "0" },
+          "60%":  { transform: "rotateY(8deg)",   opacity: "1" },
+          "100%": { transform: "rotateY(0deg)",   opacity: "1" },
         },
-        // Multiplier shimmer.
+        // Multiplier shimmer on the streak pill.
         fxMultShimmer: {
-          "0%": { backgroundPosition: "-200% center" },
-          "100%": { backgroundPosition: "200% center" },
+          "0%":   { backgroundPosition: "200% center" },
+          "100%": { backgroundPosition: "-200% center" },
         },
-        // Coach/toast slide up.
+        // CoachingToast entrance — nudge up from the bottom-left.
         fxCoachSlideUp: {
-          "0%": { opacity: "0", transform: "translateY(12px) scale(0.97)" },
-          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+          "0%":   { transform: "translateY(12px)", opacity: "0" },
+          "100%": { transform: "translateY(0)",    opacity: "1" },
         },
-        // Credit award float-up.
+        // Credit award pop: floats up and fades after task completion.
         fxCreditPop: {
-          "0%": { opacity: "0", transform: "translateY(0) scale(0.6)" },
-          "40%": { opacity: "1", transform: "translateY(-12px) scale(1.1)" },
-          "100%": { opacity: "0", transform: "translateY(-28px) scale(0.9)" },
+          "0%":   { opacity: "0", transform: "translateY(0) scale(0.7)" },
+          "15%":  { opacity: "1", transform: "translateY(-6px) scale(1.08)" },
+          "60%":  { opacity: "1", transform: "translateY(-18px) scale(1)" },
+          "100%": { opacity: "0", transform: "translateY(-34px) scale(0.9)" },
         },
       },
       animation: {
@@ -176,12 +180,12 @@ const config: Config = {
         "scale-fade": "fxScaleFade 0.4s cubic-bezier(0.22, 1, 0.36, 1) both",
         float: "fxFloat 6s ease-in-out infinite",
         "border-pulse": "fxBorderPulse 2s ease-in-out infinite",
-        "streak-flame": "fxStreakFlame 1.2s ease-in-out infinite",
-        "milestone-burst": "fxMilestoneBurst 0.5s cubic-bezier(0.22, 1, 0.36, 1) both",
-        "badge-reveal": "fxBadgeReveal 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both",
-        "mult-shimmer": "fxMultShimmer 2s linear infinite",
-        "coach-slide-up": "fxCoachSlideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both",
-        "credit-pop": "fxCreditPop 1.2s ease-in-out forwards",
+        "streak-flame": "fxStreakFlame 1.4s ease-in-out infinite",
+        "milestone-burst": "fxMilestoneBurst 0.55s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "badge-reveal": "fxBadgeReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "mult-shimmer": "fxMultShimmer 2.2s linear infinite",
+        "coach-slide-up": "fxCoachSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "credit-pop": "fxCreditPop 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards",
       },
     },
   },

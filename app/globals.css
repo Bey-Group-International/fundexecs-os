@@ -12,13 +12,38 @@
   --fx-fg-primary: 241 247 255;
   --fx-fg-secondary: 175 190 211;
   --fx-fg-muted: 113 132 158;
+  /* Neural/data-terminal accent — sky blue for grid lines and tech surfaces */
   --fx-accent-300: 125 211 252;
   --fx-accent-400: 56 189 248;
   --fx-accent-500: 37 99 235;
   --fx-accent-rgb: 56 189 248;
   --fx-accent-strong-rgb: 37 99 235;
+  /* Gold — investment-bank warm gold for financial numbers and CTAs */
+  --fx-gold-300: 245 215 115;
+  --fx-gold-400: 212 168 42;
+  --fx-gold-500: 158 120 15;
+  --fx-gold-rgb: 212 168 42;
   --background: rgb(var(--fx-surface-0));
   --foreground: rgb(var(--fx-fg-primary));
+
+  /* Semantic design-token aliases — consumed by lib/design-tokens.ts.
+     These resolve to fully-formed color values (not bare RGB triplets) so
+     they can be used directly in non-Tailwind contexts (SVG, Canvas, etc.). */
+  --surface-0: rgb(5 9 18);
+  --surface-1: rgb(10 17 31);
+  --surface-2: rgb(16 27 46);
+  --surface-3: rgb(24 40 66);
+  --line: rgb(38 61 92);
+  --fg-primary: rgb(241 247 255);
+  --fg-secondary: rgb(175 190 211);
+  --fg-muted: rgb(113 132 158);
+  --gold-300: rgb(125 211 252);
+  --gold-400: rgb(56 189 248);
+  --gold-500: rgb(37 99 235);
+  --status-success: #5FB87A;
+  --status-warning: #D6A24A;
+  --status-danger: #D46A5A;
+  --status-info: #5B9BD5;
 }
 
 html.theme-day {
@@ -36,8 +61,25 @@ html.theme-day {
   --fx-accent-500: 29 78 216;
   --fx-accent-rgb: 37 99 235;
   --fx-accent-strong-rgb: 29 78 216;
+  --fx-gold-300: 160 120 10;
+  --fx-gold-400: 130 96 5;
+  --fx-gold-500: 100 72 2;
+  --fx-gold-rgb: 130 96 5;
   --background: rgb(var(--fx-surface-0));
   --foreground: rgb(var(--fx-fg-primary));
+
+  /* Semantic aliases — light-theme overrides */
+  --surface-0: rgb(238 244 252);
+  --surface-1: rgb(248 251 255);
+  --surface-2: rgb(226 236 248);
+  --surface-3: rgb(208 223 242);
+  --line: rgb(178 197 221);
+  --fg-primary: rgb(12 24 44);
+  --fg-secondary: rgb(55 74 103);
+  --fg-muted: rgb(91 112 145);
+  --gold-300: rgb(14 165 233);
+  --gold-400: rgb(37 99 235);
+  --gold-500: rgb(29 78 216);
 }
 
 html.theme-night {

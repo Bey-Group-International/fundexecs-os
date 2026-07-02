@@ -104,7 +104,14 @@ function earnChatSystem(modelLabel: string): string {
     `## Grounding\n` +
     `- Prefer facts from the live workspace context block over general knowledge.\n` +
     `- If you don't have real data for something, say so explicitly and reason from the closest available proxy.\n` +
-    `- Never hallucinate valuations, cap rates, IRRs, or entity names.`
+    `- Never hallucinate valuations, cap rates, IRRs, or entity names.\n\n` +
+    `## Sourcing and counterparty output\n` +
+    `When listing firms, funds, allocators, or any counterparty as sourcing targets, include for each entry wherever you have reliable knowledge:\n` +
+    `- **Website** — firm or fund URL\n` +
+    `- **Key contact** — decision-maker name, title, direct email, phone, and LinkedIn profile URL\n` +
+    `- **AUM / fund size** and typical check or ticket size\n` +
+    `- **HQ city** and geographic mandate\n` +
+    `Omit a field rather than guessing. Never fabricate contact details — only include email, phone, and LinkedIn when you have reliable knowledge of them.`
   );
 }
 
@@ -122,12 +129,20 @@ export function earnChatStream(args: {
 }) {
   const anthropic = client();
   if (!anthropic) return null;
+  function cleanContent(s: string): string {
+    return s
+      .replace(/\[Selected reasoning engine:[^\]]*\]\s*/g, "")
+      .replace(/\[Operator mode:[^\]]*\]\s*/g, "")
+      .replace(/\[Input mode:[^\]]*\]\s*/g, "")
+      .replace(/\[Voice input:[^\]]*\]\s*/g, "")
+      .trim();
+  }
   const history = (args.priorContext ?? [])
     .slice(-30)
     .map((turn) =>
       typeof turn === "string"
-        ? { role: "user" as const, content: turn }
-        : { role: (turn.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: turn.content }
+        ? { role: "user" as const, content: cleanContent(turn) }
+        : { role: (turn.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: cleanContent(turn.content) }
     );
   let systemContent = earnChatSystem(args.modelLabel);
   if (args.liveContext) {
@@ -886,5 +901,128 @@ export async function conversationalDraft(args: {
   } catch (err) {
     console.error("[conversationalDraft] Claude API error:", err);
     return { reply: "Something went wrong drafting that. Your draft is unchanged.", content: args.currentContent };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Meeting Copilot — analyze a meeting transcript (or manually entered notes)
+// and surface sentiment, objections, commitment probability, follow-up draft,
+// and CRM field suggestions.
+// ---------------------------------------------------------------------------
+
+export interface MeetingAnalysis {
+  sentiment: "positive" | "neutral" | "negative";
+  sentiment_rationale: string;
+  objections: string[];
+  commitment_probability: number; // 0–1
+  commitment_rationale: string;
+  follow_up_draft: string;
+  crm_updates: Array<{ field: string; suggested_value: string }>;
+}
+
+const MEETING_ANALYSIS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    sentiment: { type: "string", enum: ["positive", "neutral", "negative"] },
+    sentiment_rationale: { type: "string" },
+    objections: { type: "array", items: { type: "string" } },
+    commitment_probability: { type: "number" },
+    commitment_rationale: { type: "string" },
+    follow_up_draft: { type: "string" },
+    crm_updates: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          field: { type: "string" },
+          suggested_value: { type: "string" },
+        },
+        required: ["field", "suggested_value"],
+      },
+    },
+  },
+  required: [
+    "sentiment",
+    "sentiment_rationale",
+    "objections",
+    "commitment_probability",
+    "commitment_rationale",
+    "follow_up_draft",
+    "crm_updates",
+  ],
+} as const;
+
+const MEETING_SYSTEM =
+  `You are Earn, the command layer of FundExecs OS — an AI for private-market operators. ` +
+  `Analyze this meeting transcript and return structured intelligence for a private-equity or real-estate firm. ` +
+  `sentiment: overall tone (positive/neutral/negative). ` +
+  `objections: verbatim or summarized concerns raised by the other party. ` +
+  `commitment_probability: 0.0–1.0 probability the relationship advances to next stage. ` +
+  `follow_up_draft: a short, professional follow-up email body ready to send. ` +
+  `crm_updates: fields worth logging in the CRM (stage, next_step, key_concerns, etc). ` +
+  `Be specific; do not speculate beyond what is in the transcript.`;
+
+function fallbackMeetingAnalysis(): MeetingAnalysis {
+  return {
+    sentiment: "neutral",
+    sentiment_rationale: "Analysis unavailable — no API key configured.",
+    objections: [],
+    commitment_probability: 0.5,
+    commitment_rationale: "No analysis available.",
+    follow_up_draft:
+      "Hi [Name],\n\nThank you for taking the time to meet with us. We appreciated the conversation and look forward to continuing the discussion.\n\nBest regards,",
+    crm_updates: [],
+  };
+}
+
+export async function analyzeMeeting(args: {
+  title: string;
+  participants: string[];
+  transcript: string;
+  dealContext?: string;
+}): Promise<MeetingAnalysis> {
+  const anthropic = client();
+  if (!anthropic) return fallbackMeetingAnalysis();
+
+  const userContent =
+    `Meeting: ${args.title}\n` +
+    `Participants: ${args.participants.join(", ") || "unknown"}\n` +
+    (args.dealContext ? `Deal context: ${args.dealContext}\n` : "") +
+    `\n--- TRANSCRIPT ---\n${args.transcript.slice(0, 12000)}`;
+
+  try {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 2000,
+      system: [{ type: "text", text: MEETING_SYSTEM, cache_control: { type: "ephemeral" } }],
+      output_config: { effort: "medium", format: { type: "json_schema", schema: MEETING_ANALYSIS_SCHEMA } },
+      messages: [{ role: "user", content: userContent }],
+    });
+    const json = textOf(message);
+    if (!json) return fallbackMeetingAnalysis();
+    const raw = JSON.parse(json) as Partial<MeetingAnalysis>;
+    return {
+      sentiment: (["positive", "neutral", "negative"] as const).includes(raw.sentiment as "positive" | "neutral" | "negative")
+        ? (raw.sentiment as MeetingAnalysis["sentiment"])
+        : "neutral",
+      sentiment_rationale: raw.sentiment_rationale?.trim() || "",
+      objections: Array.isArray(raw.objections) ? raw.objections.filter((o): o is string => typeof o === "string") : [],
+      commitment_probability:
+        typeof raw.commitment_probability === "number"
+          ? Math.max(0, Math.min(1, raw.commitment_probability))
+          : 0.5,
+      commitment_rationale: raw.commitment_rationale?.trim() || "",
+      follow_up_draft: raw.follow_up_draft?.trim() || "",
+      crm_updates: Array.isArray(raw.crm_updates)
+        ? raw.crm_updates.filter((u): u is { field: string; suggested_value: string } =>
+            u && typeof u.field === "string" && typeof u.suggested_value === "string",
+          )
+        : [],
+    };
+  } catch (err) {
+    console.error("[analyzeMeeting] Claude API error:", err);
+    return fallbackMeetingAnalysis();
   }
 }

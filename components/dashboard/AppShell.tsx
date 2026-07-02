@@ -8,6 +8,7 @@ import type { DashboardData } from "@/lib/dashboard/types";
 import { CommandPalette } from "./CommandPalette";
 import { DashboardHUD } from "./DashboardHUD";
 import { PWAInstallPrompt } from "./PWAInstallPrompt";
+import { RecentsStrip } from "./RecentsStrip";
 
 export function AppShell({
   data,
@@ -64,6 +65,7 @@ export function AppShell({
         </nav>
         <CommandPalette />
       </div>
+      <RecentsStrip />
       <DashboardHUD data={data} />
       <PWAInstallPrompt />
       {children}

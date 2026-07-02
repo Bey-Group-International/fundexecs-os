@@ -5,10 +5,33 @@ import Link from "next/link";
 import { dashboardWorkspaces } from "@/lib/dashboard/config";
 
 const BASE_COMMANDS = [
-  { label: "Command Center", href: "/dashboard", hint: "Main HUD" },
-  { label: "Interactive Office", href: "/dashboard/office", hint: "Closer visual look" },
-  { label: "Earn Workspace", href: "/workspace", hint: "Create a workflow" },
-  { label: "Automated Sessions", href: "/automations", hint: "Workflow automation" },
+  // Navigation
+  { label: "Command Center", href: "/dashboard", hint: "Main HUD", group: "nav" },
+  { label: "Interactive Office", href: "/dashboard/office", hint: "Visual workspace", group: "nav" },
+  { label: "Earn Workspace", href: "/workspace", hint: "Create a workflow", group: "nav" },
+  { label: "Automated Sessions", href: "/automations", hint: "Workflow automation", group: "nav" },
+  { label: "Inbox", href: "/inbox", hint: "Unified messages", group: "nav" },
+  { label: "Search", href: "/search", hint: "Full-text search", group: "nav" },
+  // Build Hub
+  { label: "Build: Profile", href: "/build/profile", hint: "Org profile", group: "build" },
+  { label: "Build: Track Record", href: "/build/track-record", hint: "Historical performance", group: "build" },
+  { label: "Build: Materials", href: "/build/materials", hint: "Investor materials", group: "build" },
+  // Source Hub
+  { label: "Source: Deal Pipeline", href: "/source/pipeline", hint: "Live deal funnel", group: "source" },
+  { label: "Source: Capital Map", href: "/capital-map", hint: "Relationship intelligence", group: "source" },
+  { label: "Source: Allocator Directory", href: "/source/allocators", hint: "LP directory", group: "source" },
+  { label: "Source: Outreach Studio", href: "/source/outreach", hint: "Prospecting workflow", group: "source" },
+  // Run Hub
+  { label: "Run: Deal War Room", href: "/run/deal", hint: "Deal evaluation", group: "run" },
+  { label: "Run: Underwriting", href: "/run/underwriting", hint: "LBO model engine", group: "run" },
+  { label: "Run: Diligence", href: "/run/diligence", hint: "Diligence workbench", group: "run" },
+  // Execute Hub
+  { label: "Execute: Cap Table", href: "/execute/cap-table", hint: "Equity tracking", group: "execute" },
+  { label: "Execute: Portfolio", href: "/execute/portfolio", hint: "Portfolio health", group: "execute" },
+  { label: "Execute: Closing", href: "/execute/closing", hint: "Closing checklist", group: "execute" },
+  // Settings
+  { label: "Settings", href: "/settings", hint: "Account & org", group: "settings" },
+  { label: "Integrations", href: "/settings/integrations", hint: "Connect tools", group: "settings" },
 ];
 
 export function CommandPalette() {
@@ -21,12 +44,17 @@ export function CommandPalette() {
         label: workspace.title,
         href: workspace.href,
         hint: workspace.eyebrow,
+        group: "workspace" as const,
       })),
     ],
     [],
   );
+
+  // "Ask Earn" passthrough: anything that looks like a question/task fires the dock.
+  const showAskEarn = query.trim().length > 3;
+
   const filtered = commands.filter((command) =>
-    `${command.label} ${command.hint}`.toLowerCase().includes(query.toLowerCase()),
+    `${command.label} ${command.hint} ${command.group ?? ""}`.toLowerCase().includes(query.toLowerCase()),
   );
 
   useEffect(() => {
@@ -69,6 +97,30 @@ export function CommandPalette() {
               />
             </div>
             <div className="max-h-80 overflow-y-auto p-2">
+              {showAskEarn ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    window.dispatchEvent(
+                      new CustomEvent("earn:open-with-context", {
+                        detail: { prompt: query },
+                      }),
+                    );
+                  }}
+                  className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-fg-primary transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="shrink-0 rounded border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                      ask earn
+                    </span>
+                    <span className="truncate">{query}</span>
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    ↵
+                  </span>
+                </button>
+              ) : null}
               {filtered.map((command) => (
                 <Link
                   key={command.href}
@@ -76,12 +128,24 @@ export function CommandPalette() {
                   onClick={() => setOpen(false)}
                   className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-fg-primary transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
                 >
-                  <span>{command.label}</span>
+                  <span className="flex items-center gap-2">
+                    {command.group ? (
+                      <span className="shrink-0 rounded border border-line/70 bg-surface-0/70 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        {command.group}
+                      </span>
+                    ) : null}
+                    <span>{command.label}</span>
+                  </span>
                   <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                     {command.hint}
                   </span>
                 </Link>
               ))}
+              {!showAskEarn && filtered.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-fg-muted">
+                  No results. Type a question to ask Earn.
+                </p>
+              ) : null}
             </div>
           </div>
         </div>

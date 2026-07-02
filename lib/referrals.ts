@@ -98,7 +98,14 @@ export type LedgerReason =
   | "pack_purchase"
   | "stake_lock"
   | "stake_release"
-  | "spend";
+  | "spend"
+  | "loyalty"
+  // Execution-driven gamification rewards
+  | "task_complete"
+  | "streak_bonus"
+  | "milestone_bonus"
+  | "hub_achievement"
+  | "quest_complete";
 
 /** Whether a ledger reason represents referral earnings (for totals). */
 export function isReferralEarning(reason: string): boolean {

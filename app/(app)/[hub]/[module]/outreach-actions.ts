@@ -100,6 +100,8 @@ export async function enrollOutreachTarget(input: {
   sequenceId: string;
   subjectName: string;
   subjectEmail?: string | null;
+  subjectPhone?: string | null;
+  subjectRole?: string | null;
   entityId?: string | null;
 }): Promise<EnrollActionResult> {
   const auth = await requireOrgContext();
@@ -111,6 +113,8 @@ export async function enrollOutreachTarget(input: {
     sequenceId: input.sequenceId,
     subjectName: input.subjectName,
     subjectEmail: input.subjectEmail ?? null,
+    subjectPhone: input.subjectPhone ?? null,
+    subjectRole: input.subjectRole ?? null,
     entityId: input.entityId ?? null,
   });
   if (!res.ok) return { ok: false, error: res.error };
@@ -242,4 +246,45 @@ export async function advanceOutreachEnrollment(enrollmentId: string): Promise<A
     sentStepOrder: res.sentStepOrder,
     message: res.outcome.message,
   };
+}
+
+// --- Delete & clear ---------------------------------------------------------
+
+export async function deleteOutreachSequenceAction(
+  sequenceId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("outreach_sequences")
+      .delete()
+      .eq("id", sequenceId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/outreach");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteOutreachSequenceAction] failed", e);
+    return { ok: false, error: "Failed to delete sequence" };
+  }
+}
+
+export async function clearOutreachSequencesAction(): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("outreach_sequences")
+      .delete()
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/outreach");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearOutreachSequencesAction] failed", e);
+    return { ok: false, error: "Failed to clear sequences" };
+  }
 }

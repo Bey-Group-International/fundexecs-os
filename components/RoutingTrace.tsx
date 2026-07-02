@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { buildRoutingTrace, fmtClockTime, type TraceState } from "@/lib/routing-trace";
+import { buildRoutingTrace, fmtClockTime, type TraceState } from "@/lib/routing-trace-ui";
 import type { Task, Approval } from "@/lib/supabase/database.types";
 
 // The routing trace — WHEN and WHERE a request was routed, made legible.

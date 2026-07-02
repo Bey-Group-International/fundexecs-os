@@ -15,6 +15,8 @@ export type ExecutiveCharacter = {
   name: string;
   nickname?: string;
   role: string;
+  /** Virtual-office room where this executive roams (matches ROOMS key). */
+  roomKey?: string;
   screens: string[];
   trigger: string;
   promptBoundary: string;
@@ -44,6 +46,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     agentKey: "associate",
     name: "Earnest Fundmaker",
     nickname: "Earn",
+    roomKey: "ceo",
     role: "Fund executive mascot and onboarding guide",
     screens: ["/dashboard", "loading", "help", "success"],
     trigger: "Login, onboarding, deal closed, milestone achieved",
@@ -62,6 +65,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     id: "capital-connector",
     agentKey: "capital_connector",
     name: "Capital Connector",
+    roomKey: "boardroom",
     role: "Chief capital officer for investor pipeline",
     screens: ["/dashboard/capital"],
     trigger: "New investor added or follow-up due",
@@ -80,6 +84,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     id: "deal-sourcer",
     agentKey: "deal_sourcer",
     name: "Deal Sourcer",
+    roomKey: "trading",
     role: "Acquisition executive for opportunity intake",
     screens: ["/dashboard/deals"],
     trigger: "New target created or screening incomplete",
@@ -98,6 +103,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     id: "capital-raiser",
     agentKey: "capital_raiser",
     name: "Capital Raiser",
+    roomKey: "research",
     role: "Capital raising executive",
     screens: ["/dashboard/capital", "/dashboard/fund-room"],
     trigger: "Fundraising campaign started",
@@ -116,6 +122,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     id: "investor-relations",
     agentKey: "investor_relations",
     name: "Investor Relations",
+    roomKey: "office",
     role: "Investor relations executive",
     screens: ["/dashboard/investor-relations"],
     trigger: "Investor opens portal or asks question",
@@ -134,6 +141,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     id: "automater",
     agentKey: "portfolio_ops",
     name: "Automater",
+    roomKey: "ops",
     role: "Automation executive",
     screens: ["/dashboard/automation"],
     trigger: "Manual repetitive task detected",
@@ -152,6 +160,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     id: "curator",
     agentKey: "curator",
     name: "Curator",
+    roomKey: "marketing",
     role: "Private events executive",
     screens: ["/dashboard/marketing"],
     trigger: "Event scheduled or investor meeting requested",
@@ -268,6 +277,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     id: "legal-admin",
     agentKey: "fund_admin",
     name: "Legal Admin",
+    roomKey: "legal",
     role: "Legal & Compliance Executive",
     screens: ["/settings", "/dashboard/legal"],
     trigger: "Compliance deadline, document review, or regulatory alert",
@@ -285,6 +295,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     id: "master-workflow",
     agentKey: "portfolio_ops",
     name: "Master Workflow",
+    roomKey: "reception",
     role: "Operations Executive",
     screens: ["/command-center", "/dashboard/automation"],
     trigger: "Process bottleneck or workflow inefficiency detected",

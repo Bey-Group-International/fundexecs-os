@@ -18,6 +18,8 @@ import { RunRiskModule, RunStressTestModule, RunCommsModule } from "@/components
 import { DocumentsModuleLive } from "@/components/run/DocumentsModuleLive";
 import { AllocatorDirectoryLive } from "@/components/source/AllocatorDirectoryLive";
 import { ServiceProviderDirectoryLive } from "@/components/source/ServiceProviderDirectoryLive";
+import { PartnersLive } from "@/components/source/PartnersLiveServer";
+import { DealPipelineLive } from "@/components/source/DealPipelineLive";
 import { RunStrategyModule } from "@/components/run/RunStrategyModule";
 import { RunDiligenceModule } from "@/components/run/RunDiligenceModule";
 import { RunUnderwritingModule } from "@/components/run/RunUnderwritingModule";
@@ -32,6 +34,7 @@ import { ExecuteCapTableModule } from "@/components/execute/CapTableModule";
 import { ExecuteOwnershipModule } from "@/components/execute/OwnershipModule";
 import { ExecuteValuationsModule } from "@/components/execute/ValuationsModule";
 import { ExecuteWaterfallModule } from "@/components/execute/WaterfallModule";
+import { SigningModule } from "@/components/execute/SigningModule";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
@@ -200,15 +203,11 @@ export async function ModuleView({
     if (mod.key === "waterfall") return <ExecuteWaterfallModule orgId={ctx.orgId} />;
     if (mod.key === "reporting") return <ExecuteReportingModule orgId={ctx.orgId} />;
     if (mod.key === "exit") return <ExecuteExitModule orgId={ctx.orgId} />;
+    if (mod.key === "signing") return <SigningModule />;
 
     // Modules with defined roadmap scope — structured Coming Soon states so
     // the operator knows what's shipping and can use Earn in the interim.
     const EXECUTE_COMING_SOON: Record<string, { blurb: string; earnPrompt: string }> = {
-      signing: {
-        blurb:
-          "Counterparty e-signature flows, signature-status tracking, and automatic filing into the Data Room — all wired to your deal records.",
-        earnPrompt: "Help me track signing status for my active closing",
-      },
       issuance: {
         blurb:
           "Equity and unit issuance ledger: issue securities, record cap-table entries, generate certificates, and push events to LP notices.",
@@ -271,6 +270,7 @@ export async function ModuleView({
             legal_name: org?.legal_name ?? "",
             entity_type: org?.entity_type ?? "",
             tagline: org?.tagline ?? "",
+            logo_url: org?.logo_url ?? "",
             jurisdiction: org?.jurisdiction ?? "",
             website: org?.website ?? "",
             description: org?.description ?? "",
@@ -334,6 +334,56 @@ export async function ModuleView({
           fields={ADD_ROW_CONFIGS[key]?.fields ?? []}
         />
         <ServiceProviderDirectoryLive />
+      </div>
+    );
+  }
+
+  if (hub.key === "source" && mod.key === "partners") {
+    const aiCfg = sessionId ? null : sourceConfigFor(key);
+    return (
+      <div>
+        {mandateStrip}
+        {aiCfg ? (
+          <AiSourcingPanel
+            hub={hub.key}
+            module={mod.key}
+            entities={aiCfg.entities}
+            agentName={AGENT_BY_KEY[aiCfg.agent]?.name ?? "Sourcing"}
+            live={sourcingLive()}
+            webEnrichment={sourcingEnrichmentEnabled()}
+          />
+        ) : null}
+        <AddRowForm
+          hub={hub.key}
+          module={mod.key}
+          fields={ADD_ROW_CONFIGS[key]?.fields ?? []}
+        />
+        <PartnersLive />
+      </div>
+    );
+  }
+
+  if (hub.key === "source" && mod.key === "deal_pipeline") {
+    const aiCfg = sessionId ? null : sourceConfigFor(key);
+    return (
+      <div>
+        {mandateStrip}
+        {aiCfg ? (
+          <AiSourcingPanel
+            hub={hub.key}
+            module={mod.key}
+            entities={aiCfg.entities}
+            agentName={AGENT_BY_KEY[aiCfg.agent]?.name ?? "Sourcing"}
+            live={sourcingLive()}
+            webEnrichment={sourcingEnrichmentEnabled()}
+          />
+        ) : null}
+        <AddRowForm
+          hub={hub.key}
+          module={mod.key}
+          fields={ADD_ROW_CONFIGS[key]?.fields ?? []}
+        />
+        <DealPipelineLive />
       </div>
     );
   }

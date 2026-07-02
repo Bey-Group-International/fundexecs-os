@@ -5,6 +5,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 import { DealPipeline } from "@/components/source/DealPipeline";
+import { ClearDealsBtn } from "@/components/source/SourceDeleteControls";
 import type { DealEntry } from "@/components/source/DealPipeline";
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
@@ -23,6 +24,11 @@ interface DealRow {
   expected_close: string | null;
   website: string | null;
   notes: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  url_source: string | null;
+  provenance: string | null;
 }
 
 interface MandateCtx {
@@ -157,9 +163,10 @@ async function loadDeals(): Promise<DealEntry[]> {
   const { data, error } = await supabase
     .from("deals")
     .select(
-      "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website, notes",
+      "id, name, stage, asset_class, geography, target_amount, thesis_fit, expected_close, website, notes, contact_name, contact_email, contact_phone, url_source, provenance",
     )
     .eq("organization_id", auth.ctx.orgId)
+    .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -195,6 +202,11 @@ async function loadDeals(): Promise<DealEntry[]> {
       expectedClose: d.expected_close,
       website: d.website,
       notes: d.notes,
+      contactName: d.contact_name,
+      contactEmail: d.contact_email,
+      contactPhone: d.contact_phone,
+      urlSource: d.url_source,
+      provenance: d.provenance,
       industry: enr.enriched?.industry,
       employeeRange: enr.enriched?.employee_range,
       revenueRange: enr.enriched?.revenue_range,
@@ -222,6 +234,7 @@ export async function DealPipelineLive() {
               {verifiedCount}/{Math.min(deals.length, DEAL_ENRICH_CAP)} enriched via Apollo
             </span>
           )}
+          {deals.length > 0 && <ClearDealsBtn />}
         </div>
       </div>
       <DealPipeline deals={deals} enrichCap={DEAL_ENRICH_CAP} />

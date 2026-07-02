@@ -1,6 +1,9 @@
 import type Stripe from "stripe";
 import { type NextRequest, NextResponse } from "next/server";
 import { getStripe, fulfillCheckout } from "@/lib/stripe";
+import { createServiceClient } from "@/lib/supabase/server";
+import { grantCredits } from "@/lib/credits";
+import { PLAN_BY_KEY, loyaltyBonus, tenureMonths, type PlanKey } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +32,50 @@ export async function POST(req: NextRequest) {
     const session = event.data.object as Stripe.Checkout.Session;
     await fulfillCheckout(session.id);
   }
-  // Recurring subscription renewals (invoice.paid) can grant the plan's monthly
-  // credits again here once recurring top-ups are desired; the initial period is
-  // already granted at checkout.
+
+  // Grant the plan's monthly credit allotment on each subscription renewal.
+  // The initial period is already granted at checkout; this handles every cycle
+  // after that. We key on invoice.payment_succeeded + billing_reason=subscription_cycle
+  // to avoid double-granting the first invoice (which fires alongside checkout).
+  if (event.type === "invoice.payment_succeeded") {
+    const invoice = event.data.object as Stripe.Invoice;
+    if (invoice.billing_reason === "subscription_cycle") {
+      const sub = invoice.subscription;
+      const subId = typeof sub === "string" ? sub : sub?.id;
+      if (subId) {
+        try {
+          const stripe = getStripe();
+          const subscription = await stripe.subscriptions.retrieve(subId);
+          const meta = subscription.metadata as Record<string, string>;
+          const orgId = meta.org_id ?? invoice.metadata?.org_id;
+          const planKey = meta.plan_key ?? invoice.metadata?.plan_key;
+          const plan = planKey ? PLAN_BY_KEY[planKey as PlanKey] : null;
+          if (orgId && plan) {
+            const service = createServiceClient();
+            await grantCredits(service, orgId, plan.creditsPerMonth, "plan_grant", {
+              note: `${plan.name} plan — renewal`,
+            });
+            // Also grant the loyalty bonus accrued since plan_started_at so the
+            // dashboard's loyalty display and the actual credit grant stay in sync.
+            const { data: walletRow } = await service
+              .from("wallets")
+              .select("plan_started_at")
+              .eq("organization_id", orgId)
+              .maybeSingle();
+            const tenure = tenureMonths(walletRow?.plan_started_at);
+            const bonus = loyaltyBonus(tenure);
+            if (bonus > 0) {
+              await grantCredits(service, orgId, bonus, "loyalty", {
+                note: `${plan.name} plan — loyalty bonus (month ${tenure})`,
+              });
+            }
+          }
+        } catch (err) {
+          console.error("[stripe] renewal grant failed:", err);
+        }
+      }
+    }
+  }
 
   return NextResponse.json({ received: true });
 }

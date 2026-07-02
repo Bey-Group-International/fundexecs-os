@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { saveOrgProfile } from "./actions";
 import { STRATEGY_LABELS, AUM_LABELS, ROLE_LABELS, displayLabel, titleCase } from "@/lib/labels";
+import { LogoUpload } from "@/components/build/LogoUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,7 @@ export default async function ProfilePage() {
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "name, legal_name, entity_type, tagline, primary_strategy, operator_role, aum_range, fund_count, hq_location, jurisdiction, website, description, brand_voice, discoverable, slug",
+      "name, legal_name, entity_type, tagline, logo_url, primary_strategy, operator_role, aum_range, fund_count, hq_location, jurisdiction, website, description, brand_voice, discoverable, slug",
     )
     .eq("id", ctx.orgId)
     .maybeSingle();
@@ -136,6 +137,15 @@ export default async function ProfilePage() {
               defaultValue={(o as Record<string, unknown>).tagline as string ?? ""}
               placeholder="e.g., Growth equity for the next generation of founders"
             />
+            <div className="sm:col-span-2 flex flex-col gap-1">
+              <label className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                Logo
+              </label>
+              <LogoUpload
+                name="logo_url"
+                defaultValue={(o as Record<string, unknown>).logo_url as string ?? ""}
+              />
+            </div>
           </div>
         </Section>
 

@@ -229,12 +229,12 @@ export async function completeMyTeamTask(formData: FormData): Promise<void> {
   const supabase = createServerClient();
   const task = await getTeamTaskForAssignee(supabase, ctx.orgId, ctx.userId, taskId);
   if (!task) return;
-  const ok = await updateTeamTaskStatus(supabase, {
+  const statusUpdate = await updateTeamTaskStatus(supabase, {
     organizationId: ctx.orgId,
     taskId,
     status: "completed",
   });
-  if (ok) {
+  if (statusUpdate.ok) {
     await recordOperatorFeedback(supabase, [
       {
         organizationId: ctx.orgId,

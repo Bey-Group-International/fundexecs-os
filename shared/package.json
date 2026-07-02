@@ -1,0 +1,23 @@
+{
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "dist/index.js",
+  "name": "@fundexecs/virtual-office-shared",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "types": "dist/index.d.ts",
+  "version": "0.1.0"
+}

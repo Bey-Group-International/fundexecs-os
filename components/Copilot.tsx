@@ -9,7 +9,7 @@ import type { SealStatus } from "@/lib/attestation-seal";
 import { ArtifactInline, ARTIFACT_LABEL } from "@/components/ArtifactViewer";
 import { routingFromTask, cursorResponse, EXECUTIVE_LABEL, EXECUTIVES, type TargetEngine, type Executive } from "@/lib/intelligence";
 import { splitPositions, type SplitPosition } from "@/lib/split-grouping";
-import { buildOutcome } from "@/lib/routing-trace";
+import { buildOutcome } from "@/lib/routing-trace-ui";
 import { RoutingTrace } from "@/components/RoutingTrace";
 import { OutcomeReceipt } from "@/components/OutcomeReceipt";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
@@ -827,7 +827,7 @@ export default function Copilot({
             aria-live="polite"
             aria-busy={t.streaming}
           >
-            {t.content ? <Markdown>{t.content}</Markdown> : null}
+            {t.content ? <Markdown>{stripSystemAnnotations(t.content)}</Markdown> : null}
             {t.streaming ? (
               <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom motion-reduce:animate-none" aria-hidden />
             ) : null}
@@ -942,7 +942,7 @@ export default function Copilot({
               You
             </div>
             <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
-              {b.workflow.description || b.workflow.title}
+              {stripSystemAnnotations(b.workflow.description || b.workflow.title)}
             </div>
           </div>
           <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">

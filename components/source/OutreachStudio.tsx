@@ -7,6 +7,8 @@ import {
   enrollOutreachTarget,
   listOutreachEnrollments,
   advanceOutreachEnrollment,
+  deleteOutreachSequenceAction,
+  clearOutreachSequencesAction,
 } from "@/app/(app)/[hub]/[module]/outreach-actions";
 // Engine code is imported as TYPES ONLY so this client bundle never pulls the
 // server-side persistence layer (lib/outreach is DB-aware).
@@ -74,8 +76,11 @@ export function OutreachStudio({ live }: { live: boolean }) {
   const [enrollments, setEnrollments] = useState<EnrollmentWithProgress[]>([]);
   const [enrollName, setEnrollName] = useState("");
   const [enrollEmail, setEnrollEmail] = useState("");
+  const [enrollPhone, setEnrollPhone] = useState("");
+  const [enrollRole, setEnrollRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const loadedOnce = useRef(false);
 
   async function loadSequences() {
@@ -145,10 +150,14 @@ export function OutreachStudio({ live }: { live: boolean }) {
         sequenceId: activeId,
         subjectName: enrollName.trim(),
         subjectEmail: enrollEmail.trim() || null,
+        subjectPhone: enrollPhone.trim() || null,
+        subjectRole: enrollRole.trim() || null,
       });
       if (res.ok) {
         setEnrollName("");
         setEnrollEmail("");
+        setEnrollPhone("");
+        setEnrollRole("");
         await loadEnrollments(activeId);
       } else setError(res.error ?? "Could not enroll target.");
     } catch {
@@ -179,6 +188,42 @@ export function OutreachStudio({ live }: { live: boolean }) {
       setError("Could not advance the step.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function deleteSequence(sequenceId: string) {
+    if (deleting) return;
+    if (!confirm("Delete this sequence and all its enrollments?")) return;
+    setDeleting(true);
+    try {
+      const res = await deleteOutreachSequenceAction(sequenceId);
+      if (!res.ok) { setError(res.error ?? "Could not delete sequence."); return; }
+      setSequences((prev) => prev.filter((s) => s.id !== sequenceId));
+      if (activeId === sequenceId) {
+        const next = sequences.find((s) => s.id !== sequenceId);
+        setActiveId(next?.id ?? null);
+      }
+    } catch {
+      setError("Could not delete sequence.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function clearSequences() {
+    if (deleting) return;
+    if (!confirm("Delete all sequences? This cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      const res = await clearOutreachSequencesAction();
+      if (!res.ok) { setError(res.error ?? "Could not clear sequences."); return; }
+      setSequences([]);
+      setActiveId(null);
+      setEnrollments([]);
+    } catch {
+      setError("Could not clear sequences.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -238,22 +283,42 @@ export function OutreachStudio({ live }: { live: boolean }) {
       {loading ? (
         <p className="mt-5 text-sm text-fg-muted">Loading sequences…</p>
       ) : sequences.length ? (
-        <div className="mt-5 flex flex-wrap gap-1.5">
-          {sequences.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setActiveId(s.id)}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${
-                s.id === activeId
-                  ? "border-gold-500/50 bg-gold-500/10 text-fg-primary"
-                  : "border-line text-fg-muted hover:bg-surface-2"
-              }`}
-            >
-              <span>{s.name}</span>
-              <span className="font-mono text-[10px] text-fg-muted">{s.steps.length} steps</span>
-            </button>
-          ))}
+        <div className="mt-5">
+          <div className="flex flex-wrap gap-1.5">
+            {sequences.map((s) => (
+              <div key={s.id} className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveId(s.id)}
+                  className={`flex items-center gap-1.5 rounded-l-full border px-2.5 py-1 text-xs transition ${
+                    s.id === activeId
+                      ? "border-gold-500/50 bg-gold-500/10 text-fg-primary"
+                      : "border-line text-fg-muted hover:bg-surface-2"
+                  }`}
+                >
+                  <span>{s.name}</span>
+                  <span className="font-mono text-[10px] text-fg-muted">{s.steps.length} steps</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => deleteSequence(s.id)}
+                  aria-label={`Delete ${s.name}`}
+                  className="rounded-r-full border border-l-0 border-line px-2 py-1 text-[10px] text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={clearSequences}
+            className="mt-2 rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
+          >
+            Clear all
+          </button>
         </div>
       ) : (
         <p className="mt-5 rounded-xl border border-line bg-surface-1 px-4 py-3 text-sm text-fg-secondary">
@@ -269,7 +334,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-fg-primary">{active.name}</span>
               <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                {humanize(active.channel)}
+                {humanize(active.channel ?? "")}
                 {active.audience ? ` · ${active.audience}` : ""}
               </span>
             </div>
@@ -301,19 +366,33 @@ export function OutreachStudio({ live }: { live: boolean }) {
             <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
               Enroll a target
             </span>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2">
               <input
                 value={enrollName}
                 onChange={(e) => setEnrollName(e.target.value)}
                 placeholder="Target name"
-                className="min-w-[10rem] flex-1 rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
+                className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
+              />
+              <input
+                value={enrollRole}
+                onChange={(e) => setEnrollRole(e.target.value)}
+                placeholder="Role (optional)"
+                className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
               />
               <input
                 value={enrollEmail}
                 onChange={(e) => setEnrollEmail(e.target.value)}
-                placeholder="email (optional)"
-                className="min-w-[10rem] flex-1 rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
+                placeholder="Email (optional)"
+                className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
               />
+              <input
+                value={enrollPhone}
+                onChange={(e) => setEnrollPhone(e.target.value)}
+                placeholder="Phone (optional)"
+                className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary outline-none focus:border-gold-500"
+              />
+            </div>
+            <div className="mt-2 flex justify-end">
               <button
                 type="button"
                 onClick={enrollTarget}
@@ -340,10 +419,25 @@ export function OutreachStudio({ live }: { live: boolean }) {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-sm text-fg-primary">{enrollment.subject_name}</span>
+                        {(enrollment as { subject_role?: string | null }).subject_role && (
+                          <span className="font-mono text-[10px] text-fg-muted">
+                            {(enrollment as { subject_role?: string | null }).subject_role}
+                          </span>
+                        )}
                         <span className={`font-mono text-[10px] uppercase tracking-wider ${statusTone(enrollment.status)}`}>
                           {progress.label}
                         </span>
                       </div>
+                      {((enrollment as { subject_email?: string | null }).subject_email || (enrollment as { subject_phone?: string | null }).subject_phone) && (
+                        <div className="flex gap-3 mt-0.5">
+                          {(enrollment as { subject_email?: string | null }).subject_email && (
+                            <span className="font-mono text-[10px] text-fg-muted">{(enrollment as { subject_email?: string | null }).subject_email}</span>
+                          )}
+                          {(enrollment as { subject_phone?: string | null }).subject_phone && (
+                            <span className="font-mono text-[10px] text-fg-muted">{(enrollment as { subject_phone?: string | null }).subject_phone}</span>
+                          )}
+                        </div>
+                      )}
                       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-3">
                         <div
                           className="h-full rounded-full bg-gold-400 transition-[width]"

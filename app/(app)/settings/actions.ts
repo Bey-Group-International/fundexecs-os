@@ -82,3 +82,40 @@ export async function deactivateMandate(formData: FormData): Promise<void> {
   if (error) { console.error("[deactivateMandate]", error.message); return; }
   revalidatePath("/settings");
 }
+
+export async function saveUserProfile(formData: FormData): Promise<{ error?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx) return { error: "Not authenticated" };
+
+  const supabase = createServerClient();
+  const str = (key: string) => String(formData.get(key) ?? "").trim() || null;
+
+  const { error } = await supabase
+    .from("principals")
+    .update({
+      full_name: str("full_name"),
+      title: str("title"),
+      phone: str("phone"),
+      avatar_url: str("avatar_url"),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", ctx.userId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  return {};
+}
+
+export async function changePassword(formData: FormData): Promise<{ error?: string }> {
+  const supabase = createServerClient();
+  const password = String(formData.get("password") ?? "").trim();
+  const confirm = String(formData.get("confirm") ?? "").trim();
+
+  if (!password) return { error: "New password is required" };
+  if (password.length < 8) return { error: "Password must be at least 8 characters" };
+  if (password !== confirm) return { error: "Passwords do not match" };
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: error.message };
+  return {};
+}

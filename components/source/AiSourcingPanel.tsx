@@ -215,17 +215,44 @@ export function AiSourcingPanel({
                 </div>
                 <p className="mt-1 text-xs text-fg-secondary">{c.rationale}</p>
                 <p className="mt-1 text-[11px] text-gold-300">→ {c.firstMove}</p>
-                {c.sourceUrl ? (
-                  <a
-                    href={c.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="mt-1 inline-block max-w-full truncate font-mono text-[10px] text-status-info hover:underline"
-                  >
-                    ↗ source
-                  </a>
-                ) : null}
+                {/* Intel row — contact, financial, geo details pre-fetched before review */}
+                {(c.contactName || c.aumRange || c.ticketRange || c.geography || c.strategies?.length) && (
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    {c.contactName && (
+                      <span className="font-mono text-[9px] text-fg-muted">
+                        {c.contactName}{c.contactRole && <span className="opacity-70"> · {c.contactRole}</span>}
+                      </span>
+                    )}
+                    {c.aumRange && <span className="font-mono text-[9px] text-fg-muted">AUM {c.aumRange}</span>}
+                    {c.ticketRange && <span className="font-mono text-[9px] text-fg-muted">Ticket {c.ticketRange}</span>}
+                    {c.geography && <span className="font-mono text-[9px] text-fg-muted">{c.geography}</span>}
+                    {c.strategies?.slice(0, 2).map((s) => (
+                      <span key={s} className="rounded-full border border-line px-1.5 py-0 font-mono text-[8px] text-fg-muted">{s}</span>
+                    ))}
+                  </div>
+                )}
+                {(c.contactEmail || c.contactPhone) && (
+                  <div className="mt-0.5 flex flex-wrap gap-x-3">
+                    {c.contactEmail && (
+                      <a href={`mailto:${c.contactEmail}`} onClick={(e) => e.stopPropagation()} className="font-mono text-[9px] text-status-info hover:underline">
+                        {c.contactEmail}
+                      </a>
+                    )}
+                    {c.contactPhone && <span className="font-mono text-[9px] text-fg-muted">{c.contactPhone}</span>}
+                  </div>
+                )}
+                {(c.sourceUrl || c.website) && (
+                  <div className="mt-0.5 flex flex-wrap gap-x-2">
+                    {c.website && (
+                      <a href={c.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono text-[9px] text-fg-muted hover:text-gold-300 hover:underline">
+                        {c.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                      </a>
+                    )}
+                    {c.sourceUrl && !c.website && (
+                      <a href={c.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono text-[10px] text-status-info hover:underline">↗ source</a>
+                    )}
+                  </div>
+                )}
               </div>
             </label>
           ))}

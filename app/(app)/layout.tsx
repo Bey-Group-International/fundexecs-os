@@ -5,7 +5,7 @@ import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
 import { GuidedTour } from "@/components/GuidedTour";
-import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
+import { CoachingToastProvider } from "@/components/shared/CoachingToast";
 import {
   createSessionGroup,
   moveSessionToGroup,
@@ -22,6 +22,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
 import { GlobalTopBar } from "@/components/GlobalTopBar";
 import { MatchToast } from "@/components/inbox/MatchToast";
+import { DownloadBanner } from "@/components/DownloadBanner";
 import { AppSidebar } from "@/components/AppSidebar";
 import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 
@@ -187,6 +188,7 @@ export default async function AppLayout({
       />
       </div>
 
+      <CoachingToastProvider>
       <ActiveSessionProvider>
         <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
           <div className="print:hidden">
@@ -196,16 +198,17 @@ export default async function AppLayout({
               dealsUnread={dealsUnread ?? 0}
             />
             <MatchToast alert={matchAlert} />
+            <DownloadBanner />
           </div>
           <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 print:overflow-visible print:p-0">
             {children}
           </main>
         </div>
       </ActiveSessionProvider>
+      </CoachingToastProvider>
 
       <div className="print:hidden">
         <GuidedTour orgId={ctx.orgId} initialHidden={orgRow?.setup_hidden ?? false} />
-        <KeyboardShortcuts />
         <EarnCopilotDock name={name} />
       </div>
     </div>

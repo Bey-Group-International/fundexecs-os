@@ -6,6 +6,9 @@
 import { useState, useMemo, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { advanceDealStageAction, createModuleRow } from "@/app/(app)/[hub]/[module]/actions";
+import { DeleteDealBtn } from "@/components/source/SourceDeleteControls";
+import { InlineContactEdit } from "@/components/source/InlineContactEdit";
+import type { ContactFields } from "@/app/(app)/[hub]/[module]/actions";
 import { VerificationPill } from "@/components/source/VerificationBadge";
 import type { FitAnalysis } from "@/lib/source-hub-types";
 import type { DealStage } from "@/lib/supabase/database.types";
@@ -23,6 +26,11 @@ export interface DealEntry {
   expectedClose: string | null;
   website: string | null;
   notes?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  urlSource?: string | null;
+  provenance?: string | null;
   // Apollo-enriched
   industry?: string;
   employeeRange?: string;
@@ -168,6 +176,14 @@ function DealSlideOver({
   onStageAdvanced: (dealId: string, newStage: DealStage, suggestDocType?: string) => void;
 }) {
   const [suggestDoc, setSuggestDoc] = useState<string | undefined>();
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactFields, setContactFields] = useState<ContactFields>({
+    contact_name: deal?.contactName ?? null,
+    contact_email: deal?.contactEmail ?? null,
+    contact_phone: deal?.contactPhone ?? null,
+    role: null,
+    url_source: deal?.urlSource ?? null,
+  });
 
   useEffect(() => {
     if (!deal) setSuggestDoc(undefined);
@@ -334,6 +350,53 @@ function DealSlideOver({
               </a>
             </div>
           )}
+
+          {/* Point of Contact */}
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">Point of Contact</p>
+              <button
+                type="button"
+                onClick={() => setEditingContact((v) => !v)}
+                className="font-mono text-[9px] text-fg-muted hover:text-gold-300"
+              >
+                {editingContact ? "Cancel" : "Edit"}
+              </button>
+            </div>
+            {editingContact ? (
+              <InlineContactEdit
+                table="deals"
+                id={deal.id}
+                initial={contactFields}
+                onClose={() => setEditingContact(false)}
+                onSaved={(f) => { setContactFields(f); setEditingContact(false); }}
+              />
+            ) : (contactFields.contact_name || contactFields.contact_email || contactFields.contact_phone || deal.contactName || deal.contactEmail || deal.contactPhone) ? (
+              <div className="space-y-0.5">
+                {(contactFields.contact_name ?? deal.contactName) && <p className="text-xs text-fg-secondary">{contactFields.contact_name ?? deal.contactName}</p>}
+                {(contactFields.contact_email ?? deal.contactEmail) && (
+                  <a href={`mailto:${contactFields.contact_email ?? deal.contactEmail}`} className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline block">
+                    {contactFields.contact_email ?? deal.contactEmail}
+                  </a>
+                )}
+                {(contactFields.contact_phone ?? deal.contactPhone) && <p className="font-mono text-[11px] text-fg-muted">{contactFields.contact_phone ?? deal.contactPhone}</p>}
+                {(contactFields.url_source ?? deal.urlSource) && (
+                  <a
+                    href={(contactFields.url_source ?? deal.urlSource ?? "").startsWith("http") ? (contactFields.url_source ?? deal.urlSource)! : `https://${contactFields.url_source ?? deal.urlSource}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline block"
+                  >
+                    {(contactFields.url_source ?? deal.urlSource ?? "").replace(/^https?:\/\//, "")}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <button type="button" onClick={() => setEditingContact(true)} className="font-mono text-[10px] text-fg-muted/50 hover:text-gold-300">
+                + Add contact
+              </button>
+            )}
+          </div>
 
           {/* Notes */}
           {deal.notes && (
@@ -657,7 +720,7 @@ export function DealPipeline({ deals, enrichCap }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-subtle">
-                {["Deal", "Stage", "Asset Class", "Target", "Fit", "Source", "Close"].map((h) => (
+                {["Deal", "Stage", "Asset Class", "Target", "Fit", "Source", "Close", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
                     {h}
                   </th>
@@ -679,7 +742,14 @@ export function DealPipeline({ deals, enrichCap }: Props) {
                   }}
                 >
                   <td className="px-4 py-3">
-                    <p className="font-medium text-fg">{d.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-medium text-fg">{d.name}</p>
+                      {d.provenance === "ai" ? (
+                        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+                      ) : (
+                        <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+                      )}
+                    </div>
                     {d.industry ? (
                       <p className="mt-0.5 text-xs text-fg-muted">{d.industry}</p>
                     ) : d.geography ? (
@@ -725,6 +795,9 @@ export function DealPipeline({ deals, enrichCap }: Props) {
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-fg-muted">
                     {d.expectedClose ?? "—"}
+                  </td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <DeleteDealBtn id={d.id} onDeleted={(id) => setLocalDeals((prev) => prev.filter((x) => x.id !== id))} />
                   </td>
                 </tr>
               ))}

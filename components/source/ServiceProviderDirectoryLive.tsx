@@ -7,6 +7,7 @@ import { ServiceProviderDirectory } from "@/components/source/ServiceProviderDir
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import type { ProviderEntry } from "@/components/source/ServiceProviderDirectory";
+import { ClearProvidersBtn } from "@/components/source/SourceDeleteControls";
 
 type ProviderRow = {
   id: string;
@@ -14,6 +15,10 @@ type ProviderRow = {
   provider_type: string | null;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone: string | null;
+  role: string | null;
+  url_source: string | null;
+  provenance: string | null;
   status: string | null;
   notes: string | null;
   website: string | null;
@@ -103,7 +108,7 @@ export async function ServiceProviderDirectoryLive() {
 
     const { data } = await supabase
       .from("service_providers")
-      .select("id, name, provider_type, contact_name, contact_email, status, notes, website")
+      .select("id, name, provider_type, contact_name, contact_email, contact_phone, role, url_source, provenance, status, notes, website")
       .eq("organization_id", auth.ctx.orgId)
       .is("archived_at", null)
       .order("created_at", { ascending: false })
@@ -137,6 +142,10 @@ export async function ServiceProviderDirectoryLive() {
         providerType: r.provider_type ?? "other",
         contactName: r.contact_name,
         contactEmail: r.contact_email,
+        contactPhone: r.contact_phone,
+        role: r.role,
+        urlSource: r.url_source,
+        provenance: r.provenance,
         status: r.status ?? "active",
         notes: r.notes,
         website: enr.website ?? (r.website ?? undefined),
@@ -156,10 +165,15 @@ export async function ServiceProviderDirectoryLive() {
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
             Service Provider Directory
           </p>
-          {providers.length > 0 && verifiedCount > 0 && (
-            <span className="text-xs text-fg-muted">
-              {verifiedCount}/{Math.min(providers.length, ENRICH_CAP)} enriched via Apollo
-            </span>
+          {providers.length > 0 && (
+            <div className="flex items-center gap-2">
+              {verifiedCount > 0 && (
+                <span className="text-xs text-fg-muted">
+                  {verifiedCount}/{Math.min(providers.length, ENRICH_CAP)} enriched via Apollo
+                </span>
+              )}
+              <ClearProvidersBtn />
+            </div>
           )}
         </div>
         <ServiceProviderDirectory providers={providers} />

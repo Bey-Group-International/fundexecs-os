@@ -203,6 +203,38 @@ export async function toggleListingPublic(formData: FormData): Promise<void> {
   revalidatePath("/marketplace");
 }
 
+// Queue outreach to the owner of a public listing the viewer is interested in.
+// This wraps queueListingOutreach but takes a listing id from the browse page.
+export async function expressInterestInListing(
+  listingId: string,
+  listingTitle: string,
+): Promise<{ error?: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "Not authenticated" };
+
+  const supabase = createServerClient();
+  const { data: listing } = await supabase
+    .from("marketplace_listings")
+    .select("organization_id")
+    .eq("id", listingId)
+    .eq("is_public", true)
+    .maybeSingle();
+
+  if (!listing) return { error: "Listing not found or not public." };
+  if (listing.organization_id === ctx.orgId)
+    return { error: "This is your own listing." };
+
+  // Re-use the capital-map outreach gate to create a routable action.
+  try {
+    await queueNextAction(listingId, "send_outreach", `Marketplace interest · ${listingTitle}`);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not queue outreach." };
+  }
+
+  revalidatePath("/marketplace/browse");
+  return {};
+}
+
 export async function deleteListing(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;

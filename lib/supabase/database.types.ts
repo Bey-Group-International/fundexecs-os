@@ -122,6 +122,7 @@ export type Principal = {
   email: string;
   full_name: string | null;
   title: string | null;
+  phone: string | null;
   avatar_url: string | null;
   // Internal identity verification (migration 20260623140000). Set by an
   // owner/admin internal attestation now; an external KYC provider would set the
@@ -190,6 +191,8 @@ export type Investor = Timestamps & RecordMeta & {
   investor_type: InvestorType;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
   jurisdiction: string | null;
   aum: number | null;
   typical_check_min: number | null;
@@ -197,6 +200,8 @@ export type Investor = Timestamps & RecordMeta & {
   notes: string | null;
   pipeline_stage: string;
   session_id: string | null;
+  website?: string | null;
+  url_source?: string | null;
 }
 
 export type Fund = Timestamps & {
@@ -221,6 +226,8 @@ export type Commitment = Timestamps & {
   called_amount: number;
   distributed_amount: number;
   committed_at: string | null;
+  lifecycle_stage?: string;
+  notes?: string | null;
 }
 
 export type CapitalEvent = Timestamps & RecordMeta & {
@@ -252,6 +259,13 @@ export type Deal = Timestamps & RecordMeta & {
   expected_close: string | null;
   notes: string | null;
   session_id: string | null;
+  website?: string | null;
+  role?: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  url_source?: string | null;
+  pipeline_stage_id?: string | null;
 }
 
 export type Asset = Timestamps & RecordMeta & {
@@ -410,6 +424,7 @@ export type Session = Timestamps & {
   pinned_at: string | null;
   unread: boolean;
   created_by: string | null;
+  memory_card?: Json;
 };
 
 export type Entity = Timestamps & {
@@ -466,6 +481,10 @@ export type Partner = Timestamps & RecordMeta & {
   relationship: string | null;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
+  website?: string | null;
+  url_source?: string | null;
   status: string;
   notes: string | null;
   created_by: string | null;
@@ -478,6 +497,9 @@ export type ServiceProvider = Timestamps & RecordMeta & {
   provider_type: string;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
+  url_source?: string | null;
   status: string;
   notes: string | null;
   website: string | null;
@@ -497,6 +519,12 @@ export type DebtFacility = Timestamps & RecordMeta & {
   maturity_date: string | null;
   notes: string | null;
   created_by: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
+  website?: string | null;
+  url_source?: string | null;
 };
 
 export type Wallet = Timestamps & {
@@ -505,6 +533,7 @@ export type Wallet = Timestamps & {
   credits: number;
   plan: string | null;
   plan_interval: string | null;
+  plan_started_at: string | null;
 };
 
 // Tokenization layers (migration 0048). Earned standing, credit stakes, and
@@ -627,6 +656,8 @@ export type TrackRecord = Timestamps & {
   notes: string | null;
 };
 
+export type DocumentStatus = "draft" | "review" | "ready";
+
 export type Document = {
   id: string;
   organization_id: string;
@@ -640,6 +671,7 @@ export type Document = {
   uploaded_by: string | null;
   content: string | null;
   sort_order: number;
+  status: DocumentStatus;
   created_at: string;
 };
 
@@ -731,6 +763,7 @@ export type Automation = Timestamps & {
   next_run_at: string | null;
   run_count: number;
   created_by: string | null;
+  canvas_json?: Json | null;
 };
 
 // A persisted Mandate (migration 0029) — the operator's standing delegation
@@ -743,8 +776,14 @@ export type MandateRow = Timestamps & {
   organization_id: string;
   name: string;
   goal: string | null;
+  /** Covers which hubs, counterparty classes, deal sizes this mandate applies to. */
+  scope: string | null;
   auto_approve: string[];
   autonomy_ceiling: number;
+  /** Ordered list of {rule: string} constraints Earn must respect during execution. */
+  guardrails: Array<{ rule: string }>;
+  /** Hard limits on automated footprint: max outreach/day, dollar thresholds, etc. */
+  blast_radius_rules: Record<string, unknown>[];
   is_active: boolean;
   created_by: string | null;
 };
@@ -925,11 +964,15 @@ export type SourcingEntity = Timestamps & {
 export type OutreachSequence = Timestamps & {
   id: string;
   organization_id: string;
+  org_id?: string;
   name: string;
-  channel: string; // 'email' | 'linkedin' | 'call'
-  audience: string | null;
-  status: string; // 'draft' | 'active' | 'paused' | 'archived'
-  metadata: Json;
+  channel?: string;
+  audience?: string | null;
+  status?: string;
+  metadata?: Json;
+  steps?: Json;
+  stop_on_reply?: boolean;
+  active?: boolean;
   created_by: string | null;
 };
 
@@ -952,6 +995,8 @@ export type OutreachEnrollment = Timestamps & {
   sequence_id: string;
   subject_name: string;
   subject_email: string | null;
+  subject_phone?: string | null;
+  subject_role?: string | null;
   entity_id: string | null;
   current_step: number;
   status: string; // 'active' | 'completed' | 'replied' | 'stopped'
@@ -1427,6 +1472,229 @@ type TableShape<Row> = {
   Relationships: [];
 };
 
+// ── New tables added by platform feature optimization migrations ──────────────
+
+export type Envelope = {
+  id: string;
+  organization_id: string;
+  title: string;
+  message: string | null;
+  document_content: string | null;
+  document_type: string;
+  file_url: string | null;
+  status: string;
+  sent_at?: string | null;
+  completed_at: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  recipient_count?: number | null;
+};
+
+export type EnvelopeRecipient = {
+  id: string;
+  envelope_id: string;
+  name: string;
+  email: string;
+  routing_order: number;
+  signing_token: string;
+  status: string;
+  signed_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  viewed_at?: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  signature_data: string | null;
+  initials_data: string | null;
+  created_at: string;
+};
+
+export type EnvelopeField = {
+  id: string;
+  envelope_id: string;
+  recipient_id: string;
+  field_type: string;
+  page: number;
+  x_pct: number;
+  y_pct: number;
+  width_pct: number;
+  height_pct: number;
+  label: string | null;
+  required: boolean;
+  response: string | null;
+  created_at: string;
+};
+
+export type EnvelopeEvent = {
+  id: string;
+  envelope_id: string;
+  recipient_id: string | null;
+  event_type: string;
+  metadata: Json | null;
+  created_at: string;
+};
+
+export type LiveMeeting = {
+  id: string;
+  room_code: string;
+  title: string;
+  host_id: string | null;
+  organization_id: string | null;
+  deal_id: string | null;
+  status: string;
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+};
+
+export type LiveMeetingParticipant = {
+  id: string;
+  meeting_id: string;
+  user_id: string | null;
+  display_name: string;
+  joined_at: string;
+  left_at: string | null;
+};
+
+export type LiveMeetingTranscript = {
+  id: string;
+  meeting_id: string;
+  speaker: string | null;
+  text: string;
+  ts: string;
+};
+
+export type LiveMeetingReport = {
+  id: string;
+  meeting_id: string;
+  summary: string | null;
+  key_points: Json;
+  action_items: Json;
+  full_transcript: string | null;
+  analysis: Json | null;
+  created_at: string;
+};
+
+export type AgentMemory = {
+  id: string;
+  org_id: string;
+  agent_key: string;
+  memory_type: string;
+  content: string;
+  source_task_id: string | null;
+  source_session_id: string | null;
+  pinned: boolean;
+  dismissed: boolean;
+  created_at: string;
+};
+
+export type PipelineStage = {
+  id: string;
+  org_id: string;
+  hub: string;
+  name: string;
+  entry_conditions: Json;
+  exit_criteria: Json;
+  required_artifacts: string[];
+  auto_actions: Json;
+  order_index: number;
+  created_at: string;
+};
+
+export type SequenceEnrollment = {
+  id: string;
+  sequence_id: string;
+  target_type: string;
+  target_id: string;
+  current_step: number;
+  enrolled_at: string;
+  next_step_at: string | null;
+  completed_at: string | null;
+  stopped_at: string | null;
+  stopped_reason: string | null;
+};
+
+export type AlertRule = {
+  id: string;
+  org_id: string;
+  name: string;
+  trigger_entity: string;
+  trigger_field: string;
+  operator: string;
+  threshold_value: string | null;
+  channel: Json;
+  escalation: Json;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type AlertEvent = {
+  id: string;
+  rule_id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string | null;
+  payload: Json | null;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  created_at: string;
+};
+
+export type RoutingEvent = {
+  id: string;
+  task_id: string | null;
+  org_id: string;
+  agent_key: string;
+  step_index: number | null;
+  rationale_json: Json | null;
+  confidence: number | null;
+  created_at: string;
+};
+
+export type WorkflowTemplate = {
+  id: string;
+  org_id: string | null;
+  name: string;
+  description: string | null;
+  canvas_json: Json;
+  is_global: boolean;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type SynthesisQueue = {
+  id: string;
+  org_id: string;
+  topic_key: string;
+  source_artifact_ids: Json;
+  synthesis_status: string;
+  draft_content: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Annotation = {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  author_id: string | null;
+  content: string;
+  position_json: Json | null;
+  resolved: boolean;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  parent_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -1518,6 +1786,27 @@ export type Database = {
       contracts: TableShape<Contract>;
       deal_signals: TableShape<DealSignalRow>;
       sector_heatmap_snapshots: TableShape<SectorHeatmapSnapshot>;
+      envelopes: TableShape<Envelope>;
+      envelope_recipients: TableShape<EnvelopeRecipient>;
+      envelope_fields: TableShape<EnvelopeField>;
+      envelope_events: TableShape<EnvelopeEvent>;
+      signing_envelopes: TableShape<Envelope>;
+      signing_recipients: TableShape<EnvelopeRecipient>;
+      signing_fields: TableShape<EnvelopeField>;
+      signing_events: TableShape<EnvelopeEvent>;
+      live_meetings: TableShape<LiveMeeting>;
+      live_meeting_participants: TableShape<LiveMeetingParticipant>;
+      live_meeting_transcripts: TableShape<LiveMeetingTranscript>;
+      live_meeting_reports: TableShape<LiveMeetingReport>;
+      agent_memories: TableShape<AgentMemory>;
+      pipeline_stages: TableShape<PipelineStage>;
+      sequence_enrollments: TableShape<SequenceEnrollment>;
+      alert_rules: TableShape<AlertRule>;
+      alert_events: TableShape<AlertEvent>;
+      routing_events: TableShape<RoutingEvent>;
+      workflow_templates: TableShape<WorkflowTemplate>;
+      synthesis_queue: TableShape<SynthesisQueue>;
+      annotations: TableShape<Annotation>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -1537,6 +1826,19 @@ export type Database = {
           content: string;
           similarity: number;
         }[];
+      };
+      // Atomically credit an org's wallet AND append a ledger row in one
+      // transaction (migration 20260701). Returns the new balance.
+      grant_org_credits: {
+        Args: {
+          p_org: string;
+          p_delta: number;
+          p_reason: string;
+          p_source_org?: string | null;
+          p_level?: number | null;
+          p_note?: string | null;
+        };
+        Returns: number;
       };
       // Atomically credit an org's wallet (creating it if absent), clamped at 0
       // (migration 0039). Returns the new balance.

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext, requireOrgContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
@@ -49,6 +49,7 @@ export async function updateProfile(formData: FormData) {
       legal_name: t("legal_name"),
       entity_type: t("entity_type"),
       tagline: t("tagline"),
+      logo_url: t("logo_url"),
       jurisdiction: t("jurisdiction"),
       website,
       description: t("description"),
@@ -121,6 +122,12 @@ export async function createModuleRow(
             | "other"
             | null) ?? "lp",
         pipeline_stage: text(formData, "pipeline_stage") ?? "prospect",
+        contact_name: text(formData, "contact_name"),
+        contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        role: text(formData, "role"),
+        website: text(formData, "website"),
+        url_source: text(formData, "url_source"),
       });
       if (insertErr) { console.error("[createModuleRow] investors", insertErr.message); return { ok: false, error: insertErr.message }; }
       break;
@@ -139,9 +146,12 @@ export async function createModuleRow(
         expected_close: text(formData, "expected_close"),
         website: text(formData, "website"),
         notes: text(formData, "notes"),
+        contact_name: text(formData, "contact_name"),
+        contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        url_source: text(formData, "url_source"),
       };
-      // TODO: remove cast after running `supabase gen types typescript` with geography/target_amount/expected_close/website/notes columns
-      const { error: dealInsertError } = await (supabase.from("deals") as unknown as { insert: (v: unknown) => Promise<{ error: { message: string } | null }> }).insert(dealRow);
+      const { error: dealInsertError } = await supabase.from("deals").insert(dealRow as never);
       if (dealInsertError) { console.error("[createModuleRow] deals insert failed", dealInsertError.message); return { ok: false, error: dealInsertError.message }; }
       break;
     }
@@ -213,6 +223,10 @@ export async function createModuleRow(
         relationship: text(formData, "relationship"),
         contact_name: text(formData, "contact_name"),
         contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        role: text(formData, "role"),
+        website: text(formData, "website"),
+        url_source: text(formData, "url_source"),
         status: text(formData, "status") ?? "active",
       });
       if (insertErr) { console.error("[createModuleRow] partners", insertErr.message); return { ok: false, error: insertErr.message }; }
@@ -227,6 +241,9 @@ export async function createModuleRow(
         provider_type: text(formData, "provider_type") ?? "legal",
         contact_name: text(formData, "contact_name"),
         contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        role: text(formData, "role"),
+        url_source: text(formData, "url_source"),
         status: text(formData, "status") ?? "active",
         notes: text(formData, "notes"),
         website: text(formData, "website"),
@@ -246,7 +263,13 @@ export async function createModuleRow(
         interest_rate: num(formData, "interest_rate"),
         currency: text(formData, "currency") ?? "USD",
         status: text(formData, "status") ?? "prospective",
-      });
+        contact_name: text(formData, "contact_name"),
+        contact_email: text(formData, "contact_email"),
+        contact_phone: text(formData, "contact_phone"),
+        role: text(formData, "role"),
+        website: text(formData, "website"),
+        url_source: text(formData, "url_source"),
+      } as never);
       if (insertErr) { console.error("[createModuleRow] debt_facilities", insertErr.message); return { ok: false, error: insertErr.message }; }
       break;
     }
@@ -555,9 +578,12 @@ export async function createProviderAction(
       provider_type: text(formData, "provider_type") ?? "legal",
       contact_name: text(formData, "contact_name"),
       contact_email: text(formData, "contact_email"),
+      contact_phone: text(formData, "contact_phone"),
+      role: text(formData, "role"),
       status: text(formData, "status") ?? "active",
       notes: text(formData, "notes"),
       website: text(formData, "website"),
+      url_source: text(formData, "url_source"),
     });
     if (error) throw error;
 
@@ -593,9 +619,12 @@ export async function updateProviderAction(
         provider_type: t("provider_type") ?? undefined,
         contact_name: t("contact_name"),
         contact_email: t("contact_email"),
+        contact_phone: t("contact_phone"),
+        role: t("role"),
         status: t("status") ?? undefined,
         notes: t("notes"),
         website: t("website"),
+        url_source: t("url_source"),
       })
       .eq("id", providerId)
       .eq("organization_id", auth.ctx.orgId)
@@ -633,5 +662,241 @@ export async function deleteProviderAction(
   } catch (e) {
     console.error("[deleteProviderAction] failed", e);
     return { error: "Failed to delete provider" };
+  }
+}
+
+export async function clearProvidersAction(): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServiceClient();
+    const { error } = await supabase
+      .from("service_providers")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
+    if (error) throw error;
+    revalidatePath("/source/providers");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearProvidersAction] failed", e);
+    return { error: "Failed to clear providers" };
+  }
+}
+
+// --- LP Pipeline (investors): delete & clear --------------------------------
+
+export async function deleteInvestorAction(
+  investorId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServiceClient();
+    const { error } = await supabase
+      .from("investors")
+      .delete()
+      .eq("id", investorId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/lp_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteInvestorAction] failed", e);
+    return { error: "Failed to delete investor" };
+  }
+}
+
+export async function archiveInvestorAction(
+  investorId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("investors")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", investorId)
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
+    if (error) throw error;
+    revalidatePath("/source/lp_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[archiveInvestorAction] failed", e);
+    return { error: "Failed to archive investor" };
+  }
+}
+
+export async function clearInvestorsAction(): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServiceClient();
+    const { error } = await supabase
+      .from("investors")
+      .delete()
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/lp_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearInvestorsAction] failed", e);
+    return { error: "Failed to clear investors" };
+  }
+}
+
+// --- Deal Pipeline: delete & clear ------------------------------------------
+
+export async function deleteDealAction(
+  dealId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("deals")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", dealId)
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
+    if (error) throw error;
+    revalidatePath("/source/deal_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteDealAction] failed", e);
+    return { error: "Failed to delete deal" };
+  }
+}
+
+export async function clearDealsAction(): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServiceClient();
+    const { error } = await supabase
+      .from("deals")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
+    if (error) throw error;
+    revalidatePath("/source/deal_pipeline");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearDealsAction] failed", e);
+    return { error: "Failed to clear deals" };
+  }
+}
+
+// --- Partners: delete & clear ------------------------------------------------
+
+export async function deletePartnerAction(
+  partnerId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase
+      .from("partners")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", partnerId)
+      .eq("organization_id", auth.ctx.orgId);
+    if (error) throw error;
+    revalidatePath("/source/partners");
+    return { ok: true };
+  } catch (e) {
+    console.error("[deletePartnerAction] failed", e);
+    return { error: "Failed to delete partner" };
+  }
+}
+
+export async function clearPartnersAction(): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+  try {
+    const supabase = createServiceClient();
+    const { error } = await supabase
+      .from("partners")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("organization_id", auth.ctx.orgId)
+      .is("archived_at", null);
+    if (error) throw error;
+    revalidatePath("/source/partners");
+    return { ok: true };
+  } catch (e) {
+    console.error("[clearPartnersAction] failed", e);
+    return { error: "Failed to clear partners" };
+  }
+}
+
+// ── Inline contact field updates ─────────────────────────────────────────────
+
+type ContactTable = "investors" | "deals" | "partners" | "service_providers" | "debt_facilities";
+
+export interface ContactFields {
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  role?: string | null;
+  website?: string | null;
+  url_source?: string | null;
+}
+
+export async function updateContactFieldsAction(
+  table: ContactTable,
+  id: string,
+  fields: ContactFields,
+): Promise<{ ok?: boolean; error?: string }> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { error: "Unauthorized" };
+
+  const tableAllowedFields: Record<ContactTable, (keyof ContactFields)[]> = {
+    investors:         ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
+    deals:             ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
+    partners:          ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
+    service_providers: ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
+    debt_facilities:   ["contact_name", "contact_email", "contact_phone", "role", "website", "url_source"],
+  };
+  if (!(table in tableAllowedFields)) return { error: "Invalid table" };
+
+  const allowedKeys = new Set(tableAllowedFields[table]);
+  const clean: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (!allowedKeys.has(k as keyof ContactFields)) continue;
+    clean[k] = typeof v === "string" ? (v.trim() || null) : null;
+  }
+
+  const pathMap: Record<ContactTable, string> = {
+    investors:         "/source/lp_pipeline",
+    deals:             "/source/deal_pipeline",
+    partners:          "/source/partners",
+    service_providers: "/source/providers",
+    debt_facilities:   "/source/debt",
+  };
+
+  if (clean.contact_email !== undefined && clean.contact_email !== null) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean.contact_email)) {
+      return { error: "Invalid email address" };
+    }
+  }
+
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from(table as "investors")
+      .update(clean as never)
+      .eq("id", id)
+      .eq("organization_id", auth.ctx.orgId)
+      .select("id");
+    if (error) throw error;
+    if (!data || data.length === 0) return { error: "Record not found" };
+    revalidatePath(pathMap[table]);
+    return { ok: true };
+  } catch (e) {
+    console.error("[updateContactFieldsAction] failed", e);
+    return { error: "Failed to update contact" };
   }
 }

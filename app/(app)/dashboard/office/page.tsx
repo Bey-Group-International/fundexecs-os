@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ExecutiveHQ } from "@/components/executive-hq/ExecutiveHQ";
+import { OfficeTabs } from "@/components/executive-hq/OfficeTabs";
 
 export const metadata: Metadata = {
   title: "Executive HQ · FundExecs OS",
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default function ExecutiveHQPage() {
   return (
     <div className="overflow-hidden rounded-2xl border border-line/60 shadow-2xl">
-      <ExecutiveHQ />
+      <OfficeTabs />
     </div>
   );
 }

@@ -47,6 +47,10 @@ export interface ProviderEntry {
   providerType: string;
   contactName: string | null;
   contactEmail: string | null;
+  contactPhone?: string | null;
+  role?: string | null;
+  urlSource?: string | null;
+  provenance?: string | null;
   status: string;
   notes: string | null;
   // Apollo-enriched
@@ -223,9 +227,21 @@ function ProviderForm({
               <label className={labelClass}>Contact Email</label>
               <input name="contact_email" type="email" defaultValue={initial?.contactEmail ?? ""} placeholder="jane@firm.com" className={inputClass} />
             </div>
+            <div>
+              <label className={labelClass}>Contact Phone</label>
+              <input name="contact_phone" type="text" defaultValue={initial?.contactPhone ?? ""} placeholder="+1 212 555 0100" className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Contact Role</label>
+              <input name="role" type="text" defaultValue={initial?.role ?? ""} placeholder="Partner, Associate…" className={inputClass} />
+            </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Website</label>
               <input name="website" type="text" defaultValue={initial?.website ?? ""} placeholder="kirkland.com" className={inputClass} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className={labelClass}>Source URL</label>
+              <input name="url_source" type="text" defaultValue={initial?.urlSource ?? ""} placeholder="https://…" className={inputClass} />
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Notes</label>
@@ -313,7 +329,14 @@ function ProviderCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-fg-primary">{provider.name}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="truncate text-sm font-medium text-fg-primary">{provider.name}</p>
+            {provider.provenance === "ai" ? (
+              <span className="shrink-0 rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+            ) : (
+              <span className="shrink-0 rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+            )}
+          </div>
           {provider.description && (
             <p className="mt-0.5 line-clamp-1 text-[11px] text-fg-muted">{provider.description}</p>
           )}
@@ -323,10 +346,13 @@ function ProviderCard({
         </span>
       </div>
 
-      {(provider.contactName || provider.contactEmail) && (
-        <div>
+      {(provider.contactName || provider.contactEmail || provider.contactPhone) && (
+        <div className="flex flex-col gap-0.5">
           {provider.contactName && (
-            <p className="font-mono text-[10px] text-fg-secondary">{provider.contactName}</p>
+            <p className="font-mono text-[10px] text-fg-secondary">
+              {provider.contactName}
+              {provider.role && <span className="ml-1 text-fg-muted">· {provider.role}</span>}
+            </p>
           )}
           {provider.contactEmail && (
             <a
@@ -336,6 +362,9 @@ function ProviderCard({
             >
               {provider.contactEmail}
             </a>
+          )}
+          {provider.contactPhone && (
+            <p className="font-mono text-[10px] text-fg-muted">{provider.contactPhone}</p>
           )}
         </div>
       )}

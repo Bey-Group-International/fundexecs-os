@@ -12,6 +12,7 @@ import {
   generateTargets,
   scorePipeline as scorePipelineEngine,
   sourceConfigFor,
+  apolloEnrichCandidates,
   type SourceCandidate,
   type PipelineScore,
   type SourcingMandate,
@@ -89,7 +90,22 @@ export interface AddSourcedResult {
 export async function addSourcedTargets(
   hub: string,
   module: string,
-  candidates: { name: string; category: string; rationale: string; fitScore?: number; sourceUrl?: string }[],
+  candidates: {
+    name: string;
+    category: string;
+    rationale: string;
+    fitScore?: number;
+    sourceUrl?: string;
+    website?: string;
+    contactName?: string;
+    contactRole?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    aumRange?: string;
+    ticketRange?: string;
+    strategies?: string[];
+    geography?: string;
+  }[],
   // Optional learning context: the originating request and the candidates that
   // were surfaced but NOT picked. Recording both accepts and rejects is what lets
   // the engine learn this operator's taste (see lib/source-intelligence.ts).
@@ -107,21 +123,36 @@ export async function addSourcedTargets(
 
   const orgId = auth.ctx.orgId;
   const supabase = createServerClient();
-  const clean = candidates
-    .map((c) => ({
-      name: String(c.name ?? "").trim(),
-      category: String(c.category ?? "").trim(),
-      rationale: String(c.rationale ?? "").trim(),
-      fitScore: typeof c.fitScore === "number" ? c.fitScore : null,
-      // A web-sourced citation becomes the verification evidence, pre-filled so
-      // the operator can confirm the (still unverified) record in one click.
-      verification_note:
-        typeof c.sourceUrl === "string" && /^https?:\/\/\S+$/i.test(c.sourceUrl.trim())
-          ? c.sourceUrl.trim().slice(0, 500)
-          : null,
-    }))
-    .filter((c) => c.name);
-  if (clean.length === 0) return { ok: false, error: "Nothing to add." };
+
+  // Filter to named candidates first so Apollo credits aren't spent on entries
+  // that the clean step would drop anyway.
+  let validCandidates = (candidates as SourceCandidate[]).filter(
+    (c) => String(c.name ?? "").trim(),
+  );
+  if (process.env.APOLLO_API_KEY) {
+    try { validCandidates = await apolloEnrichCandidates(validCandidates); } catch { /* non-fatal */ }
+  }
+
+  const normalize = (s: unknown) =>
+    typeof s === "string" && s.trim() ? s.trim() : null;
+  const clean = validCandidates.map((c) => ({
+    name: String(c.name ?? "").trim(),
+    category: String(c.category ?? "").trim(),
+    rationale: String(c.rationale ?? "").trim(),
+    fitScore: typeof c.fitScore === "number" ? c.fitScore : null,
+    sourceUrl: normalize(c.sourceUrl),
+    // A web-sourced citation becomes the verification evidence, pre-filled so
+    // the operator can confirm the (still unverified) record in one click.
+    verification_note:
+      typeof c.sourceUrl === "string" && /^https?:\/\/\S+$/i.test(c.sourceUrl.trim())
+        ? c.sourceUrl.trim().slice(0, 500)
+        : null,
+    website: normalize(c.website),
+    contactName: normalize(c.contactName),
+    contactRole: normalize(c.contactRole),
+    contactEmail: normalize(c.contactEmail),
+    contactPhone: normalize(c.contactPhone),
+  }));
 
   // AI-sourced rows carry their fit rationale into `notes` so the operator keeps
   // the "why" when triaging the pipeline.
@@ -140,6 +171,12 @@ export async function addSourcedTargets(
         pipeline_stage: "prospect",
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: c.sourceUrl ?? null,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
       }));
       const { data: ins, error } = await supabase.from("investors").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -156,6 +193,12 @@ export async function addSourcedTargets(
         asset_class: c.category || null,
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: c.sourceUrl ?? null,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
         session_id: meta?.sessionId ?? null,
       }));
       const { data: ins, error } = await supabase.from("deals").insert(rows).select("id");
@@ -174,6 +217,12 @@ export async function addSourcedTargets(
         currency: "USD",
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: c.sourceUrl,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
       }));
       const { data: ins, error } = await supabase.from("debt_facilities").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -190,6 +239,12 @@ export async function addSourcedTargets(
         status: "prospective",
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: c.sourceUrl,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
       }));
       const { data: ins, error } = await supabase.from("partners").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -206,6 +261,12 @@ export async function addSourcedTargets(
         status: "prospective",
         notes: note(c.rationale),
         verification_note: c.verification_note,
+        url_source: c.sourceUrl,
+        website: c.website ?? null,
+        contact_name: c.contactName ?? null,
+        role: c.contactRole ?? null,
+        contact_email: c.contactEmail ?? null,
+        contact_phone: c.contactPhone ?? null,
       }));
       const { data: ins, error } = await supabase.from("service_providers").insert(rows).select("id");
       if (error) return { ok: false, error: error.message };
@@ -247,7 +308,7 @@ export async function addSourcedTargets(
       fitScore: typeof r.fitScore === "number" ? r.fitScore : null,
     });
   }
-  await recordSourceFeedback(supabase, feedback);
+  try { await recordSourceFeedback(supabase, feedback); } catch { /* best-effort */ }
 
   // Agent-native intelligence: accepted candidates also grow the Sourcing
   // Intelligence catalog (migration 0042) so they're semantically discoverable
@@ -260,9 +321,9 @@ export async function addSourcedTargets(
     categories: c.category ? [c.category] : [],
     metadata: { fitScore: c.fitScore, query: meta?.query ?? null },
     provenance: c.verification_note ? "web" : "ai",
-    sourceUrl: c.verification_note,
+    sourceUrl: c.sourceUrl ?? undefined,
   }));
-  await ingestEntities(supabase, orgId, auth.ctx.userId, catalog);
+  try { await ingestEntities(supabase, orgId, auth.ctx.userId, catalog); } catch { /* best-effort */ }
 
   revalidatePath(`/${hub}/${module}`);
   return { ok: true, added };

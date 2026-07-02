@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AutosaveForm } from "@/components/build/AutosaveForm";
 import { inputClass } from "@/components/build/DraftWithEarn";
 import { ROLE_LABELS } from "@/lib/labels";
+import { LogoUpload } from "@/components/build/LogoUpload";
 
 // Values mirrored from the `organizations` row this form edits.
 export type ProfileValues = {
@@ -11,6 +12,7 @@ export type ProfileValues = {
   legal_name: string;
   entity_type: string;
   tagline: string;
+  logo_url: string;
   jurisdiction: string;
   website: string;
   description: string;
@@ -47,6 +49,7 @@ const COMPLETENESS_KEYS: (keyof ProfileValues)[] = [
   "name",
   "legal_name",
   "entity_type",
+  "tagline",
   "jurisdiction",
   "website",
   "description",
@@ -200,6 +203,9 @@ export function ProfileForm({
               placeholder="e.g., Institutional capital for tomorrow's infrastructure"
               className={`${inputClass} bg-surface-1`}
             />
+          </Field>
+          <Field label="Logo">
+            <LogoUpload name="logo_url" defaultValue={form.logo_url} />
           </Field>
           <Field label="Jurisdiction">
             <input

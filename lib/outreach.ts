@@ -390,6 +390,8 @@ export interface EnrollInput {
   sequenceId: string;
   subjectName: string;
   subjectEmail?: string | null;
+  subjectPhone?: string | null;
+  subjectRole?: string | null;
   entityId?: string | null;
 }
 
@@ -411,6 +413,8 @@ export async function enroll(supabase: Client, input: EnrollInput): Promise<Enro
         sequence_id: input.sequenceId,
         subject_name: subjectName,
         subject_email: input.subjectEmail?.trim().slice(0, 240) ?? null,
+        subject_phone: input.subjectPhone?.trim().slice(0, 80) ?? null,
+        subject_role: input.subjectRole?.trim().slice(0, 120) ?? null,
         entity_id: input.entityId ?? null,
         current_step: 0,
         status: "active",

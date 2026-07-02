@@ -2,7 +2,20 @@ import type { SourceCandidate } from "@/lib/source-ai";
 
 export type SourceSelectionCandidate = Pick<
   SourceCandidate,
-  "name" | "category" | "rationale" | "fitScore" | "sourceUrl"
+  | "name"
+  | "category"
+  | "rationale"
+  | "fitScore"
+  | "sourceUrl"
+  | "website"
+  | "contactName"
+  | "contactRole"
+  | "contactEmail"
+  | "contactPhone"
+  | "aumRange"
+  | "ticketRange"
+  | "strategies"
+  | "geography"
 >;
 
 export interface SourceSelectionPayload {
@@ -12,6 +25,15 @@ export interface SourceSelectionPayload {
     rationale: string;
     fitScore: number;
     sourceUrl?: string;
+    website?: string;
+    contactName?: string;
+    contactRole?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    aumRange?: string;
+    ticketRange?: string;
+    strategies?: string[];
+    geography?: string;
   }[];
   rejected: {
     name: string;
@@ -39,7 +61,19 @@ export function buildSourceSelectionPayload(
       fitScore: candidate.fitScore,
     };
     if (isSelected(candidate, index)) {
-      payload.picks.push({ ...base, sourceUrl: candidate.sourceUrl });
+      payload.picks.push({
+        ...base,
+        sourceUrl: candidate.sourceUrl,
+        website: candidate.website,
+        contactName: candidate.contactName,
+        contactRole: candidate.contactRole,
+        contactEmail: candidate.contactEmail,
+        contactPhone: candidate.contactPhone,
+        aumRange: candidate.aumRange,
+        ticketRange: candidate.ticketRange,
+        strategies: candidate.strategies,
+        geography: candidate.geography,
+      });
     } else {
       payload.rejected.push(base);
     }
