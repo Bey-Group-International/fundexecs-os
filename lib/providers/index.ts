@@ -5,6 +5,8 @@ import type { IssuanceProvider, CapitalRailProvider, IdentityVerificationProvide
 import { mockIssuanceProvider, mockCapitalRailProvider, mockIdentityVerificationProvider } from "./mock";
 import { docusignIssuanceProvider } from "./docusign-issuance";
 import { nativeSigningProvider } from "./native-signing";
+import { stripeCapitalRailProvider } from "./stripe-rail";
+import { stripeIdentityProvider } from "./stripe-identity";
 
 // Priority: native signing (always available) → Docusign (when credentials set) → mock.
 // Native signing is the default; Docusign is an override for orgs that prefer it.
@@ -13,11 +15,15 @@ export function getIssuanceProvider(): IssuanceProvider {
   return nativeSigningProvider;
 }
 
+// Stripe Treasury/Transfers when STRIPE_SECRET_KEY is set; mock otherwise.
 export function getCapitalRailProvider(): CapitalRailProvider {
+  if (stripeCapitalRailProvider.isConfigured()) return stripeCapitalRailProvider;
   return mockCapitalRailProvider;
 }
 
+// Stripe Identity when STRIPE_SECRET_KEY is set; mock otherwise.
 export function getIdentityVerificationProvider(): IdentityVerificationProvider {
+  if (stripeIdentityProvider.isConfigured()) return stripeIdentityProvider;
   return mockIdentityVerificationProvider;
 }
 

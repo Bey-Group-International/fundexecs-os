@@ -2,20 +2,24 @@
 // Email dispatch for the outreach / reporting family — the bulk of the
 // external-facing (Tier 2) Capital Map actions.
 //
-// Mock-or-real: with no Gmail credentials in the environment the adapter
-// operates in mock mode (it prepares the message but does not send), so the gate
-// → dispatch flow behaves identically whether or not the operator has connected
-// email. The real send is wired through the connected Gmail integration at the
-// marked seam, once OAuth credential plumbing lands.
+// Routes through lib/email.ts which chains: Gmail OAuth (GMAIL_ACCESS_TOKEN) →
+// Resend (RESEND_API_KEY) → silent fallback. The adapter is native-first:
+// Resend alone is sufficient for live sends; Gmail OAuth upgrades it to
+// "from your inbox" when connected.
 import type {
   AdapterModule,
   DispatchAdapter,
   DispatchContext,
   DispatchResult,
 } from "../types";
+import { sendEmail } from "@/lib/email";
 
 function configured(): boolean {
-  return Boolean(process.env.GMAIL_ACCESS_TOKEN || process.env.GOOGLE_OAUTH_CLIENT_ID);
+  return Boolean(
+    process.env.GMAIL_ACCESS_TOKEN ||
+    process.env.GOOGLE_OAUTH_CLIENT_ID ||
+    process.env.RESEND_API_KEY,
+  );
 }
 
 export const gmailAdapter: DispatchAdapter = {
@@ -25,25 +29,47 @@ export const gmailAdapter: DispatchAdapter = {
     const to = ctx.target?.email;
     const recipient = to ?? ctx.target?.name ?? "the contact";
 
-    // Per-org connection wins when the caller resolved it; else the env default.
     if (!(ctx.connected ?? configured())) {
       return {
         ok: true,
         channel: "gmail",
         live: false,
-        detail: `Drafted email to ${recipient} (Gmail not connected — saved as a draft to review).`,
+        detail: `Drafted email to ${recipient} (email not connected — saved as a draft to review).`,
       };
     }
 
-    // SEAM: real send through the connected Gmail integration goes here. Until
-    // the OAuth credential plumbing is in place we return a configured-but-queued
-    // result rather than calling an external API from this server action — the
-    // contract stays honest and the loop stays observable.
+    if (!to) {
+      return {
+        ok: true,
+        channel: "gmail",
+        live: false,
+        detail: `Prepared email for ${recipient} — no email address on file; send manually.`,
+      };
+    }
+
+    const result = await sendEmail({
+      to: { name: ctx.target?.name ?? recipient, email: to },
+      subject: ctx.subject ?? "(no subject)",
+      htmlBody: ctx.body
+        ? `<p>${ctx.body.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`
+        : "",
+    });
+
+    if (result.ok) {
+      return {
+        ok: true,
+        channel: result.channel,
+        live: true,
+        detail: `Email sent to ${recipient} via ${result.channel}.`,
+      };
+    }
+
     return {
-      ok: true,
+      ok: false,
       channel: "gmail",
       live: false,
-      detail: `Queued email to ${recipient} for send via connected Gmail.`,
+      detail: `Email to ${recipient} could not be sent — saved as draft. ${result.detail}`,
+      error: result.detail,
     };
   },
 };
