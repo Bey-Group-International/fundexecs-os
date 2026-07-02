@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback, useTransition } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { LiveNotesResult } from "@/app/api/meetings/notes/route";
@@ -536,7 +536,9 @@ function EmptyCopilot({ label }: { label: string }) {
 
 export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const router = useRouter();
-  const supabase = createClient();
+  // Memoized so effects that subscribe/query with it can list it as a stable
+  // dependency without tearing down and recreating on every render.
+  const supabase = useMemo(() => createClient(), []);
 
   // Local media
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -800,7 +802,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
     }
     void detectHost();
-  }, [roomCode]);
+  }, [roomCode, supabase]);
 
   // ── Preview camera ────────────────────────────────────────────────────────
 
@@ -1122,7 +1124,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       );
     }, TRANSCRIPT_FLUSH_MS);
     return () => clearInterval(interval);
-  }, [ready, meetingId, waitingForAdmit]);
+  }, [ready, meetingId, waitingForAdmit, supabase]);
 
   // ── Controls ──────────────────────────────────────────────────────────────
 
