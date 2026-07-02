@@ -22,6 +22,7 @@ import { CreditPacks } from "./CreditPacks";
 import { CheckoutBanner } from "./CheckoutBanner";
 import { CreditHistory } from "./CreditHistory";
 import { GamificationPanel } from "./GamificationPanel";
+import { CouponRedemption } from "./CouponRedemption";
 
 export const dynamic = "force-dynamic";
 
@@ -243,6 +244,11 @@ export default async function WalletPage({
         One-off credit packs
       </h2>
       <CreditPacks live={live} publishableKey={publishableKey} />
+
+      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+        Promo code
+      </h2>
+      <CouponRedemption />
 
       <Link
         href="/gift"
