@@ -217,7 +217,17 @@ export const stripeCapitalRailProvider: CapitalRailProvider = {
       };
     }
 
-    assertStripeId(transferId);
+    try {
+      assertStripeId(transferId);
+    } catch (err) {
+      return {
+        ok: false,
+        live: false,
+        detail: `Invalid transfer ID "${transferId}".`,
+        error: err instanceof Error ? err.message : String(err),
+        data: { transferId, status: "pending" },
+      };
+    }
     const safeId = encodeURIComponent(transferId);
     // Try Treasury OutboundTransfer first, then OutboundPayment, then Transfer.
     const paths = [

@@ -181,7 +181,7 @@ describe("slack adapter (internal-inbox discipline)", () => {
     expect(slackAdapter.isConfigured()).toBe(true);
   });
 
-  it("returns a well-formed live result — ok, live, delivers to internal inbox", async () => {
+  it("returns ok with live=false when no supabase client — inbox unavailable path", async () => {
     const res = await slackAdapter.dispatch({
       orgId: "org-1",
       actorId: "system",
@@ -191,7 +191,7 @@ describe("slack adapter (internal-inbox discipline)", () => {
       body: "*Daily Act-now Radar*",
     });
     expect(res.ok).toBe(true);
-    expect(res.live).toBe(true);
+    expect(res.live).toBe(false);
     expect(res.channel).toBe("slack");
     expect(res.detail).toContain("internal inbox");
   });

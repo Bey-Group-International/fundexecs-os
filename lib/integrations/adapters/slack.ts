@@ -23,6 +23,7 @@ export const slackAdapter: DispatchAdapter = {
   isConfigured: () => true,
   async dispatch(ctx: DispatchContext): Promise<DispatchResult> {
     const destination = ctx.target?.email ?? ctx.target?.name ?? "the workspace";
+    let persisted = false;
 
     // Write to internal inbox when a Supabase client is threaded through.
     if (ctx.supabase) {
@@ -45,6 +46,7 @@ export const slackAdapter: DispatchAdapter = {
           direction: "inbound",
           body: ctx.body ?? ctx.subject ?? "",
         });
+        persisted = true;
       } catch {
         // Non-fatal — dispatch_log still captures the event.
       }
@@ -53,8 +55,10 @@ export const slackAdapter: DispatchAdapter = {
     return {
       ok: true,
       channel: "slack",
-      live: true,
-      detail: `Notification delivered to internal inbox for ${destination}.`,
+      live: persisted,
+      detail: persisted
+        ? `Notification delivered to internal inbox for ${destination}.`
+        : `Notification logged for ${destination} — internal inbox unavailable.`,
     };
   },
 };
