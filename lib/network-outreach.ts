@@ -8,6 +8,8 @@ import { requireOrgContext } from "@/lib/auth";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 
+export type OutreachTone = "formal" | "warm" | "brief";
+
 export interface DraftOutreachParams {
   targetName: string;
   targetTitle: string | null;
@@ -17,6 +19,12 @@ export interface DraftOutreachParams {
   senderTitle: string | null;
   messageType: "direct" | "intro_request";
   introducerName?: string; // For intro_request type
+  tone?: OutreachTone;
+  // Org context injected from getOutreachProfile()
+  introBlurb?: string | null;
+  fundName?: string | null;
+  fundStrategy?: string | null;
+  aumRange?: string | null;
 }
 
 export interface DraftedMessage {
@@ -40,24 +48,37 @@ export async function draftOutreachMessage(
 
   const client = new Anthropic({ apiKey });
 
+  const toneGuide =
+    params.tone === "formal" ? "Tone: formal and precise. No contractions."
+    : params.tone === "brief" ? "Tone: very brief — 3–4 sentences max per paragraph, get to the point fast."
+    : "Tone: warm and conversational, professional but not stiff.";
+
+  const orgContext = [
+    params.fundName && `Fund: ${params.fundName}`,
+    params.fundStrategy && `Strategy: ${params.fundStrategy}`,
+    params.aumRange && `AUM: ${params.aumRange}`,
+    params.introBlurb && `Sender intro: ${params.introBlurb}`,
+  ].filter(Boolean).join("\n");
+
   const systemPrompt =
     params.messageType === "direct"
-      ? `You are a professional relationship advisor for a PE/family office fund manager.
-Draft a concise, warm, and professional outreach email.
-- Subject line: clear and specific (not generic)
-- Body: 3–4 short paragraphs, conversational not salesy, specific to context
-- End with a low-friction ask (15-min call, happy to share more)
-- LinkedIn note: under 300 chars, friendly opener`
-      : `You are a professional relationship advisor.
-Draft a warm introduction request email to ${params.introducerName ?? "a mutual connection"}.
+      ? `You are a professional ghostwriter for PE/family office fund managers.
+Draft a concise, credible outreach email grounded in the sender's specific fund context.
+${toneGuide}
+- Subject: specific, not generic
+- Body: 3–4 short paragraphs, specific to context, end with a low-friction ask
+- LinkedIn note: under 300 chars`
+      : `You are a professional ghostwriter for PE/family office fund managers.
+Draft a warm introduction request to ${params.introducerName ?? "a mutual connection"}.
+${toneGuide}
 - Subject: "Introduction request: [sender] → [target]"
-- Body: 2–3 paragraphs explaining why you'd like the intro, what value you offer, make it easy to forward
-- LinkedIn note: under 300 chars for the direct ask`;
+- Body: 2–3 paragraphs, explain the value exchange, easy to forward
+- LinkedIn note: under 300 chars`;
 
   const userPrompt = `Draft ${params.messageType === "direct" ? "a direct outreach" : "an intro request"} message.
 
 Sender: ${params.senderName}${params.senderTitle ? `, ${params.senderTitle}` : ""}
-Target: ${params.targetName}${params.targetTitle ? `, ${params.targetTitle}` : ""}${params.targetCompany ? ` at ${params.targetCompany}` : ""}
+${orgContext ? `\nFund context:\n${orgContext}\n` : ""}Target: ${params.targetName}${params.targetTitle ? `, ${params.targetTitle}` : ""}${params.targetCompany ? ` at ${params.targetCompany}` : ""}
 ${params.introducerName ? `Introducer: ${params.introducerName}` : ""}
 Context / Goal: ${params.context}
 

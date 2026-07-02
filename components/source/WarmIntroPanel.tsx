@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useCallback } from "react";
 import type { NetworkSearchResult } from "@/lib/network-search";
+import type { OutreachTone } from "@/lib/network-outreach";
 
 interface Props {
   contact: NetworkSearchResult;
@@ -16,18 +17,76 @@ interface DraftedMessage {
   linkedinNote?: string;
 }
 
+interface OutreachProfile {
+  introBlurb: string | null;
+  fundName: string | null;
+  fundStrategy: string | null;
+  aumRange: string | null;
+}
+
 type MessageType = "direct" | "intro_request";
+
+const TONE_LABELS: Record<OutreachTone, string> = {
+  warm: "Warm",
+  formal: "Formal",
+  brief: "Brief",
+};
 
 export function WarmIntroPanel({ contact, senderName, senderTitle, onClose }: Props) {
   const [messageType, setMessageType] = useState<MessageType>(
     contact.introPath && contact.introPath.length > 2 ? "intro_request" : "direct",
   );
+  const [tone, setTone] = useState<OutreachTone>("warm");
   const [context, setContext] = useState("");
   const [draft, setDraft] = useState<DraftedMessage | null>(null);
   const [copied, setCopied] = useState<"body" | "linkedin" | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const [profile, setProfile] = useState<OutreachProfile | null>(null);
+  const [blurb, setBlurb] = useState("");
+  const [blurbEditing, setBlurbEditing] = useState(false);
+  const [blurbSaving, setBlurbSaving] = useState(false);
+  const [blurbGenerating, setBlurbGenerating] = useState(false);
+
   const introducer = contact.introPath?.[1];
+
+  const loadProfile = useCallback(async () => {
+    const res = await fetch("/api/network/profile");
+    if (!res.ok) return;
+    const p: OutreachProfile & { introBlurb: string | null } = await res.json();
+    setProfile(p);
+    setBlurb(p.introBlurb ?? "");
+  }, []);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  async function generateBlurb() {
+    setBlurbGenerating(true);
+    const res = await fetch("/api/network/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "generate" }),
+    });
+    if (res.ok) {
+      const { blurb: generated } = await res.json();
+      setBlurb(generated);
+      setBlurbEditing(true);
+    }
+    setBlurbGenerating(false);
+  }
+
+  async function saveBlurb() {
+    if (!blurb.trim()) return;
+    setBlurbSaving(true);
+    await fetch("/api/network/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save", blurb }),
+    });
+    setBlurbSaving(false);
+    setBlurbEditing(false);
+    setProfile((p) => p ? { ...p, introBlurb: blurb } : p);
+  }
 
   async function generateDraft() {
     if (!context.trim()) return;
@@ -44,6 +103,11 @@ export function WarmIntroPanel({ contact, senderName, senderTitle, onClose }: Pr
           senderTitle: senderTitle ?? null,
           messageType,
           introducerName: messageType === "intro_request" ? introducer : undefined,
+          tone,
+          introBlurb: blurb || null,
+          fundName: profile?.fundName ?? null,
+          fundStrategy: profile?.fundStrategy ?? null,
+          aumRange: profile?.aumRange ?? null,
         }),
       });
       if (res.ok) setDraft(await res.json());
@@ -107,9 +171,7 @@ export function WarmIntroPanel({ contact, senderName, senderTitle, onClose }: Pr
                   key={t}
                   onClick={() => { setMessageType(t); setDraft(null); }}
                   className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
-                    messageType === t
-                      ? "bg-accent text-white"
-                      : "text-fg-muted hover:text-fg"
+                    messageType === t ? "bg-accent text-white" : "text-fg-muted hover:text-fg"
                   }`}
                 >
                   {t === "direct" ? "Direct Outreach" : `Ask ${introducer ?? "Mutual"} for Intro`}
@@ -117,6 +179,71 @@ export function WarmIntroPanel({ contact, senderName, senderTitle, onClose }: Pr
               ))}
             </div>
           )}
+
+          {/* Intro blurb */}
+          <div className="rounded-lg border border-line bg-surface p-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-mono uppercase tracking-wider text-fg-muted">Your Intro Blurb</p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={generateBlurb}
+                  disabled={blurbGenerating}
+                  className="text-xs text-accent hover:text-accent/80 disabled:opacity-50 transition-colors flex items-center gap-1"
+                >
+                  {blurbGenerating ? (
+                    <>
+                      <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                      </svg>
+                      Generating…
+                    </>
+                  ) : "✦ Generate with Earn"}
+                </button>
+                {!blurbEditing && blurb && (
+                  <button onClick={() => setBlurbEditing(true)} className="text-xs text-fg-muted hover:text-fg transition-colors">Edit</button>
+                )}
+              </div>
+            </div>
+            {blurbEditing ? (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  value={blurb}
+                  onChange={(e) => setBlurb(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+                  placeholder="2–3 sentences about you and your fund for outreach emails…"
+                />
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => { setBlurbEditing(false); setBlurb(profile?.introBlurb ?? ""); }} className="text-xs text-fg-muted hover:text-fg transition-colors">Discard</button>
+                  <button onClick={saveBlurb} disabled={blurbSaving || !blurb.trim()} className="text-xs text-accent hover:text-accent/80 disabled:opacity-50 transition-colors">
+                    {blurbSaving ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-fg-muted italic">
+                {blurb || "No blurb yet — click \"Generate with Earn\" to create one, or edit to write your own."}
+              </p>
+            )}
+          </div>
+
+          {/* Tone selector */}
+          <div>
+            <label className="text-xs text-fg-muted font-mono uppercase tracking-wider mb-1.5 block">Tone</label>
+            <div className="flex rounded-lg border border-line bg-surface p-1 gap-1">
+              {(["warm", "formal", "brief"] as OutreachTone[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => { setTone(t); setDraft(null); }}
+                  className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+                    tone === t ? "bg-accent text-white" : "text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  {TONE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Context input */}
           <div>
