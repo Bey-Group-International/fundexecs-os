@@ -129,12 +129,7 @@ export function DataRoomViewer({
   const [viewerEmail, setViewerEmail] = useState<string | null>(null);
 
   // Stable session ID for this page load.
-  const sessionId = useMemo(() => {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID();
-    }
-    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }, []);
+  const sessionId = useMemo(() => crypto.randomUUID(), []);
 
   // If no gates are required, pass immediately.
   const noGates =

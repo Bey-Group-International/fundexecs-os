@@ -172,17 +172,22 @@ export async function updateDocumentStatus(formData: FormData): Promise<void> {
 
 // --- Shareable data-room links --------------------------------------------
 
-/** Compute a simple SHA-256 based hash for data-room password protection.
- *  Stored as "sha256:<hex>" to allow future algorithm migration. */
 async function hashPassword(password: string): Promise<string> {
-  const { createHash } = await import("crypto");
-  const hex = createHash("sha256").update(password).digest("hex");
-  return `sha256:${hex}`;
+  const { pbkdf2Sync, randomBytes } = await import("crypto");
+  const salt = randomBytes(16).toString("hex");
+  const hash = pbkdf2Sync(password, salt, 100_000, 32, "sha256").toString("hex");
+  return `pbkdf2:${salt}:${hash}`;
 }
 
 async function comparePassword(password: string, stored: string): Promise<boolean> {
-  const expected = await hashPassword(password);
-  return expected === stored;
+  if (!stored.startsWith("pbkdf2:")) {
+    // Legacy sha256 hashes: reject and require re-auth with new hash.
+    return false;
+  }
+  const [, salt, expectedHash] = stored.split(":");
+  const { pbkdf2Sync } = await import("crypto");
+  const actualHash = pbkdf2Sync(password, salt, 100_000, 32, "sha256").toString("hex");
+  return actualHash === expectedHash;
 }
 
 export async function createShare(formData: FormData): Promise<void> {

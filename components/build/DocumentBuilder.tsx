@@ -475,7 +475,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
 
                 <button
                   type="button"
-                  onClick={save}
+                  onClick={() => save()}
                   disabled={pending}
                   className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
                 >
