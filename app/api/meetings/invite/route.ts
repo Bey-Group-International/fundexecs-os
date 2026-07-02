@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, escapeHtml } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   const supabase = createServerClient();
@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
 }
 
 function buildInviteHtml({ inviteUrl, title, senderName }: { inviteUrl: string; title: string; senderName: string }) {
+  const safeTitle = escapeHtml(title);
+  const safeSender = escapeHtml(senderName);
+  const safeUrl = inviteUrl.startsWith("https://") || inviteUrl.startsWith("http://") ? inviteUrl : "#";
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" /></head>
@@ -38,9 +41,9 @@ function buildInviteHtml({ inviteUrl, title, senderName }: { inviteUrl: string; 
   <div style="margin-bottom:24px">
     <span style="font-family:monospace;font-size:13px;color:#b8a36a;letter-spacing:0.1em;text-transform:uppercase">FundExecs OS</span>
   </div>
-  <h1 style="font-size:20px;font-weight:600;margin:0 0 8px">${senderName} invited you to a meeting</h1>
-  <p style="color:#9ca3af;font-size:14px;margin:0 0 24px">${title}</p>
-  <a href="${inviteUrl}"
+  <h1 style="font-size:20px;font-weight:600;margin:0 0 8px">${safeSender} invited you to a meeting</h1>
+  <p style="color:#9ca3af;font-size:14px;margin:0 0 24px">${safeTitle}</p>
+  <a href="${safeUrl}"
      style="display:inline-block;background:#b8a36a;color:#0d0d10;font-weight:600;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none">
     Join meeting →
   </a>

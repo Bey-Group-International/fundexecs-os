@@ -334,14 +334,16 @@ function CopilotSidebar({
     const emails = emailInput.split(/[\s,;]+/).map((e) => e.trim()).filter((e) => e.includes("@"));
     if (emails.length === 0) return;
     setEmailSending(true);
-    await fetch("/api/meetings/invite", {
+    const res = await fetch("/api/meetings/invite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roomCode, emails }),
     });
     setEmailSending(false);
-    setEmailSent(true);
-    setEmailInput("");
+    if (res.ok) {
+      setEmailSent(true);
+      setEmailInput("");
+    }
     setTimeout(() => setEmailSent(false), 3000);
   };
 
