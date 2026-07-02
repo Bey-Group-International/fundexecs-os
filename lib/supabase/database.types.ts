@@ -1778,6 +1778,92 @@ export type FinJournalLine = {
   created_at: string;
 };
 
+// --- Finance Engine — Phase 2 banking (migration 20260703100000) -------------
+export type FinImportFormat = "csv" | "ofx" | "qif" | "camt";
+export type FinImportStatus = "pending" | "staged" | "failed";
+export type FinBankTxnStatus = "unmatched" | "suggested" | "matched" | "reconciled" | "ignored";
+export type FinReconMatchKind = "auto" | "manual";
+export type FinRuleMatchType = "contains" | "exact" | "regex";
+
+export type FinBankAccount = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  gl_account_id: string;
+  name: string;
+  institution: string | null;
+  account_mask: string | null;
+  currency: string;
+  is_active: boolean;
+};
+
+export type FinBankImport = Timestamps & {
+  id: string;
+  organization_id: string;
+  bank_account_id: string;
+  format: FinImportFormat;
+  filename: string | null;
+  checksum: string | null;
+  row_count: number;
+  staged_count: number;
+  duplicate_count: number;
+  status: FinImportStatus;
+  statement_start: string | null;
+  statement_end: string | null;
+  opening_balance: number | null;
+  closing_balance: number | null;
+  imported_by: string | null;
+};
+
+export type FinBankTransaction = Timestamps & {
+  id: string;
+  organization_id: string;
+  bank_account_id: string;
+  import_id: string | null;
+  txn_date: string;
+  value_date: string | null;
+  amount: number;
+  currency: string;
+  description: string | null;
+  counterparty: string | null;
+  external_ref: string | null;
+  running_balance: number | null;
+  dedup_hash: string;
+  status: FinBankTxnStatus;
+  suggested_account_id: string | null;
+  matched_entry_id: string | null;
+  reconciled_by: string | null;
+  reconciled_at: string | null;
+};
+
+export type FinTxnRule = Timestamps & {
+  id: string;
+  organization_id: string;
+  entity_id: string;
+  name: string;
+  priority: number;
+  match_type: FinRuleMatchType;
+  match_field: string;
+  pattern: string;
+  amount_min: number | null;
+  amount_max: number | null;
+  target_account_id: string;
+  counterparty: string | null;
+  is_active: boolean;
+};
+
+export type FinReconciliation = {
+  id: string;
+  organization_id: string;
+  bank_account_id: string;
+  bank_txn_id: string;
+  entry_id: string;
+  match_kind: FinReconMatchKind;
+  matched_by: string | null;
+  matched_at: string;
+  created_at: string;
+};
+
 // Insert/Update use Partial for ergonomics until full generated types land.
 type TableShape<Row> = {
   Row: Row;
@@ -2142,6 +2228,11 @@ export type Database = {
       fin_fx_rates: TableShape<FinFxRate>;
       fin_journal_entries: TableShape<FinJournalEntry>;
       fin_journal_lines: TableShape<FinJournalLine>;
+      fin_bank_accounts: TableShape<FinBankAccount>;
+      fin_bank_imports: TableShape<FinBankImport>;
+      fin_bank_transactions: TableShape<FinBankTransaction>;
+      fin_txn_rules: TableShape<FinTxnRule>;
+      fin_reconciliations: TableShape<FinReconciliation>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -2260,6 +2351,11 @@ export type Database = {
       fin_normal_side: FinNormalSide;
       fin_period_status: FinPeriodStatus;
       fin_entry_status: FinEntryStatus;
+      fin_import_format: FinImportFormat;
+      fin_import_status: FinImportStatus;
+      fin_bank_txn_status: FinBankTxnStatus;
+      fin_recon_match_kind: FinReconMatchKind;
+      fin_rule_match_type: FinRuleMatchType;
     };
   };
 }
