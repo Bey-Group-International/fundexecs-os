@@ -23,6 +23,8 @@ import { CheckoutBanner } from "./CheckoutBanner";
 import { CreditHistory } from "./CreditHistory";
 import { GamificationPanel } from "./GamificationPanel";
 import { CouponRedemption } from "./CouponRedemption";
+import { BillingPortalButton } from "./BillingPortalButton";
+import { CREDIT_GRACE_BUFFER } from "@/lib/credits";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +109,19 @@ export default async function WalletPage({
       </header>
 
       <CheckoutBanner status={searchParams.checkout} />
+
+      {balance <= CREDIT_GRACE_BUFFER && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-400/40 bg-amber-400/[0.07] px-4 py-3 text-sm">
+          <span className="mt-0.5 shrink-0 text-amber-400">⚠</span>
+          <div>
+            <span className="font-medium text-amber-300">Credits running low.</span>{" "}
+            <span className="text-fg-secondary">
+              You have {balance} credit{balance === 1 ? "" : "s"} remaining. AI actions may be
+              blocked when the balance is exhausted. Top up with a credit pack or upgrade your plan.
+            </span>
+          </div>
+        </div>
+      )}
 
       <section className="fx-neural-panel p-5 sm:p-6">
         <div className="relative z-10 grid gap-4 lg:grid-cols-[1.45fr_1fr]">
@@ -274,6 +289,12 @@ export default async function WalletPage({
       <GamificationPanel />
 
       <CreditHistory />
+
+      {live && currentPlan && (
+        <div className="mt-6 flex justify-center">
+          <BillingPortalButton />
+        </div>
+      )}
 
       <p className="mt-6 text-center text-xs text-fg-muted">
         {live
