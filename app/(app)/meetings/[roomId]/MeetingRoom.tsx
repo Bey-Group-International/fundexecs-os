@@ -37,7 +37,7 @@ type SignalMsg =
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const ICE_SERVERS: RTCConfiguration = {
+const FALLBACK_ICE: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
@@ -359,6 +359,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [meetingId, setMeetingId] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
 
+  // ICE configuration (fetched once from server)
+  const iceConfigRef = useRef<RTCConfiguration>(FALLBACK_ICE);
+
   // Peer connections
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const [peers, setPeers] = useState<Map<string, Peer>>(new Map());
@@ -396,7 +399,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   const createPeerConnection = useCallback(
     (peerId: string): RTCPeerConnection => {
-      const pc = new RTCPeerConnection(ICE_SERVERS);
+      const pc = new RTCPeerConnection(iceConfigRef.current);
 
       localStreamRef.current?.getTracks().forEach((t) => {
         pc.addTrack(t, localStreamRef.current!);
@@ -530,6 +533,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const name = displayName.trim() || "Participant";
     setLocalName(name);
 
+    // Fetch TURN/STUN ICE servers
+    try {
+      const iceRes = await fetch("/api/meetings/ice-servers");
+      if (iceRes.ok) {
+        const { iceServers } = await iceRes.json() as { iceServers: RTCIceServer[] };
+        iceConfigRef.current = { iceServers };
+      }
+    } catch { /* keep fallback */ }
+
     // Get or create meeting
     let mId: string | null = null;
     try {
@@ -562,6 +574,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // Proceed without DB — meeting still works
     }
     setMeetingId(mId);
+
+    // Record participant join
+    if (mId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        void supabase.from("live_meeting_participants").upsert(
+          { meeting_id: mId, user_id: user.id, display_name: name, joined_at: new Date().toISOString() },
+          { onConflict: "meeting_id,user_id" },
+        );
+      }
+    }
 
     // Stop preview BEFORE acquiring meeting stream to avoid NotReadableError on mobile
     previewStreamRef.current?.getTracks().forEach((t) => t.stop());
