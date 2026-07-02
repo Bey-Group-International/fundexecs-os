@@ -55,8 +55,6 @@ const MORE_ITEMS: NavItem[] = [
   { href: "/graph", label: "Graphs" },
   { href: "/marketplace", label: "Marketplace" },
   { href: "/meetings", label: "Meeting Copilot" },
-  { href: "/envelopes", label: "Documents & Signatures" },
-  { href: "/design-system", label: "Design System" },
 ];
 
 // Account menu, in display order. Items with a real destination are links;
