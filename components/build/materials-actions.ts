@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
-import type { Document } from "@/lib/supabase/database.types";
+import type { Document, DocumentVersion } from "@/lib/supabase/database.types";
 
 const SECTION_KEYS = new Set(DATA_ROOM_SECTIONS.map((s) => s.key));
 const ROOM = "/build/data_room";
@@ -85,6 +85,17 @@ export async function updateDocument(formData: FormData): Promise<void> {
 
   const supabase = createServerClient();
   await supabase.from("documents").update(patch).eq("id", id).eq("organization_id", ctx.orgId);
+
+  // Snapshot version on every save (content only — links have no content to version).
+  if (patch.content !== undefined) {
+    await supabase.from("document_versions").insert({
+      document_id: id,
+      organization_id: ctx.orgId,
+      content: patch.content ?? null,
+      name: patch.name ?? name,
+      saved_by: ctx.userId,
+    });
+  }
   revalidatePath(ROOM);
 }
 
@@ -189,6 +200,45 @@ export async function revokeShare(formData: FormData): Promise<void> {
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
   revalidatePath(ROOM);
+}
+
+// --- Document version history --------------------------------------------------
+export async function listDocumentVersions(docId: string): Promise<DocumentVersion[]> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return [];
+  const supabase = createServerClient();
+  const { data } = await supabase
+    .from("document_versions")
+    .select("*")
+    .eq("document_id", docId)
+    .eq("organization_id", ctx.orgId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  return (data ?? []) as DocumentVersion[];
+}
+
+export async function restoreDocumentVersion(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const versionId = String(formData.get("version_id") ?? "");
+  const docId = String(formData.get("doc_id") ?? "");
+  if (!versionId || !docId) return;
+  const supabase = createServerClient();
+  const { data } = await supabase
+    .from("document_versions")
+    .select("*")
+    .eq("id", versionId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  const version = data as DocumentVersion | null;
+  if (!version) return;
+  await supabase
+    .from("documents")
+    .update({ content: version.content, name: version.name })
+    .eq("id", docId)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath(ROOM);
+  revalidatePath(`/document/${docId}`);
 }
 
 // Open a section's builder: jump to the section's most recent document, creating
