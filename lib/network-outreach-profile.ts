@@ -24,13 +24,14 @@ export async function getOutreachProfile(): Promise<OutreachProfile | null> {
   const { ctx } = auth;
 
   const supabase = createServerClient();
+  const db = supabase as any;
   const [principalRes, orgRes] = await Promise.all([
-    supabase
+    db
       .from("principals")
       .select("full_name, title, intro_blurb")
       .eq("id", ctx.userId)
       .single(),
-    supabase
+    db
       .from("organizations")
       .select("name, primary_strategy, aum_range, hq_location")
       .eq("id", ctx.orgId)
@@ -43,7 +44,7 @@ export async function getOutreachProfile(): Promise<OutreachProfile | null> {
   return {
     senderName: principal?.full_name ?? ctx.email ?? "You",
     senderTitle: principal?.title ?? null,
-    introBlurb: (principal as { intro_blurb?: string | null } | null)?.intro_blurb ?? null,
+    introBlurb: principal?.intro_blurb ?? null,
     fundName: org?.name ?? null,
     fundStrategy: org?.primary_strategy ?? null,
     aumRange: org?.aum_range ?? null,
@@ -57,13 +58,10 @@ export async function saveIntroBlurb(blurb: string): Promise<void> {
   if (!auth.ok) throw new Error(auth.error);
   const { ctx } = auth;
 
-  const supabase = createServerClient();
-  await supabase
+  const db = createServerClient() as any;
+  await db
     .from("principals")
-    .update({
-      intro_blurb: blurb.trim(),
-      intro_blurb_updated_at: new Date().toISOString(),
-    } as Parameters<ReturnType<typeof supabase.from>["update"]>[0])
+    .update({ intro_blurb: blurb.trim(), intro_blurb_updated_at: new Date().toISOString() })
     .eq("id", ctx.userId);
 }
 
